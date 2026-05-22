@@ -27,11 +27,12 @@ type Handler struct {
 	store          *sessions.CookieStore
 	tmplFS         ioFS.FS
 	schemaMismatch string
+	releaseNotes   string
 }
 
-func New(db *sql.DB, cfg *config.Config, tmplFS ioFS.FS) *Handler {
+func New(db *sql.DB, cfg *config.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
-	return &Handler{db: db, cfg: cfg, store: store, tmplFS: tmplFS}
+	return &Handler{db: db, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes)}
 }
 
 func (h *Handler) logSQL(query string, args ...any) {

@@ -3,7 +3,6 @@ package handlers
 import (
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"arx/test_records_go/config"
@@ -94,8 +93,13 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
+func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "whats_new.html", map[string]any{
+		"ReleaseNotes": h.releaseNotes,
+	})
+}
+
 func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map[string]any) map[string]any {
-	changelog, _ := os.ReadFile("../CHANGELOG.md")
 	data := map[string]any{
 		"Connected":      h.db != nil,
 		"DBServer":       h.cfg.DBServer,
@@ -105,7 +109,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"DocControlRoot": h.cfg.DocControlRoot,
 		"TestMode":       h.cfg.TestMode,
 		"DebugMode":      h.cfg.DebugMode,
-		"Changelog":      string(changelog),
+		"ReleaseNotes":   h.releaseNotes,
 		"CsrfToken":      h.csrfToken(w, r),
 	}
 	for k, v := range extra {

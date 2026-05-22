@@ -5,11 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.31] - 2026-05-22 
+- both apps: embed user-facing release notes in binary; `/whats-new` route; "new version" banner in layout; release notes replace changelog on settings page ([#295](https://github.com/Jolls/arx-legacy/issues/295))
+
 ## [0.3.30] - 2026-05-22 
-- test_records_go: add image gallery section to record detail and print views (#208); tiled grid below results table, grouped by step parameter; images render in PDF via browser print; results table shows `[see gallery]` for image rows
+- test_records_go: add image gallery to record detail and print views ([#208](https://github.com/Jolls/arx-legacy/issues/208))
 
 ## [0.3.29] - 2026-05-22 
-- test_records_go: add print-friendly view for test records at `GET /records/{id}/print` (#204); standalone HTML page with embedded CSS, `@media print` suppression of browser headers, PDF filename set via `<title>` tag; Print button added to record detail view
+- test_records_go: add print/PDF export view for test records ([#204](https://github.com/Jolls/arx-legacy/issues/204))
 
 ## [0.3.28] - 2026-05-22 
 - parts_master_go: PO print page auto-names PDF to `<PO Number> <SupplierCode>` via `<title>` tag
