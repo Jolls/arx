@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -70,6 +71,7 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 type polRow struct {
 	Item       string
 	PartNumber string
+	Rev        string
 	Desc       string
 	VendorPN   string
 	Qty        string
@@ -98,6 +100,7 @@ func extractPolRows(form url.Values, prefix string) map[string]polRow {
 		switch field {
 		case "POLItem":          row.Item = val
 		case "POLPNPartNumber":  row.PartNumber = val
+		case "POLRev":           row.Rev = val
 		case "POLDesc":          row.Desc = val
 		case "VendorPN":         row.VendorPN = val
 		case "POLQty":           row.Qty = val
@@ -311,6 +314,8 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	now := time.Now()
+	// OUTPUT INSERTED.ID is blocked on tables with triggers; combine INSERT + SCOPE_IDENTITY()
+	// in one batch so they share the same scope.
 	var newID int
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (number, is_active, orderer, account_id,
@@ -322,10 +327,10 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		  receiver_country, receiver_phone, receiver_fax,
 		  tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
 		  date_requested, date_closed, date_modified, total_cost)
-		OUTPUT INSERTED.ID
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,
 		        @p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,
-		        @p27,@p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36)
+		        @p27,@p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36);
+		SELECT CAST(SCOPE_IDENTITY() AS INT)
 	`, h.cfg.POTable()),
 		newNumber, r.FormValue("is_active") == "1", fs(r, "orderer"), fs(r, "account_id"),
 		nullableInt(fs(r, "supplier_id")), fs(r, "supplier_name"), fs(r, "supplier_contact"), fs(r, "supplier_email"),
@@ -350,10 +355,11 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		item, qty, cost, pnid := polRowToArgs(row)
+		rev := h.resolvePolRev(r, row.Rev, row.PNID)
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
-			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)
-		`, h.cfg.POLineTable()), newID, item, row.PartNumber, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
+			INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLRev, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
+			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
+		`, h.cfg.POLineTable()), newID, item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
 			h.renderError(w, "Error adding PO line: "+err.Error())
 			return
 		}
@@ -451,11 +457,12 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		item, qty, cost, pnid := polRowToArgs(row)
+		rev := h.resolvePolRev(r, row.Rev, row.PNID)
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET POLItem=@p1, POLPNPartNumber=@p2, POLDesc=@p3,
-			              POLQty=@p4, POLCost=@p5, VendorPN=@p6, POLPNID=@p7
-			WHERE POLID=@p8
-		`, h.cfg.POLineTable()), item, row.PartNumber, row.Desc, qty, cost, row.VendorPN, pnid, polID); err != nil {
+			UPDATE %s SET POLItem=@p1, POLPNPartNumber=@p2, POLRev=@p3, POLDesc=@p4,
+			              POLQty=@p5, POLCost=@p6, VendorPN=@p7, POLPNID=@p8
+			WHERE POLID=@p9
+		`, h.cfg.POLineTable()), item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid, polID); err != nil {
 			h.renderError(w, "Error updating PO line: "+err.Error())
 			return
 		}
@@ -476,10 +483,11 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			item, qty, cost, pnid := polRowToArgs(row)
+			rev := h.resolvePolRev(r, row.Rev, row.PNID)
 			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-				INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
-				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)
-			`, h.cfg.POLineTable()), poID, item, row.PartNumber, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
+				INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLRev, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
+				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
+			`, h.cfg.POLineTable()), poID, item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
 				h.renderError(w, "Error adding PO line: "+err.Error())
 				return
 			}
@@ -604,13 +612,23 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var supplierCode string
+	if po.SupplierID != nil {
+		var code sql.NullString
+		h.queryRowContext(r.Context(), fmt.Sprintf(
+			`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg.SupplierTable(),
+		), *po.SupplierID).Scan(&code)
+		supplierCode = code.String
+	}
+
 	items := h.fetchPOItems(w, r, num)
 	var lineTotal float64
 	for _, item := range items {
 		lineTotal += item.POLQty * item.POLCost
 	}
 	h.renderPrint(w, "po_print.html", map[string]any{
-		"PO": po, "POItems": items, "LineTotal": lineTotal, "TestMode": h.cfg.TestMode,
+		"PO": po, "POItems": items, "LineTotal": lineTotal,
+		"SupplierCode": supplierCode, "TestMode": h.cfg.TestMode,
 	})
 }
 
@@ -621,6 +639,30 @@ func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
 	h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET date_printed=@p1 WHERE number=@p2`, h.cfg.POTable(),
 	), time.Now(), num)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── POOpenFolder — POST /po/{id}/open-folder ─────────────────────────────────
+
+func (h *Handler) POOpenFolder(w http.ResponseWriter, r *http.Request) {
+	root := h.cfg.POFolderRoot
+	if root == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	num := chi.URLParam(r, "id")
+	var supplierID sql.NullInt64
+	h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT supplier_id FROM %s WHERE number=@p1`, h.cfg.POTable(),
+	), num).Scan(&supplierID)
+	supplierIDStr := ""
+	if supplierID.Valid {
+		supplierIDStr = strconv.FormatInt(supplierID.Int64, 10)
+	}
+	h.createPOFolder(r, num, supplierIDStr)
+	if folder := findPOBaseFolder(root, num); folder != "" {
+		exec.Command("explorer.exe", filepath.Join(root, folder)).Start() //nolint:errcheck
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -902,7 +944,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num string) []models.PurchaseOrderLine {
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pol.POLID, pol.POLItem, pol.POLPNPartNumber, pol.POLDesc,
+		SELECT pol.POLID, pol.POLItem, pol.POLPNPartNumber, pol.POLRev, pol.POLDesc,
 		       pol.POLQty, pol.POLCost, pol.VendorPN, pol.POLPNID
 		FROM %s pol
 		JOIN %s po ON pol.POLPOID = po.ID
@@ -916,11 +958,12 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 	var items []models.PurchaseOrderLine
 	for rows.Next() {
 		var item models.PurchaseOrderLine
-		var partNumber, desc, vendorPN sql.NullString
+		var partNumber, rev, desc, vendorPN sql.NullString
 		var polpnid sql.NullInt64
-		if err := rows.Scan(&item.POLID, &item.POLItem, &partNumber, &desc,
+		if err := rows.Scan(&item.POLID, &item.POLItem, &partNumber, &rev, &desc,
 			&item.POLQty, &item.POLCost, &vendorPN, &polpnid); err == nil {
 			item.POLPNPartNumber = partNumber.String
+			item.POLRev = rev.String
 			item.POLDesc = desc.String
 			item.VendorPN = vendorPN.String
 			if polpnid.Valid {
@@ -931,6 +974,23 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 		}
 	}
 	return items
+}
+
+// resolvePolRev returns the revision to store on a POL row. It prefers the
+// value submitted from the form; if blank and a PNID is known, it looks up
+// PN.revision as a fallback so server-side saves always capture the snapshot.
+func (h *Handler) resolvePolRev(r *http.Request, formRev, pnidStr string) string {
+	if formRev != "" {
+		return formRev
+	}
+	if pnidStr == "" {
+		return ""
+	}
+	var rev sql.NullString
+	h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT revision FROM %s WHERE PNID=@p1`, h.cfg.PartsTable(),
+	), pnidStr).Scan(&rev)
+	return rev.String
 }
 
 func (h *Handler) createPOFolder(r *http.Request, poNumber, supplierIDStr string) {

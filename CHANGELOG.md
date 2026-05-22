@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - parts_master_go: PO print page auto-names PDF to `<PO Number> <SupplierCode>` via `<title>` tag
 - parts_master_go: print button opens PO folder in Explorer after marking printed (`POST /po/{id}/open-folder`), creating folder if it doesn't exist
 - parts_master_go: suppress browser URL/date headers from PO print output via `@page { margin: 0 }`
+- parts_master_go: capture part revision at time of order — `POL.POLRev VARCHAR(10) NULL` wired up on INSERT and UPDATE; server-side fallback looks up `PN.revision` when POLPNID is set and form field is blank
+- parts_master_go: `APIPartSearch` now returns `revision` field; PO edit autocomplete auto-fills Rev on part selection
+- parts_master_go: Rev column added to PO detail, edit form, and print views
+- parts_master_go: fix PO creation failure on tables with triggers — replace `OUTPUT INSERTED.ID` with combined INSERT + `SCOPE_IDENTITY()` batch
+- SQL: add `POLRev VARCHAR(10) NULL` to `po_items.sql` DDL; migration: `ALTER TABLE dbo.POL ADD POLRev VARCHAR(10) NULL`
+- closes #220
 
 ## [0.3.27] - 2026-05-21 
 - parts_master_go: add BOM rollup cost button on BOM tab — `POST /part/{id}/rollup-cost` computes `SUM(PNCurrentCost * PLQty)` for direct components and writes to `PN.PNLastRollupCost` + new `PN.PNLastRollupAt`

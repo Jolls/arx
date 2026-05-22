@@ -104,6 +104,7 @@
                     <tr>
                         <th style="width:36px;">#</th>
                         <th>Part Number</th>
+                        <th style="width:60px;">Rev</th>
                         <th>Description</th>
                         <th>Vendor PN</th>
                         <th style="width:72px; text-align:right;">Qty</th>
@@ -119,6 +120,7 @@
                             {{if .POLPNID}}<a href="/part/{{derefInt .POLPNID}}" class="part-number-link">{{.POLPNPartNumber}}</a>
                             {{else}}{{.POLPNPartNumber}}{{end}}
                         </td>
+                        <td>{{.POLRev}}</td>
                         <td>{{.POLDesc}}</td>
                         <td>{{.VendorPN}}</td>
                         <td style="text-align:right;">{{printf "%.2f" .POLQty}}</td>
@@ -129,23 +131,23 @@
                 </tbody>
                 <tfoot>
                     <tr style="font-weight:700; border-top:2px solid var(--accent-1); background:#f5f5f5;">
-                        <td colspan="6" style="text-align:right; padding:10px;">Line Items Subtotal:</td>
+                        <td colspan="7" style="text-align:right; padding:10px;">Line Items Subtotal:</td>
                         <td style="text-align:right; padding:10px;">${{printf "%.2f" .LineTotal}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="6" style="text-align:right; padding:5px 10px; color:#555;">Tax:</td>
+                        <td colspan="7" style="text-align:right; padding:5px 10px; color:#555;">Tax:</td>
                         <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.Tax1)}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="6" style="text-align:right; padding:5px 10px; color:#555;">Shipping:</td>
+                        <td colspan="7" style="text-align:right; padding:5px 10px; color:#555;">Shipping:</td>
                         <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.ShippingCost)}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="6" style="text-align:right; padding:5px 10px; color:#555;">Misc:</td>
+                        <td colspan="7" style="text-align:right; padding:5px 10px; color:#555;">Misc:</td>
                         <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.MiscCost)}}</td>
                     </tr>
                     <tr style="font-weight:700; background:#f0f4ff; border-top:1px solid #c7d2fe;">
-                        <td colspan="6" style="text-align:right; padding:10px; color:var(--accent-1);">PO Total:</td>
+                        <td colspan="7" style="text-align:right; padding:10px; color:var(--accent-1);">PO Total:</td>
                         <td style="text-align:right; padding:10px; color:var(--accent-1);">${{printf "%.2f" (deref .PO.TotalCost)}}</td>
                     </tr>
                 </tfoot>

@@ -245,6 +245,7 @@
                         <tr>
                             <th style="width:52px;">#</th>
                             <th style="min-width:110px;">Part Number</th>
+                            <th style="width:60px;">Rev</th>
                             <th style="min-width:180px;">Description</th>
                             <th style="min-width:110px;">Vendor PN</th>
                             <th style="width:72px; text-align:right;">Qty</th>
@@ -259,6 +260,7 @@
                         <tr class="new-line">
                             <td><input type="number" name="new_pol[dup{{$i}}][POLItem]" value="{{$item.POLItem}}" class="tbl-input" style="width:48px;"></td>
                             <td><input type="text"   name="new_pol[dup{{$i}}][POLPNPartNumber]" value="{{$item.POLPNPartNumber}}" class="tbl-input"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][POLRev]" value="{{$item.POLRev}}" class="tbl-input" style="width:56px;"></td>
                             <td><input type="text"   name="new_pol[dup{{$i}}][POLDesc]" value="{{$item.POLDesc}}" class="tbl-input"></td>
                             <td><input type="text"   name="new_pol[dup{{$i}}][VendorPN]" value="{{$item.VendorPN}}" class="tbl-input"></td>
                             <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLQty]" value="{{printf "%g" $item.POLQty}}" class="tbl-input" style="text-align:right;"></td>
@@ -274,6 +276,7 @@
                         <tr data-polid="{{.POLID}}">
                             <td><input type="number" name="pol[{{.POLID}}][POLItem]" value="{{.POLItem}}" class="tbl-input" style="width:48px;"></td>
                             <td><input type="text"   name="pol[{{.POLID}}][POLPNPartNumber]" value="{{.POLPNPartNumber}}" class="tbl-input"></td>
+                            <td><input type="text"   name="pol[{{.POLID}}][POLRev]" value="{{.POLRev}}" class="tbl-input" style="width:56px;"></td>
                             <td><input type="text"   name="pol[{{.POLID}}][POLDesc]" value="{{.POLDesc}}" class="tbl-input"></td>
                             <td><input type="text"   name="pol[{{.POLID}}][VendorPN]" value="{{.VendorPN}}" class="tbl-input"></td>
                             <td><input type="number" step="any" name="pol[{{.POLID}}][POLQty]" value="{{printf "%g" .POLQty}}" class="tbl-input" style="text-align:right;"></td>
@@ -307,6 +310,7 @@
     <tr class="new-line">
         <td><input type="number" name="new_pol[IDX][POLItem]" class="tbl-input" style="width:48px;" placeholder="#"></td>
         <td><input type="text"   name="new_pol[IDX][POLPNPartNumber]" class="tbl-input" placeholder="Part number"></td>
+        <td><input type="text"   name="new_pol[IDX][POLRev]" class="tbl-input" style="width:56px;" placeholder="Rev"></td>
         <td><input type="text"   name="new_pol[IDX][POLDesc]" class="tbl-input" placeholder="Description"></td>
         <td><input type="text"   name="new_pol[IDX][VendorPN]" class="tbl-input" placeholder="Vendor PN"></td>
         <td><input type="number" step="any" name="new_pol[IDX][POLQty]"  class="tbl-input" style="text-align:right;" placeholder="0"></td>
@@ -504,8 +508,10 @@ function setupPartAutocomplete(input, row) {
     }
     function select(p) {
         input.value = p.part_number;
+        const revInput  = row.querySelector('[name$="[POLRev]"]');
         const descInput = row.querySelector('[name$="[POLDesc]"]');
         const idInput   = row.querySelector('[name$="[POLPNID]"]');
+        if (revInput  && !revInput.value)  revInput.value  = p.revision || '';
         if (descInput && !descInput.value) descInput.value = p.title || '';
         if (idInput) idInput.value = p.pnid;
         close();

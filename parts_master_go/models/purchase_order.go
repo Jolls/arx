@@ -44,15 +44,16 @@ type PurchaseOrder struct {
 }
 
 type PurchaseOrderLine struct {
-	POLID         int
-	POLPOID       int
-	POLItem       int
+	POLID           int
+	POLPOID         int
+	POLItem         int
 	POLPNPartNumber string
-	POLDesc       string
-	POLQty        float64
-	POLCost       float64
-	VendorPN      string
-	POLPNID       *int
+	POLRev          string
+	POLDesc         string
+	POLQty          float64
+	POLCost         float64
+	VendorPN        string
+	POLPNID         *int
 	// joined fields
 	PONumber     string
 	SupplierName string

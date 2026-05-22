@@ -12,6 +12,7 @@ CREATE TABLE POL (
   POLID           INT            PRIMARY KEY IDENTITY,
   POLPOID         INT            NOT NULL,       -- FK to PO.id.
   POLPNPartNumber VARCHAR(255),                  -- Denormalized part number at time of order.
+  POLRev          VARCHAR(10),                   -- Denormalized revision at time of order. Snapshot of PN.revision.
   POLPNID         INT,                           -- FK to PN.PNID. Nullable — line items may not map to a catalog part.
   POLItem         INT            NOT NULL,        -- Line item number on the PO.
   POLDesc         VARCHAR(MAX),                  -- Description at time of order.
@@ -19,6 +20,8 @@ CREATE TABLE POL (
   POLCost         DECIMAL(16,8)  NOT NULL DEFAULT 0, -- Unit cost at time of order.
   VendorPN        VARCHAR(55),                   -- Supplier's part number for this item.
 );
+
+-- Migration: ALTER TABLE dbo.POL ADD POLRev VARCHAR(10) NULL;
 
 ALTER TABLE dbo.POL ADD CONSTRAINT FK_POL_PO FOREIGN KEY (POLPOID) REFERENCES dbo.PO (id);
 ALTER TABLE dbo.POL ADD CONSTRAINT FK_POL_PN FOREIGN KEY (POLPNID) REFERENCES dbo.PN (PNID);

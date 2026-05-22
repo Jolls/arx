@@ -101,7 +101,7 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PNID, PNPartNumber, PNTitle, PNDetail FROM %s
+		SELECT PNID, PNPartNumber, revision, PNTitle, PNDetail FROM %s
 		WHERE PNPartNumber LIKE @p1
 		ORDER BY PNPartNumber
 		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY
@@ -114,15 +114,17 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 	type result struct {
 		PNID       int    `json:"pnid"`
 		PartNumber string `json:"part_number"`
+		Revision   string `json:"revision"`
 		Title      string `json:"title"`
 		Detail     string `json:"detail"`
 	}
 	var out []result
 	for rows.Next() {
 		var p result
-		var partNumber, title, detail sql.NullString
-		if rows.Scan(&p.PNID, &partNumber, &title, &detail) == nil {
+		var partNumber, revision, title, detail sql.NullString
+		if rows.Scan(&p.PNID, &partNumber, &revision, &title, &detail) == nil {
 			p.PartNumber = partNumber.String
+			p.Revision = revision.String
 			p.Title = title.String
 			p.Detail = detail.String
 			out = append(out, p)
