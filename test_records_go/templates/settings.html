@@ -132,11 +132,14 @@ function confirmTestModeToggle(cb) {
 </div>
 </form>
 
-{{if .Changelog}}
+{{if .ReleaseNotes}}
 <div class="card">
-  <div class="card-header"><strong>Changelog</strong></div>
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Release Notes</strong>
+    <a href="/whats-new" class="small text-muted text-decoration-none" target="_blank">Open full page &#8599;</a>
+  </div>
   <div class="card-body">
-    <pre class="mb-0 small" style="white-space:pre-wrap; overflow-wrap:break-word;">{{.Changelog}}</pre>
+    <pre class="mb-0 small" style="white-space:pre-wrap; overflow-wrap:break-word;">{{.ReleaseNotes}}</pre>
   </div>
 </div>
 {{end}}

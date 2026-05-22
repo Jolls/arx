@@ -45,7 +45,7 @@ func onReady() {
 		log.Println("no database password configured — open Settings to connect")
 	}
 
-	appHandler = handlers.New(database, cfg, templatesFS)
+	appHandler = handlers.New(database, cfg, templatesFS, releaseNotesData)
 	appHandler.CheckSchemaVersion(context.Background())
 	addr := "0.0.0.0:" + cfg.Port
 	url := "http://localhost:" + cfg.Port
@@ -99,6 +99,7 @@ func buildRouter(h *handlers.Handler) http.Handler {
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(subStatic))))
 	r.Get("/settings", h.Settings)
 	r.Post("/settings", h.SettingsSave)
+	r.Get("/whats-new", h.WhatsNew)
 	r.Get("/api/browse-folder", h.APIBrowseFolder)
 
 	// All other routes require a live database connection.

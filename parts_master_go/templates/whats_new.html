@@ -1,0 +1,11 @@
+{{define "content"}}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+  <h2>What's New</h2>
+  <a href="/settings" style="color:#888; font-size:0.9em; text-decoration:none;">&#8592; Settings</a>
+</div>
+<div class="detail-section">
+  <pre style="margin:0; font-family:'Consolas','Courier New',monospace; font-size:0.88em;
+              line-height:1.6; white-space:pre-wrap; overflow-wrap:break-word;
+              color:#333;">{{.ReleaseNotes}}</pre>
+</div>
+{{end}}

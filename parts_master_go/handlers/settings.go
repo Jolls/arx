@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -59,8 +58,6 @@ func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 }
 
 func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map[string]any) map[string]any {
-	changelog, _ := os.ReadFile("../CHANGELOG.md")
-
 	var contacts []contactOption
 	var suppliers []supplierOption
 	if h.db != nil {
@@ -83,7 +80,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PODefaultReceiverID": h.cfg.Settings.PODefaults.ReceiverID,
 		"Contacts":            contacts,
 		"Suppliers":           suppliers,
-		"Changelog":           string(changelog),
+		"ReleaseNotes":        h.releaseNotes,
 		"ActiveTab":           "settings",
 		"CsrfToken":           h.csrfToken(w, r),
 	}
@@ -91,6 +88,13 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		data[k] = v
 	}
 	return data
+}
+
+func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "whats_new.html", map[string]any{
+		"ReleaseNotes": h.releaseNotes,
+		"ActiveTab":    "settings",
+	})
 }
 
 func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
