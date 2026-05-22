@@ -163,4 +163,24 @@
     {{end}}
   </tbody>
 </table>
+
+{{if .ImageRows}}
+<h5 class="mt-4 mb-3"><i class="bi bi-images"></i> Screenshots</h5>
+<div class="row row-cols-1 row-cols-md-2 g-3 mb-4">
+  {{range .ImageRows}}
+  {{$imgURL := imageURL $.Form.PartNumber .EffectiveValue}}
+  <div class="col">
+    <div class="card h-100">
+      <a href="{{$imgURL}}" target="_blank">
+        <img src="{{$imgURL}}" class="card-img-top" alt="{{.EffectiveParameter}}"
+             style="object-fit:contain; max-height:330px; background:#f8f8f8;">
+      </a>
+      <div class="card-body p-2">
+        <p class="card-text small text-muted mb-0">{{.EffectiveParameter}}</p>
+      </div>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}
 {{end}}

@@ -85,7 +85,7 @@
       <tr>
         <td>{{.EffectiveParameter}}</td>
         <td>{{.EffectiveSpec}}</td>
-        <td>{{if imageResult $val}}[image]{{else if isLocalFile $val}}[file: {{fileBaseName $val}}]{{else}}{{$val}}{{end}}</td>
+        <td>{{if imageResult $val}}[see gallery]{{else if isLocalFile $val}}[file: {{fileBaseName $val}}]{{else}}{{$val}}{{end}}</td>
         <td style="text-align:center;">{{pfBadge .Result}}</td>
         <td>{{if .Result}}{{.Result.Comment}}{{end}}</td>
       </tr>
@@ -93,6 +93,21 @@
       {{end}}
     </tbody>
   </table>
+
+  {{if .ImageRows}}
+  <div style="margin-top:16px;">
+    <div style="font-weight:700; font-size:10pt; border-bottom:2px solid #000; padding-bottom:4px; margin-bottom:10px;">Screenshots</div>
+    <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px;">
+      {{range .ImageRows}}
+      {{$imgURL := imageURL $.Form.PartNumber .EffectiveValue}}
+      <div style="border:1px solid #ccc; break-inside:avoid;">
+        <img src="{{$imgURL}}" style="width:100%; display:block; object-fit:contain; max-height:270px; background:#f8f8f8;" alt="{{.EffectiveParameter}}">
+        <div style="padding:4px 6px; font-size:8.5pt; color:#333;">{{.EffectiveParameter}}</div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
 </div>
 </body>
 </html>{{end}}

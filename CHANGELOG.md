@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.30] - 2026-05-22 
+- test_records_go: add image gallery section to record detail and print views (#208); tiled grid below results table, grouped by step parameter; images render in PDF via browser print; results table shows `[see gallery]` for image rows
+
 ## [0.3.29] - 2026-05-22 
 - test_records_go: add print-friendly view for test records at `GET /records/{id}/print` (#204); standalone HTML page with embedded CSS, `@media print` suppression of browser headers, PDF filename set via `<title>` tag; Print button added to record detail view
 
