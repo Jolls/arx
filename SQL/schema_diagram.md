@@ -178,13 +178,6 @@ erDiagram
     }
 
     %% Core parts & suppliers
-<<<<<<< HEAD
-    supplier    ||--o{    CN          : "has contacts (CNSUID)"
-    supplier    |o--||    CN          : "default_contact"
-    supplier    ||--o{    LNK         : "approved vendors (LNKSUID)"
-    supplier    ||--o{    PO          : "purchase orders (supplier_id)"
-    supplier    ||--o{    price       : "pricing (supplier_id)"
-=======
     supplier    ||--o{    CN                  : "has contacts (CNSUID)"
     supplier    |o--||    CN                  : "default_contact"
     supplier    ||--o{    LNK                 : "approved vendors (LNKSUID)"
