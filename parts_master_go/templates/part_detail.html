@@ -97,7 +97,7 @@
         <h3>Pricing &amp; Quantities</h3>
         <div class="detail-row"><strong>Quantity:</strong>           <span>{{printf "%.8f" .Part.PNQty}}</span></div>
         <div class="detail-row"><strong>Current Cost:</strong>       <span>${{printf "%.8f" .Part.PNCurrentCost}}</span></div>
-        <div class="detail-row"><strong>Last Rollup Cost:</strong>   <span>{{printf "%.8f" .Part.PNLastRollupCost}}</span></div>
+        <div class="detail-row"><strong>Last Rollup Cost:</strong>   <span>{{if .Part.PNLastRollupAt}}${{printf "%.4f" .Part.PNLastRollupCost}}{{else}}<span class="muted">Never run</span>{{end}}</span></div>
     </div>
 
     {{/* ── Notes ───────────────────────────────────────────────── */}}

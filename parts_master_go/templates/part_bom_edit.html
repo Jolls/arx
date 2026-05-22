@@ -51,6 +51,20 @@
             <a href="/part/{{.Part.PNID}}/bom" class="btn-secondary">Cancel</a>
         </div>
     </form>
+
+    <div class="detail-section" style="margin-top:1.5rem;">
+        <h3>Rollup Cost</h3>
+        {{if .Part.PNLastRollupAt}}
+        <div class="detail-row"><strong>Last Rollup:</strong> <span>${{printf "%.4f" .Part.PNLastRollupCost}} &mdash; {{.Part.PNLastRollupAt.Format "2006-01-02 15:04"}}</span></div>
+        {{else}}
+        <div class="detail-row"><strong>Last Rollup:</strong> <span class="muted">Never run</span></div>
+        {{end}}
+        <form method="POST" action="/part/{{.Part.PNID}}/rollup-cost" style="margin-top:0.5rem;">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="btn">Run Rollup</button>
+        </form>
+        <p class="table-footer-note">Sums PNCurrentCost &times; Qty for each direct BOM component.</p>
+    </div>
 </div>
 
 <template id="new-row-tpl">

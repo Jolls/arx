@@ -22,6 +22,7 @@ type Part struct {
 	PNQty            float64
 	PNCurrentCost    float64
 	PNLastRollupCost float64
+	PNLastRollupAt   *time.Time
 	PNFILLinks       int
 	PNPOLinks        int
 	PNUser1          string
@@ -71,15 +72,16 @@ func (p Part) UserFields() []struct{ Label, Value string } {
 }
 
 type BOMItem struct {
-	PLID         int
-	PLItem       int
-	PLQty        float64
-	PLPartID     int
-	PLListID     int
-	PNPartNumber string
-	PNTitle      string
-	Revision     string
-	PNType       string
+	PLID           int
+	PLItem         int
+	PLQty          float64
+	PLPartID       int
+	PLListID       int
+	PNPartNumber   string
+	PNTitle        string
+	Revision       string
+	PNType         string
+	PNCurrentCost  float64
 }
 
 type Attachment struct {

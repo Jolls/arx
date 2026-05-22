@@ -122,6 +122,7 @@ func buildRouter(h *handlers.Handler) http.Handler {
 		r.Get("/part/{id}/bom", h.PartBOM)
 		r.Get("/part/{id}/bom/edit", h.PartBOMEdit)
 		r.Post("/part/{id}/bom", h.PartBOMSave)
+		r.Post("/part/{id}/rollup-cost", h.PartRollupCost)
 		r.Get("/part/{id}/where-used", h.PartWhereUsed)
 		r.Get("/part/{id}/attachments", h.PartAttachments)
 		r.Post("/part/{id}/attachments", h.PartAttachmentCreate)

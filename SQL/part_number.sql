@@ -35,6 +35,7 @@ CREATE TABLE PN (
   PNDate            DATE             CONSTRAINT DF_PN_PNDate           DEFAULT GETDATE(),
   PNQty             DECIMAL(16,8)    CONSTRAINT DF_PN_PNQty            DEFAULT 0,
   PNLastRollupCost  DECIMAL(16,8)    NULL,                                            -- NULL = no rollup ever run.
+  PNLastRollupAt    DATETIME         NULL,                                            -- NULL = no rollup ever run.
   PNFILLinks        INT              CONSTRAINT DF_PN_PNFILLinks       DEFAULT 0,    -- Denormalized count of FIL rows for this part.
   PNFILIDPrimary    INT              CONSTRAINT DF_PN_PNFILIDPrimary   DEFAULT 0,    -- FILID of the primary attachment.
   PNCurrentCost     DECIMAL(16,8)    CONSTRAINT DF_PN_PNCurrentCost    DEFAULT 0,
