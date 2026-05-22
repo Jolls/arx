@@ -110,7 +110,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		status, reqBy, notes                         sql.NullString
 		user1, user2, user3, user4, user5            sql.NullString
 		user6, user7, user8, user9, user10           sql.NullString
-		pnDate, pnDateModified                       sql.NullTime
+		pnDate, pnDateModified, lastRollupAt         sql.NullTime
 		active                                       sql.NullBool
 		filIDPrimary, filLinks, poLinks              sql.NullInt64
 		qty, currentCost, lastRollupCost             sql.NullFloat64
@@ -119,7 +119,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		SELECT PNID, PNPartNumber, revision, PNTitle, PNDetail, PNType,
 		       PNStatus, PNActive, PNReqBy, PNNotes,
 		       PNDate, PNDateModified, PNFILIDPrimary,
-		       PNQty, PNCurrentCost, PNLastRollupCost, PNFILLinks, PNPOLinks,
+		       PNQty, PNCurrentCost, PNLastRollupCost, PNLastRollupAt, PNFILLinks, PNPOLinks,
 		       PNUser1, PNUser2, PNUser3, PNUser4, PNUser5,
 		       PNUser6, PNUser7, PNUser8, PNUser9, PNUser10
 		FROM %s WHERE PNID = @p1
@@ -127,7 +127,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		&p.PNID, &partNumber, &revision, &title, &detail, &pnType,
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
-		&qty, &currentCost, &lastRollupCost, &filLinks, &poLinks,
+		&qty, &currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -153,6 +153,9 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	p.PNQty = qty.Float64
 	p.PNCurrentCost = currentCost.Float64
 	p.PNLastRollupCost = lastRollupCost.Float64
+	if lastRollupAt.Valid {
+		p.PNLastRollupAt = &lastRollupAt.Time
+	}
 	p.PNFILLinks = int(filLinks.Int64)
 	p.PNPOLinks = int(poLinks.Int64)
 	p.PNUser1, p.PNUser2, p.PNUser3, p.PNUser4, p.PNUser5 = user1.String, user2.String, user3.String, user4.String, user5.String
@@ -390,7 +393,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLItem, pl.PLQty, pl.PLPartID,
-		       pn.PNPartNumber, pn.PNTitle, pn.revision, pn.PNType
+		       pn.PNPartNumber, pn.PNTitle, pn.revision, pn.PNType, pn.PNCurrentCost
 		FROM %s pl
 		JOIN %s pn ON pl.PLPartID = pn.PNID
 		WHERE pl.PLListID = @p1
@@ -405,8 +408,9 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item models.BOMItem
 		var partNumber, title, revision, pnType sql.NullString
+		var currentCost sql.NullFloat64
 		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLPartID,
-			&partNumber, &title, &revision, &pnType); err != nil {
+			&partNumber, &title, &revision, &pnType, &currentCost); err != nil {
 			h.renderError(w, "Error reading BOM: "+err.Error())
 			return
 		}
@@ -414,6 +418,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		item.PNTitle = title.String
 		item.Revision = revision.String
 		item.PNType = pnType.String
+		item.PNCurrentCost = currentCost.Float64
 		items = append(items, item)
 	}
 	h.render(w, "part_bom.html", map[string]any{
@@ -538,6 +543,15 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 		item.PNTitle = title.String
 		items = append(items, item)
 	}
+	var lastRollupCost sql.NullFloat64
+	var lastRollupAt sql.NullTime
+	h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT PNLastRollupCost, PNLastRollupAt FROM %s WHERE PNID = @p1`, pn,
+	), id).Scan(&lastRollupCost, &lastRollupAt)
+	p.PNLastRollupCost = lastRollupCost.Float64
+	if lastRollupAt.Valid {
+		p.PNLastRollupAt = &lastRollupAt.Time
+	}
 	h.render(w, "part_bom_edit.html", map[string]any{
 		"Part": p, "BOMItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
@@ -637,6 +651,34 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/bom", id), http.StatusFound)
+}
+
+// ── PartRollupCost — POST /part/{id}/rollup-cost ─────────────────────────────
+
+func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
+	if !h.verifyCsrf(r) {
+		http.Error(w, "Invalid form submission", http.StatusForbidden)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	var cost float64
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT ISNULL(SUM(pn.PNCurrentCost * pl.PLQty), 0)
+		FROM %s pl
+		JOIN %s pn ON pl.PLPartID = pn.PNID
+		WHERE pl.PLListID = @p1
+	`, pl, pn), id).Scan(&cost); err != nil {
+		h.renderError(w, "Error computing rollup cost: "+err.Error())
+		return
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET PNLastRollupCost=@p1, PNLastRollupAt=@p2 WHERE PNID=@p3`, pn,
+	), cost, time.Now(), id); err != nil {
+		h.renderError(w, "Error saving rollup cost: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/bom", id), http.StatusSeeOther)
 }
 
 func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
