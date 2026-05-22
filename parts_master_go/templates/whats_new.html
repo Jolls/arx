@@ -8,4 +8,7 @@
               line-height:1.6; white-space:pre-wrap; overflow-wrap:break-word;
               color:#333;">{{.ReleaseNotes}}</pre>
 </div>
+<script>
+if (typeof dismissWhatsNew === "function") { dismissWhatsNew("{{.AppVersion}}"); }
+</script>
 {{end}}

@@ -8,4 +8,7 @@
     <pre class="mb-0 small" style="white-space:pre-wrap; overflow-wrap:break-word;">{{.ReleaseNotes}}</pre>
   </div>
 </div>
+<script>
+if (typeof dismissWhatsNew === "function") { dismissWhatsNew("{{.AppVersion}}"); }
+</script>
 {{end}}
