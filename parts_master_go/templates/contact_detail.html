@@ -1,0 +1,63 @@
+{{define "content"}}
+<header>
+    <h1>Contact Details</h1>
+    <p>{{.Contact.CNName}}</p>
+</header>
+<div class="content">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <a href="{{if .NavBackURL}}{{.NavBackURL}}{{else}}/contacts{{end}}" class="back-link" style="margin-bottom:0;">
+            &#8592; Back to {{if .NavBackLabel}}{{.NavBackLabel}}{{else}}Contacts List{{end}}
+        </a>
+        <a href="/contact/{{.Contact.CNID}}/edit" class="new-record-btn" style="margin-bottom:0;">Edit Contact</a>
+    </div>
+
+    <div class="detail-section">
+        <h3>Basic Information</h3>
+        <div class="detail-row"><strong>Name:</strong>         <span>{{.Contact.CNName}}</span></div>
+        <div class="detail-row">
+            <strong>Supplier:</strong>
+            <span>
+                {{if .Contact.CNSUID}}
+                    <a href="/supplier/{{derefInt .Contact.CNSUID}}">{{.Contact.SupplierName}}</a>
+                {{else}}None{{end}}
+            </span>
+        </div>
+        <div class="detail-row"><strong>Email:</strong>        <span>{{.Contact.CNEmail}}</span></div>
+        <div class="detail-row"><strong>Web:</strong>          <span>{{.Contact.CNWeb}}</span></div>
+        <div class="detail-row"><strong>User Account:</strong> <span>{{.Contact.CNUserAccountLink}}</span></div>
+    </div>
+
+    <div class="detail-section">
+        <h3>Status &amp; Dates</h3>
+        <div class="detail-row">
+            <strong>Active:</strong>
+            <span>{{if .Contact.CNActive}}<span class="badge badge-active">Active</span>
+            {{else}}<span class="badge badge-inactive">Inactive</span>{{end}}</span>
+        </div>
+        <div class="detail-row"><strong>Last Modified:</strong> <span>{{formatDate .Contact.CNDateModified}}</span></div>
+    </div>
+
+    <div class="detail-section">
+        <h3>Contact Details</h3>
+        <div class="detail-row"><strong>Phone 1:</strong> <span>{{.Contact.CNPhone1}}</span></div>
+        <div class="detail-row"><strong>Phone 2:</strong> <span>{{.Contact.CNPhone2}}</span></div>
+        <div class="detail-row"><strong>Fax:</strong>     <span>{{.Contact.CNFAX}}</span></div>
+    </div>
+
+    <div class="detail-section">
+        <h3>Address</h3>
+        <div class="detail-row"><strong>Street:</strong>  <span>{{.Contact.CNAddress}}</span></div>
+        <div class="detail-row"><strong>City:</strong>    <span>{{.Contact.CNCity}}</span></div>
+        <div class="detail-row"><strong>State:</strong>   <span>{{.Contact.CNState}}</span></div>
+        <div class="detail-row"><strong>Zip:</strong>     <span>{{.Contact.CNZipcode}}</span></div>
+        <div class="detail-row"><strong>Country:</strong> <span>{{.Contact.CNCountry}}</span></div>
+    </div>
+
+    {{if .Contact.CNNotes}}
+    <div class="detail-section">
+        <h3>Notes</h3>
+        <p style="white-space:pre-wrap; word-break:break-word;">{{.Contact.CNNotes}}</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

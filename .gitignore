@@ -1,0 +1,10 @@
+
+*.frx
+~$Parts Master-Dev.xlsm
+CLAUDE.md
+.env
+config/local.json
+~$Test Release Record-DEV.xlsm
+test_records_go/config/local.tr.json
+parts_master_go/config/local.pm.json
+.claude/settings.local.json

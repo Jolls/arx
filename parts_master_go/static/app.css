@@ -1,0 +1,254 @@
+/* =============================================================
+   Arx Parts Master — application stylesheet
+   All colours and sizing live here. To retheme the app, only
+   this file needs to change.
+   ============================================================= */
+
+/* --- Tokens -------------------------------------------------- */
+:root {
+    --accent-1:      #667eea;   /* primary blue-purple */
+    --accent-2:      #764ba2;   /* secondary purple */
+    --header-bg:     #1a1a2e;
+    --header-border: var(--accent-1);
+    --body-bg-from:  var(--accent-1);
+    --body-bg-to:    var(--accent-2);
+}
+
+/* --- Reset ---------------------------------------------------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* --- Page shell ---------------------------------------------- */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, var(--body-bg-from) 0%, var(--body-bg-to) 100%);
+    min-height: 100vh;
+    padding: 20px;
+    padding-top: 56px;
+}
+
+.app-header {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 36px; background: var(--header-bg); color: #e0e0e0;
+    display: flex; align-items: center; padding: 0 16px;
+    font-size: 0.85em; font-weight: 600; letter-spacing: 0.5px;
+    z-index: 1000; border-bottom: 2px solid var(--header-border);
+}
+
+.app-header--testmode {
+    background: #b45309;
+    border-bottom-color: #f59e0b;
+}
+
+.container {
+    max-width: 1200px; margin: 0 auto; background: white;
+    border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden;
+}
+
+/* --- Page header (title banner) ------------------------------ */
+header {
+    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+    color: white; padding: 20px; text-align: center;
+}
+header h1 { font-size: 2.5em; margin-bottom: 5px; }
+header p  { font-size: 1.1em; opacity: 0.9; margin: 0; }
+
+/* --- Navigation tabs ----------------------------------------- */
+.tabs { display: flex; border-bottom: 1px solid #ddd; background: #fafafa; }
+.tab {
+    flex: 1; text-align: center; padding: 12px 0;
+    text-decoration: none; color: #444; font-weight: 600;
+    border-right: 1px solid #ddd; transition: background 0.2s, color 0.2s;
+}
+.tab:last-child { border-right: none; }
+.tab:hover  { background: #f0f0f0; }
+.tab.active { background: var(--accent-1); color: #fff; }
+
+/* --- Sub-tabs (detail pages) --------------------------------- */
+.sub-tabs {
+    display: flex; border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 20px; margin-top: -4px;
+}
+.sub-tab {
+    padding: 10px 20px; text-decoration: none; color: #555; font-weight: 600;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    font-size: 0.95em; transition: color 0.2s, border-color 0.2s;
+}
+.sub-tab:hover         { color: var(--accent-1); text-decoration: none; }
+.sub-tab.active        { color: var(--accent-1); border-bottom-color: var(--accent-1); }
+.sub-tab.disabled      { color: #bbb; cursor: default; pointer-events: none; }
+.sub-tab-edit          { margin-left: auto; }
+
+/* --- Content area -------------------------------------------- */
+.content { padding: 20px; }
+
+/* --- Tables -------------------------------------------------- */
+.table-wrapper { overflow-x: auto; contain: layout style; }
+
+table { width: 100%; border-collapse: collapse; background: white; table-layout: fixed; }
+thead { background: #f5f5f5; border-bottom: 2px solid var(--accent-1); }
+th    { padding: 8px 10px; text-align: left; font-weight: 600; color: #333; font-size: 0.95em; }
+td    { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+tr:hover { background: #f9f9f9; }
+
+/* Parts table column widths */
+table.parts-table th:nth-child(1), table.parts-table td:nth-child(1) { width: 110px; }
+table.parts-table th:nth-child(2), table.parts-table td:nth-child(2) { width: 60px; }
+table.parts-table th:nth-child(3), table.parts-table td:nth-child(3) { width: 180px; }
+table.parts-table th:nth-child(4), table.parts-table td:nth-child(4) { width: 150px; }
+table.parts-table th:nth-child(5), table.parts-table td:nth-child(5) { width: 100px; }
+table.parts-table th:nth-child(6), table.parts-table td:nth-child(6) { width: 90px; }
+table.parts-table th:nth-child(7), table.parts-table td:nth-child(7) { width: 60px; }
+table.parts-table th:nth-child(8), table.parts-table td:nth-child(8) { width: 110px; }
+
+/* --- Filter row --------------------------------------------- */
+.filter-row th { padding: 4px 6px; border: none; background: transparent; }
+.filter-row input {
+    width: 100%; box-sizing: border-box; margin: 0;
+    padding: 6px 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.9em;
+}
+.filter-row input:focus { outline: none; border-color: var(--accent-1); box-shadow: 0 0 3px rgba(102,126,234,0.3); }
+
+.form-input.input-invalid { border-color: #dc3545 !important; background: #fff8f8; }
+.form-input.input-invalid:focus { box-shadow: 0 0 3px rgba(220,53,69,0.4); }
+
+/* --- Pagination ---------------------------------------------- */
+.pagination-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0; }
+.pagination-info     { color: #666; font-size: 0.95em; }
+.pagination-buttons  { display: flex; gap: 10px; }
+.page-nav {
+    padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd;
+    border-radius: 3px; cursor: pointer; font-size: 0.9em; transition: background 0.2s;
+}
+.page-nav:hover:not(:disabled) { background: #e0e0e0; }
+.page-nav:disabled              { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Links --------------------------------------------------- */
+a { color: var(--accent-1); text-decoration: none; transition: color 0.2s; }
+a:hover { color: var(--accent-2); text-decoration: underline; }
+
+.part-number-link { color: var(--accent-1); text-decoration: none; font-weight: 600; transition: color 0.2s; }
+.part-number-link:hover { color: var(--accent-2); text-decoration: underline; }
+
+.back-link { display: inline-block; margin-bottom: 20px; padding: 8px 15px; background: #f0f0f0; border-radius: 4px; transition: background 0.2s; }
+.back-link:hover { background: #e0e0e0; }
+
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.header-app-link { color: #e0e0e0; font-size: 0.8em; font-weight: 400; letter-spacing: 0; text-decoration: none; opacity: 0.55; transition: opacity 0.2s; }
+.header-app-link:hover { opacity: 1; color: #e0e0e0; text-decoration: none; }
+.header-settings-link { color: #e0e0e0; font-size: 1.15em; text-decoration: none; opacity: 0.65; line-height: 1; transition: opacity 0.2s; }
+.header-settings-link:hover,
+.header-settings-link.active { opacity: 1; color: #e0e0e0; text-decoration: none; }
+
+/* --- Badges & status ----------------------------------------- */
+.badge          { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 500; }
+.badge-active   { background: #d4edda; color: #155724; }
+.badge-inactive { background: #f8d7da; color: #721c24; }
+.status-U       { background: #cfe2ff; color: #084298; }
+.status-A       { background: #d1e7dd; color: #0f5132; }
+.status-D       { background: #f8d7da; color: #721c24; }
+
+/* --- Detail sections ----------------------------------------- */
+.detail-section { margin-bottom: 20px; padding: 20px; background: #f9f9f9; border-radius: 4px; border-left: 4px solid var(--accent-1); }
+.detail-section h3 { margin-bottom: 10px; color: #333; }
+.detail-row { display: grid; grid-template-columns: 150px 1fr; margin-bottom: 12px; gap: 20px; }
+.detail-row strong { color: var(--accent-1); }
+
+/* --- Banners ------------------------------------------------- */
+.error-banner  { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+.info-banner   { background: #e0f0ff; border: 1px solid #b6d9f7; color: #0c5a8a; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+.query-error   { background: #fff3cd; border: 1px solid #ffc107; color: #664d03; padding: 12px 15px; border-radius: 4px; margin-bottom: 20px; font-size: 0.9em; }
+.no-results         { text-align: center; padding: 40px; color: #999; font-size: 1.1em; }
+.table-footer-note  { margin-top: 12px; color: #888; font-size: 0.9em; }
+
+/* --- Buttons ------------------------------------------------- */
+.btn-primary {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+    color: white; border: none; border-radius: 4px; font-size: 1em; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s;
+}
+.btn-primary:hover { opacity: 0.9; }
+
+.btn-secondary {
+    padding: 10px 24px; background: #f0f0f0; color: #333; border: 1px solid #ddd;
+    border-radius: 4px; font-size: 1em; font-weight: 600; text-decoration: none;
+    display: inline-block; transition: background 0.2s;
+}
+.btn-secondary:hover { background: #e0e0e0; color: #333; text-decoration: none; }
+
+.new-record-btn {
+    display: inline-block; padding: 8px 16px;
+    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+    color: white; border-radius: 4px; font-size: 0.9em; font-weight: 600;
+    text-decoration: none; transition: opacity 0.2s; margin-bottom: 15px;
+}
+.new-record-btn:hover { opacity: 0.9; color: white; text-decoration: none; }
+
+/* --- Forms --------------------------------------------------- */
+.form-label { display: block; font-weight: 600; color: var(--accent-1); font-size: 0.95em; }
+.form-input, .form-select, .form-textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px;
+    font-size: 0.95em; font-family: inherit; box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+    outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+}
+.form-textarea { min-height: 100px; resize: vertical; }
+.form-checkbox-row { display: flex; align-items: center; gap: 10px; }
+.form-checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-1); cursor: pointer; }
+.form-actions { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
+
+/* --- Part status bar (detail page) --------------------------- */
+.part-status-bar {
+    display: flex; flex-wrap: wrap; gap: 0;
+    margin-bottom: 20px; background: #f0f4ff;
+    border: 1px solid #c7d2fe; border-radius: 6px; overflow: hidden;
+}
+.part-status-cell {
+    padding: 14px 24px; border-right: 1px solid #c7d2fe; text-align: center;
+}
+.part-status-cell--flex { min-width: 0; flex: 1; }
+.part-status-cell:last-child { border-right: none; }
+.part-status-label {
+    font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--accent-1); font-weight: 700; margin-bottom: 6px;
+}
+.part-status-value { font-weight: 600; font-size: 0.95em; }
+.part-status-link {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* --- PO edit line-item table --------------------------------- */
+.tbl-input {
+    border: 1px solid #d1d5db; border-radius: 3px;
+    padding: 3px 5px; font-size: 0.85em;
+    width: 100%; box-sizing: border-box;
+}
+.tbl-input:focus { outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 2px rgba(102,126,234,0.2); }
+.btn-remove-row {
+    background: none; border: 1px solid #e5e7eb; border-radius: 3px;
+    color: #ef4444; font-size: 1.1em; font-weight: bold;
+    cursor: pointer; padding: 1px 6px; line-height: 1;
+}
+.btn-remove-row:hover { background: #fee2e2; border-color: #ef4444; }
+tr.line-removed td { opacity: 0.35; pointer-events: none; }
+
+/* --- Supplier/part search dropdown --------------------------- */
+.search-dropdown {
+    position: fixed; background: #fff;
+    border: 1px solid var(--accent-1); border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+    z-index: 9999; max-height: 220px; overflow-y: auto; min-width: 280px;
+}
+.search-dropdown-item {
+    padding: 7px 12px; cursor: pointer; font-size: 0.85em;
+    border-bottom: 1px solid #f3f4f6;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.search-dropdown-item:last-child { border-bottom: none; }
+.search-dropdown-item:hover, .search-dropdown-item.active { background: #eef2ff; }
+.search-dropdown-item strong { color: var(--accent-1); font-weight: 600; }
+
+/* --- Footer -------------------------------------------------- */
+footer { background: #f5f5f5; padding: 20px; text-align: center; color: #666; font-size: 0.9em; border-top: 1px solid #e0e0e0; }

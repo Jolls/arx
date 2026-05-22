@@ -1,0 +1,50 @@
+{{define "content"}}
+<header>
+    <h1>Part Details</h1>
+    <p>{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}</p>
+</header>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{if .OrderItems}}
+    <div class="table-wrapper">
+        <table style="table-layout:auto;">
+            <thead>
+                <tr>
+                    <th style="width:80px;">PO #</th>
+                    <th>Supplier</th>
+                    <th style="width:100px;">Date Ordered</th>
+                    <th style="width:100px;">Date Closed</th>
+                    <th style="width:70px;">Status</th>
+                    <th style="width:60px; text-align:right;">Qty</th>
+                    <th style="width:100px; text-align:right;">Unit Cost</th>
+                    <th>Description</th>
+                    <th>Vendor PN</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .OrderItems}}
+                <tr>
+                    <td><a href="/po/{{.PONumber}}" class="part-number-link">{{.PONumber}}</a></td>
+                    <td>{{.SupplierName}}</td>
+                    <td>{{formatDate .DateOrdered}}</td>
+                    <td>{{formatDate .DateClosed}}</td>
+                    <td>
+                        {{if .IsActive}}<span class="badge badge-active">Open</span>
+                        {{else}}<span class="badge badge-inactive">Closed</span>{{end}}
+                    </td>
+                    <td style="text-align:right;">{{printf "%.2f" .POLQty}}</td>
+                    <td style="text-align:right;">${{printf "%.4f" .POLCost}}</td>
+                    <td>{{.POLDesc}}</td>
+                    <td>{{.VendorPN}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .OrderItems}} order line{{if ne (len .OrderItems) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No purchase order history found for this part.</p>
+    {{end}}
+</div>
+{{end}}

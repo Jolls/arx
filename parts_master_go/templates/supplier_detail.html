@@ -1,0 +1,72 @@
+{{define "content"}}
+<header>
+    <h1>Supplier Details</h1>
+    <p>{{.Supplier.Name}}</p>
+</header>
+<div class="content">
+    {{template "supplier_tabs" .}}
+
+    <div class="detail-section">
+        <h3>Basic Information</h3>
+        <div class="detail-row"><strong>Name:</strong>           <span>{{.Supplier.Name}}</span></div>
+        <div class="detail-row"><strong>Supplier Code:</strong>  <span>{{.Supplier.SUSupplierCode}}</span></div>
+        <div class="detail-row">
+            <strong>Default Attachment:</strong>
+            <span>
+                {{if .PrimaryAtt}}
+                    {{$f := .PrimaryAtt.FilePath}}
+                    {{$n := .PrimaryAtt.Notes}}
+                    {{if isHTTPURL $f}}
+                        <a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{attachLabel $f $n}}</a>
+                    {{else if isLocalDir $f}}
+                        <a href="{{supplierLocalDirURL $f}}">&#128193; {{attachLabel $f $n}}</a>
+                    {{else if isLocalFile $f}}
+                        {{if isPDF $f}}
+                            <a href="{{supplierLocalFileURL $f}}" target="_blank">{{attachLabel $f $n}}</a>
+                        {{else}}
+                            <a href="{{supplierLocalFileURL $f}}" download="{{fileBaseName $f}}">{{attachLabel $f $n}}</a>
+                        {{end}}
+                    {{else}}
+                        {{$f}}
+                    {{end}}
+                {{else}}—{{end}}
+            </span>
+        </div>
+    </div>
+
+    <div class="detail-section">
+        <h3>Default Contact Information</h3>
+        {{if .Supplier.DefaultContact}}
+        <div class="detail-row"><strong>Name:</strong>   <span><a href="/contact/{{derefInt .Supplier.DefaultContact}}">{{.Supplier.CNName}}</a></span></div>
+        <div class="detail-row"><strong>Phone:</strong>  <span>{{if .Supplier.CNPhone1}}{{.Supplier.CNPhone1}}{{else}}—{{end}}</span></div>
+        <div class="detail-row"><strong>Email:</strong>  <span>{{if .Supplier.CNEmail}}{{.Supplier.CNEmail}}{{else}}—{{end}}</span></div>
+        <div class="detail-row"><strong>City:</strong>   <span>{{if .Supplier.CNCity}}{{.Supplier.CNCity}}{{else}}—{{end}}</span></div>
+        {{else}}
+        <p style="color:#888;">No default contact set.</p>
+        {{end}}
+    </div>
+
+    <div class="detail-section">
+        <h3>Status &amp; Dates</h3>
+        <div class="detail-row">
+            <strong>Status:</strong>
+            <span>{{if .Supplier.IsActive}}<span class="badge badge-active">Active</span>
+            {{else}}<span class="badge badge-inactive">Inactive</span>{{end}}</span>
+        </div>
+        <div class="detail-row"><strong>Last Modified:</strong> <span>{{formatDate .Supplier.DateModified}}</span></div>
+    </div>
+
+    <div class="detail-section">
+        <h3>Statistics</h3>
+        <div class="detail-row"><strong>Linked Parts:</strong>     <span>{{.Supplier.SUNumOfLNKs}}</span></div>
+        <div class="detail-row"><strong>Purchase Orders:</strong>  <span>{{.Supplier.SUNumOfPOs}}</span></div>
+    </div>
+
+    {{if .Supplier.SUNotes}}
+    <div class="detail-section">
+        <h3>Notes</h3>
+        <p style="white-space:pre-wrap; word-break:break-word;">{{.Supplier.SUNotes}}</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

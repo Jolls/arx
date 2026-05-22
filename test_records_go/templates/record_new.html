@@ -1,0 +1,68 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Forms</a></li>
+    <li class="breadcrumb-item">
+      <a href="/forms/{{.Form.ID}}/records">{{.Form.PartNumber}}</a>
+    </li>
+    <li class="breadcrumb-item active">New Record</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
+</div>
+
+<form method="POST" action="/forms/{{.Form.ID}}/records/new" style="max-width:520px">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+  <div class="mb-3">
+    <label class="form-label fw-semibold" for="bom_pnid">Unit Under Test</label>
+    {{if .BOMParts}}
+    <select class="form-select" id="bom_pnid" name="bom_pnid">
+      <option value="">— select part —</option>
+      {{range .BOMParts}}
+      <option value="{{.PNID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
+      {{end}}
+    </select>
+    {{else}}
+    <p class="text-muted small mb-0">No parts in BOM for this form. Add items to the form's part number BOM in Parts Master.</p>
+    <input type="hidden" name="bom_pnid" value="">
+    {{end}}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label fw-semibold" for="serial_number">Serial Number</label>
+    <input type="text" class="form-control font-mono" id="serial_number"
+           name="serial_number" value="{{.NextSN}}" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label fw-semibold" for="record_date">Test Date</label>
+    <input type="date" class="form-control" id="record_date"
+           name="record_date" value="{{.Today}}">
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label fw-semibold" for="comments">Type</label>
+    {{$types := .Form.RecordTypeList}}
+    {{if $types}}
+    <select class="form-select" id="comments" name="comments">
+      {{range $i, $t := $types}}
+      <option value="{{$t}}"{{if eq $i 0}} selected{{end}}>{{$t}}</option>
+      {{end}}
+    </select>
+    {{else}}
+    <input type="text" class="form-control" id="comments" name="comments"
+           placeholder="e.g. New Release, Re-Test, Upgrade">
+    {{end}}
+  </div>
+
+  <div class="d-flex gap-2 mt-4">
+    <a href="/forms/{{.Form.ID}}/records" class="btn btn-outline-secondary">Cancel</a>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-plus-circle"></i> Create &amp; Open
+    </button>
+  </div>
+</form>
+{{end}}

@@ -1,0 +1,368 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
+
+## [0.3.26] - 2026-05-21 
+- SQL: add NOT NULL + FK constraints to LNK, PL, POL, PO, price, supplier, CN, Forms, Tests, TestRecords, TestResults; migration scripts in `SQL/migrate_add_constraints_parts.sql` and `SQL/migrate_add_constraints_tests.sql`
+- SQL: rename all auto-generated constraint names to explicit `DF_table_column` / `UQ_table_column` conventions; rename script in `SQL/rename_constraints.sql`
+- SQL: update all DDL reference files with explicit CONSTRAINT names, NOT NULL, and FK declarations; remove resolved TODO comments
+- SQL: add missing DEFAULT constraints for `supplier.is_active`, `supplier.SUNumOfLNKs`, `supplier.SUNumOfPOs`, `price.pack_size`
+- Both apps: add cross-app navigation link in header (Parts Master ↔ Test Records); configurable via `PM_URL` / `TR_URL` env vars, defaulting to localhost ports
+- parts_master_go: fix nil panic on new supplier form — `{{if not .Contacts}}` instead of `{{if eq (len .Contacts) 0}}`
+- test_records_go: replace `serial_number + 0` sort trick with `TRY_CAST(serial_number AS INT)` in RecordsList and RecordDetail prev/next queries
+
+## [0.3.25] - 2026-05-21 
+- SQL: migrate `PN.PNLastRollupCost` from `VARCHAR(255)` to `DECIMAL(16,8) NULL`; NULL = no rollup ever run
+- SQL: add `NOT NULL DEFAULT 0` to `PL.PLItem` and `PL.PLQty`; fixes NULL scan error on where-used page
+- Add `arxlib/urlutil/urlutil_test.go` — first unit test suite; covers all 9 urlutil functions
+- Fix `SafePathSegments` to correctly drop `..` traversal segments (was passing through via `filepath.Base`)
+
+## [0.3.24] - 2026-05-20 
+- Both apps: open a Windows console window on startup when `DEBUG_MODE=true` (`console_windows.go`); SQL query logging is now visible without running from a terminal
+- Both apps: add `app_config` table (key/value store for DB-side metadata); seed `schema_version = '1'`; add `app_config_Test` variant and update `_test.sql`
+- Both apps: add `CheckSchemaVersion` — checks `app_config.schema_version` against `config.ExpectedSchemaVersion` on startup, on settings save, and on Parts/Forms/Records page load; shows a persistent banner if there is a mismatch
+
+## [0.3.23] - 2026-05-20 
+- Schema audit: drop dead columns `supplier.SUWeb`, `supplier.SUContact1`, `Forms.custom_sheets`, `POL.POLRev`, `price.price_type` from DDL; update comments on remaining flagged columns confirming status
+- `parts_master_go`: add `PO.date_printed` to model, `fetchPO` SELECT/scan, update handler, detail status bar, and edit form; set automatically via `POST /po/{id}/mark-printed` when print button is clicked
+- Both apps: link `DEBUG_MODE` to SQL query logging — all `QueryContext`/`QueryRowContext`/`ExecContext`/transaction calls log to terminal when debug mode is on; `parts_master_go` adds wrapper methods; `test_records_go` unifies on `DebugMode` (removes separate `SQLDebug` field)
+
+## [0.3.22] - 2026-05-19 
+- `test_records_go`: prev/next navigation arrows on record view — steps through records in the same form by the same ordering as the records list (serial number descending)
+- `test_records_go`: debug mode setting — toggleable in Settings; when on, shows raw step fields panel on record view; persisted in `config/local.tr.json`
+- Both apps: test mode now toggleable in Settings UI under Developer; persisted in `local.json` which overrides `.env`; confirmation popup warns to close other tabs before switching
+- Both apps: remove test mode port switching — each app runs on one port regardless of mode; test mode now only switches table name variants
+
+## [0.3.21] - 2026-05-19 
+- Remove `report_text` field — never used in VBA or Go UI; removed from `Tests` DDL, `test_definition_history` DDL and trigger, all Go handlers, models, templates, and migration script; DB column drop (`ALTER TABLE Tests DROP COLUMN report_text`) to be run separately
+
+## [0.3.20] - 2026-05-19 
+- DB migration: VBA `ArchiveTest` rows moved from `Tests` into `test_definition_history`; all definition change history now consolidated in one table and surfaced in the form definition timeline UI
+- `SQL/migrate_vba_archive_to_history.sql`: migration script with pre-flight checks, `_Test` and prod steps, backup tables, and cleanup placeholders (section 4 deferred — archive rows and column drops pending)
+- `SQL/_test.sql`: remove conditional guard on `test_definition_history_Test` recreate — table is now permanent
+- `test_records_go`: remove Calc P/F column from read-only record view — stored `pass_fail` is the source of truth; live spec comparison deferred to a future feature
+- `TestRecord` xlsm: remove `Revision` column from `tbl_NewTests` test modification sheet
+
+## [0.3.19] - 2026-05-18 
+- `TestRecord` VBA: remove `ArchiveTest` mechanism — test definition history is now handled entirely by the `trg_Tests_history` DB trigger writing to `test_definition_history`; removes `ArchiveTest` sub, `Call ArchiveTest` call site, revision increment logic, and `Revision` column from the `Tests` SELECT query
+
+
+- Both apps: `PM_PORT`/`TR_PORT` and `PM_TEST_PORT`/`TR_TEST_PORT` env vars allow all four ports to be configured in a single shared `.env` file; falls back to `PORT`/`TEST_PORT` for backwards compatibility
+- Both apps: app-specific local config files (`config/local.pm.json`, `config/local.tr.json`) prevent each app from clobbering the other's settings when run from the same folder
+- `test_records_go`: `max_subbatch_result` named query refined — joins `TestRecords` to filter by `record_date <= @record_date`, preventing later batches from inflating the max when editing historical records
+
+## [0.3.18] - 2026-05-18 
+- `parts_master_go`: Add BOM editing — GET `/part/{id}/bom/edit` renders an editable table; POST `/part/{id}/bom` saves changes (add rows, update item#/qty, delete rows) in one transaction; part number typeahead reused from PO line items; "Edit BOM" button added to the read-only BOM view
+- `parts_master_go`: `TEST_PORT` env var allows prod and test mode to run simultaneously on different ports
+- `test_records_go`: Form definition editor — drag-and-drop row reordering (SortableJS), add new test rows, hide checkbox on heading rows, hide applies to all row types
+- `test_records_go`: Named queries — live re-resolution of `{id}` cross-step tokens on the edit page without a save/reload cycle; auto-fill single-result queries trigger P/F immediately; open-link icon for LOCAL: file results; `{form.id}`, `{form.pnid}`, `{form.pn}` tokens added; named query errors now surface in the UI instead of silently leaving the field stuck
+- `test_records_go`: Add `pn_primary_attachment` and `form_primary_attachment` named queries using `PN.PNFILIDPrimary` for primary attachment lookup
+- `test_records_go`: Add named queries — `recent_serial_numbers_for_form` (last 20 SNs for a form by date), `max_subbatch_result` (max integer result for a test step capped at record date), `bom_pn_by_item` changed to `list`
+- `test_records_go`: `result_type = 'multi'` on named queries renders a checkbox list; selected values stored comma-delimited; includes "— Other —" for custom entries
+- `test_records_go`: Formula evaluation in `default_result` — expressions like `{113} + {116}` auto-compute live on the edit page; computed inputs are readonly and highlighted blue
+- `test_records_go`: `pf_type = 'comment'` always passes regardless of value
+- `test_records_go`: Definition history timeline collapses to one dot per calendar day
+- `test_records_go`: `spec_nom` syntax lint in form definition editor — flags missing `@` on named query params on blur
+- `test_records_go`: `TEST_PORT` env var allows prod and test mode to run simultaneously on different ports
+
+## [0.3.17] - 2026-05-16 
+- Both apps now display proper branded icons in the system tray and browser tab
+- `parts_master_go`: Arx single-gear icon (Arx-32.png embedded as systray ICO and favicon)
+- `test_records_go`: Arx Assemblies double-gear icon (Arx-Assemblies-32.png embedded as systray ICO and favicon)
+- `icons/` folder added to repo with SVG sources and PNG rasters at 16/32/64/128/256/512/1024px
+
+## [0.3.16] - 2026-05-16 
+- Add `trg_FIL_part_count` trigger on `FIL` to maintain `PN.PNFILLinks` (active rows only)
+- `SQL/_test.sql`: add `trg_FIL_Test_part_count`, combined FIL+POL recalibration
+- `PartsMaster/Part.cls`: convert FIL hard-delete to soft-delete; add `is_active=1` filter to `BuildFileLinkCollection` and `NumFileLinksViaSQL`; remove `UpdateNumFileLinks` (trigger owns count)
+- `FIL.FILPNID` migrated from VARCHAR(255) to INT NOT NULL with FK constraint to PN.PNID
+- Document all 4 triggers (+ 4 test variants) in `SQL/SCHEMA.md`, `SQL/FIL.sql`, `SQL/part_number.sql`, `CLAUDE.md`
+
+## [0.3.15] - 2026-05-16 
+- Add `trg_FIL_part_count` trigger on `FIL` to maintain `PN.PNFILLinks` (active rows only, handles VARCHAR→INT FILPNID via TRY_CAST)
+- `SQL/_test.sql`: add `trg_FIL_Test_part_count`, combine FIL+POL recalibration into one update
+- `PartsMaster/Part.cls`: convert FIL hard-delete to soft-delete (`UPDATE SET is_active=0`); add `is_active=1` filter to `BuildFileLinkCollection` and `NumFileLinksViaSQL`; remove `UpdateNumFileLinks` (trigger owns the count)
+- Document in `SQL/SCHEMA.md`, `SQL/FIL.sql`, `SQL/part_number.sql`, and `CLAUDE.md`
+
+## [0.3.14] - 2026-05-16 
+- Add `trg_POL_part_count` trigger on `POL` to maintain `PN.PNPOLinks` after any INSERT/UPDATE/DELETE
+- `SQL/_test.sql`: add `trg_POL_Test_part_count` on `POL_Test` and recalibrate `PN_Test.PNPOLinks` in snapshot
+- Document in `SQL/SCHEMA.md`, `SQL/po_items.sql`, `SQL/part_number.sql`, and `CLAUDE.md`
+
+## [0.3.13] - 2026-05-16 
+- Document DB triggers in `SQL/SCHEMA.md` (new Triggers section), `SQL/LNK.sql`, `SQL/PO.sql`, and `CLAUDE.md`
+
+## [0.3.12] - 2026-05-16 
+- `POCreate` and `POUpdate` handlers wrapped in `db.BeginTx` transactions — PO header, line items, and total update now commit atomically or roll back together
+- All DB calls in both handlers now check and surface errors (previously silently discarded)
+- `POUpdate`: resolve PO ID once before new-line loop instead of per-row
+
+## [0.3.11] - 2026-05-16 
+- Add `SQL/triggers.sql`: DB triggers `trg_LNK_supplier_count` and `trg_PO_supplier_count` keep `supplier.SUNumOfLNKs` / `SUNumOfPOs` accurate after any LNK or PO write, from any client
+- `SQL/_test.sql`: recreate equivalent triggers on `_Test` tables after snapshot; recalibrate copied counts
+- `SQL/supplier.sql`: update comment — counts are now maintained by triggers, not the application
+- `PartsMaster/LNKs.bas`: remove `UpdateSUNumOfLNKs` (was querying `LNK_Test` against prod, overwriting the correct trigger value with a stale count)
+
+## [0.3.10] - 2026-05-16 
+- New `arxlib/` shared Go module: `db` (Connect), `urlutil` (IsHTTPURL, IsLocalFile, LocalFileURL, FileIcon, SafePathSegments, etc.), `folderpick` (PowerShell folder picker)
+- Go workspace (`go.work`) links arxlib, parts_master_go, test_records_go
+- Both apps now delegate duplicate helpers to arxlib; local db/db.go are thin wrappers
+
+## [0.3.9] - 2026-05-16 
+- New `test_records_go/` Go app: port of `test_records/` Ruby/Sinatra app to Go
+- Same chi/systray/go:embed/go-mssqldb stack as `parts_master_go`; port 4569
+- Routes: `/` (forms list), `/forms/{id}/records` (WIP filter), `/records/{id}` (detail with hierarchical test results, p/f badges, image hover preview, LOCAL: file links)
+- File serving: `/local/*` (DOC_CONTROL_ROOT), `/images/*` (IMAGE_ROOT, auto-.PNG)
+- Settings page with DB connection, IMAGE_ROOT, DOC_CONTROL_ROOT, browse-folder picker
+- Test-mode table variants: Forms/Forms_Test, TestRecords/TestRecords_Test, Tests/Tests_Test, TestResults/TestResults_Test
+- Updated CLAUDE.md: both Go apps documented, test-mode table expanded
+
+## [0.3.8] - 2026-05-15 
+- Dropped unused supplier columns: SUFollowup, SUCode, SUCurDedExRate, SUCurExRate, SUCURID, SUCurReverse, SUNoPhonePrefix, SUContact2, SUDateLast, SUAccount, SUTerms, SUFedTaxID, SUStateTaxID, SUEMail2, SUZipcode, SUState, SUCity (confirmed absent from Go app and VBA codebase)
+- SUCity removed from Go model, queries, forms, and templates; supplier search API now joins CN for city
+- Added TODO notes on SUWeb and SUContact1 for future removal (superseded by attachments and CN respectively)
+- Supplier edit form: live contact details panel (phone, email, city) below default contact dropdown, updates on selection change
+- Supplier detail view: dedicated "Default Contact Information" section showing name (linked), phone, email, city joined from CN
+
+## [0.3.7] - 2026-05-15 
+- SQL schema cleanup: VARCHAR expansions (FIL, CN, PO, POL), DATE→DATETIME on date_modified/CNDateModified/PNDateModified, DEFAULT GETDATE() on date columns
+- Added DEFAULT values to LNK.LNKUse, LNKChoice, LNKCurrentCost; PO.is_active; FIL.order_id
+- Added new columns: supplier.SUZipcode/SUState, POL.POLRev, price.price_type
+- Added schema_diagram.md ER diagram (new file)
+- Diagram updated: supplier_attachment entity and relationships added
+- PO.sql: added CREATE SEQUENCE DDL for PO_Number_Seq
+- TODO annotations: unsafe changes flagged with verification queries; unused columns flagged (supplier currency fields, SUFollowup, SUCode, SUNoPhonePrefix, PO.date_printed)
+
+## [0.3.6] - 2026-05-15 
+- Part attachments: soft-delete (is_active flag); Delete button with confirm on attachments tab
+- Part attachments: fixed PartSetPrimaryAttachment to use proper int parameters
+- Supplier attachments: default attachment (primary_attachment_id on supplier table); star/Set UI matches parts
+- Shared helpers: softDeleteAttachment + setPrimaryAttachment in handlers/attachments.go used by both
+- Fixed `not` template function to accept any type instead of requiring bool (was crashing notes_select)
+
+## [0.3.5] - 2026-05-15 
+- Suppliers: new Attachments subtab for files and URLs (SUFIL / SUFIL_Test tables)
+- Settings: SUPPLIER_FILES_ROOT path field with Browse button (falls back to DOC_CONTROL_ROOT if blank)
+- File serving: /supplier-local/* and /supplier-local-dir/* routes for supplier file access
+
+## [0.3.4.2] - 2026-05-14 
+- PO edit: supplier and receiver typeahead now validates on blur and blocks save if no valid selection made
+- PO new: fixed broken JS caused by {{len .POItems}} on nil — all JavaScript now initializes correctly
+- PO new/edit: supplier and receiver are required fields; empty submission blocked with error banner
+- Settings: version displayed as "Arx Parts Master vX.Y.Z"
+- AppVersion constant in config.go drives both settings display and static asset cache-busting URL
+- CSS: .form-input.input-invalid style for red border on invalid typeahead fields
+
+## [0.3.4] - 2026-05-14 
+- Removed parts_master_web (Ruby/Sinatra app) — superseded by parts_master_go
+
+## [0.3.3] - 2026-05-14 
+- Fixed supplier edit template error (not on []ContactSummary — use len check instead)
+- Settings: Default Receiver dropdown now shows suppliers (not contacts) since receiver_id is a supplier ID
+- Settings: PO default contact/receiver dropdowns now inside form so they save correctly
+- Filter performance: replaceChildren replaces show/hide loop — INP drops from 2000ms to 40ms
+- Filter: cell text cached at page load (initRows) — no DOM reads per keystroke
+- CSS: contain:layout style on .table-wrapper isolates table repaints from page gradient/shadow
+- Cache-busting ?v= query string on static assets to force browser refresh after rebuild
+
+## [0.3.2] - 2026-05-14 
+- templates/ and static/ embedded into binary via go:embed — distribute exe only, no supporting folders required
+- config/local.json and .env still read from the exe's working directory at runtime
+
+## [0.3.1] - 2026-05-14 
+- Settings page: DB connection fields (server, name, user, password) and file path overrides editable in UI
+- DB password removed from .env — stored only in gitignored config/local.json; app prompts for it on first run
+- All app routes redirect to /settings when no database connection is active (RequireAuth middleware)
+- Auto-reconnects on startup if local.json contains a saved password
+- Backward compat: existing DATABASE_DSN in .env is parsed to extract server/db/user (password still required via UI)
+
+## [0.3.0] - 2026-05-14 
+- Added parts_master_go: full Go port of parts_master_web
+- Standalone Windows .exe — no Ruby/gems required
+- System tray icon with Open/Quit; auto-opens browser on launch
+- All read views: parts, suppliers, contacts, purchase orders, BOM, where-used, attachments, pricing, order history
+- All edit/create/delete forms: parts, suppliers, contacts, purchase orders with line items
+- PO sequence number, folder creation, duplicate, print, note, folder browser
+- Local file and directory serving with path-traversal protection
+- Supplier/part/contact search API endpoints for PO edit autocomplete
+- CSS custom properties in static/app.css for easy retheme; JS in static/app.js
+
+## [0.2.61] - 2026-05-08 
+- Added changelog update instructions to CLAUDE.md
+
+## [0.2.60] - 2026-05-08 
+- PO folder name appends -testmode suffix when running in test mode
+
+## [0.2.59] - 2026-05-08 
+- PO folder tab replaces Open Folder button; folder listing shows PO header and sub-tabs
+- New PO creation auto-creates folder in PO_FOLDER_ROOT named "<number> <SUSupplierCode>"
+
+## [0.2.58] - 2026-05-08 
+- Added PO folder subtab: GET /po/:id/folder serves directory listing from PO_FOLDER_ROOT
+- Folder lookup matches any directory starting with the PO number (e.g. "4309 Acme")
+
+## [0.2.57] - 2026-05-08 
+- Duplicate PO: added "Duplicate PO" button on PO detail/edit view; pre-fills new PO form with supplier, ship-to, line items, and costs from the source PO
+
+## [0.2.56] - 2026-05-08 
+- Attachment CRUD: add, edit, and set-primary attachment actions now work on the part attachments tab
+
+## [0.2.55] - 2026-05-08 
+- Folder attachments: LOCAL:path\to\folder\ syntax opens a server-side directory listing with file links and a Copy Path button
+
+## [0.2.54] - 2026-05-08 
+- Fixed assign_po_fields writing to non-existent columns; supplier/receiver detail fields (address, email, phone, etc.) now save correctly when creating or editing a PO
+
+## [0.2.53] - 2026-05-08 
+- Settings view accessible via gear icon in app header
+- Changelog rendered from CHANGELOG.md in settings view
+
+## [0.2.52] - 2026-05-08 
+- PO supplier schema improved
+
+## [0.2.51] - 2026-05-08 
+- Added PO_Test number sequence to remove race condition
+
+## [0.2.50] - 2024-07-18 
+- Updating PO's now refresh PO List table
+
+## [0.2.48] - 2023-08-10 
+- Updated Qty on Parts List to 5 decimal places
+
+## [0.2.48] - 2023-07-21 
+- Added Internal Notes to PO_Test Form
+
+## [0.2.47] - 2023-07-21 
+- Creating new Contact doesn't prompt for "SUID" anymore, prompts for "Supplier"
+
+## [0.2.46] - 2023-07-21 
+- Fixed "Update Source Costs" where it would only go to a few decimals
+
+## [0.2.45] - 2023-05-25 
+- Fixed re/deactivate on PN and CN tables
+
+## [0.2.44] - 2023-02-07 
+- Fixed bug on double-click date in PO (vartypecheck error)
+
+## [0.2.43] - 2023-02-03 
+- Reduced min PO items from 5 to 1
+
+## [0.2.42] - 2023-02-03 
+- Refactored Link creation and viewing
+
+## [0.2.41] - 2023-02-02 
+- Fixed issue with new contact creation. also added button to update associated supplier for contact
+
+## [0.2.40] - 2023-02-02 
+- Fixed Part Info dbl-click on Supplier bug
+
+## [0.2.39] - 2023-02-01 
+- Added Discount Qty for parts onto Parts List
+
+## [0.2.38] - 2023-01-30 
+- Fixed bug with adding Part Link to preexisting file from Doc Control
+
+## [0.2.37] - 2023-01-27 
+- Add Release Notes now had default incremented version
+
+## [0.2.36] - 2023-01-27 
+- Pricing List now handles "Cancel" or "X" on both popups
+
+## [0.2.35] - 2023-01-26 
+- Expanding BOM Item now shows Ext Cost with Links
+
+## [0.2.34] - 2023-01-25 
+- minor cleanup and refactor
+
+## [0.2.33] - 2023-01-19 
+- Doubleclick on File now opens location of file in FileExplorer
+
+## [0.2.32] - 2023-01-19 
+- Assy cost now updates upon updating. also upon refreshing
+
+## [0.2.31] - 2023-01-19 
+- Fixed where export/backup to csv was only doing limited columns
+
+## [0.2.30] - 2023-01-03 
+- Initial draft release of Quanity Pricing
+
+## [0.2.25] - 2022-12-28 
+- Purchase History refreshes every time you access it now
+
+## [0.2.24] - 2022-12-28 
+- Fixed issue on double-clicking merged cells; Contact issue, PO Inactivate button. ADDED Ext. Costs and FIL Links to Parts List
+
+## [0.2.23] - 2022-11-03 
+- Updated dbcharlimit to include more supplier stuff
+
+## [0.2.22] - 2022-10-29 
+- Updated PO Form to use Supplier/Contact objects properly
+
+## [0.2.21] - 2022-10-22 
+- Updated supplier stuff to use the supplier object more
+
+## [0.2.20] - 2022-10-20
+- Removed QuerySUInfo in favor of using Supplier Object
+
+## [0.2.19] - 2022-10-15
+- admin Columns now autohide based on userConfig
+
+## [0.2.18] - 2022-10-15
+- Fixed bug on PO creation not saving order date
+
+## [0.2.17] - 2022-10-15
+- Made default contact more robust on Supplier sheet
+
+## [0.2.16] - 2022-10-14
+- Improved sqlExecute logging
+
+## [0.2.15] - 2022-10-14
+- Added admin mode to release notes
+
+## [0.2.14] - 2022-10-14
+- Added Copy Link to Part Info. So now you can select a link, hit that button to copy it to clipboard for ease of opening in other applications (or attaching to emails)
+
+## [0.2.13] - 2022-10-11
+- sqlExecute updates and added release note functionality
+
+## [0.2.12] - 2022-10-02
+- Fixed minor release_notes bug
+
+## [0.2.11] - 2022-10-02
+- Replaced Supplier Info with Default Contact info
+
+## [0.2.10] - 2022-10-01
+- Added prompt to link new Contact with Supplier
+
+## [0.2.9] - 2022-09-30
+- Solo and Bulk methods to add Part to Parts List
+
+## [0.2.8] - 2022-09-29
+- Added ability to replace part on BOM with new part
+
+## [0.2.7] - 2022-09-23
+- Added ability to add HTTP link to Part via clipboard
+
+## [0.2.6] - 2022-09-17
+- Updated Logging table and columns to new schema
+
+## [0.2.5] - 2022-09-17
+- Fixed column name bug
+
+## [0.2.4] - 2022-09-15
+- added release notes to database and Show Release Notes button to UI/Settings
+
+## [0.2.3] - 2022-09-15
+- Fixed bug where you couldn't add a PO Line Item if Line Item had no assigned supplier in PartInfo
+
+## [0.2.2] - 2022-09-15
+- Fixed bug where when creating new Supplier it didn't filter onto the supplier
+
+## [0.2.1] - 2022-09-15
+- When adding new File/Link it will auto-increment the Order
+
+## [0.2.0] - 2022-09-15
+- Initial test release

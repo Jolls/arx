@@ -1,0 +1,160 @@
+{{define "content"}}
+<h2 class="mb-1">Settings</h2>
+<p class="text-muted small mb-4">Arx Test Records v{{.AppVersion}}</p>
+
+{{if not .Connected}}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  <span><strong>Not connected to database.</strong> Enter your connection details below to connect.</span>
+</div>
+{{end}}
+
+{{if .Error}}
+<div class="alert alert-danger mb-3">{{.Error}}</div>
+{{end}}
+
+{{if .Success}}
+<div class="alert alert-success mb-3">{{.Success}}</div>
+{{end}}
+
+<form method="POST" action="/settings">
+<input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center gap-2">
+    <strong>Database Connection</strong>
+    {{if .Connected}}
+    <span class="badge bg-success ms-1">&#10003; Connected</span>
+    {{else}}
+    <span class="badge bg-danger ms-1">&#10007; Not connected</span>
+    {{end}}
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-auto">
+        <label class="form-label">DB Server</label>
+        <input type="text" class="form-control form-control-sm font-mono" name="db_server"
+               value="{{.DBServer}}" placeholder="yourserver.database.windows.net" style="min-width:320px">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Database Name</label>
+        <input type="text" class="form-control form-control-sm font-mono" name="db_name"
+               value="{{.DBName}}" placeholder="YourDatabase">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Username</label>
+        <input type="text" class="form-control form-control-sm font-mono" name="db_user"
+               value="{{.DBUser}}" placeholder="dbuser" autocomplete="username">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">
+          Password
+          <span class="text-muted small">({{if .Connected}}leave blank to keep current{{else}}required to connect{{end}})</span>
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="password" class="form-control font-mono" name="db_password" id="db_password"
+                 autocomplete="current-password">
+          <label class="input-group-text" style="cursor:pointer; user-select:none;">
+            <input type="checkbox" class="me-1"
+                   onchange="document.getElementById('db_password').type=this.checked?'text':'password'">
+            Show
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><strong>File Paths</strong></div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Override paths from your .env file. Saved to <code>config/local.json</code> and take effect immediately.
+    </p>
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="form-label">IMAGE_ROOT</label>
+        <div class="d-flex gap-2">
+          <input type="text" class="form-control form-control-sm font-mono" name="image_root" id="image_root"
+                 value="{{.ImageRoot}}" placeholder="e.g. C:\TestImages">
+          <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap"
+                  onclick="browseFolder('image_root')">Browse&hellip;</button>
+        </div>
+      </div>
+      <div class="col-12">
+        <label class="form-label">DOC_CONTROL_ROOT</label>
+        <div class="d-flex gap-2">
+          <input type="text" class="form-control form-control-sm font-mono" name="doc_control_root" id="doc_control_root"
+                 value="{{.DocControlRoot}}" placeholder="e.g. C:\DocControl">
+          <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap"
+                  onclick="browseFolder('doc_control_root')">Browse&hellip;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><strong>Developer</strong></div>
+  <div class="card-body">
+    <div class="form-check mb-2">
+      <input class="form-check-input" type="checkbox" name="test_mode" value="1" id="test_mode"
+             {{if .TestMode}}checked{{end}}
+             onchange="confirmTestModeToggle(this)">
+      <label class="form-check-label" for="test_mode">
+        Test mode — use <code>_Test</code> table variants <span class="text-danger fw-semibold">(writes go to test data)</span>
+      </label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="debug_mode" value="1" id="debug_mode"
+             {{if .DebugMode}}checked{{end}}>
+      <label class="form-check-label" for="debug_mode">
+        Debug mode — show raw step fields on record view
+      </label>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmTestModeToggle(cb) {
+  var msg = cb.checked
+    ? "Switching TO test mode will route all reads and writes to _Test tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
+    : "Switching OUT of test mode will route all reads and writes to production tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
+  if (!confirm(msg)) cb.checked = !cb.checked;
+}
+</script>
+
+<div class="d-flex align-items-center gap-3 mb-4">
+  <button type="submit" class="btn btn-primary">Save Settings</button>
+  {{if .Connected}}
+  <a href="/" class="text-muted small text-decoration-none">&#8592; Back to app</a>
+  {{end}}
+</div>
+</form>
+
+{{if .Changelog}}
+<div class="card">
+  <div class="card-header"><strong>Changelog</strong></div>
+  <div class="card-body">
+    <pre class="mb-0 small" style="white-space:pre-wrap; overflow-wrap:break-word;">{{.Changelog}}</pre>
+  </div>
+</div>
+{{end}}
+
+<script>
+function browseFolder(inputId) {
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Browsing…';
+  fetch('/api/browse-folder')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.path) { document.getElementById(inputId).value = data.path; }
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.textContent = 'Browse…';
+    });
+}
+</script>
+{{end}}

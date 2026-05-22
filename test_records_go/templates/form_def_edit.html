@@ -1,0 +1,240 @@
+﻿{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Forms</a></li>
+    <li class="breadcrumb-item">
+      <a href="/forms/{{.Form.ID}}/records">{{.Form.PartNumber}}</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="/forms/{{.Form.ID}}/def">Definition</a>
+    </li>
+    <li class="breadcrumb-item active">Edit</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
+  <div class="d-flex gap-2">
+    <a href="/forms/{{.Form.ID}}/def" class="btn btn-sm btn-outline-secondary">Cancel</a>
+    <button type="submit" form="steps-form" class="btn btn-sm btn-primary">
+      <i class="bi bi-floppy"></i> Save Changes
+    </button>
+  </div>
+</div>
+
+<details class="mb-3 small text-muted">
+  <summary class="user-select-none" style="cursor:pointer">Token reference</summary>
+  <div class="mt-2 ps-2" style="line-height:1.8">
+    <div class="fw-semibold mb-1">Self-referential (resolved from this step's own fields)</div>
+    <code>{min}</code> spec_min &nbsp;&bull;&nbsp;
+    <code>{max}</code> spec_max &nbsp;&bull;&nbsp;
+    <code>{nom}</code> spec_nom &nbsp;&bull;&nbsp;
+    <code>{units}</code> spec_units
+    <div class="fw-semibold mt-2 mb-1">Record context (resolved from the test record)</div>
+    <code>{record.sn}</code> serial number &nbsp;&bull;&nbsp;
+    <code>{record.pn}</code> unit part number &nbsp;&bull;&nbsp;
+    <code>{record.pndesc}</code> unit description &nbsp;&bull;&nbsp;
+    <code>{record.type}</code> record type &nbsp;&bull;&nbsp;
+    <code>{record.date}</code> test date
+    <div class="fw-semibold mt-2 mb-1">Cross-step (resolved from another step's recorded result)</div>
+    <code>{<em>id</em>}</code> result of step with that ID — e.g. <code>{15}</code>. Step IDs are shown in the ID column below.
+    <div class="fw-semibold mt-2 mb-1">Named queries (run a SQL query; tokens above usable as parameters)</div>
+    <code>query:<em>name</em>(@param={record.pn})</code>
+    <div class="mt-1">Example Specification: <code>{nom}{units} ({min} – {max}{units})</code> &rarr; <em>5v (4.5 – 5.5v)</em></div>
+  </div>
+</details>
+
+<form id="steps-form" method="POST" action="/forms/{{.Form.ID}}/def/edit">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <input type="hidden" id="step_order" name="step_order">
+  <div class="table-responsive">
+    <table id="steps-table" class="table table-bordered table-sm align-middle" style="min-width:2400px">
+      <thead class="table-dark" style="position:sticky;top:0;z-index:1">
+        <tr>
+          <th style="width:24px;"></th>
+          <th style="width:40px">ID</th>
+          <th style="width:60px">Type</th>
+          <th style="width:180px">Parameter</th>
+          <th style="width:180px">Specification</th>
+          <th style="width:220px">spec_nom</th>
+          <th style="width:90px">spec_min</th>
+          <th style="width:90px">spec_max</th>
+          <th style="width:70px">spec_units</th>
+          <th style="width:90px">pf_type</th>
+          <th style="width:120px">default_result</th>
+          <th style="width:60px">Hide</th>
+          <th style="width:120px">category</th>
+          <th style="width:120px">sheet_name</th>
+          <th style="width:180px">applicable_instrs</th>
+          <th style="width:200px">comment</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Steps}}
+        {{if gt .Type 0}}
+        <tr class="row-heading-{{.Type}}" data-step-id="{{.ID}}">
+          <td class="drag-handle text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
+          <td class="text-muted small">{{.ID}}</td>
+          <td>
+            <input type="hidden" name="original_type_{{.ID}}" value="{{.Type}}">
+            <select class="form-select form-select-sm" name="type_{{.ID}}"
+                    data-original="{{.Type}}">
+              <option value="0">0 &mdash; Data</option>
+              <option value="1"{{if eq .Type 1}} selected{{end}}>1 &mdash; H1</option>
+              <option value="2"{{if eq .Type 2}} selected{{end}}>2 &mdash; H2</option>
+              <option value="3"{{if eq .Type 3}} selected{{end}}>3 &mdash; H3</option>
+            </select>
+          </td>
+          <td colspan="8">
+            <input type="hidden" name="original_parameter_{{.ID}}" value="{{.Parameter}}">
+            <input type="text" class="form-control form-control-sm fw-bold"
+                   name="parameter_{{.ID}}" value="{{.Parameter}}"
+                   data-original="{{.Parameter}}">
+          </td>
+          <td class="text-center">
+            <input type="hidden" name="original_hide_{{.ID}}" value="{{.HideFormula}}">
+            <input class="form-check-input" type="checkbox" name="hide_{{.ID}}" value="1"
+                   data-original="{{.HideFormula}}"
+                   {{if eq .HideFormula "HIDE"}}checked{{end}}>
+          </td>
+          <td colspan="5"></td>
+        </tr>
+        {{else}}
+        <tr data-step-id="{{.ID}}">
+          <td class="drag-handle text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
+          {{/* Hidden originals for server-side change detection */}}
+          <input type="hidden" name="original_parameter_{{.ID}}"        value="{{.Parameter}}">
+          <input type="hidden" name="original_type_{{.ID}}"             value="{{.Type}}">
+          <input type="hidden" name="original_specification_{{.ID}}"    value="{{.Specification}}">
+          <input type="hidden" name="original_spec_nom_{{.ID}}"         value="{{.SpecNom}}">
+          <input type="hidden" name="original_spec_min_{{.ID}}"         value="{{.SpecMin}}">
+          <input type="hidden" name="original_spec_max_{{.ID}}"         value="{{.SpecMax}}">
+          <input type="hidden" name="original_spec_units_{{.ID}}"       value="{{.SpecUnits}}">
+          <input type="hidden" name="original_pf_type_{{.ID}}"          value="{{.PFType}}">
+          <input type="hidden" name="original_default_result_{{.ID}}"   value="{{.DefaultResult}}">
+          <input type="hidden" name="original_hide_{{.ID}}"             value="{{.HideFormula}}">
+          <input type="hidden" name="original_category_{{.ID}}"         value="{{.Category}}">
+          <input type="hidden" name="original_sheet_name_{{.ID}}"       value="{{.SheetName}}">
+          <input type="hidden" name="original_applicable_instrs_{{.ID}}" value="{{.ApplicableInstrs}}">
+          <input type="hidden" name="original_comment_{{.ID}}"          value="{{.StepComment}}">
+          <td class="text-muted small">{{.ID}}</td>
+          <td>
+            <select class="form-select form-select-sm" name="type_{{.ID}}"
+                    data-original="{{.Type}}">
+              <option value="0"{{if eq .Type 0}} selected{{end}}>0 &mdash; Data</option>
+              <option value="1">1 &mdash; H1</option>
+              <option value="2">2 &mdash; H2</option>
+              <option value="3">3 &mdash; H3</option>
+            </select>
+          </td>
+          <td><input type="text" class="form-control form-control-sm" name="parameter_{{.ID}}" value="{{.Parameter}}" data-original="{{.Parameter}}"></td>
+          <td><input type="text" class="form-control form-control-sm" name="specification_{{.ID}}" value="{{.Specification}}" data-original="{{.Specification}}"></td>
+          <td><input type="text" class="form-control form-control-sm font-mono" name="spec_nom_{{.ID}}" value="{{.SpecNom}}" data-original="{{.SpecNom}}"></td>
+          <td><input type="text" class="form-control form-control-sm font-mono" name="spec_min_{{.ID}}" value="{{.SpecMin}}" data-original="{{.SpecMin}}"></td>
+          <td><input type="text" class="form-control form-control-sm font-mono" name="spec_max_{{.ID}}" value="{{.SpecMax}}" data-original="{{.SpecMax}}"></td>
+          <td><input type="text" class="form-control form-control-sm" name="spec_units_{{.ID}}" value="{{.SpecUnits}}" data-original="{{.SpecUnits}}"></td>
+          <td>
+            <select class="form-select form-select-sm" name="pf_type_{{.ID}}"
+                    data-original="{{.PFType}}">
+              <option value=""{{if eq .PFType ""}} selected{{end}}></option>
+              <option value="range"{{if eq .PFType "range"}} selected{{end}}>range</option>
+              <option value="filled"{{if eq .PFType "filled"}} selected{{end}}>filled</option>
+              <option value="comment"{{if eq .PFType "comment"}} selected{{end}}>comment</option>
+            </select>
+          </td>
+          <td><input type="text" class="form-control form-control-sm font-mono" name="default_result_{{.ID}}" value="{{.DefaultResult}}" data-original="{{.DefaultResult}}"></td>
+          <td class="text-center">
+            <input class="form-check-input" type="checkbox" name="hide_{{.ID}}" value="1"
+                   data-original="{{.HideFormula}}"
+                   {{if eq .HideFormula "HIDE"}} checked{{end}}>
+          </td>
+          <td><input type="text" class="form-control form-control-sm" name="category_{{.ID}}" value="{{.Category}}" data-original="{{.Category}}"></td>
+          <td><input type="text" class="form-control form-control-sm" name="sheet_name_{{.ID}}" value="{{.SheetName}}" data-original="{{.SheetName}}"></td>
+          <td><input type="text" class="form-control form-control-sm" name="applicable_instrs_{{.ID}}" value="{{.ApplicableInstrs}}" data-original="{{.ApplicableInstrs}}"></td>
+          <td><input type="text" class="form-control form-control-sm" name="comment_{{.ID}}" value="{{.StepComment}}" data-original="{{.StepComment}}"></td>
+        </tr>
+        {{end}}
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-2 mb-3">
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addRow()">
+      <i class="bi bi-plus-lg"></i> Add Row
+    </button>
+  </div>
+
+  <div class="d-flex justify-content-end gap-2 mt-3">
+    <a href="/forms/{{.Form.ID}}/def" class="btn btn-outline-secondary">Cancel</a>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-floppy"></i> Save Changes
+    </button>
+  </div>
+</form>
+
+<template id="new-row-tpl">
+  <tr class="table-warning" data-step-id="">
+    <td class="drag-handle text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
+    <td class="text-muted small"><em>new</em></td>
+    <td>
+      <select class="form-select form-select-sm" name="new_row[IDX][type]">
+        <option value="0" selected>0 &mdash; Data</option>
+        <option value="1">1 &mdash; H1</option>
+        <option value="2">2 &mdash; H2</option>
+        <option value="3">3 &mdash; H3</option>
+      </select>
+    </td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][parameter]" placeholder="Parameter"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][specification]"></td>
+    <td><input type="text" class="form-control form-control-sm font-mono" name="new_row[IDX][spec_nom]"></td>
+    <td><input type="text" class="form-control form-control-sm font-mono" name="new_row[IDX][spec_min]"></td>
+    <td><input type="text" class="form-control form-control-sm font-mono" name="new_row[IDX][spec_max]"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][spec_units]"></td>
+    <td>
+      <select class="form-select form-select-sm" name="new_row[IDX][pf_type]">
+        <option value="" selected></option>
+        <option value="range">range</option>
+        <option value="filled">filled</option>
+      </select>
+    </td>
+    <td><input type="text" class="form-control form-control-sm font-mono" name="new_row[IDX][default_result]"></td>
+    <td class="text-center"><input class="form-check-input" type="checkbox" name="new_row[IDX][hide]" value="1"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][category]"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][sheet_name]"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][applicable_instrs]"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][comment]"></td>
+  </tr>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+(function () {
+  const tbody = document.querySelector('#steps-table tbody');
+  Sortable.create(tbody, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'table-active',
+  });
+  document.getElementById('steps-form').addEventListener('submit', function () {
+    const ids = Array.from(tbody.querySelectorAll('tr[data-step-id]'))
+      .map(tr => tr.dataset.stepId);
+    document.getElementById('step_order').value = ids.join(',');
+  });
+
+  let newRowCounter = 0;
+  window.addRow = function () {
+    const tpl = document.getElementById('new-row-tpl');
+    const clone = tpl.content.cloneNode(true);
+    const idx = newRowCounter++;
+    const tr = clone.querySelector('tr');
+    tr.dataset.stepId = 'new_' + idx;
+    clone.querySelectorAll('[name]').forEach(el => {
+      el.name = el.name.replace(/IDX/g, idx);
+    });
+    tbody.appendChild(clone);
+    tr.querySelector('input[type="text"]') && tbody.lastElementChild.querySelector('input[type="text"]').focus();
+  };
+})();
+</script>
+{{end}}

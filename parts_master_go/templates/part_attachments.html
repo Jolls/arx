@@ -1,0 +1,159 @@
+{{define "content"}}
+<header>
+    <h1>Part Details</h1>
+    <p>{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}</p>
+</header>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+
+    {{if .Attachments}}
+    <div class="table-wrapper">
+        <table style="table-layout:auto;">
+            <thead>
+                <tr>
+                    <th style="width:60px; text-align:center;">Order</th>
+                    <th style="width:60px;">Rev</th>
+                    <th>File / URL</th>
+                    <th>Notes</th>
+                    <th style="width:70px; text-align:center;">Default</th>
+                    <th style="width:50px;"></th>
+                    <th style="width:50px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Attachments}}
+                {{$f := .FILFileName}}
+                {{$isPrimary := eq .FILID $.Part.PNFILIDPrimary}}
+                <tr>
+                    <td style="text-align:center; color:#888;">{{if .OrderID}}{{derefInt .OrderID}}{{end}}</td>
+                    <td>{{.FILPNRev}}</td>
+                    <td style="max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        {{if isHTTPURL $f}}
+                            <a href="{{$f}}" target="_blank" rel="noopener noreferrer" title="{{$f}}">{{$f}}</a>
+                        {{else if isLocalDir $f}}
+                            <a href="{{localDirURL $f}}" title="Open folder">&#128193; {{$f | printf "%s"}}</a>
+                        {{else if isLocalFile $f}}
+                            {{if isPDF $f}}
+                                <a href="{{localFileURL $f}}" target="_blank" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
+                            {{else}}
+                                <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
+                            {{end}}
+                        {{else}}
+                            <span style="font-family:monospace; font-size:0.9em;" title="{{$f}}">{{$f}}</span>
+                        {{end}}
+                    </td>
+                    <td>{{.FILNotes}}</td>
+                    <td style="text-align:center;">
+                        {{if $isPrimary}}
+                            <span style="color:#f5a623; font-size:1.1em;" title="Primary attachment">&#9733;</span>
+                        {{else}}
+                            <form method="post" action="/part/{{$.Part.PNID}}/primary_attachment" style="margin:0;">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <input type="hidden" name="filid" value="{{.FILID}}">
+                                <button type="submit" class="btn-secondary" style="padding:2px 8px; font-size:0.8em;">Set</button>
+                            </form>
+                        {{end}}
+                    </td>
+                    <td style="text-align:center;">
+                        <a href="/part/{{$.Part.PNID}}/attachments?edit={{.FILID}}#edit-form"
+                           class="btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
+                    </td>
+                    <td style="text-align:center;">
+                        <form method="post" action="/part/{{$.Part.PNID}}/attachments/{{.FILID}}/delete"
+                              style="margin:0;" onsubmit="return confirm('Remove this attachment?')">
+                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <button type="submit" class="btn-secondary"
+                                    style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Attachments}} attachment{{if ne (len .Attachments) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No attachments found for this part.</p>
+    {{end}}
+
+    {{/* ── Edit form ─────────────────────────────────────────── */}}
+    {{if .EditingAtt}}
+    <div id="edit-form" class="detail-section" style="margin-top:24px;">
+        <h3>Edit Attachment</h3>
+        <p style="font-size:0.9em; color:#888; margin-bottom:12px; font-family:monospace;">{{.EditingAtt.FILFileName}}</p>
+        <form method="post" action="/part/{{.Part.PNID}}/attachments/{{.EditingAtt.FILID}}">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="detail-row">
+                <label class="form-label">Rev</label>
+                <input type="text" name="FILPNRev" class="form-input" style="max-width:100px;"
+                       value="{{.EditingAtt.FILPNRev}}">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Notes</label>
+                {{template "notes_select" (notesCtx .AttachmentNotes .EditingAtt.FILNotes "edit_FILNotes")}}
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Sort Order</label>
+                <input type="number" name="order_id" class="form-input" style="max-width:100px;"
+                       value="{{if .EditingAtt.OrderID}}{{derefInt .EditingAtt.OrderID}}{{end}}">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Save Changes</button>
+                <a href="/part/{{.Part.PNID}}/attachments" class="btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+    {{end}}
+
+    {{/* ── Add form ──────────────────────────────────────────── */}}
+    <details style="margin-top:24px;">
+        <summary style="cursor:pointer; font-weight:600; font-size:1em; padding:8px 0;">Add Attachment</summary>
+        <div class="detail-section" style="margin-top:8px;">
+            <form method="post" action="/part/{{.Part.PNID}}/attachments">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <div class="detail-row">
+                    <label class="form-label">File / URL *</label>
+                    <input type="text" name="FILFileName" class="form-input"
+                           placeholder="https://... or LOCAL:relative\path\to\file.pdf or LOCAL:folder\" required>
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Rev</label>
+                    <input type="text" name="FILPNRev" class="form-input" style="max-width:100px;">
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Notes</label>
+                    {{template "notes_select" (notesCtx .AttachmentNotes "" "add_FILNotes")}}
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Sort Order</label>
+                    <input type="number" name="order_id" class="form-input" style="max-width:100px;">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Add Attachment</button>
+                </div>
+            </form>
+        </div>
+    </details>
+</div>
+
+<script>
+function notesSelChange(sel, inputId) {
+    var input = document.getElementById(inputId);
+    if (sel.value === '__custom__') {
+        input.style.display = ''; input.value = ''; input.focus();
+    } else {
+        input.style.display = 'none'; input.value = sel.value;
+    }
+}
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('select[data-notes-sel]').forEach(function(sel) {
+        var inputId = sel.dataset.notesSel;
+        var input = document.getElementById(inputId);
+        if (!input) return;
+        if (sel.value && sel.value !== '__custom__') input.value = sel.value;
+    });
+});
+</script>
+{{end}}

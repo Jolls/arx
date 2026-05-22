@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Arx — icon files</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F1E9D7;
+    --paper: #FBF6E8;
+    --ink: #14171C;
+    --rule: rgba(20,23,28,0.12);
+    --muted: rgba(20,23,28,0.6);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  body { padding: 64px 48px 96px; }
+  .frame { max-width: 1120px; margin: 0 auto; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 18px; border-bottom: 1px solid var(--ink); margin-bottom: 48px; }
+  h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600;
+    font-size: 44px; letter-spacing: 4px; margin: 0; }
+  header .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: 1.6px; color: var(--muted); text-align: right; line-height: 1.7; }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .card { background: var(--paper); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .card-title { font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 600; font-size: 26px; letter-spacing: 0.5px; }
+  .card-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: 1.6px; color: var(--muted); text-transform: uppercase; }
+
+  .preview { display: flex; align-items: center; justify-content: center;
+    background: var(--bg); border-radius: 4px; padding: 24px; min-height: 280px; }
+  .preview img { width: 240px; height: 240px; display: block; }
+
+  .sizes { display: flex; align-items: flex-end; gap: 24px; padding: 16px 0;
+    border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule); }
+  .sizes .swatch { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .sizes .swatch img { display: block; image-rendering: -webkit-optimize-contrast; }
+  .sizes .swatch .lab { font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    letter-spacing: 1.4px; color: var(--muted); }
+
+  .downloads { display: flex; flex-direction: column; gap: 4px; }
+  .downloads h3 { font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: 1.8px; color: var(--muted); text-transform: uppercase;
+    margin: 0 0 8px; font-weight: 600; }
+  .downloads ul { list-style: none; margin: 0; padding: 0; display: grid;
+    grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+  .downloads a { font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--ink); text-decoration: none; padding: 4px 0;
+    display: flex; justify-content: space-between; border-bottom: 1px dotted transparent; }
+  .downloads a:hover { border-bottom-color: var(--ink); }
+  .downloads a .ext { color: var(--muted); margin-left: 12px; font-size: 10px; letter-spacing: 1.2px; }
+
+  .note { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--rule);
+    font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 720px; }
+  .note strong { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <header>
+    <div>
+      <h1>ARX · ICON FILES</h1>
+      <div class="card-sub" style="margin-top:8px">Solid variant · Ink on Cream</div>
+    </div>
+    <div class="meta">
+      <div>SHEET 01 / 01</div>
+      <div>FORMATS · SVG / PNG</div>
+      <div>2 GLYPHS · 14 RASTERS</div>
+    </div>
+  </header>
+
+  <div class="cards">
+    <!-- ARX -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Arx</div>
+        <div class="card-sub">PARTS · POs · SUPPLIERS</div>
+      </div>
+      <div class="preview"><img src="png/Arx-256.png" alt="Arx icon" /></div>
+
+      <div class="sizes">
+        <div class="swatch"><img src="png/Arx-128.png" width="128" height="128"/><div class="lab">128</div></div>
+        <div class="swatch"><img src="png/Arx-64.png" width="64" height="64"/><div class="lab">64</div></div>
+        <div class="swatch"><img src="png/Arx-32.png" width="32" height="32"/><div class="lab">32</div></div>
+        <div class="swatch"><img src="png/Arx-16.png" width="16" height="16"/><div class="lab">16</div></div>
+      </div>
+
+      <div class="downloads">
+        <h3>Files</h3>
+        <ul>
+          <li><a href="Arx.svg" download>Arx.svg<span class="ext">VECTOR · WITH TILE</span></a></li>
+          <li><a href="Arx-mark.svg" download>Arx-mark.svg<span class="ext">VECTOR · GLYPH ONLY</span></a></li>
+          <li><a href="png/Arx-1024.png" download>Arx-1024.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-512.png" download>Arx-512.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-256.png" download>Arx-256.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-128.png" download>Arx-128.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-64.png" download>Arx-64.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-32.png" download>Arx-32.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-16.png" download>Arx-16.png<span class="ext">PNG</span></a></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ASSEMBLIES -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Arx · Assemblies</div>
+        <div class="card-sub">PRODUCTION TEST RECORDS</div>
+      </div>
+      <div class="preview"><img src="png/Arx-Assemblies-256.png" alt="Arx Assemblies icon" /></div>
+
+      <div class="sizes">
+        <div class="swatch"><img src="png/Arx-Assemblies-128.png" width="128" height="128"/><div class="lab">128</div></div>
+        <div class="swatch"><img src="png/Arx-Assemblies-64.png" width="64" height="64"/><div class="lab">64</div></div>
+        <div class="swatch"><img src="png/Arx-Assemblies-32.png" width="32" height="32"/><div class="lab">32</div></div>
+        <div class="swatch"><img src="png/Arx-Assemblies-16.png" width="16" height="16"/><div class="lab">16</div></div>
+      </div>
+
+      <div class="downloads">
+        <h3>Files</h3>
+        <ul>
+          <li><a href="Arx-Assemblies.svg" download>Arx-Assemblies.svg<span class="ext">VECTOR · WITH TILE</span></a></li>
+          <li><a href="Arx-Assemblies-mark.svg" download>Arx-Assemblies-mark.svg<span class="ext">VECTOR · GLYPH ONLY</span></a></li>
+          <li><a href="png/Arx-Assemblies-1024.png" download>Arx-Assemblies-1024.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-Assemblies-512.png" download>Arx-Assemblies-512.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-Assemblies-256.png" download>Arx-Assemblies-256.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-Assemblies-128.png" download>Arx-Assemblies-128.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-Assemblies-64.png" download>Arx-Assemblies-64.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-Assemblies-32.png" download>Arx-Assemblies-32.png<span class="ext">PNG</span></a></li>
+          <li><a href="png/Arx-Assemblies-16.png" download>Arx-Assemblies-16.png<span class="ext">PNG</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <p><strong>SVG · WITH TILE</strong> bakes in the rounded-square cream background and is ready to use as-is. <strong>SVG · GLYPH ONLY</strong> has a transparent background; use this when the platform (iOS, macOS, Android) supplies its own corner mask or when the icon needs to sit on a different surface.</p>
+    <p><strong>Colors:</strong> Cream <code>#F1E9D7</code>, Ink <code>#14171C</code>, Brass tick <code>#B5894A</code>, Test Red <code>#B91C1C</code>.</p>
+    <p>The vector source is below if you want to drop into other tools — both SVGs are plain shape primitives, no filters or masks.</p>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,132 @@
+{{define "content"}}
+<header>
+    <h1>{{if .IsNew}}New Contact{{else}}Edit Contact{{end}}</h1>
+    <p>{{if .IsNew}}Create a new contact record{{else}}{{.Contact.CNName}}{{end}}</p>
+</header>
+<div class="content">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <a href="{{if .NavBackURL}}{{.NavBackURL}}{{else}}/contacts{{end}}" class="back-link" style="margin-bottom:0;">
+            &#8592; Back to {{if .NavBackLabel}}{{.NavBackLabel}}{{else}}Contacts List{{end}}
+        </a>
+        {{if not .IsNew}}
+        <a href="/contact/{{.Contact.CNID}}" class="btn-secondary">Cancel</a>
+        {{end}}
+    </div>
+
+    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+
+    <form method="post" action="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.CNID}}{{end}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+        <div class="detail-section">
+            <h3>Basic Information</h3>
+            <div class="detail-row">
+                <label for="CNName" class="form-label">Name *</label>
+                <input type="text" id="CNName" name="CNName" class="form-input" required
+                       value="{{.Contact.CNName}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNSUID" class="form-label">Supplier</label>
+                <select id="CNSUID" name="CNSUID" class="form-select">
+                    <option value="">-- None --</option>
+                    {{range .Suppliers}}
+                    <option value="{{.ID}}"
+                        {{if and $.Contact.CNSUID (eq (derefInt $.Contact.CNSUID) .ID)}}selected{{end}}>
+                        {{.Name}}
+                    </option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="detail-row">
+                <label for="CNEmail" class="form-label">Email</label>
+                <input type="email" id="CNEmail" name="CNEmail" class="form-input"
+                       value="{{.Contact.CNEmail}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNWeb" class="form-label">Website</label>
+                <input type="text" id="CNWeb" name="CNWeb" class="form-input"
+                       value="{{.Contact.CNWeb}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNUserAccountLink" class="form-label">User Account</label>
+                <input type="text" id="CNUserAccountLink" name="CNUserAccountLink" class="form-input"
+                       value="{{.Contact.CNUserAccountLink}}">
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Phone</h3>
+            <div class="detail-row">
+                <label for="CNPhone1" class="form-label">Phone 1</label>
+                <input type="text" id="CNPhone1" name="CNPhone1" class="form-input"
+                       value="{{.Contact.CNPhone1}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNPhone2" class="form-label">Phone 2</label>
+                <input type="text" id="CNPhone2" name="CNPhone2" class="form-input"
+                       value="{{.Contact.CNPhone2}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNFAX" class="form-label">Fax</label>
+                <input type="text" id="CNFAX" name="CNFAX" class="form-input"
+                       value="{{.Contact.CNFAX}}">
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Address</h3>
+            <div class="detail-row">
+                <label for="CNAddress" class="form-label">Street</label>
+                <input type="text" id="CNAddress" name="CNAddress" class="form-input"
+                       value="{{.Contact.CNAddress}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNCity" class="form-label">City</label>
+                <input type="text" id="CNCity" name="CNCity" class="form-input"
+                       value="{{.Contact.CNCity}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNState" class="form-label">State</label>
+                <input type="text" id="CNState" name="CNState" class="form-input"
+                       value="{{.Contact.CNState}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNZipcode" class="form-label">Zip</label>
+                <input type="text" id="CNZipcode" name="CNZipcode" class="form-input"
+                       value="{{.Contact.CNZipcode}}">
+            </div>
+            <div class="detail-row">
+                <label for="CNCountry" class="form-label">Country</label>
+                <input type="text" id="CNCountry" name="CNCountry" class="form-input"
+                       value="{{.Contact.CNCountry}}">
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Status</h3>
+            <div class="detail-row">
+                <label class="form-label">Active</label>
+                <div class="form-checkbox-row">
+                    <input type="checkbox" id="CNActive" name="CNActive" value="1"
+                           {{if .Contact.CNActive}}checked{{end}}>
+                    <label for="CNActive">Contact is active</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Notes</h3>
+            <textarea id="CNNotes" name="CNNotes" class="form-textarea"
+                      style="width:100%; margin-top:8px;">{{.Contact.CNNotes}}</textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">
+                {{if .IsNew}}Create Contact{{else}}Save Changes{{end}}
+            </button>
+            <a href="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.CNID}}{{end}}"
+               class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{{end}}

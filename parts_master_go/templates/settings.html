@@ -1,0 +1,269 @@
+{{define "content"}}
+<div class="content">
+    <h2 style="margin-bottom:4px; color:#333;">Settings</h2>
+    <p style="color:#999; font-size:0.85em; margin-bottom:20px;">Arx Parts Master v{{.AppVersion}}</p>
+
+    {{if not .Connected}}
+    <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:6px;
+                padding:12px 16px; margin-bottom:24px; display:flex; align-items:center; gap:10px;">
+        <span style="font-size:1.2em;">&#9888;</span>
+        <span><strong>Not connected to database.</strong> Enter your connection details below to connect.</span>
+    </div>
+    {{end}}
+
+    {{if .Error}}
+    <div style="background:#f8d7da; border:1px solid #f5c2c7; border-radius:6px;
+                padding:12px 16px; margin-bottom:20px; color:#842029;">
+        <strong>Error:</strong> {{.Error}}
+    </div>
+    {{end}}
+
+    {{if .Success}}
+    <div style="background:#d1e7dd; border:1px solid #badbcc; border-radius:6px;
+                padding:12px 16px; margin-bottom:20px; color:#0f5132;">
+        {{.Success}}
+    </div>
+    {{end}}
+
+    <form method="POST" action="/settings">
+    <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+
+    <!-- ── Database Connection ───────────────────────────────────────── -->
+    <div class="detail-section">
+        <h3 style="display:flex; align-items:center; gap:10px;">
+            Database Connection
+            {{if .Connected}}
+            <span style="font-size:0.72em; font-weight:500; color:#155724;
+                         background:#d1e7dd; border:1px solid #badbcc;
+                         border-radius:20px; padding:2px 12px; line-height:1.6;">
+                &#10003; Connected
+            </span>
+            {{else}}
+            <span style="font-size:0.72em; font-weight:500; color:#842029;
+                         background:#f8d7da; border:1px solid #f5c2c7;
+                         border-radius:20px; padding:2px 12px; line-height:1.6;">
+                &#10007; Not connected
+            </span>
+            {{end}}
+        </h3>
+
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">DB Server</strong>
+            <input type="text" name="db_server" value="{{.DBServer}}"
+                   placeholder="yourserver.database.windows.net"
+                   style="width:360px; padding:6px 10px; border:1px solid #ccc;
+                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+        </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">Database Name</strong>
+            <input type="text" name="db_name" value="{{.DBName}}"
+                   placeholder="ArxParts"
+                   style="width:240px; padding:6px 10px; border:1px solid #ccc;
+                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+        </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">Username</strong>
+            <input type="text" name="db_user" value="{{.DBUser}}"
+                   placeholder="dbuser"
+                   autocomplete="username"
+                   style="width:240px; padding:6px 10px; border:1px solid #ccc;
+                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+        </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">Password</strong>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="password" name="db_password" id="db_password"
+                       placeholder="{{if .Connected}}Leave blank to keep current{{else}}Required to connect{{end}}"
+                       autocomplete="current-password"
+                       style="width:280px; padding:6px 10px; border:1px solid #ccc;
+                              border-radius:4px; font-size:0.9em;">
+                <label style="display:flex; align-items:center; gap:4px;
+                              font-size:0.85em; color:#666; cursor:pointer; user-select:none;">
+                    <input type="checkbox"
+                           onchange="document.getElementById('db_password').type=this.checked?'text':'password'">
+                    Show
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── File Paths ────────────────────────────────────────────────── -->
+    <div class="detail-section" style="margin-top:20px;">
+        <h3>File Paths</h3>
+        <p style="font-size:0.85em; color:#888; margin:4px 0 14px;">
+            Override the default paths from your .env file. Changes are saved to
+            <code>config/local.json</code> and take effect immediately.
+        </p>
+
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">DOC_CONTROL_ROOT</strong>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <input type="text" name="doc_control_root" id="doc_control_root"
+                       value="{{.DocControlRoot}}"
+                       placeholder="e.g. C:\DocControl"
+                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
+                              border-radius:4px; font-size:0.9em; font-family:monospace;">
+                <button type="button" class="btn-secondary"
+                        onclick="browseFolder('doc_control_root')"
+                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+            </div>
+        </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">PO_FOLDER_ROOT</strong>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <input type="text" name="po_folder_root" id="po_folder_root"
+                       value="{{.POFolderRoot}}"
+                       placeholder="e.g. C:\PurchaseOrders"
+                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
+                              border-radius:4px; font-size:0.9em; font-family:monospace;">
+                <button type="button" class="btn-secondary"
+                        onclick="browseFolder('po_folder_root')"
+                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+            </div>
+        </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">SUPPLIER_FILES_ROOT</strong>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <input type="text" name="supplier_files_root" id="supplier_files_root"
+                       value="{{.SupplierFilesRoot}}"
+                       placeholder="e.g. C:\SupplierDocs (blank = use DOC_CONTROL_ROOT)"
+                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
+                              border-radius:4px; font-size:0.9em; font-family:monospace;">
+                <button type="button" class="btn-secondary"
+                        onclick="browseFolder('supplier_files_root')"
+                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── PO Defaults ───────────────────────────────────────────────── -->
+    <div class="detail-section" style="margin-top:20px;">
+        <h3>PO Defaults</h3>
+        <p style="font-size:0.85em; color:#888; margin:4px 0 14px;">
+            Overrides <code>config/settings.yml</code>. Connect to the database to see contact names.
+        </p>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">Default Contact</strong>
+            {{if .Contacts}}
+            <select name="po_default_contact_id"
+                    style="padding:6px 10px; border:1px solid #ccc; border-radius:4px;
+                           font-size:0.9em; min-width:260px;">
+                <option value="0">— none —</option>
+                {{range .Contacts}}
+                <option value="{{.ID}}" {{if eq .ID $.PODefaultContactID}}selected{{end}}>
+                    {{.Name}} ({{.ID}})
+                </option>
+                {{end}}
+            </select>
+            {{else}}
+            <input type="number" name="po_default_contact_id" value="{{.PODefaultContactID}}"
+                   placeholder="Contact ID"
+                   style="width:120px; padding:6px 10px; border:1px solid #ccc;
+                          border-radius:4px; font-size:0.9em;">
+            {{end}}
+        </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">Default Receiver</strong>
+            {{if .Suppliers}}
+            <select name="po_default_receiver_id"
+                    style="padding:6px 10px; border:1px solid #ccc; border-radius:4px;
+                           font-size:0.9em; min-width:260px;">
+                <option value="0">— none —</option>
+                {{range .Suppliers}}
+                <option value="{{.ID}}" {{if eq .ID $.PODefaultReceiverID}}selected{{end}}>
+                    {{.Name}} ({{.ID}})
+                </option>
+                {{end}}
+            </select>
+            {{else}}
+            <input type="number" name="po_default_receiver_id" value="{{.PODefaultReceiverID}}"
+                   placeholder="Supplier ID"
+                   style="width:120px; padding:6px 10px; border:1px solid #ccc;
+                          border-radius:4px; font-size:0.9em;">
+            {{end}}
+        </div>
+    </div>
+
+    <!-- ── Developer ────────────────────────────────────────────────── -->
+    <div class="settings-card" style="margin-top:24px;">
+        <div class="settings-card-header">Developer</div>
+        <div class="settings-card-body">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:8px;">
+                <input type="checkbox" name="test_mode" value="1" {{if .TestMode}}checked{{end}}
+                       onchange="confirmTestModeToggle(this)">
+                Test mode — use <code>_Test</code> table variants <span style="color:#c0392b; font-weight:600;">(writes go to test data)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" name="debug_mode" value="1" {{if .DebugMode}}checked{{end}}>
+                Debug mode — reserved for future use
+            </label>
+        </div>
+    </div>
+
+    <script>
+    function confirmTestModeToggle(cb) {
+      var msg = cb.checked
+        ? "Switching TO test mode will route all reads and writes to _Test tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
+        : "Switching OUT of test mode will route all reads and writes to production tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
+      if (!confirm(msg)) cb.checked = !cb.checked;
+    }
+    </script>
+
+    <!-- ── Save button ───────────────────────────────────────────────── -->
+    <div style="margin-top:24px; display:flex; align-items:center; gap:16px;">
+        <button type="submit" class="btn-primary" style="padding:10px 32px; font-size:0.95em;">
+            Save Settings
+        </button>
+        {{if .Connected}}
+        <a href="/" style="color:#666; font-size:0.9em; text-decoration:none;">&#8592; Back to app</a>
+        {{end}}
+    </div>
+    </form>
+
+    <!-- ── Attachment Note Types (read-only) ─────────────────────────── -->
+    <div class="detail-section" style="margin-top:36px;">
+        <h3>Application Configuration</h3>
+        <p style="margin:8px 0 16px; color:#888; font-size:0.85em;">
+            Read-only &mdash; edit <code>config/settings.yml</code> to change these values.
+        </p>
+        <div>
+            <strong style="color:var(--accent-1); display:block; margin-bottom:8px;">Attachment Note Types</strong>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                {{range .Settings.AttachmentNotes}}
+                <span style="background:#f0f0f0; border:1px solid #ddd; border-radius:3px;
+                             padding:3px 10px; font-size:0.88em;">{{.}}</span>
+                {{end}}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Changelog ─────────────────────────────────────────────────── -->
+    {{if .Changelog}}
+    <div class="detail-section" style="margin-top:24px;">
+        <h3 style="margin-bottom:16px;">Changelog</h3>
+        <pre style="margin:0; font-family:'Consolas','Courier New',monospace; font-size:0.88em;
+                    line-height:1.6; white-space:pre-wrap; overflow-wrap:break-word;
+                    color:#333;">{{.Changelog}}</pre>
+    </div>
+    {{end}}
+</div>
+
+<script>
+function browseFolder(inputId) {
+    var btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Browsing…';
+    fetch('/api/browse-folder')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.path) {
+                document.getElementById(inputId).value = data.path;
+            }
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.textContent = 'Browse…';
+        });
+}
+</script>
+{{end}}

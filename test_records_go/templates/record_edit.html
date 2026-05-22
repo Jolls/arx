@@ -1,0 +1,127 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Forms</a></li>
+    <li class="breadcrumb-item">
+      <a href="/forms/{{.Form.ID}}/records">{{.Form.PartNumber}}</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="/records/{{.Record.ID}}">SN: {{.Record.SerialNumber}}</a>
+    </li>
+    <li class="breadcrumb-item active">Edit</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>
+    {{.Record.SerialNumberPN}}
+    &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
+  </h4>
+  <div class="d-flex gap-2">
+    <a href="/records/{{.Record.ID}}" class="btn btn-sm btn-outline-secondary">Cancel</a>
+    <button type="submit" form="edit-form" class="btn btn-sm btn-primary">
+      <i class="bi bi-floppy"></i> Save
+    </button>
+  </div>
+</div>
+
+<form id="edit-form" method="POST" action="/records/{{.Record.ID}}/edit">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+  <div class="row mb-3 g-2">
+    <div class="col-auto">
+      <label class="form-label fw-semibold mb-1 small">Test Date</label>
+      <input type="date" class="form-control form-control-sm"
+             name="record_date" value="{{formatDateInput .Record.RecordDate}}">
+    </div>
+    <div class="col-auto">
+      <label class="form-label fw-semibold mb-1 small">Type</label>
+      <input type="text" class="form-control form-control-sm"
+             name="comments" value="{{.Record.Comments}}"
+             placeholder="e.g. New Release, Re-Test">
+    </div>
+  </div>
+
+  <table class="table table-bordered table-sm align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Parameter</th>
+        <th>Specification</th>
+        <th>Result</th>
+        <th class="text-center">P/F</th>
+        <th>Comment</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      {{if gt .Level 0}}
+      <tr class="row-heading-{{.Level}}">
+        <td colspan="5">{{.EffectiveParameter}}</td>
+      </tr>
+      {{else}}
+      {{$cur := .EffectiveValue}}
+      {{$opts := .Step.ListOptions}}
+      {{$sid := .Step.ID}}
+      <tr>
+        <td>{{.EffectiveParameter}}</td>
+        <td class="small text-muted">{{.EffectiveSpec}}</td>
+        <td>
+          {{if $opts}}
+          <select class="form-select form-select-sm"
+                  name="result_{{$sid}}"
+                  data-spec-min="{{.Step.SpecMin}}"
+                  data-spec-max="{{.Step.SpecMax}}"
+                  data-pf-type="{{.Step.PFType}}"
+                  data-pf-target="pf-{{$sid}}">
+            <option value=""></option>
+            {{range $opts}}
+            <option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+          {{else if isQuerySpec .Step.SpecNom}}
+          <div data-query-spec="{{.Step.SpecNom}}"
+               data-raw-spec="{{.RawSpecNom}}"
+               data-step-id="{{$sid}}"
+               data-input-name="result_{{$sid}}"
+               data-current-val="{{$cur}}"
+               data-spec-min="{{.Step.SpecMin}}"
+               data-spec-max="{{.Step.SpecMax}}"
+               data-pf-type="{{.Step.PFType}}"
+               data-pf-target="pf-{{$sid}}">
+            <input type="text" class="form-control form-control-sm font-mono"
+                   name="result_{{$sid}}" value="{{$cur}}" placeholder="loading…"
+                   data-spec-min="{{.Step.SpecMin}}"
+                   data-spec-max="{{.Step.SpecMax}}"
+                   data-pf-type="{{.Step.PFType}}"
+                   data-pf-target="pf-{{$sid}}">
+          </div>
+          {{else}}
+          <input type="text" class="form-control form-control-sm font-mono"
+                 name="result_{{$sid}}" value="{{$cur}}"
+                 {{if .RawDefault}}data-formula="{{.RawDefault}}"{{end}}
+                 data-spec-min="{{.Step.SpecMin}}"
+                 data-spec-max="{{.Step.SpecMax}}"
+                 data-pf-type="{{.Step.PFType}}"
+                 data-pf-target="pf-{{$sid}}">
+          {{end}}
+        </td>
+        <td class="text-center" id="pf-{{$sid}}"></td>
+        <td>
+          <input type="text" class="form-control form-control-sm"
+                 name="comment_{{$sid}}"
+                 value="{{if .Result}}{{.Result.Comment}}{{end}}">
+        </td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+
+  <div class="d-flex justify-content-end gap-2 mt-2">
+    <a href="/records/{{.Record.ID}}" class="btn btn-outline-secondary">Cancel</a>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-floppy"></i> Save
+    </button>
+  </div>
+</form>
+{{end}}

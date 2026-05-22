@@ -1,0 +1,80 @@
+/* Arx Test Records — application stylesheet */
+
+body { font-size: 0.875rem; }
+
+.font-mono { font-family: monospace; }
+
+/* Navbar */
+.navbar-testmode { background-color: #92400e !important; }
+.navbar:not(.navbar-testmode) { background-color: #212529; }
+
+/* Section heading rows — target td directly to override Bootstrap's per-cell bg vars */
+.row-heading-1 td { background-color: #808080 !important; color: #fff; font-weight: bold; }
+.row-heading-2 td { background-color: #ed7d31 !important; color: #fff; font-weight: bold; }
+.row-heading-3 td { background-color: #d5d8dc !important; color: #555; font-style: italic; }
+
+/* Definition history timeline */
+.def-timeline {
+  position: relative;
+  height: 32px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+.def-timeline-line {
+  position: absolute;
+  top: 50%; left: 2%; right: 2%;
+  height: 2px;
+  background: #dee2e6;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.def-timeline-now {
+  background: #fff;
+  border-color: #6c757d;
+}
+.def-timeline-now:hover { background: #f8f9fa; border-color: #495057; }
+.def-timeline-now.active { background: #ed7d31; border-color: #ed7d31; }
+.def-timeline-dot {
+  position: absolute;
+  top: 50%;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #6c757d;
+  border: 2px solid #fff;
+  padding: 0;
+  z-index: 10;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition: background 0.15s, width 0.15s, height 0.15s;
+}
+.def-timeline-dot:hover { background: #495057; width: 18px; height: 18px; }
+.def-timeline-dot.active { background: #ed7d31; width: 18px; height: 18px; }
+
+/* Changed row highlight when viewing history */
+#def-table tr.row-changed td { background-color: #fff3cd !important; }
+
+/* Modified row highlight in step editor */
+#steps-table tr.row-modified td { background-color: #fff8e1 !important; }
+
+/* Formula-computed result inputs — readonly, visually distinct */
+input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; cursor: default; }
+
+/* Image hover preview */
+.img-hover-wrap { position: relative; display: inline-block; }
+.img-hover-preview {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1050;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+.img-hover-preview img { display: block; max-width: 480px; max-height: 480px; }
+.img-hover-wrap:hover .img-hover-preview { display: block; }

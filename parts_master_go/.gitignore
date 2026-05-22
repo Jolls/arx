@@ -1,0 +1,3 @@
+.env
+*.exe
+config/local.json

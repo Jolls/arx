@@ -1,0 +1,33 @@
+{{define "content"}}
+<h4 class="mb-3">Test Forms</h4>
+
+<table class="table table-bordered table-hover table-sm">
+  <thead class="table-dark">
+    <tr>
+      <th>Part Number</th>
+      <th>Title</th>
+      <th class="text-center">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{if not .Forms}}
+    <tr><td colspan="3" class="text-center text-muted py-3">No active forms found</td></tr>
+    {{end}}
+    {{range .Forms}}
+    <tr>
+      <td>
+        <a href="/forms/{{.ID}}/records" class="fw-semibold">{{.PartNumber}}</a>
+      </td>
+      <td>{{.Title}}</td>
+      <td class="text-center">
+        {{if .Locked}}
+        <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Locked</span>
+        {{else}}
+        <span class="badge bg-success">Active</span>
+        {{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

@@ -1,0 +1,76 @@
+{{define "notes_select"}}
+<div style="display:flex; flex-direction:column; gap:6px; flex:1;">
+    <select class="form-select" data-notes-sel="{{.InputID}}"
+            onchange="notesSelChange(this, '{{.InputID}}')">
+        <option value="">-- Select --</option>
+        {{range .Opts}}
+        <option value="{{.}}"{{if eq . $.Current}} selected{{end}}>{{.}}</option>
+        {{end}}
+        <option value="__custom__"{{if and .Current (not (inList .Opts .Current))}} selected{{end}}>Custom...</option>
+    </select>
+    <input type="text" id="{{.InputID}}" name="FILNotes" class="form-input"
+           placeholder="Custom note" value="{{.Current}}"
+           style="{{if or (not .Current) (inList .Opts .Current)}}display:none;{{end}}">
+</div>
+{{end}}
+
+{{define "supplier_tabs"}}
+{{if .NavBackURL}}
+<a href="{{.NavBackURL}}" class="back-link">&#8592; Back to {{.NavBackLabel}}</a>
+{{else}}
+<a href="/suppliers" class="back-link">&#8592; Back to Suppliers List</a>
+{{end}}
+<div class="sub-tabs">
+    <a href="/supplier/{{.Supplier.ID}}"       class="sub-tab{{if eq .ActiveSubTab "details"}} active{{end}}">Details</a>
+    <a href="/supplier/{{.Supplier.ID}}/parts"       class="sub-tab{{if eq .ActiveSubTab "parts"}} active{{end}}">Linked Parts</a>
+    <a href="/supplier/{{.Supplier.ID}}/attachments" class="sub-tab{{if eq .ActiveSubTab "attachments"}} active{{end}}">Attachments</a>
+    <a href="/supplier/{{.Supplier.ID}}/folder"      class="sub-tab{{if eq .ActiveSubTab "folder"}} active{{end}}">Folder</a>
+    <a href="/supplier/{{.Supplier.ID}}/edit"        class="sub-tab sub-tab-edit{{if eq .ActiveSubTab "edit"}} active{{end}}">Edit</a>
+</div>
+{{end}}
+
+{{define "po_tabs"}}
+{{if .NavBackURL}}
+<a href="{{.NavBackURL}}" class="back-link">&#8592; Back to {{.NavBackLabel}}</a>
+{{else}}
+<a href="/pos" class="back-link">&#8592; Back to POs List</a>
+{{end}}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+    <div class="sub-tabs" style="margin-bottom:0;">
+        <a href="/po/{{.PO.Number}}"        class="sub-tab{{if eq .ActiveSubTab "details"}} active{{end}}">Details</a>
+        <a href="/po/{{.PO.Number}}/edit"   class="sub-tab{{if eq .ActiveSubTab "edit"}} active{{end}}">Edit</a>
+        <a href="/po/{{.PO.Number}}/print"  class="sub-tab{{if eq .ActiveSubTab "print"}} active{{end}}">Print / PDF</a>
+        <a href="/po/{{.PO.Number}}/folder" class="sub-tab{{if eq .ActiveSubTab "folder"}} active{{end}}">Folder</a>
+    </div>
+    <a href="/po/{{.PO.Number}}/duplicate" class="btn-secondary" style="font-size:0.85em; white-space:nowrap;">Duplicate PO</a>
+</div>
+{{end}}
+
+{{define "part_tabs"}}
+{{if .NavBackURL}}
+<a href="{{.NavBackURL}}" class="back-link">&#8592; Back to {{.NavBackLabel}}</a>
+{{else}}
+<a href="/" class="back-link">&#8592; Back to Parts List</a>
+{{end}}
+
+{{$id := .Part.PNID}}
+{{$sub := .ActiveSubTab}}
+{{$hasBOM := or (eq .Part.PNType "CAT") (eq .Part.PNType "FORM") (eq .Part.PNType "PL")}}
+<div class="sub-tabs">
+    <a href="/part/{{$id}}/details"     class="sub-tab{{if eq $sub "details"}} active{{end}}">Details</a>
+    {{if $hasBOM}}
+    <a href="/part/{{$id}}/bom"         class="sub-tab{{if eq $sub "bom"}} active{{end}}">BOM</a>
+    {{else}}
+    <span class="sub-tab disabled" title="{{.Part.PNType}} parts do not have a BOM">BOM</span>
+    {{end}}
+    <a href="/part/{{$id}}/where-used"  class="sub-tab{{if eq $sub "where-used"}} active{{end}}">Where Used</a>
+    <a href="/part/{{$id}}/orders"      class="sub-tab{{if eq $sub "orders"}} active{{end}}">Order History</a>
+    <a href="/part/{{$id}}/attachments" class="sub-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
+    <a href="/part/{{$id}}/pricing"     class="sub-tab{{if eq $sub "pricing"}} active{{end}}">Pricing</a>
+    {{if eq $sub "details"}}
+    <a href="/part/{{$id}}/edit" class="sub-tab sub-tab-edit">Edit</a>
+    {{else if and $hasBOM (eq $sub "bom")}}
+    <a href="/part/{{$id}}/bom/edit" class="sub-tab sub-tab-edit">Edit BOM</a>
+    {{end}}
+</div>
+{{end}}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>PO #{{.PO.Number}}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Segoe UI',Arial,sans-serif; font-size:10pt; color:#000; background:#fff; padding:20px; }
+    .print-btn { margin-bottom:16px; display:flex; gap:10px; align-items:center; }
+    .print-btn button { padding:8px 20px; background:#667eea; color:white; border:none; border-radius:4px; font-size:10pt; font-weight:600; cursor:pointer; }
+    .print-btn a { padding:8px 16px; background:#f0f0f0; color:#333; border:1px solid #ccc; border-radius:4px; font-size:10pt; font-weight:600; text-decoration:none; }
+    .po-doc { max-width:800px; margin:0 auto; }
+    .po-header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:12px; }
+    .po-header h1 { font-size:18pt; font-weight:700; letter-spacing:1px; }
+    .po-header .po-meta { text-align:right; font-size:10pt; line-height:1.6; }
+    .po-header .po-meta strong { font-size:13pt; }
+    .po-parties { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:10px; }
+    .po-box { border:1px solid #ccc; padding:8px 10px; }
+    .po-box h4 { font-size:7pt; text-transform:uppercase; letter-spacing:1px; color:#555; margin-bottom:5px; border-bottom:1px solid #ddd; padding-bottom:3px; }
+    .po-box p { font-size:9.5pt; line-height:1.5; }
+    .po-box .supplier-name { font-weight:700; font-size:10.5pt; }
+    .po-meta-strip { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid #ccc; margin-bottom:12px; }
+    .po-meta-strip .cell { padding:5px 8px; border-right:1px solid #ccc; font-size:9pt; }
+    .po-meta-strip .cell:last-child { border-right:none; }
+    .po-meta-strip .cell label { display:block; font-size:7pt; text-transform:uppercase; letter-spacing:0.5px; color:#555; margin-bottom:2px; }
+    .po-meta-strip .cell span { font-weight:600; }
+    table { width:100%; border-collapse:collapse; margin-bottom:4px; font-size:9.5pt; }
+    thead tr { background:#eee; }
+    th { padding:5px 6px; text-align:left; font-weight:700; font-size:8.5pt; border:1px solid #ccc; }
+    td { padding:4px 6px; border:1px solid #ddd; vertical-align:top; }
+    td.num { text-align:right; white-space:nowrap; }
+    tfoot td { border:1px solid #ccc; }
+    .totals-row td { background:#f5f5f5; }
+    .total-row td { background:#e8eeff; font-weight:700; font-size:10pt; }
+    .po-notes { border:1px solid #ccc; padding:8px 10px; margin-top:12px; }
+    .po-notes h4 { font-size:7pt; text-transform:uppercase; letter-spacing:1px; color:#555; margin-bottom:5px; }
+    .po-notes p { font-size:9.5pt; line-height:1.5; white-space:pre-wrap; }
+    @media print {
+      .print-btn { display:none !important; }
+      body { padding:0; }
+      .po-doc { max-width:100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="print-btn">
+  <button onclick="fetch('/po/{{.PO.Number}}/mark-printed',{method:'POST'}).then(function(){window.print()}).catch(function(){window.print()})">&#9113; Print / Save PDF</button>
+  <a href="/po/{{.PO.Number}}">&#8592; Back to PO</a>
+</div>
+
+<div class="po-doc">
+  <div class="po-header">
+    <div>
+      <h1>PURCHASE ORDER</h1>
+      {{if .PO.SupplierName}}<div style="margin-top:4px; font-size:10pt; color:#333;">{{.PO.SupplierName}}</div>{{end}}
+    </div>
+    <div class="po-meta">
+      <strong>PO #{{.PO.Number}}</strong><br>
+      {{if .PO.DateOrdered}}{{formatDate .PO.DateOrdered}}<br>{{end}}
+      <span style="font-size:9pt; font-weight:700; color:{{if .PO.IsActive}}#155724{{else}}#721c24{{end}};">
+        {{if .PO.IsActive}}OPEN{{else}}CLOSED{{end}}
+      </span>
+    </div>
+  </div>
+
+  <div class="po-parties">
+    <div class="po-box">
+      <h4>Supplier / Vendor</h4>
+      <p>
+        {{if .PO.SupplierName}}<span class="supplier-name">{{.PO.SupplierName}}</span><br>{{end}}
+        {{if .PO.SupplierContact}}{{.PO.SupplierContact}}<br>{{end}}
+        {{if .PO.SupplierEmail}}{{.PO.SupplierEmail}}{{end}}
+      </p>
+    </div>
+    <div class="po-box">
+      <h4>Ship To</h4>
+      <p>
+        {{if .PO.ReceiverName}}<span class="supplier-name">{{.PO.ReceiverName}}</span><br>{{end}}
+        {{if .PO.ReceiverAddress}}{{.PO.ReceiverAddress}}<br>{{end}}
+        {{$cl := cityLine .PO.ReceiverCity .PO.ReceiverState .PO.ReceiverZipcode}}{{if $cl}}{{$cl}}<br>{{end}}
+        {{if .PO.ReceiverCountry}}{{.PO.ReceiverCountry}}{{end}}
+      </p>
+    </div>
+  </div>
+
+  <div class="po-meta-strip">
+    <div class="cell"><label>Ordered</label><span>{{if .PO.DateOrdered}}{{formatDate .PO.DateOrdered}}{{else}}—{{end}}</span></div>
+    <div class="cell"><label>Requested</label><span>{{if .PO.DateRequested}}{{formatDate .PO.DateRequested}}{{else}}—{{end}}</span></div>
+    <div class="cell"><label>Orderer</label><span>{{.PO.Orderer}}</span></div>
+    <div class="cell"><label>Account ID</label><span>{{.PO.AccountID}}</span></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:32px;">#</th>
+        <th style="width:110px;">Part Number</th>
+        <th>Description</th>
+        <th style="width:110px;">Vendor PN</th>
+        <th style="width:50px; text-align:right;">Qty</th>
+        <th style="width:80px; text-align:right;">Unit Cost</th>
+        <th style="width:80px; text-align:right;">Extended</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .POItems}}
+      <tr>
+        <td>{{.POLItem}}</td>
+        <td>{{.POLPNPartNumber}}</td>
+        <td>{{.POLDesc}}</td>
+        <td>{{.VendorPN}}</td>
+        <td class="num">{{printf "%.2f" .POLQty}}</td>
+        <td class="num">${{printf "%.4f" .POLCost}}</td>
+        <td class="num">${{printf "%.2f" (mul .POLQty .POLCost)}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+    <tfoot>
+      <tr class="totals-row">
+        <td colspan="6" style="text-align:right; font-weight:600;">Subtotal</td>
+        <td class="num">${{printf "%.2f" .LineTotal}}</td>
+      </tr>
+      <tr class="totals-row">
+        <td colspan="6" style="text-align:right;">Tax</td>
+        <td class="num">${{printf "%.2f" (deref .PO.Tax1)}}</td>
+      </tr>
+      <tr class="totals-row">
+        <td colspan="6" style="text-align:right;">Shipping</td>
+        <td class="num">${{printf "%.2f" (deref .PO.ShippingCost)}}</td>
+      </tr>
+      <tr class="totals-row">
+        <td colspan="6" style="text-align:right;">Misc</td>
+        <td class="num">${{printf "%.2f" (deref .PO.MiscCost)}}</td>
+      </tr>
+      <tr class="total-row">
+        <td colspan="6" style="text-align:right;">TOTAL</td>
+        <td class="num">${{printf "%.2f" (deref .PO.TotalCost)}}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {{if .PO.Notes}}
+  <div class="po-notes">
+    <h4>Notes</h4>
+    <p>{{.PO.Notes}}</p>
+  </div>
+  {{end}}
+</div>
+</body>
+</html>

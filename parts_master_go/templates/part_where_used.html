@@ -1,0 +1,41 @@
+{{define "content"}}
+<header>
+    <h1>Part Details</h1>
+    <p>{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}</p>
+</header>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{if .WhereUsedItems}}
+    <div class="table-wrapper">
+        <table style="table-layout:auto;">
+            <thead>
+                <tr>
+                    <th>Parent Part Number</th>
+                    <th>Title</th>
+                    <th style="width:60px;">Rev</th>
+                    <th style="width:80px;">Type</th>
+                    <th style="width:80px; text-align:right;">Qty Used</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .WhereUsedItems}}
+                <tr>
+                    <td><a href="/part/{{.PLListID}}" class="part-number-link">{{.PNPartNumber}}</a></td>
+                    <td>{{.PNTitle}}</td>
+                    <td>{{.Revision}}</td>
+                    <td>{{.PNType}}</td>
+                    <td style="text-align:right;">{{printf "%.5g" .PLQty}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">
+        Used in {{len .WhereUsedItems}} assembl{{if eq (len .WhereUsedItems) 1}}y{{else}}ies{{end}}
+    </p>
+    {{else}}
+    <p class="no-results">This part is not used in any assemblies.</p>
+    {{end}}
+</div>
+{{end}}

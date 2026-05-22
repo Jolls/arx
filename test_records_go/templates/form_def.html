@@ -1,0 +1,117 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Forms</a></li>
+    <li class="breadcrumb-item">
+      <a href="/forms/{{.Form.ID}}/records">{{.Form.PartNumber}}</a>
+    </li>
+    <li class="breadcrumb-item active">Definition</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
+  <a href="/forms/{{.Form.ID}}/def/edit" class="btn btn-sm btn-primary">
+    <i class="bi bi-pencil"></i> Edit Definition
+  </a>
+</div>
+
+{{if .HistPoints}}
+<div class="mb-3">
+  <div class="small text-muted mb-1">History</div>
+  <div class="def-timeline" data-form-id="{{.Form.ID}}">
+    <div class="def-timeline-line"></div>
+    {{range .HistPoints}}
+    <button type="button"
+            class="def-timeline-dot"
+            style="left:{{printf "%.1f" .PctLeft}}%"
+            data-at="{{.At.Format "2006-01-02"}}"
+            title="{{.At.Format "01/02/2006"}} — {{.Count}} change{{if gt .Count 1}}s{{end}}">
+    </button>
+    {{end}}
+    <button type="button"
+            class="def-timeline-dot def-timeline-now active"
+            style="left:95%"
+            data-now="true"
+            title="Current">
+    </button>
+  </div>
+  <div id="def-history-label" class="small text-muted mt-1"></div>
+</div>
+{{end}}
+
+<details class="mb-3 small text-muted">
+  <summary class="user-select-none" style="cursor:pointer">Token reference</summary>
+  <div class="mt-2 ps-2" style="line-height:1.8">
+    <div class="fw-semibold mb-1">Self-referential (resolved from this step's own fields)</div>
+    <code>{min}</code> spec_min &nbsp;&bull;&nbsp;
+    <code>{max}</code> spec_max &nbsp;&bull;&nbsp;
+    <code>{nom}</code> spec_nom &nbsp;&bull;&nbsp;
+    <code>{units}</code> spec_units
+    <div class="fw-semibold mt-2 mb-1">Record context (resolved from the test record)</div>
+    <code>{record.sn}</code> serial number &nbsp;&bull;&nbsp;
+    <code>{record.pn}</code> unit part number &nbsp;&bull;&nbsp;
+    <code>{record.pndesc}</code> unit description &nbsp;&bull;&nbsp;
+    <code>{record.type}</code> record type &nbsp;&bull;&nbsp;
+    <code>{record.date}</code> test date
+    <div class="fw-semibold mt-2 mb-1">Cross-step (resolved from another step's recorded result)</div>
+    <code>{<em>id</em>}</code> result of step with that ID — e.g. <code>{15}</code>. Step IDs are shown in the ID column below.
+    <div class="fw-semibold mt-2 mb-1">Named queries (run a SQL query; tokens above usable as parameters)</div>
+    <code>query:<em>name</em>(@param={record.pn})</code>
+    <div class="mt-1">Example Specification: <code>{nom}{units} ({min} – {max}{units})</code> &rarr; <em>5v (4.5 – 5.5v)</em></div>
+  </div>
+</details>
+
+<div class="table-responsive">
+<table class="table table-bordered table-sm align-middle" id="def-table" style="min-width:2400px">
+  <thead class="table-dark" style="position:sticky;top:0;z-index:1">
+    <tr>
+      <th style="width:40px">ID</th>
+      <th style="width:60px">Type</th>
+      <th style="width:180px">Parameter</th>
+      <th style="width:180px">Specification</th>
+      <th style="width:220px">spec_nom</th>
+      <th style="width:90px">spec_min</th>
+      <th style="width:90px">spec_max</th>
+      <th style="width:70px">spec_units</th>
+      <th style="width:90px">pf_type</th>
+      <th style="width:120px">default_result</th>
+      <th style="width:60px">Hide</th>
+      <th style="width:120px">category</th>
+      <th style="width:120px">sheet_name</th>
+      <th style="width:180px">applicable_instrs</th>
+      <th style="width:200px">comment</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Steps}}
+    {{if gt .Type 0}}
+    <tr class="row-heading-{{.Type}}" data-step-id="{{.ID}}">
+      <td class="text-muted small">{{.ID}}</td>
+      <td class="text-muted small">{{.Type}}</td>
+      <td colspan="14" data-field="parameter">{{.Parameter}}</td>
+    </tr>
+    {{else}}
+    <tr data-step-id="{{.ID}}">
+      <td class="text-muted small">{{.ID}}</td>
+      <td class="text-muted small">{{.Type}}</td>
+      <td>{{.Parameter}}</td>
+      <td>{{.Specification}}</td>
+      <td class="font-mono">{{.SpecNom}}</td>
+      <td class="font-mono">{{.SpecMin}}</td>
+      <td class="font-mono">{{.SpecMax}}</td>
+      <td>{{.SpecUnits}}</td>
+      <td>{{.PFType}}</td>
+      <td class="font-mono">{{.DefaultResult}}</td>
+      <td class="text-center">{{if eq .HideFormula "HIDE"}}<i class="bi bi-eye-slash text-muted"></i>{{end}}</td>
+      <td class="small text-muted">{{.Category}}</td>
+      <td class="small text-muted">{{.SheetName}}</td>
+      <td class="small text-muted">{{.ApplicableInstrs}}</td>
+      <td class="small text-muted">{{.StepComment}}</td>
+    </tr>
+    {{end}}
+    {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

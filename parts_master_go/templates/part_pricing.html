@@ -1,0 +1,58 @@
+{{define "content"}}
+<header>
+    <h1>Part Details</h1>
+    <p>{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}</p>
+</header>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{if .PriceGroups}}
+    {{range .PriceGroups}}
+    <div class="detail-section">
+        <h3>
+            {{if .SupplierID}}
+                <a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a>
+            {{else}}
+                Unknown Supplier
+            {{end}}
+            {{if .AllInactive}}
+            <span class="badge badge-inactive" style="font-size:0.7em; vertical-align:middle; margin-left:8px;">Inactive</span>
+            {{end}}
+        </h3>
+        <div class="table-wrapper" style="margin-top:10px;">
+            <table style="table-layout:auto;">
+                <thead>
+                    <tr>
+                        <th style="width:100px; text-align:right;">Pack Size</th>
+                        <th style="width:120px; text-align:right;">Price / Unit</th>
+                        <th style="width:120px; text-align:right;">Price / Pack</th>
+                        <th style="width:70px; text-align:center;">Active</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Rows}}
+                    <tr>
+                        <td style="text-align:right;">{{packSizeStr .PackSize}}</td>
+                        <td style="text-align:right;">
+                            {{if .PriceEA}}${{printf "%.6f" (deref .PriceEA)}}{{else}}—{{end}}
+                        </td>
+                        <td style="text-align:right;">
+                            {{if .PricePack}}${{printf "%.4f" (deref .PricePack)}}{{else}}—{{end}}
+                        </td>
+                        <td style="text-align:center;">
+                            {{if .IsActive}}<span class="badge badge-active">Yes</span>
+                            {{else}}<span class="badge badge-inactive">No</span>{{end}}
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {{end}}
+    <p class="table-footer-note">{{len .PriceGroups}} supplier{{if ne (len .PriceGroups) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No pricing data found for this part.</p>
+    {{end}}
+</div>
+{{end}}

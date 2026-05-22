@@ -1,0 +1,102 @@
+{{define "content"}}
+<header>
+    <h1>{{if .IsNew}}New Supplier{{else}}Edit Supplier{{end}}</h1>
+    <p>{{if .IsNew}}Create a new supplier record{{else}}{{.Supplier.Name}}{{end}}</p>
+</header>
+<div class="content">
+    {{if .IsNew}}
+    <a href="/suppliers" class="back-link">&#8592; Back to Suppliers List</a>
+    {{else}}
+    {{template "supplier_tabs" .}}
+    {{end}}
+
+    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+
+    <form method="post" action="{{if .IsNew}}/suppliers{{else}}/supplier/{{.Supplier.ID}}{{end}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+        <div class="detail-section">
+            <h3>Basic Information</h3>
+            <div class="detail-row">
+                <label for="name" class="form-label">Name *</label>
+                <input type="text" id="name" name="name" class="form-input" required
+                       value="{{.Supplier.Name}}">
+            </div>
+            <div class="detail-row">
+                <label for="SUSupplierCode" class="form-label">Supplier Code</label>
+                <input type="text" id="SUSupplierCode" name="SUSupplierCode" class="form-input"
+                       value="{{.Supplier.SUSupplierCode}}">
+            </div>
+            <div class="detail-row">
+                <label for="default_contact" class="form-label">Default Contact</label>
+                <select id="default_contact" name="default_contact" class="form-select">
+                    <option value="">-- None --</option>
+                    {{range .Contacts}}
+                    <option value="{{.CNID}}"
+                        data-phone="{{.Phone}}"
+                        data-email="{{.Email}}"
+                        data-city="{{.City}}"
+                        {{if and $.Supplier.DefaultContact (eq (derefInt $.Supplier.DefaultContact) .CNID)}}selected{{end}}>
+                        {{.CNName}}
+                    </option>
+                    {{end}}
+                </select>
+                {{if not .Contacts}}
+                <p style="font-size:0.82em; color:#888; margin-top:4px;">
+                    Add contacts to this supplier first, then set a default here.
+                </p>
+                {{end}}
+            </div>
+        </div>
+
+        <div class="detail-section" id="contact-details" style="display:none;">
+            <h3>Default Contact Details</h3>
+            <div class="detail-row"><span class="form-label">Phone</span><span id="cd-phone">—</span></div>
+            <div class="detail-row"><span class="form-label">Email</span><span id="cd-email">—</span></div>
+            <div class="detail-row"><span class="form-label">City</span> <span id="cd-city">—</span></div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Status</h3>
+            <div class="detail-row">
+                <label class="form-label">Active</label>
+                <div class="form-checkbox-row">
+                    <input type="checkbox" id="is_active" name="is_active" value="1"
+                           {{if .Supplier.IsActive}}checked{{end}}>
+                    <label for="is_active">Supplier is active</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Notes</h3>
+            <textarea id="SUNotes" name="SUNotes" class="form-textarea"
+                      style="width:100%; margin-top:8px;">{{.Supplier.SUNotes}}</textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">
+                {{if .IsNew}}Create Supplier{{else}}Save Changes{{end}}
+            </button>
+            <a href="{{if .IsNew}}/suppliers{{else}}/supplier/{{.Supplier.ID}}{{end}}"
+               class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+<script>
+(function () {
+    var sel = document.getElementById('default_contact');
+    var panel = document.getElementById('contact-details');
+    function update() {
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) { panel.style.display = 'none'; return; }
+        panel.style.display = '';
+        document.getElementById('cd-phone').textContent = opt.dataset.phone || '—';
+        document.getElementById('cd-email').textContent = opt.dataset.email || '—';
+        document.getElementById('cd-city').textContent  = opt.dataset.city  || '—';
+    }
+    sel.addEventListener('change', update);
+    update();
+}());
+</script>
+{{end}}

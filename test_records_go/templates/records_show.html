@@ -1,0 +1,163 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/">Forms</a></li>
+      <li class="breadcrumb-item">
+        <a href="/forms/{{.Form.ID}}/records">{{.Form.PartNumber}}</a>
+      </li>
+      <li class="breadcrumb-item active">SN: {{.Record.SerialNumber}}</li>
+    </ol>
+  </nav>
+  <div class="btn-group btn-group-sm">
+    {{if .PrevID}}
+    <a href="/records/{{.PrevID}}" class="btn btn-outline-secondary" title="Previous record">
+      <i class="bi bi-chevron-left"></i>
+    </a>
+    {{else}}
+    <button class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left"></i></button>
+    {{end}}
+    {{if .NextID}}
+    <a href="/records/{{.NextID}}" class="btn btn-outline-secondary" title="Next record">
+      <i class="bi bi-chevron-right"></i>
+    </a>
+    {{else}}
+    <button class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-right"></i></button>
+    {{end}}
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-8">
+    <h4>
+      {{.Record.SerialNumberPN}}
+      &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
+      {{if .Record.Locked}}
+      <span class="badge bg-secondary ms-1"><i class="bi bi-lock-fill"></i> Locked</span>
+      {{else}}
+      <a href="/records/{{.Record.ID}}/edit" class="btn btn-sm btn-primary ms-2">
+        <i class="bi bi-pencil"></i> Edit
+      </a>
+      {{end}}
+    </h4>
+    <table class="table table-sm table-borderless w-auto small">
+      <tr>
+        <th class="pe-3 text-muted">Form</th>
+        <td>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</td>
+      </tr>
+      <tr>
+        <th class="text-muted">Description</th>
+        <td>{{.Record.SerialNumberDesc}}</td>
+      </tr>
+      <tr>
+        <th class="text-muted">Date</th>
+        <td>{{formatDate .Record.RecordDate}}</td>
+      </tr>
+      <tr>
+        <th class="text-muted">Type</th>
+        <td>{{.Record.Comments}}</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<table class="table table-bordered table-sm align-middle">
+  <thead class="table-dark">
+    <tr>
+      <th>Parameter</th>
+      <th>Specification</th>
+      <th class="text-center">Result</th>
+      <th class="text-center">P/F</th>
+      <th>Comment</th>
+      <th class="text-nowrap">Updated</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Rows}}
+    {{if gt .Level 0}}
+    <tr class="row-heading-{{.Level}}">
+      <td colspan="6">{{.EffectiveParameter}}</td>
+    </tr>
+    {{else}}
+    {{$val := .EffectiveValue}}
+    {{$sid := .Step.ID}}
+    <tr>
+      <td>
+        {{.EffectiveParameter}}
+        {{if $.DebugMode}}
+        <button class="btn btn-link btn-sm p-0 ms-1 text-muted" type="button"
+                data-bs-toggle="collapse" data-bs-target="#step-debug-{{$sid}}"
+                title="Show step fields">
+          <i class="bi bi-chevron-down" style="font-size:.7rem"></i>
+        </button>
+        {{end}}
+      </td>
+      <td>{{.EffectiveSpec}}</td>
+      <td class="text-center font-mono">
+        {{if imageResult $val}}
+          {{$imgURL := imageURL $.Form.PartNumber $val}}
+          <span class="img-hover-wrap" data-src="{{$imgURL}}">
+            <a href="{{$imgURL}}" target="_blank">
+              <i class="bi bi-image"></i> View
+            </a>
+            <span class="img-hover-preview"><img alt="preview"></span>
+          </span>
+        {{else if isLocalFile $val}}
+          {{$fname := fileBaseName $val}}
+          {{$url   := localFileURL $val}}
+          {{if isPDF $fname}}
+          <a href="{{$url}}" target="_blank">
+            <i class="bi bi-file-pdf text-danger"></i> {{$fname}}
+          </a>
+          {{else}}
+          <a href="{{$url}}" download="{{$fname}}">
+            <i class="bi {{fileIcon $fname}}"></i> {{$fname}}
+          </a>
+          {{end}}
+        {{else}}
+          {{$val}}
+        {{end}}
+      </td>
+      <td class="text-center">{{pfBadge .Result}}</td>
+      <td>{{if .Result}}{{.Result.Comment}}{{end}}</td>
+      <td class="text-nowrap small text-muted">
+        {{if .Result}}{{formatDateTime .Result.UpdatedAt}}{{end}}
+      </td>
+    </tr>
+    {{if $.DebugMode}}
+    {{if not .Level}}
+    <tr class="collapse" id="step-debug-{{$sid}}">
+      <td colspan="6" class="bg-light py-2 px-3">
+        <table class="table table-sm table-bordered border-secondary mb-0 small">
+          <tbody>
+            <tr><th class="text-muted fw-normal w-25">id</th>               <td>{{.Step.ID}}</td></tr>
+            <tr><th class="text-muted fw-normal">form_id</th>               <td>{{.Step.FormID}}</td></tr>
+            <tr><th class="text-muted fw-normal">type</th>                  <td>{{.Step.Type}}</td></tr>
+            <tr><th class="text-muted fw-normal">archive_id</th>            <td>{{.Step.ArchiveID}}</td></tr>
+            <tr><th class="text-muted fw-normal">revision</th>              <td>{{.Step.Revision}}</td></tr>
+            <tr><th class="text-muted fw-normal">category</th>              <td>{{.Step.Category}}</td></tr>
+            <tr><th class="text-muted fw-normal">sheet_name</th>            <td>{{.Step.SheetName}}</td></tr>
+            <tr><th class="text-muted fw-normal">spec_units</th>            <td>{{.Step.SpecUnits}}</td></tr>
+            <tr><th class="text-muted fw-normal">spec_min</th>              <td>{{.Step.SpecMin}}</td></tr>
+            <tr><th class="text-muted fw-normal">spec_nom</th>              <td>{{.Step.SpecNom}}</td></tr>
+            <tr><th class="text-muted fw-normal">spec_max</th>              <td>{{.Step.SpecMax}}</td></tr>
+            <tr><th class="text-muted fw-normal">default_result</th>        <td>{{.Step.DefaultResult}}</td></tr>
+            <tr><th class="text-muted fw-normal">hide_formula</th>          <td>{{.Step.HideFormula}}</td></tr>
+            <tr><th class="text-muted fw-normal">pf_formula</th>            <td>{{.Step.PFFormula}}</td></tr>
+            <tr><th class="text-muted fw-normal">pf_type</th>               <td>{{.Step.PFType}}</td></tr>
+            <tr><th class="text-muted fw-normal">applicable_instrs</th>     <td>{{.Step.ApplicableInstrs}}</td></tr>
+            <tr><th class="text-muted fw-normal">format</th>                <td>{{.Step.Format}}</td></tr>
+            <tr><th class="text-muted fw-normal">comment</th>               <td>{{.Step.StepComment}}</td></tr>
+            <tr><th class="text-muted fw-normal">created_at</th>            <td>{{formatDateTime .Step.StepCreatedAt}}</td></tr>
+            <tr><th class="text-muted fw-normal">updated_at</th>            <td>{{formatDateTime .Step.StepUpdatedAt}}</td></tr>
+          </tbody>
+        </table>
+      </td>
+    </tr>
+    {{end}}
+    {{end}}
+    {{end}}
+    {{end}}
+  </tbody>
+</table>
+{{end}}

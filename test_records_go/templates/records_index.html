@@ -1,0 +1,65 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Forms</a></li>
+    <li class="breadcrumb-item active">{{.Form.PartNumber}}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
+  <div class="d-flex gap-2">
+    <a href="/forms/{{.Form.ID}}/records/new" class="btn btn-sm btn-primary">
+      <i class="bi bi-plus-circle"></i> New Record
+    </a>
+    <a href="/forms/{{.Form.ID}}/def" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-list-check"></i> View Definition
+    </a>
+    {{if .WIPOnly}}
+    <a href="?wip=false" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-eye"></i> Show All (incl. Locked)
+    </a>
+    {{else}}
+    <a href="?" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-funnel"></i> WIP Only
+    </a>
+    {{end}}
+  </div>
+</div>
+
+<table class="table table-bordered table-hover table-sm">
+  <thead class="table-dark">
+    <tr>
+      <th>Serial Number</th>
+      <th>Part Number</th>
+      <th>Description</th>
+      <th>Date</th>
+      <th>Type</th>
+      <th class="text-center">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{if not .Records}}
+    <tr><td colspan="6" class="text-center text-muted py-3">No records found</td></tr>
+    {{end}}
+    {{range .Records}}
+    <tr>
+      <td>
+        <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
+      </td>
+      <td>{{.SerialNumberPN}}</td>
+      <td>{{.SerialNumberDesc}}</td>
+      <td class="text-nowrap">{{formatDate .RecordDate}}</td>
+      <td>{{.Comments}}</td>
+      <td class="text-center">
+        {{if .Locked}}
+        <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Locked</span>
+        {{else}}
+        <span class="badge bg-info text-dark">WIP</span>
+        {{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
