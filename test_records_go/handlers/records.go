@@ -931,10 +931,18 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		SELECT COALESCE(prev_id, 0), COALESCE(next_id, 0) FROM ordered WHERE ID = @p2`,
 		h.cfg.RecordsTable()), record.FormID, recordID).Scan(&prevID, &nextID)
 
+	var imageRows []models.ResultRow
+	for _, row := range resultRows {
+		if row.Level == 0 && imageResult(row.EffectiveValue()) {
+			imageRows = append(imageRows, row)
+		}
+	}
+
 	h.render(w, "records_show.html", map[string]any{
 		"Form":      form,
 		"Record":    record,
 		"Rows":      resultRows,
+		"ImageRows": imageRows,
 		"PrevID":    prevID,
 		"NextID":    nextID,
 		"TestMode":  h.cfg.TestMode,
@@ -1093,11 +1101,19 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		row.Step.DefaultResult = substituteStepSelf(substituteRefs(row.Step.DefaultResult, results, steps, &record, &form), row.Step)
 	}
 
+	var imageRows []models.ResultRow
+	for _, row := range resultRows {
+		if row.Level == 0 && imageResult(row.EffectiveValue()) {
+			imageRows = append(imageRows, row)
+		}
+	}
+
 	h.renderPrint(w, "record_print.html", map[string]any{
-		"Form":     form,
-		"Record":   record,
-		"Rows":     resultRows,
-		"TestMode": h.cfg.TestMode,
+		"Form":      form,
+		"Record":    record,
+		"Rows":      resultRows,
+		"ImageRows": imageRows,
+		"TestMode":  h.cfg.TestMode,
 	})
 }
 
