@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.28] - 2026-05-22 
+- parts_master_go: PO print page auto-names PDF to `<PO Number> <SupplierCode>` via `<title>` tag
+- parts_master_go: print button opens PO folder in Explorer after marking printed (`POST /po/{id}/open-folder`), creating folder if it doesn't exist
+- parts_master_go: suppress browser URL/date headers from PO print output via `@page { margin: 0 }`
+
 ## [0.3.27] - 2026-05-21 
 - parts_master_go: add BOM rollup cost button on BOM tab — `POST /part/{id}/rollup-cost` computes `SUM(PNCurrentCost * PLQty)` for direct components and writes to `PN.PNLastRollupCost` + new `PN.PNLastRollupAt`
 - parts_master_go: add Unit Cost column to BOM table (PNCurrentCost per component)

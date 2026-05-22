@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>PO #{{.PO.Number}}</title>
+  <title>{{.PO.Number}}{{if .SupplierCode}} {{.SupplierCode}}{{end}}</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Segoe UI',Arial,sans-serif; font-size:10pt; color:#000; background:#fff; padding:20px; }
@@ -35,9 +35,10 @@
     .po-notes { border:1px solid #ccc; padding:8px 10px; margin-top:12px; }
     .po-notes h4 { font-size:7pt; text-transform:uppercase; letter-spacing:1px; color:#555; margin-bottom:5px; }
     .po-notes p { font-size:9.5pt; line-height:1.5; white-space:pre-wrap; }
+    @page { margin: 0; }
     @media print {
       .print-btn { display:none !important; }
-      body { padding:0; }
+      body { padding:12mm; }
       .po-doc { max-width:100%; }
     }
   </style>
@@ -45,7 +46,7 @@
 <body>
 
 <div class="print-btn">
-  <button onclick="fetch('/po/{{.PO.Number}}/mark-printed',{method:'POST'}).then(function(){window.print()}).catch(function(){window.print()})">&#9113; Print / Save PDF</button>
+  <button onclick="fetch('/po/{{.PO.Number}}/mark-printed',{method:'POST'}).catch(function(){}).then(function(){fetch('/po/{{.PO.Number}}/open-folder',{method:'POST'}).catch(function(){});window.print()})">&#9113; Print / Save PDF</button>
   <a href="/po/{{.PO.Number}}">&#8592; Back to PO</a>
 </div>
 
@@ -96,6 +97,7 @@
       <tr>
         <th style="width:32px;">#</th>
         <th style="width:110px;">Part Number</th>
+        <th style="width:46px;">Rev</th>
         <th>Description</th>
         <th style="width:110px;">Vendor PN</th>
         <th style="width:50px; text-align:right;">Qty</th>
@@ -108,6 +110,7 @@
       <tr>
         <td>{{.POLItem}}</td>
         <td>{{.POLPNPartNumber}}</td>
+        <td>{{.POLRev}}</td>
         <td>{{.POLDesc}}</td>
         <td>{{.VendorPN}}</td>
         <td class="num">{{printf "%.2f" .POLQty}}</td>
@@ -118,23 +121,23 @@
     </tbody>
     <tfoot>
       <tr class="totals-row">
-        <td colspan="6" style="text-align:right; font-weight:600;">Subtotal</td>
+        <td colspan="7" style="text-align:right; font-weight:600;">Subtotal</td>
         <td class="num">${{printf "%.2f" .LineTotal}}</td>
       </tr>
       <tr class="totals-row">
-        <td colspan="6" style="text-align:right;">Tax</td>
+        <td colspan="7" style="text-align:right;">Tax</td>
         <td class="num">${{printf "%.2f" (deref .PO.Tax1)}}</td>
       </tr>
       <tr class="totals-row">
-        <td colspan="6" style="text-align:right;">Shipping</td>
+        <td colspan="7" style="text-align:right;">Shipping</td>
         <td class="num">${{printf "%.2f" (deref .PO.ShippingCost)}}</td>
       </tr>
       <tr class="totals-row">
-        <td colspan="6" style="text-align:right;">Misc</td>
+        <td colspan="7" style="text-align:right;">Misc</td>
         <td class="num">${{printf "%.2f" (deref .PO.MiscCost)}}</td>
       </tr>
       <tr class="total-row">
-        <td colspan="6" style="text-align:right;">TOTAL</td>
+        <td colspan="7" style="text-align:right;">TOTAL</td>
         <td class="num">${{printf "%.2f" (deref .PO.TotalCost)}}</td>
       </tr>
     </tfoot>

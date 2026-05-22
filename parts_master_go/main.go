@@ -167,6 +167,7 @@ func buildRouter(h *handlers.Handler) http.Handler {
 		r.Get("/po/{id}/note", h.PONote)
 		r.Get("/po/{id}/print", h.POPrint)
 		r.Post("/po/{id}/mark-printed", h.POMarkPrinted)
+		r.Post("/po/{id}/open-folder", h.POOpenFolder)
 		r.Get("/po/{id}/duplicate", h.PODuplicate)
 		r.Get("/po/{id}/folder", h.POFolder)
 		r.Get("/po/{id}/folder/*", h.POFolderSub)
