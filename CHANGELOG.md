@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.29] - 2026-05-22 
+- test_records_go: add print-friendly view for test records at `GET /records/{id}/print` (#204); standalone HTML page with embedded CSS, `@media print` suppression of browser headers, PDF filename set via `<title>` tag; Print button added to record detail view
+
 ## [0.3.28] - 2026-05-22 
 - parts_master_go: PO print page auto-names PDF to `<PO Number> <SupplierCode>` via `<title>` tag
 - parts_master_go: print button opens PO folder in Explorer after marking printed (`POST /po/{id}/open-folder`), creating folder if it doesn't exist

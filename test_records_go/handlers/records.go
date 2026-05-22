@@ -942,6 +942,165 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// RecordPrint — GET /records/{id}/print
+func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
+	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var record models.TestRecord
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
+		       record_date, comments, locked, active, test_order
+		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
+		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
+			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
+			&record.Locked, &record.Active, &record.TestOrder)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var form models.TestForm
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		FROM %s f
+		JOIN %s pn ON f.PNID = pn.PNID
+		WHERE f.ID = @p1`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
+		       spec_min, spec_max, pf_type,
+		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
+		       pf_formula, applicable_instrs, format, comment,
+		       created_at, updated_at
+		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer stepRows.Close()
+
+	steps := map[int]*models.TestStep{}
+	for stepRows.Next() {
+		var s models.TestStep
+		var (
+			archiveID, revision                         sql.NullInt32
+			param, spec, defaultResult, hideFormula     sql.NullString
+			specMin, specMax, pfType                    sql.NullString
+			category, sheetName, specUnits, specNom     sql.NullString
+			pfFormula, applicableInstrs, format         sql.NullString
+			stepComment                                 sql.NullString
+		)
+		if err := stepRows.Scan(
+			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
+			&specMin, &specMax, &pfType,
+			&archiveID, &revision, &category, &sheetName,
+			&specUnits, &specNom, &pfFormula, &applicableInstrs,
+			&format, &stepComment,
+			&s.StepCreatedAt, &s.StepUpdatedAt,
+		); err != nil {
+			continue
+		}
+		s.Parameter = param.String
+		s.Specification = spec.String
+		s.DefaultResult = defaultResult.String
+		s.HideFormula = hideFormula.String
+		s.SpecMin = specMin.String
+		s.SpecMax = specMax.String
+		s.PFType = pfType.String
+		if archiveID.Valid {
+			s.ArchiveID = int(archiveID.Int32)
+		}
+		if revision.Valid {
+			s.Revision = int(revision.Int32)
+		}
+		s.Category = category.String
+		s.SheetName = sheetName.String
+		s.SpecUnits = specUnits.String
+		s.SpecNom = specNom.String
+		s.PFFormula = pfFormula.String
+		s.ApplicableInstrs = applicableInstrs.String
+		s.Format = format.String
+		s.StepComment = stepComment.String
+		steps[s.ID] = &s
+	}
+
+	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT ID, record_id, test_id,
+		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
+		       pass_fail, COALESCE(comment,''), updated_at
+		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resRows.Close()
+
+	results := map[int]*models.TestResult{}
+	for resRows.Next() {
+		var res models.TestResult
+		if err := resRows.Scan(&res.ID, &res.RecordID, &res.TestID, &res.Parameter,
+			&res.Specification, &res.Result, &res.PassFail, &res.Comment, &res.UpdatedAt); err != nil {
+			continue
+		}
+		results[res.TestID] = &res
+	}
+
+	ids := record.OrderedTestIDs()
+	if len(ids) == 0 {
+		ids = form.OrderedTestIDs()
+	}
+
+	var resultRows []models.ResultRow
+	for _, tid := range ids {
+		step, ok := steps[tid]
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(step.HideFormula, "HIDE") {
+			continue
+		}
+		resultRows = append(resultRows, models.ResultRow{
+			Step:   step,
+			Result: results[tid],
+			Level:  step.Type,
+		})
+	}
+
+	for i := range resultRows {
+		row := &resultRows[i]
+		if row.Level > 0 || row.Step == nil {
+			continue
+		}
+		row.Step.Parameter = substituteRefs(row.Step.Parameter, results, steps, &record, &form)
+		row.Step.Specification = substituteStepSelf(substituteRefs(row.Step.Specification, results, steps, &record, &form), row.Step)
+		row.Step.SpecNom = substituteRefs(row.Step.SpecNom, results, steps, &record, &form)
+		row.Step.SpecMin = substituteRefs(row.Step.SpecMin, results, steps, &record, &form)
+		row.Step.SpecMax = substituteRefs(row.Step.SpecMax, results, steps, &record, &form)
+		row.Step.DefaultResult = substituteStepSelf(substituteRefs(row.Step.DefaultResult, results, steps, &record, &form), row.Step)
+	}
+
+	h.renderPrint(w, "record_print.html", map[string]any{
+		"Form":     form,
+		"Record":   record,
+		"Rows":     resultRows,
+		"TestMode": h.cfg.TestMode,
+	})
+}
+
 // BOMPart is one row from the form's BOM (PL → PN join).
 type BOMPart struct {
 	PNID       int
