@@ -114,6 +114,7 @@ func buildRouter(h *handlers.Handler) http.Handler {
 		r.Post("/forms/{id}/def/edit", h.SaveFormDef)
 		r.Get("/api/forms/{id}/def/history", h.FormDefHistory)
 		r.Get("/records/{id}", h.RecordDetail)
+		r.Get("/records/{id}/print", h.RecordPrint)
 		r.Get("/records/{id}/edit", h.EditRecord)
 		r.Post("/records/{id}/edit", h.SaveResults)
 		r.Get("/api/named-query", h.APINamedQuery)

@@ -112,6 +112,21 @@ func (h *Handler) render(w http.ResponseWriter, page string, data any) {
 	}
 }
 
+// renderPrint parses a single standalone template (no layout wrapper) and executes it.
+// Used for print views that ship their own full HTML document.
+func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
+	tmpl, err := template.New("").Funcs(templateFuncs()).ParseFS(h.tmplFS,
+		"templates/"+page,
+	)
+	if err != nil {
+		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tmpl.ExecuteTemplate(w, page, data); err != nil {
+		http.Error(w, "template execute error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	h.render(w, "not_found.html", map[string]any{"TestMode": h.cfg.TestMode})
