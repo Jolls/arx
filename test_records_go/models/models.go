@@ -58,7 +58,7 @@ func (r *TestRecord) OrderedTestIDs() []int {
 	return parseIDList(r.TestOrder)
 }
 
-// TestStep is a row in the Tests table.
+// TestStep is a row in the test_definition table.
 // Type is the heading level: 0 = data row, 1/2/3 = section heading.
 type TestStep struct {
 	ID            int

@@ -125,7 +125,7 @@ erDiagram
         bit     active
     }
 
-    Tests {
+    test_definition {
         int     id              PK
         int     form_id         FK
         varchar Parameter
@@ -200,11 +200,11 @@ erDiagram
     %% Test records
     PN          ||--o{    Forms       : "test forms (PNID)"
     PN          ||--o{    TestRecords : "test records (part_number_id)"
-    Forms       ||--o{    Tests       : "test definitions (form_id)"
+    Forms       ||--o{    test_definition : "test definitions (form_id)"
     Forms       ||--o{    TestRecords : "executed records (form_id)"
     Forms       ||--o{    TestResults : "results (form_id)"
     TestRecords ||--o{    TestResults : "results (record_id)"
-    Tests       ||--o{    TestResults : "result per test (test_id)"
+    test_definition ||--o{    TestResults : "result per test (test_id)"
 ```
 
 ## Notes

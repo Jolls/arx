@@ -1,6 +1,6 @@
 -- Forms: Test form definitions. One form per part number / product type.
 -- PNID links to PN.PNID in the PartsMaster database (cross-database; no FK constraint).
--- test_order is a comma-separated list of Tests.id values in display order.
+-- test_order is a comma-separated list of test_definition.id values in display order.
 -- locked prevents structural changes to the form (adding/removing/reordering tests).
 
 IF OBJECT_ID('dbo.Forms', 'U') IS NOT NULL DROP TABLE Forms;
@@ -8,7 +8,7 @@ IF OBJECT_ID('dbo.Forms', 'U') IS NOT NULL DROP TABLE Forms;
 CREATE TABLE Forms (
   ID            INT          PRIMARY KEY IDENTITY,
   PNID          INT          NOT NULL,           -- Cross-database reference to PartsMaster PN.PNID. No FK constraint possible.
-  test_order    VARCHAR(MAX),                    -- Comma-separated Tests.id values in display order.
+  test_order    VARCHAR(MAX),                    -- Comma-separated test_definition.id values in display order.
   locked        BIT          NOT NULL CONSTRAINT DF_Forms_locked DEFAULT 0, -- 1 = locked from structural changes.
   active        BIT          NOT NULL CONSTRAINT DF_Forms_active DEFAULT 1, -- 0 = archived; hidden from UI.
   record_types  VARCHAR(500)                     -- comma-separated list of allowed record types (e.g. 'New Release,Re-Test,Upgrade'). NULL = free-text.
@@ -19,7 +19,7 @@ CREATE TABLE Forms (
 -- ALTER TABLE Forms_Test ADD record_types VARCHAR(500) NULL;
 
 
--- Tests: Individual test step / parameter definitions within a form.
+-- test_definition: Individual test step / parameter definitions within a form.
 -- form_id FKs to Forms.ID.
 -- type encodes the row role: 0 = measurable test, 1/2/3 = heading level (mirrors VBA).
 -- hide_formula = 'HIDE' excludes the row from display.
@@ -27,14 +27,14 @@ CREATE TABLE Forms (
 -- NOTE: Parameter and Specification are capitalized in the live DB; the app normalizes
 --       to lowercase via transform_keys(&:downcase).
 
--- TODO: rename Tests → test_definition and Tests_Test → test_definition_Test
+-- TODO: rename test_definition → test_definition and Tests_Test → test_definition_Test
 --       to align with the test_definition_history naming convention.
 --       Requires updating all Go handlers, config helpers, _test.sql, CLAUDE.md,
 --       and running a DB rename (sp_rename or DROP/CREATE).
-IF OBJECT_ID('dbo.Tests', 'U') IS NOT NULL DROP TABLE Tests;
--- FK added after creation: ALTER TABLE dbo.Tests ADD CONSTRAINT FK_Tests_Forms FOREIGN KEY (form_id) REFERENCES dbo.Forms (ID);
+IF OBJECT_ID('dbo.test_definition', 'U') IS NOT NULL DROP TABLE test_definition;
+-- FK added after creation: ALTER TABLE dbo.test_definition ADD CONSTRAINT FK_test_definition_Forms FOREIGN KEY (form_id) REFERENCES dbo.Forms (ID);
 
-CREATE TABLE Tests (
+CREATE TABLE test_definition (
   id                  INT          PRIMARY KEY IDENTITY,
   form_id             INT          NOT NULL,             -- FK to Forms.ID.
   archive_id          INT,                               -- TODO: document purpose.
@@ -107,20 +107,20 @@ CREATE TABLE TestRecordHistory (
 
 
 -- TestResults: One row per test step per test record.
--- record_id FKs to TestRecords.ID. test_id FKs to Tests.id.
--- parameter/specification/spec_* are denormalized snapshots from Tests at record creation.
+-- record_id FKs to TestRecords.ID. test_id FKs to test_definition.id.
+-- parameter/specification/spec_* are denormalized snapshots from test_definition at record creation.
 -- form_id is denormalized (derivable via TestRecords.form_id). TODO: evaluate removing.
 -- pass_fail: 1 = PASS, 0 = FAIL, NULL = not yet evaluated.
 
 IF OBJECT_ID('dbo.TestResults', 'U') IS NOT NULL DROP TABLE TestResults;
 -- FKs added after creation:
 --   ALTER TABLE dbo.TestResults ADD CONSTRAINT FK_TestResults_TestRecords FOREIGN KEY (record_id) REFERENCES dbo.TestRecords (ID);
---   ALTER TABLE dbo.TestResults ADD CONSTRAINT FK_TestResults_Tests       FOREIGN KEY (test_id)   REFERENCES dbo.Tests (id);
+--   ALTER TABLE dbo.TestResults ADD CONSTRAINT FK_TestResults_test_definition       FOREIGN KEY (test_id)   REFERENCES dbo.test_definition (id);
 
 CREATE TABLE TestResults (
   ID             INT          PRIMARY KEY IDENTITY,
   record_id      INT          NOT NULL,             -- FK to TestRecords.ID.
-  test_id        INT          NOT NULL,             -- FK to Tests.id.
+  test_id        INT          NOT NULL,             -- FK to test_definition.id.
   form_id        INT,                               -- Denormalized from TestRecords. TODO: evaluate removing.
   pass_fail      BIT,                               -- 1 = PASS, 0 = FAIL, NULL = not evaluated.
   result         VARCHAR(255),
@@ -245,7 +245,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 
 
 -- test_definition_history: Audit trail for changes to Tests rows.
--- Populated automatically by trg_Tests_history (AFTER UPDATE trigger on Tests).
+-- Populated automatically by trg_test_definition_history (AFTER UPDATE trigger on Tests).
 -- Each row is a snapshot of the old values captured at the moment of update.
 --
 -- TODO (user login): changed_by currently stores SYSTEM_USER (the DB login, same for all apps).
@@ -258,7 +258,7 @@ IF OBJECT_ID('dbo.test_definition_history', 'U') IS NOT NULL DROP TABLE test_def
 
 CREATE TABLE test_definition_history (
   id            INT          PRIMARY KEY IDENTITY,
-  test_id       INT          NOT NULL,              -- FK to Tests.id
+  test_id       INT          NOT NULL,              -- FK to test_definition.id
   changed_at    DATETIME     NOT NULL DEFAULT GETDATE(),
   changed_by    VARCHAR(128) NOT NULL DEFAULT SYSTEM_USER, -- TODO: replace with app user via CONTEXT_INFO
   -- snapshot of values before the update
@@ -282,10 +282,10 @@ CREATE TABLE test_definition_history (
 -- Trigger: snapshot old values into test_definition_history on every Tests UPDATE.
 -- Uses DELETED pseudo-table which contains pre-update row values.
 -- Set-based: handles bulk updates (multiple rows changed at once) correctly.
-IF OBJECT_ID('dbo.trg_Tests_history', 'TR') IS NOT NULL DROP TRIGGER trg_Tests_history;
+IF OBJECT_ID('dbo.trg_test_definition_history', 'TR') IS NOT NULL DROP TRIGGER trg_test_definition_history;
 GO
-CREATE TRIGGER dbo.trg_Tests_history
-ON dbo.Tests
+CREATE TRIGGER dbo.trg_test_definition_history
+ON dbo.test_definition
 AFTER UPDATE
 AS
 BEGIN

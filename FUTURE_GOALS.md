@@ -54,8 +54,8 @@ Required before: Level 2/3 automated tests (#240), any new test infrastructure.
 ### 3. Schema constraints (#213)
 Many FK and NOT NULL constraints deferred at table creation. Should be applied incrementally before adding columns that depend on referential integrity. Verify no orphan/NULL rows before each constraint.
 
-### 4. `Tests` table rename → `test_definition` (#215)
-The name `Tests` is ambiguous alongside Go's `_test.go` convention. Rename early to avoid compounding rename debt. Affects both apps, `cfg.StepsTable()`, DDL files, CLAUDE.md.
+### ~~4. `Tests` table rename → `test_definition` (#215)~~
+~~The name `Tests` is ambiguous alongside Go's `_test.go` convention. Rename early to avoid compounding rename debt. Affects both apps, `cfg.StepsTable()`, DDL files, CLAUDE.md.~~ **Done in PR #308.**
 
 ### 5. `price.is_preferred` flag (#223)
 Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.price_id` pointer is stale and unmanaged; replace with `is_preferred BIT` + filtered unique index.
@@ -162,14 +162,14 @@ Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.pr
 | #251 | Per-result change history (`TestResultHistory` table) | — |
 
 ### Tier 3: Form Definition Features
-*Extends `Tests`/`Forms` schema.*
+*Extends `test_definition`/`Forms` schema.*
 
 | Issue | Feature | Schema touch |
 |---|---|---|
 | #260 | Formal revision numbers on Forms (Rev A/B/C) | `Forms.revision`, `TestRecords.form_revision` |
-| #261/256 | Required test steps (block lock if incomplete) | `Tests.required` BIT |
-| #262/257 | Conditional step visibility (`show_if` expression) | `Tests.show_if` VARCHAR |
-| #210 | `hide_formula` dynamic expressions (extends HIDE/SHOW) | `Tests.hide_formula` semantic extension |
+| #261/256 | Required test steps (block lock if incomplete) | `test_definition.required` BIT |
+| #262/257 | Conditional step visibility (`show_if` expression) | `test_definition.show_if` VARCHAR |
+| #210 | `hide_formula` dynamic expressions (extends HIDE/SHOW) | `test_definition.hide_formula` semantic extension |
 | #255 | Clone/duplicate a form definition | No schema change |
 | #221 | Custom worksheet tab support (future, VBA concept) | `Forms` config field TBD |
 
@@ -222,8 +222,8 @@ Next:
 - **Level 2:** `net/http/httptest` handler tests — requires TEST_MODE wired to ArxDev and CSRF disabled in test mode
 - **Level 3:** Integration tests — full DB round-trips against ArxDev; validates triggers and sequences
 
-### `Tests` Table Rename (#215)
-Rename `Tests` → `test_definition`, `Tests_Test` → `test_definition_Test` (or just `test_definition` in ArxDev). Do this before writing any new test records handler tests to avoid locking in the old name.
+### ~~`Tests` Table Rename (#215)~~
+~~Rename `Tests` → `test_definition`, `Tests_Test` → `test_definition_Test`.~~ **Done.**
 
 ### Serial Number Migration (#214)
 `TestRecords.serial_number` is `VARCHAR(64)` but all active records appear numeric. Migrate to `INT` after verifying: `SELECT * FROM TestRecords WHERE TRY_CAST(serial_number AS INT) IS NULL AND active = 1`. The named query `recent_serial_numbers_for_form` already uses `TRY_CAST` in anticipation.
@@ -238,7 +238,7 @@ Rename `Tests` → `test_definition`, `Tests_Test` → `test_definition_Test` (o
 - `PN.price_id` — stale pointer; replace with `price.is_preferred` (#223) then drop.
 - `price_type` — was dropped; re-add when #222 is implemented.
 - `Forms.custom_sheets` — was dropped; only re-add if custom worksheet feature is scoped (#221).
-- `pf_formula` on `Tests` — loaded but unevaluated; decide evaluate-or-drop (#199) before #262 adds more step evaluation logic.
+- `pf_formula` on `test_definition` — loaded but unevaluated; decide evaluate-or-drop (#199) before #262 adds more step evaluation logic.
 
 ---
 
