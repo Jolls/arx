@@ -42,6 +42,7 @@ EXEC sp_rename N'dbo.DF__PN_Test__PNUser9__21A0F6C4', N'DF_PN_PNUser9',         
 EXEC sp_rename N'dbo.DF__PN_Test__PNUser1__19FFD4FC', N'DF_PN_PNUser1',          N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN_Test__PNUser1__22951AFD', N'DF_PN_PNUser10',         N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN__price_id__231F2AE2',     N'DF_PN_price_id',         N'OBJECT';
+EXEC sp_rename N'dbo.DF__PN__has_bom__4F87BD05',     N'DF_PN_has_bom',           N'OBJECT';
 EXEC sp_rename N'dbo.UQ__PN_Test__EC08A3D50081A4CA',  N'UQ_PN_PNPartNumber',     N'OBJECT';
 
 -- ============================================================

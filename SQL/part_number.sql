@@ -16,7 +16,7 @@ IF OBJECT_ID('dbo.PN', 'U') IS NOT NULL DROP TABLE PN;
 
 CREATE TABLE PN (
   PNID              INT              PRIMARY KEY IDENTITY,
-  part_number       VARCHAR(255)     NOT NULL CONSTRAINT UQ_PN_part_number UNIQUE,
+  part_number       VARCHAR(255)     NOT NULL CONSTRAINT UQ_PN_part_number UNIQUE,  -- live DB is nullable (pre-existing); NOT NULL is the intent.
   category          VARCHAR(10)      CONSTRAINT DF_PN_category         DEFAULT 'BUY'
                                      CONSTRAINT CK_PN_category         CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL')),
   has_bom           BIT              CONSTRAINT DF_PN_has_bom          DEFAULT 0,
@@ -45,6 +45,6 @@ CREATE TABLE PN (
   PNCurrentCost     DECIMAL(16,8)    CONSTRAINT DF_PN_PNCurrentCost    DEFAULT 0,
   active            BIT              CONSTRAINT DF_PN_active           DEFAULT 1,
   PNPOLinks         INT              CONSTRAINT DF_PN_PNPOLinks        DEFAULT 0,    -- Denormalized count of POL rows for this part.
-  PNDateModified    DATETIME         CONSTRAINT DF_PN_PNDateModified   DEFAULT GETDATE(),
+  PNDateModified    DATE             CONSTRAINT DF_PN_PNDateModified   DEFAULT GETDATE(),
   price_id          INT              CONSTRAINT DF_PN_price_id         DEFAULT 0     -- FK to price table. TODO: add FK constraint.
 );
