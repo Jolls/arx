@@ -7,14 +7,14 @@ import (
 
 type Part struct {
 	PNID             int
-	PNPartNumber     string
+	PartNumber       string
 	Revision         string
-	PNTitle          string
-	PNDetail         string
+	Title            string
+	Detail           string
 	Category         string
 	HasBOM           bool
-	PNStatus         string
-	PNActive         bool
+	ReleaseStatus    string
+	Active           bool
 	PNReqBy          string
 	PNNotes          string
 	PNDate           *time.Time
@@ -78,8 +78,8 @@ type BOMItem struct {
 	PLQty          float64
 	PLPartID       int
 	PLListID       int
-	PNPartNumber   string
-	PNTitle        string
+	PartNumber     string
+	Title          string
 	Revision       string
 	Category       string
 	PNCurrentCost  float64

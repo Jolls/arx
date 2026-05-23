@@ -170,7 +170,7 @@ CREATE TABLE named_queries (
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'fil_notes_for_pn',
   'File attachment notes for a given part number',
-  'SELECT FILNotes FROM FIL WHERE FILPNID = (SELECT PNID FROM PN WHERE PNPartNumber = @pn) AND is_active = 1',
+  'SELECT FILNotes FROM FIL WHERE FILPNID = (SELECT PNID FROM PN WHERE part_number = @pn) AND is_active = 1',
   'pn', 'list',
   GETDATE()
 );
@@ -178,7 +178,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'parts_matching',
   'Part numbers matching a LIKE pattern (caller supplies wildcards)',
-  'SELECT PNPartNumber FROM PN WHERE PNPartNumber LIKE @pattern AND PNActive = 1 ORDER BY PNPartNumber DESC',
+  'SELECT part_number FROM PN WHERE part_number LIKE @pattern AND active = 1 ORDER BY part_number DESC',
   'pattern', 'list',
   GETDATE()
 );
@@ -194,7 +194,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'bom_pn_by_item',
   'Part number at a specific BOM item position for a given parent assembly PN',
-  'SELECT PN.PNPartNumber, PN.PNTitle FROM PL JOIN PN ON PL.PLPartID = PN.PNID WHERE PL.PLListID = (SELECT PNID FROM PN WHERE PNPartNumber = @pn) AND PL.PLItem = @item',
+  'SELECT PN.part_number, PN.title FROM PL JOIN PN ON PL.PLPartID = PN.PNID WHERE PL.PLListID = (SELECT PNID FROM PN WHERE part_number = @pn) AND PL.PLItem = @item',
   'pn, item', 'list',
   GETDATE()
 );
@@ -202,7 +202,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'pn_primary_attachment',
   'Primary attachment for any part number via PN.PNFILIDPrimary; falls back to lowest order_id if no primary set.',
-  'SELECT TOP 1 f.FILFileName, COALESCE(f.FILNotes, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.PNPartNumber = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC',
+  'SELECT TOP 1 f.FILFileName, COALESCE(f.FILNotes, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC',
   'pn', 'single',
   GETDATE()
 );

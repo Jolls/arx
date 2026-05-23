@@ -1,7 +1,7 @@
 {{define "content"}}
 <header>
     <h1>Part Details</h1>
-    <p>{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}</p>
+    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
 </header>
 
 <div class="content">
@@ -15,9 +15,9 @@
     <div class="part-status-bar">
         <div class="part-status-cell">
             <div class="part-status-label">Status</div>
-            {{if eq .Part.PNStatus "U"}}<span class="badge status-U">Under Review</span>
-            {{else if eq .Part.PNStatus "A"}}<span class="badge status-A">Active</span>
-            {{else if eq .Part.PNStatus "D"}}<span class="badge status-D">Deprecated</span>
+            {{if eq .Part.ReleaseStatus "U"}}<span class="badge status-U">Under Review</span>
+            {{else if eq .Part.ReleaseStatus "A"}}<span class="badge status-A">Active</span>
+            {{else if eq .Part.ReleaseStatus "D"}}<span class="badge status-D">Deprecated</span>
             {{else}}<span style="font-weight:600">—</span>{{end}}
         </div>
         <div class="part-status-cell">
@@ -30,7 +30,7 @@
         </div>
         <div class="part-status-cell">
             <div class="part-status-label">Active</div>
-            {{if .Part.PNActive}}<span class="badge badge-active">Yes</span>
+            {{if .Part.Active}}<span class="badge badge-active">Yes</span>
             {{else}}<span class="badge badge-inactive">No</span>{{end}}
         </div>
         <div class="part-status-cell">
@@ -64,11 +64,11 @@
     {{/* ── Basic info ─────────────────────────────────────────── */}}
     <div class="detail-section">
         <h3>Basic Information</h3>
-        <div class="detail-row"><strong>Part Number:</strong><span>{{.Part.PNPartNumber}}</span></div>
-        <div class="detail-row"><strong>Title:</strong>      <span>{{.Part.PNTitle}}</span></div>
+        <div class="detail-row"><strong>Part Number:</strong><span>{{.Part.PartNumber}}</span></div>
+        <div class="detail-row"><strong>Title:</strong>      <span>{{.Part.Title}}</span></div>
         <div class="detail-row"><strong>Category:</strong>   <span>{{.Part.Category}}</span></div>
         <div class="detail-row"><strong>Revision:</strong>   <span>{{.Part.Revision}}</span></div>
-        <div class="detail-row"><strong>Detail:</strong>     <span>{{.Part.PNDetail}}</span></div>
+        <div class="detail-row"><strong>Detail:</strong>     <span>{{.Part.Detail}}</span></div>
     </div>
 
     {{/* ── Status & dates ─────────────────────────────────────── */}}
@@ -77,15 +77,15 @@
         <div class="detail-row">
             <strong>Status:</strong>
             <span>
-                {{if eq .Part.PNStatus "U"}}<span class="badge status-U">Under Review</span>
-                {{else if eq .Part.PNStatus "A"}}<span class="badge status-A">Active</span>
-                {{else if eq .Part.PNStatus "D"}}<span class="badge status-D">Deprecated</span>
-                {{else}}<span class="badge">{{.Part.PNStatus}}</span>{{end}}
+                {{if eq .Part.ReleaseStatus "U"}}<span class="badge status-U">Under Review</span>
+                {{else if eq .Part.ReleaseStatus "A"}}<span class="badge status-A">Active</span>
+                {{else if eq .Part.ReleaseStatus "D"}}<span class="badge status-D">Deprecated</span>
+                {{else}}<span class="badge">{{.Part.ReleaseStatus}}</span>{{end}}
             </span>
         </div>
         <div class="detail-row">
             <strong>Active:</strong>
-            <span>{{if .Part.PNActive}}<span class="badge badge-active">Active</span>
+            <span>{{if .Part.Active}}<span class="badge badge-active">Active</span>
             {{else}}<span class="badge badge-inactive">Inactive</span>{{end}}</span>
         </div>
         <div class="detail-row"><strong>Created Date:</strong>   <span>{{formatDate .Part.PNDate}}</span></div>

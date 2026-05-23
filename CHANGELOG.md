@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ## [0.3.32] - 2026-05-22 
-- parts_master_go: rename `PNType` → `category` (CHECK-constrained: ASM/BUY/DWG/DOC/FORM/MFG/RAW/SVC/TOOL); add `has_bom` BIT column as explicit BOM capability driver; update all queries, models, and templates
+- parts_master_go: rename `PNType` → `category` (CHECK-constrained: ASM/BUY/DWG/DOC/FORM/MFG/RAW/SVC/TOOL); add `has_bom` BIT column as explicit BOM capability driver; rename 5 `PN` columns to snake_case (`PNPartNumber`→`part_number`, `PNTitle`→`title`, `PNDetail`→`detail`, `PNStatus`→`status`, `PNActive`→`active`); update all queries, models, templates, and `named_queries` data (schema version 2)
 
 ## [0.3.31] - 2026-05-22 
 - both apps: embed user-facing release notes in binary; `/whats-new` route; "new version" banner in layout; release notes replace changelog on settings page ([#295](https://github.com/Jolls/arx-legacy/issues/295))

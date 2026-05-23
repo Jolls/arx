@@ -1,7 +1,7 @@
 {{define "content"}}
 <header>
     <h1>Part Details</h1>
-    <p>{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}</p>
+    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
 </header>
 <div class="content">
     {{template "part_tabs" .}}
@@ -21,8 +21,8 @@
             <tbody>
                 {{range .WhereUsedItems}}
                 <tr>
-                    <td><a href="/part/{{.PLListID}}" class="part-number-link">{{.PNPartNumber}}</a></td>
-                    <td>{{.PNTitle}}</td>
+                    <td><a href="/part/{{.PLListID}}" class="part-number-link">{{.PartNumber}}</a></td>
+                    <td>{{.Title}}</td>
                     <td>{{.Revision}}</td>
                     <td>{{.Category}}</td>
                     <td style="text-align:right;">{{printf "%.5g" .PLQty}}</td>

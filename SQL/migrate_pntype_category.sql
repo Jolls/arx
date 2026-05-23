@@ -1,4 +1,4 @@
--- Migration: rename PNType → category, add has_bom BIT
+-- Migration: rename PNType → category, add has_bom BIT; rename 5 PN columns to snake_case
 -- Run on the live database before deploying the updated binary.
 -- Safe to run multiple times — each step is guarded.
 -- PN_Test is migrated first as a dry run — verify its output before PN runs.
@@ -37,6 +37,33 @@ BEGIN TRY
     -- 5. Set has_bom on PN_Test.
     UPDATE PN_Test SET has_bom = 1 WHERE category IN ('ASM', 'FORM') AND has_bom = 0;
     PRINT CONCAT('PN_Test: set has_bom=1 on ', @@ROWCOUNT, ' parts');
+
+    -- 5a. Rename 5 PN_Test columns to snake_case (no constraints to rename — SELECT INTO copies none).
+    IF COL_LENGTH('dbo.PN_Test', 'PNPartNumber') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN_Test.PNPartNumber', 'part_number', 'COLUMN';
+        PRINT 'Renamed PN_Test.PNPartNumber → part_number';
+    END
+    IF COL_LENGTH('dbo.PN_Test', 'PNTitle') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN_Test.PNTitle', 'title', 'COLUMN';
+        PRINT 'Renamed PN_Test.PNTitle → title';
+    END
+    IF COL_LENGTH('dbo.PN_Test', 'PNDetail') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN_Test.PNDetail', 'detail', 'COLUMN';
+        PRINT 'Renamed PN_Test.PNDetail → detail';
+    END
+    IF COL_LENGTH('dbo.PN_Test', 'PNStatus') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN_Test.PNStatus', 'release_status', 'COLUMN';
+        PRINT 'Renamed PN_Test.PNStatus → release_status';
+    END
+    IF COL_LENGTH('dbo.PN_Test', 'PNActive') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN_Test.PNActive', 'active', 'COLUMN';
+        PRINT 'Renamed PN_Test.PNActive → active';
+    END
 
     -- ── PN (production) ───────────────────────────────────────────────────────
 
@@ -101,7 +128,63 @@ BEGIN TRY
         PRINT 'Added CK_PN_category constraint';
     END
 
-    -- 14. Bump schema version to 2.
+    -- 14. Rename 5 PN columns to snake_case.
+    IF COL_LENGTH('dbo.PN', 'PNPartNumber') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN.PNPartNumber', 'part_number', 'COLUMN';
+        PRINT 'Renamed PN.PNPartNumber → part_number';
+    END
+    -- Rename UNIQUE constraint on PNPartNumber if it exists under the old name.
+    IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'UQ_PN_PNPartNumber')
+        EXEC sp_rename 'dbo.UQ_PN_PNPartNumber', 'UQ_PN_part_number', 'OBJECT';
+
+    IF COL_LENGTH('dbo.PN', 'PNTitle') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN.PNTitle', 'title', 'COLUMN';
+        PRINT 'Renamed PN.PNTitle → title';
+    END
+    IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = 'DF_PN_PNTitle')
+        EXEC sp_rename 'dbo.DF_PN_PNTitle', 'DF_PN_title', 'OBJECT';
+
+    IF COL_LENGTH('dbo.PN', 'PNDetail') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN.PNDetail', 'detail', 'COLUMN';
+        PRINT 'Renamed PN.PNDetail → detail';
+    END
+    IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = 'DF_PN_PNDetail')
+        EXEC sp_rename 'dbo.DF_PN_PNDetail', 'DF_PN_detail', 'OBJECT';
+
+    IF COL_LENGTH('dbo.PN', 'PNStatus') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN.PNStatus', 'release_status', 'COLUMN';
+        PRINT 'Renamed PN.PNStatus → release_status';
+    END
+    IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = 'DF_PN_PNStatus')
+        EXEC sp_rename 'dbo.DF_PN_PNStatus', 'DF_PN_release_status', 'OBJECT';
+
+    IF COL_LENGTH('dbo.PN', 'PNActive') IS NOT NULL
+    BEGIN
+        EXEC sp_rename 'dbo.PN.PNActive', 'active', 'COLUMN';
+        PRINT 'Renamed PN.PNActive → active';
+    END
+    -- PNActive default constraint may have an auto-generated name from PN_Test era — find and rename it.
+    DECLARE @dfActive SYSNAME;
+    SELECT @dfActive = dc.name
+    FROM sys.default_constraints dc
+    JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+    JOIN sys.tables t ON t.object_id = dc.parent_object_id
+    WHERE t.name = 'PN' AND c.name = 'active' AND dc.name <> 'DF_PN_active';
+    IF @dfActive IS NOT NULL
+        EXEC sp_rename @dfActive, 'DF_PN_active', 'OBJECT';
+
+    -- 15. Update named_queries SQL strings to use new column names.
+    UPDATE named_queries SET sql = REPLACE(REPLACE(sql, 'PNPartNumber', 'part_number'), 'PNActive', 'active')
+    WHERE name IN ('fil_notes_for_pn', 'parts_matching', 'bom_pn_by_item', 'pn_primary_attachment');
+    UPDATE named_queries SET sql = REPLACE(sql, 'PNTitle', 'title')
+    WHERE name = 'bom_pn_by_item';
+    PRINT CONCAT('Updated ', @@ROWCOUNT, ' named_queries rows');
+
+    -- 16. Bump schema version to 2.
     UPDATE app_config      SET setting_value = '2' WHERE setting_key = 'schema_version';
     UPDATE app_config_Test SET setting_value = '2' WHERE setting_key = 'schema_version';
     PRINT 'Schema version → 2';

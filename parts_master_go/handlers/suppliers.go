@@ -213,11 +213,11 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		SELECT lnk.LNKID, lnk.LNKPNID, lnk.LNKChoice, lnk.LNKVendorPN, lnk.LNKVendorDesc,
 		       lnk.LNKLeadtime, lnk.LNKCurrentCost, lnk.LNKAtQty, lnk.LNKMinIncrement,
 		       lnk.LNKUse, lnk.LNKRFQDate,
-		       pn.PNID, pn.PNPartNumber, pn.PNTitle, pn.revision, pn.category
+		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category
 		FROM %s lnk
 		JOIN %s pn ON lnk.LNKPNID = pn.PNID
 		WHERE lnk.LNKSUID = @p1
-		ORDER BY pn.PNPartNumber
+		ORDER BY pn.part_number
 	`, lnk, pn), id)
 	if err != nil {
 		h.renderError(w, "Error retrieving linked parts: "+err.Error())
@@ -259,8 +259,8 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 			lk.LNKRFQDate = &rfqDate.Time
 		}
 		lk.PNID = int(pnID.Int64)
-		lk.PNPartNumber = partNumber.String
-		lk.PNTitle = title.String
+		lk.PartNumber = partNumber.String
+		lk.Title = title.String
 		lk.Revision = revision.String
 		lk.Category = category.String
 		links = append(links, lk)

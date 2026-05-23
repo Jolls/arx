@@ -22,11 +22,11 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	var hasBOM sql.NullBool
 	var filIDPrimary sql.NullInt64
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT PNID, PNPartNumber, PNTitle, category, has_bom, PNFILIDPrimary FROM %s WHERE PNID = @p1`,
+		`SELECT PNID, part_number, title, category, has_bom, PNFILIDPrimary FROM %s WHERE PNID = @p1`,
 		h.cfg.PartsTable(),
 	), id).Scan(&p.PNID, &partNumber, &title, &category, &hasBOM, &filIDPrimary)
-	p.PNPartNumber = partNumber.String
-	p.PNTitle = title.String
+	p.PartNumber = partNumber.String
+	p.Title = title.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
 	p.PNFILIDPrimary = int(filIDPrimary.Int64)
@@ -43,7 +43,7 @@ func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTa
 		h.renderError(w, "Error retrieving part: "+err.Error())
 		return models.Part{}, "", "", false
 	}
-	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PNPartNumber)
+	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	return p, backURL, backLabel, true
@@ -56,9 +56,9 @@ func fs(r *http.Request, key string) string { return strings.TrimSpace(r.FormVal
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
 	h.CheckSchemaVersion(r.Context())
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PNID, PNPartNumber, revision, PNTitle, PNDetail,
+		SELECT PNID, part_number, revision, title, detail,
 		       PNReqBy, PNDate, category, PNDateModified
-		FROM %s ORDER BY PNPartNumber
+		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
 	if err != nil {
 		h.renderError(w, "Error connecting to database: "+err.Error())
@@ -78,10 +78,10 @@ func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, "Error reading parts: "+err.Error())
 			return
 		}
-		p.PNPartNumber = partNumber.String
+		p.PartNumber = partNumber.String
 		p.Revision = revision.String
-		p.PNTitle = title.String
-		p.PNDetail = detail.String
+		p.Title = title.String
+		p.Detail = detail.String
 		p.PNReqBy = reqBy.String
 		p.Category = category.String
 		if pnDate.Valid {
@@ -118,8 +118,8 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		qty, currentCost, lastRollupCost              sql.NullFloat64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT PNID, PNPartNumber, revision, PNTitle, PNDetail, category, has_bom,
-		       PNStatus, PNActive, PNReqBy, PNNotes,
+		SELECT PNID, part_number, revision, title, detail, category, has_bom,
+		       release_status, active, PNReqBy, PNNotes,
 		       PNDate, PNDateModified, PNFILIDPrimary,
 		       PNQty, PNCurrentCost, PNLastRollupCost, PNLastRollupAt, PNFILLinks, PNPOLinks,
 		       PNUser1, PNUser2, PNUser3, PNUser4, PNUser5,
@@ -142,14 +142,14 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.PNPartNumber = partNumber.String
+	p.PartNumber = partNumber.String
 	p.Revision = revision.String
-	p.PNTitle = title.String
-	p.PNDetail = detail.String
+	p.Title = title.String
+	p.Detail = detail.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
-	p.PNStatus = status.String
-	p.PNActive = active.Bool
+	p.ReleaseStatus = status.String
+	p.Active = active.Bool
 	p.PNReqBy = reqBy.String
 	p.PNNotes = notes.String
 	p.PNFILIDPrimary = int(filIDPrimary.Int64)
@@ -190,7 +190,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PNPartNumber)
+	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 
@@ -219,7 +219,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid form submission", http.StatusForbidden)
 		return
 	}
-	partNumber := fs(r, "PNPartNumber")
+	partNumber := fs(r, "part_number")
 	if partNumber == "" {
 		h.render(w, "part_edit.html", map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Part Number is required",
@@ -231,16 +231,16 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	var newID int
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (PNPartNumber, revision, PNTitle, PNDetail, category, has_bom,
-		                PNStatus, PNActive, PNReqBy, PNNotes, PNDate, PNDateModified,
+		INSERT INTO %s (part_number, revision, title, detail, category, has_bom,
+		                release_status, active, PNReqBy, PNNotes, PNDate, PNDateModified,
 		                PNUser1, PNUser2, PNUser3, PNUser4, PNUser5,
 		                PNUser6, PNUser7, PNUser8, PNUser9, PNUser10)
 		OUTPUT INSERTED.PNID
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,
 		        @p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22)
 	`, h.cfg.PartsTable()),
-		partNumber, fs(r, "revision"), fs(r, "PNTitle"), fs(r, "PNDetail"), fs(r, "category"), r.FormValue("has_bom") == "1",
-		fs(r, "PNStatus"), r.FormValue("PNActive") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
+		partNumber, fs(r, "revision"), fs(r, "title"), fs(r, "detail"), fs(r, "category"), r.FormValue("has_bom") == "1",
+		fs(r, "release_status"), r.FormValue("active") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
 		now, now,
 		fs(r, "PNUser1"), fs(r, "PNUser2"), fs(r, "PNUser3"), fs(r, "PNUser4"), fs(r, "PNUser5"),
 		fs(r, "PNUser6"), fs(r, "PNUser7"), fs(r, "PNUser8"), fs(r, "PNUser9"), fs(r, "PNUser10"),
@@ -288,7 +288,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	partNumber := fs(r, "PNPartNumber")
+	partNumber := fs(r, "part_number")
 	if partNumber == "" {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
 		h.render(w, "part_edit.html", map[string]any{
@@ -302,14 +302,14 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  PNPartNumber=@p1, revision=@p2, PNTitle=@p3, PNDetail=@p4, category=@p5, has_bom=@p6,
-		  PNStatus=@p7, PNActive=@p8, PNReqBy=@p9, PNNotes=@p10, PNDateModified=@p11,
+		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5, has_bom=@p6,
+		  release_status=@p7, active=@p8, PNReqBy=@p9, PNNotes=@p10, PNDateModified=@p11,
 		  PNUser1=@p12, PNUser2=@p13, PNUser3=@p14, PNUser4=@p15, PNUser5=@p16,
 		  PNUser6=@p17, PNUser7=@p18, PNUser8=@p19, PNUser9=@p20, PNUser10=@p21
 		WHERE PNID=@p22
 	`, h.cfg.PartsTable()),
-		partNumber, fs(r, "revision"), fs(r, "PNTitle"), fs(r, "PNDetail"), fs(r, "category"), r.FormValue("has_bom") == "1",
-		fs(r, "PNStatus"), r.FormValue("PNActive") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
+		partNumber, fs(r, "revision"), fs(r, "title"), fs(r, "detail"), fs(r, "category"), r.FormValue("has_bom") == "1",
+		fs(r, "release_status"), r.FormValue("active") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
 		time.Now(),
 		fs(r, "PNUser1"), fs(r, "PNUser2"), fs(r, "PNUser3"), fs(r, "PNUser4"), fs(r, "PNUser5"),
 		fs(r, "PNUser6"), fs(r, "PNUser7"), fs(r, "PNUser8"), fs(r, "PNUser9"), fs(r, "PNUser10"),
@@ -334,10 +334,10 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 // partFromForm rebuilds a Part struct from POST form values (for re-displaying on error).
 func partFromForm(r *http.Request) models.Part {
 	return models.Part{
-		PNPartNumber: fs(r, "PNPartNumber"), Revision: fs(r, "revision"),
-		PNTitle: fs(r, "PNTitle"), PNDetail: fs(r, "PNDetail"), Category: fs(r, "category"),
+		PartNumber: fs(r, "part_number"), Revision: fs(r, "revision"),
+		Title: fs(r, "title"), Detail: fs(r, "detail"), Category: fs(r, "category"),
 		HasBOM: r.FormValue("has_bom") == "1",
-		PNStatus: fs(r, "PNStatus"), PNActive: r.FormValue("PNActive") == "1",
+		ReleaseStatus: fs(r, "release_status"), Active: r.FormValue("active") == "1",
 		PNReqBy: fs(r, "PNReqBy"), PNNotes: fs(r, "PNNotes"),
 		PNUser1: fs(r, "PNUser1"), PNUser2: fs(r, "PNUser2"), PNUser3: fs(r, "PNUser3"),
 		PNUser4: fs(r, "PNUser4"), PNUser5: fs(r, "PNUser5"), PNUser6: fs(r, "PNUser6"),
@@ -357,8 +357,8 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		active, hasBOM                                sql.NullBool
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT PNID, PNPartNumber, revision, PNTitle, PNDetail, category, has_bom,
-		       PNStatus, PNActive, PNReqBy, PNNotes,
+		SELECT PNID, part_number, revision, title, detail, category, has_bom,
+		       release_status, active, PNReqBy, PNNotes,
 		       PNUser1, PNUser2, PNUser3, PNUser4, PNUser5,
 		       PNUser6, PNUser7, PNUser8, PNUser9, PNUser10
 		FROM %s WHERE PNID = @p1
@@ -371,14 +371,14 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	if err != nil {
 		return p, err
 	}
-	p.PNPartNumber = partNumber.String
+	p.PartNumber = partNumber.String
 	p.Revision = revision.String
-	p.PNTitle = title.String
-	p.PNDetail = detail.String
+	p.Title = title.String
+	p.Detail = detail.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
-	p.PNStatus = status.String
-	p.PNActive = active.Bool
+	p.ReleaseStatus = status.String
+	p.Active = active.Bool
 	p.PNReqBy = reqBy.String
 	p.PNNotes = notes.String
 	p.PNUser1, p.PNUser2, p.PNUser3, p.PNUser4, p.PNUser5 = user1.String, user2.String, user3.String, user4.String, user5.String
@@ -397,7 +397,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLItem, pl.PLQty, pl.PLPartID,
-		       pn.PNPartNumber, pn.PNTitle, pn.revision, pn.category, pn.PNCurrentCost
+		       pn.PartNumber, pn.Title, pn.revision, pn.category, pn.PNCurrentCost
 		FROM %s pl
 		JOIN %s pn ON pl.PLPartID = pn.PNID
 		WHERE pl.PLListID = @p1
@@ -418,8 +418,8 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, "Error reading BOM: "+err.Error())
 			return
 		}
-		item.PNPartNumber = partNumber.String
-		item.PNTitle = title.String
+		item.PartNumber = partNumber.String
+		item.Title = title.String
 		item.Revision = revision.String
 		item.Category = category.String
 		item.PNCurrentCost = currentCost.Float64
@@ -441,11 +441,11 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLItem, pl.PLQty, pl.PLListID,
-		       pn.PNPartNumber, pn.PNTitle, pn.revision, pn.category
+		       pn.PartNumber, pn.Title, pn.revision, pn.category
 		FROM %s pl
 		JOIN %s pn ON pl.PLListID = pn.PNID
 		WHERE pl.PLPartID = @p1
-		ORDER BY pn.PNPartNumber
+		ORDER BY pn.PartNumber
 	`, pl, pn), id)
 	if err != nil {
 		h.renderError(w, "Error retrieving where-used: "+err.Error())
@@ -461,8 +461,8 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, "Error reading where-used: "+err.Error())
 			return
 		}
-		item.PNPartNumber = partNumber.String
-		item.PNTitle = title.String
+		item.PartNumber = partNumber.String
+		item.Title = title.String
 		item.Revision = revision.String
 		item.Category = category.String
 		items = append(items, item)
@@ -523,7 +523,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLID, pl.PLItem, pl.PLQty, pl.PLPartID,
-		       pn.PNPartNumber, pn.PNTitle
+		       pn.PartNumber, pn.Title
 		FROM %s pl
 		JOIN %s pn ON pl.PLPartID = pn.PNID
 		WHERE pl.PLListID = @p1
@@ -543,8 +543,8 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, "Error reading BOM: "+err.Error())
 			return
 		}
-		item.PNPartNumber = partNumber.String
-		item.PNTitle = title.String
+		item.PartNumber = partNumber.String
+		item.Title = title.String
 		items = append(items, item)
 	}
 	var lastRollupCost sql.NullFloat64
@@ -609,7 +609,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 		if pnid == 0 && row.PartPN != "" {
 			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT PNID FROM %s WHERE PNPartNumber = @p1`, pn,
+				`SELECT PNID FROM %s WHERE part_number = @p1`, pn,
 			), row.PartPN).Scan(&pnid)
 		}
 		if pnid == 0 {
@@ -636,7 +636,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 		if pnid == 0 && row.PartPN != "" {
 			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT PNID FROM %s WHERE PNPartNumber = @p1`, pn,
+				`SELECT PNID FROM %s WHERE part_number = @p1`, pn,
 			), row.PartPN).Scan(&pnid)
 		}
 		if pnid == 0 {
