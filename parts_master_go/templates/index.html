@@ -39,13 +39,13 @@
             <tbody>
                 {{range .Parts}}
                 <tr>
-                    <td><a href="/part/{{.PNID}}" class="part-number-link">{{.PNPartNumber}}</a></td>
+                    <td><a href="/part/{{.PNID}}" class="part-number-link">{{.PartNumber}}</a></td>
                     <td>{{.Revision}}</td>
-                    <td>{{.PNTitle}}</td>
-                    <td>{{.PNDetail}}</td>
+                    <td>{{.Title}}</td>
+                    <td>{{.Detail}}</td>
                     <td>{{.PNReqBy}}</td>
                     <td>{{formatDate .PNDate}}</td>
-                    <td>{{.PNType}}</td>
+                    <td>{{.Category}}</td>
                     <td>{{formatDate .PNDateModified}}</td>
                 </tr>
                 {{end}}

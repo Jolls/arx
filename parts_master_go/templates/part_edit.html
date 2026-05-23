@@ -1,7 +1,7 @@
 {{define "content"}}
 <header>
     <h1>{{if .IsNew}}New Part{{else}}Edit Part{{end}}</h1>
-    <p>{{if .IsNew}}Create a new part record{{else}}{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}{{end}}</p>
+    <p>{{if .IsNew}}Create a new part record{{else}}{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}{{end}}</p>
 </header>
 <div class="content">
     {{if .IsNew}}
@@ -18,9 +18,9 @@
         <div class="detail-section">
             <h3>Basic Information</h3>
             <div class="detail-row">
-                <label for="PNPartNumber" class="form-label">Part Number *</label>
-                <input type="text" id="PNPartNumber" name="PNPartNumber" class="form-input" required
-                       value="{{.Part.PNPartNumber}}">
+                <label for="part_number" class="form-label">Part Number *</label>
+                <input type="text" id="part_number" name="part_number" class="form-input" required
+                       value="{{.Part.PartNumber}}">
             </div>
             <div class="detail-row">
                 <label for="revision" class="form-label">Revision</label>
@@ -28,19 +28,28 @@
                        value="{{.Part.Revision}}">
             </div>
             <div class="detail-row">
-                <label for="PNTitle" class="form-label">Title</label>
-                <input type="text" id="PNTitle" name="PNTitle" class="form-input"
-                       value="{{.Part.PNTitle}}">
+                <label for="title" class="form-label">Title</label>
+                <input type="text" id="title" name="title" class="form-input"
+                       value="{{.Part.Title}}">
             </div>
             <div class="detail-row">
-                <label for="PNDetail" class="form-label">Detail</label>
-                <input type="text" id="PNDetail" name="PNDetail" class="form-input"
-                       value="{{.Part.PNDetail}}">
+                <label for="detail" class="form-label">Detail</label>
+                <input type="text" id="detail" name="detail" class="form-input"
+                       value="{{.Part.Detail}}">
             </div>
             <div class="detail-row">
-                <label for="PNType" class="form-label">Type</label>
-                <input type="text" id="PNType" name="PNType" class="form-input"
-                       list="pn-type-list" value="{{.Part.PNType}}">
+                <label for="category" class="form-label">Category</label>
+                <select id="category" name="category" class="form-select">
+                    <option value="ASM"  {{if eq .Part.Category "ASM"}}selected{{end}}>ASM — Assembly</option>
+                    <option value="BUY"  {{if or (eq .Part.Category "BUY") (eq .Part.Category "")}}selected{{end}}>BUY — Purchased</option>
+                    <option value="DWG"  {{if eq .Part.Category "DWG"}}selected{{end}}>DWG — Drawing</option>
+                    <option value="DOC"  {{if eq .Part.Category "DOC"}}selected{{end}}>DOC — Document</option>
+                    <option value="FORM" {{if eq .Part.Category "FORM"}}selected{{end}}>FORM — Test Form</option>
+                    <option value="MFG"  {{if eq .Part.Category "MFG"}}selected{{end}}>MFG — Manufactured</option>
+                    <option value="RAW"  {{if eq .Part.Category "RAW"}}selected{{end}}>RAW — Raw Material</option>
+                    <option value="SVC"  {{if eq .Part.Category "SVC"}}selected{{end}}>SVC — Service</option>
+                    <option value="TOOL" {{if eq .Part.Category "TOOL"}}selected{{end}}>TOOL — Tooling</option>
+                </select>
             </div>
             <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
@@ -52,20 +61,28 @@
         <div class="detail-section">
             <h3>Status</h3>
             <div class="detail-row">
-                <label for="PNStatus" class="form-label">Status</label>
-                <select id="PNStatus" name="PNStatus" class="form-select">
-                    <option value=""{{if eq .Part.PNStatus ""}} selected{{end}}>-- Select --</option>
-                    <option value="U"{{if eq .Part.PNStatus "U"}} selected{{end}}>Under Review</option>
-                    <option value="A"{{if eq .Part.PNStatus "A"}} selected{{end}}>Active</option>
-                    <option value="D"{{if eq .Part.PNStatus "D"}} selected{{end}}>Deprecated</option>
+                <label for="release_status" class="form-label">Status</label>
+                <select id="release_status" name="release_status" class="form-select">
+                    <option value=""{{if eq .Part.ReleaseStatus ""}} selected{{end}}>-- Select --</option>
+                    <option value="U"{{if eq .Part.ReleaseStatus "U"}} selected{{end}}>Under Review</option>
+                    <option value="A"{{if eq .Part.ReleaseStatus "A"}} selected{{end}}>Active</option>
+                    <option value="D"{{if eq .Part.ReleaseStatus "D"}} selected{{end}}>Deprecated</option>
                 </select>
             </div>
             <div class="detail-row">
                 <label class="form-label">Active</label>
                 <div class="form-checkbox-row">
-                    <input type="checkbox" id="PNActive" name="PNActive" value="1"
-                           {{if .Part.PNActive}}checked{{end}}>
-                    <label for="PNActive">Part is active</label>
+                    <input type="checkbox" id="active" name="active" value="1"
+                           {{if .Part.Active}}checked{{end}}>
+                    <label for="active">Part is active</label>
+                </div>
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Has BOM</label>
+                <div class="form-checkbox-row">
+                    <input type="checkbox" id="has_bom" name="has_bom" value="1"
+                           {{if .Part.HasBOM}}checked{{end}}>
+                    <label for="has_bom">Part has a Bill of Materials</label>
                 </div>
             </div>
         </div>
@@ -87,16 +104,7 @@
             {{end}}
         </div>
 
-        <datalist id="pn-type-list">
-            <option value="BUY">
-            <option value="CAT">
-            <option value="FORM">
-            <option value="MFG">
-            <option value="PL">
-            <option value="SVC">
-        </datalist>
-
-        <div class="form-actions">
+<div class="form-actions">
             <button type="submit" class="btn-primary">
                 {{if .IsNew}}Create Part{{else}}Save Changes{{end}}
             </button>

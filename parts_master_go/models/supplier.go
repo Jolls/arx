@@ -48,8 +48,8 @@ type SupplierLink struct {
 	LNKRFQDate     *time.Time
 	// joined fields
 	PNID         int
-	PNPartNumber string
-	PNTitle      string
+	PartNumber   string
+	Title        string
 	Revision     string
-	PNType       string
+	Category     string
 }

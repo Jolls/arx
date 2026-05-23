@@ -37,7 +37,7 @@ func substituteStepSelf(s string, step *models.TestStep) string {
 //   - {record.type}  → record's Type (comments field)
 //   - {record.pn}    → record's unit-under-test part number (serial_number_PN)
 //   - {record.sn}     → record's serial number
-//   - {record.pndesc} → record's unit-under-test description (serial_number_PNDesc / PNTitle)
+//   - {record.pndesc} → record's unit-under-test description (serial_number_PNDesc / title)
 //   - {record.date}   → record's test date (MM/DD/YYYY)
 //
 // Unresolvable tokens are left as-is. Pass nil for any context that isn't available.
@@ -104,11 +104,11 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	h.CheckSchemaVersion(r.Context())
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.PNID = pn.PNID
-		WHERE pn.PNType = 'FORM' AND pn.PNActive = 1 AND f.active = 1
-		ORDER BY pn.PNPartNumber ASC`,
+		WHERE pn.category = 'FORM' AND pn.active = 1 AND f.active = 1
+		ORDER BY pn.part_number ASC`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()))
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
@@ -143,7 +143,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	// Load the form header.
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.PNID = pn.PNID
 		WHERE f.ID = @p1`,
@@ -213,7 +213,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.PNID = pn.PNID
 		WHERE f.ID = @p1`,
@@ -443,7 +443,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
@@ -789,7 +789,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.PNID = pn.PNID
 		WHERE f.ID = @p1`,
@@ -977,7 +977,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.PNID = pn.PNID
 		WHERE f.ID = @p1`,
@@ -1136,7 +1136,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	var recordTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle, f.record_types
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.record_types
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes)
@@ -1153,10 +1153,10 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	// BOM lookup: parts listed under the form's own part number in PL.
 	var bomParts []BOMPart
 	bomRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PN.PNID, PN.PNPartNumber, PN.PNTitle
+		SELECT PN.PNID, PN.part_number, PN.title
 		FROM %s PL JOIN %s PN ON PL.PLPartID = PN.PNID
 		WHERE PL.PLListID = @p1
-		ORDER BY PN.PNTitle`,
+		ORDER BY PN.title`,
 		h.cfg.BOMTable(), h.cfg.PartsTable()), form.PNID)
 	if err == nil {
 		defer bomRows.Close()
@@ -1208,7 +1208,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
@@ -1231,7 +1231,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		if pnid, convErr := strconv.Atoi(pnidStr); convErr == nil {
 			var pn, title sql.NullString
 			if scanErr := h.queryRowContext(r.Context(), fmt.Sprintf(`
-				SELECT PNPartNumber, PNTitle FROM %s WHERE PNID = @p1`,
+				SELECT part_number, title FROM %s WHERE PNID = @p1`,
 				h.cfg.PartsTable()), pnid).Scan(&pn, &title); scanErr == nil {
 				snPN = pn.String
 				snDesc = title.String
@@ -1296,7 +1296,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.PNPartNumber, pn.PNTitle
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)

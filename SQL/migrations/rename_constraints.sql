@@ -28,7 +28,7 @@ EXEC sp_rename N'dbo.DF__PN_Test__PNQty__247D636F',   N'DF_PN_PNQty',           
 EXEC sp_rename N'dbo.DF__PN_Test__PNReqBy__18178C8A', N'DF_PN_PNReqBy',         N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN_Test__PNStatu__17236851', N'DF_PN_PNStatus',         N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN_Test__PNTitle__153B1FDF', N'DF_PN_PNTitle',          N'OBJECT';
-EXEC sp_rename N'dbo.DF__PN_Test__PNType__1352D76D',  N'DF_PN_PNType',           N'OBJECT';
+EXEC sp_rename N'dbo.DF__PN_Test__PNType__1352D76D',  N'DF_PN_category',         N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN_Test__revisio__1446FBA6', N'DF_PN_revision',         N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN_Test__PNUser2__1AF3F935', N'DF_PN_PNUser2',          N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN_Test__PNUser3__1BE81D6E', N'DF_PN_PNUser3',          N'OBJECT';
@@ -42,6 +42,7 @@ EXEC sp_rename N'dbo.DF__PN_Test__PNUser9__21A0F6C4', N'DF_PN_PNUser9',         
 EXEC sp_rename N'dbo.DF__PN_Test__PNUser1__19FFD4FC', N'DF_PN_PNUser1',          N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN_Test__PNUser1__22951AFD', N'DF_PN_PNUser10',         N'OBJECT';
 EXEC sp_rename N'dbo.DF__PN__price_id__231F2AE2',     N'DF_PN_price_id',         N'OBJECT';
+EXEC sp_rename N'dbo.DF__PN__has_bom__4F87BD05',     N'DF_PN_has_bom',           N'OBJECT';
 EXEC sp_rename N'dbo.UQ__PN_Test__EC08A3D50081A4CA',  N'UQ_PN_PNPartNumber',     N'OBJECT';
 
 -- ============================================================

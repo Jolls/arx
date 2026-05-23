@@ -1,7 +1,7 @@
 {{define "content"}}
 <header>
     <h1>Edit BOM</h1>
-    <p>{{.Part.PNPartNumber}}{{if .Part.PNTitle}} &mdash; {{.Part.PNTitle}}{{end}}</p>
+    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
 </header>
 <div class="content">
     {{template "part_tabs" .}}
@@ -25,11 +25,11 @@
                     <tr data-plid="{{.PLID}}">
                         <td><input type="number" name="pl[{{.PLID}}][PLItem]" value="{{.PLItem}}" class="tbl-input" style="width:52px;"></td>
                         <td>
-                            <input type="text" name="pl[{{.PLID}}][PLPartNumber]" value="{{.PNPartNumber}}"
+                            <input type="text" name="pl[{{.PLID}}][PLPartNumber]" value="{{.PartNumber}}"
                                    class="tbl-input bom-pn-input" autocomplete="off">
                             <input type="hidden" name="pl[{{.PLID}}][PLPNID]" value="{{.PLPartID}}">
                         </td>
-                        <td><span class="bom-title" style="font-size:0.9em; color:#555;">{{.PNTitle}}</span></td>
+                        <td><span class="bom-title" style="font-size:0.9em; color:#555;">{{.Title}}</span></td>
                         <td><input type="number" step="any" name="pl[{{.PLID}}][PLQty]" value="{{printf "%g" .PLQty}}"
                                    class="tbl-input" style="text-align:right;"></td>
                         <td style="text-align:center;">

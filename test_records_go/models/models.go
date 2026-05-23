@@ -14,8 +14,8 @@ type TestForm struct {
 	Locked      bool
 	Active      bool
 	TestOrder   string // comma-separated test IDs in display order
-	PartNumber  string // joined: PN.PNPartNumber
-	Title       string // joined: PN.PNTitle
+	PartNumber  string // joined: PN.part_number
+	Title       string // joined: PN.title
 	RecordTypes string // comma-separated allowed record types; empty = free-text
 }
 
