@@ -115,7 +115,7 @@ func (c *Config) PartsTable() string          { return pick(c.TestMode, "PN_Test
 func (c *Config) BOMTable() string            { return pick(c.TestMode, "PL_Test", "PL") } // read-only; PL is owned by parts_master_go
 func (c *Config) FormsTable() string          { return pick(c.TestMode, "Forms_Test", "Forms") }
 func (c *Config) RecordsTable() string        { return pick(c.TestMode, "TestRecords_Test", "TestRecords") }
-func (c *Config) StepsTable() string          { return pick(c.TestMode, "Tests_Test", "Tests") }
+func (c *Config) StepsTable() string          { return pick(c.TestMode, "test_definition_Test", "test_definition") }
 func (c *Config) ResultsTable() string        { return pick(c.TestMode, "TestResults_Test", "TestResults") }
 func (c *Config) NamedQueriesTable() string      { return "named_queries" } // no _Test variant — shared config
 func (c *Config) TestDefinitionHistoryTable() string {

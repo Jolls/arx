@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.33] - 2026-05-22 
+- both apps: rename `Tests` table → `test_definition` (and `Tests_Test` → `test_definition_Test`); update `StepsTable()` config helper, DDL, schema diagram, CLAUDE.md ([#215](https://github.com/Jolls/arx-legacy/issues/215))
+
 ## [0.3.32] - 2026-05-22 
 - parts_master_go: rename `PNType` → `category` (CHECK-constrained: ASM/BUY/DWG/DOC/FORM/MFG/RAW/SVC/TOOL); add `has_bom` BIT column as explicit BOM capability driver; rename 5 `PN` columns to snake_case (`PNPartNumber`→`part_number`, `PNTitle`→`title`, `PNDetail`→`detail`, `PNStatus`→`status`, `PNActive`→`active`); update all queries, models, templates, and `named_queries` data (schema version 2)
 
