@@ -38,9 +38,9 @@
                        value="{{.Part.PNDetail}}">
             </div>
             <div class="detail-row">
-                <label for="PNType" class="form-label">Type</label>
-                <input type="text" id="PNType" name="PNType" class="form-input"
-                       list="pn-type-list" value="{{.Part.PNType}}">
+                <label for="category" class="form-label">Category</label>
+                <input type="text" id="category" name="category" class="form-input"
+                       list="category-list" value="{{if .Part.Category}}{{.Part.Category}}{{else}}BUY{{end}}">
             </div>
             <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
@@ -68,6 +68,14 @@
                     <label for="PNActive">Part is active</label>
                 </div>
             </div>
+            <div class="detail-row">
+                <label class="form-label">Has BOM</label>
+                <div class="form-checkbox-row">
+                    <input type="checkbox" id="has_bom" name="has_bom" value="1"
+                           {{if .Part.HasBOM}}checked{{end}}>
+                    <label for="has_bom">Part has a Bill of Materials</label>
+                </div>
+            </div>
         </div>
 
         <div class="detail-section">
@@ -87,13 +95,16 @@
             {{end}}
         </div>
 
-        <datalist id="pn-type-list">
+        <datalist id="category-list">
+            <option value="ASM">
             <option value="BUY">
-            <option value="CAT">
+            <option value="DWG">
+            <option value="DOC">
             <option value="FORM">
             <option value="MFG">
-            <option value="PL">
+            <option value="RAW">
             <option value="SVC">
+            <option value="TOOL">
         </datalist>
 
         <div class="form-actions">

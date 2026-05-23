@@ -55,13 +55,13 @@
 
 {{$id := .Part.PNID}}
 {{$sub := .ActiveSubTab}}
-{{$hasBOM := or (eq .Part.PNType "CAT") (eq .Part.PNType "FORM") (eq .Part.PNType "PL")}}
+{{$hasBOM := .Part.HasBOM}}
 <div class="sub-tabs">
     <a href="/part/{{$id}}/details"     class="sub-tab{{if eq $sub "details"}} active{{end}}">Details</a>
     {{if $hasBOM}}
     <a href="/part/{{$id}}/bom"         class="sub-tab{{if eq $sub "bom"}} active{{end}}">BOM</a>
     {{else}}
-    <span class="sub-tab disabled" title="{{.Part.PNType}} parts do not have a BOM">BOM</span>
+    <span class="sub-tab disabled" title="This part does not have a BOM">BOM</span>
     {{end}}
     <a href="/part/{{$id}}/where-used"  class="sub-tab{{if eq $sub "where-used"}} active{{end}}">Where Used</a>
     <a href="/part/{{$id}}/orders"      class="sub-tab{{if eq $sub "orders"}} active{{end}}">Order History</a>

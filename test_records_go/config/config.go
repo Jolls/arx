@@ -15,7 +15,7 @@ var AppVersion = "dev"
 
 // ExpectedSchemaVersion is the app_config schema_version this build requires.
 // Bump this whenever a migration changes the DB schema.
-const ExpectedSchemaVersion = "1"
+const ExpectedSchemaVersion = "2"
 
 type Config struct {
 	Version        string

@@ -27,7 +27,7 @@
                     <td><a href="/part/{{.PLPartID}}" class="part-number-link">{{.PNPartNumber}}</a></td>
                     <td>{{.PNTitle}}</td>
                     <td>{{.Revision}}</td>
-                    <td>{{.PNType}}</td>
+                    <td>{{.Category}}</td>
                     <td style="text-align:right;">{{printf "%.5g" .PLQty}}</td>
                     <td style="text-align:right;">{{if .PNCurrentCost}}${{printf "%.4f" .PNCurrentCost}}{{end}}</td>
                 </tr>

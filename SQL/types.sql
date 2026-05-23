@@ -1,7 +1,6 @@
--- part_types: Defines the categories of parts in the PartsMaster catalog.
--- Controls which features are enabled per type (BOM list, supplier/file links, etc.).
--- TODO: populate with initial rows for known PNType values (PS, DWG, DOC, CAT, FORM, PL).
--- WIP: this table does not yet exist in the live database.
+-- part_types: Superseded — this table was never created in the live database.
+-- Capabilities (BOM, etc.) are now encoded as BIT columns directly on PN (e.g. has_bom).
+-- Category labels are stored in PN.category with a CHECK constraint. See part_number.sql.
 
 IF OBJECT_ID('dbo.part_types', 'U') IS NOT NULL DROP TABLE part_types;
 

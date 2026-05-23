@@ -21,8 +21,8 @@
             {{else}}<span style="font-weight:600">—</span>{{end}}
         </div>
         <div class="part-status-cell">
-            <div class="part-status-label">Type</div>
-            <div class="part-status-value">{{if .Part.PNType}}{{.Part.PNType}}{{else}}—{{end}}</div>
+            <div class="part-status-label">Category</div>
+            <div class="part-status-value">{{if .Part.Category}}{{.Part.Category}}{{else}}—{{end}}</div>
         </div>
         <div class="part-status-cell">
             <div class="part-status-label">Rev</div>
@@ -66,7 +66,7 @@
         <h3>Basic Information</h3>
         <div class="detail-row"><strong>Part Number:</strong><span>{{.Part.PNPartNumber}}</span></div>
         <div class="detail-row"><strong>Title:</strong>      <span>{{.Part.PNTitle}}</span></div>
-        <div class="detail-row"><strong>Type:</strong>       <span>{{.Part.PNType}}</span></div>
+        <div class="detail-row"><strong>Category:</strong>   <span>{{.Part.Category}}</span></div>
         <div class="detail-row"><strong>Revision:</strong>   <span>{{.Part.Revision}}</span></div>
         <div class="detail-row"><strong>Detail:</strong>     <span>{{.Part.PNDetail}}</span></div>
     </div>

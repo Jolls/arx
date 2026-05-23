@@ -107,7 +107,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 		SELECT f.ID, f.PNID, f.locked, pn.PNPartNumber, pn.PNTitle
 		FROM %s f
 		JOIN %s pn ON f.PNID = pn.PNID
-		WHERE pn.PNType = 'FORM' AND pn.PNActive = 1 AND f.active = 1
+		WHERE pn.category = 'FORM' AND pn.PNActive = 1 AND f.active = 1
 		ORDER BY pn.PNPartNumber ASC`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()))
 	if err != nil {

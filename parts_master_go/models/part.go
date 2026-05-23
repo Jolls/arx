@@ -11,7 +11,8 @@ type Part struct {
 	Revision         string
 	PNTitle          string
 	PNDetail         string
-	PNType           string
+	Category         string
+	HasBOM           bool
 	PNStatus         string
 	PNActive         bool
 	PNReqBy          string
@@ -80,7 +81,7 @@ type BOMItem struct {
 	PNPartNumber   string
 	PNTitle        string
 	Revision       string
-	PNType         string
+	Category       string
 	PNCurrentCost  float64
 }
 

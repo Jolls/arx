@@ -51,5 +51,5 @@ type SupplierLink struct {
 	PNPartNumber string
 	PNTitle      string
 	Revision     string
-	PNType       string
+	Category     string
 }

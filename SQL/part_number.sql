@@ -1,5 +1,7 @@
 -- PN: Part Numbers — the core parts catalog.
--- PNType controls what kind of part this is (PS, DWG, DOC, CAT, FORM, PL).
+-- category: descriptive label for what kind of part this is (ASM, BUY, DWG, DOC, FORM, MFG, RAW, SVC, TOOL).
+--   Constrained by CK_PN_category — see CHECK constraint below.
+-- has_bom: 1 if this part has a Bill of Materials. Drives BOM tab visibility. Decoupled from category.
 -- PNStatus: U = Under Review, A = Active, D = Deprecated.
 -- PNFILLinks and PNPOLinks are denormalized counts maintained by DB triggers — do not update them in code.
 -- PNPOLinks: trg_POL_part_count fires on POL INSERT/UPDATE/DELETE (see SQL/triggers.sql).
@@ -15,7 +17,9 @@ IF OBJECT_ID('dbo.PN', 'U') IS NOT NULL DROP TABLE PN;
 CREATE TABLE PN (
   PNID              INT              PRIMARY KEY IDENTITY,
   PNPartNumber      VARCHAR(255)     NOT NULL CONSTRAINT UQ_PN_PNPartNumber UNIQUE,
-  PNType            VARCHAR(10)      CONSTRAINT DF_PN_PNType          DEFAULT '',
+  category          VARCHAR(10)      CONSTRAINT DF_PN_category         DEFAULT 'BUY'
+                                     CONSTRAINT CK_PN_category         CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL')),
+  has_bom           BIT              CONSTRAINT DF_PN_has_bom          DEFAULT 0,
   revision          VARCHAR(10)      CONSTRAINT DF_PN_revision         DEFAULT '',   -- TODO: add NOT NULL (ALTER attempted but not applied to live).
   PNTitle           VARCHAR(255)     CONSTRAINT DF_PN_PNTitle          DEFAULT '',
   PNDetail          VARCHAR(255)     CONSTRAINT DF_PN_PNDetail         DEFAULT '',

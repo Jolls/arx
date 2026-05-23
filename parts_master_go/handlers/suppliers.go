@@ -213,7 +213,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		SELECT lnk.LNKID, lnk.LNKPNID, lnk.LNKChoice, lnk.LNKVendorPN, lnk.LNKVendorDesc,
 		       lnk.LNKLeadtime, lnk.LNKCurrentCost, lnk.LNKAtQty, lnk.LNKMinIncrement,
 		       lnk.LNKUse, lnk.LNKRFQDate,
-		       pn.PNID, pn.PNPartNumber, pn.PNTitle, pn.revision, pn.PNType
+		       pn.PNID, pn.PNPartNumber, pn.PNTitle, pn.revision, pn.category
 		FROM %s lnk
 		JOIN %s pn ON lnk.LNKPNID = pn.PNID
 		WHERE lnk.LNKSUID = @p1
@@ -232,11 +232,11 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		var lnkUse sql.NullBool
 		var rfqDate sql.NullTime
 		var pnID sql.NullInt64
-		var partNumber, title, revision, pnType sql.NullString
+		var partNumber, title, revision, category sql.NullString
 		if err := rows.Scan(
 			&lk.LNKID, &lk.LNKPNID, &choice, &vendorPN, &vendorDesc,
 			&leadtime, &currentCost, &atQty, &minIncr, &lnkUse, &rfqDate,
-			&pnID, &partNumber, &title, &revision, &pnType,
+			&pnID, &partNumber, &title, &revision, &category,
 		); err != nil {
 			h.renderError(w, "Error reading linked parts: "+err.Error())
 			return
@@ -262,7 +262,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		lk.PNPartNumber = partNumber.String
 		lk.PNTitle = title.String
 		lk.Revision = revision.String
-		lk.PNType = pnType.String
+		lk.Category = category.String
 		links = append(links, lk)
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
