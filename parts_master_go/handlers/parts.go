@@ -397,7 +397,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLItem, pl.PLQty, pl.PLPartID,
-		       pn.PartNumber, pn.Title, pn.revision, pn.category, pn.PNCurrentCost
+		       pn.part_number, pn.title, pn.revision, pn.category, pn.PNCurrentCost
 		FROM %s pl
 		JOIN %s pn ON pl.PLPartID = pn.PNID
 		WHERE pl.PLListID = @p1
@@ -441,11 +441,11 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLItem, pl.PLQty, pl.PLListID,
-		       pn.PartNumber, pn.Title, pn.revision, pn.category
+		       pn.part_number, pn.title, pn.revision, pn.category
 		FROM %s pl
 		JOIN %s pn ON pl.PLListID = pn.PNID
 		WHERE pl.PLPartID = @p1
-		ORDER BY pn.PartNumber
+		ORDER BY pn.part_number
 	`, pl, pn), id)
 	if err != nil {
 		h.renderError(w, "Error retrieving where-used: "+err.Error())
@@ -523,7 +523,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLID, pl.PLItem, pl.PLQty, pl.PLPartID,
-		       pn.PartNumber, pn.Title
+		       pn.part_number, pn.title
 		FROM %s pl
 		JOIN %s pn ON pl.PLPartID = pn.PNID
 		WHERE pl.PLListID = @p1
