@@ -53,6 +53,7 @@ BEGIN TRY
     ALTER TABLE dbo.PO_Test    ADD CONSTRAINT UQ_PO_Test_number                UNIQUE (number);
     -- No UNIQUE on PL_Test (PLListID, PLItem) — item numbers are user-assigned and not enforced unique.
     ALTER TABLE dbo.price_Test ADD CONSTRAINT UQ_price_Test_part_supplier_pack UNIQUE (part_id, supplier_id, pack_size);
+    ALTER TABLE dbo.PN_Test    ADD CONSTRAINT CK_PN_Test_category              CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
 
     -- Triggers not copied by SELECT * INTO — recreate on _Test tables.
     -- EXEC isolates each CREATE OR ALTER TRIGGER in its own batch (required by SQL Server).
