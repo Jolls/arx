@@ -1,5 +1,6 @@
 
 *.frx
+INVENTREE_REFERENCE.md
 ~$Parts Master-Dev.xlsm
 CLAUDE.md
 .env

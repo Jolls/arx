@@ -12,7 +12,7 @@ import (
 )
 
 func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
-	cn, su := h.cfg.ContactTable(), h.cfg.SupplierTable()
+	cn, su := h.cfg.ContactTable(), h.cfg.CompanyTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT cn.CNID, cn.CNSUID, cn.CNName, cn.CNEmail, cn.CNPhone1,
 		       cn.CNCity, cn.CNState, cn.CNCountry, cn.CNWeb,
@@ -194,7 +194,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string) (models.Contact, bool) {
-	cn, su := h.cfg.ContactTable(), h.cfg.SupplierTable()
+	cn, su := h.cfg.ContactTable(), h.cfg.CompanyTable()
 	var c models.Contact
 	var cnsuid sql.NullInt64
 	var name, email, phone1, phone2, fax, address, city, state, zip, country sql.NullString
@@ -251,7 +251,7 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 
 func (h *Handler) fetchSupplierList(r *http.Request) []models.Supplier {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT id, name FROM %s ORDER BY name`, h.cfg.SupplierTable(),
+		`SELECT id, name FROM %s ORDER BY name`, h.cfg.CompanyTable(),
 	))
 	if err != nil {
 		return nil

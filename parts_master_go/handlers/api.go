@@ -24,7 +24,7 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 		WHERE su.name LIKE @p1 AND su.is_active = 1
 		ORDER BY su.name
 		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
-	`, h.cfg.SupplierTable(), h.cfg.ContactTable()), "%"+q+"%")
+	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), "%"+q+"%")
 	if err != nil {
 		writeJSON(w, []any{})
 		return

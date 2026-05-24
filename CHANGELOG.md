@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.35] - 2026-05-24 
+- parts_master_go: rename `LNK` → `supplier_part` with modernized column names (`LNKID`→`id`, `LNKSUID`→`supplier_id`, `LNKPNID`→`part_id`, `LNKVendorPN`→`supplier_pn`, `LNKVendorDesc`→`supplier_desc`, `LNKLeadtime`→`lead_time`, `LNKChoice`→`preference`, `LNKUse`→`is_active`, etc.); drop obsolete columns (`LNKMFRID`, `LNKMFRPNID`, `LNKUNID`, `LNKToPNID`, `LNKAtQty`, `LNKCurrentCost`, `LNKRFQDate`); add `mfg_part` table for manufacturer part records; add `is_supplier`/`is_manufacturer` role flags to `supplier`; update config helpers, models, handlers, templates, and schema docs; add test + prod migration scripts with backup and validation ([#225](https://github.com/Jolls/arx-legacy/issues/225))
+- parts_master_go: rename `supplier` → `company` and `supplier_attachment` → `company_attachment`; manufacturers and distributors share one table distinguished by role flags; update all FK constraint names, config helpers (`CompanyTable`, `CompanyAttachmentsTable`), handlers, `_test.sql`, `triggers.sql`, and schema docs; fix deferred trigger bodies that still referenced `dbo.LNK`/`LNKSUID`/`dbo.supplier` ([#225](https://github.com/Jolls/arx-legacy/issues/225))
+
 ## [0.3.34] - 2026-05-23 
 - parts_master_go: add price CRUD — create, edit (deactivates old row + inserts new), deactivate, activate; add `effective_date` column for price history; replace unique constraint with filtered index (active rows only) so inactive rows serve as history ([#310](https://github.com/Jolls/arx-legacy/issues/310))
 

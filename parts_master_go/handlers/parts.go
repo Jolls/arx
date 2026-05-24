@@ -881,7 +881,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pr, su := h.cfg.PriceTable(), h.cfg.SupplierTable()
+	pr, su := h.cfg.PriceTable(), h.cfg.CompanyTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
 		FROM %s p

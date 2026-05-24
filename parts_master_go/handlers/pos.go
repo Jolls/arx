@@ -249,7 +249,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 		var rName sql.NullString
 		var rDefaultContact sql.NullInt64
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT name, default_contact FROM %s WHERE id = @p1`, h.cfg.SupplierTable(),
+			`SELECT name, default_contact FROM %s WHERE id = @p1`, h.cfg.CompanyTable(),
 		), rid).Scan(&rName, &rDefaultContact)
 		po.ReceiverName = rName.String
 		v := rid
@@ -616,7 +616,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 	if po.SupplierID != nil {
 		var code sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg.SupplierTable(),
+			`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg.CompanyTable(),
 		), *po.SupplierID).Scan(&code)
 		supplierCode = code.String
 	}
@@ -1002,7 +1002,7 @@ func (h *Handler) createPOFolder(r *http.Request, poNumber, supplierIDStr string
 	if supplierIDStr != "" {
 		var code sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg.SupplierTable(),
+			`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg.CompanyTable(),
 		), supplierIDStr).Scan(&code)
 		if code.String != "" {
 			folderName += " " + code.String

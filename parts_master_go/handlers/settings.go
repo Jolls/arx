@@ -42,7 +42,7 @@ func (h *Handler) fetchContactOptions(r *http.Request) []contactOption {
 func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 	rows, err := h.queryContext(r.Context(),
 		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = 1 ORDER BY name`,
-			h.cfg.SupplierTable()))
+			h.cfg.CompanyTable()))
 	if err != nil {
 		return nil
 	}

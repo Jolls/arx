@@ -17,7 +17,7 @@ import (
 )
 
 func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
-	su, cn := h.cfg.SupplierTable(), h.cfg.ContactTable()
+	su, cn := h.cfg.CompanyTable(), h.cfg.ContactTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, su.SUSupplierCode, su.SUNumOfLNKs, su.SUNumOfPOs,
 		       su.is_active, CN.CNName, CN.CNCountry
@@ -67,7 +67,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 		var fp, notes sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 			`SELECT supplier_attachment_id, supplier_id, file_path, notes FROM %s WHERE supplier_attachment_id = @p1`,
-			h.cfg.SupplierAttachmentsTable(),
+			h.cfg.CompanyAttachmentsTable(),
 		), *s.PrimaryAttachmentID).Scan(&att.SupplierAttachmentID, &att.SupplierID, &fp, &notes); err == nil {
 			att.FilePath = fp.String
 			att.Notes = notes.String
@@ -112,7 +112,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO %s (name, SUSupplierCode, default_contact, is_active, SUNotes, date_modified)
 		OUTPUT INSERTED.id
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6)
-	`, h.cfg.SupplierTable()),
+	`, h.cfg.CompanyTable()),
 		name, fs(r, "SUSupplierCode"),
 		nullableInt(fs(r, "default_contact")),
 		r.FormValue("is_active") == "1",
@@ -173,7 +173,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET name=@p1, SUSupplierCode=@p2, default_contact=@p3,
 		              is_active=@p4, SUNotes=@p5, date_modified=@p6
 		WHERE id=@p7
-	`, h.cfg.SupplierTable()),
+	`, h.cfg.CompanyTable()),
 		name, fs(r, "SUSupplierCode"),
 		nullableInt(fs(r, "default_contact")),
 		r.FormValue("is_active") == "1",
@@ -196,7 +196,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	var s models.Supplier
 	var name sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT id, name FROM %s WHERE id = @p1`, h.cfg.SupplierTable(),
+		`SELECT id, name FROM %s WHERE id = @p1`, h.cfg.CompanyTable(),
 	), id).Scan(&s.ID, &name)
 	if err == sql.ErrNoRows {
 		h.renderError(w, "Supplier not found")
@@ -208,55 +208,44 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Name = name.String
 
-	lnk, pn := h.cfg.SupplierLinkTable(), h.cfg.PartsTable()
+	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT lnk.LNKID, lnk.LNKPNID, lnk.LNKChoice, lnk.LNKVendorPN, lnk.LNKVendorDesc,
-		       lnk.LNKLeadtime, lnk.LNKCurrentCost, lnk.LNKAtQty, lnk.LNKMinIncrement,
-		       lnk.LNKUse, lnk.LNKRFQDate,
+		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
+		       sp.lead_time, sp.min_increment, sp.is_active,
 		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category
-		FROM %s lnk
-		JOIN %s pn ON lnk.LNKPNID = pn.PNID
-		WHERE lnk.LNKSUID = @p1
+		FROM %s sp
+		JOIN %s pn ON sp.part_id = pn.PNID
+		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`, lnk, pn), id)
+	`, sp, pn), id)
 	if err != nil {
 		h.renderError(w, "Error retrieving linked parts: "+err.Error())
 		return
 	}
 	defer rows.Close()
-	var links []models.SupplierLink
+	var links []models.SupplierPart
 	for rows.Next() {
-		var lk models.SupplierLink
-		var choice, vendorPN, vendorDesc, leadtime sql.NullString
-		var currentCost, atQty, minIncr sql.NullFloat64
-		var lnkUse sql.NullBool
-		var rfqDate sql.NullTime
+		var lk models.SupplierPart
+		var preference, supplierPN, supplierDesc, leadTime sql.NullString
+		var minIncr sql.NullFloat64
+		var isActive sql.NullBool
 		var pnID sql.NullInt64
 		var partNumber, title, revision, category sql.NullString
 		if err := rows.Scan(
-			&lk.LNKID, &lk.LNKPNID, &choice, &vendorPN, &vendorDesc,
-			&leadtime, &currentCost, &atQty, &minIncr, &lnkUse, &rfqDate,
+			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
+			&leadTime, &minIncr, &isActive,
 			&pnID, &partNumber, &title, &revision, &category,
 		); err != nil {
 			h.renderError(w, "Error reading linked parts: "+err.Error())
 			return
 		}
-		lk.LNKChoice = choice.String
-		lk.LNKVendorPN = vendorPN.String
-		lk.LNKVendorDesc = vendorDesc.String
-		lk.LNKLeadtime = leadtime.String
-		lk.LNKUse = lnkUse.Bool
-		if currentCost.Valid {
-			lk.LNKCurrentCost = &currentCost.Float64
-		}
-		if atQty.Valid {
-			lk.LNKAtQty = &atQty.Float64
-		}
+		lk.Preference = preference.String
+		lk.SupplierPN = supplierPN.String
+		lk.SupplierDesc = supplierDesc.String
+		lk.LeadTime = leadTime.String
+		lk.IsActive = isActive.Bool
 		if minIncr.Valid {
-			lk.LNKMinIncrement = &minIncr.Float64
-		}
-		if rfqDate.Valid {
-			lk.LNKRFQDate = &rfqDate.Time
+			lk.MinIncrement = &minIncr.Float64
 		}
 		lk.PNID = int(pnID.Int64)
 		lk.PartNumber = partNumber.String
@@ -282,7 +271,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tbl := h.cfg.SupplierAttachmentsTable()
+	tbl := h.cfg.CompanyAttachmentsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT supplier_attachment_id, supplier_id, file_path, notes, sort_order
 		FROM %s WHERE supplier_id = @p1 AND is_active = 1
@@ -358,7 +347,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (supplier_id, file_path, notes, sort_order)
 		VALUES (@p1, @p2, @p3, @p4)
-	`, h.cfg.SupplierAttachmentsTable()), id, filePath, notes, sortOrderVal)
+	`, h.cfg.CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal)
 	if err != nil {
 		h.renderError(w, "Error adding attachment: "+err.Error())
 		return
@@ -376,7 +365,7 @@ func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Reques
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET is_active = 0
 		WHERE supplier_attachment_id = @p1 AND supplier_id = @p2
-	`, h.cfg.SupplierAttachmentsTable()), attID, id)
+	`, h.cfg.CompanyAttachmentsTable()), attID, id)
 	if err != nil {
 		h.renderError(w, "Error deleting attachment: "+err.Error())
 		return
@@ -404,7 +393,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET notes=@p1, sort_order=@p2
 		WHERE supplier_attachment_id=@p3 AND supplier_id=@p4
-	`, h.cfg.SupplierAttachmentsTable()), notes, sortOrderVal, attID, id)
+	`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, attID, id)
 	if err != nil {
 		h.renderError(w, "Error updating attachment: "+err.Error())
 		return
@@ -431,7 +420,7 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		FROM %s su
 		LEFT JOIN %s cn ON su.default_contact = cn.CNID
 		WHERE su.id = @p1
-	`, h.cfg.SupplierTable(), h.cfg.ContactTable()), id).Scan(
+	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), id).Scan(
 		&s.ID, &name, &code, &notes,
 		&defaultContact, &isActive, &numLNKs, &numPOs, &dateModified,
 		&primaryAttID,
@@ -481,7 +470,7 @@ func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Re
 	if n, err2 := strconv.Atoi(attIDStr); err2 == nil && n != 0 {
 		val = n
 	}
-	if err := h.setPrimaryAttachment(r.Context(), h.cfg.SupplierTable(), "id", "primary_attachment_id", idInt, val); err != nil {
+	if err := h.setPrimaryAttachment(r.Context(), h.cfg.CompanyTable(), "id", "primary_attachment_id", idInt, val); err != nil {
 		h.renderError(w, "Error setting primary attachment: "+err.Error())
 		return
 	}

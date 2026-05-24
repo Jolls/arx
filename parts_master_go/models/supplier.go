@@ -8,6 +8,8 @@ type Supplier struct {
 	SUSupplierCode       string
 	SUNotes              string
 	IsActive             bool
+	IsSupplier           bool
+	IsManufacturer       bool
 	DefaultContact       *int
 	DateModified         *time.Time
 	SUNumOfLNKs          int
@@ -33,23 +35,35 @@ type SupplierAttachment struct {
 	SortOrder            *int
 }
 
-type SupplierLink struct {
-	LNKID          int
-	LNKPNID        int
-	LNKSUID        int
-	LNKChoice      string
-	LNKVendorPN    string
-	LNKVendorDesc  string
-	LNKLeadtime    string
-	LNKCurrentCost *float64
-	LNKAtQty       *float64
-	LNKMinIncrement *float64
-	LNKUse         bool
-	LNKRFQDate     *time.Time
-	// joined fields
-	PNID         int
-	PartNumber   string
-	Title        string
-	Revision     string
-	Category     string
+type SupplierPart struct {
+	ID           int
+	SupplierID   int
+	PartID       int
+	Preference   string
+	SupplierPN   string
+	SupplierDesc string
+	LeadTime     string
+	MinIncrement *float64
+	IsActive     bool
+	// joined — part info (supplier parts view)
+	PNID       int
+	PartNumber string
+	Title      string
+	Revision   string
+	Category   string
+	// joined — supplier + mfg info (part sourcing view)
+	SupplierName  string
+	MfgPartID     *int
+	MfgPartNumber string
+	MfgName       string
+}
+
+type MfgPart struct {
+	ID            int
+	PartID        int
+	MfgID         int
+	MfgPartNumber string
+	Description   string
+	// joined
+	MfgName string
 }
