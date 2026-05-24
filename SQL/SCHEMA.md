@@ -89,19 +89,24 @@ Every table used by the Go app must have a `_Test` sibling created alongside it.
 `cfg.*Table()` helpers in `config/config.go` switch between prod and test names at runtime.
 Never hardcode a table name in Go — always call the helper.
 
-| Prod | Test |
-|------|------|
-| `PN` | `PN_Test` |
-| `FIL` | `FIL_Test` |
-| `company_attachment` | `company_attachment_Test` |
-| `PL` | `PL_Test` |
-| `PO` / `POL` | `PO_Test` / `POL_Test` |
-| `company` | `company_Test` |
-| `supplier_part` | `supplier_part_Test` |
-| `mfg_part` | `mfg_part_Test` |
-| `CN` | `CN_Test` |
-| `price` | `price_Test` |
-| `app_config` | `app_config_Test` |
+| Prod | Test | App |
+|------|------|-----|
+| `PN` | `PN_Test` | both |
+| `app_config` | `app_config_Test` | both |
+| `FIL` | `FIL_Test` | parts_master_go |
+| `company_attachment` | `company_attachment_Test` | parts_master_go |
+| `PL` | `PL_Test` | parts_master_go (read-only in test_records_go for BOM dropdown) |
+| `PO` / `POL` | `PO_Test` / `POL_Test` | parts_master_go |
+| `company` | `company_Test` | parts_master_go |
+| `supplier_part` | `supplier_part_Test` | parts_master_go |
+| `mfg_part` | `mfg_part_Test` | parts_master_go |
+| `CN` | `CN_Test` | parts_master_go |
+| `price` | `price_Test` | parts_master_go |
+| `Forms` | `Forms_Test` | test_records_go |
+| `TestRecords` | `TestRecords_Test` | test_records_go |
+| `test_definition` | `test_definition_Test` | test_records_go |
+| `TestResults` | `TestResults_Test` | test_records_go |
+| `test_definition_history` | `test_definition_history_Test` | test_records_go |
 
 ## Triggers
 
@@ -127,3 +132,26 @@ These fire for all writers (Go app and VBA). Do not update `SUNumOfLNKs`, `SUNum
 - Use `IF OBJECT_ID('dbo.TableName', 'U') IS NOT NULL DROP TABLE dbo.TableName;` at the top.
 - Keep the file in sync with schema changes made directly to the live DB.
 - Add `TODO:` comments for known drift between the script and the live schema.
+
+---
+
+## Table reference
+
+Key facts per table: primary key, trigger side-effects, and column semantics that affect application code.
+
+| Table | PK | Notes |
+|-------|----|-------|
+| `PN` | `PNID` | Parts catalog. `PNStatus`: U/A/D. `PNUser1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). |
+| `FIL` | `FILID` | File/URL attachments. `FILPNID` → `PN.PNID` (VARCHAR FK, not INT yet). `FILFileName` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `order_id` controls sort. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. |
+| `PL` | — | BOM / parts list. Links a parent part to child parts. |
+| `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `CN.CNID`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
+| `CN` | `CNID` | Contacts, linked to companies. |
+| `PO` | `id` | Purchase orders. `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. |
+| `POL` | `POLID` | PO line items → `PO.id`. |
+| `supplier_part` | `id` | Sourcing links — maps parts to supplier catalog entries. `supplier_id` → `company.id`, `part_id` → `PN.PNID`, `mfg_part_id` → `mfg_part.id` (optional). Writes fire `trg_supplier_part_company_count`. |
+| `mfg_part` | `id` | Manufacturer part numbers. `part_id` → `PN.PNID`, `mfg_id` → `company.id`. |
+| `price` | — | Quantity price breaks. |
+| `Forms` | `ID` | Test form definitions. `PNID` → `PN`. `test_order` = comma-separated `test_definition.id` list. |
+| `TestRecords` | `ID` | A test run for one serial number. `form_id` → `Forms.ID`. `test_order` = snapshot of order at record creation. |
+| `test_definition` | `id` | Test step definitions. `type` = heading level (0=data, 1/2/3=heading). `hide_formula='HIDE'` hides data rows. |
+| `TestResults` | `ID` | One result per step per record. `pass_fail` BIT. `result` = value or VBA image filename or `LOCAL:` path. |
