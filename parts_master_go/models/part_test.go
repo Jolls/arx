@@ -4,7 +4,7 @@ import "testing"
 
 func TestUserFieldsForEdit(t *testing.T) {
 	p := Part{
-		PNUser1: "Alpha", PNUser2: "", PNUser3: "Gamma",
+		UserField1: "Alpha", UserField2: "", UserField3: "Gamma",
 	}
 	fields := p.UserFieldsForEdit()
 
@@ -19,10 +19,10 @@ func TestUserFieldsForEdit(t *testing.T) {
 		wantLabel  string
 		wantValue  string
 	}{
-		{0, "PNUser1", "User 1", "Alpha"},
-		{1, "PNUser2", "User 2", ""},
-		{2, "PNUser3", "User 3", "Gamma"},
-		{9, "PNUser10", "User 10", ""},
+		{0, "user_field_1", "User 1", "Alpha"},
+		{1, "user_field_2", "User 2", ""},
+		{2, "user_field_3", "User 3", "Gamma"},
+		{9, "user_field_10", "User 10", ""},
 	}
 	for _, c := range cases {
 		f := fields[c.idx]
@@ -35,7 +35,7 @@ func TestUserFieldsForEdit(t *testing.T) {
 
 func TestUserFields(t *testing.T) {
 	t.Run("only non-empty fields returned", func(t *testing.T) {
-		p := Part{PNUser1: "Alpha", PNUser3: "Gamma"}
+		p := Part{UserField1: "Alpha", UserField3: "Gamma"}
 		fields := p.UserFields()
 		if len(fields) != 2 {
 			t.Fatalf("expected 2 fields, got %d", len(fields))
@@ -57,8 +57,8 @@ func TestUserFields(t *testing.T) {
 
 	t.Run("all filled returns 10", func(t *testing.T) {
 		p := Part{
-			PNUser1: "a", PNUser2: "b", PNUser3: "c", PNUser4: "d", PNUser5: "e",
-			PNUser6: "f", PNUser7: "g", PNUser8: "h", PNUser9: "i", PNUser10: "j",
+			UserField1: "a", UserField2: "b", UserField3: "c", UserField4: "d", UserField5: "e",
+			UserField6: "f", UserField7: "g", UserField8: "h", UserField9: "i", UserField10: "j",
 		}
 		if fields := p.UserFields(); len(fields) != 10 {
 			t.Errorf("expected 10, got %d", len(fields))

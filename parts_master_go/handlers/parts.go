@@ -122,8 +122,8 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       release_status, active, PNReqBy, PNNotes,
 		       PNDate, PNDateModified, PNFILIDPrimary,
 		       PNQty, PNCurrentCost, PNLastRollupCost, PNLastRollupAt, PNFILLinks, PNPOLinks,
-		       PNUser1, PNUser2, PNUser3, PNUser4, PNUser5,
-		       PNUser6, PNUser7, PNUser8, PNUser9, PNUser10
+		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
+		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s WHERE PNID = @p1
 	`, h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
@@ -161,8 +161,8 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	p.PNFILLinks = int(filLinks.Int64)
 	p.PNPOLinks = int(poLinks.Int64)
-	p.PNUser1, p.PNUser2, p.PNUser3, p.PNUser4, p.PNUser5 = user1.String, user2.String, user3.String, user4.String, user5.String
-	p.PNUser6, p.PNUser7, p.PNUser8, p.PNUser9, p.PNUser10 = user6.String, user7.String, user8.String, user9.String, user10.String
+	p.UserField1, p.UserField2, p.UserField3, p.UserField4, p.UserField5 = user1.String, user2.String, user3.String, user4.String, user5.String
+	p.UserField6, p.UserField7, p.UserField8, p.UserField9, p.UserField10 = user6.String, user7.String, user8.String, user9.String, user10.String
 	if pnDate.Valid {
 		p.PNDate = &pnDate.Time
 	}
@@ -233,8 +233,8 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_number, revision, title, detail, category, has_bom,
 		                release_status, active, PNReqBy, PNNotes, PNDate, PNDateModified,
-		                PNUser1, PNUser2, PNUser3, PNUser4, PNUser5,
-		                PNUser6, PNUser7, PNUser8, PNUser9, PNUser10)
+		                user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
+		                user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
 		OUTPUT INSERTED.PNID
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,
 		        @p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22)
@@ -242,8 +242,8 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		partNumber, fs(r, "revision"), fs(r, "title"), fs(r, "detail"), fs(r, "category"), r.FormValue("has_bom") == "1",
 		fs(r, "release_status"), r.FormValue("active") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
 		now, now,
-		fs(r, "PNUser1"), fs(r, "PNUser2"), fs(r, "PNUser3"), fs(r, "PNUser4"), fs(r, "PNUser5"),
-		fs(r, "PNUser6"), fs(r, "PNUser7"), fs(r, "PNUser8"), fs(r, "PNUser9"), fs(r, "PNUser10"),
+		fs(r, "user_field_1"), fs(r, "user_field_2"), fs(r, "user_field_3"), fs(r, "user_field_4"), fs(r, "user_field_5"),
+		fs(r, "user_field_6"), fs(r, "user_field_7"), fs(r, "user_field_8"), fs(r, "user_field_9"), fs(r, "user_field_10"),
 	).Scan(&newID)
 	if err != nil {
 		h.render(w, "part_edit.html", map[string]any{
@@ -304,15 +304,15 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET
 		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5, has_bom=@p6,
 		  release_status=@p7, active=@p8, PNReqBy=@p9, PNNotes=@p10, PNDateModified=@p11,
-		  PNUser1=@p12, PNUser2=@p13, PNUser3=@p14, PNUser4=@p15, PNUser5=@p16,
-		  PNUser6=@p17, PNUser7=@p18, PNUser8=@p19, PNUser9=@p20, PNUser10=@p21
+		  user_field_1=@p12, user_field_2=@p13, user_field_3=@p14, user_field_4=@p15, user_field_5=@p16,
+		  user_field_6=@p17, user_field_7=@p18, user_field_8=@p19, user_field_9=@p20, user_field_10=@p21
 		WHERE PNID=@p22
 	`, h.cfg.PartsTable()),
 		partNumber, fs(r, "revision"), fs(r, "title"), fs(r, "detail"), fs(r, "category"), r.FormValue("has_bom") == "1",
 		fs(r, "release_status"), r.FormValue("active") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
 		time.Now(),
-		fs(r, "PNUser1"), fs(r, "PNUser2"), fs(r, "PNUser3"), fs(r, "PNUser4"), fs(r, "PNUser5"),
-		fs(r, "PNUser6"), fs(r, "PNUser7"), fs(r, "PNUser8"), fs(r, "PNUser9"), fs(r, "PNUser10"),
+		fs(r, "user_field_1"), fs(r, "user_field_2"), fs(r, "user_field_3"), fs(r, "user_field_4"), fs(r, "user_field_5"),
+		fs(r, "user_field_6"), fs(r, "user_field_7"), fs(r, "user_field_8"), fs(r, "user_field_9"), fs(r, "user_field_10"),
 		id,
 	)
 	if err != nil {
@@ -339,10 +339,10 @@ func partFromForm(r *http.Request) models.Part {
 		HasBOM: r.FormValue("has_bom") == "1",
 		ReleaseStatus: fs(r, "release_status"), Active: r.FormValue("active") == "1",
 		PNReqBy: fs(r, "PNReqBy"), PNNotes: fs(r, "PNNotes"),
-		PNUser1: fs(r, "PNUser1"), PNUser2: fs(r, "PNUser2"), PNUser3: fs(r, "PNUser3"),
-		PNUser4: fs(r, "PNUser4"), PNUser5: fs(r, "PNUser5"), PNUser6: fs(r, "PNUser6"),
-		PNUser7: fs(r, "PNUser7"), PNUser8: fs(r, "PNUser8"), PNUser9: fs(r, "PNUser9"),
-		PNUser10: fs(r, "PNUser10"),
+		UserField1: fs(r, "user_field_1"), UserField2: fs(r, "user_field_2"), UserField3: fs(r, "user_field_3"),
+		UserField4: fs(r, "user_field_4"), UserField5: fs(r, "user_field_5"), UserField6: fs(r, "user_field_6"),
+		UserField7: fs(r, "user_field_7"), UserField8: fs(r, "user_field_8"), UserField9: fs(r, "user_field_9"),
+		UserField10: fs(r, "user_field_10"),
 	}
 }
 
@@ -359,8 +359,8 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
 		SELECT PNID, part_number, revision, title, detail, category, has_bom,
 		       release_status, active, PNReqBy, PNNotes,
-		       PNUser1, PNUser2, PNUser3, PNUser4, PNUser5,
-		       PNUser6, PNUser7, PNUser8, PNUser9, PNUser10
+		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
+		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s WHERE PNID = @p1
 	`, h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
@@ -381,8 +381,8 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	p.Active = active.Bool
 	p.PNReqBy = reqBy.String
 	p.PNNotes = notes.String
-	p.PNUser1, p.PNUser2, p.PNUser3, p.PNUser4, p.PNUser5 = user1.String, user2.String, user3.String, user4.String, user5.String
-	p.PNUser6, p.PNUser7, p.PNUser8, p.PNUser9, p.PNUser10 = user6.String, user7.String, user8.String, user9.String, user10.String
+	p.UserField1, p.UserField2, p.UserField3, p.UserField4, p.UserField5 = user1.String, user2.String, user3.String, user4.String, user5.String
+	p.UserField6, p.UserField7, p.UserField8, p.UserField9, p.UserField10 = user6.String, user7.String, user8.String, user9.String, user10.String
 	return p, nil
 }
 
