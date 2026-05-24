@@ -26,25 +26,25 @@ type Part struct {
 	PNLastRollupAt   *time.Time
 	PNFILLinks       int
 	PNPOLinks        int
-	PNUser1          string
-	PNUser2          string
-	PNUser3          string
-	PNUser4          string
-	PNUser5          string
-	PNUser6          string
-	PNUser7          string
-	PNUser8          string
-	PNUser9          string
-	PNUser10         string
+	UserField1       string
+	UserField2       string
+	UserField3       string
+	UserField4       string
+	UserField5       string
+	UserField6       string
+	UserField7       string
+	UserField8       string
+	UserField9       string
+	UserField10      string
 }
 
 // UserFieldsForEdit returns all 10 PNUser fields for the edit form (including empty ones).
 func (p Part) UserFieldsForEdit() []struct{ Name, Label, Value string } {
 	raw := [10]struct{ name, val string }{
-		{"PNUser1", p.PNUser1}, {"PNUser2", p.PNUser2}, {"PNUser3", p.PNUser3},
-		{"PNUser4", p.PNUser4}, {"PNUser5", p.PNUser5}, {"PNUser6", p.PNUser6},
-		{"PNUser7", p.PNUser7}, {"PNUser8", p.PNUser8}, {"PNUser9", p.PNUser9},
-		{"PNUser10", p.PNUser10},
+		{"user_field_1", p.UserField1}, {"user_field_2", p.UserField2}, {"user_field_3", p.UserField3},
+		{"user_field_4", p.UserField4}, {"user_field_5", p.UserField5}, {"user_field_6", p.UserField6},
+		{"user_field_7", p.UserField7}, {"user_field_8", p.UserField8}, {"user_field_9", p.UserField9},
+		{"user_field_10", p.UserField10},
 	}
 	out := make([]struct{ Name, Label, Value string }, 10)
 	for i, f := range raw {
@@ -53,12 +53,12 @@ func (p Part) UserFieldsForEdit() []struct{ Name, Label, Value string } {
 	return out
 }
 
-// UserFields returns the non-empty PNUser1–10 values with their labels,
+// UserFields returns the non-empty user_field_1–10 values with their labels,
 // ready for template iteration.
 func (p Part) UserFields() []struct{ Label, Value string } {
 	raw := [10]string{
-		p.PNUser1, p.PNUser2, p.PNUser3, p.PNUser4, p.PNUser5,
-		p.PNUser6, p.PNUser7, p.PNUser8, p.PNUser9, p.PNUser10,
+		p.UserField1, p.UserField2, p.UserField3, p.UserField4, p.UserField5,
+		p.UserField6, p.UserField7, p.UserField8, p.UserField9, p.UserField10,
 	}
 	var out []struct{ Label, Value string }
 	for i, v := range raw {
