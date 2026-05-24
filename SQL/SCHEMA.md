@@ -55,7 +55,8 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 |-------|-------------|-------|
 | `PN`  | `PN`  | Part numbers |
 | `FIL` | `FIL` | File/URL attachments (to parts) |
-| `LNK` | `LNK` | Part-supplier links |
+| `supplier_part` | — | Sourcing links (migrated from `LNK`) |
+| `mfg_part` | — | Manufacturer part numbers |
 | `CN`  | `CN`  | Contacts |
 | `PL`  | `PL`  | Parts list / BOM |
 | `POL` | `POL` | PO line items |
@@ -96,7 +97,8 @@ Never hardcode a table name in Go — always call the helper.
 | `PL` | `PL_Test` |
 | `PO` / `POL` | `PO_Test` / `POL_Test` |
 | `supplier` | `supplier_Test` |
-| `LNK` | `LNK_Test` |
+| `supplier_part` | `supplier_part_Test` |
+| `mfg_part` | `mfg_part_Test` |
 | `CN` | `CN_Test` |
 | `price` | `price_Test` |
 | `app_config` | `app_config_Test` |
@@ -107,11 +109,11 @@ Trigger DDL lives in `SQL/triggers.sql`. `_Test` table equivalents are created i
 
 | Trigger | Table | Effect |
 |---------|-------|--------|
-| `trg_LNK_supplier_count` | `LNK` | Recalculates `supplier.SUNumOfLNKs` after any INSERT/UPDATE/DELETE |
+| `trg_LNK_supplier_count` | `supplier_part` | Recalculates `supplier.SUNumOfLNKs` after any INSERT/UPDATE/DELETE (trigger rename deferred) |
 | `trg_PO_supplier_count` | `PO` | Recalculates `supplier.SUNumOfPOs` after any INSERT/UPDATE/DELETE |
 | `trg_FIL_part_count` | `FIL` | Recalculates `PN.PNFILLinks` (active rows only) after any INSERT/UPDATE/DELETE |
 | `trg_POL_part_count` | `POL` | Recalculates `PN.PNPOLinks` after any INSERT/UPDATE/DELETE |
-| `trg_LNK_Test_supplier_count` | `LNK_Test` | Same as `trg_LNK_supplier_count`, targeting `supplier_Test` |
+| `trg_LNK_Test_supplier_count` | `supplier_part_Test` | Same as `trg_LNK_supplier_count`, targeting `supplier_Test` (trigger rename deferred) |
 | `trg_PO_Test_supplier_count` | `PO_Test` | Same as `trg_PO_supplier_count`, targeting `supplier_Test` |
 | `trg_FIL_Test_part_count` | `FIL_Test` | Same as `trg_FIL_part_count`, targeting `PN_Test` |
 | `trg_POL_Test_part_count` | `POL_Test` | Same as `trg_POL_part_count`, targeting `PN_Test` |

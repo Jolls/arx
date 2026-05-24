@@ -208,55 +208,44 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Name = name.String
 
-	lnk, pn := h.cfg.SupplierLinkTable(), h.cfg.PartsTable()
+	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT lnk.LNKID, lnk.LNKPNID, lnk.LNKChoice, lnk.LNKVendorPN, lnk.LNKVendorDesc,
-		       lnk.LNKLeadtime, lnk.LNKCurrentCost, lnk.LNKAtQty, lnk.LNKMinIncrement,
-		       lnk.LNKUse, lnk.LNKRFQDate,
+		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
+		       sp.lead_time, sp.min_increment, sp.is_active,
 		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category
-		FROM %s lnk
-		JOIN %s pn ON lnk.LNKPNID = pn.PNID
-		WHERE lnk.LNKSUID = @p1
+		FROM %s sp
+		JOIN %s pn ON sp.part_id = pn.PNID
+		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`, lnk, pn), id)
+	`, sp, pn), id)
 	if err != nil {
 		h.renderError(w, "Error retrieving linked parts: "+err.Error())
 		return
 	}
 	defer rows.Close()
-	var links []models.SupplierLink
+	var links []models.SupplierPart
 	for rows.Next() {
-		var lk models.SupplierLink
-		var choice, vendorPN, vendorDesc, leadtime sql.NullString
-		var currentCost, atQty, minIncr sql.NullFloat64
-		var lnkUse sql.NullBool
-		var rfqDate sql.NullTime
+		var lk models.SupplierPart
+		var preference, supplierPN, supplierDesc, leadTime sql.NullString
+		var minIncr sql.NullFloat64
+		var isActive sql.NullBool
 		var pnID sql.NullInt64
 		var partNumber, title, revision, category sql.NullString
 		if err := rows.Scan(
-			&lk.LNKID, &lk.LNKPNID, &choice, &vendorPN, &vendorDesc,
-			&leadtime, &currentCost, &atQty, &minIncr, &lnkUse, &rfqDate,
+			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
+			&leadTime, &minIncr, &isActive,
 			&pnID, &partNumber, &title, &revision, &category,
 		); err != nil {
 			h.renderError(w, "Error reading linked parts: "+err.Error())
 			return
 		}
-		lk.LNKChoice = choice.String
-		lk.LNKVendorPN = vendorPN.String
-		lk.LNKVendorDesc = vendorDesc.String
-		lk.LNKLeadtime = leadtime.String
-		lk.LNKUse = lnkUse.Bool
-		if currentCost.Valid {
-			lk.LNKCurrentCost = &currentCost.Float64
-		}
-		if atQty.Valid {
-			lk.LNKAtQty = &atQty.Float64
-		}
+		lk.Preference = preference.String
+		lk.SupplierPN = supplierPN.String
+		lk.SupplierDesc = supplierDesc.String
+		lk.LeadTime = leadTime.String
+		lk.IsActive = isActive.Bool
 		if minIncr.Valid {
-			lk.LNKMinIncrement = &minIncr.Float64
-		}
-		if rfqDate.Valid {
-			lk.LNKRFQDate = &rfqDate.Time
+			lk.MinIncrement = &minIncr.Float64
 		}
 		lk.PNID = int(pnID.Int64)
 		lk.PartNumber = partNumber.String

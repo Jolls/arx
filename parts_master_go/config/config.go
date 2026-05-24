@@ -163,7 +163,8 @@ func (c *Config) PriceTable() string        { return pick(c.TestMode, "price_Tes
 func (c *Config) POTable() string           { return pick(c.TestMode, "PO_Test", "PO") }
 func (c *Config) POLineTable() string       { return pick(c.TestMode, "POL_Test", "POL") }
 func (c *Config) SupplierTable() string            { return pick(c.TestMode, "supplier_Test", "supplier") }
-func (c *Config) SupplierLinkTable() string        { return pick(c.TestMode, "LNK_Test", "LNK") }
+func (c *Config) SupplierPartTable() string         { return pick(c.TestMode, "supplier_part_Test", "supplier_part") }
+func (c *Config) MfgPartTable() string             { return pick(c.TestMode, "mfg_part_Test", "mfg_part") }
 func (c *Config) SupplierAttachmentsTable() string {
 	return pick(c.TestMode, "supplier_attachment_Test", "supplier_attachment")
 }
