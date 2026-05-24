@@ -9,13 +9,14 @@ BEGIN TRY
     -- Drop existing _Test tables
     IF OBJECT_ID('dbo.CN_Test',                  'U') IS NOT NULL DROP TABLE CN_Test;
     IF OBJECT_ID('dbo.FIL_Test',                 'U') IS NOT NULL DROP TABLE FIL_Test;
-    IF OBJECT_ID('dbo.LNK_Test',                 'U') IS NOT NULL DROP TABLE LNK_Test;
+    IF OBJECT_ID('dbo.supplier_part_Test',        'U') IS NOT NULL DROP TABLE supplier_part_Test;
+    IF OBJECT_ID('dbo.mfg_part_Test',             'U') IS NOT NULL DROP TABLE mfg_part_Test;
     IF OBJECT_ID('dbo.PL_Test',                  'U') IS NOT NULL DROP TABLE PL_Test;
     IF OBJECT_ID('dbo.PN_Test',                  'U') IS NOT NULL DROP TABLE PN_Test;
     IF OBJECT_ID('dbo.PO_Test',                  'U') IS NOT NULL DROP TABLE PO_Test;
     IF OBJECT_ID('dbo.POL_Test',                 'U') IS NOT NULL DROP TABLE POL_Test;
-    IF OBJECT_ID('dbo.supplier_Test',             'U') IS NOT NULL DROP TABLE supplier_Test;
-    IF OBJECT_ID('dbo.supplier_attachment_Test', 'U') IS NOT NULL DROP TABLE supplier_attachment_Test;
+    IF OBJECT_ID('dbo.company_Test',             'U') IS NOT NULL DROP TABLE company_Test;
+    IF OBJECT_ID('dbo.company_attachment_Test',  'U') IS NOT NULL DROP TABLE company_attachment_Test;
     IF OBJECT_ID('dbo.Forms_Test',               'U') IS NOT NULL DROP TABLE Forms_Test;
     IF OBJECT_ID('dbo.TestRecordHistory_Test',   'U') IS NOT NULL DROP TABLE TestRecordHistory_Test;
     IF OBJECT_ID('dbo.TestRecords_Test',         'U') IS NOT NULL DROP TABLE TestRecords_Test;
@@ -31,13 +32,14 @@ BEGIN TRY
     -- Recreate from live
     SELECT * INTO CN_Test                FROM CN;
     SELECT * INTO FIL_Test               FROM FIL;
-    SELECT * INTO LNK_Test               FROM LNK;
+    SELECT * INTO supplier_part_Test     FROM supplier_part;
+    SELECT * INTO mfg_part_Test          FROM mfg_part;
     SELECT * INTO PL_Test                FROM PL;
     SELECT * INTO PN_Test                FROM PN;
     SELECT * INTO PO_Test                FROM PO;
     SELECT * INTO POL_Test               FROM POL;
-    SELECT * INTO supplier_Test               FROM supplier;
-    SELECT * INTO supplier_attachment_Test    FROM supplier_attachment;
+    SELECT * INTO company_Test               FROM company;
+    SELECT * INTO company_attachment_Test    FROM company_attachment;
     SELECT * INTO Forms_Test             FROM Forms;
     SELECT * INTO TestRecordHistory_Test FROM TestRecordHistory;
     SELECT * INTO TestRecords_Test       FROM TestRecords;
@@ -58,25 +60,25 @@ BEGIN TRY
     -- Triggers not copied by SELECT * INTO — recreate on _Test tables.
     -- EXEC isolates each CREATE OR ALTER TRIGGER in its own batch (required by SQL Server).
     EXEC('
-CREATE OR ALTER TRIGGER dbo.trg_LNK_Test_supplier_count
-ON dbo.LNK_Test
+CREATE OR ALTER TRIGGER dbo.trg_supplier_part_Test_company_count
+ON dbo.supplier_part_Test
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT LNKSUID FROM inserted WHERE LNKSUID IS NOT NULL
+        SELECT supplier_id FROM inserted WHERE supplier_id IS NOT NULL
         UNION
-        SELECT LNKSUID FROM deleted  WHERE LNKSUID IS NOT NULL
+        SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.LNK_Test l WHERE l.LNKSUID = s.id)
-    FROM   dbo.supplier_Test s
+    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part_Test sp WHERE sp.supplier_id = s.id)
+    FROM   dbo.company_Test s
     JOIN   affected a ON a.id = s.id
 END
     ');
     EXEC('
-CREATE OR ALTER TRIGGER dbo.trg_PO_Test_supplier_count
+CREATE OR ALTER TRIGGER dbo.trg_PO_Test_company_count
 ON dbo.PO_Test
 AFTER INSERT, UPDATE, DELETE
 AS
@@ -89,7 +91,7 @@ BEGIN
     )
     UPDATE s
     SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO_Test p WHERE p.supplier_id = s.id)
-    FROM   dbo.supplier_Test s
+    FROM   dbo.company_Test s
     JOIN   affected a ON a.id = s.id
 END
     ');
@@ -132,9 +134,9 @@ END
 
     -- Recalibrate copied snapshot counts (prod data may have drifted before triggers existed).
     UPDATE s
-    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.LNK_Test l WHERE l.LNKSUID    = s.id),
-           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO_Test  p WHERE p.supplier_id = s.id)
-    FROM   dbo.supplier_Test s;
+    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part_Test sp WHERE sp.supplier_id = s.id),
+           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO_Test             p  WHERE p.supplier_id  = s.id)
+    FROM   dbo.company_Test s;
 
     UPDATE p
     SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL_Test f WHERE f.FILPNID = p.PNID AND f.is_active = 1),

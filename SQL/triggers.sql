@@ -1,6 +1,6 @@
--- Triggers that keep denormalized supplier counts current.
--- SUNumOfLNKs: total LNK rows where LNKSUID = supplier.id.
--- SUNumOfPOs:  total PO rows where supplier_id = supplier.id.
+-- Triggers that keep denormalized company counts current.
+-- SUNumOfLNKs: total supplier_part rows where supplier_id = company.id.
+-- SUNumOfPOs:  total PO rows where supplier_id = company.id.
 --
 -- Run once to install. Safe to re-run (CREATE OR ALTER).
 -- After installing, run the recalibration block at the bottom once
@@ -8,27 +8,27 @@
 --
 -- _Test table equivalents are created by _test.sql.
 
--- LNK → supplier.SUNumOfLNKs
-CREATE OR ALTER TRIGGER dbo.trg_LNK_supplier_count
-ON dbo.LNK
+-- supplier_part → company.SUNumOfLNKs
+CREATE OR ALTER TRIGGER dbo.trg_supplier_part_company_count
+ON dbo.supplier_part
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT LNKSUID FROM inserted WHERE LNKSUID IS NOT NULL
+        SELECT supplier_id FROM inserted WHERE supplier_id IS NOT NULL
         UNION
-        SELECT LNKSUID FROM deleted  WHERE LNKSUID IS NOT NULL
+        SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.LNK l WHERE l.LNKSUID = s.id)
-    FROM   dbo.supplier s
+    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id)
+    FROM   dbo.company s
     JOIN   affected a ON a.id = s.id;
 END;
 GO
 
--- PO → supplier.SUNumOfPOs
-CREATE OR ALTER TRIGGER dbo.trg_PO_supplier_count
+-- PO → company.SUNumOfPOs
+CREATE OR ALTER TRIGGER dbo.trg_PO_company_count
 ON dbo.PO
 AFTER INSERT, UPDATE, DELETE
 AS
@@ -41,7 +41,7 @@ BEGIN
     )
     UPDATE s
     SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO p WHERE p.supplier_id = s.id)
-    FROM   dbo.supplier s
+    FROM   dbo.company s
     JOIN   affected a ON a.id = s.id;
 END;
 GO
@@ -88,9 +88,9 @@ GO
 -- One-time recalibration: corrects any counts that drifted before triggers existed.
 -- Safe to re-run.
 UPDATE s
-SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.LNK l WHERE l.LNKSUID    = s.id),
-       s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO  p WHERE p.supplier_id = s.id)
-FROM   dbo.supplier s;
+SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id),
+       s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO             p  WHERE p.supplier_id  = s.id)
+FROM   dbo.company s;
 
 UPDATE p
 SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1),

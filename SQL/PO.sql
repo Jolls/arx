@@ -1,11 +1,11 @@
 -- PO: Purchase Orders.
 -- 'number' is the human-readable PO number shown on documents.
--- supplier_id and receiver_id both FK to supplier.id:
+-- supplier_id and receiver_id both FK to company.id:
 --   supplier_id  = who the PO is sent to.
 --   receiver_id  = bill-to / ship-to address (may differ from supplier).
 -- notes prints on the PO document. internal_notes is for internal use only.
 -- PO numbers are auto-assigned via sequence: SELECT NEXT VALUE FOR dbo.PO_Number_Seq
--- TRIGGER: trg_PO_supplier_count fires after INSERT/UPDATE/DELETE and updates supplier.SUNumOfPOs.
+-- TRIGGER: trg_PO_company_count fires after INSERT/UPDATE/DELETE and updates company.SUNumOfPOs.
 --          Do not update SUNumOfPOs manually. See SQL/triggers.sql.
 
 -- Sequence used to generate PO numbers. One-time creation — skip if already present.
@@ -20,7 +20,7 @@ CREATE TABLE PO (
   number                VARCHAR(32)    NOT NULL CONSTRAINT UQ_PO_number UNIQUE, -- Human-readable PO number. Note: an old auto-named duplicate unique constraint (UQ__PO__69B9A841B8557DE9) also existed and was dropped during migration.
 
   -- Supplier
-  supplier_id           INT            NOT NULL,        -- FK to supplier.id.
+  supplier_id           INT            NOT NULL,        -- FK to company.id.
   supplier_name         VARCHAR(127),                   -- Denormalized supplier name at time of order.
   supplier_contact      VARCHAR(127),
   supplier_address      VARCHAR(255),
@@ -33,7 +33,7 @@ CREATE TABLE PO (
   supplier_email        VARCHAR(127),
 
   -- Receiver / Ship-To
-  receiver_id           INT,                            -- FK to supplier.id (bill & ship to). Nullable — not all POs have a separate ship-to.
+  receiver_id           INT,                            -- FK to company.id (bill & ship to). Nullable — not all POs have a separate ship-to.
   receiver_name         VARCHAR(255),
   receiver_contact      VARCHAR(127),
   receiver_address      VARCHAR(255),
@@ -66,5 +66,5 @@ CREATE TABLE PO (
   is_active             BIT            CONSTRAINT DF_PO_is_active DEFAULT 1 -- 1 = open, 0 = closed.
 );
 
-ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_supplier FOREIGN KEY (supplier_id) REFERENCES dbo.supplier (id);
-ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_receiver  FOREIGN KEY (receiver_id) REFERENCES dbo.supplier (id);
+ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_company  FOREIGN KEY (supplier_id) REFERENCES dbo.company (id);
+ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_receiver FOREIGN KEY (receiver_id) REFERENCES dbo.company (id);

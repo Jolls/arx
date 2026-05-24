@@ -12,7 +12,7 @@ CREATE TABLE supplier_part (
   id                 INT            PRIMARY KEY IDENTITY,
 
   -- Foreign keys
-  supplier_id        INT            NOT NULL,    -- FK to supplier.id (who you buy from).
+  supplier_id        INT            NOT NULL,    -- FK to company.id (who you buy from).
   part_id            INT            NOT NULL,    -- FK to PN.PNID (the internal part).
   mfg_part_id        INT,                        -- FK to mfg_part.id. NULL = buying direct or manufacturer unknown.
   -- unit_id removed — needs a units-of-measure table first (#314)
@@ -35,6 +35,6 @@ CREATE TABLE supplier_part (
 
 );
 
-ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_supplier FOREIGN KEY (supplier_id)  REFERENCES dbo.supplier (id);
+ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_company  FOREIGN KEY (supplier_id)  REFERENCES dbo.company (id);
 ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_pn       FOREIGN KEY (part_id)      REFERENCES dbo.PN (PNID);
 ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_mfg_part FOREIGN KEY (mfg_part_id)  REFERENCES dbo.mfg_part (id);
