@@ -7,15 +7,18 @@
 IF OBJECT_ID('dbo.price', 'U') IS NOT NULL DROP TABLE price;
 
 CREATE TABLE price (
-  id           INT            PRIMARY KEY IDENTITY,
-  part_id      INT            NOT NULL,    -- FK to PN.PNID.
-  supplier_id  INT            NOT NULL,    -- FK to supplier.id.
-  price_ea     DECIMAL(13,6)  CONSTRAINT DF_price_price_ea   DEFAULT 0, -- Per-unit price.
-  price_pack   DECIMAL(13,6)  CONSTRAINT DF_price_price_pack DEFAULT 0, -- Total price for pack_size units.
-  pack_size    DECIMAL(13,6)  CONSTRAINT DF_price_pack_size  DEFAULT 1, -- Units per pack. Decimal to support fractional quantities.
-  is_active    BIT            CONSTRAINT DF_price_is_active  DEFAULT 1,
+  id             INT            PRIMARY KEY IDENTITY,
+  part_id        INT            NOT NULL,    -- FK to PN.PNID.
+  supplier_id    INT            NOT NULL,    -- FK to supplier.id.
+  price_ea       DECIMAL(13,6)  CONSTRAINT DF_price_price_ea      DEFAULT 0, -- Per-unit price.
+  price_pack     DECIMAL(13,6)  CONSTRAINT DF_price_price_pack     DEFAULT 0, -- Total price for pack_size units.
+  pack_size      DECIMAL(13,6)  CONSTRAINT DF_price_pack_size      DEFAULT 1, -- Units per pack. Decimal to support fractional quantities.
+  is_active      BIT            CONSTRAINT DF_price_is_active      DEFAULT 1,
+  effective_date DATE           CONSTRAINT DF_price_effective_date DEFAULT GETDATE(), -- Date this price became effective. Inactive rows serve as price history.
 );
 
-ALTER TABLE dbo.price ADD CONSTRAINT FK_price_PN              FOREIGN KEY (part_id)     REFERENCES dbo.PN (PNID);
-ALTER TABLE dbo.price ADD CONSTRAINT FK_price_supplier        FOREIGN KEY (supplier_id) REFERENCES dbo.supplier (id);
-ALTER TABLE dbo.price ADD CONSTRAINT UQ_price_part_supplier_pack UNIQUE (part_id, supplier_id, pack_size);
+ALTER TABLE dbo.price ADD CONSTRAINT FK_price_PN       FOREIGN KEY (part_id)     REFERENCES dbo.PN (PNID);
+ALTER TABLE dbo.price ADD CONSTRAINT FK_price_supplier FOREIGN KEY (supplier_id) REFERENCES dbo.supplier (id);
+-- Filtered unique index: only one active row per (part, supplier, pack_size) at a time.
+-- Inactive rows (is_active = 0) are retained as price history and are not subject to this constraint.
+CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;

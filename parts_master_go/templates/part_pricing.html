@@ -6,6 +6,10 @@
 <div class="content">
     {{template "part_tabs" .}}
 
+    <div style="margin-bottom:12px;">
+        <a href="/part/{{.Part.PNID}}/pricing/new" class="btn btn-primary">+ Add Price</a>
+    </div>
+
     {{if .PriceGroups}}
     {{range .PriceGroups}}
     <div class="detail-section">
@@ -26,12 +30,14 @@
                         <th style="width:100px; text-align:right;">Pack Size</th>
                         <th style="width:120px; text-align:right;">Price / Unit</th>
                         <th style="width:120px; text-align:right;">Price / Pack</th>
+                        <th style="width:110px; text-align:center;">Effective</th>
                         <th style="width:70px; text-align:center;">Active</th>
+                        <th style="width:120px;"></th>
                     </tr>
                 </thead>
                 <tbody>
                     {{range .Rows}}
-                    <tr>
+                    <tr{{if not .IsActive}} style="opacity:0.45;"{{end}}>
                         <td style="text-align:right;">{{packSizeStr .PackSize}}</td>
                         <td style="text-align:right;">
                             {{if .PriceEA}}${{printf "%.6f" (deref .PriceEA)}}{{else}}—{{end}}
@@ -39,9 +45,24 @@
                         <td style="text-align:right;">
                             {{if .PricePack}}${{printf "%.4f" (deref .PricePack)}}{{else}}—{{end}}
                         </td>
+                        <td style="text-align:center;">{{formatDate .EffectiveDate}}</td>
                         <td style="text-align:center;">
                             {{if .IsActive}}<span class="badge badge-active">Yes</span>
                             {{else}}<span class="badge badge-inactive">No</span>{{end}}
+                        </td>
+                        <td style="text-align:right; white-space:nowrap;">
+                            {{if .IsActive}}
+                            <a href="/part/{{$.Part.PNID}}/pricing/{{.ID}}/edit" class="btn btn-sm">Edit</a>
+                            <form method="post" action="/part/{{$.Part.PNID}}/pricing/{{.ID}}/deactivate" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button type="submit" class="btn btn-sm btn-danger">Deactivate</button>
+                            </form>
+                            {{else}}
+                            <form method="post" action="/part/{{$.Part.PNID}}/pricing/{{.ID}}/activate" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button type="submit" class="btn btn-sm">Activate</button>
+                            </form>
+                            {{end}}
                         </td>
                     </tr>
                     {{end}}

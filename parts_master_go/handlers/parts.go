@@ -883,11 +883,11 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	}
 	pr, su := h.cfg.PriceTable(), h.cfg.SupplierTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.supplier_id, s.name
+		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
 		FROM %s p
 		LEFT JOIN %s s ON p.supplier_id = s.id
 		WHERE p.part_id = @p1
-		ORDER BY s.name, p.pack_size
+		ORDER BY s.name, p.effective_date DESC, p.pack_size
 	`, pr, su), id)
 	if err != nil {
 		h.renderError(w, "Error retrieving pricing: "+err.Error())
@@ -900,8 +900,9 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 		var priceEA, pricePack, packSize sql.NullFloat64
 		var supplierID sql.NullInt64
 		var isActive sql.NullBool
+		var effectiveDate sql.NullTime
 		var supplierName sql.NullString
-		if err := rows.Scan(&price.ID, &priceEA, &pricePack, &packSize, &isActive, &supplierID, &supplierName); err != nil {
+		if err := rows.Scan(&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID, &supplierName); err != nil {
 			h.renderError(w, "Error reading pricing: "+err.Error())
 			return
 		}
@@ -915,6 +916,9 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 			price.PackSize = &packSize.Float64
 		}
 		price.IsActive = isActive.Bool
+		if effectiveDate.Valid {
+			price.EffectiveDate = &effectiveDate.Time
+		}
 		if supplierID.Valid {
 			v := int(supplierID.Int64)
 			price.SupplierID = &v
@@ -949,6 +953,202 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
+}
+
+// ── Price CRUD ───────────────────────────────────────────────────────────────
+
+func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "pricing")
+	if !ok {
+		return
+	}
+	h.render(w, "part_pricing_form.html", map[string]any{
+		"Part": p, "Price": models.Price{}, "IsNew": true,
+		"Suppliers": h.fetchSupplierOptions(r),
+		"ActiveTab": "parts", "ActiveSubTab": "pricing",
+		"NavBackURL": backURL, "NavBackLabel": backLabel,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+	})
+}
+
+func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
+	partID := chi.URLParam(r, "id")
+	if !h.verifyCsrf(r) {
+		http.Error(w, "Invalid form submission", http.StatusForbidden)
+		return
+	}
+	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
+	if err != nil || supplierID == 0 {
+		h.renderError(w, "Invalid supplier")
+		return
+	}
+	effectiveDate := r.FormValue("effective_date")
+	if effectiveDate == "" {
+		effectiveDate = time.Now().Format("2006-01-02")
+	}
+	_, err = h.execContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)
+	`, h.cfg.PriceTable()),
+		partID, supplierID,
+		r.FormValue("pack_size"), r.FormValue("price_ea"), r.FormValue("price_pack"),
+		effectiveDate,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "UQ_price") {
+			h.renderError(w, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
+			return
+		}
+		h.renderError(w, "Error saving price: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
+}
+
+func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
+	partID := chi.URLParam(r, "id")
+	priceID := chi.URLParam(r, "priceID")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, partID, "pricing")
+	if !ok {
+		return
+	}
+	var price models.Price
+	var priceEA, pricePack, packSize sql.NullFloat64
+	var isActive sql.NullBool
+	var effectiveDate sql.NullTime
+	var supplierID sql.NullInt64
+	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT id, price_ea, price_pack, pack_size, is_active, effective_date, supplier_id
+		FROM %s WHERE id = @p1 AND part_id = @p2
+	`, h.cfg.PriceTable()), priceID, partID).Scan(
+		&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID,
+	)
+	if err == sql.ErrNoRows {
+		h.renderError(w, "Price not found")
+		return
+	}
+	if err != nil {
+		h.renderError(w, "Error retrieving price: "+err.Error())
+		return
+	}
+	if priceEA.Valid {
+		price.PriceEA = &priceEA.Float64
+	}
+	if pricePack.Valid {
+		price.PricePack = &pricePack.Float64
+	}
+	if packSize.Valid {
+		price.PackSize = &packSize.Float64
+	}
+	price.IsActive = isActive.Bool
+	if effectiveDate.Valid {
+		price.EffectiveDate = &effectiveDate.Time
+	}
+	if supplierID.Valid {
+		v := int(supplierID.Int64)
+		price.SupplierID = &v
+	}
+	h.render(w, "part_pricing_form.html", map[string]any{
+		"Part": p, "Price": price, "IsNew": false,
+		"Suppliers": h.fetchSupplierOptions(r),
+		"ActiveTab": "parts", "ActiveSubTab": "pricing",
+		"NavBackURL": backURL, "NavBackLabel": backLabel,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+	})
+}
+
+func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
+	partID := chi.URLParam(r, "id")
+	priceID := chi.URLParam(r, "priceID")
+	if !h.verifyCsrf(r) {
+		http.Error(w, "Invalid form submission", http.StatusForbidden)
+		return
+	}
+	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
+	if err != nil || supplierID == 0 {
+		h.renderError(w, "Invalid supplier")
+		return
+	}
+	effectiveDate := r.FormValue("effective_date")
+	if effectiveDate == "" {
+		effectiveDate = time.Now().Format("2006-01-02")
+	}
+	pr := h.cfg.PriceTable()
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, "Error starting transaction: "+err.Error())
+		return
+	}
+	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET is_active = 0 WHERE id = @p1 AND part_id = @p2`, pr,
+	), priceID, partID)
+	if err != nil {
+		tx.Rollback()
+		h.renderError(w, "Error updating price: "+err.Error())
+		return
+	}
+	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)
+	`, pr),
+		partID, supplierID,
+		r.FormValue("pack_size"), r.FormValue("price_ea"), r.FormValue("price_pack"),
+		effectiveDate,
+	)
+	if err != nil {
+		tx.Rollback()
+		if strings.Contains(err.Error(), "UQ_price") {
+			h.renderError(w, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
+			return
+		}
+		h.renderError(w, "Error saving price: "+err.Error())
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		h.renderError(w, "Error committing price update: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
+}
+
+func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
+	partID := chi.URLParam(r, "id")
+	priceID := chi.URLParam(r, "priceID")
+	if !h.verifyCsrf(r) {
+		http.Error(w, "Invalid form submission", http.StatusForbidden)
+		return
+	}
+	_, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET is_active = 0 WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(),
+	), priceID, partID)
+	if err != nil {
+		h.renderError(w, "Error deactivating price: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
+}
+
+func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
+	partID := chi.URLParam(r, "id")
+	priceID := chi.URLParam(r, "priceID")
+	if !h.verifyCsrf(r) {
+		http.Error(w, "Invalid form submission", http.StatusForbidden)
+		return
+	}
+	_, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET is_active = 1 WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(),
+	), priceID, partID)
+	if err != nil {
+		if strings.Contains(err.Error(), "UQ_price") {
+			h.renderError(w, "Cannot activate: another active price exists for this supplier and pack size.")
+			return
+		}
+		h.renderError(w, "Error activating price: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
 }

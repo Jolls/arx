@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.34] - 2026-05-23 
+- parts_master_go: add price CRUD — create, edit (deactivates old row + inserts new), deactivate, activate; add `effective_date` column for price history; replace unique constraint with filtered index (active rows only) so inactive rows serve as history ([#310](https://github.com/Jolls/arx-legacy/issues/310))
+
 ## [0.3.33] - 2026-05-22 
 - both apps: rename `Tests` table → `test_definition` (and `Tests_Test` → `test_definition_Test`); update `StepsTable()` config helper, DDL, schema diagram, CLAUDE.md ([#215](https://github.com/Jolls/arx-legacy/issues/215))
 
