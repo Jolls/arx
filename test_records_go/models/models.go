@@ -48,6 +48,7 @@ type TestRecord struct {
 	SerialNumberDesc string     // description of the unit under test
 	RecordDate       *time.Time
 	Comments         string // used as "Type" in the UI
+	InstrumentType   string // free-text instrument type label; matched against test_definition.instrument_types to filter steps
 	Locked           bool
 	Active           bool
 	TestOrder        string // comma-separated snapshot of test IDs at record creation
@@ -80,7 +81,7 @@ type TestStep struct {
 	SpecUnits        string
 	SpecNom          string
 	PFFormula        string
-	ApplicableInstrs string
+	InstrumentTypes  string
 	Format           string
 	StepComment      string
 	StepCreatedAt    *time.Time

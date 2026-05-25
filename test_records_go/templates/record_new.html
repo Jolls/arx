@@ -44,6 +44,13 @@
   </div>
 
   <div class="mb-3">
+    <label class="form-label fw-semibold" for="instrument_type">Instrument Type</label>
+    <input type="text" class="form-control" id="instrument_type" name="instrument_type"
+           placeholder="e.g. ModelA, ModelB, Leave Blank, etc.">
+    <div class="form-text">Used to filter applicable test steps. Leave blank to show all steps.</div>
+  </div>
+
+  <div class="mb-3">
     <label class="form-label fw-semibold" for="comments">Type</label>
     {{$types := .Form.RecordTypeList}}
     {{if $types}}
