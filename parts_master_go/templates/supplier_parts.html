@@ -20,7 +20,6 @@
                     <th>Supplier Description</th>
                     <th style="width:90px;">Lead Time</th>
                     <th style="width:80px; text-align:right;">Min Incr.</th>
-                    <th style="width:50px; text-align:center;">Active</th>
                 </tr>
             </thead>
             <tbody>
@@ -35,10 +34,6 @@
                     <td>{{.SupplierDesc}}</td>
                     <td>{{.LeadTime}}</td>
                     <td style="text-align:right;">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
-                    <td style="text-align:center;">
-                        {{if .IsActive}}<span class="badge badge-active">Yes</span>
-                        {{else}}<span class="badge badge-inactive">No</span>{{end}}
-                    </td>
                 </tr>
                 {{end}}
             </tbody>

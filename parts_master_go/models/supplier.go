@@ -44,7 +44,6 @@ type SupplierPart struct {
 	SupplierDesc string
 	LeadTime     string
 	MinIncrement *float64
-	IsActive     bool
 	// joined — part info (supplier parts view)
 	PNID       int
 	PartNumber string

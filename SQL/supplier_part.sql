@@ -30,7 +30,6 @@ CREATE TABLE supplier_part (
   -- rfq_date removed — superseded by full RFQ workflow (#270)
 
   -- Status
-  is_active          BIT            CONSTRAINT DF_supplier_part_is_active  DEFAULT 1,
   preference         INT            CONSTRAINT DF_supplier_part_preference DEFAULT 1,  -- Supplier preference order (1 = preferred, 2 = alternate, etc.).
 
 );
