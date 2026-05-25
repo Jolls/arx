@@ -18,7 +18,8 @@ BEGIN TRY
     IF OBJECT_ID('dbo.company_Test',             'U') IS NOT NULL DROP TABLE company_Test;
     IF OBJECT_ID('dbo.company_attachment_Test',  'U') IS NOT NULL DROP TABLE company_attachment_Test;
     IF OBJECT_ID('dbo.Forms_Test',               'U') IS NOT NULL DROP TABLE Forms_Test;
-    IF OBJECT_ID('dbo.TestRecordHistory_Test',   'U') IS NOT NULL DROP TABLE TestRecordHistory_Test;
+    IF OBJECT_ID('dbo.form_events_Test',         'U') IS NOT NULL DROP TABLE form_events_Test;
+    IF OBJECT_ID('dbo.record_events_Test',       'U') IS NOT NULL DROP TABLE record_events_Test;
     IF OBJECT_ID('dbo.TestRecords_Test',         'U') IS NOT NULL DROP TABLE TestRecords_Test;
     IF OBJECT_ID('dbo.TestResults_Test',         'U') IS NOT NULL DROP TABLE TestResults_Test;
     IF OBJECT_ID('dbo.test_definition_Test',      'U') IS NOT NULL DROP TABLE test_definition_Test;
@@ -41,7 +42,8 @@ BEGIN TRY
     SELECT * INTO company_Test               FROM company;
     SELECT * INTO company_attachment_Test    FROM company_attachment;
     SELECT * INTO Forms_Test             FROM Forms;
-    SELECT * INTO TestRecordHistory_Test FROM TestRecordHistory;
+    SELECT * INTO form_events_Test       FROM form_events;
+    SELECT * INTO record_events_Test     FROM record_events;
     SELECT * INTO TestRecords_Test       FROM TestRecords;
     SELECT * INTO TestResults_Test       FROM TestResults;
     SELECT * INTO test_definition_Test        FROM test_definition;

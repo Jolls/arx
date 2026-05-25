@@ -96,21 +96,37 @@ CREATE TABLE TestRecords (
 -- ALTER TABLE TestRecords_Test ADD instrument_type VARCHAR(100) NULL;
 
 
--- TestRecordHistory: Audit trail for lock/unlock events on forms and test records.
--- history_type: 0 = unspecified, 1 = Form event, 2 = TestRecord event.
--- record_id FKs to Forms.ID or TestRecords.ID depending on history_type.
--- history_locked mirrors the locked status of the parent at the time of the event.
+-- form_events: Audit trail for state changes on Forms (locked, unlocked, archived, activated, etc.).
+-- form_id FKs to Forms.ID.
+-- event_type is a short string identifying the action taken.
 
-IF OBJECT_ID('dbo.TestRecordHistory', 'U') IS NOT NULL DROP TABLE TestRecordHistory;
+IF OBJECT_ID('dbo.form_events', 'U') IS NOT NULL DROP TABLE form_events;
 
-CREATE TABLE TestRecordHistory (
-  ID                INT          PRIMARY KEY IDENTITY,
-  history_type      INT,                                  -- 0 = unspecified, 1 = Form, 2 = TestRecord.
-  record_id         INT,                                  -- FK to Forms.ID or TestRecords.ID.
-  username          VARCHAR(255),                         -- OS username at the time of the event.
-  history_date      DATETIME,                             -- Timestamp of the event.
-  history_comments  VARCHAR(MAX),                         -- User-supplied comment when unlocking.
-  history_locked    BIT                                   -- Locked status at the time of the event.
+CREATE TABLE form_events (
+  id          INT          PRIMARY KEY IDENTITY,
+  form_id     INT          NOT NULL REFERENCES dbo.Forms(ID),  -- FK to Forms.ID.
+  event_type  VARCHAR(50)  NOT NULL,                           -- 'locked', 'unlocked', 'archived', 'activated', etc.
+  username    VARCHAR(255),                                    -- OS username at the time of the event.
+  event_date  DATETIME     NOT NULL DEFAULT GETDATE(),         -- Timestamp of the event.
+  comments    VARCHAR(MAX)                                     -- User-supplied comment (required on unlock).
+);
+
+-- Migration (run once on live DB — replaces TestRecordHistory):
+-- See SQL/TestRecords.sql history or issue #298 for the full migration script.
+
+
+-- record_events: Audit trail for state changes on TestRecords (locked, unlocked, archived, activated, etc.).
+-- test_record_id FKs to TestRecords.ID.
+
+IF OBJECT_ID('dbo.record_events', 'U') IS NOT NULL DROP TABLE record_events;
+
+CREATE TABLE record_events (
+  id             INT          PRIMARY KEY IDENTITY,
+  test_record_id INT          NOT NULL REFERENCES dbo.TestRecords(ID),  -- FK to TestRecords.ID.
+  event_type     VARCHAR(50)  NOT NULL,                                  -- 'locked', 'unlocked', 'archived', 'activated', etc.
+  username       VARCHAR(255),                                           -- OS username at the time of the event.
+  event_date     DATETIME     NOT NULL DEFAULT GETDATE(),                -- Timestamp of the event.
+  comments       VARCHAR(MAX)                                            -- User-supplied comment (required on unlock).
 );
 
 

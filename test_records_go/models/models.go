@@ -148,6 +148,28 @@ func (r ResultRow) EffectiveSpec() string {
 	return ""
 }
 
+// FormEvent is a row in the form_events table.
+// Records state changes on a Form (locked, unlocked, archived, activated, etc.).
+type FormEvent struct {
+	ID        int
+	FormID    int
+	EventType string
+	Username  string
+	EventDate *time.Time
+	Comments  string
+}
+
+// RecordEvent is a row in the record_events table.
+// Records state changes on a TestRecord (locked, unlocked, archived, activated, etc.).
+type RecordEvent struct {
+	ID           int
+	TestRecordID int
+	EventType    string
+	Username     string
+	EventDate    *time.Time
+	Comments     string
+}
+
 // ComputePassFail evaluates pass/fail for a result value against a step's spec bounds.
 // Returns nil if the result cannot be evaluated (empty, non-numeric, no bounds).
 // pf_type values:

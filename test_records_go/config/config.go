@@ -121,7 +121,9 @@ func (c *Config) NamedQueriesTable() string      { return "named_queries" } // n
 func (c *Config) TestDefinitionHistoryTable() string {
 	return pick(c.TestMode, "test_definition_history_Test", "test_definition_history")
 }
-func (c *Config) AppConfigTable() string { return pick(c.TestMode, "app_config_Test", "app_config") }
+func (c *Config) FormEventsTable() string   { return pick(c.TestMode, "form_events_Test", "form_events") }
+func (c *Config) RecordEventsTable() string { return pick(c.TestMode, "record_events_Test", "record_events") }
+func (c *Config) AppConfigTable() string    { return pick(c.TestMode, "app_config_Test", "app_config") }
 
 func pick(test bool, testVal, prodVal string) string {
 	if test {
