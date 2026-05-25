@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -963,6 +964,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		"ImageRows": imageRows,
 		"PrevID":    prevID,
 		"NextID":    nextID,
+		"CSRFToken": h.csrfToken(w, r),
 		"TestMode":  h.cfg.TestMode,
 		"DebugMode": h.cfg.DebugMode,
 	})
@@ -1436,6 +1438,82 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		"CSRFToken": h.csrfToken(w, r),
 		"TestMode":  h.cfg.TestMode,
 	})
+}
+
+// LockRecord — POST /records/{id}/lock
+// Sets locked=1 on the record and writes a 'locked' event to record_events.
+func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
+	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !h.verifyCsrf(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	username := os.Getenv("USERNAME")
+
+	res, err := h.execContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET locked=1, updated_at=GETDATE() WHERE ID=@p1 AND locked=0",
+		h.cfg.RecordsTable()), recordID)
+	if err != nil {
+		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		h.execContext(r.Context(), fmt.Sprintf(
+			"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'locked', @p2, GETDATE())",
+			h.cfg.RecordEventsTable()), recordID, username)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
+}
+
+// UnlockRecord — POST /records/{id}/unlock
+// Requires a comment, sets locked=0, and writes an 'unlocked' event to record_events.
+func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
+	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !h.verifyCsrf(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+
+	comment := strings.TrimSpace(r.FormValue("comment"))
+	if comment == "" {
+		http.Error(w, "a comment is required to unlock a record", http.StatusBadRequest)
+		return
+	}
+
+	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	username := os.Getenv("USERNAME")
+
+	res, err := h.execContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET locked=0, updated_at=GETDATE() WHERE ID=@p1 AND locked=1",
+		h.cfg.RecordsTable()), recordID)
+	if err != nil {
+		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		h.execContext(r.Context(), fmt.Sprintf(
+			"INSERT INTO %s (test_record_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
+			h.cfg.RecordEventsTable()), recordID, username, comment)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
 }
 
 // SaveResults â€" POST /records/{id}/edit
