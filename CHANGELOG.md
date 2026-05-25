@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.41] - 2026-05-25 
+- schema: replace `TestRecordHistory` with `form_events` + `record_events`; migrate 90 rows; real FK constraints on both tables ([#298](https://github.com/Jolls/arx-legacy/issues/298))
+- test_records_go: lock/unlock UI for test records with required comment on unlock ([#201](https://github.com/Jolls/arx-legacy/issues/201))
+- test_records_go: write lock/unlock audit events to `record_events` using Windows login ([#200](https://github.com/Jolls/arx-legacy/issues/200))
+
 ## [0.3.40] - 2026-05-25 
 - schema: migrate `FIL.FILPNID` from `VARCHAR` to `INT NOT NULL` with enforced FK to `PN.PNID`; fix `FIL_Test` missing `is_active` DEFAULT in `_test.sql`; correct stale column names in schema docs ([#297](https://github.com/Jolls/arx-legacy/issues/297))
 
