@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.43] - 2026-05-25 
+- parts_master_go: drop unused `is_active` column from `supplier_part`; remove Active column from supplier linked-parts view
+
 ## [0.3.42] - 2026-05-25 
 - parts_master_go: add `status` enum to PO (`pending/placed/complete/cancelled/on_hold`); replace `is_active` checkbox with status dropdown; `is_active` kept in sync as convenience bit ([#300](https://github.com/Jolls/arx-legacy/issues/300))
 

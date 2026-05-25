@@ -211,7 +211,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
-		       sp.lead_time, sp.min_increment, sp.is_active,
+		       sp.lead_time, sp.min_increment,
 		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category
 		FROM %s sp
 		JOIN %s pn ON sp.part_id = pn.PNID
@@ -228,12 +228,11 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		var lk models.SupplierPart
 		var preference, supplierPN, supplierDesc, leadTime sql.NullString
 		var minIncr sql.NullFloat64
-		var isActive sql.NullBool
 		var pnID sql.NullInt64
 		var partNumber, title, revision, category sql.NullString
 		if err := rows.Scan(
 			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
-			&leadTime, &minIncr, &isActive,
+			&leadTime, &minIncr,
 			&pnID, &partNumber, &title, &revision, &category,
 		); err != nil {
 			h.renderError(w, "Error reading linked parts: "+err.Error())
@@ -243,7 +242,6 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		lk.SupplierPN = supplierPN.String
 		lk.SupplierDesc = supplierDesc.String
 		lk.LeadTime = leadTime.String
-		lk.IsActive = isActive.Bool
 		if minIncr.Valid {
 			lk.MinIncrement = &minIncr.Float64
 		}
