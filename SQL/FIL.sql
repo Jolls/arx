@@ -6,11 +6,16 @@
 -- TRIGGER: trg_FIL_part_count fires after INSERT/UPDATE/DELETE and updates PN.PNFILLinks (active rows only).
 --          Do not update PNFILLinks manually. See SQL/triggers.sql.
 
--- Migration (run once on live DB):
---   EXEC sp_rename 'dbo.FIL.FILNotes',      'category', 'COLUMN';
---   EXEC sp_rename 'dbo.FIL_Test.FILNotes',  'category', 'COLUMN';
---   INSERT INTO app_config (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo');
---   INSERT INTO app_config_Test (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo');
+-- Migrations (run once on live DB):
+--   #313 — FILNotes → category rename:
+--     EXEC sp_rename 'dbo.FIL.FILNotes',      'category', 'COLUMN';
+--     EXEC sp_rename 'dbo.FIL_Test.FILNotes',  'category', 'COLUMN';
+--     INSERT INTO app_config (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo');
+--     INSERT INTO app_config_Test (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo');
+--   #297 — FILPNID VARCHAR → INT FK:
+--     ALTER TABLE dbo.FIL ALTER COLUMN FILPNID INT NOT NULL;
+--     ALTER TABLE dbo.FIL ADD CONSTRAINT FK_FIL_FILPNID FOREIGN KEY (FILPNID) REFERENCES dbo.PN(PNID);
+--     ALTER TABLE dbo.FIL_Test ALTER COLUMN FILPNID INT NOT NULL;
 
 IF OBJECT_ID('dbo.FIL', 'U') IS NOT NULL DROP TABLE FIL;
 

@@ -141,8 +141,8 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 
 | Table | PK | Notes |
 |-------|----|-------|
-| `PN` | `PNID` | Parts catalog. `PNStatus`: U/A/D. `PNUser1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). |
-| `FIL` | `FILID` | File/URL attachments. `FILPNID` → `PN.PNID` (VARCHAR FK, not INT yet). `FILFileName` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `category` = free-text document type label; options driven by `app_config.'attachment_categories'`. `order_id` controls sort. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. |
+| `PN` | `PNID` | Parts catalog. `release_status`: U/A/D. `user_field_1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). |
+| `FIL` | `FILID` | File/URL attachments. `FILPNID` → `PN.PNID` (INT FK, enforced). `FILFileName` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `category` = free-text document type label; options driven by `app_config.'attachment_categories'`. `order_id` controls sort. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. |
 | `PL` | — | BOM / parts list. Links a parent part to child parts. |
 | `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `CN.CNID`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
 | `CN` | `CNID` | Contacts, linked to companies. |
