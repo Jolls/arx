@@ -1564,11 +1564,11 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		} else if result != "" || comment != "" {
 			h.execContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
-				  (record_id, test_id, form_id, result, comment, pass_fail,
+				  (record_id, test_id, result, comment, pass_fail,
 				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, updated_at)
-				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,GETDATE())`,
+				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,GETDATE())`,
 				h.cfg.ResultsTable()),
-				recordID, testID, record.FormID,
+				recordID, testID,
 				result, comment, passFail,
 				step.Parameter, step.Specification,
 				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits)
