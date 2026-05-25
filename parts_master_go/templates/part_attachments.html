@@ -16,7 +16,7 @@
                     <th style="width:60px; text-align:center;">Order</th>
                     <th style="width:60px;">Rev</th>
                     <th>File / URL</th>
-                    <th>Notes</th>
+                    <th>Category</th>
                     <th style="width:70px; text-align:center;">Default</th>
                     <th style="width:50px;"></th>
                     <th style="width:50px;"></th>
@@ -44,7 +44,7 @@
                             <span style="font-family:monospace; font-size:0.9em;" title="{{$f}}">{{$f}}</span>
                         {{end}}
                     </td>
-                    <td>{{.FILNotes}}</td>
+                    <td>{{.Category}}</td>
                     <td style="text-align:center;">
                         {{if $isPrimary}}
                             <span style="color:#f5a623; font-size:1.1em;" title="Primary attachment">&#9733;</span>
@@ -91,8 +91,8 @@
                        value="{{.EditingAtt.FILPNRev}}">
             </div>
             <div class="detail-row">
-                <label class="form-label">Notes</label>
-                {{template "notes_select" (notesCtx .AttachmentNotes .EditingAtt.FILNotes "edit_FILNotes")}}
+                <label class="form-label">Category</label>
+                {{template "category_select" (categoryCtx .AttachmentCategories .EditingAtt.Category "edit_category")}}
             </div>
             <div class="detail-row">
                 <label class="form-label">Sort Order</label>
@@ -123,8 +123,8 @@
                     <input type="text" name="FILPNRev" class="form-input" style="max-width:100px;">
                 </div>
                 <div class="detail-row">
-                    <label class="form-label">Notes</label>
-                    {{template "notes_select" (notesCtx .AttachmentNotes "" "add_FILNotes")}}
+                    <label class="form-label">Category</label>
+                    {{template "category_select" (categoryCtx .AttachmentCategories "" "add_category")}}
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Sort Order</label>

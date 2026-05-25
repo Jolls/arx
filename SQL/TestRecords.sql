@@ -174,12 +174,18 @@ CREATE TABLE named_queries (
 
 -- Seed: initial named queries derived from existing spec_nom auto-fill patterns.
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
-  'fil_notes_for_pn',
-  'File attachment notes for a given part number',
-  'SELECT FILNotes FROM FIL WHERE FILPNID = (SELECT PNID FROM PN WHERE part_number = @pn) AND is_active = 1',
+  'fil_category_for_pn',
+  'Attachment categories for a given part number',
+  'SELECT category FROM FIL WHERE FILPNID = (SELECT PNID FROM PN WHERE part_number = @pn) AND is_active = 1',
   'pn', 'list',
   GETDATE()
 );
+-- Migration (run once on live DB):
+--   UPDATE named_queries SET name='fil_category_for_pn', description='Attachment categories for a given part number',
+--          sql='SELECT category FROM FIL WHERE FILPNID = (SELECT PNID FROM PN WHERE part_number = @pn) AND is_active = 1'
+--   WHERE name='fil_notes_for_pn';
+--   UPDATE named_queries SET sql='SELECT TOP 1 f.FILFileName, COALESCE(f.category, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC' WHERE name='pn_primary_attachment';
+--   UPDATE named_queries SET sql='SELECT TOP 1 f.FILFileName, COALESCE(f.category, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.PNID = @pnid AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC' WHERE name='form_primary_attachment';
 
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'parts_matching',
@@ -208,7 +214,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'pn_primary_attachment',
   'Primary attachment for any part number via PN.PNFILIDPrimary; falls back to lowest order_id if no primary set.',
-  'SELECT TOP 1 f.FILFileName, COALESCE(f.FILNotes, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC',
+  'SELECT TOP 1 f.FILFileName, COALESCE(f.category, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC',
   'pn', 'single',
   GETDATE()
 );
@@ -220,7 +226,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'form_primary_attachment',
   'Primary attachment for the form''s own part number via PN.PNFILIDPrimary; falls back to lowest order_id if no primary set.',
-  'SELECT TOP 1 f.FILFileName, COALESCE(f.FILNotes, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.PNID = @pnid AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC',
+  'SELECT TOP 1 f.FILFileName, COALESCE(f.category, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.PNID = @pnid AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC',
   'pnid', 'single',
   GETDATE()
 );

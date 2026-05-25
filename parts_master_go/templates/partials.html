@@ -1,4 +1,4 @@
-{{define "notes_select"}}
+{{define "category_select"}}
 <div style="display:flex; flex-direction:column; gap:6px; flex:1;">
     <select class="form-select" data-notes-sel="{{.InputID}}"
             onchange="notesSelChange(this, '{{.InputID}}')">
@@ -8,8 +8,8 @@
         {{end}}
         <option value="__custom__"{{if and .Current (not (inList .Opts .Current))}} selected{{end}}>Custom...</option>
     </select>
-    <input type="text" id="{{.InputID}}" name="FILNotes" class="form-input"
-           placeholder="Custom note" value="{{.Current}}"
+    <input type="text" id="{{.InputID}}" name="category" class="form-input"
+           placeholder="Custom category" value="{{.Current}}"
            style="{{if or (not .Current) (inList .Opts .Current)}}display:none;{{end}}">
 </div>
 {{end}}

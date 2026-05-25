@@ -52,7 +52,8 @@ BEGIN TRY
     SELECT * INTO logs_Test              FROM logs;
 
     -- Constraints not copied by SELECT * INTO — add manually
-    ALTER TABLE dbo.PO_Test    ADD CONSTRAINT UQ_PO_Test_number                UNIQUE (number);
+    ALTER TABLE dbo.PO_Test         ADD CONSTRAINT UQ_PO_Test_number                UNIQUE (number);
+    ALTER TABLE dbo.app_config_Test ADD CONSTRAINT DF_app_config_Test_updated_at    DEFAULT GETDATE() FOR updated_at;
     -- No UNIQUE on PL_Test (PLListID, PLItem) — item numbers are user-assigned and not enforced unique.
     CREATE UNIQUE INDEX UQ_price_Test_active_combo ON dbo.price_Test (part_id, supplier_id, pack_size) WHERE is_active = 1;
     ALTER TABLE dbo.PN_Test    ADD CONSTRAINT CK_PN_Test_category              CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));

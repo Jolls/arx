@@ -220,22 +220,27 @@
     </div>
     </form>
 
-    <!-- ── Attachment Note Types (read-only) ─────────────────────────── -->
+    <!-- ── Application Configuration ────────────────────────────────── -->
+    {{if .Connected}}
     <div class="detail-section" style="margin-top:36px;">
         <h3>Application Configuration</h3>
-        <p style="margin:8px 0 16px; color:#888; font-size:0.85em;">
-            Read-only &mdash; edit <code>config/settings.yml</code> to change these values.
-        </p>
-        <div>
-            <strong style="color:var(--accent-1); display:block; margin-bottom:8px;">Attachment Note Types</strong>
-            <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                {{range .Settings.AttachmentNotes}}
-                <span style="background:#f0f0f0; border:1px solid #ddd; border-radius:3px;
-                             padding:3px 10px; font-size:0.88em;">{{.}}</span>
-                {{end}}
+        <form method="post" action="/settings">
+            <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+            <div class="detail-row">
+                <label class="form-label" for="attachment_categories">Attachment Categories</label>
+                <div style="flex:1;">
+                    <input type="text" id="attachment_categories" name="attachment_categories"
+                           class="form-input" value="{{.AttachmentCategories}}"
+                           placeholder="Datasheet,Drawing,Certificate,ECO,Photo,Compliance,Other">
+                    <p style="margin:4px 0 0; color:#888; font-size:0.82em;">Comma-separated list shown in the attachment Category dropdown.</p>
+                </div>
             </div>
-        </div>
+            <div class="form-actions" style="margin-top:12px;">
+                <button type="submit" class="btn-primary">Save Categories</button>
+            </div>
+        </form>
     </div>
+    {{end}}
 
     <!-- ── Release Notes ──────────────────────────────────────────────── -->
     {{if .ReleaseNotes}}

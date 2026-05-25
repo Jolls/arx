@@ -180,11 +180,11 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		var att models.Attachment
 		var fname, fnotes, frev sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT FILID, FILFileName, FILNotes, FILPNRev FROM %s WHERE FILID = @p1`,
+			`SELECT FILID, FILFileName, category, FILPNRev FROM %s WHERE FILID = @p1`,
 			h.cfg.AttachmentsTable(),
 		), p.PNFILIDPrimary).Scan(&att.FILID, &fname, &fnotes, &frev); err == nil {
 			att.FILFileName = fname.String
-			att.FILNotes = fnotes.String
+			att.Category = fnotes.String
 			att.FILPNRev = frev.String
 			primaryAtt = &att
 		}
@@ -692,7 +692,7 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT FILID, FILFileName, FILNotes, FILPNRev, order_id
+		SELECT FILID, FILFileName, category, FILPNRev, order_id
 		FROM %s WHERE FILPNID = @p1 AND is_active = 1 ORDER BY order_id, FILID
 	`, h.cfg.AttachmentsTable()), id)
 	if err != nil {
@@ -710,7 +710,7 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		att.FILFileName = fname.String
-		att.FILNotes = fnotes.String
+		att.Category = fnotes.String
 		att.FILPNRev = frev.String
 		if orderID.Valid {
 			v := int(orderID.Int64)
@@ -727,13 +727,14 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	cats := splitCSV(h.appConfigGet(r.Context(), "attachment_categories"))
 	h.render(w, "part_attachments.html", map[string]any{
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r),
-		"AttachmentNotes": h.cfg.Settings.AttachmentNotes,
-		"TestMode": h.cfg.TestMode,
+		"CSRFToken":             h.csrfToken(w, r),
+		"AttachmentCategories": cats,
+		"TestMode":              h.cfg.TestMode,
 	})
 }
 
@@ -750,7 +751,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`INSERT INTO %s (FILPNID, FILFileName, FILPNRev, FILNotes, order_id) VALUES (@p1,@p2,@p3,@p4,@p5)`,
+		`INSERT INTO %s (FILPNID, FILFileName, FILPNRev, category, order_id) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 		h.cfg.AttachmentsTable(),
 	), id, fs(r, "FILFileName"), fs(r, "FILPNRev"), fs(r, "FILNotes"), oID); err != nil {
 		h.renderError(w, "Error adding attachment: "+err.Error())
@@ -773,9 +774,9 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	attIDInt, _ := strconv.Atoi(attID)
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET FILPNRev=@p1, FILNotes=@p2, order_id=@p3 WHERE FILID=@p4`,
+		`UPDATE %s SET FILPNRev=@p1, category=@p2, order_id=@p3 WHERE FILID=@p4`,
 		h.cfg.AttachmentsTable(),
-	), fs(r, "FILPNRev"), fs(r, "FILNotes"), oID, attIDInt); err != nil {
+	), fs(r, "FILPNRev"), fs(r, "category"), oID, attIDInt); err != nil {
 		h.renderError(w, "Error updating attachment: "+err.Error())
 		return
 	}

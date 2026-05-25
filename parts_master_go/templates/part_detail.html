@@ -41,7 +41,7 @@
             <div class="part-status-label">Primary Attachment</div>
             {{if .PrimaryAtt}}
                 {{$f := .PrimaryAtt.FILFileName}}
-                {{$n := .PrimaryAtt.FILNotes}}
+                {{$n := .PrimaryAtt.Category}}
                 {{if isHTTPURL $f}}
                     <a href="{{$f}}" target="_blank" rel="noopener noreferrer" class="part-status-value part-status-link">{{attachLabel $f $n}}</a>
                 {{else if isLocalDir $f}}

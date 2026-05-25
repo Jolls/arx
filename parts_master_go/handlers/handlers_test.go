@@ -45,16 +45,16 @@ func TestFormatFileSize(t *testing.T) {
 
 func TestAttachLabel(t *testing.T) {
 	cases := []struct {
-		filename, notes, want string
+		filename, category, want string
 	}{
-		{"foo/bar/doc.pdf", "My Notes", "My Notes"},   // notes win
-		{"foo/bar/doc.pdf", "", "doc.pdf"},             // no notes → basename
-		{"foo\\bar\\doc.pdf", "", "doc.pdf"},           // backslash path
-		{"doc.pdf", "", "doc.pdf"},                     // no directory
+		{"foo/bar/doc.pdf", "Drawing", "Drawing"},     // category wins
+		{"foo/bar/doc.pdf", "", "doc.pdf"},            // no category → basename
+		{"foo\\bar\\doc.pdf", "", "doc.pdf"},          // backslash path
+		{"doc.pdf", "", "doc.pdf"},                    // no directory
 	}
 	for _, c := range cases {
-		if got := attachLabel(c.filename, c.notes); got != c.want {
-			t.Errorf("attachLabel(%q, %q) = %q, want %q", c.filename, c.notes, got, c.want)
+		if got := attachLabel(c.filename, c.category); got != c.want {
+			t.Errorf("attachLabel(%q, %q) = %q, want %q", c.filename, c.category, got, c.want)
 		}
 	}
 }

@@ -106,6 +106,29 @@ func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 	}
 }
 
+// appConfigGet reads a single key from app_config. Returns "" if not found or DB is nil.
+func (h *Handler) appConfigGet(ctx context.Context, key string) string {
+	if h.db == nil {
+		return ""
+	}
+	var val string
+	h.queryRowContext(ctx,
+		`SELECT setting_value FROM `+h.cfg.AppConfigTable()+` WHERE setting_key = @p1`, key,
+	).Scan(&val)
+	return val
+}
+
+// appConfigSet upserts a key/value pair in app_config.
+func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
+	_, err := h.execContext(ctx, `
+		MERGE INTO `+h.cfg.AppConfigTable()+` AS t
+		USING (SELECT @p1 AS k, @p2 AS v) AS s ON t.setting_key = s.k
+		WHEN MATCHED THEN UPDATE SET t.setting_value = s.v, t.updated_at = GETDATE()
+		WHEN NOT MATCHED THEN INSERT (setting_key, setting_value) VALUES (s.k, s.v)`,
+		key, value)
+	return err
+}
+
 // CloseDB closes the underlying database connection if one is open.
 func (h *Handler) CloseDB() {
 	if h.db != nil {
@@ -279,7 +302,7 @@ func templateFuncs() template.FuncMap {
 		"deref":          func(f *float64) float64 { if f == nil { return 0 }; return *f },
 		"derefInt":       func(i *int) int { if i == nil { return 0 }; return *i },
 		"packSizeStr":    func(f *float64) string { if f == nil { return "—" }; return fmt.Sprintf("%g", *f) },
-		"notesCtx": func(opts []string, current, inputID string) map[string]any {
+		"categoryCtx": func(opts []string, current, inputID string) map[string]any {
 			return map[string]any{"Opts": opts, "Current": current, "InputID": inputID}
 		},
 		"inList": func(list []string, val string) bool {
@@ -364,9 +387,20 @@ func formatFileSize(bytes int64) string {
 	}
 }
 
-func attachLabel(filename, notes string) string {
-	if notes != "" {
-		return notes
+// splitCSV splits a comma-separated string into trimmed, non-empty tokens.
+func splitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func attachLabel(filename, category string) string {
+	if category != "" {
+		return category
 	}
 	return urlutil.FileBaseName(filename)
 }
