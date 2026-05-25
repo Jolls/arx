@@ -7,6 +7,7 @@ CREATE TABLE app_config (
 );
 
 INSERT INTO app_config (setting_key, setting_value) VALUES ('schema_version', '1');
+INSERT INTO app_config (setting_key, setting_value) VALUES ('attachment_categories', 'Datasheet,Drawing,Certificate,ECO,Photo,Compliance,Other');
 
 -- Test variant
 IF OBJECT_ID('dbo.app_config_Test', 'U') IS NOT NULL DROP TABLE dbo.app_config_Test;

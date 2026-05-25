@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"gopkg.in/yaml.v3"
 )
 
 // AppVersion is set at build time via -ldflags from the top entry in CHANGELOG.md.
@@ -36,11 +35,10 @@ type Config struct {
 }
 
 type Settings struct {
-	AttachmentNotes []string `yaml:"attachment_notes"`
-	PODefaults      struct {
-		ContactID  int `yaml:"contact_id"`
-		ReceiverID int `yaml:"receiver_id"`
-	} `yaml:"po_defaults"`
+	PODefaults struct {
+		ContactID  int
+		ReceiverID int
+	}
 }
 
 func Load() *Config {
@@ -112,12 +110,6 @@ func Load() *Config {
 		}
 		if local.TestMode != nil {
 			cfg.TestMode = *local.TestMode
-		}
-	}
-
-	if data, err := os.ReadFile("config/settings.yml"); err == nil {
-		if err := yaml.Unmarshal(data, &cfg.Settings); err != nil {
-			log.Printf("warning: could not parse settings.yml: %v", err)
 		}
 	}
 

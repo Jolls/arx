@@ -90,6 +90,6 @@ type Attachment struct {
 	FILPNID     int
 	FILFileName string
 	FILPNRev    string
-	FILNotes    string
+	Category    string
 	OrderID     *int
 }

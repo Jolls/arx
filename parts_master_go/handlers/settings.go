@@ -66,23 +66,23 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	}
 
 	data := map[string]any{
-		"Connected":           h.db != nil,
-		"DBServer":            h.cfg.DBServer,
-		"DBName":              h.cfg.DBName,
-		"DBUser":              h.cfg.DBUser,
-		"DocControlRoot":      h.cfg.DocControlRoot,
-		"POFolderRoot":        h.cfg.POFolderRoot,
-		"SupplierFilesRoot":   h.cfg.SupplierFilesRoot,
-		"TestMode":            h.cfg.TestMode,
-		"DebugMode":           h.cfg.DebugMode,
-		"Settings":            h.cfg.Settings,
-		"PODefaultContactID":  h.cfg.Settings.PODefaults.ContactID,
-		"PODefaultReceiverID": h.cfg.Settings.PODefaults.ReceiverID,
-		"Contacts":            contacts,
-		"Suppliers":           suppliers,
-		"ReleaseNotes":        h.releaseNotes,
-		"ActiveTab":           "settings",
-		"CsrfToken":           h.csrfToken(w, r),
+		"Connected":              h.db != nil,
+		"DBServer":               h.cfg.DBServer,
+		"DBName":                 h.cfg.DBName,
+		"DBUser":                 h.cfg.DBUser,
+		"DocControlRoot":         h.cfg.DocControlRoot,
+		"POFolderRoot":           h.cfg.POFolderRoot,
+		"SupplierFilesRoot":      h.cfg.SupplierFilesRoot,
+		"TestMode":               h.cfg.TestMode,
+		"DebugMode":              h.cfg.DebugMode,
+		"PODefaultContactID":     h.cfg.Settings.PODefaults.ContactID,
+		"PODefaultReceiverID":    h.cfg.Settings.PODefaults.ReceiverID,
+		"AttachmentCategories":   h.appConfigGet(r.Context(), "attachment_categories"),
+		"Contacts":               contacts,
+		"Suppliers":              suppliers,
+		"ReleaseNotes":           h.releaseNotes,
+		"ActiveTab":              "settings",
+		"CsrfToken":              h.csrfToken(w, r),
 	}
 	for k, v := range extra {
 		data[k] = v
@@ -152,6 +152,13 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	local.PODefaultReceiverID = &receiverID
 	h.cfg.Settings.PODefaults.ContactID = contactID
 	h.cfg.Settings.PODefaults.ReceiverID = receiverID
+
+	if h.db != nil {
+		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")
+		if err := h.appConfigSet(r.Context(), "attachment_categories", cats); err != nil {
+			log.Printf("warning: could not save attachment_categories: %v", err)
+		}
+	}
 
 	var connErr string
 	if password != "" {
