@@ -117,7 +117,6 @@ CREATE TABLE TestRecordHistory (
 -- TestResults: One row per test step per test record.
 -- record_id FKs to TestRecords.ID. test_id FKs to test_definition.id.
 -- parameter/specification/spec_* are denormalized snapshots from test_definition at record creation.
--- form_id is denormalized (derivable via TestRecords.form_id). TODO: evaluate removing.
 -- pass_fail: 1 = PASS, 0 = FAIL, NULL = not yet evaluated.
 
 IF OBJECT_ID('dbo.TestResults', 'U') IS NOT NULL DROP TABLE TestResults;
@@ -129,7 +128,6 @@ CREATE TABLE TestResults (
   ID             INT          PRIMARY KEY IDENTITY,
   record_id      INT          NOT NULL,             -- FK to TestRecords.ID.
   test_id        INT          NOT NULL,             -- FK to test_definition.id.
-  form_id        INT,                               -- Denormalized from TestRecords. TODO: evaluate removing.
   pass_fail      BIT,                               -- 1 = PASS, 0 = FAIL, NULL = not evaluated.
   result         VARCHAR(255),
   comment        VARCHAR(255),
