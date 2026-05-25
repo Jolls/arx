@@ -11,12 +11,15 @@ CREATE TABLE Forms (
   test_order    VARCHAR(MAX),                    -- Comma-separated test_definition.id values in display order.
   locked        BIT          NOT NULL CONSTRAINT DF_Forms_locked DEFAULT 0, -- 1 = locked from structural changes.
   active        BIT          NOT NULL CONSTRAINT DF_Forms_active DEFAULT 1, -- 0 = archived; hidden from UI.
-  record_types  VARCHAR(500)                     -- comma-separated list of allowed record types (e.g. 'New Release,Re-Test,Upgrade'). NULL = free-text.
+  record_types      VARCHAR(500),                -- comma-separated list of allowed record types (e.g. 'New Release,Re-Test,Upgrade'). NULL = free-text.
+  instrument_types  VARCHAR(500)                 -- comma-separated instrument types valid for this form (e.g. 'ModelA,ModelB'). Drives the Instrument Type dropdown on records. NULL = free-text.
 );
 
 -- Migration (run once on live DB; _test.sql SELECT * INTO picks it up automatically):
 -- ALTER TABLE Forms ADD record_types VARCHAR(500) NULL;
 -- ALTER TABLE Forms_Test ADD record_types VARCHAR(500) NULL;
+-- ALTER TABLE Forms ADD instrument_types VARCHAR(500) NULL;
+-- ALTER TABLE Forms_Test ADD instrument_types VARCHAR(500) NULL;
 
 
 -- test_definition: Individual test step / parameter definitions within a form.

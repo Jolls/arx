@@ -1155,12 +1155,12 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var form models.TestForm
-	var recordTypes sql.NullString
+	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.record_types
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.record_types, f.instrument_types
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes, &instrumentTypes)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1170,6 +1170,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.RecordTypes = recordTypes.String
+	form.InstrumentTypes = instrumentTypes.String
 
 	// BOM lookup: parts listed under the form's own part number in PL.
 	var bomParts []BOMPart
@@ -1317,15 +1318,17 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var form models.TestForm
+	var editInstrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.instrument_types
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &editInstrumentTypes)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	form.InstrumentTypes = editInstrumentTypes.String
 
 	editStepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
