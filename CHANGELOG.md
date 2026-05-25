@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.42] - 2026-05-25 
+- parts_master_go: add `status` enum to PO (`pending/placed/complete/cancelled/on_hold`); replace `is_active` checkbox with status dropdown; `is_active` kept in sync as convenience bit ([#300](https://github.com/Jolls/arx-legacy/issues/300))
+
 ## [0.3.41] - 2026-05-25 
 - schema: replace `TestRecordHistory` with `form_events` + `record_events`; migrate 90 rows; real FK constraints on both tables ([#298](https://github.com/Jolls/arx-legacy/issues/298))
 - test_records_go: lock/unlock UI for test records with required comment on unlock ([#201](https://github.com/Jolls/arx-legacy/issues/201))

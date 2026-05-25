@@ -36,8 +36,12 @@
                 <tr>
                     <td><a href="/po/{{.Number}}" class="part-number-link">{{.Number}}</a></td>
                     <td>
-                        {{if .IsActive}}<span class="badge badge-active">Open</span>
-                        {{else}}<span class="badge badge-inactive">Closed</span>{{end}}
+                        {{if eq .Status "pending"  }}<span class="badge badge-info">Pending</span>
+                        {{else if eq .Status "placed"   }}<span class="badge badge-active">Placed</span>
+                        {{else if eq .Status "on_hold"  }}<span class="badge badge-active">On Hold</span>
+                        {{else if eq .Status "complete" }}<span class="badge badge-neutral">Complete</span>
+                        {{else if eq .Status "cancelled"}}<span class="badge badge-inactive">Cancelled</span>
+                        {{else}}<span class="badge badge-neutral">{{.Status}}</span>{{end}}
                     </td>
                     <td>
                         {{if .SupplierID}}<a href="/supplier/{{derefInt .SupplierID}}" class="part-number-link">{{.SupplierName}}</a>

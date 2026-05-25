@@ -143,6 +143,8 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .badge          { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 500; }
 .badge-active   { background: #d4edda; color: #155724; }
 .badge-inactive { background: #f8d7da; color: #721c24; }
+.badge-neutral  { background: #e9ecef; color: #495057; }
+.badge-info     { background: #cfe2ff; color: #084298; }
 .status-U       { background: #cfe2ff; color: #084298; }
 .status-A       { background: #d1e7dd; color: #0f5132; }
 .status-D       { background: #f8d7da; color: #721c24; }

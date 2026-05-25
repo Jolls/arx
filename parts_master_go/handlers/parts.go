@@ -824,7 +824,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT po.number, po.supplier_name, po.date_ordered, po.date_closed, po.is_active,
+		SELECT po.number, po.supplier_name, po.date_ordered, po.date_closed, po.status,
 		       pol.POLItem, pol.POLQty, pol.POLCost, pol.POLDesc, pol.VendorPN
 		FROM %s pol
 		JOIN %s po ON pol.POLPOID = po.ID
@@ -839,11 +839,10 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	var items []models.PurchaseOrderLine
 	for rows.Next() {
 		var item models.PurchaseOrderLine
-		var poNum, supplierName, desc, vendorPN sql.NullString
+		var poNum, supplierName, desc, vendorPN, status sql.NullString
 		var dateOrdered, dateClosed sql.NullTime
-		var isActive sql.NullBool
 		if err := rows.Scan(
-			&poNum, &supplierName, &dateOrdered, &dateClosed, &isActive,
+			&poNum, &supplierName, &dateOrdered, &dateClosed, &status,
 			&item.POLItem, &item.POLQty, &item.POLCost, &desc, &vendorPN,
 		); err != nil {
 			h.renderError(w, "Error reading orders: "+err.Error())
@@ -851,7 +850,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		}
 		item.PONumber = poNum.String
 		item.SupplierName = supplierName.String
-		item.IsActive = isActive.Bool
+		item.Status = status.String
 		item.POLDesc = desc.String
 		item.VendorPN = vendorPN.String
 		if dateOrdered.Valid {

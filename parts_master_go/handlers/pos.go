@@ -162,7 +162,7 @@ func parseFormFloat(s string) interface{} {
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT number, is_active, supplier_id, supplier_name,
+		SELECT number, status, supplier_id, supplier_name,
 		       date_ordered, date_closed, orderer, total_cost
 		FROM %s ORDER BY number DESC
 	`, h.cfg.POTable()))
@@ -175,16 +175,15 @@ func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var po models.PurchaseOrder
 		var supplierID sql.NullInt64
-		var supplierName, orderer sql.NullString
-		var isActive sql.NullBool
+		var supplierName, orderer, status sql.NullString
 		var dateOrdered, dateClosed sql.NullTime
 		var totalCost sql.NullFloat64
-		if err := rows.Scan(&po.Number, &isActive, &supplierID, &supplierName,
+		if err := rows.Scan(&po.Number, &status, &supplierID, &supplierName,
 			&dateOrdered, &dateClosed, &orderer, &totalCost); err != nil {
 			h.renderError(w, "Error reading POs: "+err.Error())
 			return
 		}
-		po.IsActive = isActive.Bool
+		po.Status = status.String
 		po.SupplierName = supplierName.String
 		po.Orderer = orderer.String
 		if supplierID.Valid {
@@ -234,7 +233,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────
 
 func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
-	po := models.PurchaseOrder{IsActive: true}
+	po := models.PurchaseOrder{Status: "pending", IsActive: true}
 
 	// Apply PO defaults from settings
 	if cid := h.cfg.Settings.PODefaults.ContactID; cid > 0 {
@@ -316,9 +315,10 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	// OUTPUT INSERTED.ID is blocked on tables with triggers; combine INSERT + SCOPE_IDENTITY()
 	// in one batch so they share the same scope.
+	newStatus := fs(r, "status")
 	var newID int
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (number, is_active, orderer, account_id,
+		INSERT INTO %s (number, status, is_active, orderer, account_id,
 		  supplier_id, supplier_name, supplier_contact, supplier_email,
 		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
 		  supplier_country, supplier_phone_number, supplier_fax_number,
@@ -327,12 +327,12 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		  receiver_country, receiver_phone, receiver_fax,
 		  tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
 		  date_requested, date_closed, date_modified, total_cost)
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,
-		        @p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,
-		        @p27,@p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36);
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,
+		        @p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,@p27,
+		        @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37);
 		SELECT CAST(SCOPE_IDENTITY() AS INT)
 	`, h.cfg.POTable()),
-		newNumber, r.FormValue("is_active") == "1", fs(r, "orderer"), fs(r, "account_id"),
+		newNumber, newStatus, statusIsActive(newStatus), fs(r, "orderer"), fs(r, "account_id"),
 		nullableInt(fs(r, "supplier_id")), fs(r, "supplier_name"), fs(r, "supplier_contact"), fs(r, "supplier_email"),
 		fs(r, "supplier_address"), fs(r, "supplier_city"), fs(r, "supplier_state"), fs(r, "supplier_zipcode"),
 		fs(r, "supplier_country"), fs(r, "supplier_phone_number"), fs(r, "supplier_fax_number"),
@@ -512,22 +512,23 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	misc, _ := strconv.ParseFloat(fs(r, "misc_cost"), 64)
 	totalCost := lineSum + tax + ship + misc
 
+	updStatus := fs(r, "status")
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  is_active=@p1, orderer=@p2, account_id=@p3,
-		  supplier_id=@p4, supplier_name=@p5, supplier_contact=@p6, supplier_email=@p7,
-		  supplier_address=@p8, supplier_city=@p9, supplier_state=@p10, supplier_zipcode=@p11,
-		  supplier_country=@p12, supplier_phone_number=@p13, supplier_fax_number=@p14,
-		  receiver_id=@p15, receiver_name=@p16, receiver_contact=@p17, receiver_email=@p18,
-		  receiver_address=@p19, receiver_city=@p20, receiver_state=@p21, receiver_zipcode=@p22,
-		  receiver_country=@p23, receiver_phone=@p24, receiver_fax=@p25,
-		  tax1=@p26, shipping_cost=@p27, misc_cost=@p28,
-		  notes=@p29, internal_notes=@p30,
-		  date_ordered=@p31, date_requested=@p32, date_closed=@p33, date_printed=@p34,
-		  date_modified=@p35, total_cost=@p36
-		WHERE number=@p37
+		  status=@p1, is_active=@p2, orderer=@p3, account_id=@p4,
+		  supplier_id=@p5, supplier_name=@p6, supplier_contact=@p7, supplier_email=@p8,
+		  supplier_address=@p9, supplier_city=@p10, supplier_state=@p11, supplier_zipcode=@p12,
+		  supplier_country=@p13, supplier_phone_number=@p14, supplier_fax_number=@p15,
+		  receiver_id=@p16, receiver_name=@p17, receiver_contact=@p18, receiver_email=@p19,
+		  receiver_address=@p20, receiver_city=@p21, receiver_state=@p22, receiver_zipcode=@p23,
+		  receiver_country=@p24, receiver_phone=@p25, receiver_fax=@p26,
+		  tax1=@p27, shipping_cost=@p28, misc_cost=@p29,
+		  notes=@p30, internal_notes=@p31,
+		  date_ordered=@p32, date_requested=@p33, date_closed=@p34, date_printed=@p35,
+		  date_modified=@p36, total_cost=@p37
+		WHERE number=@p38
 	`, h.cfg.POTable()),
-		r.FormValue("is_active") == "1", fs(r, "orderer"), fs(r, "account_id"),
+		updStatus, statusIsActive(updStatus), fs(r, "orderer"), fs(r, "account_id"),
 		nullableInt(fs(r, "supplier_id")), fs(r, "supplier_name"), fs(r, "supplier_contact"), fs(r, "supplier_email"),
 		fs(r, "supplier_address"), fs(r, "supplier_city"), fs(r, "supplier_state"), fs(r, "supplier_zipcode"),
 		fs(r, "supplier_country"), fs(r, "supplier_phone_number"), fs(r, "supplier_fax_number"),
@@ -566,6 +567,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 	source.DateRequested = nil
 	source.DateClosed = nil
 	source.TotalCost = nil
+	source.Status = "pending"
 	source.IsActive = true
 
 	supID := 0
@@ -829,6 +831,12 @@ func (h *Handler) POFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
+// statusIsActive returns true for statuses that represent an open/in-progress PO.
+// is_active is kept in sync with this value; status is authoritative.
+func statusIsActive(status string) bool {
+	return status == "pending" || status == "placed" || status == "on_hold"
+}
+
 // ── shared helpers ───────────────────────────────────────────────────────────
 
 func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (models.PurchaseOrder, bool) {
@@ -836,7 +844,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 	var (
 		isActive                                        sql.NullBool
 		supplierID, receiverID                          sql.NullInt64
-		number, orderer, accountID                      sql.NullString
+		number, orderer, accountID, status              sql.NullString
 		supName, supContact, supEmail                   sql.NullString
 		supAddr, supCity, supState, supZip, supCountry  sql.NullString
 		supPhone, supFax                                sql.NullString
@@ -848,7 +856,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		dateOrdered, dateRequested, dateClosed, datePrinted, dateMod sql.NullTime
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, number, is_active, orderer, account_id,
+		SELECT ID, number, status, is_active, orderer, account_id,
 		       supplier_id, supplier_name, supplier_contact, supplier_email,
 		       supplier_address, supplier_city, supplier_state, supplier_zipcode, supplier_country,
 		       supplier_phone_number, supplier_fax_number,
@@ -860,7 +868,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		       date_ordered, date_requested, date_closed, date_printed, date_modified
 		FROM %s WHERE number = @p1
 	`, h.cfg.POTable()), num).Scan(
-		&po.ID, &number, &isActive, &orderer, &accountID,
+		&po.ID, &number, &status, &isActive, &orderer, &accountID,
 		&supplierID, &supName, &supContact, &supEmail,
 		&supAddr, &supCity, &supState, &supZip, &supCountry, &supPhone, &supFax,
 		&receiverID, &recName, &recContact, &recEmail,
@@ -878,6 +886,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		return po, false
 	}
 	po.Number = number.String
+	po.Status = status.String
 	po.IsActive = isActive.Bool
 	po.Orderer = orderer.String
 	po.AccountID = accountID.String
