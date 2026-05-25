@@ -368,6 +368,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		"Form":        form,
 		"Steps":       steps,
 		"HistPoints":  histPoints,
+		"CSRFToken":   h.csrfToken(w, r),
 		"TestMode":    h.cfg.TestMode,
 	})
 }
@@ -1514,6 +1515,82 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
+}
+
+// LockForm — POST /forms/{id}/lock
+// Sets locked=1 on the form and writes a 'locked' event to form_events.
+func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !h.verifyCsrf(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	username := os.Getenv("USERNAME")
+
+	res, err := h.execContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET locked=1 WHERE ID=@p1 AND locked=0",
+		h.cfg.FormsTable()), formID)
+	if err != nil {
+		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		h.execContext(r.Context(), fmt.Sprintf(
+			"INSERT INTO %s (form_id, event_type, username, event_date) VALUES (@p1, 'locked', @p2, GETDATE())",
+			h.cfg.FormEventsTable()), formID, username)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
+}
+
+// UnlockForm — POST /forms/{id}/unlock
+// Requires a comment, sets locked=0, and writes an 'unlocked' event to form_events.
+func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !h.verifyCsrf(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+
+	comment := strings.TrimSpace(r.FormValue("comment"))
+	if comment == "" {
+		http.Error(w, "a comment is required to unlock a form", http.StatusBadRequest)
+		return
+	}
+
+	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	username := os.Getenv("USERNAME")
+
+	res, err := h.execContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET locked=0 WHERE ID=@p1 AND locked=1",
+		h.cfg.FormsTable()), formID)
+	if err != nil {
+		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		h.execContext(r.Context(), fmt.Sprintf(
+			"INSERT INTO %s (form_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
+			h.cfg.FormEventsTable()), formID, username, comment)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
 }
 
 // SaveResults â€" POST /records/{id}/edit

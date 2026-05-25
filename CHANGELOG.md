@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.44] - 2026-05-25 
+- test_records_go: implement Form lock/unlock with audit trail written to `form_events`; require comment on unlock ([#200](https://github.com/Jolls/arx-legacy/issues/200))
+
 ## [0.3.43] - 2026-05-25 
 - parts_master_go: drop unused `is_active` column from `supplier_part`; remove Active column from supplier linked-parts view
 
