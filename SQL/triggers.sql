@@ -1,10 +1,16 @@
--- Triggers that keep denormalized company counts current.
--- SUNumOfLNKs: total supplier_part rows where supplier_id = company.id.
--- SUNumOfPOs:  total PO rows where supplier_id = company.id.
+-- Triggers that maintain denormalized counts on company and PN.
+--   company.SUNumOfLNKs — active supplier_part rows for a supplier
+--   company.SUNumOfPOs  — PO rows for a supplier
+--   PN.PNFILLinks       — active FIL attachment rows for a part
+--   PN.PNPOLinks        — POL line-item rows for a part
+--
+-- Each trigger recomputes a full COUNT(*) from live data (not increment/decrement),
+-- so any drift is self-correcting on the next write to an affected row.
+-- These columns are display-only; they are never used in WHERE clauses or business logic.
 --
 -- Run once to install. Safe to re-run (CREATE OR ALTER).
--- After installing, run the recalibration block at the bottom once
--- to fix any counts that drifted before triggers existed.
+-- The recalibration block at the bottom corrects any counts that drifted before
+-- triggers were installed; safe to re-run at any time if drift is suspected.
 --
 -- _Test table equivalents are created by _test.sql.
 
