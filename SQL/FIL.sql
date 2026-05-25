@@ -9,8 +9,8 @@
 -- Migration (run once on live DB):
 --   EXEC sp_rename 'dbo.FIL.FILNotes',      'category', 'COLUMN';
 --   EXEC sp_rename 'dbo.FIL_Test.FILNotes',  'category', 'COLUMN';
---   INSERT INTO app_config (setting_key, setting_value) VALUES ('attachment_categories', 'Datasheet,Drawing,Certificate,ECO,Photo,Compliance,Other');
---   INSERT INTO app_config_Test (setting_key, setting_value) VALUES ('attachment_categories', 'Datasheet,Drawing,Certificate,ECO,Photo,Compliance,Other');
+--   INSERT INTO app_config (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo');
+--   INSERT INTO app_config_Test (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo');
 
 IF OBJECT_ID('dbo.FIL', 'U') IS NOT NULL DROP TABLE FIL;
 
