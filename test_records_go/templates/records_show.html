@@ -33,11 +33,19 @@
       {{.Record.SerialNumberPN}}
       &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
       {{if .Record.Locked}}
-      <span class="badge bg-secondary ms-1"><i class="bi bi-lock-fill"></i> Locked</span>
+      <button class="btn btn-sm btn-outline-secondary ms-2" data-bs-toggle="modal" data-bs-target="#unlockModal">
+        <i class="bi bi-unlock"></i> Unlock
+      </button>
       {{else}}
       <a href="/records/{{.Record.ID}}/edit" class="btn btn-sm btn-primary ms-2">
         <i class="bi bi-pencil"></i> Edit
       </a>
+      <form method="POST" action="/records/{{.Record.ID}}/lock" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn-sm btn-outline-secondary ms-1">
+          <i class="bi bi-lock"></i> Lock
+        </button>
+      </form>
       {{end}}
       <a href="/records/{{.Record.ID}}/print" target="_blank" class="btn btn-sm btn-outline-secondary ms-2">
         <i class="bi bi-printer"></i> Print
@@ -187,6 +195,34 @@
     </div>
   </div>
   {{end}}
+</div>
+{{end}}
+
+{{if .Record.Locked}}
+<div class="modal fade" id="unlockModal" tabindex="-1" aria-labelledby="unlockModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="/records/{{.Record.ID}}/unlock">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="unlockModalLabel"><i class="bi bi-unlock"></i> Unlock Record</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">SN: {{.Record.SerialNumber}} &mdash; {{.Record.SerialNumberPN}}</p>
+          <div class="mb-3">
+            <label for="unlockComment" class="form-label">Reason for unlocking <span class="text-danger">*</span></label>
+            <textarea class="form-control" id="unlockComment" name="comment" rows="3" required
+                      placeholder="Describe why this record is being unlocked..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning"><i class="bi bi-unlock"></i> Unlock</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 {{end}}
 {{end}}
