@@ -5,18 +5,18 @@ erDiagram
 
     PN {
         int     PNID            PK
-        varchar PNPartNumber    "UNIQUE"
-        varchar PNType
+        varchar part_number     "UNIQUE"
+        varchar category
         varchar revision
-        varchar PNTitle
-        varchar PNDetail
-        varchar PNStatus        "U/A/D"
+        varchar title
+        varchar detail
+        varchar release_status  "U/A/D"
         varchar PNReqBy
         int     PNFILIDPrimary  FK
         int     price_id        FK
         int     PNFILLinks
         int     PNPOLinks
-        bit     PNActive
+        bit     active
     }
 
     supplier {
@@ -86,10 +86,10 @@ erDiagram
 
     FIL {
         int     FILID           PK
-        varchar FILPNID         FK
+        int     FILPNID         FK
         int     order_id        FK
         varchar FILFileName
-        varchar FILNotes
+        varchar category
         varchar FILPNRev
     }
 
@@ -209,7 +209,7 @@ erDiagram
 
 ## Notes
 
-- **FIL.FILPNID** stores `PNPartNumber` (varchar), not `PNID` — the join is on the part number string, not the integer key.
+- **FIL.FILPNID** is an INT FK to `PN.PNID` with an enforced constraint. Migrated from VARCHAR in #297.
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
 - **PO.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
 - **TestRecordHistory.record_id** is polymorphic — it references either `Forms.ID` or `TestRecords.ID` depending on `history_type`.

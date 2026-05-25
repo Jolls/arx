@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.40] - 2026-05-25 
+- schema: migrate `FIL.FILPNID` from `VARCHAR` to `INT NOT NULL` with enforced FK to `PN.PNID`; fix `FIL_Test` missing `is_active` DEFAULT in `_test.sql`; correct stale column names in schema docs ([#297](https://github.com/Jolls/arx-legacy/issues/297))
+
 ## [0.3.39] - 2026-05-24 
 - parts_master_go: rename `FIL.FILNotes` → `FIL.category`; attachment categories now stored in `app_config` and editable via Settings; drop dead `settings.yml` / yaml approach ([#313](https://github.com/Jolls/arx-legacy/issues/313))
 
