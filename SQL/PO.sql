@@ -63,7 +63,8 @@ CREATE TABLE PO (
   -- Notes & status
   notes                 VARCHAR(MAX),                   -- Prints on PO document.
   internal_notes        VARCHAR(MAX)   CONSTRAINT DF_PO_internal_notes DEFAULT '', -- Internal-only notes, not printed on PO.
-  is_active             BIT            CONSTRAINT DF_PO_is_active DEFAULT 1 -- 1 = open, 0 = closed.
+  is_active             BIT            CONSTRAINT DF_PO_is_active DEFAULT 1, -- 1 = open, 0 = closed. Derived from status — do not set directly.
+  status                VARCHAR(20)    CONSTRAINT DF_PO_status DEFAULT 'pending' CONSTRAINT CK_PO_status CHECK (status IN ('pending','placed','complete','cancelled','on_hold')) -- Authoritative PO state.
 );
 
 ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_company  FOREIGN KEY (supplier_id) REFERENCES dbo.company (id);

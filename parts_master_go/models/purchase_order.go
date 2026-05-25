@@ -5,6 +5,7 @@ import "time"
 type PurchaseOrder struct {
 	ID                  int
 	Number              string
+	Status              string
 	IsActive            bool
 	Orderer             string
 	AccountID           string
@@ -59,5 +60,5 @@ type PurchaseOrderLine struct {
 	SupplierName string
 	DateOrdered  *time.Time
 	DateClosed   *time.Time
-	IsActive     bool
+	Status       string
 }

@@ -38,12 +38,14 @@
                 </div>
                 {{end}}
                 <div class="detail-row">
-                    <label class="form-label">Status</label>
-                    <div class="form-checkbox-row">
-                        <input type="checkbox" id="is_active" name="is_active" value="1"
-                               {{if .PO.IsActive}}checked{{end}}>
-                        <label for="is_active">Open (active)</label>
-                    </div>
+                    <label class="form-label" for="status">Status</label>
+                    <select id="status" name="status" class="form-input" style="max-width:180px;">
+                        <option value="pending"   {{if eq .PO.Status "pending"  }}selected{{end}}>Pending</option>
+                        <option value="placed"    {{if eq .PO.Status "placed"   }}selected{{end}}>Placed</option>
+                        <option value="on_hold"   {{if eq .PO.Status "on_hold"  }}selected{{end}}>On Hold</option>
+                        <option value="complete"  {{if eq .PO.Status "complete" }}selected{{end}}>Complete</option>
+                        <option value="cancelled" {{if eq .PO.Status "cancelled"}}selected{{end}}>Cancelled</option>
+                    </select>
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Supplier</label>
