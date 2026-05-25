@@ -196,12 +196,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
   'pn', 'list',
   GETDATE()
 );
--- Migration (run once on live DB):
---   UPDATE named_queries SET name='fil_category_for_pn', description='Attachment categories for a given part number',
---          sql='SELECT category FROM FIL WHERE FILPNID = (SELECT PNID FROM PN WHERE part_number = @pn) AND is_active = 1'
---   WHERE name='fil_notes_for_pn';
---   UPDATE named_queries SET sql='SELECT TOP 1 f.FILFileName, COALESCE(f.category, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC' WHERE name='pn_primary_attachment';
---   UPDATE named_queries SET sql='SELECT TOP 1 f.FILFileName, COALESCE(f.category, f.FILFileName) FROM FIL f JOIN PN pn ON f.FILPNID = pn.PNID WHERE pn.PNID = @pnid AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.FILID = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.order_id ASC' WHERE name='form_primary_attachment';
+-- Migration (run once on live DB): see SQL/migrations/migrate_filnotes_to_category_named_queries.sql
 
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'parts_matching',
