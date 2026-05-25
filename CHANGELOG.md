@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.39] - 2026-05-24 
+- parts_master_go: rename `FIL.FILNotes` → `FIL.category`; attachment categories now stored in `app_config` and editable via Settings; drop dead `settings.yml` / yaml approach ([#313](https://github.com/Jolls/arx-legacy/issues/313))
+
 ## [0.3.38] - 2026-05-24 
 - test_records_go: drop `TestResults.form_id` — write-only denormalized column, never read by the app ([#299](https://github.com/Jolls/arx-legacy/issues/299))
 
