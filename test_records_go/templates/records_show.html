@@ -60,6 +60,12 @@
         <th class="text-muted">Type</th>
         <td>{{.Record.Comments}}</td>
       </tr>
+      {{if .Record.InstrumentType}}
+      <tr>
+        <th class="text-muted">Instrument Type</th>
+        <td>{{.Record.InstrumentType}}</td>
+      </tr>
+      {{end}}
     </table>
   </div>
 </div>
@@ -148,7 +154,7 @@
             <tr><th class="text-muted fw-normal">hide_formula</th>          <td>{{.Step.HideFormula}}</td></tr>
             <tr><th class="text-muted fw-normal">pf_formula</th>            <td>{{.Step.PFFormula}}</td></tr>
             <tr><th class="text-muted fw-normal">pf_type</th>               <td>{{.Step.PFType}}</td></tr>
-            <tr><th class="text-muted fw-normal">applicable_instrs</th>     <td>{{.Step.ApplicableInstrs}}</td></tr>
+            <tr><th class="text-muted fw-normal">instrument_types</th>      <td>{{.Step.InstrumentTypes}}</td></tr>
             <tr><th class="text-muted fw-normal">format</th>                <td>{{.Step.Format}}</td></tr>
             <tr><th class="text-muted fw-normal">comment</th>               <td>{{.Step.StepComment}}</td></tr>
             <tr><th class="text-muted fw-normal">created_at</th>            <td>{{formatDateTime .Step.StepCreatedAt}}</td></tr>

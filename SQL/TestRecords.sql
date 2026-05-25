@@ -11,12 +11,15 @@ CREATE TABLE Forms (
   test_order    VARCHAR(MAX),                    -- Comma-separated test_definition.id values in display order.
   locked        BIT          NOT NULL CONSTRAINT DF_Forms_locked DEFAULT 0, -- 1 = locked from structural changes.
   active        BIT          NOT NULL CONSTRAINT DF_Forms_active DEFAULT 1, -- 0 = archived; hidden from UI.
-  record_types  VARCHAR(500)                     -- comma-separated list of allowed record types (e.g. 'New Release,Re-Test,Upgrade'). NULL = free-text.
+  record_types      VARCHAR(500),                -- comma-separated list of allowed record types (e.g. 'New Release,Re-Test,Upgrade'). NULL = free-text.
+  instrument_types  VARCHAR(500)                 -- comma-separated instrument types valid for this form (e.g. 'ModelA,ModelB'). Drives the Instrument Type dropdown on records. NULL = free-text.
 );
 
 -- Migration (run once on live DB; _test.sql SELECT * INTO picks it up automatically):
 -- ALTER TABLE Forms ADD record_types VARCHAR(500) NULL;
 -- ALTER TABLE Forms_Test ADD record_types VARCHAR(500) NULL;
+-- ALTER TABLE Forms ADD instrument_types VARCHAR(500) NULL;
+-- ALTER TABLE Forms_Test ADD instrument_types VARCHAR(500) NULL;
 
 
 -- test_definition: Individual test step / parameter definitions within a form.
@@ -52,7 +55,7 @@ CREATE TABLE test_definition (
   hide_formula        VARCHAR(255),                      -- 'HIDE' excludes this row from display.
   pf_formula          VARCHAR(255),
   pf_type             VARCHAR(50),                       -- Go evaluator: 'range' (default/NULL = range check).
-  applicable_instrs   VARCHAR(255),
+  instrument_types    VARCHAR(255),                      -- Comma-separated instrument type names this step applies to. NULL/empty = applies to all. Matched against TestRecords.instrument_type.
   format              VARCHAR(255),
   comment             VARCHAR(500),
   created_at          DATETIME,
@@ -81,11 +84,16 @@ CREATE TABLE TestRecords (
   serial_number_PNDesc VARCHAR(64),                       -- Denormalized PN description at record creation.
   test_order           VARCHAR(MAX),                      -- Snapshot of Forms.test_order at record creation.
   comments             VARCHAR(MAX),
+  instrument_type      VARCHAR(100),                      -- Instrument type label (e.g. 'ModelA'). Matched against test_definition.instrument_types to filter applicable steps.
   locked               BIT          NOT NULL CONSTRAINT DF_TestRecords_locked DEFAULT 0, -- 1 = record is locked from further edits.
   active               BIT          NOT NULL CONSTRAINT DF_TestRecords_active DEFAULT 1, -- 0 = soft-deleted; excluded from all views.
   created_at           DATETIME,
   updated_at           DATETIME
 );
+
+-- Migration (run once on live DB; _test.sql SELECT * INTO picks it up automatically):
+-- ALTER TABLE TestRecords ADD instrument_type VARCHAR(100) NULL;
+-- ALTER TABLE TestRecords_Test ADD instrument_type VARCHAR(100) NULL;
 
 
 -- TestRecordHistory: Audit trail for lock/unlock events on forms and test records.
@@ -273,11 +281,15 @@ CREATE TABLE test_definition_history (
   hide_formula  VARCHAR(255),
   pf_formula    VARCHAR(255),
   pf_type       VARCHAR(50),
-  applicable_instrs VARCHAR(255),
+  instrument_types VARCHAR(255),
   comment       VARCHAR(500),
   category      VARCHAR(255),
   sheet_name    VARCHAR(255)
 );
+
+-- Migration (run once on live DB):
+-- EXEC sp_rename 'test_definition.applicable_instrs',         'instrument_types', 'COLUMN';
+-- EXEC sp_rename 'test_definition_history.applicable_instrs', 'instrument_types', 'COLUMN';
 
 -- Trigger: snapshot old values into test_definition_history on every Tests UPDATE.
 -- Uses DELETED pseudo-table which contains pre-update row values.
@@ -295,13 +307,13 @@ BEGIN
        type, Parameter, Specification, spec_units,
        spec_min, spec_max, spec_nom, default_result,
        hide_formula, pf_formula, pf_type,
-       applicable_instrs, comment, category, sheet_name)
+       instrument_types, comment, category, sheet_name)
     SELECT
       id, GETDATE(), SYSTEM_USER,
       type, Parameter, Specification, spec_units,
       spec_min, spec_max, spec_nom, default_result,
       hide_formula, pf_formula, pf_type,
-      applicable_instrs, comment, category, sheet_name
+      instrument_types, comment, category, sheet_name
     FROM DELETED;
 END
 GO

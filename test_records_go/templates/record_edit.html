@@ -40,6 +40,22 @@
              name="comments" value="{{.Record.Comments}}"
              placeholder="e.g. New Release, Re-Test">
     </div>
+    <div class="col-auto">
+      <label class="form-label fw-semibold mb-1 small">Instrument Type</label>
+      {{$itypes := .Form.InstrumentTypeList}}
+      {{if $itypes}}
+      <select class="form-select form-select-sm" name="instrument_type">
+        <option value="">— all steps —</option>
+        {{range $itypes}}
+        <option value="{{.}}"{{if eq . $.Record.InstrumentType}} selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+      {{else}}
+      <input type="text" class="form-control form-control-sm"
+             name="instrument_type" value="{{.Record.InstrumentType}}"
+             placeholder="e.g. ModelA">
+      {{end}}
+    </div>
   </div>
 
   <table class="table table-bordered table-sm align-middle">

@@ -16,12 +16,28 @@ type TestForm struct {
 	TestOrder   string // comma-separated test IDs in display order
 	PartNumber  string // joined: PN.part_number
 	Title       string // joined: PN.title
-	RecordTypes string // comma-separated allowed record types; empty = free-text
+	RecordTypes     string // comma-separated allowed record types; empty = free-text
+	InstrumentTypes string // comma-separated valid instrument types for this form; empty = free-text
 }
 
 // OrderedTestIDs parses TestOrder into a slice of integer step IDs.
 func (f *TestForm) OrderedTestIDs() []int {
 	return parseIDList(f.TestOrder)
+}
+
+// InstrumentTypeList splits InstrumentTypes into individual options for template rendering.
+// Returns nil when InstrumentTypes is empty (caller shows a free-text input instead).
+func (f TestForm) InstrumentTypeList() []string {
+	if f.InstrumentTypes == "" {
+		return nil
+	}
+	var out []string
+	for _, t := range strings.Split(f.InstrumentTypes, ",") {
+		if t = trim(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // RecordTypeList splits RecordTypes into individual options for template rendering.
@@ -48,6 +64,7 @@ type TestRecord struct {
 	SerialNumberDesc string     // description of the unit under test
 	RecordDate       *time.Time
 	Comments         string // used as "Type" in the UI
+	InstrumentType   string // free-text instrument type label; matched against test_definition.instrument_types to filter steps
 	Locked           bool
 	Active           bool
 	TestOrder        string // comma-separated snapshot of test IDs at record creation
@@ -80,7 +97,7 @@ type TestStep struct {
 	SpecUnits        string
 	SpecNom          string
 	PFFormula        string
-	ApplicableInstrs string
+	InstrumentTypes  string
 	Format           string
 	StepComment      string
 	StepCreatedAt    *time.Time

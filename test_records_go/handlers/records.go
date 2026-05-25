@@ -19,6 +19,21 @@ import (
 // refToken matches {123} step-ID tokens, {record.field}, and {form.field} context tokens.
 var refToken = regexp.MustCompile(`\{(\d+|record\.\w+|form\.\w+)\}`)
 
+// stepAppliesToRecord returns true if the step should be shown for the given instrument type.
+// Empty instrument_types on the step means the step applies to all records.
+// Empty instrument_type on the record means no filtering — show all steps.
+func stepAppliesToRecord(instrumentTypes, recordType string) bool {
+	if instrumentTypes == "" || recordType == "" {
+		return true
+	}
+	for _, t := range strings.Split(instrumentTypes, ",") {
+		if strings.EqualFold(strings.TrimSpace(t), strings.TrimSpace(recordType)) {
+			return true
+		}
+	}
+	return false
+}
+
 // substituteStepSelf replaces {min}, {max}, {nom} in s with the step's own spec bound values.
 // Called after substituteRefs so cross-step tokens resolve first.
 func substituteStepSelf(s string, step *models.TestStep) string {
@@ -163,7 +178,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 
 	query := fmt.Sprintf(`
 		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, locked, active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s
 		WHERE form_id = @p1 AND active = 1`, h.cfg.RecordsTable())
 	if wipOnly {
@@ -185,7 +200,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(
 			&rec.ID, &rec.FormID, &rec.SerialNumber, &rec.SerialNumberPN,
 			&rec.SerialNumberDesc, &rec.RecordDate, &rec.Comments,
-			&rec.Locked, &rec.Active, &rec.TestOrder,
+			&rec.InstrumentType, &rec.Locked, &rec.Active, &rec.TestOrder,
 		); err != nil {
 			continue
 		}
@@ -232,7 +247,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       pf_formula, applicable_instrs, format, comment,
+		       pf_formula, instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
 	if err != nil {
@@ -249,14 +264,14 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 			param, spec, defaultResult, hideFormula     sql.NullString
 			specMin, specMax, pfType                    sql.NullString
 			category, sheetName, specUnits, specNom     sql.NullString
-			pfFormula, applicableInstrs, format         sql.NullString
+			pfFormula, instrumentTypes, format           sql.NullString
 			stepComment                                 sql.NullString
 		)
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
 			&archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &pfFormula, &applicableInstrs,
+			&specUnits, &specNom, &pfFormula, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
@@ -280,7 +295,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		s.SpecUnits = specUnits.String
 		s.SpecNom = specNom.String
 		s.PFFormula = pfFormula.String
-		s.ApplicableInstrs = applicableInstrs.String
+		s.InstrumentTypes = instrumentTypes.String
 		s.Format = format.String
 		s.StepComment = stepComment.String
 		stepsMap[s.ID] = &s
@@ -460,7 +475,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, COALESCE(type,0) AS type, Parameter, Specification, spec_nom, spec_min, spec_max, spec_units,
 		       pf_type, default_result, hide_formula, category, sheet_name,
-		       applicable_instrs, comment
+		       instrument_types, comment
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
@@ -473,11 +488,11 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		var s models.TestStep
 		var param, spec, specNom, specMin, specMax, specUnits sql.NullString
 		var pfType, defaultResult, hideFormula, category, sheetName sql.NullString
-		var applicableInstrs, comment sql.NullString
+		var instrumentTypes, comment sql.NullString
 		if err := stepRows.Scan(
 			&s.ID, &s.Type, &param, &spec, &specNom, &specMin, &specMax, &specUnits,
 			&pfType, &defaultResult, &hideFormula, &category, &sheetName,
-			&applicableInstrs, &comment,
+			&instrumentTypes, &comment,
 		); err != nil {
 			continue
 		}
@@ -492,7 +507,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		s.HideFormula = hideFormula.String
 		s.Category = category.String
 		s.SheetName = sheetName.String
-		s.ApplicableInstrs = applicableInstrs.String
+		s.InstrumentTypes = instrumentTypes.String
 		s.StepComment = comment.String
 		stepsMap[s.ID] = &s
 	}
@@ -583,7 +598,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			hideFormula == orig(id, "hide") &&
 			sid(id, "category") == orig(id, "category") &&
 			sid(id, "sheet_name") == orig(id, "sheet_name") &&
-			sid(id, "applicable_instrs") == orig(id, "applicable_instrs") &&
+			sid(id, "instrument_types") == orig(id, "instrument_types") &&
 			sid(id, "comment") == orig(id, "comment") {
 			continue
 		}
@@ -593,7 +608,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			  type=@p1, Parameter=@p2, Specification=@p3,
 			  spec_nom=@p4, spec_min=@p5, spec_max=@p6, spec_units=@p7,
 			  pf_type=@p8, default_result=@p9, hide_formula=@p10,
-			  category=@p11, sheet_name=@p12, applicable_instrs=@p13,
+			  category=@p11, sheet_name=@p12, instrument_types=@p13,
 			  comment=@p14, updated_at=GETDATE()
 			WHERE id=@p15 AND form_id=@p16`, h.cfg.StepsTable()),
 			stepType,
@@ -605,7 +620,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			nullOrVal(sid(id, "default_result")),
 			nullOrVal(hideFormula),
 			nullOrVal(sid(id, "category")), nullOrVal(sid(id, "sheet_name")),
-			nullOrVal(sid(id, "applicable_instrs")),
+			nullOrVal(sid(id, "instrument_types")),
 			nullOrVal(sid(id, "comment")),
 			id, formID,
 		)
@@ -625,7 +640,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		Hide             string
 		Category         string
 		SheetName        string
-		ApplicableInstrs string
+		InstrumentTypes  string
 		Comment          string
 	}
 	parsedNewRows := map[string]newRowData{}
@@ -658,7 +673,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		case "hide":              row.Hide = val
 		case "category":          row.Category = val
 		case "sheet_name":        row.SheetName = val
-		case "applicable_instrs": row.ApplicableInstrs = val
+		case "instrument_types":  row.InstrumentTypes = val
 		case "comment":           row.Comment = val
 		}
 		parsedNewRows[idx] = row
@@ -683,7 +698,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		if err2 := h.queryRowContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s
 			  (form_id, type, Parameter, Specification, spec_nom, spec_min, spec_max, spec_units,
-			   pf_type, default_result, hide_formula, category, sheet_name, applicable_instrs,
+			   pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
 			   comment, created_at, updated_at)
 			OUTPUT INSERTED.id
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,GETDATE(),GETDATE())`,
@@ -692,7 +707,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			nullOrVal(row.SpecNom), nullOrVal(row.SpecMin), nullOrVal(row.SpecMax),
 			nullOrVal(row.SpecUnits), nullOrVal(row.PFType), nullOrVal(row.DefaultResult),
 			nullOrVal(hideFormula), nullOrVal(row.Category), nullOrVal(row.SheetName),
-			nullOrVal(row.ApplicableInstrs), nullOrVal(row.Comment),
+			nullOrVal(row.InstrumentTypes), nullOrVal(row.Comment),
 		).Scan(&newID); err2 != nil {
 			log.Printf("insert new test step: %v", err2)
 			continue
@@ -773,11 +788,11 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, locked, active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -806,7 +821,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       pf_formula, applicable_instrs, format, comment,
+		       pf_formula, instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
@@ -823,14 +838,14 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 			param, spec, defaultResult, hideFormula         sql.NullString
 			specMin, specMax, pfType                        sql.NullString
 			category, sheetName, specUnits, specNom         sql.NullString
-			pfFormula, applicableInstrs, format             sql.NullString
+			pfFormula, instrumentTypes, format               sql.NullString
 			stepComment                                     sql.NullString
 		)
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
 			&archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &pfFormula, &applicableInstrs,
+			&specUnits, &specNom, &pfFormula, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
@@ -854,7 +869,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		s.SpecUnits = specUnits.String
 		s.SpecNom = specNom.String
 		s.PFFormula = pfFormula.String
-		s.ApplicableInstrs = applicableInstrs.String
+		s.InstrumentTypes = instrumentTypes.String
 		s.Format = format.String
 		s.StepComment = stepComment.String
 		steps[s.ID] = &s
@@ -896,6 +911,9 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		}
 		level := step.Type
 		if strings.EqualFold(step.HideFormula, "HIDE") {
+			continue
+		}
+		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
 			continue
 		}
 		resultRows = append(resultRows, models.ResultRow{
@@ -961,11 +979,11 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, locked, active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -992,7 +1010,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       pf_formula, applicable_instrs, format, comment,
+		       pf_formula, instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
@@ -1009,14 +1027,14 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 			param, spec, defaultResult, hideFormula     sql.NullString
 			specMin, specMax, pfType                    sql.NullString
 			category, sheetName, specUnits, specNom     sql.NullString
-			pfFormula, applicableInstrs, format         sql.NullString
+			pfFormula, instrumentTypes, format           sql.NullString
 			stepComment                                 sql.NullString
 		)
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
 			&archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &pfFormula, &applicableInstrs,
+			&specUnits, &specNom, &pfFormula, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
@@ -1040,7 +1058,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		s.SpecUnits = specUnits.String
 		s.SpecNom = specNom.String
 		s.PFFormula = pfFormula.String
-		s.ApplicableInstrs = applicableInstrs.String
+		s.InstrumentTypes = instrumentTypes.String
 		s.Format = format.String
 		s.StepComment = stepComment.String
 		steps[s.ID] = &s
@@ -1079,6 +1097,9 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if strings.EqualFold(step.HideFormula, "HIDE") {
+			continue
+		}
+		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
 			continue
 		}
 		resultRows = append(resultRows, models.ResultRow{
@@ -1134,12 +1155,12 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var form models.TestForm
-	var recordTypes sql.NullString
+	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.record_types
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.record_types, f.instrument_types
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes, &instrumentTypes)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1149,6 +1170,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.RecordTypes = recordTypes.String
+	form.InstrumentTypes = instrumentTypes.String
 
 	// BOM lookup: parts listed under the form's own part number in PL.
 	var bomParts []BOMPart
@@ -1223,6 +1245,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	serialNumber := strings.TrimSpace(r.FormValue("serial_number"))
 	comments := strings.TrimSpace(r.FormValue("comments"))
+	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
 
 	// Resolve the selected BOM part into denormalized PN fields.
 	var snPN, snDesc string
@@ -1251,11 +1274,11 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s
 		  (form_id, part_number_id, serial_number, serial_number_PN, serial_number_PNDesc,
-		   comments, test_order, record_date, created_at, active, locked)
+		   comments, instrument_type, test_order, record_date, created_at, active, locked)
 		OUTPUT INSERTED.ID
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),1,0)`,
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0)`,
 		h.cfg.RecordsTable()),
-		formID, partNumberID, serialNumber, snPN, snDesc, comments, form.TestOrder, recordDate).Scan(&newID)
+		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1276,11 +1299,11 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, locked, active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1295,15 +1318,17 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var form models.TestForm
+	var editInstrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.instrument_types
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &editInstrumentTypes)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	form.InstrumentTypes = editInstrumentTypes.String
 
 	editStepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
@@ -1372,6 +1397,9 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		if strings.EqualFold(step.HideFormula, "HIDE") {
 			continue
 		}
+		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
+			continue
+		}
 		resultRows = append(resultRows, models.ResultRow{
 			Step:   step,
 			Result: results[tid],
@@ -1429,11 +1457,11 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, locked, active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1548,20 +1576,21 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	comments := strings.TrimSpace(r.FormValue("comments"))
+	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
 	if rdStr := r.FormValue("record_date"); rdStr != "" {
 		if rd, parseErr := time.Parse("2006-01-02", rdStr); parseErr == nil {
 			h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET record_date=@p1, comments=@p2, updated_at=GETDATE() WHERE ID=@p3",
-				h.cfg.RecordsTable()), rd, comments, recordID)
+				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, updated_at=GETDATE() WHERE ID=@p4",
+				h.cfg.RecordsTable()), rd, comments, instrumentType, recordID)
 		} else {
 			h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET comments=@p1, updated_at=GETDATE() WHERE ID=@p2",
-				h.cfg.RecordsTable()), comments, recordID)
+				"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE ID=@p3",
+				h.cfg.RecordsTable()), comments, instrumentType, recordID)
 		}
 	} else {
 		h.execContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET comments=@p1, updated_at=GETDATE() WHERE ID=@p2",
-			h.cfg.RecordsTable()), comments, recordID)
+			"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE ID=@p3",
+			h.cfg.RecordsTable()), comments, instrumentType, recordID)
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)

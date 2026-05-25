@@ -65,7 +65,7 @@
           <th style="width:60px">Hide</th>
           <th style="width:120px">category</th>
           <th style="width:120px">sheet_name</th>
-          <th style="width:180px">applicable_instrs</th>
+          <th style="width:180px">instrument_types</th>
           <th style="width:200px">comment</th>
         </tr>
       </thead>
@@ -115,7 +115,7 @@
           <input type="hidden" name="original_hide_{{.ID}}"             value="{{.HideFormula}}">
           <input type="hidden" name="original_category_{{.ID}}"         value="{{.Category}}">
           <input type="hidden" name="original_sheet_name_{{.ID}}"       value="{{.SheetName}}">
-          <input type="hidden" name="original_applicable_instrs_{{.ID}}" value="{{.ApplicableInstrs}}">
+          <input type="hidden" name="original_instrument_types_{{.ID}}" value="{{.InstrumentTypes}}">
           <input type="hidden" name="original_comment_{{.ID}}"          value="{{.StepComment}}">
           <td class="text-muted small">{{.ID}}</td>
           <td>
@@ -150,7 +150,7 @@
           </td>
           <td><input type="text" class="form-control form-control-sm" name="category_{{.ID}}" value="{{.Category}}" data-original="{{.Category}}"></td>
           <td><input type="text" class="form-control form-control-sm" name="sheet_name_{{.ID}}" value="{{.SheetName}}" data-original="{{.SheetName}}"></td>
-          <td><input type="text" class="form-control form-control-sm" name="applicable_instrs_{{.ID}}" value="{{.ApplicableInstrs}}" data-original="{{.ApplicableInstrs}}"></td>
+          <td><input type="text" class="form-control form-control-sm" name="instrument_types_{{.ID}}" value="{{.InstrumentTypes}}" data-original="{{.InstrumentTypes}}"></td>
           <td><input type="text" class="form-control form-control-sm" name="comment_{{.ID}}" value="{{.StepComment}}" data-original="{{.StepComment}}"></td>
         </tr>
         {{end}}
@@ -202,7 +202,7 @@
     <td class="text-center"><input class="form-check-input" type="checkbox" name="new_row[IDX][hide]" value="1"></td>
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][category]"></td>
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][sheet_name]"></td>
-    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][applicable_instrs]"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][instrument_types]"></td>
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][comment]"></td>
   </tr>
 </template>

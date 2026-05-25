@@ -151,7 +151,7 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 | `supplier_part` | `id` | Sourcing links — maps parts to supplier catalog entries. `supplier_id` → `company.id`, `part_id` → `PN.PNID`, `mfg_part_id` → `mfg_part.id` (optional). Writes fire `trg_supplier_part_company_count`. |
 | `mfg_part` | `id` | Manufacturer part numbers. `part_id` → `PN.PNID`, `mfg_id` → `company.id`. |
 | `price` | — | Quantity price breaks. |
-| `Forms` | `ID` | Test form definitions. `PNID` → `PN`. `test_order` = comma-separated `test_definition.id` list. |
-| `TestRecords` | `ID` | A test run for one serial number. `form_id` → `Forms.ID`. `test_order` = snapshot of order at record creation. |
-| `test_definition` | `id` | Test step definitions. `type` = heading level (0=data, 1/2/3=heading). `hide_formula='HIDE'` hides data rows. |
+| `Forms` | `ID` | Test form definitions. `PNID` → `PN`. `test_order` = comma-separated `test_definition.id` list. `instrument_types` = comma-separated valid instrument types for this form; drives the Instrument Type dropdown on records. |
+| `TestRecords` | `ID` | A test run for one serial number. `form_id` → `Forms.ID`. `test_order` = snapshot of order at record creation. `instrument_type` = free-text label matched against `test_definition.instrument_types` to filter applicable steps. |
+| `test_definition` | `id` | Test step definitions. `type` = heading level (0=data, 1/2/3=heading). `hide_formula='HIDE'` hides data rows. `instrument_types` = comma-separated type names; step is hidden when record's `instrument_type` is not in this list (empty = show for all). |
 | `TestResults` | `ID` | One result per step per record. `pass_fail` BIT. `result` = value or VBA image filename or `LOCAL:` path. |
