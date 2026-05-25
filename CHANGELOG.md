@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.38] - 2026-05-24 
+- test_records_go: drop `TestResults.form_id` — write-only denormalized column, never read by the app ([#299](https://github.com/Jolls/arx-legacy/issues/299))
+
 ## [0.3.37] - 2026-05-24 
 - test_records_go: add `instrument_type` field to `TestRecords` and rename `applicable_instrs` → `instrument_types` on `test_definition`; record show/edit/print views now filter steps by instrument type — steps with `instrument_types` set are hidden when the record's `instrument_type` doesn't match ([#203](https://github.com/Jolls/arx-legacy/issues/203))
 - test_records_go: add `instrument_types` to `Forms`; record create/edit show a dropdown for Instrument Type when the form has types configured, free-text otherwise ([#203](https://github.com/Jolls/arx-legacy/issues/203))
