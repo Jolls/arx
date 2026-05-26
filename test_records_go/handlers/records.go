@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/user"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1471,8 +1472,11 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	// TODO (#330): replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET locked=1, updated_at=GETDATE() WHERE ID=@p1 AND locked=0",
@@ -1514,8 +1518,11 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	// TODO (#330): replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET locked=0, updated_at=GETDATE() WHERE ID=@p1 AND locked=1",
@@ -1547,8 +1554,11 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	// TODO (#330): replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET locked=1 WHERE ID=@p1 AND locked=0",
@@ -1590,8 +1600,11 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#207): replace os.Getenv("USERNAME") with authenticated app user once auth is implemented.
+	// TODO (#330): replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET locked=0 WHERE ID=@p1 AND locked=1",

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"os/user"
 	"strconv"
 	"strings"
 	"time"
@@ -205,8 +206,12 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 // ── PartsNew — GET /parts/new ───────────────────────────────────────────────
 
 func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
+	p := models.Part{}
+	if u, err := user.Current(); err == nil {
+		p.PNReqBy = u.Username
+	}
 	h.render(w, "part_edit.html", map[string]any{
-		"Part": models.Part{}, "IsNew": true,
+		"Part": p, "IsNew": true,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})

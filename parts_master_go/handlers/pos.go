@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -234,6 +235,9 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 	po := models.PurchaseOrder{Status: "pending", IsActive: true}
+	if u, err := user.Current(); err == nil {
+		po.Orderer = u.Username
+	}
 
 	// Apply PO defaults from settings
 	if cid := h.cfg.Settings.PODefaults.ContactID; cid > 0 {
