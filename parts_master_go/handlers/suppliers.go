@@ -109,13 +109,15 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	var newID int
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (name, SUSupplierCode, default_contact, is_active, SUNotes, date_modified)
+		INSERT INTO %s (name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified)
 		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6)
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)
 	`, h.cfg.CompanyTable()),
 		name, fs(r, "SUSupplierCode"),
 		nullableInt(fs(r, "default_contact")),
 		r.FormValue("is_active") == "1",
+		r.FormValue("is_supplier") == "1",
+		r.FormValue("is_manufacturer") == "1",
 		fs(r, "SUNotes"), time.Now(),
 	).Scan(&newID)
 	if err != nil {
@@ -171,12 +173,15 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET name=@p1, SUSupplierCode=@p2, default_contact=@p3,
-		              is_active=@p4, SUNotes=@p5, date_modified=@p6
-		WHERE id=@p7
+		              is_active=@p4, is_supplier=@p5, is_manufacturer=@p6,
+		              SUNotes=@p7, date_modified=@p8
+		WHERE id=@p9
 	`, h.cfg.CompanyTable()),
 		name, fs(r, "SUSupplierCode"),
 		nullableInt(fs(r, "default_contact")),
 		r.FormValue("is_active") == "1",
+		r.FormValue("is_supplier") == "1",
+		r.FormValue("is_manufacturer") == "1",
 		fs(r, "SUNotes"), time.Now(), id,
 	)
 	if err != nil {
@@ -405,14 +410,15 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 	var s models.Supplier
 	var name, code, notes sql.NullString
 	var defaultContact sql.NullInt64
-	var isActive sql.NullBool
+	var isActive, isSupplier, isManufacturer sql.NullBool
 	var numLNKs, numPOs sql.NullInt64
 	var dateModified sql.NullTime
 	var primaryAttID sql.NullInt64
 	var cnName, cnPhone, cnEmail, cnCity sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, su.SUSupplierCode, su.SUNotes,
-		       su.default_contact, su.is_active, su.SUNumOfLNKs, su.SUNumOfPOs, su.date_modified,
+		       su.default_contact, su.is_active, su.is_supplier, su.is_manufacturer,
+		       su.SUNumOfLNKs, su.SUNumOfPOs, su.date_modified,
 		       su.primary_attachment_id,
 		       cn.CNName, cn.CNPhone1, cn.CNEmail, cn.CNCity
 		FROM %s su
@@ -420,7 +426,8 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		WHERE su.id = @p1
 	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), id).Scan(
 		&s.ID, &name, &code, &notes,
-		&defaultContact, &isActive, &numLNKs, &numPOs, &dateModified,
+		&defaultContact, &isActive, &isSupplier, &isManufacturer,
+		&numLNKs, &numPOs, &dateModified,
 		&primaryAttID,
 		&cnName, &cnPhone, &cnEmail, &cnCity,
 	)
@@ -440,6 +447,8 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 	s.CNEmail = cnEmail.String
 	s.CNCity = cnCity.String
 	s.IsActive = isActive.Bool
+	s.IsSupplier = isSupplier.Bool
+	s.IsManufacturer = isManufacturer.Bool
 	s.SUNumOfLNKs = int(numLNKs.Int64)
 	s.SUNumOfPOs = int(numPOs.Int64)
 	if defaultContact.Valid {
@@ -651,8 +660,10 @@ func (h *Handler) SupplierFile(w http.ResponseWriter, r *http.Request) {
 func supplierFromForm(r *http.Request) models.Supplier {
 	s := models.Supplier{
 		Name: fs(r, "name"), SUSupplierCode: fs(r, "SUSupplierCode"),
-		SUNotes: fs(r, "SUNotes"),
-		IsActive: r.FormValue("is_active") == "1",
+		SUNotes:        fs(r, "SUNotes"),
+		IsActive:       r.FormValue("is_active") == "1",
+		IsSupplier:     r.FormValue("is_supplier") == "1",
+		IsManufacturer: r.FormValue("is_manufacturer") == "1",
 	}
 	if v := nullableInt(fs(r, "default_contact")); v != nil {
 		i := v.(int)

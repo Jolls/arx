@@ -1,3 +1,14 @@
+Arx v0.3.46 — May 2026
+
+NEW FEATURES
+
+  Parts Master — Manufacturer Part Numbers (MPN)
+  Each part now has a "Mfg Parts" tab listing the manufacturers who
+  make it and their part numbers. Add as many manufacturer/MPN pairs
+  as needed. Companies can now be flagged as manufacturers in addition
+  to (or instead of) suppliers, making them available in the MPN
+  manufacturer dropdown.
+
 Arx v0.3.31 — May 2026
 
 NEW FEATURES

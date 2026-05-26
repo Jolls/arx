@@ -66,6 +66,19 @@
                     <label for="is_active">Supplier is active</label>
                 </div>
             </div>
+            <div class="detail-row">
+                <label class="form-label">Roles</label>
+                <div class="form-checkbox-row">
+                    <input type="checkbox" id="is_supplier" name="is_supplier" value="1"
+                           {{if .Supplier.IsSupplier}}checked{{end}}>
+                    <label for="is_supplier">Supplier (sells parts)</label>
+                </div>
+                <div class="form-checkbox-row" style="margin-top:4px;">
+                    <input type="checkbox" id="is_manufacturer" name="is_manufacturer" value="1"
+                           {{if .Supplier.IsManufacturer}}checked{{end}}>
+                    <label for="is_manufacturer">Manufacturer (makes parts)</label>
+                </div>
+            </div>
         </div>
 
         <div class="detail-section">
