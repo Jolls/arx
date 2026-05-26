@@ -138,6 +138,11 @@ func buildRouter(h *handlers.Handler) http.Handler {
 		r.Post("/part/{id}/pricing/{priceID}", h.PriceUpdate)
 		r.Post("/part/{id}/pricing/{priceID}/deactivate", h.PriceDeactivate)
 		r.Post("/part/{id}/pricing/{priceID}/activate", h.PriceActivate)
+		r.Get("/part/{id}/mfg-parts", h.PartMfgParts)
+		r.Post("/part/{id}/mfg-parts", h.MfgPartCreate)
+		r.Get("/part/{id}/mfg-parts/{mid}/edit", h.MfgPartEdit)
+		r.Post("/part/{id}/mfg-parts/{mid}", h.MfgPartUpdate)
+		r.Post("/part/{id}/mfg-parts/{mid}/delete", h.MfgPartDelete)
 
 		// Suppliers
 		r.Get("/suppliers", h.SuppliersList)

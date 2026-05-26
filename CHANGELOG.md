@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.46] - 2026-05-25 
+- parts_master_go: add manufacturer part number (MPN) management on part detail page; flag companies as manufacturers; soft-delete support ([#303](https://github.com/Jolls/arx-legacy/issues/303))
+
 ## [0.3.45] - 2026-05-25 
 - test_records_go: add New Form action on forms index — creates blank form (or optionally copies steps from an existing form) for any unassigned FORM-category PN ([#319](https://github.com/Jolls/arx-legacy/issues/319))
 - test_records_go: add Duplicate Form action on form definition page — copies all steps, record_types, and instrument_types to a new form with chosen PN ([#255](https://github.com/Jolls/arx-legacy/issues/255))

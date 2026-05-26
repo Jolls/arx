@@ -1,0 +1,133 @@
+{{define "content"}}
+<header>
+    <h1>Part Details</h1>
+    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
+</header>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+
+    {{/* ── MPN list ──────────────────────────────────────────── */}}
+    {{if .MfgParts}}
+    <div class="table-wrapper">
+        <table style="table-layout:auto;">
+            <thead>
+                <tr>
+                    <th>Manufacturer</th>
+                    <th>MPN</th>
+                    <th>Description</th>
+                    <th style="width:60px;"></th>
+                    <th style="width:60px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .MfgParts}}
+                <tr>
+                    <td>{{.MfgName}}</td>
+                    <td style="font-family:monospace;">{{.MfgPartNumber}}</td>
+                    <td>{{.Description}}</td>
+                    <td style="text-align:center;">
+                        <a href="/part/{{$.Part.PNID}}/mfg-parts/{{.ID}}/edit#edit-form"
+                           class="btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
+                    </td>
+                    <td style="text-align:center;">
+                        <form method="post" action="/part/{{$.Part.PNID}}/mfg-parts/{{.ID}}/delete"
+                              style="margin:0;" onsubmit="return confirm('Remove this manufacturer part?')">
+                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <button type="submit" class="btn-secondary"
+                                    style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .MfgParts}} manufacturer part{{if ne (len .MfgParts) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No manufacturer parts recorded for this part.</p>
+    {{end}}
+
+    {{/* ── Edit form ─────────────────────────────────────────── */}}
+    {{if .EditingMfgPart}}
+    <div id="edit-form" class="detail-section" style="margin-top:24px;">
+        <h3>Edit Manufacturer Part</h3>
+        <form method="post" action="/part/{{.Part.PNID}}/mfg-parts/{{.EditingMfgPart.ID}}">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="detail-row">
+                <label class="form-label">Manufacturer *</label>
+                {{if .Manufacturers}}
+                <select name="mfg_id" class="form-select" required>
+                    <option value="">-- Select --</option>
+                    {{range .Manufacturers}}
+                    <option value="{{.ID}}" {{if eq .ID $.EditingMfgPart.MfgID}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+                {{else}}
+                <span style="color:#888; font-size:0.9em;">
+                    No manufacturers found. Edit a company and enable <em>Manufacturer (makes parts)</em>.
+                </span>
+                <input type="hidden" name="mfg_id" value="">
+                {{end}}
+            </div>
+            <div class="detail-row">
+                <label class="form-label">MPN *</label>
+                <input type="text" name="mfg_part_number" class="form-input"
+                       value="{{.EditingMfgPart.MfgPartNumber}}" required>
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Description</label>
+                <input type="text" name="description" class="form-input"
+                       value="{{.EditingMfgPart.Description}}">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Save Changes</button>
+                <a href="/part/{{.Part.PNID}}/mfg-parts" class="btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+    {{end}}
+
+    {{/* ── Add form ──────────────────────────────────────────── */}}
+    {{if not .EditingMfgPart}}
+    <details style="margin-top:24px;">
+        <summary style="cursor:pointer; font-weight:600; font-size:1em; padding:8px 0;">Add Manufacturer Part</summary>
+        <div class="detail-section" style="margin-top:8px;">
+            {{if not .Manufacturers}}
+            <p style="color:#888; font-size:0.9em; margin-bottom:12px;">
+                No manufacturers found. Edit a company and enable <em>Manufacturer (makes parts)</em> first.
+            </p>
+            {{end}}
+            <form method="post" action="/part/{{.Part.PNID}}/mfg-parts">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <div class="detail-row">
+                    <label class="form-label">Manufacturer *</label>
+                    <select name="mfg_id" class="form-select" required {{if not .Manufacturers}}disabled{{end}}>
+                        <option value="">-- Select --</option>
+                        {{range .Manufacturers}}
+                        <option value="{{.ID}}">{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">MPN *</label>
+                    <input type="text" name="mfg_part_number" class="form-input"
+                           placeholder="Manufacturer's part number" required>
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Description</label>
+                    <input type="text" name="description" class="form-input"
+                           placeholder="Optional manufacturer description">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary" {{if not .Manufacturers}}disabled{{end}}>
+                        Add Manufacturer Part
+                    </button>
+                </div>
+            </form>
+        </div>
+    </details>
+    {{end}}
+</div>
+{{end}}

@@ -63,6 +63,7 @@ type MfgPart struct {
 	MfgID         int
 	MfgPartNumber string
 	Description   string
+	IsActive      bool
 	// joined
 	MfgName string
 }
