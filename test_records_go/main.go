@@ -120,6 +120,8 @@ func buildRouter(h *handlers.Handler) http.Handler {
 		r.Post("/records/{id}/edit", h.SaveResults)
 		r.Post("/records/{id}/lock", h.LockRecord)
 		r.Post("/records/{id}/unlock", h.UnlockRecord)
+		r.Post("/forms/{id}/lock", h.LockForm)
+		r.Post("/forms/{id}/unlock", h.UnlockForm)
 		r.Get("/api/named-query", h.APINamedQuery)
 	})
 
