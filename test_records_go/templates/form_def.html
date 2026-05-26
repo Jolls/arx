@@ -25,11 +25,16 @@
     </form>
     {{end}}
   </h4>
-  {{if not .Form.Locked}}
-  <a href="/forms/{{.Form.ID}}/def/edit" class="btn btn-sm btn-primary">
-    <i class="bi bi-pencil"></i> Edit Definition
-  </a>
-  {{end}}
+  <div class="d-flex gap-2">
+    <a href="/forms/{{.Form.ID}}/duplicate" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-copy"></i> Duplicate
+    </a>
+    {{if not .Form.Locked}}
+    <a href="/forms/{{.Form.ID}}/def/edit" class="btn btn-sm btn-primary">
+      <i class="bi bi-pencil"></i> Edit Definition
+    </a>
+    {{end}}
+  </div>
 </div>
 
 {{if .HistPoints}}

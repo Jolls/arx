@@ -47,6 +47,26 @@
 <form id="steps-form" method="POST" action="/forms/{{.Form.ID}}/def/edit">
   <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
   <input type="hidden" id="step_order" name="step_order">
+
+  <div class="row g-3 mb-4" style="max-width:700px">
+    <div class="col">
+      <label class="form-label fw-semibold" for="record_types">Record Types</label>
+      <input type="hidden" name="original_record_types" value="{{.Form.RecordTypes}}">
+      <input type="text" class="form-control form-control-sm" id="record_types"
+             name="record_types" value="{{.Form.RecordTypes}}"
+             placeholder="e.g. New Release,Re-Test,Upgrade">
+      <div class="form-text">Comma-separated. Empty = free-text on new record.</div>
+    </div>
+    <div class="col">
+      <label class="form-label fw-semibold" for="form_instrument_types">Instrument Types</label>
+      <input type="hidden" name="original_instrument_types" value="{{.Form.InstrumentTypes}}">
+      <input type="text" class="form-control form-control-sm" id="form_instrument_types"
+             name="instrument_types" value="{{.Form.InstrumentTypes}}"
+             placeholder="e.g. ModelA,ModelB">
+      <div class="form-text">Comma-separated. Empty = free-text on new record.</div>
+    </div>
+  </div>
+
   <div class="table-responsive">
     <table id="steps-table" class="table table-bordered table-sm align-middle" style="min-width:2400px">
       <thead class="table-dark" style="position:sticky;top:0;z-index:1">

@@ -1,0 +1,43 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Forms</a></li>
+    <li class="breadcrumb-item">
+      <a href="/forms/{{.Form.ID}}/def">{{.Form.PartNumber}}</a>
+    </li>
+    <li class="breadcrumb-item active">Duplicate</li>
+  </ol>
+</nav>
+
+<h4 class="mb-1">Duplicate Form</h4>
+<p class="text-muted mb-4">
+  Copying <strong>{{.Form.PartNumber}}</strong> &mdash; {{.Form.Title}}
+  ({{.StepCount}} step{{if ne .StepCount 1}}s{{end}})
+</p>
+
+{{if not .PNs}}
+<p class="text-muted">No available part numbers. All active FORM-category part numbers already have a form, or none exist.</p>
+<a href="/forms/{{.Form.ID}}/def" class="btn btn-outline-secondary">Back</a>
+{{else}}
+<form method="POST" action="/forms/{{.Form.ID}}/duplicate" style="max-width:480px">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+  <div class="mb-4">
+    <label class="form-label fw-semibold" for="pnid">Target Part Number</label>
+    <select class="form-select" id="pnid" name="pnid" required>
+      <option value="">— select part number —</option>
+      {{range .PNs}}
+      <option value="{{.PNID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
+      {{end}}
+    </select>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a href="/forms/{{.Form.ID}}/def" class="btn btn-outline-secondary">Cancel</a>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-copy"></i> Duplicate &amp; Edit
+    </button>
+  </div>
+</form>
+{{end}}
+{{end}}
