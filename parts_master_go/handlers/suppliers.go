@@ -213,16 +213,21 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Name = name.String
 
-	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
+	sp, pn, ut := h.cfg.SupplierPartTable(), h.cfg.PartsTable(), h.cfg.UnitTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,
-		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category
+		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category,
+		       sp.unit_id,
+		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
+		       CASE WHEN sp.unit_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
 		FROM %s sp
 		JOIN %s pn ON sp.part_id = pn.PNID
+		LEFT JOIN %s pu ON sp.unit_id  = pu.unit_id   -- explicit purchase unit
+		LEFT JOIN %s bu ON pn.PNUNID   = bu.unit_id   -- base unit fallback
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`, sp, pn), id)
+	`, sp, pn, ut, ut), id)
 	if err != nil {
 		h.renderError(w, "Error retrieving linked parts: "+err.Error())
 		return
@@ -233,12 +238,14 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		var lk models.SupplierPart
 		var preference, supplierPN, supplierDesc, leadTime sql.NullString
 		var minIncr sql.NullFloat64
-		var pnID sql.NullInt64
-		var partNumber, title, revision, category sql.NullString
+		var pnID, unitID sql.NullInt64
+		var partNumber, title, revision, category, unitAbbr sql.NullString
+		var unitIsExplicit bool
 		if err := rows.Scan(
 			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
 			&leadTime, &minIncr,
 			&pnID, &partNumber, &title, &revision, &category,
+			&unitID, &unitAbbr, &unitIsExplicit,
 		); err != nil {
 			h.renderError(w, "Error reading linked parts: "+err.Error())
 			return
@@ -255,6 +262,12 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		lk.Title = title.String
 		lk.Revision = revision.String
 		lk.Category = category.String
+		if unitID.Valid {
+			v := int(unitID.Int64)
+			lk.UnitID = &v
+		}
+		lk.PurchaseUnitAbbr = unitAbbr.String
+		lk.PurchaseUnitIsExplicit = unitIsExplicit
 		links = append(links, lk)
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)

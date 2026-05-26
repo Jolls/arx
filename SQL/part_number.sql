@@ -46,5 +46,8 @@ CREATE TABLE PN (
   active            BIT              CONSTRAINT DF_PN_active           DEFAULT 1,
   PNPOLinks         INT              CONSTRAINT DF_PN_PNPOLinks        DEFAULT 0,    -- Denormalized count of POL rows for this part.
   PNDateModified    DATE             CONSTRAINT DF_PN_PNDateModified   DEFAULT GETDATE(),
-  price_id          INT              CONSTRAINT DF_PN_price_id         DEFAULT 0     -- FK to price table. TODO: add FK constraint.
+  price_id          INT              CONSTRAINT DF_PN_price_id         DEFAULT 0,    -- FK to price table. TODO: add FK constraint.
+  PNUNID            INT              NULL                                              -- FK to unit.unit_id. Base/inventory unit for this part (EA, mL, kg, …).
 );
+
+ALTER TABLE dbo.PN ADD CONSTRAINT FK_PN_unit FOREIGN KEY (PNUNID) REFERENCES dbo.unit (unit_id);

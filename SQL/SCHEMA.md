@@ -101,6 +101,7 @@ Never hardcode a table name in Go — always call the helper.
 | `supplier_part` | `supplier_part_Test` | parts_master_go |
 | `mfg_part` | `mfg_part_Test` | parts_master_go |
 | `CN` | `CN_Test` | parts_master_go |
+| `unit` | `unit_Test` | parts_master_go |
 | `price` | `price_Test` | parts_master_go |
 | `Forms` | `Forms_Test` | test_records_go |
 | `TestRecords` | `TestRecords_Test` | test_records_go |
@@ -141,15 +142,16 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 
 | Table | PK | Notes |
 |-------|----|-------|
-| `PN` | `PNID` | Parts catalog. `release_status`: U/A/D. `user_field_1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). |
+| `PN` | `PNID` | Parts catalog. `release_status`: U/A/D. `user_field_1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). `PNUNID` → `unit.unit_id` (base/inventory unit). |
 | `FIL` | `FILID` | File/URL attachments. `FILPNID` → `PN.PNID` (INT FK, enforced). `FILFileName` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `category` = free-text document type label; options driven by `app_config.'attachment_categories'`. `order_id` controls sort. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. |
 | `PL` | — | BOM / parts list. Links a parent part to child parts. |
 | `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `CN.CNID`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
 | `CN` | `CNID` | Contacts, linked to companies. |
 | `PO` | `id` | Purchase orders. `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative: `pending` \| `placed` \| `complete` \| `cancelled` \| `on_hold`. `is_active` is a convenience bit kept in sync by the app (`pending/placed/on_hold → 1`, `complete/cancelled → 0`) — do not set it directly. Run `SQL/migrations/migrate_po_status.sql` to add the column to existing databases. |
 | `POL` | `POLID` | PO line items → `PO.id`. |
-| `supplier_part` | `id` | Sourcing links — maps parts to supplier catalog entries. `supplier_id` → `company.id`, `part_id` → `PN.PNID`, `mfg_part_id` → `mfg_part.id` (optional). Writes fire `trg_supplier_part_company_count`. |
+| `supplier_part` | `id` | Sourcing links — maps parts to supplier catalog entries. `supplier_id` → `company.id`, `part_id` → `PN.PNID`, `mfg_part_id` → `mfg_part.id` (optional), `unit_id` → `unit.unit_id` (purchase unit; NULL = same as `PN.PNUNID`). Writes fire `trg_supplier_part_company_count`. |
 | `mfg_part` | `id` | Manufacturer part numbers. `part_id` → `PN.PNID`, `mfg_id` → `company.id`. `is_active = 0` = soft-deleted. Unique index is filtered on `is_active = 1` (allows re-adding an MPN after soft-delete). |
+| `unit` | `unit_id` | Reference list of units of measure. `unit_type`: count/volume/length/mass/package. Base unit on `PN.PNUNID`; purchase unit on `supplier_part.unit_id`. |
 | `price` | — | Quantity price breaks. |
 | `Forms` | `ID` | Test form definitions. `PNID` → `PN`. `test_order` = comma-separated `test_definition.id` list. `instrument_types` = comma-separated valid instrument types for this form; drives the Instrument Type dropdown on records. |
 | `TestRecords` | `ID` | A test run for one serial number. `form_id` → `Forms.ID`. `test_order` = snapshot of order at record creation. `instrument_type` = free-text label matched against `test_definition.instrument_types` to filter applicable steps. |

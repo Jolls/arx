@@ -69,6 +69,7 @@
         <div class="detail-row"><strong>Category:</strong>   <span>{{.Part.Category}}</span></div>
         <div class="detail-row"><strong>Revision:</strong>   <span>{{.Part.Revision}}</span></div>
         <div class="detail-row"><strong>Detail:</strong>     <span>{{.Part.Detail}}</span></div>
+        <div class="detail-row"><strong>Unit:</strong>       <span>{{if .Part.UnitAbbr}}{{.Part.UnitAbbr}}{{else}}—{{end}}</span></div>
     </div>
 
     {{/* ── Status & dates ─────────────────────────────────────── */}}

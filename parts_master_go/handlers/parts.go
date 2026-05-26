@@ -117,12 +117,14 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		active, hasBOM                                sql.NullBool
 		filIDPrimary, filLinks, poLinks               sql.NullInt64
 		qty, currentCost, lastRollupCost              sql.NullFloat64
+		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT PNID, part_number, revision, title, detail, category, has_bom,
 		       release_status, active, PNReqBy, PNNotes,
 		       PNDate, PNDateModified, PNFILIDPrimary,
 		       PNQty, PNCurrentCost, PNLastRollupCost, PNLastRollupAt, PNFILLinks, PNPOLinks,
+		       PNUNID,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s WHERE PNID = @p1
@@ -131,6 +133,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
 		&qty, &currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
+		&unitID,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -169,6 +172,15 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	if pnDateModified.Valid {
 		p.PNDateModified = &pnDateModified.Time
+	}
+	if unitID.Valid {
+		v := int(unitID.Int64)
+		p.UnitID = &v
+		var abbr sql.NullString
+		h.queryRowContext(r.Context(), fmt.Sprintf(
+			`SELECT abbreviation FROM %s WHERE unit_id = @p1`, h.cfg.UnitTable(),
+		), v).Scan(&abbr)
+		p.UnitAbbr = abbr.String
 	}
 
 	if p.HasBOM && r.URL.Path == fmt.Sprintf("/part/%s", id) {
@@ -210,8 +222,10 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 	if u, err := user.Current(); err == nil {
 		p.PNReqBy = u.Username
 	}
+	units, _ := h.fetchUnits(r.Context())
 	h.render(w, "part_edit.html", map[string]any{
 		"Part": p, "IsNew": true,
+		"Units": units,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -238,21 +252,26 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_number, revision, title, detail, category, has_bom,
 		                release_status, active, PNReqBy, PNNotes, PNDate, PNDateModified,
+		                PNUNID,
 		                user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		                user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
 		OUTPUT INSERTED.PNID
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,
-		        @p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22)
+		        @p13,
+		        @p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23)
 	`, h.cfg.PartsTable()),
 		partNumber, fs(r, "revision"), fs(r, "title"), fs(r, "detail"), fs(r, "category"), r.FormValue("has_bom") == "1",
 		fs(r, "release_status"), r.FormValue("active") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
 		now, now,
+		nullableInt(fs(r, "PNUNID")),
 		fs(r, "user_field_1"), fs(r, "user_field_2"), fs(r, "user_field_3"), fs(r, "user_field_4"), fs(r, "user_field_5"),
 		fs(r, "user_field_6"), fs(r, "user_field_7"), fs(r, "user_field_8"), fs(r, "user_field_9"), fs(r, "user_field_10"),
 	).Scan(&newID)
 	if err != nil {
+		units, _ := h.fetchUnits(r.Context())
 		h.render(w, "part_edit.html", map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Error creating part: " + err.Error(),
+			"Units":     units,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})
@@ -275,8 +294,10 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, "Error retrieving part: "+err.Error())
 		return
 	}
+	units, _ := h.fetchUnits(r.Context())
 	h.render(w, "part_edit.html", map[string]any{
 		"Part": full, "IsNew": false,
+		"Units":     units,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -309,21 +330,25 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET
 		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5, has_bom=@p6,
 		  release_status=@p7, active=@p8, PNReqBy=@p9, PNNotes=@p10, PNDateModified=@p11,
-		  user_field_1=@p12, user_field_2=@p13, user_field_3=@p14, user_field_4=@p15, user_field_5=@p16,
-		  user_field_6=@p17, user_field_7=@p18, user_field_8=@p19, user_field_9=@p20, user_field_10=@p21
-		WHERE PNID=@p22
+		  PNUNID=@p12,
+		  user_field_1=@p13, user_field_2=@p14, user_field_3=@p15, user_field_4=@p16, user_field_5=@p17,
+		  user_field_6=@p18, user_field_7=@p19, user_field_8=@p20, user_field_9=@p21, user_field_10=@p22
+		WHERE PNID=@p23
 	`, h.cfg.PartsTable()),
 		partNumber, fs(r, "revision"), fs(r, "title"), fs(r, "detail"), fs(r, "category"), r.FormValue("has_bom") == "1",
 		fs(r, "release_status"), r.FormValue("active") == "1", fs(r, "PNReqBy"), fs(r, "PNNotes"),
 		time.Now(),
+		nullableInt(fs(r, "PNUNID")),
 		fs(r, "user_field_1"), fs(r, "user_field_2"), fs(r, "user_field_3"), fs(r, "user_field_4"), fs(r, "user_field_5"),
 		fs(r, "user_field_6"), fs(r, "user_field_7"), fs(r, "user_field_8"), fs(r, "user_field_9"), fs(r, "user_field_10"),
 		id,
 	)
 	if err != nil {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
+		units, _ := h.fetchUnits(r.Context())
 		h.render(w, "part_edit.html", map[string]any{
 			"Part": partFromForm(r), "IsNew": false, "Error": "Error saving part: " + err.Error(),
+			"Units":     units,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
 			"NavBackURL": backURL, "NavBackLabel": backLabel,
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -338,7 +363,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 
 // partFromForm rebuilds a Part struct from POST form values (for re-displaying on error).
 func partFromForm(r *http.Request) models.Part {
-	return models.Part{
+	p := models.Part{
 		PartNumber: fs(r, "part_number"), Revision: fs(r, "revision"),
 		Title: fs(r, "title"), Detail: fs(r, "detail"), Category: fs(r, "category"),
 		HasBOM: r.FormValue("has_bom") == "1",
@@ -349,6 +374,12 @@ func partFromForm(r *http.Request) models.Part {
 		UserField7: fs(r, "user_field_7"), UserField8: fs(r, "user_field_8"), UserField9: fs(r, "user_field_9"),
 		UserField10: fs(r, "user_field_10"),
 	}
+	if v := fs(r, "PNUNID"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			p.UnitID = &n
+		}
+	}
+	return p
 }
 
 // fetchPartFull fetches all editable fields for the edit form.
@@ -360,16 +391,19 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		user1, user2, user3, user4, user5             sql.NullString
 		user6, user7, user8, user9, user10            sql.NullString
 		active, hasBOM                                sql.NullBool
+		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
 		SELECT PNID, part_number, revision, title, detail, category, has_bom,
 		       release_status, active, PNReqBy, PNNotes,
+		       PNUNID,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s WHERE PNID = @p1
 	`, h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
+		&unitID,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -386,6 +420,10 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	p.Active = active.Bool
 	p.PNReqBy = reqBy.String
 	p.PNNotes = notes.String
+	if unitID.Valid {
+		v := int(unitID.Int64)
+		p.UnitID = &v
+	}
 	p.UserField1, p.UserField2, p.UserField3, p.UserField4, p.UserField5 = user1.String, user2.String, user3.String, user4.String, user5.String
 	p.UserField6, p.UserField7, p.UserField8, p.UserField9, p.UserField10 = user6.String, user7.String, user8.String, user9.String, user10.String
 	return p, nil

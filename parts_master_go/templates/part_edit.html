@@ -52,6 +52,17 @@
                 </select>
             </div>
             <div class="detail-row">
+                <label for="PNUNID" class="form-label">Unit of Measure</label>
+                <select id="PNUNID" name="PNUNID" class="form-select">
+                    <option value="">— None —</option>
+                    {{range .Units}}
+                    <option value="{{.ID}}" {{if and $.Part.UnitID (eq (derefInt $.Part.UnitID) .ID)}}selected{{end}}>
+                        {{.Abbreviation}} — {{.DisplayName}}
+                    </option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
                 <input type="text" id="PNReqBy" name="PNReqBy" class="form-input"
                        value="{{.Part.PNReqBy}}">

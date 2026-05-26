@@ -36,6 +36,8 @@ type Part struct {
 	UserField8       string
 	UserField9       string
 	UserField10      string
+	UnitID           *int
+	UnitAbbr         string // joined from unit table; abbreviation of PNUNID
 }
 
 // UserFieldsForEdit returns all 10 PNUser fields for the edit form (including empty ones).

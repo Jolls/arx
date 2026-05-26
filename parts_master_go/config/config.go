@@ -161,6 +161,7 @@ func (c *Config) CompanyAttachmentsTable() string  {
 	return pick(c.TestMode, "company_attachment_Test", "company_attachment")
 }
 func (c *Config) ContactTable() string      { return pick(c.TestMode, "CN_Test", "CN") }
+func (c *Config) UnitTable() string         { return pick(c.TestMode, "unit_Test", "unit") }
 func (c *Config) AppConfigTable() string    { return pick(c.TestMode, "app_config_Test", "app_config") }
 
 func pick(test bool, testVal, prodVal string) string {
