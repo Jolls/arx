@@ -1,6 +1,7 @@
 ﻿package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -459,11 +460,14 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var form models.TestForm
+	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title,
+		       f.record_types, f.instrument_types
 		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title,
+			&recordTypes, &instrumentTypes)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -472,6 +476,8 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	form.RecordTypes = recordTypes.String
+	form.InstrumentTypes = instrumentTypes.String
 
 	// Load raw step values â€" no substituteRefs, we want to edit the actual stored values.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
@@ -773,6 +779,17 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 				"UPDATE %s SET test_order=@p1 WHERE ID=@p2", h.cfg.FormsTable()),
 				normalizeOrder(stepOrder), formID)
 		}
+	}
+
+	// Update form-level record_types and instrument_types if changed.
+	newRecordTypes := strings.TrimSpace(r.FormValue("record_types"))
+	newInstrTypes := strings.TrimSpace(r.FormValue("instrument_types"))
+	if newRecordTypes != r.FormValue("original_record_types") ||
+		newInstrTypes != r.FormValue("original_instrument_types") {
+		h.execContext(r.Context(), fmt.Sprintf(
+			"UPDATE %s SET record_types=@p1, instrument_types=@p2 WHERE ID=@p3",
+			h.cfg.FormsTable()),
+			nullOrVal(newRecordTypes), nullOrVal(newInstrTypes), formID)
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
@@ -1749,4 +1766,351 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
+}
+
+// formPN is a selectable part number for the new-form / duplicate-form PN picker.
+type formPN struct {
+	PNID       int
+	PartNumber string
+	Title      string
+}
+
+// formPNList returns FORM-category PNs that don't already have an active form.
+// Used by both NewForm and DuplicateForm to populate the PN picker.
+func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT PNID, part_number, title
+		FROM %s
+		WHERE category = 'FORM' AND active = 1
+		  AND NOT EXISTS (
+		      SELECT 1 FROM %s WHERE PNID = %s.PNID AND active = 1
+		  )
+		ORDER BY part_number`,
+		h.cfg.PartsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []formPN
+	for rows.Next() {
+		var pn formPN
+		if err := rows.Scan(&pn.PNID, &pn.PartNumber, &pn.Title); err != nil {
+			return nil, err
+		}
+		list = append(list, pn)
+	}
+	return list, nil
+}
+
+// copyFormSteps copies all test steps from sourceID into newFormID (within tx)
+// and sets test_order on the new form. Returns an error on any failure.
+func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFormID int) error {
+	var sourceOrder string
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		"SELECT COALESCE(test_order,'') FROM %s WHERE ID=@p1", h.cfg.FormsTable()), sourceID).
+		Scan(&sourceOrder); err != nil {
+		return err
+	}
+
+	stepRows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT id, COALESCE(type,0), Parameter, Specification, spec_nom, spec_min, spec_max,
+		       spec_units, pf_type, pf_formula, default_result, hide_formula,
+		       category, sheet_name, instrument_types, format, comment,
+		       archive_id, revision
+		FROM %s WHERE form_id=@p1`, h.cfg.StepsTable()), sourceID)
+	if err != nil {
+		return err
+	}
+	defer stepRows.Close()
+
+	type stepRow struct {
+		ID            int
+		Type          int
+		Parameter     sql.NullString
+		Specification sql.NullString
+		SpecNom       sql.NullString
+		SpecMin       sql.NullString
+		SpecMax       sql.NullString
+		SpecUnits     sql.NullString
+		PFType        sql.NullString
+		PFFormula     sql.NullString
+		DefaultResult sql.NullString
+		HideFormula   sql.NullString
+		Category      sql.NullString
+		SheetName     sql.NullString
+		InstrTypes    sql.NullString
+		Format        sql.NullString
+		Comment       sql.NullString
+		ArchiveID     sql.NullInt64
+		Revision      sql.NullInt64
+	}
+	stepsMap := map[int]stepRow{}
+	for stepRows.Next() {
+		var s stepRow
+		if err := stepRows.Scan(
+			&s.ID, &s.Type, &s.Parameter, &s.Specification,
+			&s.SpecNom, &s.SpecMin, &s.SpecMax, &s.SpecUnits,
+			&s.PFType, &s.PFFormula, &s.DefaultResult, &s.HideFormula,
+			&s.Category, &s.SheetName, &s.InstrTypes, &s.Format, &s.Comment,
+			&s.ArchiveID, &s.Revision,
+		); err != nil {
+			return err
+		}
+		stepsMap[s.ID] = s
+	}
+
+	// Walk steps in source test_order sequence.
+	var src models.TestForm
+	src.TestOrder = sourceOrder
+	orderedIDs := src.OrderedTestIDs()
+
+	newIDs := make([]int, 0, len(orderedIDs))
+	for _, oldID := range orderedIDs {
+		s, ok := stepsMap[oldID]
+		if !ok {
+			continue
+		}
+		var newStepID int
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+			INSERT INTO %s
+			  (form_id, type, Parameter, Specification, spec_nom, spec_min, spec_max,
+			   spec_units, pf_type, pf_formula, default_result, hide_formula,
+			   category, sheet_name, instrument_types, format, comment,
+			   archive_id, revision)
+			OUTPUT INSERTED.id
+			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19)`,
+			h.cfg.StepsTable()),
+			newFormID, s.Type, s.Parameter.String, s.Specification.String,
+			s.SpecNom, s.SpecMin, s.SpecMax, s.SpecUnits,
+			s.PFType, s.PFFormula, s.DefaultResult, s.HideFormula,
+			s.Category, s.SheetName, s.InstrTypes, s.Format, s.Comment,
+			s.ArchiveID, s.Revision,
+		).Scan(&newStepID); err != nil {
+			return err
+		}
+		newIDs = append(newIDs, newStepID)
+	}
+
+	idParts := make([]string, len(newIDs))
+	for i, id := range newIDs {
+		idParts[i] = strconv.Itoa(id)
+	}
+	_, err = tx.ExecContext(ctx, fmt.Sprintf(
+		"UPDATE %s SET test_order=@p1 WHERE ID=@p2", h.cfg.FormsTable()),
+		strings.Join(idParts, ","), newFormID)
+	return err
+}
+
+// NewForm — GET /forms/new
+func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
+	pns, err := h.formPNList(r.Context())
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Load existing active forms for the "copy steps from" dropdown.
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT f.ID, pn.part_number, pn.title
+		FROM %s f JOIN %s pn ON f.PNID = pn.PNID
+		WHERE f.active = 1 ORDER BY pn.part_number`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()))
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	var sourceForms []models.TestForm
+	for rows.Next() {
+		var f models.TestForm
+		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Title); err != nil {
+			continue
+		}
+		sourceForms = append(sourceForms, f)
+	}
+
+	h.render(w, "form_new.html", map[string]any{
+		"PNs":         pns,
+		"SourceForms": sourceForms,
+		"CSRFToken":   h.csrfToken(w, r),
+		"TestMode":    h.cfg.TestMode,
+	})
+}
+
+// CreateForm — POST /forms/new
+// Inserts a form row and redirects to its definition edit page.
+// If source_id is provided, copies all steps from that form.
+func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
+	if !h.verifyCsrf(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+
+	pnid, err := strconv.Atoi(r.FormValue("pnid"))
+	if err != nil || pnid <= 0 {
+		http.Error(w, "invalid part number", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the PNID is a valid active FORM-category part number.
+	var exists int
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		"SELECT COUNT(1) FROM %s WHERE PNID=@p1 AND category='FORM' AND active=1",
+		h.cfg.PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
+		http.Error(w, "invalid part number", http.StatusBadRequest)
+		return
+	}
+
+	sourceID, _ := strconv.Atoi(r.FormValue("source_id")) // 0 = blank form
+
+	// If copying from a source, carry over form-level settings.
+	var srcRecordTypes, srcInstrTypes sql.NullString
+	if sourceID > 0 {
+		h.queryRowContext(r.Context(), fmt.Sprintf(
+			"SELECT record_types, instrument_types FROM %s WHERE ID=@p1",
+			h.cfg.FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
+	}
+
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		http.Error(w, "tx error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var newID int
+	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
+		"INSERT INTO %s (PNID, active, locked, test_order, record_types, instrument_types) OUTPUT INSERTED.ID VALUES (@p1, 1, 0, '', @p2, @p3)",
+		h.cfg.FormsTable()), pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
+		tx.Rollback()
+		http.Error(w, "create error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if sourceID > 0 {
+		if err := h.copyFormSteps(r.Context(), tx, sourceID, newID); err != nil {
+			tx.Rollback()
+			http.Error(w, "copy error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def/edit", newID), http.StatusSeeOther)
+}
+
+// DuplicateForm — GET /forms/{id}/duplicate
+func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var form models.TestForm
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var stepCount int
+	h.queryRowContext(r.Context(), fmt.Sprintf(
+		"SELECT COUNT(1) FROM %s WHERE form_id=@p1", h.cfg.StepsTable()), formID).Scan(&stepCount)
+
+	pns, err := h.formPNList(r.Context())
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.render(w, "form_duplicate.html", map[string]any{
+		"Form":      form,
+		"StepCount": stepCount,
+		"PNs":       pns,
+		"CSRFToken": h.csrfToken(w, r),
+		"TestMode":  h.cfg.TestMode,
+	})
+}
+
+// CreateDuplicate — POST /forms/{id}/duplicate
+// Copies all steps from the source form into a new form with the chosen PN.
+func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
+	sourceID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !h.verifyCsrf(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+
+	pnid, err := strconv.Atoi(r.FormValue("pnid"))
+	if err != nil || pnid <= 0 {
+		http.Error(w, "invalid part number", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the PNID is a valid active FORM-category part number.
+	var exists int
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		"SELECT COUNT(1) FROM %s WHERE PNID=@p1 AND category='FORM' AND active=1",
+		h.cfg.PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
+		http.Error(w, "invalid part number", http.StatusBadRequest)
+		return
+	}
+
+	// Carry over form-level settings from the source form.
+	var srcRecordTypes, srcInstrTypes sql.NullString
+	h.queryRowContext(r.Context(), fmt.Sprintf(
+		"SELECT record_types, instrument_types FROM %s WHERE ID=@p1",
+		h.cfg.FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
+
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		http.Error(w, "tx error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var newFormID int
+	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
+		"INSERT INTO %s (PNID, active, locked, test_order, record_types, instrument_types) OUTPUT INSERTED.ID VALUES (@p1, 1, 0, '', @p2, @p3)",
+		h.cfg.FormsTable()), pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {
+		tx.Rollback()
+		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.copyFormSteps(r.Context(), tx, sourceID, newFormID); err != nil {
+		tx.Rollback()
+		http.Error(w, "copy error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def/edit", newFormID), http.StatusSeeOther)
 }
