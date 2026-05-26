@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.47] - 2026-05-25 
+- test_records_go: use `os/user.Current()` instead of `os.Getenv("USERNAME")` for audit username in lock/unlock handlers ([#330](https://github.com/Jolls/arx-legacy/issues/330))
+- parts_master_go: pre-populate PO orderer field with Windows login name on new PO ([#330](https://github.com/Jolls/arx-legacy/issues/330))
+- parts_master_go: pre-populate Requested By field with Windows login name on new part ([#330](https://github.com/Jolls/arx-legacy/issues/330))
+
 ## [0.3.46] - 2026-05-25 
 - parts_master_go: add manufacturer part number (MPN) management on part detail page; flag companies as manufacturers; soft-delete support ([#303](https://github.com/Jolls/arx-legacy/issues/303))
 
