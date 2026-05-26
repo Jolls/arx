@@ -20,6 +20,7 @@
                     <th>Supplier Description</th>
                     <th style="width:90px;">Lead Time</th>
                     <th style="width:80px; text-align:right;">Min Incr.</th>
+                    <th style="width:80px;">Purchase Unit</th>
                 </tr>
             </thead>
             <tbody>
@@ -34,6 +35,15 @@
                     <td>{{.SupplierDesc}}</td>
                     <td>{{.LeadTime}}</td>
                     <td style="text-align:right;">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
+                    <td>
+                        {{if .PurchaseUnitAbbr}}
+                            {{if .PurchaseUnitIsExplicit}}
+                                {{.PurchaseUnitAbbr}}
+                            {{else}}
+                                <span style="color:#999;" title="Base unit (inherited from part)">{{.PurchaseUnitAbbr}}</span>
+                            {{end}}
+                        {{else}}—{{end}}
+                    </td>
                 </tr>
                 {{end}}
             </tbody>

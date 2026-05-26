@@ -404,3 +404,38 @@ func attachLabel(filename, category string) string {
 	}
 	return urlutil.FileBaseName(filename)
 }
+
+// ── Units of measure ─────────────────────────────────────────────────────────
+
+// UnitOption is a row from the unit table, used to populate dropdowns.
+type UnitOption struct {
+	ID           int
+	Abbreviation string
+	DisplayName  string
+	UnitType     string
+}
+
+// fetchUnits returns all rows from the unit table ordered by unit_type, abbreviation.
+func (h *Handler) fetchUnits(ctx context.Context) ([]UnitOption, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(
+		`SELECT unit_id, abbreviation, display_name, unit_type FROM %s ORDER BY unit_type, abbreviation`,
+		h.cfg.UnitTable(),
+	))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var units []UnitOption
+	for rows.Next() {
+		var u UnitOption
+		var abbr, name, utype sql.NullString
+		if err := rows.Scan(&u.ID, &abbr, &name, &utype); err != nil {
+			return nil, err
+		}
+		u.Abbreviation = abbr.String
+		u.DisplayName = name.String
+		u.UnitType = utype.String
+		units = append(units, u)
+	}
+	return units, rows.Err()
+}

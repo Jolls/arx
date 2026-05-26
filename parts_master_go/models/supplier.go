@@ -51,10 +51,13 @@ type SupplierPart struct {
 	Revision   string
 	Category   string
 	// joined — supplier + mfg info (part sourcing view)
-	SupplierName  string
-	MfgPartID     *int
-	MfgPartNumber string
-	MfgName       string
+	SupplierName    string
+	MfgPartID       *int
+	MfgPartNumber   string
+	MfgName         string
+	UnitID               *int
+	PurchaseUnitAbbr     string // joined from unit table; COALESCE(purchase unit, part base unit)
+	PurchaseUnitIsExplicit bool // true = unit_id set on supplier_part; false = inherited from PN.PNUNID
 }
 
 type MfgPart struct {

@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.48] - 2026-05-26 
+- parts_master_go: add units of measure — `unit` reference table, base unit on parts (`PNUNID`), purchase unit on sourcing (`supplier_part.unit_id`); supplier parts list shows effective unit with base-unit fallback ([#314](https://github.com/Jolls/arx-legacy/issues/314))
+
 ## [0.3.47] - 2026-05-25 
 - test_records_go: use `os/user.Current()` instead of `os.Getenv("USERNAME")` for audit username in lock/unlock handlers ([#330](https://github.com/Jolls/arx-legacy/issues/330))
 - parts_master_go: pre-populate PO orderer field with Windows login name on new PO ([#330](https://github.com/Jolls/arx-legacy/issues/330))

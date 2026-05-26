@@ -26,6 +26,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.test_definition_history_Test', 'U') IS NOT NULL DROP TABLE test_definition_history_Test;
     -- named_queries intentionally excluded — no _Test variant (shared config, read-only lookups)
     IF OBJECT_ID('dbo.app_config_Test',          'U') IS NOT NULL DROP TABLE app_config_Test;
+    IF OBJECT_ID('dbo.unit_Test',                'U') IS NOT NULL DROP TABLE unit_Test;
     IF OBJECT_ID('dbo.price_Test',               'U') IS NOT NULL DROP TABLE price_Test;
     IF OBJECT_ID('dbo.release_notes_Test',       'U') IS NOT NULL DROP TABLE release_notes_Test;
     IF OBJECT_ID('dbo.logs_Test',                'U') IS NOT NULL DROP TABLE logs_Test;
@@ -49,6 +50,7 @@ BEGIN TRY
     SELECT * INTO test_definition_Test        FROM test_definition;
     SELECT * INTO test_definition_history_Test FROM test_definition_history;
     SELECT * INTO app_config_Test        FROM app_config;
+    SELECT * INTO unit_Test              FROM unit;
     SELECT * INTO price_Test             FROM price;
     SELECT * INTO release_notes_Test     FROM release_notes;
     SELECT * INTO logs_Test              FROM logs;
