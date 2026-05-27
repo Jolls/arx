@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-26 
+- release: v0.4.0 milestone — conditional step visibility, result format display, units of measure, vendor rename, manufacturer links, Windows login auto-fill
+
 ## [0.3.53] - 2026-05-26 
 - test_records_go: hide_formula — support `{token}=value` and `{token}!=value` expressions for dynamic per-record step visibility ([#210](https://github.com/Jolls/arx-legacy/issues/210))
 

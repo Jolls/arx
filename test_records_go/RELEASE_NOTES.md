@@ -1,4 +1,43 @@
+Arx v0.4.0 — May 2026
+======================
+
+NEW FEATURES
+
+  Test Records — Conditional Step Visibility
+  Steps in a form can now be shown or hidden based on other step results
+  or record context. Enter an expression like {record.type}!=Re-Test or
+  {12}=Yes in the hide column of the form definition editor. Steps hidden
+  by an expression are excluded from the record view, edit view, and
+  print output — no manual editing needed when the same form is used for
+  multiple record types.
+
+  Test Records — Result Display Format
+  The format field on a step definition now controls how the result
+  appears in the record view and print output. The edit input shows a
+  placeholder hint to guide data entry to the expected format.
+
+  Parts Master — Units of Measure
+  Parts now have a base unit and sourcing relationships can specify a
+  purchase unit. A unit reference table manages available units. The
+  supplier parts list shows the effective unit, falling back to the
+  part's base unit when no purchase unit is set.
+
+  Parts Master — Vendors
+  The Suppliers section has been renamed to Vendors throughout the app.
+  The vendor detail page now shows a Roles row indicating whether the
+  company is flagged as a supplier, manufacturer, or both.
+
+  Parts Master — Manufacturer Page Links
+  On a part's Mfg Parts tab, the manufacturer name is now a clickable
+  link to that company's detail page.
+
+  Both Apps — Windows Login Auto-Fill
+  New POs pre-fill the Orderer field and new part requests pre-fill the
+  Requested By field with your Windows login name. The same login is
+  recorded in the audit trail for form and record lock and unlock events.
+
 Arx v0.3.46 — May 2026
+=======================
 
 NEW FEATURES
 
@@ -10,6 +49,7 @@ NEW FEATURES
   manufacturer dropdown.
 
 Arx v0.3.31 — May 2026
+=======================
 
 NEW FEATURES
 
