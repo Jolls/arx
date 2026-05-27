@@ -1,0 +1,199 @@
+{{define "content"}}
+<header>
+    <h1>Part Details</h1>
+    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
+</header>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+
+    {{/* ── Supplier links list ───────────────────────────────── */}}
+    {{if .Links}}
+    <div class="table-wrapper">
+        <table style="table-layout:auto;">
+            <thead>
+                <tr>
+                    <th>Supplier</th>
+                    <th>Supplier PN</th>
+                    <th>Description</th>
+                    <th style="width:80px;">Preference</th>
+                    <th style="width:90px;">Lead Time</th>
+                    <th style="width:80px; text-align:right;">Min Incr.</th>
+                    <th style="width:80px;">Purchase Unit</th>
+                    <th style="width:60px;"></th>
+                    <th style="width:60px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Links}}
+                <tr>
+                    <td><a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a></td>
+                    <td style="font-family:monospace;">{{.SupplierPN}}</td>
+                    <td>{{.SupplierDesc}}</td>
+                    <td>{{.Preference}}</td>
+                    <td>{{.LeadTime}}</td>
+                    <td style="text-align:right;">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
+                    <td>
+                        {{if .PurchaseUnitAbbr}}
+                            {{if .PurchaseUnitIsExplicit}}
+                                {{.PurchaseUnitAbbr}}
+                            {{else}}
+                                <span style="color:#999;" title="Base unit (inherited from part)">{{.PurchaseUnitAbbr}}</span>
+                            {{end}}
+                        {{else}}—{{end}}
+                    </td>
+                    <td style="text-align:center;">
+                        <a href="/part/{{$.Part.PNID}}/suppliers/{{.ID}}/edit#edit-form"
+                           class="btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
+                    </td>
+                    <td style="text-align:center;">
+                        <form method="post" action="/part/{{$.Part.PNID}}/suppliers/{{.ID}}/delete"
+                              style="margin:0;" onsubmit="return confirm('Remove this supplier link?')">
+                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <button type="submit" class="btn-secondary"
+                                    style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Links}} supplier{{if ne (len .Links) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No supplier links recorded for this part.</p>
+    {{end}}
+
+    {{/* ── Edit form ─────────────────────────────────────────── */}}
+    {{if .EditingLink}}
+    <div id="edit-form" class="detail-section" style="margin-top:24px;">
+        <h3>Edit Supplier Link</h3>
+        <form method="post" action="/part/{{.Part.PNID}}/suppliers/{{.EditingLink.ID}}">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="detail-row">
+                <label class="form-label">Supplier *</label>
+                {{if .Suppliers}}
+                <select name="supplier_id" class="form-select" required>
+                    <option value="">-- Select --</option>
+                    {{range .Suppliers}}
+                    <option value="{{.ID}}" {{if eq .ID $.EditingLink.SupplierID}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+                {{else}}
+                <span style="color:#888; font-size:0.9em;">
+                    No suppliers found. Edit a company and enable <em>Supplier</em>.
+                </span>
+                <input type="hidden" name="supplier_id" value="">
+                {{end}}
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Supplier PN</label>
+                <input type="text" name="supplier_pn" class="form-input"
+                       value="{{.EditingLink.SupplierPN}}">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Description</label>
+                <input type="text" name="supplier_desc" class="form-input"
+                       value="{{.EditingLink.SupplierDesc}}">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Preference</label>
+                <input type="text" name="preference" class="form-input"
+                       value="{{.EditingLink.Preference}}" placeholder="e.g. Primary, Secondary">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Lead Time</label>
+                <input type="text" name="lead_time" class="form-input"
+                       value="{{.EditingLink.LeadTime}}" placeholder="e.g. 2 weeks">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Min Increment</label>
+                <input type="number" name="min_increment" class="form-input" step="any" min="0"
+                       value="{{if .EditingLink.MinIncrement}}{{printf "%g" (deref .EditingLink.MinIncrement)}}{{end}}">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Purchase Unit</label>
+                <select name="unit_id" class="form-select">
+                    <option value="">— inherit from part base unit —</option>
+                    {{range .Units}}
+                    <option value="{{.ID}}" {{if and $.EditingLink.UnitID (eq .ID (derefInt $.EditingLink.UnitID))}}selected{{end}}>
+                        {{.Abbreviation}}{{if .DisplayName}} — {{.DisplayName}}{{end}}
+                    </option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Save Changes</button>
+                <a href="/part/{{.Part.PNID}}/suppliers" class="btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+    {{end}}
+
+    {{/* ── Add form ──────────────────────────────────────────── */}}
+    {{if not .EditingLink}}
+    <details style="margin-top:24px;">
+        <summary style="cursor:pointer; font-weight:600; font-size:1em; padding:8px 0;">Add Supplier Link</summary>
+        <div class="detail-section" style="margin-top:8px;">
+            {{if not .Suppliers}}
+            <p style="color:#888; font-size:0.9em; margin-bottom:12px;">
+                No suppliers found. Edit a company and enable <em>Supplier</em> first.
+            </p>
+            {{end}}
+            <form method="post" action="/part/{{.Part.PNID}}/suppliers">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <div class="detail-row">
+                    <label class="form-label">Supplier *</label>
+                    <select name="supplier_id" class="form-select" required {{if not .Suppliers}}disabled{{end}}>
+                        <option value="">-- Select --</option>
+                        {{range .Suppliers}}
+                        <option value="{{.ID}}">{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Supplier PN</label>
+                    <input type="text" name="supplier_pn" class="form-input"
+                           placeholder="Supplier's part number">
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Description</label>
+                    <input type="text" name="supplier_desc" class="form-input"
+                           placeholder="Supplier's description">
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Preference</label>
+                    <input type="text" name="preference" class="form-input"
+                           placeholder="e.g. Primary, Secondary">
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Lead Time</label>
+                    <input type="text" name="lead_time" class="form-input"
+                           placeholder="e.g. 2 weeks">
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Min Increment</label>
+                    <input type="number" name="min_increment" class="form-input" step="any" min="0"
+                           placeholder="Minimum order quantity">
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Purchase Unit</label>
+                    <select name="unit_id" class="form-select">
+                        <option value="">— inherit from part base unit —</option>
+                        {{range .Units}}
+                        <option value="{{.ID}}">{{.Abbreviation}}{{if .DisplayName}} — {{.DisplayName}}{{end}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary" {{if not .Suppliers}}disabled{{end}}>
+                        Add Supplier Link
+                    </button>
+                </div>
+            </form>
+        </div>
+    </details>
+    {{end}}
+</div>
+{{end}}
