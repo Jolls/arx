@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.49] - 2026-05-26 
+- test_records_go: apply `format` field to result display in show/print views; add format placeholder to edit inputs; expose format column in form def editor ([#209](https://github.com/Jolls/arx-legacy/issues/209))
+
 ## [0.3.48] - 2026-05-26 
 - parts_master_go: add units of measure — `unit` reference table, base unit on parts (`PNUNID`), purchase unit on sourcing (`supplier_part.unit_id`); supplier parts list shows effective unit with base-unit fallback ([#314](https://github.com/Jolls/arx-legacy/issues/314))
 

@@ -105,7 +105,7 @@
                data-pf-type="{{.Step.PFType}}"
                data-pf-target="pf-{{$sid}}">
             <input type="text" class="form-control form-control-sm font-mono"
-                   name="result_{{$sid}}" value="{{$cur}}" placeholder="loading…"
+                   name="result_{{$sid}}" value="{{$cur}}" placeholder="{{.Step.Format}}"
                    data-spec-min="{{.Step.SpecMin}}"
                    data-spec-max="{{.Step.SpecMax}}"
                    data-pf-type="{{.Step.PFType}}"
@@ -114,6 +114,7 @@
           {{else}}
           <input type="text" class="form-control form-control-sm font-mono"
                  name="result_{{$sid}}" value="{{$cur}}"
+                 placeholder="{{.Step.Format}}"
                  {{if .RawDefault}}data-formula="{{.RawDefault}}"{{end}}
                  data-spec-min="{{.Step.SpecMin}}"
                  data-spec-max="{{.Step.SpecMax}}"

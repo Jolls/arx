@@ -86,6 +86,7 @@
           <th style="width:120px">category</th>
           <th style="width:120px">sheet_name</th>
           <th style="width:180px">instrument_types</th>
+          <th style="width:80px">format</th>
           <th style="width:200px">comment</th>
         </tr>
       </thead>
@@ -136,6 +137,7 @@
           <input type="hidden" name="original_category_{{.ID}}"         value="{{.Category}}">
           <input type="hidden" name="original_sheet_name_{{.ID}}"       value="{{.SheetName}}">
           <input type="hidden" name="original_instrument_types_{{.ID}}" value="{{.InstrumentTypes}}">
+          <input type="hidden" name="original_format_{{.ID}}"           value="{{.Format}}">
           <input type="hidden" name="original_comment_{{.ID}}"          value="{{.StepComment}}">
           <td class="text-muted small">{{.ID}}</td>
           <td>
@@ -171,6 +173,7 @@
           <td><input type="text" class="form-control form-control-sm" name="category_{{.ID}}" value="{{.Category}}" data-original="{{.Category}}"></td>
           <td><input type="text" class="form-control form-control-sm" name="sheet_name_{{.ID}}" value="{{.SheetName}}" data-original="{{.SheetName}}"></td>
           <td><input type="text" class="form-control form-control-sm" name="instrument_types_{{.ID}}" value="{{.InstrumentTypes}}" data-original="{{.InstrumentTypes}}"></td>
+          <td><input type="text" class="form-control form-control-sm font-mono" name="format_{{.ID}}" value="{{.Format}}" data-original="{{.Format}}" placeholder="e.g. 0.00"></td>
           <td><input type="text" class="form-control form-control-sm" name="comment_{{.ID}}" value="{{.StepComment}}" data-original="{{.StepComment}}"></td>
         </tr>
         {{end}}
@@ -223,6 +226,7 @@
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][category]"></td>
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][sheet_name]"></td>
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][instrument_types]"></td>
+    <td><input type="text" class="form-control form-control-sm font-mono" name="new_row[IDX][format]" placeholder="e.g. 0.00"></td>
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][comment]"></td>
   </tr>
 </template>

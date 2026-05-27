@@ -132,7 +132,7 @@
           </a>
           {{end}}
         {{else}}
-          {{$val}}
+          {{applyFormat $val .Step.Format}}
         {{end}}
       </td>
       <td class="text-center">{{pfBadge .Result}}</td>
