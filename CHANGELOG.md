@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.50] - 2026-05-26 
+- parts_master_go: manufacturer name on Mfg Parts tab is now a clickable link to the supplier detail page ([#338](https://github.com/Jolls/arx-legacy/issues/338))
+
 ## [0.3.49] - 2026-05-26 
 - test_records_go: apply `format` field to result display in show/print views; add format placeholder to edit inputs; expose format column in form def editor ([#209](https://github.com/Jolls/arx-legacy/issues/209))
 
