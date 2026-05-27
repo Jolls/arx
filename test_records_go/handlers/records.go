@@ -484,7 +484,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, COALESCE(type,0) AS type, Parameter, Specification, spec_nom, spec_min, spec_max, spec_units,
 		       pf_type, default_result, hide_formula, category, sheet_name,
-		       instrument_types, comment
+		       instrument_types, format, comment
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
@@ -497,11 +497,11 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		var s models.TestStep
 		var param, spec, specNom, specMin, specMax, specUnits sql.NullString
 		var pfType, defaultResult, hideFormula, category, sheetName sql.NullString
-		var instrumentTypes, comment sql.NullString
+		var instrumentTypes, format, comment sql.NullString
 		if err := stepRows.Scan(
 			&s.ID, &s.Type, &param, &spec, &specNom, &specMin, &specMax, &specUnits,
 			&pfType, &defaultResult, &hideFormula, &category, &sheetName,
-			&instrumentTypes, &comment,
+			&instrumentTypes, &format, &comment,
 		); err != nil {
 			continue
 		}
@@ -517,6 +517,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		s.Category = category.String
 		s.SheetName = sheetName.String
 		s.InstrumentTypes = instrumentTypes.String
+		s.Format = format.String
 		s.StepComment = comment.String
 		stepsMap[s.ID] = &s
 	}
@@ -608,6 +609,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			sid(id, "category") == orig(id, "category") &&
 			sid(id, "sheet_name") == orig(id, "sheet_name") &&
 			sid(id, "instrument_types") == orig(id, "instrument_types") &&
+			sid(id, "format") == orig(id, "format") &&
 			sid(id, "comment") == orig(id, "comment") {
 			continue
 		}
@@ -618,8 +620,8 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			  spec_nom=@p4, spec_min=@p5, spec_max=@p6, spec_units=@p7,
 			  pf_type=@p8, default_result=@p9, hide_formula=@p10,
 			  category=@p11, sheet_name=@p12, instrument_types=@p13,
-			  comment=@p14, updated_at=GETDATE()
-			WHERE id=@p15 AND form_id=@p16`, h.cfg.StepsTable()),
+			  format=@p14, comment=@p15, updated_at=GETDATE()
+			WHERE id=@p16 AND form_id=@p17`, h.cfg.StepsTable()),
 			stepType,
 			sid(id, "parameter"), sid(id, "specification"),
 			nullOrVal(sid(id, "spec_nom")),
@@ -630,6 +632,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			nullOrVal(hideFormula),
 			nullOrVal(sid(id, "category")), nullOrVal(sid(id, "sheet_name")),
 			nullOrVal(sid(id, "instrument_types")),
+			nullOrVal(sid(id, "format")),
 			nullOrVal(sid(id, "comment")),
 			id, formID,
 		)
@@ -650,6 +653,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		Category         string
 		SheetName        string
 		InstrumentTypes  string
+		Format           string
 		Comment          string
 	}
 	parsedNewRows := map[string]newRowData{}
@@ -683,6 +687,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		case "category":          row.Category = val
 		case "sheet_name":        row.SheetName = val
 		case "instrument_types":  row.InstrumentTypes = val
+		case "format":            row.Format = val
 		case "comment":           row.Comment = val
 		}
 		parsedNewRows[idx] = row
@@ -708,15 +713,15 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			INSERT INTO %s
 			  (form_id, type, Parameter, Specification, spec_nom, spec_min, spec_max, spec_units,
 			   pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
-			   comment, created_at, updated_at)
+			   format, comment, created_at, updated_at)
 			OUTPUT INSERTED.id
-			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,GETDATE(),GETDATE())`,
+			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE(),GETDATE())`,
 			h.cfg.StepsTable()),
 			formID, stepType, row.Parameter, nullOrVal(row.Specification),
 			nullOrVal(row.SpecNom), nullOrVal(row.SpecMin), nullOrVal(row.SpecMax),
 			nullOrVal(row.SpecUnits), nullOrVal(row.PFType), nullOrVal(row.DefaultResult),
 			nullOrVal(hideFormula), nullOrVal(row.Category), nullOrVal(row.SheetName),
-			nullOrVal(row.InstrumentTypes), nullOrVal(row.Comment),
+			nullOrVal(row.InstrumentTypes), nullOrVal(row.Format), nullOrVal(row.Comment),
 		).Scan(&newID); err2 != nil {
 			log.Printf("insert new test step: %v", err2)
 			continue

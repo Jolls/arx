@@ -10,6 +10,7 @@ import (
 	ioFS "io/fs"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -205,6 +206,40 @@ func templateFuncs() template.FuncMap {
 				return `<span class="badge bg-success">PASS</span>`
 			}
 			return `<span class="badge bg-danger">FAIL</span>`
+		},
+		// applyFormat applies an Excel number format string to a result value.
+		// Handles: blank/General/@ (pass-through), "0"/"0.0"/"0.00"/"0.000"
+		// (fixed decimal), "0%"/"0.0%" (percent). Non-numeric values fall through.
+		"applyFormat": func(val, format string) string {
+			if val == "" {
+				return val
+			}
+			f := strings.TrimSpace(format)
+			if f == "" || f == "General" || f == "@" {
+				return val
+			}
+			isPercent := strings.HasSuffix(f, "%")
+			numFmt := strings.TrimSuffix(f, "%")
+			// Must be "0" or "0.NNN" pattern
+			if numFmt != "0" && !strings.HasPrefix(numFmt, "0.") {
+				return val
+			}
+			decimals := 0
+			if idx := strings.Index(numFmt, "."); idx >= 0 {
+				decimals = len(numFmt) - idx - 1
+			}
+			v, err := strconv.ParseFloat(val, 64)
+			if err != nil {
+				return val
+			}
+			if isPercent {
+				v *= 100
+			}
+			result := fmt.Sprintf("%.*f", decimals, v)
+			if isPercent {
+				result += "%"
+			}
+			return result
 		},
 	}
 }
