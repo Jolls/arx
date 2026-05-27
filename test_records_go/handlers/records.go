@@ -250,7 +250,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       pf_formula, instrument_types, format, comment,
+		       instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
 	if err != nil {
@@ -267,14 +267,14 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 			param, spec, defaultResult, hideFormula     sql.NullString
 			specMin, specMax, pfType                    sql.NullString
 			category, sheetName, specUnits, specNom     sql.NullString
-			pfFormula, instrumentTypes, format           sql.NullString
+			instrumentTypes, format                     sql.NullString
 			stepComment                                 sql.NullString
 		)
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
 			&archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &pfFormula, &instrumentTypes,
+			&specUnits, &specNom, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
@@ -297,7 +297,6 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		s.SheetName = sheetName.String
 		s.SpecUnits = specUnits.String
 		s.SpecNom = specNom.String
-		s.PFFormula = pfFormula.String
 		s.InstrumentTypes = instrumentTypes.String
 		s.Format = format.String
 		s.StepComment = stepComment.String
@@ -846,7 +845,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       pf_formula, instrument_types, format, comment,
+		       instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
@@ -863,14 +862,14 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 			param, spec, defaultResult, hideFormula         sql.NullString
 			specMin, specMax, pfType                        sql.NullString
 			category, sheetName, specUnits, specNom         sql.NullString
-			pfFormula, instrumentTypes, format               sql.NullString
+			instrumentTypes, format                         sql.NullString
 			stepComment                                     sql.NullString
 		)
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
 			&archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &pfFormula, &instrumentTypes,
+			&specUnits, &specNom, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
@@ -893,7 +892,6 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		s.SheetName = sheetName.String
 		s.SpecUnits = specUnits.String
 		s.SpecNom = specNom.String
-		s.PFFormula = pfFormula.String
 		s.InstrumentTypes = instrumentTypes.String
 		s.Format = format.String
 		s.StepComment = stepComment.String
@@ -1036,7 +1034,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       pf_formula, instrument_types, format, comment,
+		       instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
@@ -1053,14 +1051,14 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 			param, spec, defaultResult, hideFormula     sql.NullString
 			specMin, specMax, pfType                    sql.NullString
 			category, sheetName, specUnits, specNom     sql.NullString
-			pfFormula, instrumentTypes, format           sql.NullString
+			instrumentTypes, format                     sql.NullString
 			stepComment                                 sql.NullString
 		)
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
 			&archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &pfFormula, &instrumentTypes,
+			&specUnits, &specNom, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
@@ -1083,7 +1081,6 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		s.SheetName = sheetName.String
 		s.SpecUnits = specUnits.String
 		s.SpecNom = specNom.String
-		s.PFFormula = pfFormula.String
 		s.InstrumentTypes = instrumentTypes.String
 		s.Format = format.String
 		s.StepComment = stepComment.String
@@ -1832,7 +1829,7 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFo
 
 	stepRows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT id, COALESCE(type,0), Parameter, Specification, spec_nom, spec_min, spec_max,
-		       spec_units, pf_type, pf_formula, default_result, hide_formula,
+		       spec_units, pf_type, default_result, hide_formula,
 		       category, sheet_name, instrument_types, format, comment,
 		       archive_id, revision
 		FROM %s WHERE form_id=@p1`, h.cfg.StepsTable()), sourceID)
@@ -1851,7 +1848,6 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFo
 		SpecMax       sql.NullString
 		SpecUnits     sql.NullString
 		PFType        sql.NullString
-		PFFormula     sql.NullString
 		DefaultResult sql.NullString
 		HideFormula   sql.NullString
 		Category      sql.NullString
@@ -1868,7 +1864,7 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFo
 		if err := stepRows.Scan(
 			&s.ID, &s.Type, &s.Parameter, &s.Specification,
 			&s.SpecNom, &s.SpecMin, &s.SpecMax, &s.SpecUnits,
-			&s.PFType, &s.PFFormula, &s.DefaultResult, &s.HideFormula,
+			&s.PFType, &s.DefaultResult, &s.HideFormula,
 			&s.Category, &s.SheetName, &s.InstrTypes, &s.Format, &s.Comment,
 			&s.ArchiveID, &s.Revision,
 		); err != nil {
@@ -1892,15 +1888,15 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFo
 		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s
 			  (form_id, type, Parameter, Specification, spec_nom, spec_min, spec_max,
-			   spec_units, pf_type, pf_formula, default_result, hide_formula,
+			   spec_units, pf_type, default_result, hide_formula,
 			   category, sheet_name, instrument_types, format, comment,
 			   archive_id, revision)
 			OUTPUT INSERTED.id
-			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19)`,
+			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18)`,
 			h.cfg.StepsTable()),
 			newFormID, s.Type, s.Parameter.String, s.Specification.String,
 			s.SpecNom, s.SpecMin, s.SpecMax, s.SpecUnits,
-			s.PFType, s.PFFormula, s.DefaultResult, s.HideFormula,
+			s.PFType, s.DefaultResult, s.HideFormula,
 			s.Category, s.SheetName, s.InstrTypes, s.Format, s.Comment,
 			s.ArchiveID, s.Revision,
 		).Scan(&newStepID); err != nil {

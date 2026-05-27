@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.52] - 2026-05-26 
+- test_records_go: deprecate pf_formula — remove from all step queries and struct; pass/fail uses pf_type + ComputePassFail ([#199](https://github.com/Jolls/arx-legacy/issues/199))
+
 ## [0.3.51] - 2026-05-26 
 - parts_master_go: rename "Suppliers" section to "Vendors" throughout UI; add Roles row to vendor detail page; fix "Supplier is active" label and manufacturer checkbox formatting ([#336](https://github.com/Jolls/arx-legacy/issues/336))
 

@@ -96,7 +96,6 @@ type TestStep struct {
 	SheetName        string
 	SpecUnits        string
 	SpecNom          string
-	PFFormula        string
 	InstrumentTypes  string
 	Format           string
 	StepComment      string
