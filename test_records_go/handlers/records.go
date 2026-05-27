@@ -310,7 +310,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
-		if strings.EqualFold(step.HideFormula, "HIDE") {
+		if evaluateHide(step.HideFormula, nil, stepsMap, nil, &form) {
 			continue
 		}
 		steps = append(steps, step)
@@ -589,10 +589,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		if t, err := strconv.Atoi(orig(id, "type")); err == nil {
 			origType = t
 		}
-		hideFormula := ""
-		if r.FormValue(fmt.Sprintf("hide_%d", id)) == "1" {
-			hideFormula = "HIDE"
-		}
+		hideFormula := strings.TrimSpace(r.FormValue(fmt.Sprintf("hide_%d", id)))
 
 		// Skip if nothing changed relative to what the user saw when the page loaded.
 		if stepType == origType &&
@@ -703,10 +700,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		if stepType == 0 && row.Parameter == "" {
 			continue
 		}
-		hideFormula := ""
-		if row.Hide == "1" {
-			hideFormula = "HIDE"
-		}
+		hideFormula := row.Hide
 		var newID int
 		if err2 := h.queryRowContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s
@@ -933,7 +927,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		level := step.Type
-		if strings.EqualFold(step.HideFormula, "HIDE") {
+		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
 			continue
 		}
 		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
@@ -1119,7 +1113,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
-		if strings.EqualFold(step.HideFormula, "HIDE") {
+		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
 			continue
 		}
 		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
@@ -1417,7 +1411,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
-		if strings.EqualFold(step.HideFormula, "HIDE") {
+		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
 			continue
 		}
 		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {

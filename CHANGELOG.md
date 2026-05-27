@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.53] - 2026-05-26 
+- test_records_go: hide_formula — support `{token}=value` and `{token}!=value` expressions for dynamic per-record step visibility ([#210](https://github.com/Jolls/arx-legacy/issues/210))
+
 ## [0.3.52] - 2026-05-26 
 - test_records_go: deprecate pf_formula — remove from all step queries and struct; pass/fail uses pf_type + ComputePassFail ([#199](https://github.com/Jolls/arx-legacy/issues/199))
 

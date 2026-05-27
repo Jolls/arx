@@ -124,7 +124,7 @@
       <td>{{.SpecUnits}}</td>
       <td>{{.PFType}}</td>
       <td class="font-mono">{{.DefaultResult}}</td>
-      <td class="text-center">{{if eq .HideFormula "HIDE"}}<i class="bi bi-eye-slash text-muted"></i>{{end}}</td>
+      <td class="text-center">{{if .HideFormula}}{{if eq .HideFormula "HIDE"}}<i class="bi bi-eye-slash text-muted"></i>{{else}}<span class="font-mono small text-muted" title="hide: {{.HideFormula}}">{{.HideFormula}}</span>{{end}}{{end}}</td>
       <td class="small text-muted">{{.Category}}</td>
       <td class="small text-muted">{{.SheetName}}</td>
       <td class="small text-muted">{{.InstrumentTypes}}</td>
