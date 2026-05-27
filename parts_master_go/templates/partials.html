@@ -68,6 +68,7 @@
     <a href="/part/{{$id}}/attachments" class="sub-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
     <a href="/part/{{$id}}/pricing"     class="sub-tab{{if eq $sub "pricing"}} active{{end}}">Pricing</a>
     <a href="/part/{{$id}}/mfg-parts"   class="sub-tab{{if eq $sub "mfg-parts"}} active{{end}}">Mfg Parts</a>
+    <a href="/part/{{$id}}/suppliers"   class="sub-tab{{if eq $sub "suppliers"}} active{{end}}">Suppliers</a>
     {{if eq $sub "details"}}
     <a href="/part/{{$id}}/edit" class="sub-tab sub-tab-edit">Edit</a>
     {{else if and $hasBOM (eq $sub "bom")}}
