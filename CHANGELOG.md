@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.51] - 2026-05-26 
+- parts_master_go: rename "Suppliers" section to "Vendors" throughout UI; add Roles row to vendor detail page; fix "Supplier is active" label and manufacturer checkbox formatting ([#336](https://github.com/Jolls/arx-legacy/issues/336))
+
 ## [0.3.50] - 2026-05-26 
 - parts_master_go: manufacturer name on Mfg Parts tab is now a clickable link to the supplier detail page ([#338](https://github.com/Jolls/arx-legacy/issues/338))
 

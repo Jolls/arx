@@ -1,6 +1,6 @@
 {{define "content"}}
 <header>
-    <h1>Supplier Details</h1>
+    <h1>Vendor Details</h1>
     <p>{{.Supplier.Name}}</p>
 </header>
 <div class="content">
@@ -52,6 +52,14 @@
             <strong>Status:</strong>
             <span>{{if .Supplier.IsActive}}<span class="badge badge-active">Active</span>
             {{else}}<span class="badge badge-inactive">Inactive</span>{{end}}</span>
+        </div>
+        <div class="detail-row">
+            <strong>Roles:</strong>
+            <span>
+                {{if .Supplier.IsSupplier}}<span class="badge badge-active">Supplier</span> {{end}}
+                {{if .Supplier.IsManufacturer}}<span class="badge badge-active">Manufacturer</span>{{end}}
+                {{if and (not .Supplier.IsSupplier) (not .Supplier.IsManufacturer)}}—{{end}}
+            </span>
         </div>
         <div class="detail-row"><strong>Last Modified:</strong> <span>{{formatDate .Supplier.DateModified}}</span></div>
     </div>
