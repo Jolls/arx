@@ -24,7 +24,7 @@
             <tbody>
                 {{range .MfgParts}}
                 <tr>
-                    <td>{{.MfgName}}</td>
+                    <td><a href="/supplier/{{.MfgID}}">{{.MfgName}}</a></td>
                     <td style="font-family:monospace;">{{.MfgPartNumber}}</td>
                     <td>{{.Description}}</td>
                     <td style="text-align:center;">
