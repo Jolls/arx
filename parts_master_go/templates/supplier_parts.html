@@ -1,6 +1,6 @@
 {{define "content"}}
 <header>
-    <h1>Supplier Details</h1>
+    <h1>Vendor Details</h1>
     <p>{{.Supplier.Name}}</p>
 </header>
 <div class="content">
@@ -51,7 +51,7 @@
     </div>
     <p class="table-footer-note">{{len .Links}} linked part{{if ne (len .Links) 1}}s{{end}}</p>
     {{else}}
-    <p class="no-results">No linked parts found for this supplier.</p>
+    <p class="no-results">No linked parts found for this vendor.</p>
     {{end}}
 </div>
 {{end}}

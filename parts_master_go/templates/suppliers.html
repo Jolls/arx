@@ -1,17 +1,17 @@
 {{define "content"}}
 <header>
-    <h1>Suppliers</h1>
-    <p>Supplier directory</p>
+    <h1>Vendors</h1>
+    <p>Vendor directory</p>
 </header>
 <div class="content">
-    <a href="/suppliers/new" class="new-record-btn">+ New Supplier</a>
+    <a href="/suppliers/new" class="new-record-btn">+ New Vendor</a>
 
     {{if .Suppliers}}
     <div class="table-wrapper">
         <table>
             <thead>
                 <tr>
-                    <th>Supplier Name</th>
+                    <th>Vendor Name</th>
                     <th>Status</th>
                     <th>Country</th>
                     <th># Linked Parts</th>
@@ -55,7 +55,7 @@
         Total matching: <strong><span class="record-count">{{len .Suppliers}}</span></strong>
     </p>
     {{else}}
-    <div class="no-results">No suppliers available.</div>
+    <div class="no-results">No vendors available.</div>
     {{end}}
 </div>
 {{end}}

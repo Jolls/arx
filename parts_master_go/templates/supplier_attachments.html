@@ -1,6 +1,6 @@
 {{define "content"}}
 <header>
-    <h1>Supplier Details</h1>
+    <h1>Vendor Details</h1>
     <p>{{.Supplier.Name}}</p>
 </header>
 <div class="content">
@@ -73,7 +73,7 @@
     </div>
     <p class="table-footer-note">{{len .Attachments}} attachment{{if ne (len .Attachments) 1}}s{{end}}</p>
     {{else}}
-    <p class="no-results">No attachments found for this supplier.</p>
+    <p class="no-results">No attachments found for this vendor.</p>
     {{end}}
 
     {{/* ── Edit form ─────────────────────────────────────────── */}}
