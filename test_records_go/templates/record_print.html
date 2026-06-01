@@ -60,7 +60,7 @@
   <div class="meta-strip">
     <div class="cell"><label>Part Number</label><span>{{.Record.SerialNumberPN}}</span></div>
     <div class="cell"><label>Serial Number</label><span>{{.Record.SerialNumber}}</span></div>
-    <div class="cell"><label>Date</label><span>{{if .Record.RecordDate}}{{formatDate .Record.RecordDate}}{{else}}—{{end}}</span></div>
+    <div class="cell"><label>Date</label><span>{{if .Record.RecordDate}}{{formatDateTimeFull .Record.RecordDate}}{{else}}—{{end}}</span></div>
     <div class="cell"><label>Type</label><span>{{if .Record.Comments}}{{.Record.Comments}}{{else}}—{{end}}</span></div>
   </div>
 

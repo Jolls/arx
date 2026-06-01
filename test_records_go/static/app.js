@@ -275,6 +275,8 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
   // Evaluate a basic arithmetic expression string (only digits, +, -, *, /, ., parens).
   // Returns the numeric result or null if the expression is invalid/unsafe.
   function evalMath(expr) {
+    // Reject date-like strings (e.g. "12/29/2026") — slashes would be evaluated as division.
+    if (/^\s*\d{1,2}\/\d{1,2}\/\d{2,4}/.test(expr)) return null
     if (!/^[\d\s+\-*/.()]+$/.test(expr)) return null
     try { return Function('"use strict"; return (' + expr + ')')() } catch (e) { return null }
   }

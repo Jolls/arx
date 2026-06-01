@@ -51,12 +51,13 @@ func substituteStepSelf(s string, step *models.TestStep) string {
 }
 
 // substituteRefs replaces tokens in s:
-//   - {123}          → recorded result for step 123, falling back to that step's spec_nom
-//   - {record.type}  → record's Type (comments field)
-//   - {record.pn}    → record's unit-under-test part number (serial_number_PN)
-//   - {record.sn}     → record's serial number
-//   - {record.pndesc} → record's unit-under-test description (serial_number_PNDesc / title)
-//   - {record.date}   → record's test date (MM/DD/YYYY)
+//   - {123}              → recorded result for step 123, falling back to that step's spec_nom
+//   - {record.type}      → record's Type (comments field)
+//   - {record.pn}        → record's unit-under-test part number (serial_number_PN)
+//   - {record.sn}        → record's serial number
+//   - {record.pndesc}    → record's unit-under-test description (serial_number_PNDesc / title)
+//   - {record.date}      → record's test date (MM/DD/YYYY) — date only, safe for SQL format 101
+//   - {record.datetime}  → record's test date + time (MM/DD/YYYY H:MM AM/PM)
 //
 // Unresolvable tokens are left as-is. Pass nil for any context that isn't available.
 func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]*models.TestStep, record *models.TestRecord, form *models.TestForm) string {
@@ -79,6 +80,11 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 			case "record.date":
 				if record.RecordDate != nil {
 					return record.RecordDate.Format("01/02/2006")
+				}
+				return ""
+			case "record.datetime":
+				if record.RecordDate != nil {
+					return record.RecordDate.Format("01/02/2006 3:04 PM")
 				}
 				return ""
 			}
@@ -1223,7 +1229,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		"Form":      form,
 		"BOMParts":  bomParts,
 		"NextSN":    nextSNStr,
-		"Today":     time.Now().Format("2006-01-02"),
+		"Today":     time.Now().Format("2006-01-02T15:04"),
 		"CSRFToken": h.csrfToken(w, r),
 		"TestMode":  h.cfg.TestMode,
 	})
@@ -1282,7 +1288,9 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	recordDate := time.Now()
 	if rdStr := r.FormValue("record_date"); rdStr != "" {
-		if rd, parseErr := time.Parse("2006-01-02", rdStr); parseErr == nil {
+		if rd, parseErr := time.Parse("2006-01-02T15:04", rdStr); parseErr == nil {
+			recordDate = rd
+		} else if rd, parseErr := time.Parse("2006-01-02", rdStr); parseErr == nil {
 			recordDate = rd
 		}
 	}
@@ -1759,7 +1767,12 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	comments := strings.TrimSpace(r.FormValue("comments"))
 	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
 	if rdStr := r.FormValue("record_date"); rdStr != "" {
-		if rd, parseErr := time.Parse("2006-01-02", rdStr); parseErr == nil {
+		var rd time.Time
+		var parseErr error
+		if rd, parseErr = time.Parse("2006-01-02T15:04", rdStr); parseErr != nil {
+			rd, parseErr = time.Parse("2006-01-02", rdStr)
+		}
+		if parseErr == nil {
 			h.execContext(r.Context(), fmt.Sprintf(
 				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, updated_at=GETDATE() WHERE ID=@p4",
 				h.cfg.RecordsTable()), rd, comments, instrumentType, recordID)

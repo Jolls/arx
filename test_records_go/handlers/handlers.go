@@ -174,13 +174,19 @@ func templateFuncs() template.FuncMap {
 			if t == nil {
 				return ""
 			}
-			return t.Format("2006-01-02")
+			return t.Format("2006-01-02T15:04")
 		},
 		"formatDateTime": func(t *time.Time) string {
 			if t == nil {
 				return ""
 			}
 			return t.Format("01/02 15:04")
+		},
+		"formatDateTimeFull": func(t *time.Time) string {
+			if t == nil {
+				return ""
+			}
+			return t.Format("01/02/2006 3:04 PM")
 		},
 		"isQuerySpec": func(s string) bool { return strings.HasPrefix(s, "query:") },
 		"isHTTPURL":    urlutil.IsHTTPURL,
