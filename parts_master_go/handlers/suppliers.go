@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -94,10 +94,6 @@ func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	name := fs(r, "name")
 	if name == "" {
 		h.render(w, "supplier_edit.html", map[string]any{
@@ -151,10 +147,6 @@ func (h *Handler) SupplierEdit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	name := fs(r, "name")
 	idInt := 0
@@ -340,10 +332,6 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	filePath := strings.TrimSpace(r.FormValue("file_path"))
 	if filePath == "" {
@@ -372,10 +360,6 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	attID := chi.URLParam(r, "attID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
@@ -390,10 +374,6 @@ func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	attID := chi.URLParam(r, "attID")
 	notes := strings.TrimSpace(r.FormValue("notes"))
@@ -479,10 +459,6 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 }
 
 func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	idInt, _ := strconv.Atoi(id)
 	attIDStr := r.FormValue("attachment_id")

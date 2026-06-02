@@ -550,10 +550,6 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
@@ -1242,10 +1238,6 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
@@ -1471,10 +1463,6 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
 
 	// TODO (#330): replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
@@ -1505,10 +1493,6 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
-		return
-	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -1553,10 +1537,6 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
 
 	// TODO (#330): replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
@@ -1587,10 +1567,6 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
-		return
-	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -1632,10 +1608,6 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
-		return
-	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -1962,10 +1934,6 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 // Inserts a form row and redirects to its definition edit page.
 // If source_id is provided, copies all steps from that form.
 func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
@@ -2075,10 +2043,6 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	sourceID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
-		return
-	}
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
 	if err := r.ParseForm(); err != nil {

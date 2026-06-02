@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -286,10 +286,6 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 // ── POCreate — POST /pos ─────────────────────────────────────────────────────
 
 func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, "Error parsing form: "+err.Error())
 		return
@@ -423,10 +419,6 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 // ── POUpdate — POST /po/{id} ─────────────────────────────────────────────────
 
 func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	num := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, "Error parsing form: "+err.Error())

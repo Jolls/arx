@@ -147,7 +147,9 @@ func (h *Handler) csrfToken(w http.ResponseWriter, r *http.Request) string {
 		return token
 	}
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand unavailable: " + err.Error())
+	}
 	token := hex.EncodeToString(b)
 	sess.Values["csrf_token"] = token
 	sess.Save(r, w)
@@ -158,6 +160,18 @@ func (h *Handler) verifyCsrf(r *http.Request) bool {
 	sess := h.session(r)
 	token, _ := sess.Values["csrf_token"].(string)
 	return token != "" && r.FormValue("csrf_token") == token
+}
+
+// RequireCsrfOnPost is middleware that rejects any POST whose csrf_token form
+// value does not match the session token.
+func (h *Handler) RequireCsrfOnPost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && !h.verifyCsrf(r) {
+			http.Error(w, "Invalid form submission", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // --- Template functions ----------------------------------------------------

@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"log"
@@ -14,10 +14,6 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
 
 	dbServer := strings.TrimSpace(r.FormValue("db_server"))
 	dbName := strings.TrimSpace(r.FormValue("db_name"))
