@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - test_records_go: fix `{record.date}` formula overwriting stored result as decimal on edit ([#391](https://github.com/Jolls/arx-legacy/issues/391))
 - test_records_go: Test Date field now stores and displays date + time; inputs use datetime-local picker
 - test_records_go: add `{record.datetime}` formula token (MM/DD/YYYY H:MM AM/PM)
+- db: drop legacy `trg_Tests_history` trigger that silently rolled back all `test_definition` UPDATEs; document in schema.md and TestRecords.sql
 
 ## [0.4.0] - 2026-05-26 
 - release: v0.4.0 milestone — conditional step visibility, result format display, units of measure, vendor rename, manufacturer links, Windows login auto-fill

@@ -294,17 +294,21 @@ CREATE TABLE test_definition_history (
   spec_nom      VARCHAR(255),
   default_result VARCHAR(255),
   hide_formula  VARCHAR(255),
-  pf_formula    VARCHAR(255),
+  pf_formula    VARCHAR(255),                       -- retained for historical rows; deprecated in v0.3.52, no longer written by trigger
   pf_type       VARCHAR(50),
   instrument_types VARCHAR(255),
+  format        VARCHAR(255),
   comment       VARCHAR(500),
   category      VARCHAR(255),
   sheet_name    VARCHAR(255)
 );
 
--- Migration (run once on live DB):
+-- Migrations (run once on live DB):
 -- EXEC sp_rename 'test_definition.applicable_instrs',         'instrument_types', 'COLUMN';
 -- EXEC sp_rename 'test_definition_history.applicable_instrs', 'instrument_types', 'COLUMN';
+-- ALTER TABLE dbo.test_definition_history ADD format VARCHAR(255);           -- added v0.4
+-- DROP TRIGGER dbo.trg_Tests_history;   -- legacy trigger from when table was named Tests;
+--   referenced old column applicable_instrs, silently rolled back every UPDATE after rename.
 
 -- Trigger: snapshot old values into test_definition_history on every Tests UPDATE.
 -- Uses DELETED pseudo-table which contains pre-update row values.
@@ -321,14 +325,14 @@ BEGIN
       (test_id, changed_at, changed_by,
        type, Parameter, Specification, spec_units,
        spec_min, spec_max, spec_nom, default_result,
-       hide_formula, pf_formula, pf_type,
-       instrument_types, comment, category, sheet_name)
+       hide_formula, pf_type,
+       instrument_types, format, comment, category, sheet_name)
     SELECT
       id, GETDATE(), SYSTEM_USER,
       type, Parameter, Specification, spec_units,
       spec_min, spec_max, spec_nom, default_result,
-      hide_formula, pf_formula, pf_type,
-      instrument_types, comment, category, sheet_name
+      hide_formula, pf_type,
+      instrument_types, format, comment, category, sheet_name
     FROM DELETED;
 END
 GO

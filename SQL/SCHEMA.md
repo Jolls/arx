@@ -123,6 +123,9 @@ Trigger DDL lives in `SQL/triggers.sql`. `_Test` table equivalents are created i
 | `trg_PO_Test_company_count` | `PO_Test` | Same as `trg_PO_company_count`, targeting `company_Test` |
 | `trg_FIL_Test_part_count` | `FIL_Test` | Same as `trg_FIL_part_count`, targeting `PN_Test` |
 | `trg_POL_Test_part_count` | `POL_Test` | Same as `trg_POL_part_count`, targeting `PN_Test` |
+| `trg_test_definition_history` | `test_definition` | Snapshots old row values into `test_definition_history` AFTER UPDATE (audit trail). No `_Test` equivalent — test table has no trigger. |
+
+> **Dropped trigger:** `trg_Tests_history` was a legacy AFTER UPDATE trigger on `test_definition` created when the table was named `Tests`. It referenced the old column `applicable_instrs` (since renamed to `instrument_types`), silently rolling back every UPDATE once the rename was applied. It was dropped in v0.4.1 and superseded by `trg_test_definition_history`.
 
 These fire for all writers (Go app and VBA). Do not update `SUNumOfLNKs`, `SUNumOfPOs`, `PNFILLinks`, or `PNPOLinks` manually in application code.
 
@@ -155,5 +158,6 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 | `price` | — | Quantity price breaks. |
 | `Forms` | `ID` | Test form definitions. `PNID` → `PN`. `test_order` = comma-separated `test_definition.id` list. `instrument_types` = comma-separated valid instrument types for this form; drives the Instrument Type dropdown on records. |
 | `TestRecords` | `ID` | A test run for one serial number. `form_id` → `Forms.ID`. `test_order` = snapshot of order at record creation. `instrument_type` = free-text label matched against `test_definition.instrument_types` to filter applicable steps. |
-| `test_definition` | `id` | Test step definitions. `type` = heading level (0=data, 1/2/3=heading). `hide_formula='HIDE'` hides data rows. `instrument_types` = comma-separated type names; step is hidden when record's `instrument_type` is not in this list (empty = show for all). `pf_formula` column exists in the DB but is not read or written by the app (deprecated v0.4 — never evaluated; pass/fail uses `pf_type` + `ComputePassFail` instead). |
+| `test_definition` | `id` | Test step definitions. `type` = heading level (0=data, 1/2/3=heading). `hide_formula='HIDE'` hides data rows. `instrument_types` = comma-separated type names; step is hidden when record's `instrument_type` is not in this list (empty = show for all). `pf_formula` column exists in the DB but is not read or written by the app (deprecated v0.4 — never evaluated; pass/fail uses `pf_type` + `ComputePassFail` instead). UPDATEs fire `trg_test_definition_history`. |
+| `test_definition_history` | `id` | Audit trail for `test_definition`. One row per UPDATE, capturing the pre-update values. Populated by `trg_test_definition_history`; never written directly by the app. `pf_formula` column retained for historical rows but no longer written. |
 | `TestResults` | `ID` | One result per step per record. `pass_fail` BIT. `result` = value or VBA image filename or `LOCAL:` path. |
