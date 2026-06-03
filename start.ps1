@@ -8,8 +8,9 @@ param(
 
 $root      = $PSScriptRoot
 $ip        = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.)' } | Select-Object -First 1).IPAddress
-$testEnv   = if ($Mode -eq 'Test') { 'true' } else { 'false' }
-$modeColor = if ($Mode -eq 'Test') { 'Yellow' } else { 'Red' }
+$testMode  = ($Mode -eq 'Test')
+$testEnv   = if ($testMode) { 'true' } else { 'false' }
+$modeColor = if ($testMode) { 'Yellow' } else { 'Red' }
 
 Write-Host "Starting Arx apps in $Mode mode..." -ForegroundColor $modeColor
 Write-Host "  Parts Master      ->  http://localhost:4568  /  http://${ip}:4568" -ForegroundColor Cyan
@@ -23,6 +24,21 @@ foreach ($exe in @($pmExe, $trExe)) {
     if (-not (Test-Path $exe)) {
         Write-Host "ERROR: $exe not found - run build.bat in the app directory first." -ForegroundColor Red
         exit 1
+    }
+}
+
+# local.pm.json always wins over env vars in config loading order, so patch it directly.
+foreach ($appDir in @("$root\parts_master_go", "$root\test_records_go")) {
+    $localJson = "$appDir\config\local.pm.json"
+    if (Test-Path $localJson) {
+        $cfg = Get-Content $localJson -Raw | ConvertFrom-Json
+        if ($cfg.PSObject.Properties['test_mode']) {
+            $cfg.test_mode = $testMode
+        } else {
+            $cfg | Add-Member -NotePropertyName 'test_mode' -NotePropertyValue $testMode
+        }
+        $updated = $cfg | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($localJson, $updated, (New-Object System.Text.UTF8Encoding $false))
     }
 }
 
