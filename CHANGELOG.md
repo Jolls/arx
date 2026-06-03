@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-03 
+- test_records_go: view definition now shows raw spec_nom instead of expanding {id} tokens, so it matches the editor ([#405](https://github.com/Jolls/arx-legacy/issues/405))
+
 ## [0.5.0] - 2026-06-03 
 - infra: merge Parts Master and Test Records into a single Arx.exe with one systray icon; both apps still serve on ports 4568/4569 ([#218](https://github.com/Jolls/arx-legacy/issues/218))
 
