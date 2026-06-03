@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-02 
+- security: encode CSRF tokens as base64url instead of hex (same entropy, shorter token) ([#377](https://github.com/Jolls/arx-legacy/issues/377))
+- docs: relocate scattered code TODOs to tracked references in FUTURE_GOALS.md and issue numbers ([#368](https://github.com/Jolls/arx-legacy/issues/368))
+- docs: relocate stale SQL DDL TODOs to #213 references in FUTURE_GOALS.md ([#376](https://github.com/Jolls/arx-legacy/issues/376))
+- docs: reconcile FUTURE_GOALS.md — strike through completed Test Records items; fix two doc-drift references ([#384](https://github.com/Jolls/arx-legacy/issues/384))
+
 ## [0.4.1] - 2026-06-02 
 - security: CSRF check moved to middleware covering all POST routes in both apps; fixes two previously unprotected PO handlers ([#362](https://github.com/Jolls/arx-legacy/issues/362), [#350](https://github.com/Jolls/arx-legacy/issues/350))
 - security: `crypto/rand.Read` error in CSRF token generation now panics instead of silently using a zeroed token ([#351](https://github.com/Jolls/arx-legacy/issues/351))
