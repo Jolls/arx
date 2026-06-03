@@ -310,7 +310,12 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, "Error starting transaction: "+err.Error())
 		return
 	}
-	defer tx.Rollback()
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
 
 	now := time.Now()
 	// OUTPUT INSERTED.ID is blocked on tables with triggers; combine INSERT + SCOPE_IDENTITY()
@@ -381,6 +386,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, "Error saving PO: "+err.Error())
 		return
 	}
+	committed = true
 
 	h.createPOFolder(r, newNumber, fs(r, "supplier_id"))
 	http.Redirect(w, r, "/po/"+newNumber, http.StatusFound)
@@ -430,7 +436,12 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, "Error starting transaction: "+err.Error())
 		return
 	}
-	defer tx.Rollback()
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
 
 	// Delete flagged line items
 	for _, idStr := range r.Form["delete_pol[]"] {
@@ -544,6 +555,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, "Error saving PO: "+err.Error())
 		return
 	}
+	committed = true
 	http.Redirect(w, r, "/po/"+num, http.StatusFound)
 }
 
