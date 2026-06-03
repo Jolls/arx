@@ -85,7 +85,7 @@
       <th>Specification</th>
       <th class="text-center">Result</th>
       <th class="text-center">P/F</th>
-      <th>Comment</th>
+      <th style="width:240px">Comment</th>
       <th class="text-nowrap">Updated</th>
     </tr>
   </thead>
@@ -136,7 +136,7 @@
         {{end}}
       </td>
       <td class="text-center">{{pfBadge .Result}}</td>
-      <td>{{if .Result}}{{.Result.Comment}}{{end}}</td>
+      <td style="word-break:break-word">{{if .Result}}{{.Result.Comment}}{{end}}</td>
       <td class="text-nowrap small text-muted">
         {{if .Result}}{{formatDateTime .Result.UpdatedAt}}{{end}}
       </td>
