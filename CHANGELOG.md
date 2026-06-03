@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-03 
+- infra: merge Parts Master and Test Records into a single Arx.exe with one systray icon; both apps still serve on ports 4568/4569 ([#218](https://github.com/Jolls/arx-legacy/issues/218))
+
 ## [0.4.2] - 2026-06-03 
 - security: encode CSRF tokens as base64url instead of hex (same entropy, shorter token) ([#377](https://github.com/Jolls/arx-legacy/issues/377))
 - docs: relocate scattered code TODOs to tracked references in FUTURE_GOALS.md and issue numbers ([#368](https://github.com/Jolls/arx-legacy/issues/368))
