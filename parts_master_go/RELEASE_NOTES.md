@@ -1,3 +1,20 @@
+Arx v0.4.1 — June 2026
+=======================
+
+BUG FIXES
+
+  Both Apps — Security hardening
+  CSRF protection now covers all form submissions. Session key is
+  auto-generated per installation. Config file writes are atomic.
+
+  Both Apps — Cleaner shutdown on port conflict
+  A second instance that fails to bind now exits cleanly instead of
+  terminating abruptly.
+
+  Test Records — Date field formula bug
+  Editing a record with a Test Date step no longer overwrites the saved
+  result with a raw decimal value.
+
 Arx v0.4.0 — May 2026
 ======================
 

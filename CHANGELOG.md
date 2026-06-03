@@ -5,7 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.4.1] - 2026-06-01 
+## [0.4.1] - 2026-06-02 
+- security: CSRF check moved to middleware covering all POST routes in both apps; fixes two previously unprotected PO handlers ([#362](https://github.com/Jolls/arx-legacy/issues/362), [#350](https://github.com/Jolls/arx-legacy/issues/350))
+- security: `crypto/rand.Read` error in CSRF token generation now panics instead of silently using a zeroed token ([#351](https://github.com/Jolls/arx-legacy/issues/351))
+- security: hardcoded `"change-me-in-production"` session secret replaced with auto-generated random secret persisted to `local.json` ([#352](https://github.com/Jolls/arx-legacy/issues/352))
+- infra: `config/local.json` writes are now atomic (tmp → fsync → rename) to prevent zero-byte corruption on crash ([#356](https://github.com/Jolls/arx-legacy/issues/356))
+- db: `h.db` access guarded with `sync.RWMutex`; old connection pool closed after reconnect from Settings ([#357](https://github.com/Jolls/arx-legacy/issues/357))
+- db: connection pool limits added after `Ping()` — max 25 open, 5 idle, 30 min lifetime ([#353](https://github.com/Jolls/arx-legacy/issues/353))
+- db: silent `execContext` and `Scan` failures across both apps now log with context instead of discarding errors ([#354](https://github.com/Jolls/arx-legacy/issues/354))
+- infra: `log.Fatal` in HTTP server goroutine replaced with `log.Print` + `systray.Quit()` so `onExit`/`CloseDB` runs on bind errors ([#365](https://github.com/Jolls/arx-legacy/issues/365))
 - test_records_go: fix `{record.date}` formula overwriting stored result as decimal on edit ([#391](https://github.com/Jolls/arx-legacy/issues/391))
 - test_records_go: Test Date field now stores and displays date + time; inputs use datetime-local picker
 - test_records_go: add `{record.datetime}` formula token (MM/DD/YYYY H:MM AM/PM)
