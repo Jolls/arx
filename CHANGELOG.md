@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.4.2] - 2026-06-02 
+## [0.4.2] - 2026-06-03 
 - security: encode CSRF tokens as base64url instead of hex (same entropy, shorter token) ([#377](https://github.com/Jolls/arx-legacy/issues/377))
 - docs: relocate scattered code TODOs to tracked references in FUTURE_GOALS.md and issue numbers ([#368](https://github.com/Jolls/arx-legacy/issues/368))
 - docs: relocate stale SQL DDL TODOs to #213 references in FUTURE_GOALS.md ([#376](https://github.com/Jolls/arx-legacy/issues/376))
@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - build: align go.mod toolchain with workspace go 1.26.3 ([#382](https://github.com/Jolls/arx-legacy/issues/382))
 - build: stop running arxlib tests twice per full build; add root test.bat ([#380](https://github.com/Jolls/arx-legacy/issues/380))
 - build: rewrite start.ps1 to launch the Go apps ([#349](https://github.com/Jolls/arx-legacy/issues/349))
+- parts_master_go: nullableInt now parses to int instead of returning a raw string (caller panicked on type assertion) ([#355](https://github.com/Jolls/arx-legacy/issues/355))
+- parts_master_go: raise test-mode PO sequence seed floor from 0 to 99999 so all-non-numeric snapshots can't collide ([#378](https://github.com/Jolls/arx-legacy/issues/378))
+- parts_master_go: avoid double-rollback log noise on committed transactions (BOM update, PO create, PO update) ([#367](https://github.com/Jolls/arx-legacy/issues/367))
+- test_records_go: audit and document hide_formula nil-context call paths; nil is intentional for form-def view ([#360](https://github.com/Jolls/arx-legacy/issues/360))
 
 ## [0.4.1] - 2026-06-02 
 - security: CSRF check moved to middleware covering all POST routes in both apps; fixes two previously unprotected PO handlers ([#362](https://github.com/Jolls/arx-legacy/issues/362), [#350](https://github.com/Jolls/arx-legacy/issues/350))

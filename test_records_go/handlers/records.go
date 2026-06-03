@@ -316,6 +316,8 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
+		// nil results/record: form-definition view has no record context; unresolvable tokens
+		// leave the formula unchanged so comparisons don't match → step shown. Intentional.
 		if evaluateHide(step.HideFormula, nil, stepsMap, nil, &form) {
 			continue
 		}

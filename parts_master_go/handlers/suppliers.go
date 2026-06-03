@@ -665,5 +665,8 @@ func nullableInt(s string) interface{} {
 	if s == "" {
 		return nil
 	}
-	return s
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return nil
 }

@@ -150,7 +150,7 @@ END
     FROM   dbo.PN_Test p;
 
     -- Test sequence: starts after the current max so test POs don't collide with snapshot data
-    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 0) + 1 FROM dbo.PO_Test);
+    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO_Test);
     IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq_Test')
         EXEC('ALTER SEQUENCE dbo.PO_Number_Seq_Test RESTART WITH ' + @next_po);
     ELSE
