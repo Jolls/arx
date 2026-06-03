@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,7 +82,7 @@ func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", "inline")
 	} else {
 		w.Header().Set("Content-Disposition",
-			`attachment; filename="`+filepath.Base(path)+`"`)
+			mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(path)}))
 	}
 	http.ServeFile(w, r, path)
 }
@@ -119,7 +120,7 @@ func (h *Handler) ServeSupplierFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", "inline")
 	} else {
 		w.Header().Set("Content-Disposition",
-			`attachment; filename="`+filepath.Base(path)+`"`)
+			mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(path)}))
 	}
 	http.ServeFile(w, r, path)
 }

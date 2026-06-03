@@ -6,9 +6,15 @@ import (
 	"syscall"
 )
 
+var consoleOpen bool
+
 // openDebugConsole allocates a Windows console window and redirects log output to it.
 // Called at startup when DebugMode is true; requires a restart to take effect.
 func openDebugConsole() {
+	if consoleOpen {
+		return
+	}
+	consoleOpen = true
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	kernel32.NewProc("AllocConsole").Call()
 
