@@ -41,7 +41,7 @@
 These unlock multiple downstream features. Avoid implementing dependent features before prerequisites exist.
 
 ### 1. User Authentication (#207)
-Required before: audit trails with real usernames (AUD-1, #251), PO approval (#267), reviewer approval (#249), lock/unlock audit (#200, #250), SET CONTEXT_INFO for triggers.
+Required before: audit trails with real usernames (AUD-1, #251), PO approval (#267), reviewer approval (#249), re-open with reason (#250), SET CONTEXT_INFO for triggers.
 - No auth framework decided yet; keep it simple (session cookie + single-user or small user table)
 - `SET CONTEXT_INFO` before DB writes passes username to triggers
 
@@ -141,13 +141,13 @@ Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.pr
 
 | Issue | Feature |
 |---|---|
-| #248 | Lock/unlock record from UI (button exists in DB, no UI) |
-| #201 | Lock/unlock form from UI |
-| #200 | TestRecordHistory writes on lock/unlock (audit table exists, Go never writes it) |
+| ~~#248~~ | ~~Lock/unlock record from UI~~ |
+| ~~#201~~ | ~~Lock/unlock form from UI~~ |
+| ~~#200~~ | ~~TestRecordHistory writes on lock/unlock (audit written to `form_events`/`record_events`)~~ |
 | #208 | Image gallery view (VBA had tiled grid; Go has hover-preview only) |
-| #209 | `format` field applied to result inputs (loaded but unused) |
-| #203 | `applicable_instrs` filter (SN-based row filtering) |
-| #199 | `pf_formula` decision: evaluate or formally deprecate |
+| ~~#209~~ | ~~`format` field applied to result inputs~~ |
+| ~~#203~~ | ~~`applicable_instrs` filter (SN-based row filtering, as `instrument_type`)~~ |
+| ~~#199~~ | ~~`pf_formula` deprecated~~ |
 | #202 | AutoFill on Update (auto-populate result from spec_nom query) |
 
 ### Tier 2: Record Lifecycle & Audit
@@ -155,8 +155,8 @@ Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.pr
 
 | Issue | Feature | Depends on |
 |---|---|---|
-| #248 | Lock/unlock UI | — |
-| #200 | TestRecordHistory audit writes | #248 |
+| ~~#248~~ | ~~Lock/unlock UI~~ | ~~—~~ |
+| ~~#200~~ | ~~TestRecordHistory audit writes~~ | ~~#248~~ |
 | #250 | Re-open requires logged reason | #248, #200 |
 | #249 | Reviewer approval (two-step sign-off) | Auth (#207) |
 | #251 | Per-result change history (`TestResultHistory` table) | — |
@@ -169,8 +169,8 @@ Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.pr
 | #260 | Formal revision numbers on Forms (Rev A/B/C) | `Forms.revision`, `TestRecords.form_revision` |
 | #261/256 | Required test steps (block lock if incomplete) | `test_definition.required` BIT |
 | #262/257 | Conditional step visibility (`show_if` expression) | `test_definition.show_if` VARCHAR |
-| #210 | `hide_formula` dynamic expressions (extends HIDE/SHOW) | `test_definition.hide_formula` semantic extension |
-| #255 | Clone/duplicate a form definition | No schema change |
+| ~~#210~~ | ~~`hide_formula` dynamic expressions (extends HIDE/SHOW)~~ | ~~done in 0.3.53~~ |
+| ~~#255~~ | ~~Clone/duplicate a form definition~~ | ~~No schema change~~ |
 | #221 | Custom worksheet tab support (future, VBA concept) | `Forms` config field TBD |
 
 ### Tier 4: Record UX
@@ -238,8 +238,20 @@ Next:
 - `PN.price_id` — stale pointer; replace with `price.is_preferred` (#223) then drop.
 - `price_type` — was dropped; re-add when #222 is implemented.
 - `Forms.custom_sheets` — was dropped; only re-add if custom worksheet feature is scoped (#221).
-- `pf_formula` on `test_definition` — loaded but unevaluated; decide evaluate-or-drop (#199) before #262 adds more step evaluation logic.
+- ~~`pf_formula` on `test_definition` — loaded but unevaluated; decide evaluate-or-drop (#199) before #262 adds more step evaluation logic.~~ **#199 done: `pf_formula` deprecated in 0.3.52; `#262` can proceed.**
 
 ---
 
-*Last updated: 2026-05-21 from GitHub issues audit. Covers issues #7–#290.*
+## Schema Cleanup (no issue yet)
+
+- **Drop `company.SUWeb` and `company.SUContact1`** — confirmed dead columns; no Go or VBA references. `SUWeb` superseded by `company_attachment`; `SUContact1` superseded by `default_contact` FK to CN. Migration: `ALTER TABLE company DROP COLUMN SUWeb; ALTER TABLE company DROP COLUMN SUContact1;`. Verify no orphan references before running.
+
+## Test Records — Code Quality (no issue yet)
+
+- **Debug fields cleanup** (`test_records_go/models/models.go` `TestStep` struct, and the matching query in `records.go` ~838): fields `ArchiveID`, `Revision`, `Category`, `SheetName` are still loaded but only needed during form-def authoring. Remove when the edit UI stabilises and those fields are no longer needed client-side.
+- **Records index query refactor** (`records.go` ~413): the `RecordsIndex` SQL query is verbose inline SQL; candidate for a SQL view or stored proc once the schema stabilises.
+- **Serial number sequence** (`records.go` ~1213): `MAX(serial_number)+1` is not safe under concurrent record creates for the same form. Replace with a per-form sequence/counter table.
+
+---
+
+*Last updated: 2026-06-02 — struck through completed Tier 1/2/3 Test Records items; added schema cleanup and code quality notes from TODO sweep (#368, #376, #384).*

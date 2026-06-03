@@ -59,7 +59,7 @@ func (f TestForm) RecordTypeList() []string {
 type TestRecord struct {
 	ID               int
 	FormID           int
-	SerialNumber     string // TODO: change to int once DB column is migrated from VARCHAR(64)
+	SerialNumber     string // #214: migrate to INT once DB column is migrated from VARCHAR(64)
 	SerialNumberPN   string     // part number of the unit under test
 	SerialNumberDesc string     // description of the unit under test
 	RecordDate       *time.Time
@@ -89,7 +89,7 @@ type TestStep struct {
 	SpecMax       string // acceptance window upper bound (VARCHAR in DB)
 	PFType        string // evaluator type: 'range' or empty = range check
 
-	// TODO: debug fields — remove before shipping edit UI
+	// debug fields still needed for form-def authoring — see FUTURE_GOALS.md (debug fields cleanup)
 	ArchiveID        int
 	Revision         int
 	Category         string

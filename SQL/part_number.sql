@@ -7,7 +7,7 @@
 -- PNPOLinks: trg_POL_part_count fires on POL INSERT/UPDATE/DELETE (see SQL/triggers.sql).
 -- PNFILLinks: trg_FIL_part_count fires on FIL INSERT/UPDATE/DELETE, counts is_active=1 rows only.
 -- user_field_1-10 are configurable user-defined fields.
--- price_id FKs to the price table. TODO: add FK constraint.
+-- price_id FKs to the price table; FK constraint deferred — see #213.
 -- NOTE: The PN table was originally named PN_Test and renamed via sp_rename. The DEFAULT and UNIQUE
 --       constraint names on the live DB still carry the PN_Test prefix (e.g. DF__PN_Test__PNActiv__*).
 --       Run SQL/rename_constraints.sql to normalize them.
@@ -20,10 +20,10 @@ CREATE TABLE PN (
   category          VARCHAR(10)      CONSTRAINT DF_PN_category         DEFAULT 'BUY'
                                      CONSTRAINT CK_PN_category         CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL')),
   has_bom           BIT              CONSTRAINT DF_PN_has_bom          DEFAULT 0,
-  revision          VARCHAR(10)      CONSTRAINT DF_PN_revision         DEFAULT '',   -- TODO: add NOT NULL (ALTER attempted but not applied to live).
+  revision          VARCHAR(10)      CONSTRAINT DF_PN_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
   title             VARCHAR(255)     CONSTRAINT DF_PN_title            DEFAULT '',
   detail            VARCHAR(255)     CONSTRAINT DF_PN_detail           DEFAULT '',
-  release_status    VARCHAR(255)     CONSTRAINT DF_PN_release_status   DEFAULT 'U',  -- U/A/D only. TODO: reduce to VARCHAR(1) or add CHECK constraint.
+  release_status    VARCHAR(255)     CONSTRAINT DF_PN_release_status   DEFAULT 'U',  -- U/A/D only; CHECK/narrowing deferred — see #213.
   PNReqBy           VARCHAR(50)      CONSTRAINT DF_PN_PNReqBy          DEFAULT '',
   PNNotes           VARCHAR(MAX)     CONSTRAINT DF_PN_PNNotes          DEFAULT '',
   user_field_1      VARCHAR(255)     CONSTRAINT DF_PN_user_field_1     DEFAULT '',
@@ -46,7 +46,7 @@ CREATE TABLE PN (
   active            BIT              CONSTRAINT DF_PN_active           DEFAULT 1,
   PNPOLinks         INT              CONSTRAINT DF_PN_PNPOLinks        DEFAULT 0,    -- Denormalized count of POL rows for this part.
   PNDateModified    DATE             CONSTRAINT DF_PN_PNDateModified   DEFAULT GETDATE(),
-  price_id          INT              CONSTRAINT DF_PN_price_id         DEFAULT 0,    -- FK to price table. TODO: add FK constraint.
+  price_id          INT              CONSTRAINT DF_PN_price_id         DEFAULT 0,    -- FK to price table; FK constraint deferred — see #213.
   PNUNID            INT              NULL                                              -- FK to unit.unit_id. Base/inventory unit for this part (EA, mL, kg, …).
 );
 

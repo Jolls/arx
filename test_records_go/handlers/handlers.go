@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"html/template"
 	ioFS "io/fs"
@@ -150,7 +150,7 @@ func (h *Handler) csrfToken(w http.ResponseWriter, r *http.Request) string {
 	if _, err := rand.Read(b); err != nil {
 		panic("crypto/rand unavailable: " + err.Error())
 	}
-	token := hex.EncodeToString(b)
+	token := base64.RawURLEncoding.EncodeToString(b)
 	sess.Values["csrf_token"] = token
 	sess.Save(r, w)
 	return token

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ## [0.4.2] - 2026-06-02 
+- security: encode CSRF tokens as base64url instead of hex (same entropy, shorter token) ([#377](https://github.com/Jolls/arx-legacy/issues/377))
+- docs: relocate scattered code TODOs to tracked references in FUTURE_GOALS.md and issue numbers ([#368](https://github.com/Jolls/arx-legacy/issues/368))
+- docs: relocate stale SQL DDL TODOs to #213 references in FUTURE_GOALS.md ([#376](https://github.com/Jolls/arx-legacy/issues/376))
+- docs: reconcile FUTURE_GOALS.md — strike through completed Test Records items; fix two doc-drift references ([#384](https://github.com/Jolls/arx-legacy/issues/384))
 - build: align go.mod toolchain with workspace go 1.26.3 ([#382](https://github.com/Jolls/arx-legacy/issues/382))
 - build: stop running arxlib tests twice per full build; add root test.bat ([#380](https://github.com/Jolls/arx-legacy/issues/380))
 - build: rewrite start.ps1 to launch the Go apps ([#349](https://github.com/Jolls/arx-legacy/issues/349))
