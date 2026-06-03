@@ -21,7 +21,7 @@ $trExe = "$root\test_records_go\ArxTestRecords.exe"
 
 foreach ($exe in @($pmExe, $trExe)) {
     if (-not (Test-Path $exe)) {
-        Write-Host "ERROR: $exe not found — run build.bat in the app directory first." -ForegroundColor Red
+        Write-Host "ERROR: $exe not found - run build.bat in the app directory first." -ForegroundColor Red
         exit 1
     }
 }
