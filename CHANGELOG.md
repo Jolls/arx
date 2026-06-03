@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-02 
+- build: align go.mod toolchain with workspace go 1.26.3 ([#382](https://github.com/Jolls/arx-legacy/issues/382))
+- build: stop running arxlib tests twice per full build; add root test.bat ([#380](https://github.com/Jolls/arx-legacy/issues/380))
+- build: rewrite start.ps1 to launch the Go apps ([#349](https://github.com/Jolls/arx-legacy/issues/349))
+
 ## [0.4.1] - 2026-06-02 
 - security: CSRF check moved to middleware covering all POST routes in both apps; fixes two previously unprotected PO handlers ([#362](https://github.com/Jolls/arx-legacy/issues/362), [#350](https://github.com/Jolls/arx-legacy/issues/350))
 - security: `crypto/rand.Read` error in CSRF token generation now panics instead of silently using a zeroed token ([#351](https://github.com/Jolls/arx-legacy/issues/351))

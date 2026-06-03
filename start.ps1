@@ -1,4 +1,4 @@
-# Starts both Arx apps in separate PowerShell windows.
+# Starts both Arx apps. Both exes must be built first (run build.bat in each app dir).
 # Usage: .\start.ps1          (defaults to Test mode)
 #        .\start.ps1 -Mode Real
 param(
@@ -6,20 +6,47 @@ param(
     [string]$Mode = 'Test'
 )
 
-$root    = $PSScriptRoot
-$ip      = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.)' } | Select-Object -First 1).IPAddress
-$testEnv = if ($Mode -eq 'Test') { 'true' } else { 'false' }
-$modeColor = if ($Mode -eq 'Test') { 'Yellow' } else { 'Red' }
+$root      = $PSScriptRoot
+$ip        = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.)' } | Select-Object -First 1).IPAddress
+$testMode  = ($Mode -eq 'Test')
+$testEnv   = if ($testMode) { 'true' } else { 'false' }
+$modeColor = if ($testMode) { 'Yellow' } else { 'Red' }
 
 Write-Host "Starting Arx apps in $Mode mode..." -ForegroundColor $modeColor
-Write-Host "  PN Viewer         ->  http://localhost:4568  /  http://${ip}:4568" -ForegroundColor Cyan
-Write-Host "  Arx: Test Records ->  http://localhost:9292  /  http://${ip}:9292" -ForegroundColor Cyan
+Write-Host "  Parts Master      ->  http://localhost:4568  /  http://${ip}:4568" -ForegroundColor Cyan
+Write-Host "  Test Records      ->  http://localhost:4569  /  http://${ip}:4569" -ForegroundColor Cyan
 Write-Host ""
 
-Start-Process powershell -WorkingDirectory "$root\parts_master_web" `
-    -ArgumentList "-NoExit", "-Command", `
-    "`$env:TEST_MODE='$testEnv'; Write-Host 'PN Viewer [$Mode mode]' -ForegroundColor Green; bundle exec puma -p 4568 -b tcp://0.0.0.0"
+$pmExe = "$root\parts_master_go\ArxPartsMaster.exe"
+$trExe = "$root\test_records_go\ArxTestRecords.exe"
 
-Start-Process powershell -WorkingDirectory "$root\test_records" `
-    -ArgumentList "-NoExit", "-Command", `
-    "Write-Host 'Arx: Test Records' -ForegroundColor Green; bundle exec puma -p 9292 -b tcp://localhost"
+foreach ($exe in @($pmExe, $trExe)) {
+    if (-not (Test-Path $exe)) {
+        Write-Host "ERROR: $exe not found - run build.bat in the app directory first." -ForegroundColor Red
+        exit 1
+    }
+}
+
+# local.pm.json always wins over env vars in config loading order, so patch it directly.
+$localJsonMap = @{
+    "$root\parts_master_go" = "$root\parts_master_go\config\local.pm.json"
+    "$root\test_records_go" = "$root\test_records_go\config\local.tr.json"
+}
+foreach ($appDir in $localJsonMap.Keys) {
+    $localJson = $localJsonMap[$appDir]
+    if (Test-Path $localJson) {
+        $cfg = Get-Content $localJson -Raw | ConvertFrom-Json
+        if ($cfg.PSObject.Properties['test_mode']) {
+            $cfg.test_mode = $testMode
+        } else {
+            $cfg | Add-Member -NotePropertyName 'test_mode' -NotePropertyValue $testMode
+        }
+        $updated = $cfg | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($localJson, $updated, (New-Object System.Text.UTF8Encoding $false))
+    }
+}
+
+$env:TEST_MODE = $testEnv
+
+Start-Process $pmExe -WorkingDirectory "$root\parts_master_go"
+Start-Process $trExe -WorkingDirectory "$root\test_records_go"

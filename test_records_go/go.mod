@@ -1,6 +1,6 @@
 module arx/test_records_go
 
-go 1.22
+go 1.26.3
 
 require (
 	github.com/getlantern/systray v1.2.2
