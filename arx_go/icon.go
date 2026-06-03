@@ -39,11 +39,10 @@ func appIcon() []byte {
 	return buildICO(w, h, xor, and)
 }
 
-// fallbackIcon returns a minimal solid-colour ICO used if the embedded PNG fails to decode.
 func fallbackIcon() []byte {
 	const (
 		w, h    = 16, 16
-		r, g, b = 39, 174, 96
+		r, g, b = 102, 126, 234
 	)
 	xor := make([]byte, w*h*4)
 	for i := 0; i < len(xor); i += 4 {

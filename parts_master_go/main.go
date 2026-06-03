@@ -1,100 +1,62 @@
-package main
+package partsmaster
 
 import (
 	"context"
 	"database/sql"
 	"io/fs"
 	"log"
-	"net"
 	"net/http"
-	"time"
 
-	"github.com/getlantern/systray"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/pkg/browser"
 
 	"arx/parts_master_go/config"
 	"arx/parts_master_go/db"
 	"arx/parts_master_go/handlers"
 )
 
-var appHandler *handlers.Handler
-
-func main() {
-	// systray.Run must own the main thread (it calls LockOSThread internally).
-	systray.Run(onReady, onExit)
+// App holds the configured HTTP server and handler for Parts Master.
+type App struct {
+	Server    *http.Server
+	URL       string
+	Port      string
+	Name      string
+	DebugMode bool
+	h         *handlers.Handler
 }
 
-func onReady() {
+// New loads config, connects to the database, and returns a ready-to-serve App.
+func New() *App {
 	cfg := config.Load()
 
-	if cfg.DebugMode {
-		openDebugConsole()
-	}
-
-	// Try to auto-connect using the password stored in config/local.json.
 	var database *sql.DB
 	if dsn := cfg.DSN(); dsn != "" {
 		if conn, err := db.Connect(dsn); err == nil {
 			database = conn
-			log.Println("auto-connected to database")
+			log.Println("parts_master: auto-connected to database")
 		} else {
-			log.Printf("auto-connect failed (open Settings to reconnect): %v", err)
+			log.Printf("parts_master: auto-connect failed (open Settings to reconnect): %v", err)
 		}
 	} else {
-		log.Println("no database password configured — open Settings to connect")
+		log.Println("parts_master: no database password configured — open Settings to connect")
 	}
 
-	appHandler = handlers.New(database, cfg, templatesFS, releaseNotesData)
-	appHandler.CheckSchemaVersion(context.Background())
-	addr := "0.0.0.0:" + cfg.Port
-	url := "http://localhost:" + cfg.Port
+	h := handlers.New(database, cfg, templatesFS, releaseNotesData)
+	h.CheckSchemaVersion(context.Background())
 
-	go func() {
-		log.Printf("starting on %s", addr)
-		if err := http.ListenAndServe(addr, buildRouter(appHandler)); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	// Open the browser once the server has had a moment to start.
-	go func() {
-		for i := 0; i < 40; i++ {
-			c, err := net.DialTimeout("tcp", "127.0.0.1:"+cfg.Port, 50*time.Millisecond)
-			if err == nil {
-				c.Close()
-				break
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-		_ = browser.OpenURL(url)
-	}()
-
-	// System tray icon and menu.
-	systray.SetIcon(appIcon())
-	systray.SetTooltip("Arx Parts Master")
-
-	mOpen := systray.AddMenuItem("Open", "Open in browser")
-	systray.AddSeparator()
-	mQuit := systray.AddMenuItem("Quit", "Quit Arx Parts Master")
-
-	go func() {
-		for {
-			select {
-			case <-mOpen.ClickedCh:
-				_ = browser.OpenURL(url)
-			case <-mQuit.ClickedCh:
-				systray.Quit()
-			}
-		}
-	}()
+	return &App{
+		Server:    &http.Server{Addr: "0.0.0.0:" + cfg.Port, Handler: buildRouter(h)},
+		URL:       "http://localhost:" + cfg.Port,
+		Port:      cfg.Port,
+		Name:      "Parts Master",
+		DebugMode: cfg.DebugMode,
+		h:         h,
+	}
 }
 
-func onExit() {
-	if appHandler != nil {
-		appHandler.CloseDB()
-	}
+// Close shuts down the database connection pool.
+func (a *App) Close() {
+	a.h.CloseDB()
 }
 
 func buildRouter(h *handlers.Handler) http.Handler {
@@ -158,7 +120,7 @@ func buildRouter(h *handlers.Handler) http.Handler {
 		r.Post("/part/{id}/suppliers/{spID}", h.SupplierPartUpdate)
 		r.Post("/part/{id}/suppliers/{spID}/delete", h.SupplierPartDelete)
 
-		// Suppliers
+		// Suppliers / Vendors
 		r.Get("/suppliers", h.SuppliersList)
 		r.Get("/suppliers/new", h.SuppliersNew)
 		r.Post("/suppliers", h.SuppliersCreate)
