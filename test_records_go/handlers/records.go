@@ -316,6 +316,8 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
+		// nil results/record: form-definition view has no record context; unresolvable tokens
+		// leave the formula unchanged so comparisons don't match → step shown. Intentional.
 		if evaluateHide(step.HideFormula, nil, stepsMap, nil, &form) {
 			continue
 		}
@@ -410,7 +412,7 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		Changed       bool   `json:"changed"`
 	}
 
-	// TODO: this query is verbose and should be refactored (e.g. a view or stored proc).
+	// see FUTURE_GOALS.md (records index query refactor)
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT t.id,
 		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.type,0)            ELSE COALESCE(t.type,0)            END,
@@ -835,7 +837,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: debug query â€" remove extra columns before shipping edit UI
+	// debug columns still needed for form authoring — see FUTURE_GOALS.md (debug fields cleanup)
 	// Load all test steps for this form, keyed by ID.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
@@ -1210,7 +1212,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Next serial number: max numeric SN + 1, defaulting to 1 if none exist.
-	// TODO: replace with a proper per-form sequence/counter table.
+	// MAX()+1 SN is not safe under concurrent creates — see FUTURE_GOALS.md (serial number sequence)
 	var nextSN sql.NullInt64
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT COALESCE(MAX(TRY_CAST(serial_number AS INT)) + 1, 1)
@@ -1464,7 +1466,7 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#330): replace with authenticated app user once auth is implemented.
+	// #207: replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
 	if u, err := user.Current(); err == nil {
 		username = u.Username
@@ -1506,7 +1508,7 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#330): replace with authenticated app user once auth is implemented.
+	// #207: replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
 	if u, err := user.Current(); err == nil {
 		username = u.Username
@@ -1538,7 +1540,7 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#330): replace with authenticated app user once auth is implemented.
+	// #207: replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
 	if u, err := user.Current(); err == nil {
 		username = u.Username
@@ -1580,7 +1582,7 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO (#330): replace with authenticated app user once auth is implemented.
+	// #207: replace with authenticated app user once auth is implemented.
 	username := os.Getenv("USERNAME")
 	if u, err := user.Current(); err == nil {
 		username = u.Username
@@ -1716,7 +1718,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		if prev, exists := existing[testID]; exists {
 			// Only UPDATE if result or comment actually changed
 			if result != prev.Result || comment != prev.Comment {
-				// TODO: insert into TestResultHistory here when audit trail is added
+				// #251: insert into TestResultHistory here when per-result change history is added
 				h.execContext(r.Context(), fmt.Sprintf(`
 					UPDATE %s SET result=@p1, comment=@p2, pass_fail=@p3, updated_at=GETDATE()
 					WHERE ID=@p4`, h.cfg.ResultsTable()),

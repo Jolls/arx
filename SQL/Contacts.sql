@@ -18,7 +18,7 @@ CREATE TABLE CN (
   CNWeb               VARCHAR(500),                  -- URL for supplier/contact website.
   CNEmail             VARCHAR(127),
   CNActive            BIT            DEFAULT 1,
-  CNSUID              INT,                           -- FK to supplier.id. TODO: add FK constraint.
+  CNSUID              INT,                           -- FK to supplier.id (now company.id); FK constraint deferred — see #213.
   CNUserAccountLink   VARCHAR(127),                  -- Associated Windows/network account for internal users.
   CNDateModified      DATETIME       CONSTRAINT DF_CN_CNDateModified DEFAULT GETDATE(),
   CNNotes             VARCHAR(4000)
