@@ -331,7 +331,6 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		step.Parameter = substituteRefs(step.Parameter, nil, stepsMap, nil, &form)
-		step.SpecNom = substituteRefs(step.SpecNom, nil, stepsMap, nil, &form)
 		step.SpecMin = substituteRefs(step.SpecMin, nil, stepsMap, nil, &form)
 		step.SpecMax = substituteRefs(step.SpecMax, nil, stepsMap, nil, &form)
 	}
