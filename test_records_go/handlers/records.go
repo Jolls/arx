@@ -126,7 +126,6 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 
 // FormsList â€" GET /
 func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
-	h.CheckSchemaVersion(r.Context())
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, pn.part_number, pn.title
 		FROM %s f
@@ -157,7 +156,6 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 
 // RecordsList â€" GET /forms/{id}/records
 func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
-	h.CheckSchemaVersion(r.Context())
 	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -228,7 +226,6 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 // Shows all test step definitions for a form without any result data.
 // Used as a reference when creating a new test record.
 func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
-	h.CheckSchemaVersion(r.Context())
 	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -800,7 +797,6 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 
 // RecordDetail â€" GET /records/{id}
 func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
-	h.CheckSchemaVersion(r.Context())
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -1168,7 +1164,6 @@ type BOMPart struct {
 
 // NewRecord — GET /forms/{id}/records/new
 func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
-	h.CheckSchemaVersion(r.Context())
 	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -1308,7 +1303,6 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 // EditRecord — GET /records/{id}/edit
 func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
-	h.CheckSchemaVersion(r.Context())
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)

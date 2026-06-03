@@ -55,7 +55,6 @@ func fs(r *http.Request, key string) string { return strings.TrimSpace(r.FormVal
 // ── PartsList — GET / ───────────────────────────────────────────────────────
 
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
-	h.CheckSchemaVersion(r.Context())
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT PNID, part_number, revision, title, detail,
 		       PNReqBy, PNDate, category, PNDateModified
@@ -760,7 +759,7 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	cats := splitCSV(h.appConfigGet(r.Context(), "attachment_categories"))
+	cats := splitCSV(h.appConfigGetOr(r.Context(), "attachment_categories", ""))
 	h.render(w, "part_attachments.html", map[string]any{
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "attachments",

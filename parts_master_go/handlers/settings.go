@@ -77,7 +77,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"DebugMode":              h.cfg.DebugMode,
 		"PODefaultContactID":     h.cfg.Settings.PODefaults.ContactID,
 		"PODefaultReceiverID":    h.cfg.Settings.PODefaults.ReceiverID,
-		"AttachmentCategories":   h.appConfigGet(r.Context(), "attachment_categories"),
+		"AttachmentCategories":   h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"Contacts":               contacts,
 		"Suppliers":              suppliers,
 		"ReleaseNotes":           h.releaseNotes,

@@ -77,6 +77,9 @@ func (t *txLogger) QueryContext(ctx context.Context, query string, args ...any) 
 	return t.Tx.QueryContext(ctx, query, args...)
 }
 
+func (t *txLogger) Commit() error   { t.logFn("COMMIT"); return t.Tx.Commit() }
+func (t *txLogger) Rollback() error { t.logFn("ROLLBACK"); return t.Tx.Rollback() }
+
 func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -106,15 +109,24 @@ func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 	}
 }
 
-// appConfigGet reads a single key from app_config. Returns "" if not found or DB is nil.
-func (h *Handler) appConfigGet(ctx context.Context, key string) string {
+// appConfigGet reads a single key from app_config.
+func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) {
 	if h.db == nil {
-		return ""
+		return "", nil
 	}
 	var val string
-	h.queryRowContext(ctx,
+	err := h.queryRowContext(ctx,
 		`SELECT setting_value FROM `+h.cfg.AppConfigTable()+` WHERE setting_key = @p1`, key,
 	).Scan(&val)
+	return val, err
+}
+
+// appConfigGetOr reads a single key from app_config and returns def on any error or missing key.
+func (h *Handler) appConfigGetOr(ctx context.Context, key, def string) string {
+	val, err := h.appConfigGet(ctx, key)
+	if err != nil {
+		return def
+	}
 	return val
 }
 
