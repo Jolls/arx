@@ -28,8 +28,12 @@ foreach ($exe in @($pmExe, $trExe)) {
 }
 
 # local.pm.json always wins over env vars in config loading order, so patch it directly.
-foreach ($appDir in @("$root\parts_master_go", "$root\test_records_go")) {
-    $localJson = "$appDir\config\local.pm.json"
+$localJsonMap = @{
+    "$root\parts_master_go" = "$root\parts_master_go\config\local.pm.json"
+    "$root\test_records_go" = "$root\test_records_go\config\local.tr.json"
+}
+foreach ($appDir in $localJsonMap.Keys) {
+    $localJson = $localJsonMap[$appDir]
     if (Test-Path $localJson) {
         $cfg = Get-Content $localJson -Raw | ConvertFrom-Json
         if ($cfg.PSObject.Properties['test_mode']) {
