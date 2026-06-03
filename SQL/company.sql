@@ -9,8 +9,8 @@ IF OBJECT_ID('dbo.company', 'U') IS NOT NULL DROP TABLE company;
 CREATE TABLE company (
   id                INT            PRIMARY KEY IDENTITY,
   name              VARCHAR(127)   NOT NULL CONSTRAINT UQ_company_name UNIQUE,
-  SUWeb             VARCHAR(127),                    -- TODO: drop — confirmed dead; no Go or VBA references; superseded by company_attachment. Migration: ALTER TABLE company DROP COLUMN SUWeb;
-  SUContact1        VARCHAR(127),                     -- TODO: drop — confirmed dead; no Go or VBA references; superseded by default_contact FK to CN. Migration: ALTER TABLE company DROP COLUMN SUContact1;
+  SUWeb             VARCHAR(127),                    -- dead column; see FUTURE_GOALS.md (drop SUWeb/SUContact1)
+  SUContact1        VARCHAR(127),                     -- dead column; see FUTURE_GOALS.md (drop SUWeb/SUContact1)
   SUNotes           VARCHAR(4000),
   date_modified     DATETIME       CONSTRAINT DF_company_date_modified DEFAULT GETDATE(),
   is_active         BIT            CONSTRAINT DF_company_is_active       DEFAULT 1,
