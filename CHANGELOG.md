@@ -17,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - parts_master_go: raise test-mode PO sequence seed floor from 0 to 99999 so all-non-numeric snapshots can't collide ([#378](https://github.com/Jolls/arx-legacy/issues/378))
 - parts_master_go: avoid double-rollback log noise on committed transactions (BOM update, PO create, PO update) ([#367](https://github.com/Jolls/arx-legacy/issues/367))
 - test_records_go: audit and document hide_formula nil-context call paths; nil is intentional for form-def view ([#360](https://github.com/Jolls/arx-legacy/issues/360))
+- both: poll the port instead of a fixed 600ms sleep before opening the browser ([#364](https://github.com/Jolls/arx-legacy/issues/364))
+- both: RFC 6266-encode the Content-Disposition filename with mime.FormatMediaType ([#363](https://github.com/Jolls/arx-legacy/issues/363))
+- arxlib: add BrowseFolderContext with exec.CommandContext so HTTP handlers can't hang on an open folder dialog ([#359](https://github.com/Jolls/arx-legacy/issues/359))
+- parts_master_go: guard openDebugConsole against repeated allocation ([#379](https://github.com/Jolls/arx-legacy/issues/379))
+- parts_master_go: local config ACL confirmed owner-only by inheritance — no code change needed ([#381](https://github.com/Jolls/arx-legacy/issues/381))
+- parts_master_go: render() type guard confirmed present in both apps — no fix needed ([#366](https://github.com/Jolls/arx-legacy/issues/366))
 
 ## [0.4.1] - 2026-06-02 
 - security: CSRF check moved to middleware covering all POST routes in both apps; fixes two previously unprotected PO handlers ([#362](https://github.com/Jolls/arx-legacy/issues/362), [#350](https://github.com/Jolls/arx-legacy/issues/350))

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -59,7 +60,14 @@ func onReady() {
 
 	// Open the browser once the server has had a moment to start.
 	go func() {
-		time.Sleep(600 * time.Millisecond)
+		for i := 0; i < 40; i++ {
+			c, err := net.DialTimeout("tcp", "127.0.0.1:"+cfg.Port, 50*time.Millisecond)
+			if err == nil {
+				c.Close()
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
 		_ = browser.OpenURL(url)
 	}()
 

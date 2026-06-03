@@ -136,7 +136,7 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 // APIBrowseFolder opens a native Windows folder-picker dialog and returns
 // the selected path as JSON. Used by the Settings page browse buttons.
 func (h *Handler) APIBrowseFolder(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]string{"path": folderpick.BrowseFolder()})
+	writeJSON(w, map[string]string{"path": folderpick.BrowseFolderContext(r.Context())})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

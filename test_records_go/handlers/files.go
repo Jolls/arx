@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,7 +26,8 @@ func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 	if strings.ToLower(filepath.Ext(fullPath)) == ".pdf" {
 		w.Header().Set("Content-Disposition", "inline")
 	} else {
-		w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(fullPath))
+		w.Header().Set("Content-Disposition",
+			mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(fullPath)}))
 	}
 	http.ServeFile(w, r, fullPath)
 }
