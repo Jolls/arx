@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ## [0.5.1] - 2026-06-03 
+- parts_master_go: appConfigGet returns an error so callers can tell a missing key from a DB failure ([#371](https://github.com/Jolls/arx-legacy/issues/371))
+- both: read cached schema-version check instead of re-querying app_config on every page load ([#370](https://github.com/Jolls/arx-legacy/issues/370))
+- parts_master_go: txLogger now logs Commit/Rollback in debug mode ([#373](https://github.com/Jolls/arx-legacy/issues/373))
 - test_records_go: view definition now shows raw spec_nom instead of expanding {id} tokens, so it matches the editor ([#405](https://github.com/Jolls/arx-legacy/issues/405))
 - test_records_go: cap Comment column width to 240px so long step comments don't stretch the results table
 
