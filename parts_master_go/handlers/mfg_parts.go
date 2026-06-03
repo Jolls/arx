@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -45,10 +45,6 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 // ── MfgPartCreate — POST /part/{id}/mfg-parts ───────────────────────────────
 
 func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	mfgID := strings.TrimSpace(r.FormValue("mfg_id"))
 	mpn := strings.TrimSpace(r.FormValue("mfg_part_number"))
@@ -126,10 +122,6 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 // ── MfgPartUpdate — POST /part/{id}/mfg-parts/{mid} ─────────────────────────
 
 func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	mid := chi.URLParam(r, "mid")
 	mfgID := strings.TrimSpace(r.FormValue("mfg_id"))
@@ -156,10 +148,6 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 // ── MfgPartDelete — POST /part/{id}/mfg-parts/{mid}/delete ──────────────────
 
 func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	mid := chi.URLParam(r, "mid")
 

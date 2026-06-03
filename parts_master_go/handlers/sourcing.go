@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -40,10 +40,6 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 // ── SupplierPartCreate — POST /part/{id}/suppliers ───────────────────────────
 
 func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
 	if supplierID == "" {
@@ -129,10 +125,6 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 // ── SupplierPartUpdate — POST /part/{id}/suppliers/{spID} ────────────────────
 
 func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	spID := chi.URLParam(r, "spID")
 	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
@@ -164,10 +156,6 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 // ── SupplierPartDelete — POST /part/{id}/suppliers/{spID}/delete ─────────────
 
 func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	spID := chi.URLParam(r, "spID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`

@@ -90,6 +90,7 @@ func buildRouter(h *handlers.Handler) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(h.RequireCsrfOnPost)
 
 	// Always accessible — no DB connection required.
 	subStatic, _ := fs.Sub(staticFS, "static")

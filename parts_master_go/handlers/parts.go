@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"context"
@@ -234,10 +234,6 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 // ── PartsCreate — POST /parts ───────────────────────────────────────────────
 
 func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	partNumber := fs(r, "part_number")
 	if partNumber == "" {
 		h.render(w, "part_edit.html", map[string]any{
@@ -309,10 +305,6 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 // ── PartUpdate — POST /part/{id} ────────────────────────────────────────────
 
 func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	partNumber := fs(r, "part_number")
 	if partNumber == "" {
@@ -610,10 +602,6 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 // ── PartBOMSave — POST /part/{id}/bom ───────────────────────────────────────
 
 func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, "Error parsing form: "+err.Error())
@@ -703,10 +691,6 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 // ── PartRollupCost — POST /part/{id}/rollup-cost ─────────────────────────────
 
 func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	var cost float64
@@ -782,10 +766,6 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	var oID any
 	if v := fs(r, "order_id"); v != "" {
@@ -804,10 +784,6 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id, attID := chi.URLParam(r, "id"), chi.URLParam(r, "attID")
 	var oID any
 	if v := fs(r, "order_id"); v != "" {
@@ -827,10 +803,6 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
 	if err := h.softDeleteAttachment(r.Context(), h.cfg.AttachmentsTable(), "FILID", attIDInt, "", 0); err != nil {
@@ -841,10 +813,6 @@ func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	idInt, _ := strconv.Atoi(id)
 	filID := r.FormValue("filid")
@@ -1020,10 +988,6 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
 		h.renderError(w, "Invalid supplier")
@@ -1107,10 +1071,6 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
 	priceID := chi.URLParam(r, "priceID")
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
 		h.renderError(w, "Invalid supplier")
@@ -1161,10 +1121,6 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
 	priceID := chi.URLParam(r, "priceID")
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_active = 0 WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(),
 	), priceID, partID)
@@ -1178,10 +1134,6 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
 	priceID := chi.URLParam(r, "priceID")
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_active = 1 WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(),
 	), priceID, partID)

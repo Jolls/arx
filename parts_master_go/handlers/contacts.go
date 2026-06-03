@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -90,10 +90,6 @@ func (h *Handler) ContactsNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	name := fs(r, "CNName")
 	if name == "" {
 		suppliers := h.fetchSupplierList(r)
@@ -150,10 +146,6 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.verifyCsrf(r) {
-		http.Error(w, "Invalid form submission", http.StatusForbidden)
-		return
-	}
 	id := chi.URLParam(r, "id")
 	name := fs(r, "CNName")
 	if name == "" {
