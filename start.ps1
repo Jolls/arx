@@ -28,5 +28,5 @@ foreach ($exe in @($pmExe, $trExe)) {
 
 $env:TEST_MODE = $testEnv
 
-Start-Process $pmExe
-Start-Process $trExe
+Start-Process $pmExe -WorkingDirectory "$root\parts_master_go"
+Start-Process $trExe -WorkingDirectory "$root\test_records_go"
