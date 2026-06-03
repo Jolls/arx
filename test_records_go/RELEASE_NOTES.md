@@ -1,3 +1,21 @@
+Arx v0.5.1 — June 2026
+=======================
+
+NEW FEATURES
+
+  Both Apps — Single Program
+  Arx is now one program with one tray icon instead of two.
+
+BUG FIXES
+
+  Test Records — Form Definition View
+  View Definition spec_nom now shows the raw stored value, matching the
+  editor. Previously cross-reference tokens like {629} were expanded.
+
+  Test Records — Long Comments in Results Table
+  Long step comments no longer stretch the Comment column across the
+  full table width.
+
 Arx v0.4.1 — June 2026
 =======================
 
