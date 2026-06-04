@@ -1,11 +1,11 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"net/url"
 	"os"
 
+	arxbase "arx/arxlib/config"
 	"github.com/joho/godotenv"
 )
 
@@ -18,20 +18,11 @@ var AppVersion = "dev"
 const ExpectedSchemaVersion = "2"
 
 type Config struct {
-	Version            string
-	Port               string
-	DBServer           string
-	DBName             string
-	DBUser             string
-	DBPassword         string // from local.json only — never stored in .env
-	SessionSecret      string
-	DocControlRoot     string
-	POFolderRoot       string
-	SupplierFilesRoot  string
-	TestRecordsURL     string
-	TestMode           bool
-	DebugMode          bool
-	Settings           Settings
+	arxbase.Base
+	POFolderRoot      string
+	SupplierFilesRoot string
+	TestRecordsURL    string
+	Settings          Settings
 }
 
 type Settings struct {
@@ -50,18 +41,20 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		Version:        AppVersion,
-		Port:           getEnv("PM_PORT", getEnv("PORT", "4568")),
-		DBServer:       os.Getenv("DB_SERVER"),
-		DBName:         os.Getenv("DB_NAME"),
-		DBUser:         os.Getenv("DB_USER"),
-		SessionSecret:  getEnv("SESSION_SECRET", "change-me-in-production"),
-		DocControlRoot:    os.Getenv("DOC_CONTROL_ROOT"),
+		Base: arxbase.Base{
+			Version:        AppVersion,
+			Port:           arxbase.GetEnv("PM_PORT", arxbase.GetEnv("PORT", "4568")),
+			DBServer:       os.Getenv("DB_SERVER"),
+			DBName:         os.Getenv("DB_NAME"),
+			DBUser:         os.Getenv("DB_USER"),
+			SessionSecret:  arxbase.GetEnv("SESSION_SECRET", "change-me-in-production"),
+			DocControlRoot: os.Getenv("DOC_CONTROL_ROOT"),
+			TestMode:       os.Getenv("TEST_MODE") == "true",
+			DebugMode:      os.Getenv("DEBUG_MODE") == "true",
+		},
 		POFolderRoot:      os.Getenv("PO_FOLDER_ROOT"),
 		SupplierFilesRoot: os.Getenv("SUPPLIER_FILES_ROOT"),
-		TestRecordsURL:    getEnv("TR_URL", "http://localhost:4569"),
-		TestMode:          os.Getenv("TEST_MODE") == "true",
-		DebugMode:      os.Getenv("DEBUG_MODE") == "true",
+		TestRecordsURL:    arxbase.GetEnv("TR_URL", "http://localhost:4569"),
 	}
 
 	// Backward compat: parse DATABASE_DSN if new individual fields are not set.
@@ -116,64 +109,17 @@ func Load() *Config {
 	return cfg
 }
 
-// BuildDSN constructs a sqlserver:// DSN from the config fields + a password.
-func (c *Config) BuildDSN(password string) string {
-	u := &url.URL{
-		Scheme: "sqlserver",
-		User:   url.UserPassword(c.DBUser, password),
-		Host:   c.DBServer,
-		RawQuery: url.Values{
-			"database": {c.DBName},
-			"encrypt":  {"true"},
-		}.Encode(),
-	}
-	return u.String()
-}
-
-// DSN returns a ready-to-use connection string using the stored DBPassword.
-// Returns an empty string if password or server is not configured.
-func (c *Config) DSN() string {
-	if c.DBPassword == "" || c.DBServer == "" {
-		return ""
-	}
-	return c.BuildDSN(c.DBPassword)
-}
-
-// ConnectionSummary returns a non-sensitive description of the DB target.
-func (c *Config) ConnectionSummary() string {
-	if c.DBServer == "" {
-		return "(not configured)"
-	}
-	return fmt.Sprintf("%s / %s", c.DBServer, c.DBName)
-}
-
 // Table name helpers — each pair matches the Ruby model's self.table_name.
-func (c *Config) PartsTable() string        { return pick(c.TestMode, "PN_Test", "PN") }
-func (c *Config) AttachmentsTable() string  { return pick(c.TestMode, "FIL_Test", "FIL") }
-func (c *Config) BOMTable() string          { return pick(c.TestMode, "PL_Test", "PL") }
-func (c *Config) PriceTable() string        { return pick(c.TestMode, "price_Test", "price") }
-func (c *Config) POTable() string           { return pick(c.TestMode, "PO_Test", "PO") }
-func (c *Config) POLineTable() string       { return pick(c.TestMode, "POL_Test", "POL") }
-func (c *Config) CompanyTable() string             { return pick(c.TestMode, "company_Test", "company") }
-func (c *Config) SupplierPartTable() string        { return pick(c.TestMode, "supplier_part_Test", "supplier_part") }
-func (c *Config) MfgPartTable() string             { return pick(c.TestMode, "mfg_part_Test", "mfg_part") }
-func (c *Config) CompanyAttachmentsTable() string  {
-	return pick(c.TestMode, "company_attachment_Test", "company_attachment")
-}
-func (c *Config) ContactTable() string      { return pick(c.TestMode, "CN_Test", "CN") }
-func (c *Config) UnitTable() string         { return pick(c.TestMode, "unit_Test", "unit") }
-func (c *Config) AppConfigTable() string    { return pick(c.TestMode, "app_config_Test", "app_config") }
-
-func pick(test bool, testVal, prodVal string) string {
-	if test {
-		return testVal
-	}
-	return prodVal
-}
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
+func (c *Config) PartsTable() string               { return arxbase.Pick(c.TestMode, "PN_Test", "PN") }
+func (c *Config) AttachmentsTable() string         { return arxbase.Pick(c.TestMode, "FIL_Test", "FIL") }
+func (c *Config) BOMTable() string                 { return arxbase.Pick(c.TestMode, "PL_Test", "PL") }
+func (c *Config) PriceTable() string               { return arxbase.Pick(c.TestMode, "price_Test", "price") }
+func (c *Config) POTable() string                  { return arxbase.Pick(c.TestMode, "PO_Test", "PO") }
+func (c *Config) POLineTable() string              { return arxbase.Pick(c.TestMode, "POL_Test", "POL") }
+func (c *Config) CompanyTable() string             { return arxbase.Pick(c.TestMode, "company_Test", "company") }
+func (c *Config) SupplierPartTable() string        { return arxbase.Pick(c.TestMode, "supplier_part_Test", "supplier_part") }
+func (c *Config) MfgPartTable() string             { return arxbase.Pick(c.TestMode, "mfg_part_Test", "mfg_part") }
+func (c *Config) CompanyAttachmentsTable() string  { return arxbase.Pick(c.TestMode, "company_attachment_Test", "company_attachment") }
+func (c *Config) ContactTable() string             { return arxbase.Pick(c.TestMode, "CN_Test", "CN") }
+func (c *Config) UnitTable() string                { return arxbase.Pick(c.TestMode, "unit_Test", "unit") }
+func (c *Config) AppConfigTable() string           { return arxbase.Pick(c.TestMode, "app_config_Test", "app_config") }

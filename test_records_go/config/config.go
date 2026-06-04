@@ -1,11 +1,10 @@
 package config
 
 import (
-	"fmt"
 	"log"
-	"net/url"
 	"os"
 
+	arxbase "arx/arxlib/config"
 	"github.com/joho/godotenv"
 )
 
@@ -18,18 +17,9 @@ var AppVersion = "dev"
 const ExpectedSchemaVersion = "2"
 
 type Config struct {
-	Version        string
-	Port           string
-	DBServer       string
-	DBName         string
-	DBUser         string
-	DBPassword     string // from local.json only — never stored in .env
-	SessionSecret  string
+	arxbase.Base
 	ImageRoot      string
-	DocControlRoot string
 	PartsMasterURL string
-	TestMode       bool
-	DebugMode      bool
 }
 
 func Load() *Config {
@@ -41,17 +31,19 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		Version:        AppVersion,
-		Port:           getEnv("TR_PORT", getEnv("PORT", "4569")),
-		TestMode:       os.Getenv("TEST_MODE") == "true",
-		DBServer:       os.Getenv("DB_SERVER"),
-		DBName:         os.Getenv("DB_NAME"),
-		DBUser:         os.Getenv("DB_USER"),
-		SessionSecret:  getEnv("SESSION_SECRET", "change-me-in-production"),
+		Base: arxbase.Base{
+			Version:        AppVersion,
+			Port:           arxbase.GetEnv("TR_PORT", arxbase.GetEnv("PORT", "4569")),
+			DBServer:       os.Getenv("DB_SERVER"),
+			DBName:         os.Getenv("DB_NAME"),
+			DBUser:         os.Getenv("DB_USER"),
+			SessionSecret:  arxbase.GetEnv("SESSION_SECRET", "change-me-in-production"),
+			DocControlRoot: os.Getenv("DOC_CONTROL_ROOT"),
+			TestMode:       os.Getenv("TEST_MODE") == "true",
+			DebugMode:      os.Getenv("DEBUG_MODE") == "true",
+		},
 		ImageRoot:      os.Getenv("IMAGE_ROOT"),
-		DocControlRoot: os.Getenv("DOC_CONTROL_ROOT"),
-		PartsMasterURL: getEnv("PM_URL", "http://localhost:4568"),
-		DebugMode:      os.Getenv("DEBUG_MODE") == "true",
+		PartsMasterURL: arxbase.GetEnv("PM_URL", "http://localhost:4568"),
 	}
 
 	// Apply local.json overrides (local values always win over .env).
@@ -83,58 +75,17 @@ func Load() *Config {
 	return cfg
 }
 
-func (c *Config) BuildDSN(password string) string {
-	u := &url.URL{
-		Scheme: "sqlserver",
-		User:   url.UserPassword(c.DBUser, password),
-		Host:   c.DBServer,
-		RawQuery: url.Values{
-			"database": {c.DBName},
-			"encrypt":  {"true"},
-		}.Encode(),
-	}
-	return u.String()
-}
-
-func (c *Config) DSN() string {
-	if c.DBPassword == "" || c.DBServer == "" {
-		return ""
-	}
-	return c.BuildDSN(c.DBPassword)
-}
-
-func (c *Config) ConnectionSummary() string {
-	if c.DBServer == "" {
-		return "(not configured)"
-	}
-	return fmt.Sprintf("%s / %s", c.DBServer, c.DBName)
-}
-
 // Table name helpers — switches between prod and _Test variants.
-func (c *Config) PartsTable() string          { return pick(c.TestMode, "PN_Test", "PN") }
-func (c *Config) BOMTable() string            { return pick(c.TestMode, "PL_Test", "PL") } // read-only; PL is owned by parts_master_go
-func (c *Config) FormsTable() string          { return pick(c.TestMode, "Forms_Test", "Forms") }
-func (c *Config) RecordsTable() string        { return pick(c.TestMode, "TestRecords_Test", "TestRecords") }
-func (c *Config) StepsTable() string          { return pick(c.TestMode, "test_definition_Test", "test_definition") }
-func (c *Config) ResultsTable() string        { return pick(c.TestMode, "TestResults_Test", "TestResults") }
+func (c *Config) PartsTable() string             { return arxbase.Pick(c.TestMode, "PN_Test", "PN") }
+func (c *Config) BOMTable() string               { return arxbase.Pick(c.TestMode, "PL_Test", "PL") }
+func (c *Config) FormsTable() string             { return arxbase.Pick(c.TestMode, "Forms_Test", "Forms") }
+func (c *Config) RecordsTable() string           { return arxbase.Pick(c.TestMode, "TestRecords_Test", "TestRecords") }
+func (c *Config) StepsTable() string             { return arxbase.Pick(c.TestMode, "test_definition_Test", "test_definition") }
+func (c *Config) ResultsTable() string           { return arxbase.Pick(c.TestMode, "TestResults_Test", "TestResults") }
 func (c *Config) NamedQueriesTable() string      { return "named_queries" } // no _Test variant — shared config
 func (c *Config) TestDefinitionHistoryTable() string {
-	return pick(c.TestMode, "test_definition_history_Test", "test_definition_history")
+	return arxbase.Pick(c.TestMode, "test_definition_history_Test", "test_definition_history")
 }
-func (c *Config) FormEventsTable() string   { return pick(c.TestMode, "form_events_Test", "form_events") }
-func (c *Config) RecordEventsTable() string { return pick(c.TestMode, "record_events_Test", "record_events") }
-func (c *Config) AppConfigTable() string    { return pick(c.TestMode, "app_config_Test", "app_config") }
-
-func pick(test bool, testVal, prodVal string) string {
-	if test {
-		return testVal
-	}
-	return prodVal
-}
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
+func (c *Config) FormEventsTable() string   { return arxbase.Pick(c.TestMode, "form_events_Test", "form_events") }
+func (c *Config) RecordEventsTable() string { return arxbase.Pick(c.TestMode, "record_events_Test", "record_events") }
+func (c *Config) AppConfigTable() string    { return arxbase.Pick(c.TestMode, "app_config_Test", "app_config") }
