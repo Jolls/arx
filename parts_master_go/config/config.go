@@ -22,14 +22,12 @@ type Config struct {
 	POFolderRoot      string
 	SupplierFilesRoot string
 	TestRecordsURL    string
-	Settings          Settings
+	PODefaults        PODefaults
 }
 
-type Settings struct {
-	PODefaults struct {
-		ContactID  int
-		ReceiverID int
-	}
+type PODefaults struct {
+	ContactID  int
+	ReceiverID int
 }
 
 func Load() *Config {
@@ -93,10 +91,10 @@ func Load() *Config {
 			cfg.SupplierFilesRoot = local.SupplierFilesRoot
 		}
 		if local.PODefaultContactID != nil {
-			cfg.Settings.PODefaults.ContactID = *local.PODefaultContactID
+			cfg.PODefaults.ContactID = *local.PODefaultContactID
 		}
 		if local.PODefaultReceiverID != nil {
-			cfg.Settings.PODefaults.ReceiverID = *local.PODefaultReceiverID
+			cfg.PODefaults.ReceiverID = *local.PODefaultReceiverID
 		}
 		if local.DebugMode {
 			cfg.DebugMode = true
