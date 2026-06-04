@@ -28,6 +28,7 @@
     {{else}}
     <span class="badge bg-danger ms-1">&#10007; Not connected</span>
     {{end}}
+    <span class="badge bg-secondary ms-1">{{.ActiveDBName}}{{if .TestMode}} &mdash; TEST MODE{{end}}</span>
   </div>
   <div class="card-body">
     <div class="row g-3">
@@ -37,9 +38,14 @@
                value="{{.DBServer}}" placeholder="yourserver.database.windows.net" style="min-width:320px">
       </div>
       <div class="col-auto">
-        <label class="form-label">Database Name</label>
+        <label class="form-label">Prod DB Name</label>
         <input type="text" class="form-control form-control-sm font-mono" name="db_name"
-               value="{{.DBName}}" placeholder="YourDatabase">
+               value="{{.DBName}}" placeholder="ArxProd">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Test DB Name</label>
+        <input type="text" class="form-control form-control-sm font-mono" name="test_db_name"
+               value="{{.TestDBName}}" placeholder="ArxDev">
       </div>
       <div class="col-auto">
         <label class="form-label">Username</label>
@@ -102,7 +108,7 @@
              {{if .TestMode}}checked{{end}}
              onchange="confirmTestModeToggle(this)">
       <label class="form-check-label" for="test_mode">
-        Test mode — use <code>_Test</code> table variants <span class="text-danger fw-semibold">(writes go to test data)</span>
+        Test mode — connect to <code>{{.TestDBName}}</code> instead of <code>{{.DBName}}</code> <span class="text-danger fw-semibold">(writes go to test data)</span>
       </label>
     </div>
     <div class="form-check">
@@ -118,8 +124,8 @@
 <script>
 function confirmTestModeToggle(cb) {
   var msg = cb.checked
-    ? "Switching TO test mode will route all reads and writes to _Test tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
-    : "Switching OUT of test mode will route all reads and writes to production tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
+    ? "Switching TO test mode will reconnect to the test database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
+    : "Switching OUT of test mode will reconnect to the production database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
   if (!confirm(msg)) cb.checked = !cb.checked;
 }
 </script>

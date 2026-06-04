@@ -17,6 +17,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 
 	dbServer := strings.TrimSpace(r.FormValue("db_server"))
 	dbName := strings.TrimSpace(r.FormValue("db_name"))
+	testDBName := strings.TrimSpace(r.FormValue("test_db_name"))
 	dbUser := strings.TrimSpace(r.FormValue("db_user"))
 	password := strings.TrimSpace(r.FormValue("db_password"))
 	imageRoot := strings.TrimSpace(r.FormValue("image_root"))
@@ -35,6 +36,10 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		local.DBName = dbName
 		h.cfg.DBName = dbName
 	}
+	if testDBName != "" {
+		local.TestDBName = testDBName
+		h.cfg.TestDBName = testDBName
+	}
 	if dbUser != "" {
 		local.DBUser = dbUser
 		h.cfg.DBUser = dbUser
@@ -51,9 +56,16 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	h.cfg.DebugMode = debugMode
 	h.cfg.TestMode = testMode
 
+	// Use new password if provided, otherwise reconnect with saved password.
+	// This lets test-mode toggles take effect immediately without re-entering credentials.
+	connectWith := password
+	if connectWith == "" {
+		connectWith = h.cfg.DBPassword
+	}
+
 	var connErr string
-	if password != "" {
-		dsn := h.cfg.BuildDSN(password)
+	if connectWith != "" {
+		dsn := h.cfg.BuildDSN(connectWith)
 		newDB, err := db.Connect(dsn)
 		if err != nil {
 			connErr = err.Error()
@@ -62,8 +74,10 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 				h.db.Close()
 			}
 			h.db = newDB
-			local.DBPassword = password
-			h.cfg.DBPassword = password
+			if password != "" {
+				local.DBPassword = password
+				h.cfg.DBPassword = password
+			}
 			h.CheckSchemaVersion(r.Context())
 		}
 	}
@@ -97,16 +111,18 @@ func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map[string]any) map[string]any {
 	data := map[string]any{
-		"Connected":      h.db != nil,
-		"DBServer":       h.cfg.DBServer,
-		"DBName":         h.cfg.DBName,
-		"DBUser":         h.cfg.DBUser,
-		"ImageRoot":      h.cfg.ImageRoot,
+		"Connected":    h.db != nil,
+		"DBServer":     h.cfg.DBServer,
+		"DBName":       h.cfg.DBName,
+		"TestDBName":   h.cfg.TestDBName,
+		"ActiveDBName": h.cfg.ActiveDBName(),
+		"DBUser":       h.cfg.DBUser,
+		"ImageRoot":    h.cfg.ImageRoot,
 		"DocControlRoot": h.cfg.DocControlRoot,
-		"TestMode":       h.cfg.TestMode,
-		"DebugMode":      h.cfg.DebugMode,
-		"ReleaseNotes":   h.releaseNotes,
-		"CsrfToken":      h.csrfToken(w, r),
+		"TestMode":     h.cfg.TestMode,
+		"DebugMode":    h.cfg.DebugMode,
+		"ReleaseNotes": h.releaseNotes,
+		"CsrfToken":    h.csrfToken(w, r),
 	}
 	for k, v := range extra {
 		data[k] = v
