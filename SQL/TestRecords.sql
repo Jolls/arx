@@ -53,7 +53,6 @@ CREATE TABLE test_definition (
   spec_nom            VARCHAR(255),
   default_result      VARCHAR(255),
   hide_formula        VARCHAR(255),                      -- 'HIDE' excludes this row from display.
-  pf_formula          VARCHAR(255),
   pf_type             VARCHAR(50),                       -- Go evaluator: 'range' (default/NULL = range check).
   instrument_types    VARCHAR(255),                      -- Comma-separated instrument type names this step applies to. NULL/empty = applies to all. Matched against TestRecords.instrument_type.
   format              VARCHAR(255),
@@ -294,7 +293,6 @@ CREATE TABLE test_definition_history (
   spec_nom      VARCHAR(255),
   default_result VARCHAR(255),
   hide_formula  VARCHAR(255),
-  pf_formula    VARCHAR(255),                       -- retained for historical rows; deprecated in v0.3.52, no longer written by trigger
   pf_type       VARCHAR(50),
   instrument_types VARCHAR(255),
   format        VARCHAR(255),
