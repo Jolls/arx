@@ -1,10 +1,36 @@
--- Populate ArxDev from prod.
--- Run this in the context of the ArxDev database to (re)build it as a full copy of prod.
--- Replace 'ArxProd' below with the actual prod DB name configured in local.*.json.
+-- Populate/refresh ArxDev from ArxProd.
+-- ArxDev is a separate database on the same server used when TEST_MODE=true.
+-- Table names are identical to prod — only the DSN database changes.
 -- Re-run whenever a new table is added to prod.
 --
--- ArxDev is a separate database on the same SQL Server instance using the same login.
--- TEST_MODE=true points the DSN at ArxDev instead of prod — table names are identical.
+-- ============================================================
+-- AZURE SQL DATABASE (PaaS)
+-- ============================================================
+-- Cross-database three-part names are not supported. Use the Azure portal instead:
+--
+--   1. Delete ArxDev if it exists (portal → ArxDev → Delete)
+--   2. Open ArxProd → Overview → Copy
+--   3. Name the copy "ArxDev", same server, any tier
+--   4. After the copy completes, run the "Sequence restart" block below
+--      against ArxDev to advance PO_Number_Seq past the snapshot max.
+--
+-- ============================================================
+-- ON-PREMISES SQL SERVER
+-- ============================================================
+-- Run the full script below connected to the SQL Server instance
+-- (not to ArxDev directly — USE ArxDev handles that).
+
+-- ── Sequence restart (Azure: run this after portal Copy; on-prem: included below) ──────────────
+--
+--   DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO);
+--   IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq')
+--       EXEC('ALTER SEQUENCE dbo.PO_Number_Seq RESTART WITH ' + @next_po);
+--   ELSE
+--       EXEC('CREATE SEQUENCE dbo.PO_Number_Seq AS INT START WITH ' + @next_po + ' INCREMENT BY 1 NO CYCLE NO CACHE');
+
+-- ══════════════════════════════════════════════════════════════
+-- ON-PREMISES FULL POPULATE SCRIPT
+-- ══════════════════════════════════════════════════════════════
 
 USE ArxDev;
 
@@ -37,38 +63,38 @@ BEGIN TRY
     IF OBJECT_ID('dbo.logs',                     'U') IS NOT NULL DROP TABLE dbo.logs;
 
     -- Populate from prod via three-part names
-    SELECT * INTO dbo.CN                     FROM ArxProd.dbo.CN;
-    SELECT * INTO dbo.FIL                    FROM ArxProd.dbo.FIL;
-    SELECT * INTO dbo.supplier_part          FROM ArxProd.dbo.supplier_part;
-    SELECT * INTO dbo.mfg_part               FROM ArxProd.dbo.mfg_part;
-    SELECT * INTO dbo.PL                     FROM ArxProd.dbo.PL;
-    SELECT * INTO dbo.price                  FROM ArxProd.dbo.price;
-    SELECT * INTO dbo.POL                    FROM ArxProd.dbo.POL;
-    SELECT * INTO dbo.PO                     FROM ArxProd.dbo.PO;
-    SELECT * INTO dbo.company_attachment     FROM ArxProd.dbo.company_attachment;
-    SELECT * INTO dbo.company                FROM ArxProd.dbo.company;
-    SELECT * INTO dbo.PN                     FROM ArxProd.dbo.PN;
-    SELECT * INTO dbo.Forms                  FROM ArxProd.dbo.Forms;
-    SELECT * INTO dbo.form_events            FROM ArxProd.dbo.form_events;
-    SELECT * INTO dbo.record_events          FROM ArxProd.dbo.record_events;
-    SELECT * INTO dbo.TestRecords            FROM ArxProd.dbo.TestRecords;
-    SELECT * INTO dbo.TestResults            FROM ArxProd.dbo.TestResults;
-    SELECT * INTO dbo.test_definition        FROM ArxProd.dbo.test_definition;
+    SELECT * INTO dbo.CN                      FROM ArxProd.dbo.CN;
+    SELECT * INTO dbo.FIL                     FROM ArxProd.dbo.FIL;
+    SELECT * INTO dbo.supplier_part           FROM ArxProd.dbo.supplier_part;
+    SELECT * INTO dbo.mfg_part                FROM ArxProd.dbo.mfg_part;
+    SELECT * INTO dbo.PL                      FROM ArxProd.dbo.PL;
+    SELECT * INTO dbo.price                   FROM ArxProd.dbo.price;
+    SELECT * INTO dbo.POL                     FROM ArxProd.dbo.POL;
+    SELECT * INTO dbo.PO                      FROM ArxProd.dbo.PO;
+    SELECT * INTO dbo.company_attachment      FROM ArxProd.dbo.company_attachment;
+    SELECT * INTO dbo.company                 FROM ArxProd.dbo.company;
+    SELECT * INTO dbo.PN                      FROM ArxProd.dbo.PN;
+    SELECT * INTO dbo.Forms                   FROM ArxProd.dbo.Forms;
+    SELECT * INTO dbo.form_events             FROM ArxProd.dbo.form_events;
+    SELECT * INTO dbo.record_events           FROM ArxProd.dbo.record_events;
+    SELECT * INTO dbo.TestRecords             FROM ArxProd.dbo.TestRecords;
+    SELECT * INTO dbo.TestResults             FROM ArxProd.dbo.TestResults;
+    SELECT * INTO dbo.test_definition         FROM ArxProd.dbo.test_definition;
     SELECT * INTO dbo.test_definition_history FROM ArxProd.dbo.test_definition_history;
-    SELECT * INTO dbo.named_queries          FROM ArxProd.dbo.named_queries;
-    SELECT * INTO dbo.app_config             FROM ArxProd.dbo.app_config;
-    SELECT * INTO dbo.unit                   FROM ArxProd.dbo.unit;
-    SELECT * INTO dbo.release_notes          FROM ArxProd.dbo.release_notes;
-    SELECT * INTO dbo.logs                   FROM ArxProd.dbo.logs;
+    SELECT * INTO dbo.named_queries           FROM ArxProd.dbo.named_queries;
+    SELECT * INTO dbo.app_config              FROM ArxProd.dbo.app_config;
+    SELECT * INTO dbo.unit                    FROM ArxProd.dbo.unit;
+    SELECT * INTO dbo.release_notes           FROM ArxProd.dbo.release_notes;
+    SELECT * INTO dbo.logs                    FROM ArxProd.dbo.logs;
 
-    -- Constraints not copied by SELECT * INTO — add manually
-    ALTER TABLE dbo.PO         ADD CONSTRAINT UQ_PO_number                UNIQUE (number);
-    ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at    DEFAULT GETDATE() FOR updated_at;
-    ALTER TABLE dbo.FIL        ADD CONSTRAINT DF_FIL_is_active             DEFAULT 1 FOR is_active;
+    -- Constraints not copied by SELECT * INTO
+    ALTER TABLE dbo.PO         ADD CONSTRAINT UQ_PO_number             UNIQUE (number);
+    ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at DEFAULT GETDATE() FOR updated_at;
+    ALTER TABLE dbo.FIL        ADD CONSTRAINT DF_FIL_is_active          DEFAULT 1 FOR is_active;
     CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;
-    ALTER TABLE dbo.PN         ADD CONSTRAINT CK_PN_category               CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
+    ALTER TABLE dbo.PN         ADD CONSTRAINT CK_PN_category            CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
 
-    -- Triggers not copied by SELECT * INTO — recreate on ArxDev tables.
+    -- Triggers not copied by SELECT * INTO
     EXEC('
 CREATE OR ALTER TRIGGER dbo.trg_supplier_part_company_count
 ON dbo.supplier_part
@@ -142,7 +168,7 @@ BEGIN
 END
     ');
 
-    -- Recalibrate snapshot counts (prod data may have drifted before triggers existed).
+    -- Recalibrate snapshot counts
     UPDATE s
     SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id),
            s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO             p  WHERE p.supplier_id  = s.id)
