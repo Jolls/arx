@@ -22,6 +22,7 @@ type Config struct {
 	POFolderRoot      string
 	SupplierFilesRoot string
 	TestRecordsURL    string
+	ImageRoot         string // used by Test Records; stored/displayed here so settings save round-trips it
 	PODefaults        PODefaults
 }
 
@@ -53,7 +54,8 @@ func Load() *Config {
 		},
 		POFolderRoot:      os.Getenv("PO_FOLDER_ROOT"),
 		SupplierFilesRoot: os.Getenv("SUPPLIER_FILES_ROOT"),
-		TestRecordsURL:    arxbase.GetEnv("TR_URL", "http://localhost:4569"),
+		TestRecordsURL:    arxbase.GetEnv("TR_URL", "/records"),
+		ImageRoot:         os.Getenv("IMAGE_ROOT"),
 	}
 
 	// Backward compat: parse DATABASE_DSN if new individual fields are not set.
@@ -90,6 +92,9 @@ func Load() *Config {
 		}
 		if local.SupplierFilesRoot != "" {
 			cfg.SupplierFilesRoot = local.SupplierFilesRoot
+		}
+		if local.ImageRoot != "" {
+			cfg.ImageRoot = local.ImageRoot
 		}
 		if local.PODefaultContactID != nil {
 			cfg.PODefaults.ContactID = *local.PODefaultContactID

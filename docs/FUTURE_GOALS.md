@@ -17,7 +17,7 @@
 - Analytics: yield dashboard, failure mode reports, per-result change history
 - UX polish: keyboard navigation, auto-save drafts, conditional step visibility
 
-**Architecture end state:** A single merged executable serving both apps from one binary and one port, with user authentication. Until merger, the two apps should have a navigation link to each other (port swap).
+~~**Architecture end state:** A single merged executable serving both apps from one binary and one port, with user authentication. Until merger, the two apps should have a navigation link to each other (port swap).~~ *(one binary + one port done; auth and full structural merge tracked in #422)*
 
 ---
 
@@ -202,8 +202,8 @@ Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.pr
 ## Cross-Cutting Concerns
 
 ### App Merge vs. Cross-App Navigation (#218, #234)
-**Long-term goal:** Merge both executables into one binary on one port.
-**Interim:** Add a navigation tab/link in each app pointing to the other app's port.
+~~**Long-term goal:** Merge both executables into one binary on one port.~~ *(done — #413)*
+~~**Interim:** Add a navigation tab/link in each app pointing to the other app's port.~~ *(done — header cross-links are now same-origin)*
 Design new features with merger in mind — avoid deeply embedding port-specific assumptions into the nav or config.
 
 ### User Authentication (#207)

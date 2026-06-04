@@ -15,7 +15,7 @@ import (
 	"arx/test_records_go/handlers"
 )
 
-// App holds the configured HTTP server and handler for Test Records.
+// App holds the configured HTTP handler for Test Records.
 type App struct {
 	Server    *http.Server
 	URL       string
@@ -23,6 +23,7 @@ type App struct {
 	Name      string
 	DebugMode bool
 	h         *handlers.Handler
+	router    http.Handler
 }
 
 // New loads config, connects to the database, and returns a ready-to-serve App.
@@ -43,15 +44,40 @@ func New() *App {
 
 	h := handlers.New(database, cfg, templatesFS, releaseNotesData)
 	h.CheckSchemaVersion(context.Background())
+	router := buildRouter(h)
 
 	return &App{
-		Server:    &http.Server{Addr: "0.0.0.0:" + cfg.Port, Handler: buildRouter(h)},
+		Server:    &http.Server{Addr: "0.0.0.0:" + cfg.Port, Handler: router},
 		URL:       "http://localhost:" + cfg.Port,
 		Port:      cfg.Port,
 		Name:      "Test Records",
 		DebugMode: cfg.DebugMode,
 		h:         h,
+		router:    router,
 	}
+}
+
+// Handler returns the HTTP handler for this app (used by arx_go to mount as fallback).
+func (a *App) Handler() http.Handler {
+	return a.router
+}
+
+// Reload re-reads config/local.json and reconnects the DB pool.
+// Called by arx_go after PM's settings are saved.
+func (a *App) Reload() error {
+	cfg := config.Load()
+	if dsn := cfg.DSN(); dsn != "" {
+		newDB, err := db.Connect(dsn)
+		if err != nil {
+			log.Printf("test_records: reload reconnect failed: %v", err)
+			return err
+		}
+		a.h.SetDBAndConfig(newDB, cfg)
+		a.h.CheckSchemaVersion(context.Background())
+		a.DebugMode = cfg.DebugMode
+		log.Println("test_records: reloaded config and reconnected")
+	}
+	return nil
 }
 
 // Close shuts down the database connection pool.
@@ -65,22 +91,18 @@ func buildRouter(h *handlers.Handler) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(h.RequireCsrfOnPost)
 
-	// Always accessible — no DB connection required.
+	// Static assets served under /tr-static/* (PM owns /static/*).
 	subStatic, _ := fs.Sub(staticFS, "static")
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(subStatic))))
-	r.Get("/settings", h.Settings)
-	r.Post("/settings", h.SettingsSave)
-	r.Get("/whats-new", h.WhatsNew)
-	r.Get("/api/browse-folder", h.APIBrowseFolder)
+	r.Handle("/tr-static/*", http.StripPrefix("/tr-static/", http.FileServer(http.FS(subStatic))))
 
-	// All other routes require a live database connection.
+	// All routes require a live database connection.
 	r.Group(func(r chi.Router) {
 		r.Use(h.RequireAuth)
 
-		r.Get("/local/*", h.ServeLocalFile)
 		r.Get("/images/*", h.ServeImage)
 
-		r.Get("/", h.FormsList)
+		// Forms list is the TR home — mounted at /records (PM owns /).
+		r.Get("/records", h.FormsList)
 		r.Get("/forms/{id}/records", h.RecordsList)
 		r.Get("/forms/{id}/records/new", h.NewRecord)
 		r.Post("/forms/{id}/records/new", h.CreateRecord)

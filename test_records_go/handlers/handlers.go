@@ -41,6 +41,15 @@ func (h *Handler) CloseDB() {
 	}
 }
 
+// SetDBAndConfig swaps in a fresh DB pool and config (called by App.Reload after settings save).
+func (h *Handler) SetDBAndConfig(db *sql.DB, cfg *config.Config) {
+	if h.db != nil {
+		h.db.Close()
+	}
+	h.db = db
+	h.cfg = cfg
+}
+
 // CheckSchemaVersion queries app_config for schema_version and stores a mismatch
 // message if it doesn't match config.ExpectedSchemaVersion. Safe to call when db is nil.
 func (h *Handler) CheckSchemaVersion(ctx context.Context) {

@@ -146,13 +146,26 @@
                         style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
             </div>
         </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">IMAGE_ROOT</strong>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <input type="text" name="image_root" id="image_root"
+                       value="{{.ImageRoot}}"
+                       placeholder="e.g. C:\Images (used by Test Records)"
+                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
+                              border-radius:4px; font-size:0.9em; font-family:monospace;">
+                <button type="button" class="btn-secondary"
+                        onclick="browseFolder('image_root')"
+                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+            </div>
+        </div>
     </div>
 
     <!-- ── PO Defaults ───────────────────────────────────────────────── -->
     <div class="detail-section" style="margin-top:20px;">
         <h3>PO Defaults</h3>
         <p style="font-size:0.85em; color:#888; margin:4px 0 14px;">
-            Saved to <code>config/local.pm.json</code>. Connect to the database to see contact names.
+            Saved to <code>config/local.json</code>. Connect to the database to see contact names.
         </p>
         <div class="detail-row" style="align-items:center; padding:6px 0;">
             <strong style="min-width:160px;">Default Contact</strong>

@@ -1,7 +1,7 @@
 {{define "content"}}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
-    <li class="breadcrumb-item"><a href="/">Forms</a></li>
+    <li class="breadcrumb-item"><a href="/records">Forms</a></li>
     <li class="breadcrumb-item active">New Form</li>
   </ol>
 </nav>
@@ -10,7 +10,7 @@
 
 {{if not .PNs}}
 <p class="text-muted">No available part numbers. All active FORM-category part numbers already have a form, or none exist.</p>
-<a href="/" class="btn btn-outline-secondary">Back</a>
+<a href="/records" class="btn btn-outline-secondary">Back</a>
 {{else}}
 <form method="POST" action="/forms/new" style="max-width:480px">
   <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -39,7 +39,7 @@
   {{end}}
 
   <div class="d-flex gap-2">
-    <a href="/" class="btn btn-outline-secondary">Cancel</a>
+    <a href="/records" class="btn btn-outline-secondary">Cancel</a>
     <button type="submit" class="btn btn-primary">
       <i class="bi bi-plus-circle"></i> Create &amp; Edit
     </button>

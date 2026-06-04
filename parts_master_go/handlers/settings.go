@@ -75,6 +75,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"DocControlRoot":         h.cfg.DocControlRoot,
 		"POFolderRoot":           h.cfg.POFolderRoot,
 		"SupplierFilesRoot":      h.cfg.SupplierFilesRoot,
+		"ImageRoot":              h.cfg.ImageRoot,
 		"TestMode":               h.cfg.TestMode,
 		"DebugMode":              h.cfg.DebugMode,
 		"PODefaultContactID":     h.cfg.PODefaults.ContactID,
@@ -113,6 +114,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	docRoot := strings.TrimSpace(r.FormValue("doc_control_root"))
 	poRoot := strings.TrimSpace(r.FormValue("po_folder_root"))
 	supplierFilesRoot := strings.TrimSpace(r.FormValue("supplier_files_root"))
+	imageRoot := strings.TrimSpace(r.FormValue("image_root"))
 	contactID, _ := strconv.Atoi(r.FormValue("po_default_contact_id"))
 	receiverID, _ := strconv.Atoi(r.FormValue("po_default_receiver_id"))
 
@@ -143,11 +145,13 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	local.DocControlRoot = docRoot
 	local.POFolderRoot = poRoot
 	local.SupplierFilesRoot = supplierFilesRoot
+	local.ImageRoot = imageRoot
 	local.DebugMode = debugMode
 	local.TestMode = &testMode
 	h.cfg.DocControlRoot = docRoot
 	h.cfg.POFolderRoot = poRoot
 	h.cfg.SupplierFilesRoot = supplierFilesRoot
+	h.cfg.ImageRoot = imageRoot
 	h.cfg.DebugMode = debugMode
 	h.cfg.TestMode = testMode
 
@@ -191,6 +195,10 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 
 	if err := config.SaveLocal(local); err != nil {
 		log.Printf("warning: could not save local config: %v", err)
+	}
+
+	if h.AfterSettingsSave != nil {
+		h.AfterSettingsSave()
 	}
 
 	if connErr != "" {

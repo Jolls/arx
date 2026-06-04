@@ -1,3 +1,14 @@
+Arx v0.5.6 — June 2026
+=======================
+
+NEW FEATURES
+
+  Both Apps — Single Address
+  Parts Master and Test Records now run together at one address. Open
+  Arx and use the Test Records link in the header to switch apps. The
+  separate Test Records port is gone; update any bookmarks to the main
+  Arx address. Settings now covers both apps in one page.
+
 Arx v0.5.1 — June 2026
 =======================
 
