@@ -75,8 +75,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"SupplierFilesRoot":      h.cfg.SupplierFilesRoot,
 		"TestMode":               h.cfg.TestMode,
 		"DebugMode":              h.cfg.DebugMode,
-		"PODefaultContactID":     h.cfg.Settings.PODefaults.ContactID,
-		"PODefaultReceiverID":    h.cfg.Settings.PODefaults.ReceiverID,
+		"PODefaultContactID":     h.cfg.PODefaults.ContactID,
+		"PODefaultReceiverID":    h.cfg.PODefaults.ReceiverID,
 		"AttachmentCategories":   h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"Contacts":               contacts,
 		"Suppliers":              suppliers,
@@ -146,8 +146,8 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 
 	local.PODefaultContactID = &contactID
 	local.PODefaultReceiverID = &receiverID
-	h.cfg.Settings.PODefaults.ContactID = contactID
-	h.cfg.Settings.PODefaults.ReceiverID = receiverID
+	h.cfg.PODefaults.ContactID = contactID
+	h.cfg.PODefaults.ReceiverID = receiverID
 
 	if h.db != nil {
 		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")

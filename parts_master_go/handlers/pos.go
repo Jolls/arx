@@ -240,7 +240,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply PO defaults from settings
-	if cid := h.cfg.Settings.PODefaults.ContactID; cid > 0 {
+	if cid := h.cfg.PODefaults.ContactID; cid > 0 {
 		var cnName sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
 			`SELECT CNName FROM %s WHERE CNID = @p1`, h.cfg.ContactTable(),
@@ -248,7 +248,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 		po.SupplierContact = cnName.String
 	}
 	var supplierContacts, receiverContacts []ContactSummary
-	if rid := h.cfg.Settings.PODefaults.ReceiverID; rid > 0 {
+	if rid := h.cfg.PODefaults.ReceiverID; rid > 0 {
 		var rName sql.NullString
 		var rDefaultContact sql.NullInt64
 		h.queryRowContext(r.Context(), fmt.Sprintf(
