@@ -14,7 +14,7 @@ The `FILFileName` column in `FIL` (and the equivalent field in `company_attachme
 | `LOCAL:path\to\file` | `LOCAL:Engineering\spec.pdf` | Served via `GET /local/*` from `DOC_CONTROL_ROOT` |
 | `LOCAL:path\to\folder\` (trailing slash or backslash) | `LOCAL:Engineering\drawings\` | Directory listing via `GET /local-dir/*` from `DOC_CONTROL_ROOT` |
 
-Helper functions in `parts_master_go/handlers/handlers.go`: `isHTTPURL`, `isLocalFile`, `isLocalDir`, `localFileURL`, `localDirURL`.
+**Invariant:** values stored in `FILFileName` are trimmed and use the uppercase prefix `LOCAL:`. The app never writes lowercase variants. Helper functions in `arxlib/urlutil` (`IsLocalFile`, `IsLocalDir`, `IsHTTPURL`, `LocalFileURL`, `LocalDirURL`) accept any case defensively but the stored data is always uppercase.
 
 ---
 

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ## [0.5.2] - 2026-06-03 
+- arxlib: document LOCAL: FILFileName invariant in conventions.md; fix helper-function location reference ([#375](https://github.com/Jolls/arx-legacy/issues/375))
+- test_records_go: drop pf_formula from test_definition and test_definition_history; add migration script ([#385](https://github.com/Jolls/arx-legacy/issues/385))
 - both: extract arxlib/config.Base to de-duplicate BuildDSN, DSN, ConnectionSummary, Pick, and GetEnv across the two apps; no behavior change ([#372](https://github.com/Jolls/arx-legacy/issues/372))
 
 ## [0.5.1] - 2026-06-03 
