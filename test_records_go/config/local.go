@@ -18,6 +18,7 @@ type LocalConfig struct {
 	DocControlRoot string `json:"doc_control_root"`
 	DebugMode      bool   `json:"debug_mode"`
 	TestMode       *bool  `json:"test_mode,omitempty"`
+	TestDBName     string `json:"test_db_name,omitempty"`
 }
 
 func LoadLocal() (*LocalConfig, error) {

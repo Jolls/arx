@@ -294,9 +294,6 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	// Sequence is outside the transaction — sequences never roll back in SQL Server,
 	// which is correct: a rolled-back PO should not reuse its number.
 	seqName := "dbo.PO_Number_Seq"
-	if h.cfg.TestMode {
-		seqName = "dbo.PO_Number_Seq_Test"
-	}
 	var newNumber string
 	if err := h.queryRowContext(r.Context(),
 		fmt.Sprintf("SELECT CAST(NEXT VALUE FOR %s AS VARCHAR)", seqName),

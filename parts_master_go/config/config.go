@@ -44,6 +44,7 @@ func Load() *Config {
 			Port:           arxbase.GetEnv("PM_PORT", arxbase.GetEnv("PORT", "4568")),
 			DBServer:       os.Getenv("DB_SERVER"),
 			DBName:         os.Getenv("DB_NAME"),
+			TestDBName:     arxbase.GetEnv("TEST_DB_NAME", "ArxDev"),
 			DBUser:         os.Getenv("DB_USER"),
 			SessionSecret:  arxbase.GetEnv("SESSION_SECRET", "change-me-in-production"),
 			DocControlRoot: os.Getenv("DOC_CONTROL_ROOT"),
@@ -102,22 +103,25 @@ func Load() *Config {
 		if local.TestMode != nil {
 			cfg.TestMode = *local.TestMode
 		}
+		if local.TestDBName != "" {
+			cfg.TestDBName = local.TestDBName
+		}
 	}
 
 	return cfg
 }
 
-// Table name helpers — each pair matches the Ruby model's self.table_name.
-func (c *Config) PartsTable() string               { return arxbase.Pick(c.TestMode, "PN_Test", "PN") }
-func (c *Config) AttachmentsTable() string         { return arxbase.Pick(c.TestMode, "FIL_Test", "FIL") }
-func (c *Config) BOMTable() string                 { return arxbase.Pick(c.TestMode, "PL_Test", "PL") }
-func (c *Config) PriceTable() string               { return arxbase.Pick(c.TestMode, "price_Test", "price") }
-func (c *Config) POTable() string                  { return arxbase.Pick(c.TestMode, "PO_Test", "PO") }
-func (c *Config) POLineTable() string              { return arxbase.Pick(c.TestMode, "POL_Test", "POL") }
-func (c *Config) CompanyTable() string             { return arxbase.Pick(c.TestMode, "company_Test", "company") }
-func (c *Config) SupplierPartTable() string        { return arxbase.Pick(c.TestMode, "supplier_part_Test", "supplier_part") }
-func (c *Config) MfgPartTable() string             { return arxbase.Pick(c.TestMode, "mfg_part_Test", "mfg_part") }
-func (c *Config) CompanyAttachmentsTable() string  { return arxbase.Pick(c.TestMode, "company_attachment_Test", "company_attachment") }
-func (c *Config) ContactTable() string             { return arxbase.Pick(c.TestMode, "CN_Test", "CN") }
-func (c *Config) UnitTable() string                { return arxbase.Pick(c.TestMode, "unit_Test", "unit") }
-func (c *Config) AppConfigTable() string           { return arxbase.Pick(c.TestMode, "app_config_Test", "app_config") }
+// Table name helpers — TEST_MODE swaps the whole DB via the DSN (see Base.ActiveDBName).
+func (c *Config) PartsTable() string              { return "PN" }
+func (c *Config) AttachmentsTable() string        { return "FIL" }
+func (c *Config) BOMTable() string                { return "PL" }
+func (c *Config) PriceTable() string              { return "price" }
+func (c *Config) POTable() string                 { return "PO" }
+func (c *Config) POLineTable() string             { return "POL" }
+func (c *Config) CompanyTable() string            { return "company" }
+func (c *Config) SupplierPartTable() string       { return "supplier_part" }
+func (c *Config) MfgPartTable() string            { return "mfg_part" }
+func (c *Config) CompanyAttachmentsTable() string { return "company_attachment" }
+func (c *Config) ContactTable() string            { return "CN" }
+func (c *Config) UnitTable() string               { return "unit" }
+func (c *Config) AppConfigTable() string          { return "app_config" }

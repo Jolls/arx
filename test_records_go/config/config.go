@@ -36,6 +36,7 @@ func Load() *Config {
 			Port:           arxbase.GetEnv("TR_PORT", arxbase.GetEnv("PORT", "4569")),
 			DBServer:       os.Getenv("DB_SERVER"),
 			DBName:         os.Getenv("DB_NAME"),
+			TestDBName:     arxbase.GetEnv("TEST_DB_NAME", "ArxDev"),
 			DBUser:         os.Getenv("DB_USER"),
 			SessionSecret:  arxbase.GetEnv("SESSION_SECRET", "change-me-in-production"),
 			DocControlRoot: os.Getenv("DOC_CONTROL_ROOT"),
@@ -70,22 +71,23 @@ func Load() *Config {
 		if local.TestMode != nil {
 			cfg.TestMode = *local.TestMode
 		}
+		if local.TestDBName != "" {
+			cfg.TestDBName = local.TestDBName
+		}
 	}
 
 	return cfg
 }
 
-// Table name helpers — switches between prod and _Test variants.
-func (c *Config) PartsTable() string             { return arxbase.Pick(c.TestMode, "PN_Test", "PN") }
-func (c *Config) BOMTable() string               { return arxbase.Pick(c.TestMode, "PL_Test", "PL") }
-func (c *Config) FormsTable() string             { return arxbase.Pick(c.TestMode, "Forms_Test", "Forms") }
-func (c *Config) RecordsTable() string           { return arxbase.Pick(c.TestMode, "TestRecords_Test", "TestRecords") }
-func (c *Config) StepsTable() string             { return arxbase.Pick(c.TestMode, "test_definition_Test", "test_definition") }
-func (c *Config) ResultsTable() string           { return arxbase.Pick(c.TestMode, "TestResults_Test", "TestResults") }
-func (c *Config) NamedQueriesTable() string      { return "named_queries" } // no _Test variant — shared config
-func (c *Config) TestDefinitionHistoryTable() string {
-	return arxbase.Pick(c.TestMode, "test_definition_history_Test", "test_definition_history")
-}
-func (c *Config) FormEventsTable() string   { return arxbase.Pick(c.TestMode, "form_events_Test", "form_events") }
-func (c *Config) RecordEventsTable() string { return arxbase.Pick(c.TestMode, "record_events_Test", "record_events") }
-func (c *Config) AppConfigTable() string    { return arxbase.Pick(c.TestMode, "app_config_Test", "app_config") }
+// Table name helpers — TEST_MODE swaps the whole DB via the DSN (see Base.ActiveDBName).
+func (c *Config) PartsTable() string                 { return "PN" }
+func (c *Config) BOMTable() string                   { return "PL" }
+func (c *Config) FormsTable() string                 { return "Forms" }
+func (c *Config) RecordsTable() string               { return "TestRecords" }
+func (c *Config) StepsTable() string                 { return "test_definition" }
+func (c *Config) ResultsTable() string               { return "TestResults" }
+func (c *Config) NamedQueriesTable() string          { return "named_queries" }
+func (c *Config) TestDefinitionHistoryTable() string { return "test_definition_history" }
+func (c *Config) FormEventsTable() string            { return "form_events" }
+func (c *Config) RecordEventsTable() string          { return "record_events" }
+func (c *Config) AppConfigTable() string             { return "app_config" }

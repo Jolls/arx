@@ -1,73 +1,77 @@
--- Snapshot script: copies all live tables into _Test shadow copies.
--- Run before any risky schema or data changes.
--- NOTE: _Test tables are data-only snapshots — no constraints or indexes are copied.
---       Do not treat these as a reliable restore point for production data.
+-- Populate ArxDev from prod.
+-- Run this in the context of the ArxDev database to (re)build it as a full copy of prod.
+-- Replace 'ArxProd' below with the actual prod DB name configured in local.*.json.
+-- Re-run whenever a new table is added to prod.
+--
+-- ArxDev is a separate database on the same SQL Server instance using the same login.
+-- TEST_MODE=true points the DSN at ArxDev instead of prod — table names are identical.
+
+USE ArxDev;
 
 BEGIN TRANSACTION;
 BEGIN TRY
 
-    -- Drop existing _Test tables
-    IF OBJECT_ID('dbo.CN_Test',                  'U') IS NOT NULL DROP TABLE CN_Test;
-    IF OBJECT_ID('dbo.FIL_Test',                 'U') IS NOT NULL DROP TABLE FIL_Test;
-    IF OBJECT_ID('dbo.supplier_part_Test',        'U') IS NOT NULL DROP TABLE supplier_part_Test;
-    IF OBJECT_ID('dbo.mfg_part_Test',             'U') IS NOT NULL DROP TABLE mfg_part_Test;
-    IF OBJECT_ID('dbo.PL_Test',                  'U') IS NOT NULL DROP TABLE PL_Test;
-    IF OBJECT_ID('dbo.PN_Test',                  'U') IS NOT NULL DROP TABLE PN_Test;
-    IF OBJECT_ID('dbo.PO_Test',                  'U') IS NOT NULL DROP TABLE PO_Test;
-    IF OBJECT_ID('dbo.POL_Test',                 'U') IS NOT NULL DROP TABLE POL_Test;
-    IF OBJECT_ID('dbo.company_Test',             'U') IS NOT NULL DROP TABLE company_Test;
-    IF OBJECT_ID('dbo.company_attachment_Test',  'U') IS NOT NULL DROP TABLE company_attachment_Test;
-    IF OBJECT_ID('dbo.Forms_Test',               'U') IS NOT NULL DROP TABLE Forms_Test;
-    IF OBJECT_ID('dbo.form_events_Test',         'U') IS NOT NULL DROP TABLE form_events_Test;
-    IF OBJECT_ID('dbo.record_events_Test',       'U') IS NOT NULL DROP TABLE record_events_Test;
-    IF OBJECT_ID('dbo.TestRecords_Test',         'U') IS NOT NULL DROP TABLE TestRecords_Test;
-    IF OBJECT_ID('dbo.TestResults_Test',         'U') IS NOT NULL DROP TABLE TestResults_Test;
-    IF OBJECT_ID('dbo.test_definition_Test',      'U') IS NOT NULL DROP TABLE test_definition_Test;
-    IF OBJECT_ID('dbo.test_definition_history_Test', 'U') IS NOT NULL DROP TABLE test_definition_history_Test;
-    -- named_queries intentionally excluded — no _Test variant (shared config, read-only lookups)
-    IF OBJECT_ID('dbo.app_config_Test',          'U') IS NOT NULL DROP TABLE app_config_Test;
-    IF OBJECT_ID('dbo.unit_Test',                'U') IS NOT NULL DROP TABLE unit_Test;
-    IF OBJECT_ID('dbo.price_Test',               'U') IS NOT NULL DROP TABLE price_Test;
-    IF OBJECT_ID('dbo.release_notes_Test',       'U') IS NOT NULL DROP TABLE release_notes_Test;
-    IF OBJECT_ID('dbo.logs_Test',                'U') IS NOT NULL DROP TABLE logs_Test;
+    -- Drop existing tables (reverse FK order)
+    IF OBJECT_ID('dbo.CN',                      'U') IS NOT NULL DROP TABLE dbo.CN;
+    IF OBJECT_ID('dbo.FIL',                      'U') IS NOT NULL DROP TABLE dbo.FIL;
+    IF OBJECT_ID('dbo.supplier_part',            'U') IS NOT NULL DROP TABLE dbo.supplier_part;
+    IF OBJECT_ID('dbo.mfg_part',                 'U') IS NOT NULL DROP TABLE dbo.mfg_part;
+    IF OBJECT_ID('dbo.PL',                       'U') IS NOT NULL DROP TABLE dbo.PL;
+    IF OBJECT_ID('dbo.price',                    'U') IS NOT NULL DROP TABLE dbo.price;
+    IF OBJECT_ID('dbo.POL',                      'U') IS NOT NULL DROP TABLE dbo.POL;
+    IF OBJECT_ID('dbo.PO',                       'U') IS NOT NULL DROP TABLE dbo.PO;
+    IF OBJECT_ID('dbo.company_attachment',       'U') IS NOT NULL DROP TABLE dbo.company_attachment;
+    IF OBJECT_ID('dbo.company',                  'U') IS NOT NULL DROP TABLE dbo.company;
+    IF OBJECT_ID('dbo.PN',                       'U') IS NOT NULL DROP TABLE dbo.PN;
+    IF OBJECT_ID('dbo.Forms',                    'U') IS NOT NULL DROP TABLE dbo.Forms;
+    IF OBJECT_ID('dbo.form_events',              'U') IS NOT NULL DROP TABLE dbo.form_events;
+    IF OBJECT_ID('dbo.record_events',            'U') IS NOT NULL DROP TABLE dbo.record_events;
+    IF OBJECT_ID('dbo.TestRecords',              'U') IS NOT NULL DROP TABLE dbo.TestRecords;
+    IF OBJECT_ID('dbo.TestResults',              'U') IS NOT NULL DROP TABLE dbo.TestResults;
+    IF OBJECT_ID('dbo.test_definition',          'U') IS NOT NULL DROP TABLE dbo.test_definition;
+    IF OBJECT_ID('dbo.test_definition_history',  'U') IS NOT NULL DROP TABLE dbo.test_definition_history;
+    IF OBJECT_ID('dbo.named_queries',            'U') IS NOT NULL DROP TABLE dbo.named_queries;
+    IF OBJECT_ID('dbo.app_config',               'U') IS NOT NULL DROP TABLE dbo.app_config;
+    IF OBJECT_ID('dbo.unit',                     'U') IS NOT NULL DROP TABLE dbo.unit;
+    IF OBJECT_ID('dbo.release_notes',            'U') IS NOT NULL DROP TABLE dbo.release_notes;
+    IF OBJECT_ID('dbo.logs',                     'U') IS NOT NULL DROP TABLE dbo.logs;
 
-    -- Recreate from live
-    SELECT * INTO CN_Test                FROM CN;
-    SELECT * INTO FIL_Test               FROM FIL;
-    SELECT * INTO supplier_part_Test     FROM supplier_part;
-    SELECT * INTO mfg_part_Test          FROM mfg_part;
-    SELECT * INTO PL_Test                FROM PL;
-    SELECT * INTO PN_Test                FROM PN;
-    SELECT * INTO PO_Test                FROM PO;
-    SELECT * INTO POL_Test               FROM POL;
-    SELECT * INTO company_Test               FROM company;
-    SELECT * INTO company_attachment_Test    FROM company_attachment;
-    SELECT * INTO Forms_Test             FROM Forms;
-    SELECT * INTO form_events_Test       FROM form_events;
-    SELECT * INTO record_events_Test     FROM record_events;
-    SELECT * INTO TestRecords_Test       FROM TestRecords;
-    SELECT * INTO TestResults_Test       FROM TestResults;
-    SELECT * INTO test_definition_Test        FROM test_definition;
-    SELECT * INTO test_definition_history_Test FROM test_definition_history;
-    SELECT * INTO app_config_Test        FROM app_config;
-    SELECT * INTO unit_Test              FROM unit;
-    SELECT * INTO price_Test             FROM price;
-    SELECT * INTO release_notes_Test     FROM release_notes;
-    SELECT * INTO logs_Test              FROM logs;
+    -- Populate from prod via three-part names
+    SELECT * INTO dbo.CN                     FROM ArxProd.dbo.CN;
+    SELECT * INTO dbo.FIL                    FROM ArxProd.dbo.FIL;
+    SELECT * INTO dbo.supplier_part          FROM ArxProd.dbo.supplier_part;
+    SELECT * INTO dbo.mfg_part               FROM ArxProd.dbo.mfg_part;
+    SELECT * INTO dbo.PL                     FROM ArxProd.dbo.PL;
+    SELECT * INTO dbo.price                  FROM ArxProd.dbo.price;
+    SELECT * INTO dbo.POL                    FROM ArxProd.dbo.POL;
+    SELECT * INTO dbo.PO                     FROM ArxProd.dbo.PO;
+    SELECT * INTO dbo.company_attachment     FROM ArxProd.dbo.company_attachment;
+    SELECT * INTO dbo.company                FROM ArxProd.dbo.company;
+    SELECT * INTO dbo.PN                     FROM ArxProd.dbo.PN;
+    SELECT * INTO dbo.Forms                  FROM ArxProd.dbo.Forms;
+    SELECT * INTO dbo.form_events            FROM ArxProd.dbo.form_events;
+    SELECT * INTO dbo.record_events          FROM ArxProd.dbo.record_events;
+    SELECT * INTO dbo.TestRecords            FROM ArxProd.dbo.TestRecords;
+    SELECT * INTO dbo.TestResults            FROM ArxProd.dbo.TestResults;
+    SELECT * INTO dbo.test_definition        FROM ArxProd.dbo.test_definition;
+    SELECT * INTO dbo.test_definition_history FROM ArxProd.dbo.test_definition_history;
+    SELECT * INTO dbo.named_queries          FROM ArxProd.dbo.named_queries;
+    SELECT * INTO dbo.app_config             FROM ArxProd.dbo.app_config;
+    SELECT * INTO dbo.unit                   FROM ArxProd.dbo.unit;
+    SELECT * INTO dbo.release_notes          FROM ArxProd.dbo.release_notes;
+    SELECT * INTO dbo.logs                   FROM ArxProd.dbo.logs;
 
     -- Constraints not copied by SELECT * INTO — add manually
-    ALTER TABLE dbo.PO_Test         ADD CONSTRAINT UQ_PO_Test_number                UNIQUE (number);
-    ALTER TABLE dbo.app_config_Test ADD CONSTRAINT DF_app_config_Test_updated_at    DEFAULT GETDATE() FOR updated_at;
-    ALTER TABLE dbo.FIL_Test        ADD CONSTRAINT DF_FIL_Test_is_active             DEFAULT 1 FOR is_active;
-    -- No UNIQUE on PL_Test (PLListID, PLItem) — item numbers are user-assigned and not enforced unique.
-    CREATE UNIQUE INDEX UQ_price_Test_active_combo ON dbo.price_Test (part_id, supplier_id, pack_size) WHERE is_active = 1;
-    ALTER TABLE dbo.PN_Test    ADD CONSTRAINT CK_PN_Test_category              CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
+    ALTER TABLE dbo.PO         ADD CONSTRAINT UQ_PO_number                UNIQUE (number);
+    ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at    DEFAULT GETDATE() FOR updated_at;
+    ALTER TABLE dbo.FIL        ADD CONSTRAINT DF_FIL_is_active             DEFAULT 1 FOR is_active;
+    CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;
+    ALTER TABLE dbo.PN         ADD CONSTRAINT CK_PN_category               CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
 
-    -- Triggers not copied by SELECT * INTO — recreate on _Test tables.
-    -- EXEC isolates each CREATE OR ALTER TRIGGER in its own batch (required by SQL Server).
+    -- Triggers not copied by SELECT * INTO — recreate on ArxDev tables.
     EXEC('
-CREATE OR ALTER TRIGGER dbo.trg_supplier_part_Test_company_count
-ON dbo.supplier_part_Test
+CREATE OR ALTER TRIGGER dbo.trg_supplier_part_company_count
+ON dbo.supplier_part
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -78,14 +82,14 @@ BEGIN
         SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part_Test sp WHERE sp.supplier_id = s.id)
-    FROM   dbo.company_Test s
+    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id)
+    FROM   dbo.company s
     JOIN   affected a ON a.id = s.id
 END
     ');
     EXEC('
-CREATE OR ALTER TRIGGER dbo.trg_PO_Test_company_count
-ON dbo.PO_Test
+CREATE OR ALTER TRIGGER dbo.trg_PO_company_count
+ON dbo.PO
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -96,14 +100,14 @@ BEGIN
         SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO_Test p WHERE p.supplier_id = s.id)
-    FROM   dbo.company_Test s
+    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO p WHERE p.supplier_id = s.id)
+    FROM   dbo.company s
     JOIN   affected a ON a.id = s.id
 END
     ');
     EXEC('
-CREATE OR ALTER TRIGGER dbo.trg_FIL_Test_part_count
-ON dbo.FIL_Test
+CREATE OR ALTER TRIGGER dbo.trg_FIL_part_count
+ON dbo.FIL
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -114,14 +118,14 @@ BEGIN
         SELECT FILPNID FROM deleted  WHERE FILPNID IS NOT NULL
     )
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL_Test f WHERE f.FILPNID = p.PNID AND f.is_active = 1)
-    FROM   dbo.PN_Test p
+    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1)
+    FROM   dbo.PN p
     JOIN   affected a ON a.id = p.PNID
 END
     ');
     EXEC('
-CREATE OR ALTER TRIGGER dbo.trg_POL_Test_part_count
-ON dbo.POL_Test
+CREATE OR ALTER TRIGGER dbo.trg_POL_part_count
+ON dbo.POL
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -132,35 +136,35 @@ BEGIN
         SELECT POLPNID FROM deleted  WHERE POLPNID IS NOT NULL
     )
     UPDATE p
-    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.POL_Test pol WHERE pol.POLPNID = p.PNID)
-    FROM   dbo.PN_Test p
+    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
+    FROM   dbo.PN p
     JOIN   affected a ON a.id = p.PNID
 END
     ');
 
-    -- Recalibrate copied snapshot counts (prod data may have drifted before triggers existed).
+    -- Recalibrate snapshot counts (prod data may have drifted before triggers existed).
     UPDATE s
-    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part_Test sp WHERE sp.supplier_id = s.id),
-           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO_Test             p  WHERE p.supplier_id  = s.id)
-    FROM   dbo.company_Test s;
+    SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id),
+           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO             p  WHERE p.supplier_id  = s.id)
+    FROM   dbo.company s;
 
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL_Test f WHERE f.FILPNID = p.PNID AND f.is_active = 1),
-           p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL_Test pol WHERE pol.POLPNID = p.PNID)
-    FROM   dbo.PN_Test p;
+    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1),
+           p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
+    FROM   dbo.PN p;
 
-    -- Test sequence: starts after the current max so test POs don't collide with snapshot data
-    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO_Test);
-    IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq_Test')
-        EXEC('ALTER SEQUENCE dbo.PO_Number_Seq_Test RESTART WITH ' + @next_po);
+    -- PO sequence: starts after current max so dev POs don't collide with snapshot data
+    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO);
+    IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq')
+        EXEC('ALTER SEQUENCE dbo.PO_Number_Seq RESTART WITH ' + @next_po);
     ELSE
-        EXEC('CREATE SEQUENCE dbo.PO_Number_Seq_Test AS INT START WITH ' + @next_po + ' INCREMENT BY 1 NO CYCLE NO CACHE');
+        EXEC('CREATE SEQUENCE dbo.PO_Number_Seq AS INT START WITH ' + @next_po + ' INCREMENT BY 1 NO CYCLE NO CACHE');
 
     COMMIT;
-    PRINT 'Snapshot complete — ' + CONVERT(VARCHAR, GETDATE(), 120);
+    PRINT 'ArxDev populated from ArxProd — ' + CONVERT(VARCHAR, GETDATE(), 120);
 
 END TRY
 BEGIN CATCH
     ROLLBACK;
-    PRINT 'Snapshot failed: ' + ERROR_MESSAGE();
+    PRINT 'Populate failed: ' + ERROR_MESSAGE();
 END CATCH;
