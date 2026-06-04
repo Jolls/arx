@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-06-04 
+- both: TEST_MODE now swaps the connection to a separate ArxDev database instead of _Test table-name suffixes; cfg.*Table() helpers return bare names ([#241](https://github.com/Jolls/arx-legacy/issues/241))
+
 ## [0.5.3] - 2026-06-03 
 - parts_master_go: remove unused gopkg.in/yaml.v3 dependency, collapse the vestigial config.Settings wrapper into Config, and fix the stale settings.yml reference in the Settings UI ([#321](https://github.com/Jolls/arx-legacy/issues/321))
 

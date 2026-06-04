@@ -9,7 +9,7 @@ All new tables use snake_case. Do not extend the legacy prefix style for new wor
 ### Tables
 - Singular noun: `purchase_order`, not `purchase_orders`
 - All lowercase snake_case: `company_attachment`, `part_number`
-- `_Test` sibling required for every table the Go app touches (see [Test-mode table variants](#test-mode-table-variants))
+- New tables must exist in both prod and `ArxDev` (re-run `SQL/_test.sql` to populate)
 
 ### Columns
 - All lowercase snake_case
@@ -83,35 +83,16 @@ Exception: `order_id` in `FIL` and `SUFIL` breaks the prefix rule (TODO: should 
 
 **Go-era tables** use generic snake_case: `id`, `name`, `is_active`, `date_modified`, `supplier_id`.
 
-## Test-mode table variants
+## Test mode
 
-Every table used by the Go app must have a `_Test` sibling created alongside it.
-`cfg.*Table()` helpers in `config/config.go` switch between prod and test names at runtime.
+`TEST_MODE=true` points the DSN at the `ArxDev` database instead of prod. Table names are
+identical in both databases — prod vs test is a database-level distinction, not a name suffix.
+`cfg.*Table()` helpers return bare names (`PN`, `PO`, etc.) regardless of test mode.
 Never hardcode a table name in Go — always call the helper.
-
-| Prod | Test | App |
-|------|------|-----|
-| `PN` | `PN_Test` | both |
-| `app_config` | `app_config_Test` | both |
-| `FIL` | `FIL_Test` | parts_master_go |
-| `company_attachment` | `company_attachment_Test` | parts_master_go |
-| `PL` | `PL_Test` | parts_master_go (read-only in test_records_go for BOM dropdown) |
-| `PO` / `POL` | `PO_Test` / `POL_Test` | parts_master_go |
-| `company` | `company_Test` | parts_master_go |
-| `supplier_part` | `supplier_part_Test` | parts_master_go |
-| `mfg_part` | `mfg_part_Test` | parts_master_go |
-| `CN` | `CN_Test` | parts_master_go |
-| `unit` | `unit_Test` | parts_master_go |
-| `price` | `price_Test` | parts_master_go |
-| `Forms` | `Forms_Test` | test_records_go |
-| `TestRecords` | `TestRecords_Test` | test_records_go |
-| `test_definition` | `test_definition_Test` | test_records_go |
-| `TestResults` | `TestResults_Test` | test_records_go |
-| `test_definition_history` | `test_definition_history_Test` | test_records_go |
 
 ## Triggers
 
-Trigger DDL lives in `SQL/triggers.sql`. `_Test` table equivalents are created inside `SQL/_test.sql`.
+Trigger DDL lives in `SQL/triggers.sql`. ArxDev equivalents are recreated by `SQL/_test.sql` under the same names (no `_Test` suffix — ArxDev uses bare table names).
 
 | Trigger | Table | Effect |
 |---------|-------|--------|
@@ -119,11 +100,7 @@ Trigger DDL lives in `SQL/triggers.sql`. `_Test` table equivalents are created i
 | `trg_PO_company_count` | `PO` | Recalculates `company.SUNumOfPOs` after any INSERT/UPDATE/DELETE |
 | `trg_FIL_part_count` | `FIL` | Recalculates `PN.PNFILLinks` (active rows only) after any INSERT/UPDATE/DELETE |
 | `trg_POL_part_count` | `POL` | Recalculates `PN.PNPOLinks` after any INSERT/UPDATE/DELETE |
-| `trg_supplier_part_Test_company_count` | `supplier_part_Test` | Same as `trg_supplier_part_company_count`, targeting `company_Test` |
-| `trg_PO_Test_company_count` | `PO_Test` | Same as `trg_PO_company_count`, targeting `company_Test` |
-| `trg_FIL_Test_part_count` | `FIL_Test` | Same as `trg_FIL_part_count`, targeting `PN_Test` |
-| `trg_POL_Test_part_count` | `POL_Test` | Same as `trg_POL_part_count`, targeting `PN_Test` |
-| `trg_test_definition_history` | `test_definition` | Snapshots old row values into `test_definition_history` AFTER UPDATE (audit trail). No `_Test` equivalent — test table has no trigger. |
+| `trg_test_definition_history` | `test_definition` | Snapshots old row values into `test_definition_history` AFTER UPDATE (audit trail). |
 
 > **Dropped trigger:** `trg_Tests_history` was a legacy AFTER UPDATE trigger on `test_definition` created when the table was named `Tests`. It referenced the old column `applicable_instrs` (since renamed to `instrument_types`), silently rolling back every UPDATE once the rename was applied. It was dropped in v0.4.1 and superseded by `trg_test_definition_history`.
 

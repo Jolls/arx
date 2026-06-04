@@ -45,6 +45,11 @@
                 &#10007; Not connected
             </span>
             {{end}}
+            <span style="font-size:0.72em; font-weight:500; color:#555;
+                         background:#f0f0f0; border:1px solid #ccc;
+                         border-radius:20px; padding:2px 12px; line-height:1.6;">
+                {{.ActiveDBName}}{{if .TestMode}} &mdash; TEST MODE{{end}}
+            </span>
         </h3>
 
         <div class="detail-row" style="align-items:center; padding:6px 0;">
@@ -55,9 +60,16 @@
                           border-radius:4px; font-size:0.9em; font-family:monospace;">
         </div>
         <div class="detail-row" style="align-items:center; padding:6px 0;">
-            <strong style="min-width:160px;">Database Name</strong>
+            <strong style="min-width:160px;">Prod DB Name</strong>
             <input type="text" name="db_name" value="{{.DBName}}"
-                   placeholder="ArxParts"
+                   placeholder="ArxProd"
+                   style="width:240px; padding:6px 10px; border:1px solid #ccc;
+                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+        </div>
+        <div class="detail-row" style="align-items:center; padding:6px 0;">
+            <strong style="min-width:160px;">Test DB Name</strong>
+            <input type="text" name="test_db_name" value="{{.TestDBName}}"
+                   placeholder="ArxDev"
                    style="width:240px; padding:6px 10px; border:1px solid #ccc;
                           border-radius:4px; font-size:0.9em; font-family:monospace;">
         </div>
@@ -191,7 +203,7 @@
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:8px;">
                 <input type="checkbox" name="test_mode" value="1" {{if .TestMode}}checked{{end}}
                        onchange="confirmTestModeToggle(this)">
-                Test mode — use <code>_Test</code> table variants <span style="color:#c0392b; font-weight:600;">(writes go to test data)</span>
+                Test mode — connect to <code>{{.TestDBName}}</code> instead of <code>{{.DBName}}</code> <span style="color:#c0392b; font-weight:600;">(writes go to test data)</span>
             </label>
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                 <input type="checkbox" name="debug_mode" value="1" {{if .DebugMode}}checked{{end}}>
@@ -203,8 +215,8 @@
     <script>
     function confirmTestModeToggle(cb) {
       var msg = cb.checked
-        ? "Switching TO test mode will route all reads and writes to _Test tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
-        : "Switching OUT of test mode will route all reads and writes to production tables.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
+        ? "Switching TO test mode will reconnect to the test database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
+        : "Switching OUT of test mode will reconnect to the production database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
       if (!confirm(msg)) cb.checked = !cb.checked;
     }
     </script>

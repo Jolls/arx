@@ -13,6 +13,7 @@ type Base struct {
 	Port           string
 	DBServer       string
 	DBName         string
+	TestDBName     string // database to use in test mode (default "ArxDev")
 	DBUser         string
 	DBPassword     string // from local.json only — never stored in .env
 	SessionSecret  string
@@ -21,6 +22,10 @@ type Base struct {
 	DebugMode      bool
 }
 
+// ActiveDBName returns the database the app should connect to: the dev DB in
+// test mode, otherwise the prod DB.
+func (b *Base) ActiveDBName() string { return Pick(b.TestMode, b.TestDBName, b.DBName) }
+
 // BuildDSN constructs a sqlserver:// DSN from the config fields + a password.
 func (b *Base) BuildDSN(password string) string {
 	u := &url.URL{
@@ -28,7 +33,7 @@ func (b *Base) BuildDSN(password string) string {
 		User:   url.UserPassword(b.DBUser, password),
 		Host:   b.DBServer,
 		RawQuery: url.Values{
-			"database": {b.DBName},
+			"database": {b.ActiveDBName()},
 			"encrypt":  {"true"},
 		}.Encode(),
 	}
@@ -49,7 +54,11 @@ func (b *Base) ConnectionSummary() string {
 	if b.DBServer == "" {
 		return "(not configured)"
 	}
-	return fmt.Sprintf("%s / %s", b.DBServer, b.DBName)
+	name := b.ActiveDBName()
+	if b.TestMode {
+		name += " (TEST)"
+	}
+	return fmt.Sprintf("%s / %s", b.DBServer, name)
 }
 
 // Pick returns testVal when test is true, otherwise prodVal.
