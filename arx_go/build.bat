@@ -26,7 +26,7 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-go build -ldflags "-H windowsgui -X arx/arx_go.AppVersion=%VERSION%" -o Arx.exe .
+go build -ldflags "-H windowsgui -X main.AppVersion=%VERSION%" -o Arx.exe .
 if %errorlevel% neq 0 (
     echo Build failed.
     exit /b %errorlevel%
