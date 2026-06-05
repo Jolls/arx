@@ -1,10 +1,10 @@
 @echo off
-:: Build Arx.exe — single binary for Parts Master and Test Records
+:: Build Arx.exe — single binary (Parts Master + Test Records in one package)
 :: Run from arx_go\: build.bat
 :: Output: Arx.exe in arx_go\
 ::
 :: -H windowsgui suppresses the console window (required for systray).
-:: AppVersion is injected into both apps from the top ## [x.y.z] in CHANGELOG.md.
+:: AppVersion is injected from the top ## [x.y.z] in CHANGELOG.md.
 
 cd /d "%~dp0"
 
@@ -19,14 +19,14 @@ echo Version: %VERSION%
 
 echo Running tests...
 pushd "%~dp0\.."
-go test ./parts_master_go/... ./test_records_go/... ./arxlib/...
+go test ./arx_go/... ./arxlib/...
 popd
 if %errorlevel% neq 0 (
     echo Tests failed — aborting build.
     exit /b %errorlevel%
 )
 
-go build -ldflags "-H windowsgui -X arx/parts_master_go/config.AppVersion=%VERSION% -X arx/test_records_go/config.AppVersion=%VERSION%" -o Arx.exe .
+go build -ldflags "-H windowsgui -X arx/arx_go.AppVersion=%VERSION%" -o Arx.exe .
 if %errorlevel% neq 0 (
     echo Build failed.
     exit /b %errorlevel%

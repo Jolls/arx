@@ -1,46 +1,58 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"time"
 
 	"github.com/getlantern/systray"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/pkg/browser"
 
-	partsmaster "arx/parts_master_go"
-	testrecords "arx/test_records_go"
+	arxbase "arx/arxlib/config"
+	arxdb "arx/arxlib/db"
 )
 
-var pm *partsmaster.App
-var tr *testrecords.App
+// AppVersion is set at build time via -ldflags from the top entry in CHANGELOG.md.
+var AppVersion = "dev"
+
+var h *Handler
 
 func main() {
 	systray.Run(onReady, onExit)
 }
 
 func onReady() {
-	pm = partsmaster.New()
-	// TR shares PM's single DB pool + config (no second pool).
-	tr = testrecords.New(pm.DB(), pm.Config())
+	cfg := arxbase.Load(AppVersion)
 
-	// Wire TR as the fallback for paths PM doesn't match.
-	pm.SetFallback(tr.Handler())
+	var database *sql.DB
+	if dsn := cfg.DSN(); dsn != "" {
+		if conn, err := arxdb.Connect(dsn); err == nil {
+			database = conn
+			log.Println("arx: auto-connected to database")
+		} else {
+			log.Printf("arx: auto-connect failed (open Settings to reconnect): %v", err)
+		}
+	} else {
+		log.Println("arx: no database password configured — open Settings to connect")
+	}
 
-	// After a settings save, hand PM's freshly reconnected pool (and updated
-	// config) to TR so both apps stay on the same single pool.
-	pm.SetAfterSettingsSave(func(newDB *sql.DB) { tr.SetDBAndConfig(newDB, pm.Config()) })
+	h = New(database, cfg, templatesFS, releaseNotesData)
+	h.CheckSchemaVersion(context.Background())
 
-	if pm.DebugMode || tr.DebugMode {
+	if cfg.DebugMode {
 		openDebugConsole()
 	}
 
-	// Single HTTP server on PM's port; TR routes fall through from PM's router.
+	router := buildRouter(h)
 	server := &http.Server{
-		Addr:    "0.0.0.0:" + pm.Port,
-		Handler: pm.Handler(),
+		Addr:    "0.0.0.0:" + cfg.Port,
+		Handler: router,
 	}
 	go func() {
 		log.Printf("Arx: starting on %s", server.Addr)
@@ -50,7 +62,8 @@ func onReady() {
 		}
 	}()
 
-	go openWhenReady(pm.URL, pm.Port)
+	url := "http://localhost:" + cfg.Port
+	go openWhenReady(url, cfg.Port)
 
 	systray.SetIcon(appIcon())
 	systray.SetTooltip("Arx")
@@ -63,7 +76,7 @@ func onReady() {
 		for {
 			select {
 			case <-mOpen.ClickedCh:
-				_ = browser.OpenURL(pm.URL)
+				_ = browser.OpenURL(url)
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 			}
@@ -72,11 +85,8 @@ func onReady() {
 }
 
 func onExit() {
-	if pm != nil {
-		pm.Close()
-	}
-	if tr != nil {
-		tr.Close()
+	if h != nil {
+		h.CloseDB()
 	}
 }
 
@@ -90,4 +100,145 @@ func openWhenReady(url, port string) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	_ = browser.OpenURL(url)
+}
+
+func buildRouter(h *Handler) *chi.Mux {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(h.RequireCsrfOnPost)
+
+	// Static assets: PM under /static/pm/, TR under /static/tr/.
+	subStatic, _ := fs.Sub(staticFS, "static")
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(subStatic))))
+
+	// Always accessible — no DB connection required.
+	r.Get("/settings", h.Settings)
+	r.Post("/settings", h.SettingsSave)
+	r.Get("/whats-new", h.WhatsNew)
+	r.Get("/api/browse-folder", h.APIBrowseFolder)
+
+	// All other routes require a live database connection.
+	r.Group(func(r chi.Router) {
+		r.Use(h.RequireAuth)
+
+		// Local file serving (Parts Master)
+		r.Get("/local/*", h.ServeLocalFile)
+		r.Get("/local-dir/*", h.ServeLocalDir)
+		r.Get("/supplier-local/*", h.ServeSupplierFile)
+		r.Get("/supplier-local-dir/*", h.ServeSupplierDir)
+
+		// Test Records image serving
+		r.Get("/images/*", h.ServeImage)
+
+		// Parts Master — Parts
+		r.Get("/", h.PartsList)
+		r.Get("/parts/new", h.PartsNew)
+		r.Post("/parts", h.PartsCreate)
+		r.Get("/part/{id}", h.PartDetail)
+		r.Get("/part/{id}/details", h.PartDetail)
+		r.Get("/part/{id}/edit", h.PartEdit)
+		r.Post("/part/{id}", h.PartUpdate)
+		r.Get("/part/{id}/bom", h.PartBOM)
+		r.Get("/part/{id}/bom/edit", h.PartBOMEdit)
+		r.Post("/part/{id}/bom", h.PartBOMSave)
+		r.Post("/part/{id}/rollup-cost", h.PartRollupCost)
+		r.Get("/part/{id}/where-used", h.PartWhereUsed)
+		r.Get("/part/{id}/attachments", h.PartAttachments)
+		r.Post("/part/{id}/attachments", h.PartAttachmentCreate)
+		r.Post("/part/{id}/attachments/{attID}", h.PartAttachmentUpdate)
+		r.Post("/part/{id}/primary_attachment", h.PartSetPrimaryAttachment)
+		r.Post("/part/{id}/attachments/{attID}/delete", h.PartAttachmentDelete)
+		r.Get("/part/{id}/orders", h.PartOrders)
+		r.Get("/part/{id}/pricing", h.PartPricing)
+		r.Get("/part/{id}/pricing/new", h.PriceNew)
+		r.Post("/part/{id}/pricing", h.PriceCreate)
+		r.Get("/part/{id}/pricing/{priceID}/edit", h.PriceEdit)
+		r.Post("/part/{id}/pricing/{priceID}", h.PriceUpdate)
+		r.Post("/part/{id}/pricing/{priceID}/deactivate", h.PriceDeactivate)
+		r.Post("/part/{id}/pricing/{priceID}/activate", h.PriceActivate)
+		r.Get("/part/{id}/mfg-parts", h.PartMfgParts)
+		r.Post("/part/{id}/mfg-parts", h.MfgPartCreate)
+		r.Get("/part/{id}/mfg-parts/{mid}/edit", h.MfgPartEdit)
+		r.Post("/part/{id}/mfg-parts/{mid}", h.MfgPartUpdate)
+		r.Post("/part/{id}/mfg-parts/{mid}/delete", h.MfgPartDelete)
+		r.Get("/part/{id}/suppliers", h.PartSourcing)
+		r.Post("/part/{id}/suppliers", h.SupplierPartCreate)
+		r.Get("/part/{id}/suppliers/{spID}/edit", h.SupplierPartEdit)
+		r.Post("/part/{id}/suppliers/{spID}", h.SupplierPartUpdate)
+		r.Post("/part/{id}/suppliers/{spID}/delete", h.SupplierPartDelete)
+
+		// Parts Master — Suppliers / Vendors
+		r.Get("/suppliers", h.SuppliersList)
+		r.Get("/suppliers/new", h.SuppliersNew)
+		r.Post("/suppliers", h.SuppliersCreate)
+		r.Get("/supplier/{id}", h.SupplierDetail)
+		r.Get("/supplier/{id}/edit", h.SupplierEdit)
+		r.Post("/supplier/{id}", h.SupplierUpdate)
+		r.Get("/supplier/{id}/parts", h.SupplierParts)
+		r.Get("/supplier/{id}/attachments", h.SupplierAttachments)
+		r.Post("/supplier/{id}/attachments", h.SupplierAttachmentCreate)
+		r.Post("/supplier/{id}/attachments/{attID}", h.SupplierAttachmentUpdate)
+		r.Post("/supplier/{id}/attachments/{attID}/delete", h.SupplierAttachmentDelete)
+		r.Post("/supplier/{id}/primary_attachment", h.SupplierSetPrimaryAttachment)
+		r.Get("/supplier/{id}/folder", h.SupplierFolder)
+		r.Get("/supplier/{id}/folder/*", h.SupplierFolderSub)
+		r.Get("/supplier/{id}/file/*", h.SupplierFile)
+
+		// Parts Master — Contacts
+		r.Get("/contacts", h.ContactsList)
+		r.Get("/contacts/new", h.ContactsNew)
+		r.Post("/contacts", h.ContactsCreate)
+		r.Get("/contact/{id}", h.ContactDetail)
+		r.Get("/contact/{id}/edit", h.ContactEdit)
+		r.Post("/contact/{id}", h.ContactUpdate)
+
+		// Parts Master — Purchase Orders
+		r.Get("/pos", h.POList)
+		r.Get("/pos/new", h.PONew)
+		r.Post("/pos", h.POCreate)
+		r.Get("/po/{id}", h.PODetail)
+		r.Get("/po/{id}/edit", h.POEdit)
+		r.Post("/po/{id}", h.POUpdate)
+		r.Get("/po/{id}/note", h.PONote)
+		r.Get("/po/{id}/print", h.POPrint)
+		r.Post("/po/{id}/mark-printed", h.POMarkPrinted)
+		r.Post("/po/{id}/open-folder", h.POOpenFolder)
+		r.Get("/po/{id}/duplicate", h.PODuplicate)
+		r.Get("/po/{id}/folder", h.POFolder)
+		r.Get("/po/{id}/folder/*", h.POFolderSub)
+		r.Get("/po/{id}/file/*", h.POFile)
+
+		// Parts Master — API
+		r.Get("/api/suppliers/search", h.APISupplierSearch)
+		r.Get("/api/suppliers/{id}/contacts", h.APISupplierContacts)
+		r.Get("/api/parts/search", h.APIPartSearch)
+
+		// Test Records — Forms and Records
+		r.Get("/records", h.FormsList)
+		r.Get("/forms/{id}/records", h.RecordsList)
+		r.Get("/forms/{id}/records/new", h.NewRecord)
+		r.Post("/forms/{id}/records/new", h.CreateRecord)
+		r.Get("/forms/{id}/def", h.FormDef)
+		r.Get("/forms/{id}/def/edit", h.EditFormDef)
+		r.Post("/forms/{id}/def/edit", h.SaveFormDef)
+		r.Get("/api/forms/{id}/def/history", h.FormDefHistory)
+		r.Get("/records/{id}", h.RecordDetail)
+		r.Get("/records/{id}/print", h.RecordPrint)
+		r.Get("/records/{id}/edit", h.EditRecord)
+		r.Post("/records/{id}/edit", h.SaveResults)
+		r.Post("/records/{id}/lock", h.LockRecord)
+		r.Post("/records/{id}/unlock", h.UnlockRecord)
+		r.Get("/forms/new", h.NewForm)
+		r.Post("/forms/new", h.CreateForm)
+		r.Get("/forms/{id}/duplicate", h.DuplicateForm)
+		r.Post("/forms/{id}/duplicate", h.CreateDuplicate)
+		r.Post("/forms/{id}/lock", h.LockForm)
+		r.Post("/forms/{id}/unlock", h.UnlockForm)
+		r.Get("/api/named-query", h.APINamedQuery)
+	})
+
+	r.NotFound(h.NotFound)
+
+	return r
 }
