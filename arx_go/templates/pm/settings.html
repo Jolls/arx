@@ -249,7 +249,7 @@
     {{if .Connected}}
     <div class="detail-section" style="margin-top:36px;">
         <h3>Application Configuration</h3>
-        <form method="post" action="/settings">
+        <form method="post" action="/settings/attachment-categories">
             <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
             <div class="detail-row">
                 <label class="form-label" for="attachment_categories">Attachment Categories</label>
@@ -262,6 +262,64 @@
             </div>
             <div class="form-actions" style="margin-top:12px;">
                 <button type="submit" class="btn-primary">Save Categories</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ── Part Categories ──────────────────────────────────────────── -->
+    <div class="detail-section" style="margin-top:24px;">
+        <h3>Part Categories</h3>
+        <p style="margin:0 0 12px; color:#888; font-size:0.82em;">
+            Categories shown in the part Category dropdown, and which subtabs each one exposes.
+            Stored in the database, so changes apply to every instance. The BOM tab also appears
+            automatically whenever a part already has a BOM, regardless of these settings.
+        </p>
+        <form method="post" action="/settings/categories" onsubmit="numberCats(this)">
+            <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+            <input type="hidden" name="cat_count">
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="text-align:left; color:#888; font-size:0.8em;">
+                        <th style="padding:4px 8px;">Code</th>
+                        <th style="padding:4px 8px;">Label</th>
+                        <th style="padding:4px 8px; text-align:center;">BOM</th>
+                        <th style="padding:4px 8px; text-align:center;">Orders</th>
+                        <th style="padding:4px 8px; text-align:center;">Pricing</th>
+                        <th style="padding:4px 8px; text-align:center;">Mfg Parts</th>
+                        <th style="padding:4px 8px; text-align:center;">Suppliers</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="cat-rows">
+                    {{range .PartCategories}}
+                    <tr class="cat-row">
+                        <td style="padding:2px 8px;"><input class="form-input" data-f="code" value="{{.Code}}" style="width:80px; text-transform:uppercase;"></td>
+                        <td style="padding:2px 8px;"><input class="form-input" data-f="label" value="{{.Label}}"></td>
+                        <td style="text-align:center;"><input type="checkbox" data-f="bom" {{if .BOM}}checked{{end}}></td>
+                        <td style="text-align:center;"><input type="checkbox" data-f="orders" {{if .Orders}}checked{{end}}></td>
+                        <td style="text-align:center;"><input type="checkbox" data-f="pricing" {{if .Pricing}}checked{{end}}></td>
+                        <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" {{if .MfgParts}}checked{{end}}></td>
+                        <td style="text-align:center;"><input type="checkbox" data-f="suppliers" {{if .Suppliers}}checked{{end}}></td>
+                        <td style="text-align:center;"><button type="button" class="btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            <template id="cat-row-tmpl">
+                <tr class="cat-row">
+                    <td style="padding:2px 8px;"><input class="form-input" data-f="code" style="width:80px; text-transform:uppercase;"></td>
+                    <td style="padding:2px 8px;"><input class="form-input" data-f="label"></td>
+                    <td style="text-align:center;"><input type="checkbox" data-f="bom"></td>
+                    <td style="text-align:center;"><input type="checkbox" data-f="orders" checked></td>
+                    <td style="text-align:center;"><input type="checkbox" data-f="pricing" checked></td>
+                    <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" checked></td>
+                    <td style="text-align:center;"><input type="checkbox" data-f="suppliers" checked></td>
+                    <td style="text-align:center;"><button type="button" class="btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
+                </tr>
+            </template>
+            <div class="form-actions" style="margin-top:12px; display:flex; gap:8px;">
+                <button type="button" class="btn-secondary" onclick="addCatRow()">+ Add Category</button>
+                <button type="submit" class="btn-primary">Save Part Categories</button>
             </div>
         </form>
     </div>
@@ -280,6 +338,27 @@
 </div>
 
 <script>
+// Part-category editor: clone a blank row, and index every row's fields on submit
+// (code_i, label_i, bom_i, …) so the server can rebuild the list. Blank-code rows
+// are skipped, which is how a category is deleted.
+function addCatRow() {
+    var t = document.getElementById('cat-row-tmpl');
+    document.getElementById('cat-rows').appendChild(t.content.cloneNode(true));
+}
+function numberCats(form) {
+    var n = 0;
+    form.querySelectorAll('tr.cat-row').forEach(function(row) {
+        var code = row.querySelector('[data-f=code]');
+        if (!code.value.trim()) { return; }
+        row.querySelectorAll('[data-f]').forEach(function(inp) {
+            inp.name = inp.getAttribute('data-f') + '_' + n;
+            if (inp.type === 'checkbox') { inp.value = '1'; }
+        });
+        n++;
+    });
+    form.querySelector('input[name=cat_count]').value = n;
+}
+
 function browseFolder(inputId) {
     var btn = event.target;
     btn.disabled = true;

@@ -40,15 +40,9 @@
             <div class="detail-row">
                 <label for="category" class="form-label">Category</label>
                 <select id="category" name="category" class="form-select">
-                    <option value="ASM"  {{if eq .Part.Category "ASM"}}selected{{end}}>ASM — Assembly</option>
-                    <option value="BUY"  {{if or (eq .Part.Category "BUY") (eq .Part.Category "")}}selected{{end}}>BUY — Purchased</option>
-                    <option value="DWG"  {{if eq .Part.Category "DWG"}}selected{{end}}>DWG — Drawing</option>
-                    <option value="DOC"  {{if eq .Part.Category "DOC"}}selected{{end}}>DOC — Document</option>
-                    <option value="FORM" {{if eq .Part.Category "FORM"}}selected{{end}}>FORM — Test Form</option>
-                    <option value="MFG"  {{if eq .Part.Category "MFG"}}selected{{end}}>MFG — Manufactured</option>
-                    <option value="RAW"  {{if eq .Part.Category "RAW"}}selected{{end}}>RAW — Raw Material</option>
-                    <option value="SVC"  {{if eq .Part.Category "SVC"}}selected{{end}}>SVC — Service</option>
-                    <option value="TOOL" {{if eq .Part.Category "TOOL"}}selected{{end}}>TOOL — Tooling</option>
+                    {{range .Categories}}
+                    <option value="{{.Code}}" {{if or (eq $.Part.Category .Code) (and (eq $.Part.Category "") (eq .Code "BUY"))}}selected{{end}}>{{.Code}} — {{.Label}}</option>
+                    {{end}}
                 </select>
             </div>
             <div class="detail-row">

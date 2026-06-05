@@ -55,7 +55,8 @@
 
 {{$id := .Part.PNID}}
 {{$sub := .ActiveSubTab}}
-{{$hasBOM := .Part.HasBOM}}
+{{$part := .Part}}
+{{$hasBOM := $part.ShowBOM}}
 <div class="sub-tabs">
     <a href="/part/{{$id}}/details"     class="sub-tab{{if eq $sub "details"}} active{{end}}">Details</a>
     {{if $hasBOM}}
@@ -64,11 +65,27 @@
     <span class="sub-tab disabled" title="This part does not have a BOM">BOM</span>
     {{end}}
     <a href="/part/{{$id}}/where-used"  class="sub-tab{{if eq $sub "where-used"}} active{{end}}">Where Used</a>
+    {{if $part.ShowOrders}}
     <a href="/part/{{$id}}/orders"      class="sub-tab{{if eq $sub "orders"}} active{{end}}">Order History</a>
+    {{else}}
+    <span class="sub-tab disabled" title="Order history does not apply to {{$part.Category}} parts">Order History</span>
+    {{end}}
     <a href="/part/{{$id}}/attachments" class="sub-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
+    {{if $part.ShowPricing}}
     <a href="/part/{{$id}}/pricing"     class="sub-tab{{if eq $sub "pricing"}} active{{end}}">Pricing</a>
+    {{else}}
+    <span class="sub-tab disabled" title="Pricing does not apply to {{$part.Category}} parts">Pricing</span>
+    {{end}}
+    {{if $part.ShowMfgParts}}
     <a href="/part/{{$id}}/mfg-parts"   class="sub-tab{{if eq $sub "mfg-parts"}} active{{end}}">Mfg Parts</a>
+    {{else}}
+    <span class="sub-tab disabled" title="Mfg parts do not apply to {{$part.Category}} parts">Mfg Parts</span>
+    {{end}}
+    {{if $part.ShowSuppliers}}
     <a href="/part/{{$id}}/suppliers"   class="sub-tab{{if eq $sub "suppliers"}} active{{end}}">Suppliers</a>
+    {{else}}
+    <span class="sub-tab disabled" title="Suppliers do not apply to {{$part.Category}} parts">Suppliers</span>
+    {{end}}
     {{if eq $sub "details"}}
     <a href="/part/{{$id}}/edit" class="sub-tab sub-tab-edit">Edit</a>
     {{else if and $hasBOM (eq $sub "bom")}}

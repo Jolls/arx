@@ -238,6 +238,7 @@ Next:
 - `PN.price_id` — stale pointer; replace with `price.is_preferred` (#223) then drop.
 - `price_type` — was dropped; re-add when #222 is implemented.
 - `Forms.custom_sheets` — was dropped; only re-add if custom worksheet feature is scoped (#221).
+- Part categories (code, label, per-category subtab visibility) are stored as JSON in `app_config['part_categories']`, editable in Settings (#345). `PN.category` is a free-text string matched against this list; `models.DefaultCategories()` is the seed when nothing is saved.
 - ~~`pf_formula` on `test_definition` — loaded but unevaluated; decide evaluate-or-drop (#199) before #262 adds more step evaluation logic.~~ **#199 done: `pf_formula` deprecated in 0.3.52; `#262` can proceed.**
 
 ---

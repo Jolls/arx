@@ -45,6 +45,7 @@ func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTa
 		return models.Part{}, "", "", false
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
+	h.applyCategoryTabs(r.Context(), &p)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	return p, backURL, backLabel, true
@@ -203,6 +204,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
+	h.applyCategoryTabs(r.Context(), &p)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 
@@ -224,7 +226,7 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, "part_edit.html", map[string]any{
 		"Part": p, "IsNew": true,
-		"Units": units,
+		"Units": units, "Categories": h.loadCategories(r.Context()),
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -237,7 +239,8 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	if partNumber == "" {
 		h.render(w, "part_edit.html", map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Part Number is required",
-			"ActiveTab": "parts", "ActiveSubTab": "edit",
+			"Categories": h.loadCategories(r.Context()),
+			"ActiveTab":  "parts", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})
 		return
@@ -266,7 +269,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		units, _ := h.fetchUnits(r.Context())
 		h.render(w, "part_edit.html", map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Error creating part: " + err.Error(),
-			"Units":     units,
+			"Units": units, "Categories": h.loadCategories(r.Context()),
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})
@@ -289,10 +292,11 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, "Error retrieving part: "+err.Error())
 		return
 	}
+	h.applyCategoryTabs(r.Context(), &full) // resolve tabs for the part_tabs partial
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, "part_edit.html", map[string]any{
 		"Part": full, "IsNew": false,
-		"Units":     units,
+		"Units": units, "Categories": h.loadCategories(r.Context()),
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -308,9 +312,12 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	partNumber := fv(r, "part_number")
 	if partNumber == "" {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
+		pf := partFromForm(r)
+		h.applyCategoryTabs(r.Context(), &pf)
 		h.render(w, "part_edit.html", map[string]any{
-			"Part": partFromForm(r), "IsNew": false, "Error": "Part Number is required",
-			"ActiveTab": "parts", "ActiveSubTab": "edit",
+			"Part": pf, "IsNew": false, "Error": "Part Number is required",
+			"Categories": h.loadCategories(r.Context()),
+			"ActiveTab":  "parts", "ActiveSubTab": "edit",
 			"NavBackURL": backURL, "NavBackLabel": backLabel,
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 			"PartBasic": p,
@@ -337,9 +344,11 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
 		units, _ := h.fetchUnits(r.Context())
+		pf := partFromForm(r)
+		h.applyCategoryTabs(r.Context(), &pf)
 		h.render(w, "part_edit.html", map[string]any{
-			"Part": partFromForm(r), "IsNew": false, "Error": "Error saving part: " + err.Error(),
-			"Units":     units,
+			"Part": pf, "IsNew": false, "Error": "Error saving part: " + err.Error(),
+			"Units": units, "Categories": h.loadCategories(r.Context()),
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
 			"NavBackURL": backURL, "NavBackLabel": backLabel,
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -357,7 +366,7 @@ func partFromForm(r *http.Request) models.Part {
 	p := models.Part{
 		PartNumber: fv(r, "part_number"), Revision: fv(r, "revision"),
 		Title: fv(r, "title"), Detail: fv(r, "detail"), Category: fv(r, "category"),
-		HasBOM: r.FormValue("has_bom") == "1",
+		HasBOM:        r.FormValue("has_bom") == "1",
 		ReleaseStatus: fv(r, "release_status"), Active: r.FormValue("active") == "1",
 		PNReqBy: fv(r, "PNReqBy"), PNNotes: fv(r, "PNNotes"),
 		UserField1: fv(r, "user_field_1"), UserField2: fv(r, "user_field_2"), UserField3: fv(r, "user_field_3"),
@@ -536,10 +545,14 @@ func extractBOMRows(form map[string][]string, prefix string) map[string]bomRow {
 		}
 		row := rows[id]
 		switch field {
-		case "PLItem":       row.Item = val
-		case "PLQty":        row.Qty = val
-		case "PLPNID":       row.PNID = val
-		case "PLPartNumber": row.PartPN = val
+		case "PLItem":
+			row.Item = val
+		case "PLQty":
+			row.Qty = val
+		case "PLPNID":
+			row.PNID = val
+		case "PLPartNumber":
+			row.PartPN = val
 		}
 		rows[id] = row
 	}
@@ -764,9 +777,9 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken":             h.csrfToken(w, r),
+		"CSRFToken":            h.csrfToken(w, r),
 		"AttachmentCategories": cats,
-		"TestMode":              h.cfg.TestMode,
+		"TestMode":             h.cfg.TestMode,
 	})
 }
 

@@ -66,26 +66,27 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	}
 
 	data := map[string]any{
-		"Connected":              h.db != nil,
-		"DBServer":               h.cfg.DBServer,
-		"DBName":                 h.cfg.DBName,
-		"TestDBName":             h.cfg.TestDBName,
-		"ActiveDBName":           h.cfg.ActiveDBName(),
-		"DBUser":                 h.cfg.DBUser,
-		"DocControlRoot":         h.cfg.DocControlRoot,
-		"POFolderRoot":           h.cfg.POFolderRoot,
-		"SupplierFilesRoot":      h.cfg.SupplierFilesRoot,
-		"ImageRoot":              h.cfg.ImageRoot,
-		"TestMode":               h.cfg.TestMode,
-		"DebugMode":              h.cfg.DebugMode,
-		"PODefaultContactID":     h.cfg.PODefaults.ContactID,
-		"PODefaultReceiverID":    h.cfg.PODefaults.ReceiverID,
-		"AttachmentCategories":   h.appConfigGetOr(r.Context(), "attachment_categories", ""),
-		"Contacts":               contacts,
-		"Suppliers":              suppliers,
-		"ReleaseNotes":           h.releaseNotes,
-		"ActiveTab":              "settings",
-		"CsrfToken":              h.csrfToken(w, r),
+		"Connected":            h.db != nil,
+		"DBServer":             h.cfg.DBServer,
+		"DBName":               h.cfg.DBName,
+		"TestDBName":           h.cfg.TestDBName,
+		"ActiveDBName":         h.cfg.ActiveDBName(),
+		"DBUser":               h.cfg.DBUser,
+		"DocControlRoot":       h.cfg.DocControlRoot,
+		"POFolderRoot":         h.cfg.POFolderRoot,
+		"SupplierFilesRoot":    h.cfg.SupplierFilesRoot,
+		"ImageRoot":            h.cfg.ImageRoot,
+		"TestMode":             h.cfg.TestMode,
+		"DebugMode":            h.cfg.DebugMode,
+		"PODefaultContactID":   h.cfg.PODefaults.ContactID,
+		"PODefaultReceiverID":  h.cfg.PODefaults.ReceiverID,
+		"AttachmentCategories": h.appConfigGetOr(r.Context(), "attachment_categories", ""),
+		"PartCategories":       h.loadCategories(r.Context()),
+		"Contacts":             contacts,
+		"Suppliers":            suppliers,
+		"ReleaseNotes":         h.releaseNotes,
+		"ActiveTab":            "settings",
+		"CsrfToken":            h.csrfToken(w, r),
 	}
 	for k, v := range extra {
 		data[k] = v
@@ -102,6 +103,19 @@ func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "settings.html", h.settingsData(w, r, nil))
+}
+
+// SettingsAttachmentCategoriesSave persists the attachment-category list to
+// app_config. It has its own endpoint so this partial form can't blank the
+// path/PO-default fields that SettingsSave writes from the main settings form.
+func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *http.Request) {
+	if h.db != nil {
+		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")
+		if err := h.appConfigSet(r.Context(), "attachment_categories", cats); err != nil {
+			log.Printf("warning: could not save attachment_categories: %v", err)
+		}
+	}
+	http.Redirect(w, r, "/settings", http.StatusFound)
 }
 
 func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -159,13 +173,6 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	local.PODefaultReceiverID = &receiverID
 	h.cfg.PODefaults.ContactID = contactID
 	h.cfg.PODefaults.ReceiverID = receiverID
-
-	if h.db != nil {
-		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")
-		if err := h.appConfigSet(r.Context(), "attachment_categories", cats); err != nil {
-			log.Printf("warning: could not save attachment_categories: %v", err)
-		}
-	}
 
 	// Use new password if provided, otherwise reconnect with saved password.
 	// This lets test-mode toggles take effect immediately without re-entering credentials.

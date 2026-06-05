@@ -115,6 +115,8 @@ func buildRouter(h *Handler) *chi.Mux {
 	// Always accessible — no DB connection required.
 	r.Get("/settings", h.Settings)
 	r.Post("/settings", h.SettingsSave)
+	r.Post("/settings/attachment-categories", h.SettingsAttachmentCategoriesSave)
+	r.Post("/settings/categories", h.SettingsCategoriesSave)
 	r.Get("/whats-new", h.WhatsNew)
 	r.Get("/api/browse-folder", h.APIBrowseFolder)
 
