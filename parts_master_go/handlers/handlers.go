@@ -209,7 +209,7 @@ func (h *Handler) renderError(w http.ResponseWriter, msg string) {
 }
 
 func (h *Handler) session(r *http.Request) *sessions.Session {
-	s, _ := h.store.Get(r, "arx-session")
+	s, _ := h.store.Get(r, arxbase.SessionCookieName)
 	return s
 }
 

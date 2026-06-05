@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-06-04 
+- both: unify the session cookie into one shared name across the merged app ([#423](https://github.com/Jolls/arx-legacy/issues/423))
+
 ## [0.5.7] - 2026-06-04 
 - both: collapse the two config.Config types and Load() functions into one shared arxlib/config.Config ([#419](https://github.com/Jolls/arx-legacy/issues/419))
 - both: share a single DB connection pool across the merged app instead of one pool per app ([#420](https://github.com/Jolls/arx-legacy/issues/420))
