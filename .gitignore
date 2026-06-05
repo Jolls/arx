@@ -6,9 +6,6 @@ CLAUDE.md
 .env
 config/local.json
 ~$Test Release Record-DEV.xlsm
-test_records_go/config/local.tr.json
-parts_master_go/config/local.pm.json
-arx_go/config/local.pm.json
-arx_go/config/local.tr.json
+arx_go/config/local*.json
 arx_go/Arx.exe
 .claude/settings.local.json

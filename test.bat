@@ -1,6 +1,6 @@
 @echo off
-:: Run all tests across the workspace (parts_master_go, test_records_go, arxlib).
+:: Run all tests across the workspace (arx_go, arxlib).
 :: Run from repo root: test.bat
 pushd "%~dp0"
-go test ./parts_master_go/... ./test_records_go/... ./arxlib/...
+go test ./arx_go/... ./arxlib/...
 popd

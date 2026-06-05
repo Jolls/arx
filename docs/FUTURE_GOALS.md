@@ -17,7 +17,7 @@
 - Analytics: yield dashboard, failure mode reports, per-result change history
 - UX polish: keyboard navigation, auto-save drafts, conditional step visibility
 
-~~**Architecture end state:** A single merged executable serving both apps from one binary and one port, with user authentication. Until merger, the two apps should have a navigation link to each other (port swap).~~ *(one binary + one port done; auth and full structural merge tracked in #422)*
+~~**Architecture end state:** A single merged executable serving both apps from one binary and one port, with user authentication. Until merger, the two apps should have a navigation link to each other (port swap).~~ *(done: one binary + one port + one package — #422)*
 
 ---
 

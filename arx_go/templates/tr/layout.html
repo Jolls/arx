@@ -1,0 +1,60 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arx: Test Records</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="icon" type="image/png" href="/static/tr/favicon.png">
+  <link rel="stylesheet" href="/static/tr/app.css?v={{.AppVersion}}">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark mb-4 py-2{{if .TestMode}} navbar-testmode{{end}}">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand fw-bold" href="/records">
+        <i class="bi bi-clipboard2-check"></i>
+        Arx: Test Records{{if .TestMode}} &mdash; TEST MODE{{end}}
+      </a>
+      <div class="ms-auto d-flex align-items-center gap-3">
+        {{if .PartsMasterURL}}<a href="{{.PartsMasterURL}}" class="nav-link text-white-50 small" title="Open Parts Master">Parts Master</a>{{end}}
+        <a href="/settings" class="nav-link text-white-50" title="Settings">
+          <i class="bi bi-gear"></i>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  {{if .SchemaMismatch}}
+  <div class="alert alert-warning rounded-0 mb-0 py-2 px-4" role="alert">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>Schema mismatch: {{.SchemaMismatch}} — DB may need migration.
+  </div>
+  {{end}}
+  <div id="whats-new-banner" class="alert alert-info rounded-0 mb-0 py-2 px-4 d-flex justify-content-between align-items-center" style="display:none !important;" role="alert">
+    <span><i class="bi bi-stars me-1"></i>What's new in Arx — <a href="/whats-new" class="alert-link">See release notes</a></span>
+    <button type="button" class="btn-close btn-sm" onclick="dismissWhatsNew('{{.AppVersion}}')" aria-label="Dismiss"></button>
+  </div>
+  <div class="container-fluid px-4">
+    {{template "content" .}}
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/tr/app.js?v={{.AppVersion}}"></script>
+  <script>
+  (function() {
+    var v = "{{.AppVersion}}";
+    if (v && localStorage.getItem("whats_new_seen") !== v) {
+      var el = document.getElementById("whats-new-banner");
+      if (el) el.style.setProperty("display", "flex", "important");
+    }
+  })();
+  function dismissWhatsNew(v) {
+    localStorage.setItem("whats_new_seen", v);
+    var el = document.getElementById("whats-new-banner");
+    if (el) el.style.setProperty("display", "none", "important");
+  }
+  </script>
+</body>
+</html>
+{{end}}

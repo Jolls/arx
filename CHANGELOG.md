@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-06-05 
+- both: collapse the three Go packages into a single arx_go package ([#422](https://github.com/Jolls/arx-legacy/issues/422))
+
 ## [0.5.9] - 2026-06-04 
 - parts_master: add build-tagged live-DB integration tests for the part + attachment lifecycle (identity insert, FIL-count trigger) ([#416](https://github.com/Jolls/arx-legacy/issues/416))
 

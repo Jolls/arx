@@ -3,6 +3,4 @@ go 1.26.3
 use (
 	./arxlib
 	./arx_go
-	./parts_master_go
-	./test_records_go
 )

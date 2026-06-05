@@ -34,7 +34,7 @@ type PODefaults struct {
 
 // Load reads configuration from .env files, environment variables, and
 // config/local.json. Later sources win over earlier ones.
-// version is injected via -ldflags at build time (e.g. arx/parts_master_go/config.AppVersion).
+// version is injected via -ldflags at build time (e.g. arx/arx_go.AppVersion).
 func Load(version string) *Config {
 	// Prefer a shared repo-root .env; fall back to an app-local one.
 	if err := godotenv.Load("../.env"); err != nil {
