@@ -132,7 +132,7 @@ func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) session(r *http.Request) *sessions.Session {
-	s, _ := h.store.Get(r, "arx-tr-session")
+	s, _ := h.store.Get(r, arxbase.SessionCookieName)
 	return s
 }
 

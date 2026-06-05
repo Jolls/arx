@@ -7,6 +7,10 @@ import (
 	"os"
 )
 
+// SessionCookieName is the single gorilla/sessions cookie name shared by all
+// Arx apps so the merged single-origin app carries one session + CSRF token.
+const SessionCookieName = "arx-session"
+
 // Base holds configuration fields common to all Arx apps.
 type Base struct {
 	Version        string
