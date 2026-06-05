@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-06-04 
+- both: collapse the two config.Config types and Load() functions into one shared arxlib/config.Config ([#419](https://github.com/Jolls/arx-legacy/issues/419))
+- both: share a single DB connection pool across the merged app instead of one pool per app ([#420](https://github.com/Jolls/arx-legacy/issues/420))
+- both: retire per-app duplicates — single RELEASE_NOTES embed and one ExpectedSchemaVersion/CheckSchemaVersion ([#424](https://github.com/Jolls/arx-legacy/issues/424))
+
 ## [0.5.6] - 2026-06-04 
 - both: merge Parts Master and Test Records onto a single port (4568); Test Records moves to /records, one unified settings page and config/local.json ([#413](https://github.com/Jolls/arx-legacy/issues/413))
 

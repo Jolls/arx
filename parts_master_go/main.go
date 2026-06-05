@@ -62,13 +62,20 @@ func (a *App) Handler() http.Handler {
 	return a.router
 }
 
+// DB returns the shared database pool (injected into Test Records by arx_go).
+func (a *App) DB() *sql.DB { return a.h.DB() }
+
+// Config returns the active config (shared with Test Records).
+func (a *App) Config() *config.Config { return a.h.Config() }
+
 // SetFallback installs a fallback handler for paths PM's router doesn't match.
 func (a *App) SetFallback(fallback http.Handler) {
 	a.router.NotFound(fallback.ServeHTTP)
 }
 
-// SetAfterSettingsSave wires a callback invoked after settings are saved (e.g. to reload TR).
-func (a *App) SetAfterSettingsSave(fn func()) {
+// SetAfterSettingsSave wires a callback invoked after a settings save with the
+// freshly reconnected pool, so arx_go can hand it to Test Records.
+func (a *App) SetAfterSettingsSave(fn func(newDB *sql.DB)) {
 	a.h.AfterSettingsSave = fn
 }
 

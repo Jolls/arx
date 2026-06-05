@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net"
 	"net/http"
@@ -22,13 +23,15 @@ func main() {
 
 func onReady() {
 	pm = partsmaster.New()
-	tr = testrecords.New()
+	// TR shares PM's single DB pool + config (no second pool).
+	tr = testrecords.New(pm.DB(), pm.Config())
 
 	// Wire TR as the fallback for paths PM doesn't match.
 	pm.SetFallback(tr.Handler())
 
-	// After settings save, reload TR so its DB pool + config stay in sync.
-	pm.SetAfterSettingsSave(func() { _ = tr.Reload() })
+	// After a settings save, hand PM's freshly reconnected pool (and updated
+	// config) to TR so both apps stay on the same single pool.
+	pm.SetAfterSettingsSave(func(newDB *sql.DB) { tr.SetDBAndConfig(newDB, pm.Config()) })
 
 	if pm.DebugMode || tr.DebugMode {
 		openDebugConsole()

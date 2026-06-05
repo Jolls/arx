@@ -4,14 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"io/fs"
-	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
 	"arx/test_records_go/config"
-	"arx/test_records_go/db"
 	"arx/test_records_go/handlers"
 )
 
@@ -26,23 +24,10 @@ type App struct {
 	router    http.Handler
 }
 
-// New loads config, connects to the database, and returns a ready-to-serve App.
-func New() *App {
-	cfg := config.Load()
-
-	var database *sql.DB
-	if dsn := cfg.DSN(); dsn != "" {
-		if conn, err := db.Connect(dsn); err == nil {
-			database = conn
-			log.Println("test_records: auto-connected to database")
-		} else {
-			log.Printf("test_records: auto-connect failed (open Settings to reconnect): %v", err)
-		}
-	} else {
-		log.Println("test_records: no database password configured — open Settings to connect")
-	}
-
-	h := handlers.New(database, cfg, templatesFS, releaseNotesData)
+// New builds the Test Records app around a DB pool and config injected by arx_go.
+// The pool is owned by Parts Master and shared, so New neither loads config nor connects.
+func New(database *sql.DB, cfg *config.Config) *App {
+	h := handlers.New(database, cfg, templatesFS)
 	h.CheckSchemaVersion(context.Background())
 	router := buildRouter(h)
 
@@ -62,28 +47,14 @@ func (a *App) Handler() http.Handler {
 	return a.router
 }
 
-// Reload re-reads config/local.json and reconnects the DB pool.
-// Called by arx_go after PM's settings are saved.
-func (a *App) Reload() error {
-	cfg := config.Load()
-	if dsn := cfg.DSN(); dsn != "" {
-		newDB, err := db.Connect(dsn)
-		if err != nil {
-			log.Printf("test_records: reload reconnect failed: %v", err)
-			return err
-		}
-		a.h.SetDBAndConfig(newDB, cfg)
-		a.h.CheckSchemaVersion(context.Background())
-		a.DebugMode = cfg.DebugMode
-		log.Println("test_records: reloaded config and reconnected")
-	}
-	return nil
+// SetDBAndConfig swaps in the shared pool + config after a settings save (called by arx_go).
+func (a *App) SetDBAndConfig(database *sql.DB, cfg *config.Config) {
+	a.h.SetDBAndConfig(database, cfg)
+	a.DebugMode = cfg.DebugMode
 }
 
-// Close shuts down the database connection pool.
-func (a *App) Close() {
-	a.h.CloseDB()
-}
+// Close is a no-op: the DB pool is owned and closed by Parts Master (shared pool).
+func (a *App) Close() {}
 
 func buildRouter(h *handlers.Handler) http.Handler {
 	r := chi.NewRouter()

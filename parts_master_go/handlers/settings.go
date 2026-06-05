@@ -181,24 +181,26 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			connErr = err.Error()
 		} else {
-			if h.db != nil {
-				h.db.Close()
-			}
+			oldDB := h.db
 			h.db = newDB
 			if password != "" {
 				local.DBPassword = password
 				h.cfg.DBPassword = password
 			}
 			h.CheckSchemaVersion(r.Context())
+			// Hand the new shared pool to TR before closing the old one, so the
+			// old pool is closed exactly once after both apps have swapped off it.
+			if h.AfterSettingsSave != nil {
+				h.AfterSettingsSave(newDB)
+			}
+			if oldDB != nil {
+				oldDB.Close()
+			}
 		}
 	}
 
 	if err := config.SaveLocal(local); err != nil {
 		log.Printf("warning: could not save local config: %v", err)
-	}
-
-	if h.AfterSettingsSave != nil {
-		h.AfterSettingsSave()
 	}
 
 	if connErr != "" {
