@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/sessions"
 
+	arxbase "arx/arxlib/config"
 	"arx/arxlib/urlutil"
 	"arx/test_records_go/config"
 	"arx/test_records_go/models"
@@ -27,12 +28,11 @@ type Handler struct {
 	store          *sessions.CookieStore
 	tmplFS         ioFS.FS
 	schemaMismatch string
-	releaseNotes   string
 }
 
-func New(db *sql.DB, cfg *config.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
+func New(db *sql.DB, cfg *config.Config, tmplFS ioFS.FS) *Handler {
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
-	return &Handler{db: db, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes)}
+	return &Handler{db: db, cfg: cfg, store: store, tmplFS: tmplFS}
 }
 
 func (h *Handler) CloseDB() {
@@ -41,34 +41,22 @@ func (h *Handler) CloseDB() {
 	}
 }
 
-// SetDBAndConfig swaps in a fresh DB pool and config (called by App.Reload after settings save).
+// SetDBAndConfig swaps in the shared DB pool and config after a settings save.
+// The pool is owned by Parts Master, so this must not close the old pool.
 func (h *Handler) SetDBAndConfig(db *sql.DB, cfg *config.Config) {
-	if h.db != nil {
-		h.db.Close()
-	}
 	h.db = db
 	h.cfg = cfg
+	h.CheckSchemaVersion(context.Background())
 }
 
 // CheckSchemaVersion queries app_config for schema_version and stores a mismatch
-// message if it doesn't match config.ExpectedSchemaVersion. Safe to call when db is nil.
+// message if it doesn't match ExpectedSchemaVersion. Safe to call when db is nil.
 func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 	if h.db == nil {
-		return
-	}
-	var val string
-	err := h.queryRowContext(ctx,
-		`SELECT setting_value FROM `+h.cfg.AppConfigTable()+` WHERE setting_key = 'schema_version'`,
-	).Scan(&val)
-	if err != nil {
-		h.schemaMismatch = fmt.Sprintf("could not read schema_version (%v)", err)
-		return
-	}
-	if val != config.ExpectedSchemaVersion {
-		h.schemaMismatch = fmt.Sprintf("DB schema v%s, app expects v%s", val, config.ExpectedSchemaVersion)
-	} else {
 		h.schemaMismatch = ""
+		return
 	}
+	h.schemaMismatch = arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg.AppConfigTable())
 }
 
 func (h *Handler) logSQL(query string, args ...any) {

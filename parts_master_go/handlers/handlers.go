@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/sessions"
 
+	arxbase "arx/arxlib/config"
 	"arx/arxlib/urlutil"
 	"arx/parts_master_go/config"
 )
@@ -28,8 +29,14 @@ type Handler struct {
 	tmplFS            ioFS.FS
 	schemaMismatch    string
 	releaseNotes      string
-	AfterSettingsSave func() // called after settings are saved; wired by arx_go to reload TR
+	AfterSettingsSave func(newDB *sql.DB) // called after a settings save; hands the new shared pool to TR
 }
+
+// DB returns the current database pool (shared with Test Records via arx_go).
+func (h *Handler) DB() *sql.DB { return h.db }
+
+// Config returns the active config (shared with Test Records via arx_go).
+func (h *Handler) Config() *config.Config { return h.cfg }
 
 func New(db *sql.DB, cfg *config.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
@@ -90,24 +97,13 @@ func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
 }
 
 // CheckSchemaVersion queries app_config for schema_version and stores a mismatch
-// message if it doesn't match config.ExpectedSchemaVersion. Safe to call when db is nil.
+// message if it doesn't match ExpectedSchemaVersion. Safe to call when db is nil.
 func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 	if h.db == nil {
-		return
-	}
-	var val string
-	err := h.queryRowContext(ctx,
-		`SELECT setting_value FROM `+h.cfg.AppConfigTable()+` WHERE setting_key = 'schema_version'`,
-	).Scan(&val)
-	if err != nil {
-		h.schemaMismatch = fmt.Sprintf("could not read schema_version (%v)", err)
-		return
-	}
-	if val != config.ExpectedSchemaVersion {
-		h.schemaMismatch = fmt.Sprintf("DB schema v%s, app expects v%s", val, config.ExpectedSchemaVersion)
-	} else {
 		h.schemaMismatch = ""
+		return
 	}
+	h.schemaMismatch = arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg.AppConfigTable())
 }
 
 // appConfigGet reads a single key from app_config.
