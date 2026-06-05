@@ -47,7 +47,6 @@ func (h *Handler) renderPrintTR(w http.ResponseWriter, page string, data any) {
 }
 
 // trTemplateFuncs returns the template function map for Test Records views.
-// formatDate uses MM/DD/YYYY (different from PM's YYYY-MM-DD) — do not merge.
 func trTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"formatDate": trFormatDate,
@@ -61,13 +60,13 @@ func trTemplateFuncs() template.FuncMap {
 			if t == nil {
 				return ""
 			}
-			return t.Format("01/02 15:04")
+			return t.Format("2006-01-02 15:04")
 		},
 		"formatDateTimeFull": func(t *time.Time) string {
 			if t == nil {
 				return ""
 			}
-			return t.Format("01/02/2006 3:04 PM")
+			return t.Format("2006-01-02 3:04 PM")
 		},
 		"isQuerySpec": func(s string) bool { return strings.HasPrefix(s, "query:") },
 		"isHTTPURL":    urlutil.IsHTTPURL,
@@ -125,12 +124,11 @@ func trTemplateFuncs() template.FuncMap {
 	}
 }
 
-// trFormatDate formats a date as MM/DD/YYYY for Test Records views.
 func trFormatDate(t *time.Time) string {
 	if t == nil {
 		return ""
 	}
-	return t.Format("01/02/2006")
+	return t.Format("2006-01-02")
 }
 
 // imageResult returns true for VBA image filenames: SN-..._rID-..._tID-...
