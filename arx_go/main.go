@@ -24,31 +24,43 @@ func onReady() {
 	pm = partsmaster.New()
 	tr = testrecords.New()
 
+	// Wire TR as the fallback for paths PM doesn't match.
+	pm.SetFallback(tr.Handler())
+
+	// After settings save, reload TR so its DB pool + config stay in sync.
+	pm.SetAfterSettingsSave(func() { _ = tr.Reload() })
+
 	if pm.DebugMode || tr.DebugMode {
 		openDebugConsole()
 	}
 
-	serve(pm.Server, pm.Name)
-	serve(tr.Server, tr.Name)
+	// Single HTTP server on PM's port; TR routes fall through from PM's router.
+	server := &http.Server{
+		Addr:    "0.0.0.0:" + pm.Port,
+		Handler: pm.Handler(),
+	}
+	go func() {
+		log.Printf("Arx: starting on %s", server.Addr)
+		if err := server.ListenAndServe(); err != nil {
+			log.Printf("Arx: server stopped: %v", err)
+			systray.Quit()
+		}
+	}()
 
 	go openWhenReady(pm.URL, pm.Port)
-	go openWhenReady(tr.URL, tr.Port)
 
 	systray.SetIcon(appIcon())
 	systray.SetTooltip("Arx")
 
-	mPM := systray.AddMenuItem("Open Parts Master", "Open Parts Master in browser")
-	mTR := systray.AddMenuItem("Open Test Records", "Open Test Records in browser")
+	mOpen := systray.AddMenuItem("Open Arx", "Open Arx in browser")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Quit Arx")
 
 	go func() {
 		for {
 			select {
-			case <-mPM.ClickedCh:
+			case <-mOpen.ClickedCh:
 				_ = browser.OpenURL(pm.URL)
-			case <-mTR.ClickedCh:
-				_ = browser.OpenURL(tr.URL)
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 			}
@@ -63,16 +75,6 @@ func onExit() {
 	if tr != nil {
 		tr.Close()
 	}
-}
-
-func serve(s *http.Server, name string) {
-	go func() {
-		log.Printf("%s: starting on %s", name, s.Addr)
-		if err := s.ListenAndServe(); err != nil {
-			log.Printf("%s: server stopped: %v", name, err)
-			systray.Quit()
-		}
-	}()
 }
 
 func openWhenReady(url, port string) {

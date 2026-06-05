@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-06-04 
+- both: merge Parts Master and Test Records onto a single port (4568); Test Records moves to /records, one unified settings page and config/local.json ([#413](https://github.com/Jolls/arx-legacy/issues/413))
+
 ## [0.5.5] - 2026-06-04 
 - both: expand the test suite with pure-function unit tests (path/SQL safety, form parsing, query-spec/token helpers) and no-DB httptest coverage of the RequireAuth and CSRF middleware ([#414](https://github.com/Jolls/arx-legacy/issues/414), [#240](https://github.com/Jolls/arx-legacy/issues/240))
 

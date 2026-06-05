@@ -22,12 +22,13 @@ import (
 )
 
 type Handler struct {
-	db             *sql.DB
-	cfg            *config.Config
-	store          *sessions.CookieStore
-	tmplFS         ioFS.FS
-	schemaMismatch string
-	releaseNotes   string
+	db                *sql.DB
+	cfg               *config.Config
+	store             *sessions.CookieStore
+	tmplFS            ioFS.FS
+	schemaMismatch    string
+	releaseNotes      string
+	AfterSettingsSave func() // called after settings are saved; wired by arx_go to reload TR
 }
 
 func New(db *sql.DB, cfg *config.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {

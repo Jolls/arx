@@ -1,45 +1,10 @@
 package config
 
-import (
-	"encoding/json"
-	"os"
-)
+import arxbase "arx/arxlib/config"
 
-const localConfigPath = "config/local.tr.json"
+// LocalConfig, LoadLocal, and SaveLocal are now provided by arxlib/config.
+// Both apps share a single config/local.json so settings are consistent.
+type LocalConfig = arxbase.LocalConfig
 
-// LocalConfig holds user-specific overrides stored in config/local.json.
-// This file is gitignored — it is the only place the DB password is persisted.
-type LocalConfig struct {
-	DBServer       string `json:"db_server"`
-	DBName         string `json:"db_name"`
-	DBUser         string `json:"db_user"`
-	DBPassword     string `json:"db_password"`
-	ImageRoot      string `json:"image_root"`
-	DocControlRoot string `json:"doc_control_root"`
-	DebugMode      bool   `json:"debug_mode"`
-	TestMode       *bool  `json:"test_mode,omitempty"`
-	TestDBName     string `json:"test_db_name,omitempty"`
-}
-
-func LoadLocal() (*LocalConfig, error) {
-	data, err := os.ReadFile(localConfigPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &LocalConfig{}, nil
-		}
-		return nil, err
-	}
-	var lc LocalConfig
-	if err := json.Unmarshal(data, &lc); err != nil {
-		return nil, err
-	}
-	return &lc, nil
-}
-
-func SaveLocal(lc *LocalConfig) error {
-	data, err := json.MarshalIndent(lc, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(localConfigPath, data, 0600)
-}
+var LoadLocal = arxbase.LoadLocal
+var SaveLocal = arxbase.SaveLocal

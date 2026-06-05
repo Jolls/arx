@@ -44,7 +44,7 @@ func Load() *Config {
 			DebugMode:      os.Getenv("DEBUG_MODE") == "true",
 		},
 		ImageRoot:      os.Getenv("IMAGE_ROOT"),
-		PartsMasterURL: arxbase.GetEnv("PM_URL", "http://localhost:4568"),
+		PartsMasterURL: arxbase.GetEnv("PM_URL", "/"),
 	}
 
 	// Apply local.json overrides (local values always win over .env).

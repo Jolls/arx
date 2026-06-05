@@ -23,6 +23,7 @@ type App struct {
 	Name      string
 	DebugMode bool
 	h         *handlers.Handler
+	router    *chi.Mux
 }
 
 // New loads config, connects to the database, and returns a ready-to-serve App.
@@ -43,15 +44,32 @@ func New() *App {
 
 	h := handlers.New(database, cfg, templatesFS, releaseNotesData)
 	h.CheckSchemaVersion(context.Background())
+	router := buildRouter(h)
 
 	return &App{
-		Server:    &http.Server{Addr: "0.0.0.0:" + cfg.Port, Handler: buildRouter(h)},
+		Server:    &http.Server{Addr: "0.0.0.0:" + cfg.Port, Handler: router},
 		URL:       "http://localhost:" + cfg.Port,
 		Port:      cfg.Port,
 		Name:      "Parts Master",
 		DebugMode: cfg.DebugMode,
 		h:         h,
+		router:    router,
 	}
+}
+
+// Handler returns the combined HTTP handler (used by arx_go to serve a single port).
+func (a *App) Handler() http.Handler {
+	return a.router
+}
+
+// SetFallback installs a fallback handler for paths PM's router doesn't match.
+func (a *App) SetFallback(fallback http.Handler) {
+	a.router.NotFound(fallback.ServeHTTP)
+}
+
+// SetAfterSettingsSave wires a callback invoked after settings are saved (e.g. to reload TR).
+func (a *App) SetAfterSettingsSave(fn func()) {
+	a.h.AfterSettingsSave = fn
 }
 
 // Close shuts down the database connection pool.
@@ -59,7 +77,7 @@ func (a *App) Close() {
 	a.h.CloseDB()
 }
 
-func buildRouter(h *handlers.Handler) http.Handler {
+func buildRouter(h *handlers.Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
