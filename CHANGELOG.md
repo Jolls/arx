@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-06-05 
+- both: add a Records tab to the Parts Master nav and show the shared Parts Master header + tab bar on Test Records pages (minimal slice of the unified shell) ([#421](https://github.com/Jolls/arx-legacy/issues/421))
+
 ## [0.5.11] - 2026-06-05 
 - parts_master: part subtabs (BOM, Order History, Pricing, Mfg Parts, Suppliers) now show or gray out per part category, with an editable category + tab-visibility table in Settings ([#345](https://github.com/Jolls/arx-legacy/issues/345))
 

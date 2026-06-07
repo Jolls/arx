@@ -2,11 +2,36 @@
 
 body { font-size: 0.875rem; }
 
-.font-mono { font-family: monospace; }
+/* Shared PM-style app header + tab bar (issue #421 minimal slice) */
+:root {
+  --accent-1: #667eea;
+  --header-bg: #1a1a2e;
+  --header-border: #667eea;
+}
+.app-header {
+  height: 36px; background: var(--header-bg); color: #e0e0e0;
+  display: flex; align-items: center; padding: 0 16px;
+  font-size: 0.85rem; font-weight: 600; letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--header-border);
+}
+.app-header--testmode { background: #b45309; border-bottom-color: #f59e0b; }
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.header-settings-link {
+  color: #e0e0e0; font-size: 1.15rem; text-decoration: none; opacity: 0.65;
+  line-height: 1; transition: opacity 0.2s;
+}
+.header-settings-link:hover { opacity: 1; color: #e0e0e0; text-decoration: none; }
+.tabs { display: flex; border-bottom: 1px solid #ddd; background: #fafafa; margin-bottom: 1.5rem; }
+.tab {
+  flex: 1; text-align: center; padding: 12px 0;
+  text-decoration: none; color: #444; font-weight: 600;
+  border-right: 1px solid #ddd; transition: background 0.2s, color 0.2s;
+}
+.tab:last-child { border-right: none; }
+.tab:hover { background: #f0f0f0; text-decoration: none; color: #444; }
+.tab.active { background: var(--accent-1); color: #fff; }
 
-/* Navbar */
-.navbar-testmode { background-color: #92400e !important; }
-.navbar:not(.navbar-testmode) { background-color: #212529; }
+.font-mono { font-family: monospace; }
 
 /* Section heading rows — target td directly to override Bootstrap's per-cell bg vars */
 .row-heading-1 td { background-color: #808080 !important; color: #fff; font-weight: bold; }

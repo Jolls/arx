@@ -11,19 +11,18 @@
   <link rel="stylesheet" href="/static/tr/app.css?v={{.AppVersion}}">
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark mb-4 py-2{{if .TestMode}} navbar-testmode{{end}}">
-    <div class="container-fluid px-4">
-      <a class="navbar-brand fw-bold" href="/records">
-        <i class="bi bi-clipboard2-check"></i>
-        Arx: Test Records{{if .TestMode}} &mdash; TEST MODE{{end}}
-      </a>
-      <div class="ms-auto d-flex align-items-center gap-3">
-        {{if .PartsMasterURL}}<a href="{{.PartsMasterURL}}" class="nav-link text-white-50 small" title="Open Parts Master">Parts Master</a>{{end}}
-        <a href="/settings" class="nav-link text-white-50" title="Settings">
-          <i class="bi bi-gear"></i>
-        </a>
+  <div class="app-header{{if .TestMode}} app-header--testmode{{end}}">
+      Arx: Parts Master{{if .TestMode}} &mdash; TEST MODE{{end}}
+      <div class="header-actions">
+          <a href="/settings" class="header-settings-link" title="Settings">&#9881;</a>
       </div>
-    </div>
+  </div>
+  <nav class="tabs">
+      <a href="/"          class="tab">Parts</a>
+      <a href="/suppliers" class="tab">Vendors</a>
+      <a href="/pos"       class="tab">POs</a>
+      <a href="/contacts"  class="tab">Contacts</a>
+      <a href="/records"   class="tab active">Records</a>
   </nav>
 
   {{if .SchemaMismatch}}

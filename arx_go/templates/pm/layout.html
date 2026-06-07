@@ -12,7 +12,6 @@
     <div class="app-header{{if .TestMode}} app-header--testmode{{end}}">
         Arx: Parts Master{{if .TestMode}} &mdash; TEST MODE{{end}}
         <div class="header-actions">
-            {{if .TestRecordsURL}}<a href="{{.TestRecordsURL}}" class="header-app-link" title="Open Test Records">Test Records</a>{{end}}
             <a href="/settings" class="header-settings-link{{if eq .ActiveTab "settings"}} active{{end}}" title="Settings">&#9881;</a>
         </div>
     </div>
@@ -31,6 +30,7 @@
             <a href="/suppliers" class="tab{{if eq .ActiveTab "suppliers"}} active{{end}}">Vendors</a>
             <a href="/pos"       class="tab{{if eq .ActiveTab "pos"}} active{{end}}">POs</a>
             <a href="/contacts"  class="tab{{if eq .ActiveTab "contacts"}} active{{end}}">Contacts</a>
+            <a href="/records"   class="tab{{if eq .ActiveTab "records"}} active{{end}}">Records</a>
         </nav>
 
         {{template "content" .}}
