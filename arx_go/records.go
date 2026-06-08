@@ -184,7 +184,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	wipOnly := r.URL.Query().Get("wip") != "false"
 
 	query := fmt.Sprintf(`
-		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
+		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s
 		WHERE form_id = @p1 AND active = 1`, h.cfg.RecordsTable())
@@ -205,7 +205,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var rec models.TestRecord
 		if err := rows.Scan(
-			&rec.ID, &rec.FormID, &rec.SerialNumber, &rec.SerialNumberPN,
+			&rec.ID, &rec.FormID, &rec.PartNumberID, &rec.SerialNumber, &rec.SerialNumberPN,
 			&rec.SerialNumberDesc, &rec.RecordDate, &rec.Comments,
 			&rec.InstrumentType, &rec.Locked, &rec.Active, &rec.TestOrder,
 		); err != nil {
@@ -804,10 +804,10 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
+		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
+		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
@@ -995,10 +995,10 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
+		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
+		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
@@ -1310,10 +1310,10 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
+		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
+		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
@@ -1612,10 +1612,10 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, serial_number, serial_number_PN, serial_number_PNDesc,
+		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
 		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.SerialNumber, &record.SerialNumberPN,
+		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {

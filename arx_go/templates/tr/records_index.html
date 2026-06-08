@@ -47,7 +47,7 @@
       <td>
         <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
       </td>
-      <td>{{.SerialNumberPN}}</td>
+      <td>{{if .PartNumberID}}<a href="/part/{{.PartNumberID}}">{{.SerialNumberPN}}</a>{{else}}{{.SerialNumberPN}}{{end}}</td>
       <td>{{.SerialNumberDesc}}</td>
       <td class="text-nowrap">{{formatDateTimeFull .RecordDate}}</td>
       <td>{{.Comments}}</td>

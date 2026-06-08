@@ -30,7 +30,7 @@
 <div class="row mb-3">
   <div class="col-md-8">
     <h4>
-      {{.Record.SerialNumberPN}}
+      {{if .Record.PartNumberID}}<a href="/part/{{.Record.PartNumberID}}">{{.Record.SerialNumberPN}}</a>{{else}}{{.Record.SerialNumberPN}}{{end}}
       &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
       {{if .Record.Locked}}
       <button class="btn btn-sm btn-outline-secondary ms-2" data-bs-toggle="modal" data-bs-target="#unlockModal">
