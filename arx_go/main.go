@@ -51,7 +51,7 @@ func onReady() {
 
 	router := buildRouter(h)
 	server := &http.Server{
-		Addr:    "0.0.0.0:" + cfg.Port,
+		Addr:    "127.0.0.1:" + cfg.Port,
 		Handler: router,
 	}
 	go func() {
