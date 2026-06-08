@@ -1,3 +1,20 @@
+Arx v0.5.12 — June 2026
+=======================
+
+NEW FEATURES
+
+  Parts Master — Records Tab
+  Test Records is now a tab in the Parts Master navigation bar alongside
+  Parts, Vendors, POs, and Contacts. Both apps share the same header and
+  tab bar, so switching between them feels like changing tabs rather than
+  opening a different app. The separate cross-app link in the header is gone.
+
+  Parts Master — Part Subtabs per Category
+  The detail tabs shown for a part (BOM, Order History, Pricing, Mfg Parts,
+  Suppliers) can now be configured per part category. Tabs that don't apply
+  to a category are grayed out rather than cluttering the view. Categories
+  and their tab visibility are editable in Settings.
+
 Arx v0.5.6 — June 2026
 =======================
 
