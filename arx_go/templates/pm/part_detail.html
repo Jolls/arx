@@ -14,7 +14,7 @@
     {{/* ── Status bar ─────────────────────────────────────────── */}}
     <div class="part-status-bar">
         <div class="part-status-cell">
-            <div class="part-status-label" data-tip="Release status: Under Review, Active, or Deprecated">Status</div>
+            <div class="part-status-label" data-bs-toggle="tooltip" title="Release status: Under Review, Active, or Deprecated">Status</div>
             {{if eq .Part.ReleaseStatus "U"}}<span class="badge status-U">Under Review</span>
             {{else if eq .Part.ReleaseStatus "A"}}<span class="badge status-A">Active</span>
             {{else if eq .Part.ReleaseStatus "D"}}<span class="badge status-D">Deprecated</span>
@@ -25,11 +25,11 @@
             <div class="part-status-value">{{if .Part.Category}}{{.Part.Category}}{{else}}—{{end}}</div>
         </div>
         <div class="part-status-cell">
-            <div class="part-status-label" data-tip="Revision letter or number">Rev</div>
+            <div class="part-status-label" data-bs-toggle="tooltip" title="Revision letter or number">Rev</div>
             <div class="part-status-value">{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</div>
         </div>
         <div class="part-status-cell">
-            <div class="part-status-label" data-tip="Whether this part is currently active in the database">Active</div>
+            <div class="part-status-label" data-bs-toggle="tooltip" title="Whether this part is currently active in the database">Active</div>
             {{if .Part.Active}}<span class="badge badge-active">Yes</span>
             {{else}}<span class="badge badge-inactive">No</span>{{end}}
         </div>
@@ -97,8 +97,8 @@
     <div class="detail-section">
         <h3>Pricing &amp; Quantities</h3>
         <div class="detail-row"><strong>Quantity:</strong>           <span>{{printf "%.8f" .Part.PNQty}}</span></div>
-        <div class="detail-row"><strong data-tip="Manually entered cost; may differ from BOM roll-up">Current Cost:</strong>       <span>${{printf "%.8f" .Part.PNCurrentCost}}</span></div>
-        <div class="detail-row"><strong data-tip="Cost calculated from last BOM cost roll-up">Last Rollup Cost:</strong>   <span>{{if .Part.PNLastRollupAt}}${{printf "%.4f" .Part.PNLastRollupCost}}{{else}}<span class="muted">Never run</span>{{end}}</span></div>
+        <div class="detail-row"><strong data-bs-toggle="tooltip" title="Manually entered cost; may differ from BOM roll-up">Current Cost:</strong>       <span>${{printf "%.8f" .Part.PNCurrentCost}}</span></div>
+        <div class="detail-row"><strong data-bs-toggle="tooltip" title="Cost calculated from last BOM cost roll-up">Last Rollup Cost:</strong>   <span>{{if .Part.PNLastRollupAt}}${{printf "%.4f" .Part.PNLastRollupCost}}{{else}}<span class="muted">Never run</span>{{end}}</span></div>
     </div>
 
     {{/* ── Notes ───────────────────────────────────────────────── */}}
