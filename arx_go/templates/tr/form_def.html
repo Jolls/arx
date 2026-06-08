@@ -116,14 +116,14 @@
     <tr data-step-id="{{.ID}}">
       <td class="text-muted small">{{.ID}}</td>
       <td class="text-muted small">{{.Type}}</td>
-      <td>{{.Parameter}}</td>
+      <td data-field="parameter">{{.Parameter}}</td>
       <td>{{.Specification}}</td>
-      <td class="font-mono">{{.SpecNom}}</td>
-      <td class="font-mono">{{.SpecMin}}</td>
-      <td class="font-mono">{{.SpecMax}}</td>
-      <td>{{.SpecUnits}}</td>
-      <td>{{.PFType}}</td>
-      <td class="font-mono">{{.DefaultResult}}</td>
+      <td class="font-mono" data-field="spec_nom">{{.SpecNom}}</td>
+      <td class="font-mono" data-field="spec_min">{{.SpecMin}}</td>
+      <td class="font-mono" data-field="spec_max">{{.SpecMax}}</td>
+      <td data-field="spec_units">{{.SpecUnits}}</td>
+      <td data-field="pf_type">{{.PFType}}</td>
+      <td class="font-mono" data-field="default_result">{{.DefaultResult}}</td>
       <td class="text-center">{{if .HideFormula}}{{if eq .HideFormula "HIDE"}}<i class="bi bi-eye-slash text-muted"></i>{{else}}<span class="font-mono small text-muted" title="hide: {{.HideFormula}}">{{.HideFormula}}</span>{{end}}{{end}}</td>
       <td class="small text-muted">{{.Category}}</td>
       <td class="small text-muted">{{.SheetName}}</td>

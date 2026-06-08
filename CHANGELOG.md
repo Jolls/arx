@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.13] - 2026-06-07 
+- test_records: form definition history now shows the historical step values, not just which rows changed ([#389](https://github.com/Jolls/arx-legacy/issues/389))
+
 ## [0.5.12] - 2026-06-05 
 - both: add a Records tab to the Parts Master nav and show the shared Parts Master header + tab bar on Test Records pages (minimal slice of the unified shell) ([#421](https://github.com/Jolls/arx-legacy/issues/421))
 
