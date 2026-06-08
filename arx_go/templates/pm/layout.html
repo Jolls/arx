@@ -40,8 +40,14 @@
         </footer>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/pm/app.js?v={{.AppVersion}}"></script>
     <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+            new bootstrap.Tooltip(el);
+        });
+    });
     (function() {
         var v = "{{.AppVersion}}";
         if (v && localStorage.getItem("whats_new_seen") !== v) {

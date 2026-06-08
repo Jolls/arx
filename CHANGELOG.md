@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.15] - 2026-06-08 
+- arx: add hover tooltips to column headers and field labels across Parts Master and Test Records ([#333](https://github.com/Jolls/arx-legacy/issues/333))
+
 ## [0.5.14] - 2026-06-07 
 - arx: bind to 127.0.0.1 instead of 0.0.0.0 — app is localhost-only ([#361](https://github.com/Jolls/arx-legacy/issues/361))
 - test_records: fix isSafeQuery false positives on column names containing keyword substrings (e.g. created_at, updated_at, alternate) by switching to word-boundary regex matching ([#358](https://github.com/Jolls/arx-legacy/issues/358))
