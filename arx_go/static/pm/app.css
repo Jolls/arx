@@ -252,5 +252,18 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 .search-dropdown-item:hover, .search-dropdown-item.active { background: #eef2ff; }
 .search-dropdown-item strong { color: var(--accent-1); font-weight: 600; }
 
+/* --- Tooltips ------------------------------------------------ */
+[data-tip] { position: relative; cursor: help; }
+[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute; bottom: calc(100% + 6px); left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a2e; color: #e0e0e0; font-size: 0.78rem; font-weight: 400;
+    padding: 4px 8px; border-radius: 3px; white-space: nowrap;
+    pointer-events: none; opacity: 0; transition: opacity 0.15s;
+    z-index: 9999;
+}
+[data-tip]:hover::after { opacity: 1; }
+
 /* --- Footer -------------------------------------------------- */
 footer { background: #f5f5f5; padding: 20px; text-align: center; color: #666; font-size: 0.9em; border-top: 1px solid #e0e0e0; }
