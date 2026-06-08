@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.14] - 2026-06-07 
+- arx: bind to 127.0.0.1 instead of 0.0.0.0 — app is localhost-only ([#361](https://github.com/Jolls/arx-legacy/issues/361))
+
 ## [0.5.13] - 2026-06-07 
 - test_records: form definition history now shows the historical step values, not just which rows changed ([#389](https://github.com/Jolls/arx-legacy/issues/389))
 
