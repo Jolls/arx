@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.14] - 2026-06-07 
+- test_records: fix isSafeQuery false positives on column names containing keyword substrings (e.g. created_at, updated_at, alternate) by switching to word-boundary regex matching ([#358](https://github.com/Jolls/arx-legacy/issues/358))
+
 ## [0.5.13] - 2026-06-07 
 - test_records: form definition history now shows the historical step values, not just which rows changed ([#389](https://github.com/Jolls/arx-legacy/issues/389))
 

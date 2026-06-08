@@ -21,6 +21,12 @@ func TestIsSafeQuery(t *testing.T) {
 		{"SELECT * FROM PN WHERE x = 1; --", false}, // trailing statement
 		{"EXEC sp_who", false},
 		{"WITH cte AS (SELECT 1) SELECT * FROM cte", false}, // must start with SELECT
+		// word-boundary: column names containing keyword substrings must not be blocked
+		{"SELECT created_at FROM log", true},
+		{"SELECT updated_at FROM records", true},
+		{"SELECT alternate FROM parts", true},
+		// EXECUTE is still blocked
+		{"SELECT EXECUTE sp_something", false},
 	}
 	for _, c := range cases {
 		if got := isSafeQuery(c.query); got != c.want {

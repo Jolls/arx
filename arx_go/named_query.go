@@ -6,27 +6,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
+// unsafeKeywordRE matches DML/DDL keywords at word boundaries and semicolons.
+// Word boundaries avoid false positives on column names that contain keyword
+// substrings (e.g. created_at, updated_at, alternate).
+var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE)\b|;`)
+
 // isSafeQuery rejects anything that isn't a plain SELECT.
-// Defense-in-depth â€” the DB user should also be read-only.
+// Defense-in-depth only — the real control is DB-level: the app DB user
+// should have SELECT rights only on the tables named queries are allowed to
+// touch. Until that is confirmed per-environment, this check provides a basic
+// guard against obviously unsafe SQL stored in named_queries.
 func isSafeQuery(q string) bool {
-	upper := strings.ToUpper(strings.TrimSpace(q))
-	if !strings.HasPrefix(upper, "SELECT") {
+	trimmed := strings.TrimSpace(q)
+	if !strings.HasPrefix(strings.ToUpper(trimmed), "SELECT") {
 		return false
 	}
-	for _, bad := range []string{";", "INSERT", "UPDATE", "DELETE", "DROP", "EXEC", "TRUNCATE", "ALTER", "CREATE"} {
-		if strings.Contains(upper, bad) {
-			return false
-		}
-	}
-	return true
+	return !unsafeKeywordRE.MatchString(trimmed)
 }
 
 // parseQuerySpec parses "query:name(@param1=value1,@param2=value2)".
 // The caller is responsible for resolving {id} tokens in specNom before calling this.
-// Returns the query name and a map of param name â†’ value.
+// Returns the query name and a map of param name â†' value.
 func parseQuerySpec(specNom string) (name string, params map[string]string) {
 	s := strings.TrimPrefix(specNom, "query:")
 	params = map[string]string{}
@@ -62,7 +66,7 @@ type QueryRow struct {
 // QueryResult holds the output of a named query execution.
 type QueryResult struct {
 	Rows       []QueryRow
-	ResultType string // 'list' or 'single' â€” drives UI behavior in data entry
+	ResultType string // 'list' or 'single' â€" drives UI behavior in data entry
 }
 
 // Values returns the stored values as a semicolon-joined string (for read-only display).
@@ -143,7 +147,7 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 	return result, nil
 }
 
-// APINamedQuery â€” GET /api/named-query?spec=query:name(@param=value)
+// APINamedQuery â€" GET /api/named-query?spec=query:name(@param=value)
 // Returns JSON picker options for a named query with already-resolved parameters.
 func (h *Handler) APINamedQuery(w http.ResponseWriter, r *http.Request) {
 	spec := r.URL.Query().Get("spec")
