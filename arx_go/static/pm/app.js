@@ -1,22 +1,83 @@
 /* =============================================================
    Arx Parts Master — application JavaScript
-   Filter/pagination logic for list pages lives here.
    ============================================================= */
 
 const ROWS_PER_PAGE = 20;
 let currentPage = 1;
 let allRows = [];
 
-// Read cell text from the DOM once at page load and cache it on each row
-// object. Filtering then works against plain JS strings — no DOM reads
-// per keystroke.
-function initRows() {
-    allRows = Array.from(document.querySelectorAll('tbody tr'));
-    allRows.forEach(row => {
-        row._cellText = Array.from(row.querySelectorAll('td'))
-            .map(td => td.textContent.toLowerCase());
-    });
+function escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
+const ROW_BUILDERS = {
+    '/api/parts/rows': r => `<tr>
+        <td><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a></td>
+        <td>${escHtml(r.rev)}</td>
+        <td>${escHtml(r.title)}</td>
+        <td>${escHtml(r.detail)}</td>
+        <td>${escHtml(r.reqBy)}</td>
+        <td>${r.date || 'N/A'}</td>
+        <td>${escHtml(r.cat)}</td>
+        <td>${r.modified || 'N/A'}</td>
+    </tr>`,
+
+    '/api/suppliers/rows': r => `<tr>
+        <td><a href="/supplier/${r.id}" class="part-number-link">${escHtml(r.name)}</a></td>
+        <td>${r.active ? 'Active' : 'Inactive'}</td>
+        <td>${escHtml(r.country)}</td>
+        <td>${r.links}</td>
+        <td>${r.pos}</td>
+        <td>${escHtml(r.contact)}</td>
+        <td>${escHtml(r.code)}</td>
+    </tr>`,
+
+    '/api/contacts/rows': r => `<tr>
+        <td>${r.suid ? `<a href="/supplier/${r.suid}" class="part-number-link">${escHtml(r.supplier)}</a>` : escHtml(r.supplier)}</td>
+        <td><a href="/contact/${r.id}" class="part-number-link">${escHtml(r.name)}</a></td>
+        <td>${escHtml(r.email)}</td>
+        <td>${escHtml(r.country)}</td>
+        <td>${escHtml(r.state)}</td>
+        <td>${escHtml(r.city)}</td>
+        <td>${escHtml(r.phone)}</td>
+        <td>${escHtml(r.web)}</td>
+        <td>${r.modified || 'N/A'}</td>
+        <td>${escHtml(r.notes)}</td>
+        <td>${r.active ? 'Yes' : 'No'}</td>
+    </tr>`,
+
+    '/api/pos/rows': r => {
+        const badges = {
+            pending:   '<span class="badge badge-info">Pending</span>',
+            placed:    '<span class="badge badge-active">Placed</span>',
+            on_hold:   '<span class="badge badge-active">On Hold</span>',
+            complete:  '<span class="badge badge-neutral">Complete</span>',
+            cancelled: '<span class="badge badge-inactive">Cancelled</span>',
+        };
+        const vendor = r.sid
+            ? `<a href="/supplier/${r.sid}" class="part-number-link">${escHtml(r.supplier)}</a>`
+            : escHtml(r.supplier);
+        return `<tr>
+            <td><a href="/po/${escHtml(r.num)}" class="part-number-link">${escHtml(r.num)}</a></td>
+            <td>${badges[r.status] || `<span class="badge badge-neutral">${escHtml(r.status)}</span>`}</td>
+            <td>${vendor}</td>
+            <td>${r.ordered || '—'}</td>
+            <td>${r.closed  || '—'}</td>
+            <td>${escHtml(r.orderer)}</td>
+            <td style="text-align:right;">$${r.cost.toFixed(2)}</td>
+        </tr>`;
+    },
+};
+
+// Per-column text for filter matching — column order must match the thead.
+const CELL_TEXT = {
+    '/api/parts/rows':     r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified],
+    '/api/suppliers/rows': r => [r.name, r.active ? 'active' : 'inactive', r.country, String(r.links), String(r.pos), r.contact, r.code],
+    '/api/contacts/rows':  r => [r.supplier, r.name, r.email, r.country, r.state, r.city, r.phone, r.web, r.modified, r.notes, r.active ? 'yes' : 'no'],
+    '/api/pos/rows':       r => [r.num, r.status, r.supplier, r.ordered, r.closed, r.orderer, String(r.cost)],
+};
 
 function getFilterValues() {
     return Array.from(document.querySelectorAll('tr.filter-row input'))
@@ -24,8 +85,7 @@ function getFilterValues() {
 }
 
 function matchesRow(row, filters) {
-    const cells = row._cellText || [];
-    return filters.every((f, idx) => !f || (cells[idx] || '').includes(f));
+    return filters.every((f, i) => !f || (row._text[i] || '').includes(f));
 }
 
 function applyFilters(resetPage = true) {
@@ -44,9 +104,7 @@ function renderRows(rowsToShow) {
     const start = (currentPage - 1) * ROWS_PER_PAGE;
     const end   = start + ROWS_PER_PAGE;
 
-    // Swap only the visible page's rows into the DOM — no show/hide loop.
-    // Rows not on this page stay in the allRows array but not in the document.
-    tbody.replaceChildren(...rowsToShow.slice(start, end));
+    tbody.innerHTML = rowsToShow.slice(start, end).map(r => r._html).join('');
 
     const count = rowsToShow.length;
     const pi = document.querySelector('.pagination-info');
@@ -54,7 +112,7 @@ function renderRows(rowsToShow) {
     if (rc) rc.textContent = count;
     if (pi) pi.textContent = count === 0
         ? 'No results'
-        : `Showing ${start + 1}-${Math.min(end, count)} of ${count} results (Page ${currentPage} of ${totalPages})`;
+        : `Showing ${start + 1}–${Math.min(end, count)} of ${count} (Page ${currentPage} of ${totalPages})`;
 
     const prev = document.querySelector('.page-nav.prev');
     const next = document.querySelector('.page-nav.next');
@@ -71,17 +129,41 @@ function nextPage() {
     applyFilters(false);
 }
 
-function clearFilters() {
-    currentPage = 1;
-    document.querySelectorAll('tr.filter-row input').forEach(i => i.value = '');
-    applyFilters(true);
+function loadListRows() {
+    const table = document.querySelector('table[data-rows-url]');
+    if (!table) return;
+    const url = table.dataset.rowsUrl;
+    const buildRow = ROW_BUILDERS[url];
+    const cellText = CELL_TEXT[url];
+    if (!buildRow || !cellText) return;
+
+    const t0 = performance.now();
+    fetch(url)
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(data => {
+            const tFetch = performance.now();
+            allRows = (data || []).map(item => {
+                item._html = buildRow(item);
+                item._text = cellText(item).map(s => (s == null ? '' : String(s)).toLowerCase());
+                return item;
+            });
+            applyFilters(false);
+            const tDone = performance.now();
+            console.log(`[rows] ${url}: fetch=${Math.round(tFetch - t0)}ms  render=${Math.round(tDone - tFetch)}ms  rows=${allRows.length}`);
+        })
+        .catch(err => {
+            const tbody = table.querySelector('tbody');
+            const cols  = table.querySelectorAll('thead tr:first-child th').length;
+            if (tbody) tbody.innerHTML =
+                `<tr><td colspan="${cols}" class="no-results">Error loading data: ${err.message}</td></tr>`;
+        });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (document.querySelector('tr.filter-row')) {
-        initRows();
-        applyFilters(false);
-        document.querySelectorAll('tr.filter-row input')
-            .forEach(i => i.addEventListener('input', () => applyFilters(true)));
-    }
+    loadListRows();
+    document.querySelectorAll('tr.filter-row input')
+        .forEach(i => i.addEventListener('input', () => applyFilters(true)));
 });

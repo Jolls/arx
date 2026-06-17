@@ -6,9 +6,8 @@
 <div class="content">
     <a href="/contacts/new" class="new-record-btn">+ New Contact</a>
 
-    {{if .Contacts}}
     <div class="table-wrapper">
-        <table>
+        <table data-rows-url="/api/contacts/rows">
             <thead>
                 <tr>
                     <th>Associated Supplier</th>
@@ -38,24 +37,7 @@
                 </tr>
             </thead>
             <tbody>
-                {{range .Contacts}}
-                <tr>
-                    <td>
-                        {{if .CNSUID}}<a href="/supplier/{{derefInt .CNSUID}}" class="part-number-link">{{.SupplierName}}</a>
-                        {{else}}{{.SupplierName}}{{end}}
-                    </td>
-                    <td><a href="/contact/{{.CNID}}" class="part-number-link">{{.CNName}}</a></td>
-                    <td>{{.CNEmail}}</td>
-                    <td>{{.CNCountry}}</td>
-                    <td>{{.CNState}}</td>
-                    <td>{{.CNCity}}</td>
-                    <td>{{.CNPhone1}}</td>
-                    <td>{{.CNWeb}}</td>
-                    <td>{{formatDate .CNDateModified}}</td>
-                    <td>{{.CNNotes}}</td>
-                    <td>{{if .CNActive}}Yes{{else}}No{{end}}</td>
-                </tr>
-                {{end}}
+                <tr><td colspan="11" class="no-results">Loading&hellip;</td></tr>
             </tbody>
         </table>
     </div>
@@ -67,10 +49,7 @@
         </div>
     </div>
     <p style="margin-top:15px; color:#666; text-align:right;">
-        Total matching: <strong><span class="record-count">{{len .Contacts}}</span></strong>
+        Total matching: <strong><span class="record-count">0</span></strong>
     </p>
-    {{else}}
-    <div class="no-results">No contacts available.</div>
-    {{end}}
 </div>
 {{end}}

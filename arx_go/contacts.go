@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -12,6 +13,28 @@ import (
 )
 
 func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "contacts.html", map[string]any{
+		"ActiveTab": "contacts", "TestMode": h.cfg.TestMode,
+	})
+}
+
+func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	type row struct {
+		ID       int    `json:"id"`
+		SUID     *int   `json:"suid"`
+		Supplier string `json:"supplier"`
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Country  string `json:"country"`
+		State    string `json:"state"`
+		City     string `json:"city"`
+		Phone    string `json:"phone"`
+		Web      string `json:"web"`
+		Modified string `json:"modified"`
+		Notes    string `json:"notes"`
+		Active   bool   `json:"active"`
+	}
 	cn, su := h.cfg.ContactTable(), h.cfg.CompanyTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT cn.CNID, cn.CNSUID, cn.CNName, cn.CNEmail, cn.CNPhone1,
@@ -22,47 +45,46 @@ func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
 		ORDER BY su.name, cn.CNName ASC
 	`, cn, su))
 	if err != nil {
-		h.renderError(w, "Error connecting to database: "+err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-	var contacts []models.Contact
+	out := make([]row, 0)
 	for rows.Next() {
-		var c models.Contact
+		var c row
 		var cnsuid sql.NullInt64
 		var name, email, phone, city, state, country, web, notes, suName sql.NullString
 		var active sql.NullBool
-		var dateModified sql.NullTime
+		var modified sql.NullTime
 		if err := rows.Scan(
-			&c.CNID, &cnsuid, &name, &email, &phone,
+			&c.ID, &cnsuid, &name, &email, &phone,
 			&city, &state, &country, &web,
-			&active, &notes, &dateModified, &suName,
+			&active, &notes, &modified, &suName,
 		); err != nil {
-			h.renderError(w, "Error reading contacts: "+err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if cnsuid.Valid {
 			v := int(cnsuid.Int64)
-			c.CNSUID = &v
+			c.SUID = &v
 		}
-		c.CNName = name.String
-		c.CNEmail = email.String
-		c.CNPhone1 = phone.String
-		c.CNCity = city.String
-		c.CNState = state.String
-		c.CNCountry = country.String
-		c.CNWeb = web.String
-		c.CNNotes = notes.String
-		c.CNActive = active.Bool
-		c.SupplierName = suName.String
-		if dateModified.Valid {
-			c.CNDateModified = &dateModified.Time
+		c.Name = name.String
+		c.Email = email.String
+		c.Phone = phone.String
+		c.City = city.String
+		c.State = state.String
+		c.Country = country.String
+		c.Web = web.String
+		c.Notes = notes.String
+		c.Active = active.Bool
+		c.Supplier = suName.String
+		if modified.Valid {
+			c.Modified = modified.Time.Format("2006-01-02")
 		}
-		contacts = append(contacts, c)
+		out = append(out, c)
 	}
-	h.render(w, "contacts.html", map[string]any{
-		"Contacts": contacts, "ActiveTab": "contacts", "TestMode": h.cfg.TestMode,
-	})
+	log.Printf("[rows] contacts: %d rows in %v", len(out), time.Since(start))
+	writeJSON(w, out)
 }
 
 func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"os/user"
 	"strconv"
@@ -56,50 +57,63 @@ func fv(r *http.Request, key string) string { return strings.TrimSpace(r.FormVal
 // ── PartsList — GET / ───────────────────────────────────────────────────────
 
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "index.html", map[string]any{
+		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
+	})
+}
+
+func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	type row struct {
+		ID       int    `json:"id"`
+		PN       string `json:"pn"`
+		Rev      string `json:"rev"`
+		Title    string `json:"title"`
+		Detail   string `json:"detail"`
+		ReqBy    string `json:"reqBy"`
+		Date     string `json:"date"`
+		Cat      string `json:"cat"`
+		Modified string `json:"modified"`
+	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT PNID, part_number, revision, title, detail,
 		       PNReqBy, PNDate, category, PNDateModified
 		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
 	if err != nil {
-		h.renderError(w, "Error connecting to database: "+err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-
-	var parts []models.Part
+	out := make([]row, 0)
 	for rows.Next() {
-		var p models.Part
-		var partNumber, revision, title, detail, reqBy, category sql.NullString
-		var pnDate, pnDateModified sql.NullTime
-		if err := rows.Scan(
-			&p.PNID, &partNumber, &revision, &title, &detail,
-			&reqBy, &pnDate, &category, &pnDateModified,
-		); err != nil {
-			h.renderError(w, "Error reading parts: "+err.Error())
+		var p row
+		var pn, rev, title, detail, reqBy, cat sql.NullString
+		var date, modified sql.NullTime
+		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		p.PartNumber = partNumber.String
-		p.Revision = revision.String
+		p.PN = pn.String
+		p.Rev = rev.String
 		p.Title = title.String
 		p.Detail = detail.String
-		p.PNReqBy = reqBy.String
-		p.Category = category.String
-		if pnDate.Valid {
-			p.PNDate = &pnDate.Time
+		p.ReqBy = reqBy.String
+		p.Cat = cat.String
+		if date.Valid {
+			p.Date = date.Time.Format("2006-01-02")
 		}
-		if pnDateModified.Valid {
-			p.PNDateModified = &pnDateModified.Time
+		if modified.Valid {
+			p.Modified = modified.Time.Format("2006-01-02")
 		}
-		parts = append(parts, p)
+		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
-		h.renderError(w, "Error iterating parts: "+err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.render(w, "index.html", map[string]any{
-		"Parts": parts, "ActiveTab": "parts", "TestMode": h.cfg.TestMode,
-	})
+	log.Printf("[rows] parts: %d rows in %v", len(out), time.Since(start))
+	writeJSON(w, out)
 }
 
 // ── PartDetail — GET /part/{id} and /part/{id}/details ──────────────────────

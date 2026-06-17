@@ -215,6 +215,10 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/api/suppliers/search", h.APISupplierSearch)
 		r.Get("/api/suppliers/{id}/contacts", h.APISupplierContacts)
 		r.Get("/api/parts/search", h.APIPartSearch)
+		r.Get("/api/parts/rows", h.PartsRows)
+		r.Get("/api/suppliers/rows", h.SuppliersRows)
+		r.Get("/api/contacts/rows", h.ContactsRows)
+		r.Get("/api/pos/rows", h.PORows)
 
 		// Test Records — Forms and Records
 		r.Get("/records", h.FormsList)

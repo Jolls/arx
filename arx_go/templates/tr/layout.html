@@ -12,17 +12,17 @@
 </head>
 <body>
   <div class="app-header{{if .TestMode}} app-header--testmode{{end}}">
-      Arx: Parts Master{{if .TestMode}} &mdash; TEST MODE{{end}}
+      Arx{{if .TestMode}} &mdash; TEST MODE{{end}}
       <div class="header-actions">
-          <a href="/settings" class="header-settings-link" title="Settings">&#9881;</a>
+          <a href="/settings" class="header-settings-link{{if eq .ActiveTab "settings"}} active{{end}}" title="Settings">&#9881;</a>
       </div>
   </div>
   <nav class="tabs">
-      <a href="/"          class="tab">Parts</a>
-      <a href="/suppliers" class="tab">Vendors</a>
-      <a href="/pos"       class="tab">POs</a>
-      <a href="/contacts"  class="tab">Contacts</a>
-      <a href="/records"   class="tab active">Records</a>
+      <a href="/"          class="tab{{if or (eq .ActiveTab "parts") (eq .ActiveTab "")}} active{{end}}">Parts</a>
+      <a href="/suppliers" class="tab{{if eq .ActiveTab "suppliers"}} active{{end}}">Vendors</a>
+      <a href="/pos"       class="tab{{if eq .ActiveTab "pos"}} active{{end}}">POs</a>
+      <a href="/contacts"  class="tab{{if eq .ActiveTab "contacts"}} active{{end}}">Contacts</a>
+      <a href="/records"   class="tab{{if eq .ActiveTab "records"}} active{{end}}">Records</a>
   </nav>
 
   {{if .SchemaMismatch}}

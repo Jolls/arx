@@ -6,9 +6,8 @@
 <div class="content">
     <a href="/suppliers/new" class="new-record-btn">+ New Vendor</a>
 
-    {{if .Suppliers}}
     <div class="table-wrapper">
-        <table>
+        <table data-rows-url="/api/suppliers/rows">
             <thead>
                 <tr>
                     <th>Vendor Name</th>
@@ -30,17 +29,7 @@
                 </tr>
             </thead>
             <tbody>
-                {{range .Suppliers}}
-                <tr>
-                    <td><a href="/supplier/{{.ID}}" class="part-number-link">{{.Name}}</a></td>
-                    <td>{{if .IsActive}}Active{{else}}Inactive{{end}}</td>
-                    <td>{{.CNCountry}}</td>
-                    <td>{{.SUNumOfLNKs}}</td>
-                    <td>{{.SUNumOfPOs}}</td>
-                    <td>{{.CNName}}</td>
-                    <td>{{.SUSupplierCode}}</td>
-                </tr>
-                {{end}}
+                <tr><td colspan="7" class="no-results">Loading&hellip;</td></tr>
             </tbody>
         </table>
     </div>
@@ -52,10 +41,7 @@
         </div>
     </div>
     <p style="margin-top:15px; color:#666; text-align:right;">
-        Total matching: <strong><span class="record-count">{{len .Suppliers}}</span></strong>
+        Total matching: <strong><span class="record-count">0</span></strong>
     </p>
-    {{else}}
-    <div class="no-results">No vendors available.</div>
-    {{end}}
 </div>
 {{end}}

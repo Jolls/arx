@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +18,23 @@ import (
 )
 
 func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "suppliers.html", map[string]any{
+		"ActiveTab": "suppliers", "TestMode": h.cfg.TestMode,
+	})
+}
+
+func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	type row struct {
+		ID      int    `json:"id"`
+		Name    string `json:"name"`
+		Active  bool   `json:"active"`
+		Country string `json:"country"`
+		Links   int    `json:"links"`
+		POs     int    `json:"pos"`
+		Contact string `json:"contact"`
+		Code    string `json:"code"`
+	}
 	su, cn := h.cfg.CompanyTable(), h.cfg.ContactTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, su.SUSupplierCode, su.SUNumOfLNKs, su.SUNumOfPOs,
@@ -26,32 +44,31 @@ func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
 		ORDER BY su.name ASC
 	`, su, cn))
 	if err != nil {
-		h.renderError(w, "Error connecting to database: "+err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-	var suppliers []models.Supplier
+	out := make([]row, 0)
 	for rows.Next() {
-		var s models.Supplier
+		var s row
 		var name, code, cnName, cnCountry sql.NullString
 		var numLNKs, numPOs sql.NullInt64
 		var isActive sql.NullBool
 		if err := rows.Scan(&s.ID, &name, &code, &numLNKs, &numPOs, &isActive, &cnName, &cnCountry); err != nil {
-			h.renderError(w, "Error reading suppliers: "+err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		s.Name = name.String
-		s.SUSupplierCode = code.String
-		s.SUNumOfLNKs = int(numLNKs.Int64)
-		s.SUNumOfPOs = int(numPOs.Int64)
-		s.IsActive = isActive.Bool
-		s.CNName = cnName.String
-		s.CNCountry = cnCountry.String
-		suppliers = append(suppliers, s)
+		s.Code = code.String
+		s.Links = int(numLNKs.Int64)
+		s.POs = int(numPOs.Int64)
+		s.Active = isActive.Bool
+		s.Contact = cnName.String
+		s.Country = cnCountry.String
+		out = append(out, s)
 	}
-	h.render(w, "suppliers.html", map[string]any{
-		"Suppliers": suppliers, "ActiveTab": "suppliers", "TestMode": h.cfg.TestMode,
-	})
+	log.Printf("[rows] suppliers: %d rows in %v", len(out), time.Since(start))
+	writeJSON(w, out)
 }
 
 func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {

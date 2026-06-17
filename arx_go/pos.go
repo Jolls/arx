@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -162,49 +163,63 @@ func parseFormFloat(s string) interface{} {
 // ── POList — GET /pos ────────────────────────────────────────────────────────
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "pos.html", map[string]any{
+		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
+	})
+}
+
+func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	type row struct {
+		Num      string  `json:"num"`
+		Status   string  `json:"status"`
+		SID      *int    `json:"sid"`
+		Supplier string  `json:"supplier"`
+		Ordered  string  `json:"ordered"`
+		Closed   string  `json:"closed"`
+		Orderer  string  `json:"orderer"`
+		Cost     float64 `json:"cost"`
+	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT number, status, supplier_id, supplier_name,
 		       date_ordered, date_closed, orderer, total_cost
 		FROM %s ORDER BY number DESC
 	`, h.cfg.POTable()))
 	if err != nil {
-		h.renderError(w, "Error connecting to database: "+err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-	var pos []models.PurchaseOrder
+	out := make([]row, 0)
 	for rows.Next() {
-		var po models.PurchaseOrder
+		var po row
 		var supplierID sql.NullInt64
 		var supplierName, orderer, status sql.NullString
 		var dateOrdered, dateClosed sql.NullTime
 		var totalCost sql.NullFloat64
-		if err := rows.Scan(&po.Number, &status, &supplierID, &supplierName,
+		if err := rows.Scan(&po.Num, &status, &supplierID, &supplierName,
 			&dateOrdered, &dateClosed, &orderer, &totalCost); err != nil {
-			h.renderError(w, "Error reading POs: "+err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		po.Status = status.String
-		po.SupplierName = supplierName.String
+		po.Supplier = supplierName.String
 		po.Orderer = orderer.String
+		po.Cost = totalCost.Float64
 		if supplierID.Valid {
 			v := int(supplierID.Int64)
-			po.SupplierID = &v
-		}
-		if totalCost.Valid {
-			po.TotalCost = &totalCost.Float64
+			po.SID = &v
 		}
 		if dateOrdered.Valid {
-			po.DateOrdered = &dateOrdered.Time
+			po.Ordered = dateOrdered.Time.Format("2006-01-02")
 		}
 		if dateClosed.Valid {
-			po.DateClosed = &dateClosed.Time
+			po.Closed = dateClosed.Time.Format("2006-01-02")
 		}
-		pos = append(pos, po)
+		out = append(out, po)
 	}
-	h.render(w, "pos.html", map[string]any{
-		"POs": pos, "ActiveTab": "pos", "TestMode": h.cfg.TestMode,
-	})
+	log.Printf("[rows] pos: %d rows in %v", len(out), time.Since(start))
+	writeJSON(w, out)
 }
 
 // ── PODetail — GET /po/{id} ──────────────────────────────────────────────────

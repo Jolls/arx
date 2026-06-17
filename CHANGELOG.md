@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.16] - 2026-06-17 
+- arx: unify PM and TR header bar and tab row — both now use the same structure, Bootstrap CSS, full-width tabs, and `.ActiveTab`-driven active state; fix TR header text (was "Parts Master") and hardcoded active tab
+- arx: list pages (Parts, Vendors, Contacts, POs) now load the page shell instantly and fetch row data asynchronously via `/api/*/rows` JSON endpoints, eliminating the white-flash delay on navigation
+- arx: client-side filtering and pagination now operate on in-memory JSON objects rather than injecting all rows into the DOM — render time dropped from ~574ms to ~5ms for 2240 rows
+- arx: fix `start.ps1` to patch `config/local.json` (was looking for removed `local.pm.json` / `local.tr.json`) and remove stale two-port output
+
 ## [0.5.15] - 2026-06-08 
 - arx: add hover tooltips to column headers and field labels across Parts Master and Test Records ([#333](https://github.com/Jolls/arx-legacy/issues/333))
 

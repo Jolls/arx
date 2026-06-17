@@ -5,15 +5,10 @@
 </header>
 
 <div class="content">
-    {{if .Error}}
-    <div class="error-banner"><strong>Error:</strong> {{.Error}}</div>
-    {{end}}
-
     <a href="/parts/new" class="new-record-btn">+ New Part</a>
 
-    {{if .Parts}}
     <div class="table-wrapper">
-        <table class="parts-table">
+        <table data-rows-url="/api/parts/rows">
             <thead>
                 <tr>
                     <th>Part Number</th>
@@ -37,18 +32,7 @@
                 </tr>
             </thead>
             <tbody>
-                {{range .Parts}}
-                <tr>
-                    <td><a href="/part/{{.PNID}}" class="part-number-link">{{.PartNumber}}</a></td>
-                    <td>{{.Revision}}</td>
-                    <td>{{.Title}}</td>
-                    <td>{{.Detail}}</td>
-                    <td>{{.PNReqBy}}</td>
-                    <td>{{formatDate .PNDate}}</td>
-                    <td>{{.Category}}</td>
-                    <td>{{formatDate .PNDateModified}}</td>
-                </tr>
-                {{end}}
+                <tr><td colspan="8" class="no-results">Loading&hellip;</td></tr>
             </tbody>
         </table>
     </div>
@@ -60,10 +44,7 @@
         </div>
     </div>
     <p style="margin-top: 15px; color: #666; text-align: right;">
-        Total matching: <strong><span class="record-count">{{len .Parts}}</span></strong>
+        Total matching: <strong><span class="record-count">0</span></strong>
     </p>
-    {{else}}
-    <div class="no-results">No parts available in the database</div>
-    {{end}}
 </div>
 {{end}}
