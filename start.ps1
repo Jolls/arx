@@ -13,8 +13,7 @@ $testEnv   = if ($testMode) { 'true' } else { 'false' }
 $modeColor = if ($testMode) { 'Yellow' } else { 'Red' }
 
 Write-Host "Starting Arx in $Mode mode..." -ForegroundColor $modeColor
-Write-Host "  Parts Master      ->  http://localhost:4568  /  http://${ip}:4568" -ForegroundColor Cyan
-Write-Host "  Test Records      ->  http://localhost:4569  /  http://${ip}:4569" -ForegroundColor Cyan
+Write-Host "  http://localhost:4568  /  http://${ip}:4568" -ForegroundColor Cyan
 Write-Host ""
 
 $exe = "$root\arx_go\Arx.exe"
@@ -25,22 +24,16 @@ if (-not (Test-Path $exe)) {
 }
 
 # local.json always wins over env vars in config loading order, so patch it directly.
-$localJsonMap = @{
-    "pm" = "$root\arx_go\config\local.pm.json"
-    "tr" = "$root\arx_go\config\local.tr.json"
-}
-foreach ($key in $localJsonMap.Keys) {
-    $localJson = $localJsonMap[$key]
-    if (Test-Path $localJson) {
-        $cfg = Get-Content $localJson -Raw | ConvertFrom-Json
-        if ($cfg.PSObject.Properties['test_mode']) {
-            $cfg.test_mode = $testMode
-        } else {
-            $cfg | Add-Member -NotePropertyName 'test_mode' -NotePropertyValue $testMode
-        }
-        $updated = $cfg | ConvertTo-Json -Depth 10
-        [System.IO.File]::WriteAllText($localJson, $updated, (New-Object System.Text.UTF8Encoding $false))
+$localJson = "$root\arx_go\config\local.json"
+if (Test-Path $localJson) {
+    $cfg = Get-Content $localJson -Raw | ConvertFrom-Json
+    if ($cfg.PSObject.Properties['test_mode']) {
+        $cfg.test_mode = $testMode
+    } else {
+        $cfg | Add-Member -NotePropertyName 'test_mode' -NotePropertyValue $testMode
     }
+    $updated = $cfg | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($localJson, $updated, (New-Object System.Text.UTF8Encoding $false))
 }
 
 $env:TEST_MODE = $testEnv
