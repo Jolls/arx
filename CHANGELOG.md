@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.17] - 2026-06-17 
+- arx: proportional column widths for Parts, Vendors, POs, and Contacts list tables; elastic column absorbs remaining width and scales responsively with the viewport ([#441](https://github.com/Jolls/arx-legacy/issues/441))
+- arx: hovering a truncated table cell shows a native tooltip with the full text ([#441](https://github.com/Jolls/arx-legacy/issues/441))
+
 ## [0.5.16] - 2026-06-17 
 - arx: unify PM and TR header bar and tab row — both now use the same structure, Bootstrap CSS, full-width tabs, and `.ActiveTab`-driven active state; fix TR header text (was "Parts Master") and hardcoded active tab
 - arx: list pages (Parts, Vendors, Contacts, POs) now load the page shell instantly and fetch row data asynchronously via `/api/*/rows` JSON endpoints, eliminating the white-flash delay on navigation
