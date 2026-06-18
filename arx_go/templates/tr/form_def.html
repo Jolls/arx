@@ -114,7 +114,7 @@
     </tr>
     {{else}}
     <tr data-step-id="{{.ID}}">
-      <td class="text-muted small">{{.ID}}</td>
+      <td class="text-muted small">{{.ID}} <a href="/forms/{{$.Form.ID}}/tests/{{.ID}}/report" class="ms-1 text-decoration-none" title="View all results for this test"><i class="bi bi-bar-chart-line"></i></a></td>
       <td class="text-muted small">{{.Type}}</td>
       <td data-field="parameter">{{.Parameter}}</td>
       <td>{{.Specification}}</td>

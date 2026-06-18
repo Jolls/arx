@@ -229,6 +229,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/forms/{id}/def/edit", h.EditFormDef)
 		r.Post("/forms/{id}/def/edit", h.SaveFormDef)
 		r.Get("/api/forms/{id}/def/history", h.FormDefHistory)
+		r.Get("/forms/{id}/tests/{testID}/report", h.TestReport)
 		r.Get("/records/{id}", h.RecordDetail)
 		r.Get("/records/{id}/print", h.RecordPrint)
 		r.Get("/records/{id}/edit", h.EditRecord)
