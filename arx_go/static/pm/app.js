@@ -94,6 +94,16 @@ function applyFilters(resetPage = true) {
     renderRows(allRows.filter(r => matchesRow(r, getFilterValues())));
 }
 
+function applyTruncationTooltips(tbody) {
+    tbody.querySelectorAll('td').forEach(td => {
+        if (td.scrollWidth > td.clientWidth) {
+            td.title = td.textContent.trim();
+        } else {
+            td.removeAttribute('title');
+        }
+    });
+}
+
 function renderRows(rowsToShow) {
     const tbody = document.querySelector('tbody');
     if (!tbody) return;
@@ -105,6 +115,7 @@ function renderRows(rowsToShow) {
     const end   = start + ROWS_PER_PAGE;
 
     tbody.innerHTML = rowsToShow.slice(start, end).map(r => r._html).join('');
+    applyTruncationTooltips(tbody);
 
     const count = rowsToShow.length;
     const pi = document.querySelector('.pagination-info');
