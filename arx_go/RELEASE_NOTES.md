@@ -1,3 +1,34 @@
+Arx v0.5.17 — June 2026
+=======================
+
+NEW FEATURES
+
+  Both Apps — Faster Navigation
+  List pages (Parts, Vendors, POs, Contacts) now load the page frame
+  immediately and fill in the rows in the background. Navigating between
+  sections no longer shows a blank white flash while the server assembles
+  the full page.
+
+  Both Apps — Column Widths and Overflow Tooltips
+  Table columns now size proportionally to the viewport. Cells that are
+  too narrow to show their full content are truncated with an ellipsis,
+  and hovering shows the full text in a tooltip.
+
+  Both Apps — Header and Tab Tooltips
+  Column headers and most field labels now show a short tooltip on hover
+  to clarify what the field contains.
+
+  Test Records — Form Definition History
+  The form definition history view now shows the actual previous values of
+  each changed field, not just which rows were modified. You can see
+  exactly what was changed and what it said before.
+
+BUG FIXES
+
+  Test Records — Step Name False Positives
+  Steps with names like "created_at" or "alternate" no longer get flagged
+  incorrectly by the query-safety check.
+
 Arx v0.5.12 — June 2026
 =======================
 
