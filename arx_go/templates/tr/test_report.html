@@ -1,0 +1,97 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/records">Forms</a></li>
+    <li class="breadcrumb-item"><a href="/forms/{{.Form.ID}}/records">{{.Form.PartNumber}}</a></li>
+    <li class="breadcrumb-item"><a href="/forms/{{.Form.ID}}/def">Definition</a></li>
+    <li class="breadcrumb-item active">Report: {{.Step.Parameter}}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">{{.Step.Parameter}}</h4>
+    {{if .Step.Specification}}<div class="text-muted small">{{.Step.Specification}}{{if .Step.SpecUnits}} {{.Step.SpecUnits}}{{end}}</div>{{end}}
+  </div>
+  <button id="copy-report" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-clipboard"></i> Copy for Excel
+  </button>
+</div>
+
+{{if .Rows}}
+<div class="table-responsive">
+  <table class="table table-bordered table-sm align-middle" id="report-table">
+    <thead class="table-dark">
+      <tr>
+        <th>Serial Number</th>
+        <th>Part Number</th>
+        <th>Record Date</th>
+        <th>Result Date</th>
+        <th class="text-center">Result</th>
+        <th class="text-center">P/F</th>
+        <th>Comment</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td><a href="/records/{{.RecordID}}">{{.SerialNumber}}</a></td>
+        <td>{{if .PartNumberID}}<a href="/part/{{.PartNumberID}}">{{.SerialPN}}</a>{{else}}{{.SerialPN}}{{end}}</td>
+        <td class="text-nowrap">{{.RecordDate.Format "2006-01-02 3:04 PM"}}</td>
+        <td class="text-nowrap small text-muted">{{formatDateTime .ResultUpdatedAt}}</td>
+        <td class="text-center font-mono">{{applyFormat .Result $.Step.Format}}</td>
+        <td class="text-center" data-pf="{{if .PassFail.Valid}}{{if .PassFail.Bool}}PASS{{else}}FAIL{{end}}{{else}}—{{end}}">
+          {{if .PassFail.Valid}}
+            {{if .PassFail.Bool}}
+            <span class="badge bg-success">PASS</span>
+            {{else}}
+            <span class="badge bg-danger">FAIL</span>
+            {{end}}
+          {{else}}
+          <span class="badge bg-secondary">—</span>
+          {{end}}
+        </td>
+        <td>{{.Comment}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+<div class="text-muted small mt-1">{{len .Rows}} record{{if gt (len .Rows) 1}}s{{end}}</div>
+{{else}}
+<p class="text-muted">No results recorded for this test yet.</p>
+{{end}}
+
+<script>
+(function() {
+  var btn = document.getElementById('copy-report');
+  btn.addEventListener('click', function() {
+    var lines = ['Serial Number\tPart Number\tRecord Date\tResult Date\tResult\tP/F\tComment'];
+    var tbody = document.querySelector('#report-table tbody');
+    if (tbody) {
+      var rows = tbody.querySelectorAll('tr');
+      rows.forEach(function(tr) {
+        var cells = tr.querySelectorAll('td');
+        var pf = cells[5] ? (cells[5].getAttribute('data-pf') || '') : '';
+        lines.push([
+          cells[0] ? cells[0].textContent.trim() : '',
+          cells[1] ? cells[1].textContent.trim() : '',
+          cells[2] ? cells[2].textContent.trim() : '',
+          cells[3] ? cells[3].textContent.trim() : '',
+          cells[4] ? cells[4].textContent.trim() : '',
+          pf,
+          cells[6] ? cells[6].textContent.trim() : ''
+        ].join('\t'));
+      });
+    }
+    navigator.clipboard.writeText(lines.join('\n')).then(function() {
+      btn.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
+      setTimeout(function() { btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy for Excel'; }, 2000);
+    }).catch(function() {
+      btn.textContent = 'Copy failed';
+      setTimeout(function() { btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy for Excel'; }, 2000);
+    });
+  });
+})();
+</script>
+{{end}}

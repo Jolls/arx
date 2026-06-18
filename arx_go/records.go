@@ -2094,3 +2094,113 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def/edit", newFormID), http.StatusSeeOther)
 }
+
+// TestReport – GET /forms/{id}/tests/{testID}/report
+// Shows all recorded results for a single test step across every active record of the form.
+func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	testID, err := strconv.Atoi(chi.URLParam(r, "testID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var form models.TestForm
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		FROM %s f
+		JOIN %s pn ON f.PNID = pn.PNID
+		WHERE f.ID = @p1`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type stepMeta struct {
+		ID            int
+		FormID        int
+		Parameter     string
+		Specification string
+		SpecUnits     string
+		Format        string
+	}
+	var step stepMeta
+	var param, spec, specUnits, format sql.NullString
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT id, form_id, COALESCE(Parameter,''), COALESCE(Specification,''),
+		       COALESCE(spec_units,''), COALESCE(format,'')
+		FROM %s WHERE id = @p1`, h.cfg.StepsTable()), testID).
+		Scan(&step.ID, &step.FormID, &param, &spec, &specUnits, &format)
+	if err == sql.ErrNoRows || (err == nil && step.FormID != formID) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	step.Parameter = param.String
+	step.Specification = spec.String
+	step.SpecUnits = specUnits.String
+	step.Format = format.String
+
+	type reportRow struct {
+		RecordID        int
+		SerialNumber    string
+		SerialPN        string
+		PartNumberID    int
+		RecordDate      time.Time
+		Locked          bool
+		Result          string
+		PassFail        sql.NullBool
+		Comment         string
+		ResultUpdatedAt *time.Time
+	}
+
+	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT trec.ID, trec.serial_number, COALESCE(trec.serial_number_PN,''),
+		       COALESCE(trec.part_number_id,0),
+		       trec.record_date, trec.locked,
+		       COALESCE(res.result,''), res.pass_fail, COALESCE(res.comment,''),
+		       res.updated_at
+		FROM %s res
+		JOIN %s trec ON res.record_id = trec.ID
+		WHERE res.test_id = @p1 AND trec.form_id = @p2 AND trec.active = 1
+		ORDER BY TRY_CAST(trec.serial_number AS INT) DESC, trec.record_date DESC`,
+		h.cfg.ResultsTable(), h.cfg.RecordsTable()), testID, formID)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resRows.Close()
+
+	var rows []reportRow
+	for resRows.Next() {
+		var row reportRow
+		if err := resRows.Scan(
+			&row.RecordID, &row.SerialNumber, &row.SerialPN, &row.PartNumberID,
+			&row.RecordDate, &row.Locked,
+			&row.Result, &row.PassFail, &row.Comment,
+			&row.ResultUpdatedAt,
+		); err != nil {
+			continue
+		}
+		rows = append(rows, row)
+	}
+
+	h.renderTR(w, "test_report.html", map[string]any{
+		"Form": form,
+		"Step": step,
+		"Rows": rows,
+	})
+}
