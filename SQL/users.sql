@@ -1,0 +1,12 @@
+IF OBJECT_ID('dbo.users', 'U') IS NOT NULL DROP TABLE dbo.users;
+
+CREATE TABLE dbo.users (
+    id            INT           PRIMARY KEY IDENTITY,
+    username      VARCHAR(64)   NOT NULL,
+    display_name  VARCHAR(128)  NOT NULL,
+    password_hash VARCHAR(255)  NOT NULL,
+    is_active     BIT           NOT NULL DEFAULT 1,
+    created_at    DATETIME      NOT NULL DEFAULT GETDATE(),
+    updated_at    DATETIME      NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_users_username UNIQUE (username)
+);

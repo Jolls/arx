@@ -18,7 +18,7 @@ import (
 )
 
 func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "suppliers.html", map[string]any{
+	h.render(w, r, "suppliers.html", map[string]any{
 		"ActiveTab": "suppliers", "TestMode": h.cfg.TestMode,
 	})
 }
@@ -95,7 +95,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "supplier_detail.html", map[string]any{
+	h.render(w, r, "supplier_detail.html", map[string]any{
 		"Supplier": s, "PrimaryAtt": primaryAtt,
 		"ActiveTab": "suppliers", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -103,7 +103,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "supplier_edit.html", map[string]any{
+	h.render(w, r, "supplier_edit.html", map[string]any{
 		"Supplier": models.Supplier{}, "IsNew": true, "Contacts": nil,
 		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -113,7 +113,7 @@ func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 	name := fv(r, "name")
 	if name == "" {
-		h.render(w, "supplier_edit.html", map[string]any{
+		h.render(w, r, "supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": "Supplier name is required",
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -134,7 +134,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "SUNotes"), time.Now(),
 	).Scan(&newID)
 	if err != nil {
-		h.render(w, "supplier_edit.html", map[string]any{
+		h.render(w, r, "supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Contacts": nil,
 			"Error": "Error creating supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -155,7 +155,7 @@ func (h *Handler) SupplierEdit(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "supplier_edit.html", map[string]any{
+	h.render(w, r, "supplier_edit.html", map[string]any{
 		"Supplier": s, "IsNew": false, "Contacts": contacts,
 		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -172,7 +172,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	contacts := h.contactsForSupplier(r, idInt)
 	if name == "" {
-		h.render(w, "supplier_edit.html", map[string]any{
+		h.render(w, r, "supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error": "Supplier name is required",
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -194,7 +194,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "SUNotes"), time.Now(), id,
 	)
 	if err != nil {
-		h.render(w, "supplier_edit.html", map[string]any{
+		h.render(w, r, "supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error": "Error saving supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -213,11 +213,11 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, name FROM %s WHERE id = @p1`, h.cfg.CompanyTable(),
 	), id).Scan(&s.ID, &name)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Supplier not found")
+		h.renderError(w, r, "Supplier not found")
 		return
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving supplier: "+err.Error())
+		h.renderError(w, r, "Error retrieving supplier: "+err.Error())
 		return
 	}
 	s.Name = name.String
@@ -238,7 +238,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		ORDER BY pn.part_number
 	`, sp, pn, ut, ut), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving linked parts: "+err.Error())
+		h.renderError(w, r, "Error retrieving linked parts: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -256,7 +256,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 			&pnID, &partNumber, &title, &revision, &category,
 			&unitID, &unitAbbr, &unitIsExplicit,
 		); err != nil {
-			h.renderError(w, "Error reading linked parts: "+err.Error())
+			h.renderError(w, r, "Error reading linked parts: "+err.Error())
 			return
 		}
 		lk.Preference = preference.String
@@ -282,7 +282,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "supplier_parts.html", map[string]any{
+	h.render(w, r, "supplier_parts.html", map[string]any{
 		"Supplier": s, "Links": links,
 		"ActiveTab": "suppliers", "ActiveSubTab": "parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -303,7 +303,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		ORDER BY sort_order, supplier_attachment_id
 	`, tbl), s.ID)
 	if err != nil {
-		h.renderError(w, "Error retrieving attachments: "+err.Error())
+		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -314,7 +314,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		var notes sql.NullString
 		var sortOrder sql.NullInt64
 		if err := rows.Scan(&a.SupplierAttachmentID, &a.SupplierID, &a.FilePath, &notes, &sortOrder); err != nil {
-			h.renderError(w, "Error reading attachments: "+err.Error())
+			h.renderError(w, r, "Error reading attachments: "+err.Error())
 			return
 		}
 		a.Notes = notes.String
@@ -338,7 +338,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "supplier_attachments.html", map[string]any{
+	h.render(w, r, "supplier_attachments.html", map[string]any{
 		"Supplier":    s,
 		"Attachments": attachments,
 		"EditingAtt":  editingAtt,
@@ -370,7 +370,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 		VALUES (@p1, @p2, @p3, @p4)
 	`, h.cfg.CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal)
 	if err != nil {
-		h.renderError(w, "Error adding attachment: "+err.Error())
+		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
@@ -384,7 +384,7 @@ func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Reques
 		WHERE supplier_attachment_id = @p1 AND supplier_id = @p2
 	`, h.cfg.CompanyAttachmentsTable()), attID, id)
 	if err != nil {
-		h.renderError(w, "Error deleting attachment: "+err.Error())
+		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
@@ -408,7 +408,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 		WHERE supplier_attachment_id=@p3 AND supplier_id=@p4
 	`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, attID, id)
 	if err != nil {
-		h.renderError(w, "Error updating attachment: "+err.Error())
+		h.renderError(w, r, "Error updating attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
@@ -442,11 +442,11 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		&cnName, &cnPhone, &cnEmail, &cnCity,
 	)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Supplier not found")
+		h.renderError(w, r, "Supplier not found")
 		return s, false
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving supplier: "+err.Error())
+		h.renderError(w, r, "Error retrieving supplier: "+err.Error())
 		return s, false
 	}
 	s.Name = name.String
@@ -484,7 +484,7 @@ func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Re
 		val = n
 	}
 	if err := h.setPrimaryAttachment(r.Context(), h.cfg.CompanyTable(), "id", "primary_attachment_id", idInt, val); err != nil {
-		h.renderError(w, "Error setting primary attachment: "+err.Error())
+		h.renderError(w, r, "Error setting primary attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
@@ -576,7 +576,7 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "local_dir.html", map[string]any{
+	h.render(w, r, "local_dir.html", map[string]any{
 		"Supplier":  &s,
 		"DirName":   dirName,
 		"FullPath":  path,

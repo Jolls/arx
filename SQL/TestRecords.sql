@@ -270,11 +270,10 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 -- Populated automatically by trg_test_definition_history (AFTER UPDATE trigger on Tests).
 -- Each row is a snapshot of the old values captured at the moment of update.
 --
--- TODO (user login): changed_by currently stores SYSTEM_USER (the DB login, same for all apps).
--- Once user authentication is added to the Go app, use SET CONTEXT_INFO before each UPDATE
--- to pass the logged-in username, then read it in the trigger via CAST(CONTEXT_INFO() AS VARCHAR(128)).
--- VBA uses Environ("USERNAME") (Windows login) which Go cannot access from a web server context —
--- the server process runs as its own user, not the browser client's Windows user.
+-- User identity: changed_by reads the app user from CONTEXT_INFO() when set (Go app calls
+-- SET CONTEXT_INFO before each UPDATE), otherwise falls back to SYSTEM_USER (the shared DB
+-- login). CONTEXT_INFO is a 128-byte VARBINARY padded with 0x00; null bytes are stripped.
+-- Old binaries that don't SET CONTEXT_INFO will record SYSTEM_USER on rollback.
 
 IF OBJECT_ID('dbo.test_definition_history', 'U') IS NOT NULL DROP TABLE test_definition_history;
 
@@ -282,7 +281,7 @@ CREATE TABLE test_definition_history (
   id            INT          PRIMARY KEY IDENTITY,
   test_id       INT          NOT NULL,              -- FK to test_definition.id
   changed_at    DATETIME     NOT NULL DEFAULT GETDATE(),
-  changed_by    VARCHAR(128) NOT NULL DEFAULT SYSTEM_USER, -- TODO: replace with app user via CONTEXT_INFO
+  changed_by    VARCHAR(128) NOT NULL DEFAULT SYSTEM_USER, -- set by trigger via CONTEXT_INFO(); falls back to SYSTEM_USER
   -- snapshot of values before the update
   type          INT,
   Parameter     VARCHAR(255),
@@ -326,7 +325,8 @@ BEGIN
        hide_formula, pf_type,
        instrument_types, format, comment, category, sheet_name)
     SELECT
-      id, GETDATE(), SYSTEM_USER,
+      id, GETDATE(),
+      COALESCE(NULLIF(REPLACE(CONVERT(VARCHAR(128), CONTEXT_INFO()), CHAR(0), ''), ''), SYSTEM_USER),
       type, Parameter, Specification, spec_units,
       spec_min, spec_max, spec_nom, default_result,
       hide_formula, pf_type,

@@ -325,6 +325,93 @@
     </div>
     {{end}}
 
+    <!-- ── Users ──────────────────────────────────────────────────────── -->
+    {{if and .Connected .CurrentUser}}
+    <div class="detail-section" style="margin-top:24px;">
+        <h3>Users</h3>
+        {{if .UsersError}}
+        <div style="background:#f8d7da; border:1px solid #f5c2c7; border-radius:6px;
+                    padding:10px 14px; margin-bottom:14px; color:#842029; font-size:0.9em;">
+            {{.UsersError}}
+        </div>
+        {{end}}
+        <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+            <thead>
+                <tr style="text-align:left; color:#888; font-size:0.8em; border-bottom:1px solid #e0e0e0;">
+                    <th style="padding:4px 8px;">Username</th>
+                    <th style="padding:4px 8px;">Display Name</th>
+                    <th style="padding:4px 8px; text-align:center;">Active</th>
+                    <th style="padding:4px 8px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+            {{range .Users}}
+                <tr style="border-bottom:1px solid #f0f0f0;">
+                    <td style="padding:6px 8px; font-family:monospace; font-size:0.9em;">{{.Username}}</td>
+                    <td style="padding:6px 8px;">{{.DisplayName}}</td>
+                    <td style="padding:6px 8px; text-align:center;">
+                        {{if .IsActive}}<span style="color:#155724;">&#10003;</span>{{else}}<span style="color:#842029;">&#10007;</span>{{end}}
+                    </td>
+                    <td style="padding:6px 8px; display:flex; gap:6px; flex-wrap:wrap;">
+                        <!-- Reset password -->
+                        <form method="post" action="/settings/users/{{.ID}}/password" style="display:inline;"
+                              onsubmit="return resetPwForm(this)">
+                            <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
+                            <input type="hidden" name="password" class="new-pw-field">
+                            <button type="submit" class="btn-secondary" style="font-size:0.82em;"
+                                    onclick="promptPw(this)">Reset password</button>
+                        </form>
+                        <!-- Toggle active -->
+                        <form method="post" action="/settings/users/{{.ID}}/toggle-active" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
+                            <button type="submit" class="btn-secondary" style="font-size:0.82em;">
+                                {{if .IsActive}}Deactivate{{else}}Activate{{end}}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            {{else}}
+                <tr><td colspan="4" style="padding:10px 8px; color:#888; font-size:0.9em;">No users yet.</td></tr>
+            {{end}}
+            </tbody>
+        </table>
+
+        <!-- Add user -->
+        <form method="post" action="/settings/users">
+            <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Username</label>
+                    <input type="text" name="username" autocomplete="off"
+                           style="width:160px; padding:6px 10px; border:1px solid #ccc;
+                                  border-radius:4px; font-size:0.9em; font-family:monospace;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Display Name</label>
+                    <input type="text" name="display_name" autocomplete="off"
+                           style="width:200px; padding:6px 10px; border:1px solid #ccc;
+                                  border-radius:4px; font-size:0.9em;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Password</label>
+                    <input type="password" name="password" autocomplete="new-password"
+                           style="width:180px; padding:6px 10px; border:1px solid #ccc;
+                                  border-radius:4px; font-size:0.9em;">
+                </div>
+                <button type="submit" class="btn-primary" style="font-size:0.9em;">Add User</button>
+            </div>
+        </form>
+    </div>
+    <script>
+    function promptPw(btn) {
+        var pw = prompt('New password for this user:');
+        if (!pw) { event.preventDefault(); return false; }
+        btn.closest('form').querySelector('.new-pw-field').value = pw;
+        return true;
+    }
+    </script>
+    {{end}}
+
     <!-- ── Release Notes ──────────────────────────────────────────────── -->
     {{if .ReleaseNotes}}
     <div class="detail-section" style="margin-top:24px;">

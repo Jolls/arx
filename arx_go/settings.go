@@ -60,9 +60,16 @@ func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map[string]any) map[string]any {
 	var contacts []contactOption
 	var suppliers []supplierOption
+	var users []map[string]any
+	var usersError string
 	if h.db != nil {
 		contacts = h.fetchContactOptions(r)
 		suppliers = h.fetchSupplierOptions(r)
+		var err error
+		users, err = h.listUsers(r.Context())
+		if err != nil {
+			usersError = "could not load users: " + err.Error()
+		}
 	}
 
 	data := map[string]any{
@@ -84,6 +91,9 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PartCategories":       h.loadCategories(r.Context()),
 		"Contacts":             contacts,
 		"Suppliers":            suppliers,
+		"Users":                users,
+		"UsersError":           usersError,
+		"CurrentUser":          h.currentUser(r),
 		"ReleaseNotes":         h.releaseNotes,
 		"ActiveTab":            "settings",
 		"CsrfToken":            h.csrfToken(w, r),
@@ -95,14 +105,14 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 }
 
 func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "whats_new.html", map[string]any{
+	h.render(w, r, "whats_new.html", map[string]any{
 		"ReleaseNotes": h.releaseNotes,
 		"ActiveTab":    "settings",
 	})
 }
 
 func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "settings.html", h.settingsData(w, r, nil))
+	h.render(w, r, "settings.html", h.settingsData(w, r, nil))
 }
 
 // SettingsAttachmentCategoriesSave persists the attachment-category list to
@@ -206,7 +216,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if connErr != "" {
-		h.render(w, "settings.html", h.settingsData(w, r, map[string]any{
+		h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
 			"Error": "Connection failed: " + connErr,
 		}))
 		return
@@ -217,7 +227,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, "settings.html", h.settingsData(w, r, map[string]any{
+	h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
 		"Success": "Settings saved. Enter your database password to connect.",
 	}))
 }

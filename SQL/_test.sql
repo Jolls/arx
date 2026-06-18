@@ -61,6 +61,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.unit',                     'U') IS NOT NULL DROP TABLE dbo.unit;
     IF OBJECT_ID('dbo.release_notes',            'U') IS NOT NULL DROP TABLE dbo.release_notes;
     IF OBJECT_ID('dbo.logs',                     'U') IS NOT NULL DROP TABLE dbo.logs;
+    IF OBJECT_ID('dbo.users',                    'U') IS NOT NULL DROP TABLE dbo.users;
 
     -- Populate from prod via three-part names
     SELECT * INTO dbo.CN                      FROM ArxProd.dbo.CN;
@@ -86,6 +87,7 @@ BEGIN TRY
     SELECT * INTO dbo.unit                    FROM ArxProd.dbo.unit;
     SELECT * INTO dbo.release_notes           FROM ArxProd.dbo.release_notes;
     SELECT * INTO dbo.logs                    FROM ArxProd.dbo.logs;
+    SELECT * INTO dbo.users                   FROM ArxProd.dbo.users;
 
     -- Constraints not copied by SELECT * INTO
     ALTER TABLE dbo.PO         ADD CONSTRAINT UQ_PO_number             UNIQUE (number);

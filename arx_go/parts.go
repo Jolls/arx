@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os/user"
 	"strconv"
 	"strings"
 	"time"
@@ -38,11 +37,11 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTab string) (models.Part, string, string, bool) {
 	p, err := h.fetchPartBasic(r.Context(), id)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Part not found")
+		h.renderError(w, r, "Part not found")
 		return models.Part{}, "", "", false
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving part: "+err.Error())
+		h.renderError(w, r, "Error retrieving part: "+err.Error())
 		return models.Part{}, "", "", false
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
@@ -57,7 +56,7 @@ func fv(r *http.Request, key string) string { return strings.TrimSpace(r.FormVal
 // ── PartsList — GET / ───────────────────────────────────────────────────────
 
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "index.html", map[string]any{
+	h.render(w, r, "index.html", map[string]any{
 		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
 	})
 }
@@ -152,11 +151,11 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		&user6, &user7, &user8, &user9, &user10,
 	)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Part not found")
+		h.renderError(w, r, "Part not found")
 		return
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving part: "+err.Error())
+		h.renderError(w, r, "Error retrieving part: "+err.Error())
 		return
 	}
 
@@ -222,7 +221,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 
-	h.render(w, "part_detail.html", map[string]any{
+	h.render(w, r, "part_detail.html", map[string]any{
 		"Part": p, "PrimaryAtt": primaryAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -234,11 +233,11 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 	p := models.Part{}
-	if u, err := user.Current(); err == nil {
-		p.PNReqBy = u.Username
+	if u := h.currentUser(r); u != nil {
+		p.PNReqBy = u.DisplayName
 	}
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, "part_edit.html", map[string]any{
+	h.render(w, r, "part_edit.html", map[string]any{
 		"Part": p, "IsNew": true,
 		"Units": units, "Categories": h.loadCategories(r.Context()),
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -251,7 +250,7 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	partNumber := fv(r, "part_number")
 	if partNumber == "" {
-		h.render(w, "part_edit.html", map[string]any{
+		h.render(w, r, "part_edit.html", map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Part Number is required",
 			"Categories": h.loadCategories(r.Context()),
 			"ActiveTab":  "parts", "ActiveSubTab": "edit",
@@ -281,7 +280,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	).Scan(&newID)
 	if err != nil {
 		units, _ := h.fetchUnits(r.Context())
-		h.render(w, "part_edit.html", map[string]any{
+		h.render(w, r, "part_edit.html", map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Error creating part: " + err.Error(),
 			"Units": units, "Categories": h.loadCategories(r.Context()),
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -303,12 +302,12 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 	// fetch full part for form values
 	full, err := h.fetchPartFull(r.Context(), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving part: "+err.Error())
+		h.renderError(w, r, "Error retrieving part: "+err.Error())
 		return
 	}
 	h.applyCategoryTabs(r.Context(), &full) // resolve tabs for the part_tabs partial
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, "part_edit.html", map[string]any{
+	h.render(w, r, "part_edit.html", map[string]any{
 		"Part": full, "IsNew": false,
 		"Units": units, "Categories": h.loadCategories(r.Context()),
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -328,7 +327,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
 		pf := partFromForm(r)
 		h.applyCategoryTabs(r.Context(), &pf)
-		h.render(w, "part_edit.html", map[string]any{
+		h.render(w, r, "part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Part Number is required",
 			"Categories": h.loadCategories(r.Context()),
 			"ActiveTab":  "parts", "ActiveSubTab": "edit",
@@ -360,7 +359,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		units, _ := h.fetchUnits(r.Context())
 		pf := partFromForm(r)
 		h.applyCategoryTabs(r.Context(), &pf)
-		h.render(w, "part_edit.html", map[string]any{
+		h.render(w, r, "part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Error saving part: " + err.Error(),
 			"Units": units, "Categories": h.loadCategories(r.Context()),
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -461,7 +460,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		ORDER BY pl.PLItem
 	`, pl, pn), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving BOM: "+err.Error())
+		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -472,7 +471,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		var currentCost sql.NullFloat64
 		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLPartID,
 			&partNumber, &title, &revision, &category, &currentCost); err != nil {
-			h.renderError(w, "Error reading BOM: "+err.Error())
+			h.renderError(w, r, "Error reading BOM: "+err.Error())
 			return
 		}
 		item.PartNumber = partNumber.String
@@ -482,7 +481,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		item.PNCurrentCost = currentCost.Float64
 		items = append(items, item)
 	}
-	h.render(w, "part_bom.html", map[string]any{
+	h.render(w, r, "part_bom.html", map[string]any{
 		"Part": p, "BOMItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -505,7 +504,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		ORDER BY pn.part_number
 	`, pl, pn), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving where-used: "+err.Error())
+		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -515,7 +514,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		var partNumber, title, revision, category sql.NullString
 		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLListID,
 			&partNumber, &title, &revision, &category); err != nil {
-			h.renderError(w, "Error reading where-used: "+err.Error())
+			h.renderError(w, r, "Error reading where-used: "+err.Error())
 			return
 		}
 		item.PartNumber = partNumber.String
@@ -524,7 +523,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		item.Category = category.String
 		items = append(items, item)
 	}
-	h.render(w, "part_where_used.html", map[string]any{
+	h.render(w, r, "part_where_used.html", map[string]any{
 		"Part": p, "WhereUsedItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "where-used",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -591,7 +590,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 		ORDER BY pl.PLItem
 	`, pl, pn), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving BOM: "+err.Error())
+		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -601,7 +600,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 		var partNumber, title sql.NullString
 		if err := rows.Scan(&item.PLID, &item.PLItem, &item.PLQty, &item.PLPartID,
 			&partNumber, &title); err != nil {
-			h.renderError(w, "Error reading BOM: "+err.Error())
+			h.renderError(w, r, "Error reading BOM: "+err.Error())
 			return
 		}
 		item.PartNumber = partNumber.String
@@ -617,7 +616,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	if lastRollupAt.Valid {
 		p.PNLastRollupAt = &lastRollupAt.Time
 	}
-	h.render(w, "part_bom_edit.html", map[string]any{
+	h.render(w, r, "part_bom_edit.html", map[string]any{
 		"Part": p, "BOMItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -630,13 +629,13 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, "Error parsing form: "+err.Error())
+		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		h.renderError(w, "Error starting transaction: "+err.Error())
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
 		return
 	}
 	committed := false
@@ -654,7 +653,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 			`DELETE FROM %s WHERE PLID=@p1`, pl,
 		), plidStr); err != nil {
-			h.renderError(w, "Error deleting BOM row: "+err.Error())
+			h.renderError(w, r, "Error deleting BOM row: "+err.Error())
 			return
 		}
 	}
@@ -680,7 +679,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET PLItem=@p1, PLQty=@p2, PLPartID=@p3 WHERE PLID=@p4
 		`, pl), item, qty, pnid, plidStr); err != nil {
-			h.renderError(w, "Error updating BOM row: "+err.Error())
+			h.renderError(w, r, "Error updating BOM row: "+err.Error())
 			return
 		}
 	}
@@ -707,13 +706,13 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s (PLListID, PLPartID, PLItem, PLQty) VALUES (@p1,@p2,@p3,@p4)
 		`, pl), parentID, pnid, item, qty); err != nil {
-			h.renderError(w, "Error inserting BOM row: "+err.Error())
+			h.renderError(w, r, "Error inserting BOM row: "+err.Error())
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		h.renderError(w, "Error saving BOM: "+err.Error())
+		h.renderError(w, r, "Error saving BOM: "+err.Error())
 		return
 	}
 	committed = true
@@ -732,13 +731,13 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 		JOIN %s pn ON pl.PLPartID = pn.PNID
 		WHERE pl.PLListID = @p1
 	`, pl, pn), id).Scan(&cost); err != nil {
-		h.renderError(w, "Error computing rollup cost: "+err.Error())
+		h.renderError(w, r, "Error computing rollup cost: "+err.Error())
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET PNLastRollupCost=@p1, PNLastRollupAt=@p2 WHERE PNID=@p3`, pn,
 	), cost, time.Now(), id); err != nil {
-		h.renderError(w, "Error saving rollup cost: "+err.Error())
+		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/bom", id), http.StatusSeeOther)
@@ -755,7 +754,7 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		FROM %s WHERE FILPNID = @p1 AND is_active = 1 ORDER BY order_id, FILID
 	`, h.cfg.AttachmentsTable()), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving attachments: "+err.Error())
+		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -765,7 +764,7 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		var fname, fnotes, frev sql.NullString
 		var orderID sql.NullInt64
 		if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev, &orderID); err != nil {
-			h.renderError(w, "Error reading attachments: "+err.Error())
+			h.renderError(w, r, "Error reading attachments: "+err.Error())
 			return
 		}
 		att.FILFileName = fname.String
@@ -787,7 +786,7 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	cats := splitCSV(h.appConfigGetOr(r.Context(), "attachment_categories", ""))
-	h.render(w, "part_attachments.html", map[string]any{
+	h.render(w, r, "part_attachments.html", map[string]any{
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -809,7 +808,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO %s (FILPNID, FILFileName, FILPNRev, category, order_id) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 		h.cfg.AttachmentsTable(),
 	), id, fv(r, "FILFileName"), fv(r, "FILPNRev"), fv(r, "FILNotes"), oID); err != nil {
-		h.renderError(w, "Error adding attachment: "+err.Error())
+		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
@@ -828,7 +827,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 		`UPDATE %s SET FILPNRev=@p1, category=@p2, order_id=@p3 WHERE FILID=@p4`,
 		h.cfg.AttachmentsTable(),
 	), fv(r, "FILPNRev"), fv(r, "category"), oID, attIDInt); err != nil {
-		h.renderError(w, "Error updating attachment: "+err.Error())
+		h.renderError(w, r, "Error updating attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
@@ -838,7 +837,7 @@ func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
 	if err := h.softDeleteAttachment(r.Context(), h.cfg.AttachmentsTable(), "FILID", attIDInt, "", 0); err != nil {
-		h.renderError(w, "Error deleting attachment: "+err.Error())
+		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
@@ -853,7 +852,7 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 		val = n
 	}
 	if err := h.setPrimaryAttachment(r.Context(), h.cfg.PartsTable(), "PNID", "PNFILIDPrimary", idInt, val); err != nil {
-		h.renderError(w, "Error setting primary attachment: "+err.Error())
+		h.renderError(w, r, "Error setting primary attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
@@ -875,7 +874,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		ORDER BY po.date_ordered DESC
 	`, pol, po), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving orders: "+err.Error())
+		h.renderError(w, r, "Error retrieving orders: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -888,7 +887,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 			&poNum, &supplierName, &dateOrdered, &dateClosed, &status,
 			&item.POLItem, &item.POLQty, &item.POLCost, &desc, &vendorPN,
 		); err != nil {
-			h.renderError(w, "Error reading orders: "+err.Error())
+			h.renderError(w, r, "Error reading orders: "+err.Error())
 			return
 		}
 		item.PONumber = poNum.String
@@ -904,7 +903,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	h.render(w, "part_orders.html", map[string]any{
+	h.render(w, r, "part_orders.html", map[string]any{
 		"Part": p, "OrderItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "orders",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -933,7 +932,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 		ORDER BY s.name, p.effective_date DESC, p.pack_size
 	`, pr, su), id)
 	if err != nil {
-		h.renderError(w, "Error retrieving pricing: "+err.Error())
+		h.renderError(w, r, "Error retrieving pricing: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -946,7 +945,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 		var effectiveDate sql.NullTime
 		var supplierName sql.NullString
 		if err := rows.Scan(&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID, &supplierName); err != nil {
-			h.renderError(w, "Error reading pricing: "+err.Error())
+			h.renderError(w, r, "Error reading pricing: "+err.Error())
 			return
 		}
 		if priceEA.Valid {
@@ -993,7 +992,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 		}
 		groups[i].AllInactive = allInactive
 	}
-	h.render(w, "part_pricing.html", map[string]any{
+	h.render(w, r, "part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
 		"Suppliers": h.fetchSupplierOptions(r),
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
@@ -1010,7 +1009,7 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.render(w, "part_pricing_form.html", map[string]any{
+	h.render(w, r, "part_pricing_form.html", map[string]any{
 		"Part": p, "Price": models.Price{}, "IsNew": true,
 		"Suppliers": h.fetchSupplierOptions(r),
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
@@ -1023,7 +1022,7 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
-		h.renderError(w, "Invalid supplier")
+		h.renderError(w, r, "Invalid supplier")
 		return
 	}
 	effectiveDate := r.FormValue("effective_date")
@@ -1040,10 +1039,10 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UQ_price") {
-			h.renderError(w, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
+			h.renderError(w, r, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
 			return
 		}
-		h.renderError(w, "Error saving price: "+err.Error())
+		h.renderError(w, r, "Error saving price: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
@@ -1068,11 +1067,11 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID,
 	)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Price not found")
+		h.renderError(w, r, "Price not found")
 		return
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving price: "+err.Error())
+		h.renderError(w, r, "Error retrieving price: "+err.Error())
 		return
 	}
 	if priceEA.Valid {
@@ -1092,7 +1091,7 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		v := int(supplierID.Int64)
 		price.SupplierID = &v
 	}
-	h.render(w, "part_pricing_form.html", map[string]any{
+	h.render(w, r, "part_pricing_form.html", map[string]any{
 		"Part": p, "Price": price, "IsNew": false,
 		"Suppliers": h.fetchSupplierOptions(r),
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
@@ -1106,7 +1105,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	priceID := chi.URLParam(r, "priceID")
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
-		h.renderError(w, "Invalid supplier")
+		h.renderError(w, r, "Invalid supplier")
 		return
 	}
 	effectiveDate := r.FormValue("effective_date")
@@ -1116,7 +1115,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	pr := h.cfg.PriceTable()
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		h.renderError(w, "Error starting transaction: "+err.Error())
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
 		return
 	}
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
@@ -1124,7 +1123,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	), priceID, partID)
 	if err != nil {
 		tx.Rollback()
-		h.renderError(w, "Error updating price: "+err.Error())
+		h.renderError(w, r, "Error updating price: "+err.Error())
 		return
 	}
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
@@ -1138,14 +1137,14 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		tx.Rollback()
 		if strings.Contains(err.Error(), "UQ_price") {
-			h.renderError(w, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
+			h.renderError(w, r, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
 			return
 		}
-		h.renderError(w, "Error saving price: "+err.Error())
+		h.renderError(w, r, "Error saving price: "+err.Error())
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		h.renderError(w, "Error committing price update: "+err.Error())
+		h.renderError(w, r, "Error committing price update: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
@@ -1158,7 +1157,7 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 		`UPDATE %s SET is_active = 0 WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(),
 	), priceID, partID)
 	if err != nil {
-		h.renderError(w, "Error deactivating price: "+err.Error())
+		h.renderError(w, r, "Error deactivating price: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
@@ -1172,10 +1171,10 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	), priceID, partID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UQ_price") {
-			h.renderError(w, "Cannot activate: another active price exists for this supplier and pack size.")
+			h.renderError(w, r, "Cannot activate: another active price exists for this supplier and pack size.")
 			return
 		}
-		h.renderError(w, "Error activating price: "+err.Error())
+		h.renderError(w, r, "Error activating price: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
