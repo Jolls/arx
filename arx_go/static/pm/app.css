@@ -81,7 +81,45 @@ th    { padding: 8px 10px; text-align: left; font-weight: 600; color: #333; font
 td    { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 tr:hover { background: #f9f9f9; }
 
-/* Parts table column widths */
+/* Per-table column widths via <col> selectors (table-layout: fixed).
+   The elastic column has no rule and absorbs all remaining width. */
+
+/* Parts — elastic: col 3 Description */
+table[data-rows-url="/api/parts/rows"] col:nth-child(1) { width: 12%; } /* Part Number */
+table[data-rows-url="/api/parts/rows"] col:nth-child(2) { width:  4%; } /* Rev */
+table[data-rows-url="/api/parts/rows"] col:nth-child(4) { width: 14%; } /* Detail */
+table[data-rows-url="/api/parts/rows"] col:nth-child(5) { width:  9%; } /* Originator */
+table[data-rows-url="/api/parts/rows"] col:nth-child(6) { width:  9%; } /* Date */
+table[data-rows-url="/api/parts/rows"] col:nth-child(7) { width:  7%; } /* Type */
+table[data-rows-url="/api/parts/rows"] col:nth-child(8) { width:  9%; } /* Last Modified */
+
+/* Vendors — elastic: col 1 Vendor Name */
+table[data-rows-url="/api/suppliers/rows"] col:nth-child(2) { width:  9%; } /* Status */
+table[data-rows-url="/api/suppliers/rows"] col:nth-child(3) { width: 10%; } /* Country */
+table[data-rows-url="/api/suppliers/rows"] col:nth-child(4) { width:  9%; } /* # Linked Parts */
+table[data-rows-url="/api/suppliers/rows"] col:nth-child(5) { width:  6%; } /* # POs */
+table[data-rows-url="/api/suppliers/rows"] col:nth-child(6) { width: 15%; } /* Default Contact */
+table[data-rows-url="/api/suppliers/rows"] col:nth-child(7) { width:  9%; } /* Supplier Code */
+
+/* POs — elastic: col 3 Vendor */
+table[data-rows-url="/api/pos/rows"] col:nth-child(1) { width: 10%; } /* PO Number */
+table[data-rows-url="/api/pos/rows"] col:nth-child(2) { width:  9%; } /* Status */
+table[data-rows-url="/api/pos/rows"] col:nth-child(4) { width:  9%; } /* Date Ordered */
+table[data-rows-url="/api/pos/rows"] col:nth-child(5) { width:  9%; } /* Date Closed */
+table[data-rows-url="/api/pos/rows"] col:nth-child(6) { width: 11%; } /* Orderer */
+table[data-rows-url="/api/pos/rows"] col:nth-child(7) { width:  9%; } /* Total Cost */
+
+/* Contacts — elastic: col 3 Email */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(1)  { width: 12%; } /* Supplier */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(2)  { width:  9%; } /* Name */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(4)  { width:  6%; } /* Country */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(5)  { width:  5%; } /* State */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(6)  { width:  6%; } /* City */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(7)  { width:  8%; } /* Phone */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(8)  { width:  9%; } /* Web */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(9)  { width:  7%; } /* Last Modified */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(10) { width:  8%; } /* Notes */
+table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* Active */
 
 /* --- Filter row --------------------------------------------- */
 .filter-row th { padding: 4px 6px; border: none; background: transparent; }
