@@ -521,12 +521,19 @@ function setupPartAutocomplete(input, row) {
     }
     function select(p) {
         input.value = p.part_number;
-        const revInput  = row.querySelector('[name$="[POLRev]"]');
-        const descInput = row.querySelector('[name$="[POLDesc]"]');
-        const idInput   = row.querySelector('[name$="[POLPNID]"]');
+        const revInput    = row.querySelector('[name$="[POLRev]"]');
+        const descInput   = row.querySelector('[name$="[POLDesc]"]');
+        const idInput     = row.querySelector('[name$="[POLPNID]"]');
+        const vendorInput = row.querySelector('[name$="[VendorPN]"]');
         if (revInput  && !revInput.value)  revInput.value  = p.revision || '';
         if (descInput && !descInput.value) descInput.value = p.title || '';
         if (idInput) idInput.value = p.pnid;
+        const suppID = document.getElementById('supplier_id')?.value;
+        if (vendorInput && suppID) {
+            fetch('/api/supplier-part?part_id=' + encodeURIComponent(p.pnid) + '&supplier_id=' + encodeURIComponent(suppID))
+                .then(r => r.json())
+                .then(d => { vendorInput.value = d.supplier_pn || ''; });
+        }
         close();
         row.querySelector('[name$="[POLQty]"]')?.focus();
     }
