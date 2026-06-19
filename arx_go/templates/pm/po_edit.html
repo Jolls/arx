@@ -327,16 +327,27 @@
 <script>
 let newLineIdx = {{if .POItems}}{{len .POItems}}{{else}}0{{end}};
 
+function nextItemNumber() {
+    let max = 0;
+    document.querySelectorAll('#line-items-tbody tr:not(.line-removed) [name$="[POLItem]"]').forEach(el => {
+        const v = parseInt(el.value, 10);
+        if (!isNaN(v) && v > max) max = v;
+    });
+    return max + 1;
+}
+
 function addNewLine() {
     const tpl = document.getElementById('new-line-tpl');
     const tbody = document.getElementById('line-items-tbody');
     const clone = tpl.content.cloneNode(true);
     const idx = newLineIdx++;
     clone.querySelectorAll('[name]').forEach(el => { el.name = el.name.replace('IDX', idx); });
+    const itemInput = clone.querySelector('[name$="[POLItem]"]');
+    if (itemInput) itemInput.value = nextItemNumber();
     tbody.appendChild(clone);
     const row = tbody.lastElementChild;
     setupPartAutocomplete(row.querySelector('[name$="[POLPNPartNumber]"]'), row);
-    row.querySelector('input').focus();
+    row.querySelector('[name$="[POLPNPartNumber]"]')?.focus();
     recalcTotal();
 }
 

@@ -46,9 +46,25 @@
 <body>
 
 <div class="print-btn">
-  <button onclick="fetch('/po/{{.PO.Number}}/mark-printed',{method:'POST'}).catch(function(){}).then(function(){fetch('/po/{{.PO.Number}}/open-folder',{method:'POST'}).catch(function(){});window.print()})">&#9113; Print / Save PDF</button>
+  <button data-folder="{{.POFolderPath}}" onclick="printPO(this)">&#9113; Print / Save PDF</button>
   <a href="/po/{{.PO.Number}}">&#8592; Back to PO</a>
+  {{if .POFolderPath}}<span id="folder-hint" style="font-size:9pt; color:#666; margin-left:8px;">Save to: <code>{{.POFolderPath}}</code></span>{{end}}
 </div>
+<script>
+function printPO(btn) {
+  var path = btn.dataset.folder;
+  if (path && navigator.clipboard) {
+    navigator.clipboard.writeText(path).then(function() {
+      var hint = document.getElementById('folder-hint');
+      if (hint) { hint.innerHTML = '&#10003; Folder path copied &mdash; paste in the save dialog address bar'; hint.style.color = '#155724'; }
+    }).catch(function(){});
+  }
+  fetch('/po/{{.PO.Number}}/mark-printed', {method:'POST'}).catch(function(){}).then(function() {
+    fetch('/po/{{.PO.Number}}/open-folder', {method:'POST'}).catch(function(){});
+    window.print();
+  });
+}
+</script>
 
 <div class="po-doc">
   <div class="po-header">
@@ -83,6 +99,7 @@
       <h4>Ship To</h4>
       <p>
         {{if .PO.ReceiverName}}<span class="supplier-name">{{.PO.ReceiverName}}</span><br>{{end}}
+        {{if .PO.ReceiverContact}}{{.PO.ReceiverContact}}<br>{{end}}
         {{if .PO.ReceiverAddress}}{{.PO.ReceiverAddress}}<br>{{end}}
         {{$cl := cityLine .PO.ReceiverCity .PO.ReceiverState .PO.ReceiverZipcode}}{{if $cl}}{{$cl}}<br>{{end}}
         {{if .PO.ReceiverCountry}}{{.PO.ReceiverCountry}}{{end}}
