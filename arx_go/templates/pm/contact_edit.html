@@ -12,7 +12,7 @@
 </div>
 <div class="content">
 
-    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     <form method="post" action="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.CNID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -124,7 +124,7 @@
                 {{if .IsNew}}Create Contact{{else}}Save Changes{{end}}
             </button>
             <a href="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.CNID}}{{end}}"
-               class="btn-secondary">Cancel</a>
+               class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>

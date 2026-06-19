@@ -10,7 +10,7 @@
     {{template "part_tabs" .}}
     {{end}}
 
-    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     <form method="post" action="{{if .IsNew}}/parts{{else}}/part/{{.Part.PNID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -113,7 +113,7 @@
             <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create Part{{else}}Save Changes{{end}}
             </button>
-            <a href="{{if .IsNew}}/{{else}}/part/{{.Part.PNID}}{{end}}" class="btn-secondary">Cancel</a>
+            <a href="{{if .IsNew}}/{{else}}/part/{{.Part.PNID}}{{end}}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>

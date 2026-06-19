@@ -31,6 +31,12 @@
 
 .font-mono { font-family: monospace; }
 
+/* Sortable column headers */
+thead.table-dark th.sortable { cursor: pointer; user-select: none; }
+thead.table-dark th.sortable:hover { background-image: linear-gradient(rgba(255,255,255,0.12), rgba(255,255,255,0.12)); }
+thead.table-dark th.sort-asc::after  { content: ' \25B2'; font-size: 0.7em; opacity: 0.7; }
+thead.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opacity: 0.7; }
+
 /* Section heading rows — target td directly to override Bootstrap's per-cell bg vars */
 .row-heading-1 td { background-color: #808080 !important; color: #fff; font-weight: bold; }
 .row-heading-2 td { background-color: #ed7d31 !important; color: #fff; font-weight: bold; }

@@ -109,7 +109,7 @@ table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* A
 
 /* --- Sortable column headers -------------------------------- */
 tr.table-dark th.sortable { cursor: pointer; user-select: none; }
-tr.table-dark th.sortable:hover { background: rgba(255,255,255,0.12); }
+tr.table-dark th.sortable:hover { background-image: linear-gradient(rgba(255,255,255,0.12), rgba(255,255,255,0.12)); }
 tr.table-dark th.sort-asc::after  { content: ' \25B2'; font-size: 0.7em; opacity: 0.7; }
 tr.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opacity: 0.7; }
 
@@ -142,8 +142,6 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .part-number-link { color: var(--accent-1); text-decoration: none; font-weight: 600; transition: color 0.2s; }
 .part-number-link:hover { color: var(--accent-2); text-decoration: underline; }
 
-.back-link { display: inline-block; margin-bottom: 20px; padding: 8px 15px; background: #f0f0f0; border-radius: 4px; transition: background 0.2s; }
-.back-link:hover { background: #e0e0e0; }
 
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .header-app-link { color: #e0e0e0; font-size: 0.8em; font-weight: 400; letter-spacing: 0; text-decoration: none; opacity: 0.55; transition: opacity 0.2s; }
@@ -153,14 +151,6 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .header-settings-link.active { opacity: 1; color: #e0e0e0; text-decoration: none; }
 
 /* --- Badges & status ----------------------------------------- */
-.badge          { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 500; }
-.badge-active   { background: #d4edda; color: #155724; }
-.badge-inactive { background: #f8d7da; color: #721c24; }
-.badge-neutral  { background: #e9ecef; color: #495057; }
-.badge-info     { background: #cfe2ff; color: #084298; }
-.status-U       { background: #cfe2ff; color: #084298; }
-.status-A       { background: #d1e7dd; color: #0f5132; }
-.status-D       { background: #f8d7da; color: #721c24; }
 
 /* --- Detail sections ----------------------------------------- */
 .detail-section { margin-bottom: 20px; padding: 20px; background: #f9f9f9; border-radius: 4px; border-left: 4px solid var(--accent-1); }
@@ -169,19 +159,10 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .detail-row strong { color: var(--accent-1); }
 
 /* --- Banners ------------------------------------------------- */
-.error-banner  { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-.info-banner   { background: #e0f0ff; border: 1px solid #b6d9f7; color: #0c5a8a; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-.query-error   { background: #fff3cd; border: 1px solid #ffc107; color: #664d03; padding: 12px 15px; border-radius: 4px; margin-bottom: 20px; font-size: 0.9em; }
 .no-results         { text-align: center; padding: 40px; color: #999; font-size: 1.1em; }
 .table-footer-note  { margin-top: 12px; color: #888; font-size: 0.9em; }
 
 /* --- Buttons ------------------------------------------------- */
-.btn-secondary {
-    padding: 10px 24px; background: #f0f0f0; color: #333; border: 1px solid #ddd;
-    border-radius: 4px; font-size: 1em; font-weight: 600; text-decoration: none;
-    display: inline-block; transition: background 0.2s;
-}
-.btn-secondary:hover { background: #e0e0e0; color: #333; text-decoration: none; }
 
 /* --- Forms --------------------------------------------------- */
 .form-label { display: block; font-weight: 600; color: var(--accent-1); font-size: 0.95em; }
@@ -219,18 +200,6 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 }
 
 /* --- PO edit line-item table --------------------------------- */
-.tbl-input {
-    border: 1px solid #d1d5db; border-radius: 3px;
-    padding: 3px 5px; font-size: 0.85em;
-    width: 100%; box-sizing: border-box;
-}
-.tbl-input:focus { outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 2px rgba(13,110,253,0.2); }
-.btn-remove-row {
-    background: none; border: 1px solid #e5e7eb; border-radius: 3px;
-    color: #ef4444; font-size: 1.1em; font-weight: bold;
-    cursor: pointer; padding: 1px 6px; line-height: 1;
-}
-.btn-remove-row:hover { background: #fee2e2; border-color: #ef4444; }
 tr.line-removed td { opacity: 0.35; pointer-events: none; }
 
 /* --- Supplier/part search dropdown --------------------------- */

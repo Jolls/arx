@@ -18,7 +18,7 @@
                 Unknown Supplier
             {{end}}
             {{if .AllInactive}}
-            <span class="badge badge-inactive" style="font-size:0.7em; vertical-align:middle; margin-left:8px;">Inactive</span>
+            <span class="badge bg-danger" style="font-size:0.7em; vertical-align:middle; margin-left:8px;">Inactive</span>
             {{end}}
         </h3>
         <div class="table-wrapper" style="margin-top:10px;">
@@ -45,8 +45,8 @@
                         </td>
                         <td style="text-align:center;">{{formatDate .EffectiveDate}}</td>
                         <td style="text-align:center;">
-                            {{if .IsActive}}<span class="badge badge-active">Yes</span>
-                            {{else}}<span class="badge badge-inactive">No</span>{{end}}
+                            {{if .IsActive}}<span class="badge bg-success">Yes</span>
+                            {{else}}<span class="badge bg-danger">No</span>{{end}}
                         </td>
                         <td style="text-align:right; white-space:nowrap;">
                             {{if .IsActive}}

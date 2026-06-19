@@ -9,16 +9,16 @@
     {{template "part_tabs" .}}
 
     {{if .Error}}
-    <div class="error-banner"><strong>Error:</strong> {{.Error}}</div>
+    <div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>
     {{else}}
 
     {{/* ── Status bar ─────────────────────────────────────────── */}}
     <div class="part-status-bar">
         <div class="part-status-cell">
             <div class="part-status-label" data-bs-toggle="tooltip" title="Release status: Under Review, Active, or Deprecated">Status</div>
-            {{if eq .Part.ReleaseStatus "U"}}<span class="badge status-U">Under Review</span>
-            {{else if eq .Part.ReleaseStatus "A"}}<span class="badge status-A">Active</span>
-            {{else if eq .Part.ReleaseStatus "D"}}<span class="badge status-D">Deprecated</span>
+            {{if eq .Part.ReleaseStatus "U"}}<span class="badge bg-info text-dark">Under Review</span>
+            {{else if eq .Part.ReleaseStatus "A"}}<span class="badge bg-success">Active</span>
+            {{else if eq .Part.ReleaseStatus "D"}}<span class="badge bg-danger">Deprecated</span>
             {{else}}<span style="font-weight:600">—</span>{{end}}
         </div>
         <div class="part-status-cell">
@@ -31,8 +31,8 @@
         </div>
         <div class="part-status-cell">
             <div class="part-status-label" data-bs-toggle="tooltip" title="Whether this part is currently active in the database">Active</div>
-            {{if .Part.Active}}<span class="badge badge-active">Yes</span>
-            {{else}}<span class="badge badge-inactive">No</span>{{end}}
+            {{if .Part.Active}}<span class="badge bg-success">Yes</span>
+            {{else}}<span class="badge bg-danger">No</span>{{end}}
         </div>
         <div class="part-status-cell">
             <div class="part-status-label">Last Modified</div>
@@ -79,16 +79,16 @@
         <div class="detail-row">
             <strong>Status:</strong>
             <span>
-                {{if eq .Part.ReleaseStatus "U"}}<span class="badge status-U">Under Review</span>
-                {{else if eq .Part.ReleaseStatus "A"}}<span class="badge status-A">Active</span>
-                {{else if eq .Part.ReleaseStatus "D"}}<span class="badge status-D">Deprecated</span>
+                {{if eq .Part.ReleaseStatus "U"}}<span class="badge bg-info text-dark">Under Review</span>
+                {{else if eq .Part.ReleaseStatus "A"}}<span class="badge bg-success">Active</span>
+                {{else if eq .Part.ReleaseStatus "D"}}<span class="badge bg-danger">Deprecated</span>
                 {{else}}<span class="badge">{{.Part.ReleaseStatus}}</span>{{end}}
             </span>
         </div>
         <div class="detail-row">
             <strong>Active:</strong>
-            <span>{{if .Part.Active}}<span class="badge badge-active">Active</span>
-            {{else}}<span class="badge badge-inactive">Inactive</span>{{end}}</span>
+            <span>{{if .Part.Active}}<span class="badge bg-success">Active</span>
+            {{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span>
         </div>
         <div class="detail-row"><strong>Created Date:</strong>   <span>{{formatDate .Part.PNDate}}</span></div>
         <div class="detail-row"><strong>Last Modified:</strong>  <span>{{formatDate .Part.PNDateModified}}</span></div>

@@ -8,7 +8,7 @@
 <div class="content">
     {{template "part_tabs" .}}
 
-    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     {{/* ── MPN list ──────────────────────────────────────────── */}}
     {{if .MfgParts}}
@@ -31,13 +31,13 @@
                     <td>{{.Description}}</td>
                     <td style="text-align:center;">
                         <a href="/part/{{$.Part.PNID}}/mfg-parts/{{.ID}}/edit#edit-form"
-                           class="btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
+                           class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
                     </td>
                     <td style="text-align:center;">
                         <form method="post" action="/part/{{$.Part.PNID}}/mfg-parts/{{.ID}}/delete"
                               style="margin:0;" onsubmit="return confirm('Remove this manufacturer part?')">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <button type="submit" class="btn-secondary"
+                            <button type="submit" class="btn btn-secondary"
                                     style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
                         </form>
                     </td>
@@ -85,7 +85,7 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
-                <a href="/part/{{.Part.PNID}}/mfg-parts" class="btn-secondary">Cancel</a>
+                <a href="/part/{{.Part.PNID}}/mfg-parts" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>

@@ -115,7 +115,7 @@
                        placeholder="e.g. C:\DocControl"
                        style="width:400px; padding:6px 10px; border:1px solid #ccc;
                               border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn-secondary"
+                <button type="button" class="btn btn-secondary"
                         onclick="browseFolder('doc_control_root')"
                         style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
             </div>
@@ -128,7 +128,7 @@
                        placeholder="e.g. C:\PurchaseOrders"
                        style="width:400px; padding:6px 10px; border:1px solid #ccc;
                               border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn-secondary"
+                <button type="button" class="btn btn-secondary"
                         onclick="browseFolder('po_folder_root')"
                         style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
             </div>
@@ -141,7 +141,7 @@
                        placeholder="e.g. C:\SupplierDocs (blank = use DOC_CONTROL_ROOT)"
                        style="width:400px; padding:6px 10px; border:1px solid #ccc;
                               border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn-secondary"
+                <button type="button" class="btn btn-secondary"
                         onclick="browseFolder('supplier_files_root')"
                         style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
             </div>
@@ -154,7 +154,7 @@
                        placeholder="e.g. C:\Images (used by Test Records)"
                        style="width:400px; padding:6px 10px; border:1px solid #ccc;
                               border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn-secondary"
+                <button type="button" class="btn btn-secondary"
                         onclick="browseFolder('image_root')"
                         style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
             </div>
@@ -300,7 +300,7 @@
                         <td style="text-align:center;"><input type="checkbox" data-f="pricing" {{if .Pricing}}checked{{end}}></td>
                         <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" {{if .MfgParts}}checked{{end}}></td>
                         <td style="text-align:center;"><input type="checkbox" data-f="suppliers" {{if .Suppliers}}checked{{end}}></td>
-                        <td style="text-align:center;"><button type="button" class="btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
+                        <td style="text-align:center;"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
                     </tr>
                     {{end}}
                 </tbody>
@@ -314,11 +314,11 @@
                     <td style="text-align:center;"><input type="checkbox" data-f="pricing" checked></td>
                     <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" checked></td>
                     <td style="text-align:center;"><input type="checkbox" data-f="suppliers" checked></td>
-                    <td style="text-align:center;"><button type="button" class="btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
+                    <td style="text-align:center;"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
                 </tr>
             </template>
             <div class="form-actions" style="margin-top:12px; display:flex; gap:8px;">
-                <button type="button" class="btn-secondary" onclick="addCatRow()">+ Add Category</button>
+                <button type="button" class="btn btn-secondary" onclick="addCatRow()">+ Add Category</button>
                 <button type="submit" class="btn btn-primary">Save Part Categories</button>
             </div>
         </form>

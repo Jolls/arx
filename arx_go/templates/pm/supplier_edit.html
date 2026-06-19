@@ -10,7 +10,7 @@
     {{template "supplier_tabs" .}}
     {{end}}
 
-    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     <form method="post" action="{{if .IsNew}}/suppliers{{else}}/supplier/{{.Supplier.ID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -92,7 +92,7 @@
                 {{if .IsNew}}Create Vendor{{else}}Save Changes{{end}}
             </button>
             <a href="{{if .IsNew}}/suppliers{{else}}/supplier/{{.Supplier.ID}}{{end}}"
-               class="btn-secondary">Cancel</a>
+               class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>

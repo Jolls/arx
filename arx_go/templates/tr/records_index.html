@@ -30,11 +30,11 @@
 <table class="table table-bordered table-hover table-sm">
   <thead class="table-dark">
     <tr>
-      <th>Serial Number</th>
-      <th>Part Number</th>
-      <th>Description</th>
-      <th>Date</th>
-      <th data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
+      <th class="sortable" onclick="sortTable(this)">Serial Number</th>
+      <th class="sortable" onclick="sortTable(this)">Part Number</th>
+      <th class="sortable" onclick="sortTable(this)">Description</th>
+      <th class="sortable" onclick="sortTable(this)">Date</th>
+      <th class="sortable" onclick="sortTable(this)" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
       <th class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
     </tr>
   </thead>

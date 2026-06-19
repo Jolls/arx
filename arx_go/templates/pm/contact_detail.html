@@ -30,8 +30,8 @@
         <h3>Status &amp; Dates</h3>
         <div class="detail-row">
             <strong>Active:</strong>
-            <span>{{if .Contact.CNActive}}<span class="badge badge-active">Active</span>
-            {{else}}<span class="badge badge-inactive">Inactive</span>{{end}}</span>
+            <span>{{if .Contact.CNActive}}<span class="badge bg-success">Active</span>
+            {{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span>
         </div>
         <div class="detail-row"><strong>Last Modified:</strong> <span>{{formatDate .Contact.CNDateModified}}</span></div>
     </div>
