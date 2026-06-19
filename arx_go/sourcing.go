@@ -27,10 +27,11 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 	}
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, "part_sourcing.html", map[string]any{
-		"Part":      p,
-		"Links":     links,
-		"Suppliers": h.fetchSuppliersOnly(r),
-		"Units":     units,
+		"Part":              p,
+		"Links":             links,
+		"PricesBySupplier":  h.fetchActivePricesBySupplier(r, id),
+		"Suppliers":         h.fetchSuppliersOnly(r),
+		"Units":             units,
 		"ActiveTab": "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -222,6 +223,41 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 		list = append(list, lk)
 	}
 	return list, rows.Err()
+}
+
+// fetchActivePricesBySupplier returns active prices for a part keyed by supplier_id.
+func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) map[int][]models.Price {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT supplier_id, price_ea, pack_size, effective_date
+		FROM %s
+		WHERE part_id = @p1 AND is_active = 1
+		ORDER BY supplier_id, pack_size
+	`, h.cfg.PriceTable()), partID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[int][]models.Price{}
+	for rows.Next() {
+		var suppID sql.NullInt64
+		var priceEA, packSize sql.NullFloat64
+		var effDate sql.NullTime
+		if rows.Scan(&suppID, &priceEA, &packSize, &effDate) != nil || !suppID.Valid {
+			continue
+		}
+		p := models.Price{}
+		if priceEA.Valid {
+			p.PriceEA = &priceEA.Float64
+		}
+		if packSize.Valid {
+			p.PackSize = &packSize.Float64
+		}
+		if effDate.Valid {
+			p.EffectiveDate = &effDate.Time
+		}
+		out[int(suppID.Int64)] = append(out[int(suppID.Int64)], p)
+	}
+	return out
 }
 
 // fetchSuppliersOnly returns active companies flagged as suppliers, for dropdowns.
