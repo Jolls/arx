@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.20] - 2026-06-19 
+- parts_master: auto-populate Vendor PN when selecting a part on a PO edit if a supplier part record exists ([#444](https://github.com/Jolls/arx-legacy/issues/444))
+
 ## [0.5.19] - 2026-06-19 
 - parts_master: click any column header to sort Parts, Vendors, Contacts, and POs lists ascending/descending ([#448](https://github.com/Jolls/arx-legacy/issues/448))
 - test_records: filter row on the Test Report page to narrow results by serial number, part number, date, result, pass/fail, or comment; Copy for Excel respects the active filter ([#449](https://github.com/Jolls/arx-legacy/issues/449))

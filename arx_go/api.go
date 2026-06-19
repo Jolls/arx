@@ -133,6 +133,29 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
+// APISupplierPN returns the supplier_pn for a (part, supplier) pair.
+// GET /api/supplier-part?part_id=X&supplier_id=Y
+func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
+	partID := r.URL.Query().Get("part_id")
+	supplierID := r.URL.Query().Get("supplier_id")
+	if partID == "" || supplierID == "" {
+		writeJSON(w, map[string]string{"supplier_pn": ""})
+		return
+	}
+	var pn sql.NullString
+	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT TOP 1 supplier_pn
+		FROM %s
+		WHERE part_id = @p1 AND supplier_id = @p2
+		ORDER BY preference ASC
+	`, h.cfg.SupplierPartTable()), partID, supplierID).Scan(&pn)
+	if err != nil {
+		writeJSON(w, map[string]string{"supplier_pn": ""})
+		return
+	}
+	writeJSON(w, map[string]string{"supplier_pn": pn.String})
+}
+
 // APIBrowseFolder opens a native Windows folder-picker dialog and returns
 // the selected path as JSON. Used by the Settings page browse buttons.
 func (h *Handler) APIBrowseFolder(w http.ResponseWriter, r *http.Request) {
