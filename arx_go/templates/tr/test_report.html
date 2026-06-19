@@ -31,6 +31,15 @@
         <th class="text-center">P/F</th>
         <th>Comment</th>
       </tr>
+      <tr id="report-filter-row">
+        <th><input type="text" class="report-filter-input" placeholder=""></th>
+        <th><input type="text" class="report-filter-input" placeholder=""></th>
+        <th><input type="text" class="report-filter-input" placeholder=""></th>
+        <th><input type="text" class="report-filter-input" placeholder=""></th>
+        <th><input type="text" class="report-filter-input" placeholder=""></th>
+        <th><input type="text" class="report-filter-input" placeholder=""></th>
+        <th><input type="text" class="report-filter-input" placeholder=""></th>
+      </tr>
     </thead>
     <tbody>
       {{range .Rows}}
@@ -57,20 +66,62 @@
     </tbody>
   </table>
 </div>
-<div class="text-muted small mt-1">{{len .Rows}} record{{if gt (len .Rows) 1}}s{{end}}</div>
+<div class="text-muted small mt-1"><span class="report-count">{{len .Rows}}</span> of {{len .Rows}} record{{if gt (len .Rows) 1}}s{{end}}</div>
 {{else}}
 <p class="text-muted">No results recorded for this test yet.</p>
 {{end}}
 
+<style>
+#report-filter-row th { padding: 3px 4px; }
+#report-filter-row input {
+  width: 100%; box-sizing: border-box; padding: 4px 6px;
+  border: 1px solid #6c757d; border-radius: 3px;
+  font-size: 0.85em; background: #343a40; color: #fff;
+}
+#report-filter-row input::placeholder { color: #adb5bd; }
+#report-filter-row input:focus { outline: none; border-color: #adb5bd; }
+</style>
 <script>
 (function() {
+  // Filter
+  var filterInputs = document.querySelectorAll('.report-filter-input');
+  filterInputs.forEach(function(inp) {
+    inp.addEventListener('input', applyReportFilter);
+  });
+
+  function applyReportFilter() {
+    var filters = Array.from(filterInputs).map(function(i) { return i.value.toLowerCase().trim(); });
+    var tbody = document.querySelector('#report-table tbody');
+    if (!tbody) return;
+    var count = 0;
+    tbody.querySelectorAll('tr').forEach(function(tr) {
+      var cells = tr.querySelectorAll('td');
+      // col 5 (P/F) read from data-pf attribute for text match
+      var texts = [
+        cells[0] ? cells[0].textContent.trim().toLowerCase() : '',
+        cells[1] ? cells[1].textContent.trim().toLowerCase() : '',
+        cells[2] ? cells[2].textContent.trim().toLowerCase() : '',
+        cells[3] ? cells[3].textContent.trim().toLowerCase() : '',
+        cells[4] ? cells[4].textContent.trim().toLowerCase() : '',
+        cells[5] ? (cells[5].getAttribute('data-pf') || '').toLowerCase() : '',
+        cells[6] ? cells[6].textContent.trim().toLowerCase() : '',
+      ];
+      var match = filters.every(function(f, i) { return !f || texts[i].includes(f); });
+      tr.style.display = match ? '' : 'none';
+      if (match) count++;
+    });
+    var countEl = document.querySelector('.report-count');
+    if (countEl) countEl.textContent = count;
+  }
+
+  // Copy (visible rows only)
   var btn = document.getElementById('copy-report');
   btn.addEventListener('click', function() {
     var lines = ['Serial Number\tPart Number\tRecord Date\tResult Date\tResult\tP/F\tComment'];
     var tbody = document.querySelector('#report-table tbody');
     if (tbody) {
-      var rows = tbody.querySelectorAll('tr');
-      rows.forEach(function(tr) {
+      tbody.querySelectorAll('tr').forEach(function(tr) {
+        if (tr.style.display === 'none') return;
         var cells = tr.querySelectorAll('td');
         var pf = cells[5] ? (cells[5].getAttribute('data-pf') || '') : '';
         lines.push([
