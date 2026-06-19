@@ -113,6 +113,52 @@ func (h *Handler) fetchSuggestLinks(r *http.Request, poNum string) []SuggestLink
 	return out
 }
 
+// ── SuggestPrice is a PO line whose cost has no matching active price record ──
+
+type SuggestPrice struct {
+	Index      int
+	PartID     int
+	PartNumber string
+	Cost       float64
+}
+
+func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPrice {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT DISTINCT pol.POLPNID, pol.POLPNPartNumber, pol.POLCost
+		FROM %s pol
+		JOIN %s po ON pol.POLPOID = po.ID
+		WHERE po.number = @p1
+		  AND pol.POLPNID IS NOT NULL
+		  AND pol.POLCost > 0
+		  AND po.supplier_id IS NOT NULL
+		  AND NOT EXISTS (
+		    SELECT 1 FROM %s pr
+		    WHERE pr.part_id = pol.POLPNID
+		      AND pr.supplier_id = po.supplier_id
+		      AND pr.pack_size = 1
+		      AND pr.is_active = 1
+		      AND pr.price_ea = pol.POLCost
+		  )
+	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PriceTable()), poNum)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []SuggestPrice
+	for rows.Next() {
+		var s SuggestPrice
+		var partID sql.NullInt64
+		var partNum sql.NullString
+		if rows.Scan(&partID, &partNum, &s.Cost) == nil {
+			s.Index = len(out)
+			s.PartID = int(partID.Int64)
+			s.PartNumber = partNum.String
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // ── polRow is a parsed line-item from the edit form ──────────────────────────
 
 type polRow struct {
@@ -292,6 +338,10 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("suggest_links") == "1" {
 		if links := h.fetchSuggestLinks(r, num); len(links) > 0 {
 			tplData["SuggestLinks"] = links
+			tplData["CSRFToken"] = h.csrfToken(w, r)
+		}
+		if prices := h.fetchSuggestPrices(r, num); len(prices) > 0 {
+			tplData["SuggestPrices"] = prices
 			tplData["CSRFToken"] = h.csrfToken(w, r)
 		}
 	}
@@ -652,6 +702,46 @@ func (h *Handler) POAddSupplierLinks(w http.ResponseWriter, r *http.Request) {
 			partID, supplierID, supplierPN,
 		); err != nil {
 			h.renderError(w, "Error adding supplier link: "+err.Error())
+			return
+		}
+	}
+	http.Redirect(w, r, "/po/"+num, http.StatusFound)
+}
+
+// ── POAddPrices — POST /po/{id}/add-prices ───────────────────────────────────
+
+func (h *Handler) POAddPrices(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, "Error parsing form: "+err.Error())
+		return
+	}
+	supplierID := r.FormValue("supplier_id")
+	today := time.Now().Format("2006-01-02")
+	count, _ := strconv.Atoi(r.FormValue("count"))
+	pr := h.cfg.PriceTable()
+	for i := 0; i < count; i++ {
+		if r.FormValue(fmt.Sprintf("add_price_%d", i)) != "1" {
+			continue
+		}
+		partID := r.FormValue(fmt.Sprintf("price_part_id_%d", i))
+		cost := r.FormValue(fmt.Sprintf("price_cost_%d", i))
+		if partID == "" || cost == "" || supplierID == "" {
+			continue
+		}
+		// Deactivate any existing active price at pack_size=1 for this part+supplier.
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
+			UPDATE %s SET is_active=0
+			WHERE part_id=@p1 AND supplier_id=@p2 AND pack_size=1 AND is_active=1
+		`, pr), partID, supplierID); err != nil {
+			h.renderError(w, "Error updating price: "+err.Error())
+			return
+		}
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
+			INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+			VALUES (@p1, @p2, 1, @p3, @p3, @p4, 1)
+		`, pr), partID, supplierID, cost, today); err != nil {
+			h.renderError(w, "Error inserting price: "+err.Error())
 			return
 		}
 	}
