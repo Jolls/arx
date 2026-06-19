@@ -150,6 +150,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 
 	h.renderTR(w, "index.html", map[string]any{
 		"Forms":    forms,
+		"ActiveTab": "records",
 		"TestMode": h.cfg.TestMode,
 	})
 }
@@ -218,6 +219,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		"Form":     form,
 		"Records":  records,
 		"WIPOnly":  wipOnly,
+		"ActiveTab": "records",
 		"TestMode": h.cfg.TestMode,
 	})
 }
@@ -374,6 +376,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		"Steps":       steps,
 		"HistPoints":  histPoints,
 		"CSRFToken":   h.csrfToken(w, r),
+		"ActiveTab":   "records",
 		"TestMode":    h.cfg.TestMode,
 	})
 }
@@ -537,6 +540,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		"Form":      form,
 		"Steps":     steps,
 		"CSRFToken": h.csrfToken(w, r),
+		"ActiveTab": "records",
 		"TestMode":  h.cfg.TestMode,
 	})
 }
@@ -980,6 +984,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		"PrevID":    prevID,
 		"NextID":    nextID,
 		"CSRFToken": h.csrfToken(w, r),
+		"ActiveTab": "records",
 		"TestMode":  h.cfg.TestMode,
 		"DebugMode": h.cfg.DebugMode,
 	})
@@ -1150,6 +1155,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		"Record":    record,
 		"Rows":      resultRows,
 		"ImageRows": imageRows,
+		"ActiveTab": "records",
 		"TestMode":  h.cfg.TestMode,
 	})
 }
@@ -1223,6 +1229,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		"NextSN":    nextSNStr,
 		"Today":     time.Now().Format("2006-01-02T15:04"),
 		"CSRFToken": h.csrfToken(w, r),
+		"ActiveTab": "records",
 		"TestMode":  h.cfg.TestMode,
 	})
 }
@@ -1446,6 +1453,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		"Record":    record,
 		"Rows":      resultRows,
 		"CSRFToken": h.csrfToken(w, r),
+		"ActiveTab": "records",
 		"TestMode":  h.cfg.TestMode,
 	})
 }
@@ -1921,6 +1929,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 		"PNs":         pns,
 		"SourceForms": sourceForms,
 		"CSRFToken":   h.csrfToken(w, r),
+		"ActiveTab":   "records",
 		"TestMode":    h.cfg.TestMode,
 	})
 }
@@ -2028,6 +2037,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 		"StepCount": stepCount,
 		"PNs":       pns,
 		"CSRFToken": h.csrfToken(w, r),
+		"ActiveTab": "records",
 		"TestMode":  h.cfg.TestMode,
 	})
 }
@@ -2202,6 +2212,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		"Form":     form,
 		"Step":     step,
 		"Rows":     rows,
+		"ActiveTab": "records",
 		"TestMode": h.cfg.TestMode,
 	})
 }

@@ -1,20 +1,16 @@
 {{define "content"}}
-<header>
-    <h1>Purchase Orders</h1>
-    <p>PO list</p>
-</header>
 <div class="content">
-    <div style="margin-bottom:16px;">
-        <a href="/pos/new" class="btn-primary" style="text-decoration:none;">+ New PO</a>
+    <div class="d-flex justify-content-end mb-3">
+        <a href="/pos/new" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle"></i> New PO</a>
     </div>
 
     <div class="table-wrapper">
-        <table data-rows-url="/api/pos/rows">
+        <table class="table table-bordered table-hover table-sm" data-rows-url="/api/pos/rows">
             <colgroup>
                 <col><col><col><col><col><col><col>
             </colgroup>
             <thead>
-                <tr>
+                <tr class="table-dark">
                     <th>PO Number</th>
                     <th>Status</th>
                     <th>Vendor</th>

@@ -995,6 +995,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, "part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
+		"Suppliers": h.fetchSupplierOptions(r),
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,

@@ -1,17 +1,16 @@
 {{define "content"}}
-<header>
-    <h1>{{if .IsNew}}New Contact{{else}}Edit Contact{{end}}</h1>
-    <p>{{if .IsNew}}Create a new contact record{{else}}{{.Contact.CNName}}{{end}}</p>
-</header>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{{if .NavBackURL}}{{.NavBackURL}}{{else}}/contacts{{end}}">{{if .NavBackLabel}}{{.NavBackLabel}}{{else}}Contacts{{end}}</a></li>
+            <li class="breadcrumb-item active">{{if .IsNew}}New Contact{{else}}{{.Contact.CNName}}{{end}}</li>
+        </ol>
+    </nav>
+    {{if not .IsNew}}
+    <a href="/contact/{{.Contact.CNID}}" class="btn btn-sm btn-outline-secondary">Cancel</a>
+    {{end}}
+</div>
 <div class="content">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-        <a href="{{if .NavBackURL}}{{.NavBackURL}}{{else}}/contacts{{end}}" class="back-link" style="margin-bottom:0;">
-            &#8592; Back to {{if .NavBackLabel}}{{.NavBackLabel}}{{else}}Contacts List{{end}}
-        </a>
-        {{if not .IsNew}}
-        <a href="/contact/{{.Contact.CNID}}" class="btn-secondary">Cancel</a>
-        {{end}}
-    </div>
 
     {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
@@ -121,7 +120,7 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn-primary">
+            <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create Contact{{else}}Save Changes{{end}}
             </button>
             <a href="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.CNID}}{{end}}"

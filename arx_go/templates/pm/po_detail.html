@@ -1,12 +1,10 @@
 {{define "content"}}
-<header>
-    <h1>PO #{{.PO.Number}}</h1>
-    <p>
-        {{if .PO.SupplierID}}
-            <a href="/supplier/{{derefInt .PO.SupplierID}}" style="color:white; text-decoration:underline;">{{.PO.SupplierName}}</a>
-        {{else}}{{.PO.SupplierName}}{{end}}
-    </p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/pos">POs</a></li>
+        <li class="breadcrumb-item active">PO #{{.PO.Number}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "po_tabs" .}}
 
@@ -27,7 +25,7 @@
             </label>
             {{end}}
             <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
-                <button type="submit" class="btn-primary btn-sm">Save to catalog</button>
+                <button type="submit" class="btn btn-primary btn-sm">Save to catalog</button>
                 <button type="button" class="btn-secondary btn-sm" onclick="document.getElementById('suggest-links-banner').remove()">Dismiss</button>
             </div>
         </form>
@@ -51,7 +49,7 @@
             </label>
             {{end}}
             <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
-                <button type="submit" class="btn-primary btn-sm">Save to pricing</button>
+                <button type="submit" class="btn btn-primary btn-sm">Save to pricing</button>
                 <button type="button" class="btn-secondary btn-sm" onclick="document.getElementById('suggest-prices-banner').remove()">Dismiss</button>
             </div>
         </form>
@@ -151,8 +149,8 @@
         <h3>Line Items ({{len .POItems}})</h3>
         {{if .POItems}}
         <div class="table-wrapper" style="margin-top:12px;">
-            <table style="table-layout:auto;">
-                <thead>
+            <table class="table table-bordered table-hover table-sm">
+                <thead class="table-dark">
                     <tr>
                         <th style="width:36px;">#</th>
                         <th>Part Number</th>

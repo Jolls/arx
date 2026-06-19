@@ -1,12 +1,10 @@
 /* Arx Test Records — application stylesheet */
 
-body { font-size: 0.875rem; }
-
 /* Shared PM-style app header + tab bar (issue #421 minimal slice) */
 :root {
-  --accent-1: #667eea;
+  --accent-1: #0d6efd;
   --header-bg: #1a1a2e;
-  --header-border: #667eea;
+  --header-border: #0d6efd;
 }
 .app-header {
   height: 36px; background: var(--header-bg); color: #e0e0e0;

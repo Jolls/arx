@@ -236,7 +236,7 @@
 
     <!-- ── Save button ───────────────────────────────────────────────── -->
     <div style="margin-top:24px; display:flex; align-items:center; gap:16px;">
-        <button type="submit" class="btn-primary" style="padding:10px 32px; font-size:0.95em;">
+        <button type="submit" class="btn btn-primary" style="padding:10px 32px; font-size:0.95em;">
             Save Settings
         </button>
         {{if .Connected}}
@@ -261,7 +261,7 @@
                 </div>
             </div>
             <div class="form-actions" style="margin-top:12px;">
-                <button type="submit" class="btn-primary">Save Categories</button>
+                <button type="submit" class="btn btn-primary">Save Categories</button>
             </div>
         </form>
     </div>
@@ -277,9 +277,9 @@
         <form method="post" action="/settings/categories" onsubmit="numberCats(this)">
             <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
             <input type="hidden" name="cat_count">
-            <table style="width:100%; border-collapse:collapse;">
-                <thead>
-                    <tr style="text-align:left; color:#888; font-size:0.8em;">
+            <table class="table table-bordered table-sm">
+                <thead class="table-dark">
+                    <tr>
                         <th style="padding:4px 8px;">Code</th>
                         <th style="padding:4px 8px;">Label</th>
                         <th style="padding:4px 8px; text-align:center;">BOM</th>
@@ -319,7 +319,7 @@
             </template>
             <div class="form-actions" style="margin-top:12px; display:flex; gap:8px;">
                 <button type="button" class="btn-secondary" onclick="addCatRow()">+ Add Category</button>
-                <button type="submit" class="btn-primary">Save Part Categories</button>
+                <button type="submit" class="btn btn-primary">Save Part Categories</button>
             </div>
         </form>
     </div>

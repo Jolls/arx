@@ -1,15 +1,14 @@
 {{define "content"}}
-<header>
-    <h1>Contact Details</h1>
-    <p>{{.Contact.CNName}}</p>
-</header>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{{if .NavBackURL}}{{.NavBackURL}}{{else}}/contacts{{end}}">{{if .NavBackLabel}}{{.NavBackLabel}}{{else}}Contacts{{end}}</a></li>
+            <li class="breadcrumb-item active">{{.Contact.CNName}}</li>
+        </ol>
+    </nav>
+    <a href="/contact/{{.Contact.CNID}}/edit" class="btn btn-sm btn-primary"><i class="bi bi-pencil"></i> Edit Contact</a>
+</div>
 <div class="content">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-        <a href="{{if .NavBackURL}}{{.NavBackURL}}{{else}}/contacts{{end}}" class="back-link" style="margin-bottom:0;">
-            &#8592; Back to {{if .NavBackLabel}}{{.NavBackLabel}}{{else}}Contacts List{{end}}
-        </a>
-        <a href="/contact/{{.Contact.CNID}}/edit" class="new-record-btn" style="margin-bottom:0;">Edit Contact</a>
-    </div>
 
     <div class="detail-section">
         <h3>Basic Information</h3>

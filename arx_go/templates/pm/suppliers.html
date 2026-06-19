@@ -1,18 +1,16 @@
 {{define "content"}}
-<header>
-    <h1>Vendors</h1>
-    <p>Vendor directory</p>
-</header>
 <div class="content">
-    <a href="/suppliers/new" class="new-record-btn">+ New Vendor</a>
+    <div class="d-flex justify-content-end mb-3">
+        <a href="/suppliers/new" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle"></i> New Vendor</a>
+    </div>
 
     <div class="table-wrapper">
-        <table data-rows-url="/api/suppliers/rows">
+        <table class="table table-bordered table-hover table-sm" data-rows-url="/api/suppliers/rows">
             <colgroup>
                 <col><col><col><col><col><col><col>
             </colgroup>
             <thead>
-                <tr>
+                <tr class="table-dark">
                     <th>Vendor Name</th>
                     <th>Status</th>
                     <th>Country</th>

@@ -1,14 +1,12 @@
 {{define "content"}}
-<header>
-    <h1>Part Details</h1>
-    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "part_tabs" .}}
-
-    <div style="margin-bottom:12px;">
-        <a href="/part/{{.Part.PNID}}/pricing/new" class="btn btn-primary">+ Add Price</a>
-    </div>
 
     {{if .PriceGroups}}
     {{range .PriceGroups}}
@@ -24,8 +22,8 @@
             {{end}}
         </h3>
         <div class="table-wrapper" style="margin-top:10px;">
-            <table style="table-layout:auto;">
-                <thead>
+            <table class="table table-bordered table-hover table-sm">
+                <thead class="table-dark">
                     <tr>
                         <th style="width:100px; text-align:right;">Pack Size</th>
                         <th style="width:120px; text-align:right;">Price / Unit</th>
@@ -75,5 +73,42 @@
     {{else}}
     <p class="no-results">No pricing data found for this part.</p>
     {{end}}
+
+    <details style="margin-top:24px;">
+        <summary style="cursor:pointer; font-weight:600; font-size:1em; padding:8px 0;">Add Price</summary>
+        <div class="detail-section" style="margin-top:8px;">
+            <form method="post" action="/part/{{.Part.PNID}}/pricing">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <div class="detail-row">
+                    <label for="supplier_id" class="form-label">Supplier *</label>
+                    <select id="supplier_id" name="supplier_id" class="form-select" required>
+                        <option value="">-- Select --</option>
+                        {{range .Suppliers}}
+                        <option value="{{.ID}}">{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="detail-row">
+                    <label for="pack_size" class="form-label">Pack Size *</label>
+                    <input type="number" id="pack_size" name="pack_size" class="form-input" step="any" min="0" required>
+                </div>
+                <div class="detail-row">
+                    <label for="price_ea" class="form-label">Price / Unit</label>
+                    <input type="number" id="price_ea" name="price_ea" class="form-input" step="any" min="0">
+                </div>
+                <div class="detail-row">
+                    <label for="price_pack" class="form-label">Price / Pack</label>
+                    <input type="number" id="price_pack" name="price_pack" class="form-input" step="any" min="0">
+                </div>
+                <div class="detail-row">
+                    <label for="effective_date" class="form-label">Effective Date</label>
+                    <input type="date" id="effective_date" name="effective_date" class="form-input">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Add Price</button>
+                </div>
+            </form>
+        </div>
+    </details>
 </div>
 {{end}}

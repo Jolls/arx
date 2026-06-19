@@ -6,12 +6,10 @@
 
 /* --- Tokens -------------------------------------------------- */
 :root {
-    --accent-1:      #667eea;   /* primary blue-purple */
-    --accent-2:      #764ba2;   /* secondary purple */
+    --accent-1:      #0d6efd;
+    --accent-2:      #0b5ed7;
     --header-bg:     #1a1a2e;
     --header-border: var(--accent-1);
-    --body-bg-from:  var(--accent-1);
-    --body-bg-to:    var(--accent-2);
 }
 
 /* --- Reset ---------------------------------------------------- */
@@ -35,16 +33,8 @@ body {
     border-bottom-color: #f59e0b;
 }
 
-/* --- Page header (title banner) ------------------------------ */
-header {
-    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
-    color: white; padding: 20px; text-align: center;
-}
-header h1 { font-size: 2.5em; margin-bottom: 5px; }
-header p  { font-size: 1.1em; opacity: 0.9; margin: 0; }
-
 /* --- Navigation tabs ----------------------------------------- */
-.tabs { display: flex; border-bottom: 1px solid #ddd; background: #fafafa; }
+.tabs { display: flex; border-bottom: 1px solid #ddd; background: #fafafa; margin-bottom: 1.5rem; }
 .tab {
     flex: 1; text-align: center; padding: 12px 0;
     text-decoration: none; color: #444; font-weight: 600;
@@ -70,16 +60,12 @@ header p  { font-size: 1.1em; opacity: 0.9; margin: 0; }
 .sub-tab-edit          { margin-left: auto; }
 
 /* --- Content area -------------------------------------------- */
-.content { padding: 20px; }
 
 /* --- Tables -------------------------------------------------- */
 .table-wrapper { overflow-x: auto; contain: layout style; }
 
-table { width: 100%; border-collapse: collapse; background: white; table-layout: fixed; }
-thead { background: #f5f5f5; border-bottom: 2px solid var(--accent-1); }
-th    { padding: 8px 10px; text-align: left; font-weight: 600; color: #333; font-size: 0.95em; }
-td    { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-tr:hover { background: #f9f9f9; }
+table[data-rows-url] { table-layout: fixed; }
+table[data-rows-url] td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Per-table column widths via <col> selectors (table-layout: fixed).
    The elastic column has no rule and absorbs all remaining width. */
@@ -122,18 +108,18 @@ table[data-rows-url="/api/contacts/rows"] col:nth-child(10) { width:  8%; } /* N
 table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* Active */
 
 /* --- Sortable column headers -------------------------------- */
-thead tr:first-child th.sortable { cursor: pointer; user-select: none; }
-thead tr:first-child th.sortable:hover { background: #eaeaea; }
-thead tr:first-child th.sort-asc::after  { content: ' \25B2'; font-size: 0.7em; opacity: 0.7; }
-thead tr:first-child th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opacity: 0.7; }
+tr.table-dark th.sortable { cursor: pointer; user-select: none; }
+tr.table-dark th.sortable:hover { background: rgba(255,255,255,0.12); }
+tr.table-dark th.sort-asc::after  { content: ' \25B2'; font-size: 0.7em; opacity: 0.7; }
+tr.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opacity: 0.7; }
 
 /* --- Filter row --------------------------------------------- */
-.filter-row th { padding: 4px 6px; border: none; background: transparent; }
+.filter-row th { padding: 4px 6px; background: #fff; }
 .filter-row input {
     width: 100%; box-sizing: border-box; margin: 0;
     padding: 6px 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.9em;
 }
-.filter-row input:focus { outline: none; border-color: var(--accent-1); box-shadow: 0 0 3px rgba(102,126,234,0.3); }
+.filter-row input:focus { outline: none; border-color: var(--accent-1); box-shadow: 0 0 3px rgba(13,110,253,0.3); }
 
 .form-input.input-invalid { border-color: #dc3545 !important; background: #fff8f8; }
 .form-input.input-invalid:focus { box-shadow: 0 0 3px rgba(220,53,69,0.4); }
@@ -190,28 +176,12 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .table-footer-note  { margin-top: 12px; color: #888; font-size: 0.9em; }
 
 /* --- Buttons ------------------------------------------------- */
-.btn-primary {
-    padding: 10px 24px;
-    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
-    color: white; border: none; border-radius: 4px; font-size: 1em; font-weight: 600;
-    cursor: pointer; transition: opacity 0.2s;
-}
-.btn-primary:hover { opacity: 0.9; }
-
 .btn-secondary {
     padding: 10px 24px; background: #f0f0f0; color: #333; border: 1px solid #ddd;
     border-radius: 4px; font-size: 1em; font-weight: 600; text-decoration: none;
     display: inline-block; transition: background 0.2s;
 }
 .btn-secondary:hover { background: #e0e0e0; color: #333; text-decoration: none; }
-
-.new-record-btn {
-    display: inline-block; padding: 8px 16px;
-    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
-    color: white; border-radius: 4px; font-size: 0.9em; font-weight: 600;
-    text-decoration: none; transition: opacity 0.2s; margin-bottom: 15px;
-}
-.new-record-btn:hover { opacity: 0.9; color: white; text-decoration: none; }
 
 /* --- Forms --------------------------------------------------- */
 .form-label { display: block; font-weight: 600; color: var(--accent-1); font-size: 0.95em; }
@@ -221,7 +191,7 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 .form-input:focus, .form-select:focus, .form-textarea:focus {
-    outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+    outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 3px rgba(13,110,253,0.15);
 }
 .form-textarea { min-height: 100px; resize: vertical; }
 .form-checkbox-row { display: flex; align-items: center; gap: 10px; }
@@ -254,7 +224,7 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
     padding: 3px 5px; font-size: 0.85em;
     width: 100%; box-sizing: border-box;
 }
-.tbl-input:focus { outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 2px rgba(102,126,234,0.2); }
+.tbl-input:focus { outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 2px rgba(13,110,253,0.2); }
 .btn-remove-row {
     background: none; border: 1px solid #e5e7eb; border-radius: 3px;
     color: #ef4444; font-size: 1.1em; font-weight: bold;
@@ -276,7 +246,7 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .search-dropdown-item:last-child { border-bottom: none; }
-.search-dropdown-item:hover, .search-dropdown-item.active { background: #eef2ff; }
+.search-dropdown-item:hover, .search-dropdown-item.active { background: #cfe2ff; }
 .search-dropdown-item strong { color: var(--accent-1); font-weight: 600; }
 
 
@@ -287,7 +257,6 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 .suggest-links-row {
     display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer;
 }
-.btn-sm { padding: 5px 14px; font-size: 0.85em; }
 
 .sourcing-price-subrow td {
     background: #f8f9fa; font-size: 0.85em; padding: 3px 12px 5px;

@@ -1,20 +1,21 @@
 {{define "content"}}
-<header>
-    <h1>{{if .IsNew}}New Purchase Order{{else}}Edit PO #{{.PO.Number}}{{end}}</h1>
-    <p>
-        {{if .PO.SupplierID}}
-            <a href="/supplier/{{derefInt .PO.SupplierID}}" style="color:white; text-decoration:underline;">{{.PO.SupplierName}}</a>
-        {{else}}{{.PO.SupplierName}}{{end}}
-    </p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/pos">POs</a></li>
+        {{if .IsDuplicate}}
+        <li class="breadcrumb-item"><a href="/po/{{.DuplicateFrom}}">PO #{{.DuplicateFrom}}</a></li>
+        <li class="breadcrumb-item active">Copy</li>
+        {{else if .IsNew}}
+        <li class="breadcrumb-item active">New PO</li>
+        {{else}}
+        <li class="breadcrumb-item active">PO #{{.PO.Number}}</li>
+        {{end}}
+    </ol>
+</nav>
 
 <div class="content">
     {{if not .IsNew}}
         {{template "po_tabs" .}}
-    {{else if .IsDuplicate}}
-        <a href="/po/{{.DuplicateFrom}}" class="back-link">&#8592; Back to PO #{{.DuplicateFrom}}</a>
-    {{else}}
-        <a href="/pos" class="back-link">&#8592; Back to POs List</a>
     {{end}}
 
     {{if .IsDuplicate}}
@@ -242,8 +243,8 @@
         <div class="detail-section">
             <h3>Line Items</h3>
             <div class="table-wrapper" style="margin-top:12px; overflow-x:auto;">
-                <table style="table-layout:auto; min-width:860px;">
-                    <thead>
+                <table class="table table-bordered table-hover table-sm" style="min-width:860px;">
+                    <thead class="table-dark">
                         <tr>
                             <th style="width:52px;">#</th>
                             <th style="min-width:110px;">Part Number</th>
@@ -299,7 +300,7 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn-primary">
+            <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create PO{{else}}Save Changes{{end}}
             </button>
             <a href="{{if .IsDuplicate}}/po/{{.DuplicateFrom}}{{else if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}"

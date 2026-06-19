@@ -1,12 +1,12 @@
 {{define "content"}}
-<header>
-    <h1>{{if .IsNew}}New Part{{else}}Edit Part{{end}}</h1>
-    <p>{{if .IsNew}}Create a new part record{{else}}{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}{{end}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{if .IsNew}}New Part{{else}}{{.Part.PartNumber}}{{end}}</li>
+    </ol>
+</nav>
 <div class="content">
-    {{if .IsNew}}
-    <a href="/" class="back-link">&#8592; Back to Parts List</a>
-    {{else}}
+    {{if not .IsNew}}
     {{template "part_tabs" .}}
     {{end}}
 
@@ -110,7 +110,7 @@
         </div>
 
 <div class="form-actions">
-            <button type="submit" class="btn-primary">
+            <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create Part{{else}}Save Changes{{end}}
             </button>
             <a href="{{if .IsNew}}/{{else}}/part/{{.Part.PNID}}{{end}}" class="btn-secondary">Cancel</a>

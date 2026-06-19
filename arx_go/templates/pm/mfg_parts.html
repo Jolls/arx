@@ -1,8 +1,10 @@
 {{define "content"}}
-<header>
-    <h1>Part Details</h1>
-    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "part_tabs" .}}
 
@@ -11,8 +13,8 @@
     {{/* ── MPN list ──────────────────────────────────────────── */}}
     {{if .MfgParts}}
     <div class="table-wrapper">
-        <table style="table-layout:auto;">
-            <thead>
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
                 <tr>
                     <th>Manufacturer</th>
                     <th>MPN</th>
@@ -82,7 +84,7 @@
                        value="{{.EditingMfgPart.Description}}">
             </div>
             <div class="form-actions">
-                <button type="submit" class="btn-primary">Save Changes</button>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
                 <a href="/part/{{.Part.PNID}}/mfg-parts" class="btn-secondary">Cancel</a>
             </div>
         </form>
@@ -121,7 +123,7 @@
                            placeholder="Optional manufacturer description">
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn-primary" {{if not .Manufacturers}}disabled{{end}}>
+                    <button type="submit" class="btn btn-primary" {{if not .Manufacturers}}disabled{{end}}>
                         Add Manufacturer Part
                     </button>
                 </div>
