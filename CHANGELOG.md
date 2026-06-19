@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.18] - 2026-06-19 
+- parts_master: PO print page now shows the ship-to contact person's name ([#451](https://github.com/Jolls/arx-legacy/issues/451))
+- parts_master: PO print page shows the PO folder path so users know where to save the PDF ([#450](https://github.com/Jolls/arx-legacy/issues/450))
+- parts_master: new PO date ordered and date requested now default to today ([#445](https://github.com/Jolls/arx-legacy/issues/445))
+- parts_master: adding a line item to a PO auto-increments the item number ([#443](https://github.com/Jolls/arx-legacy/issues/443))
+
 ## [0.5.17] - 2026-06-17 
 - arx: proportional column widths for Parts, Vendors, POs, and Contacts list tables; elastic column absorbs remaining width and scales responsively with the viewport ([#441](https://github.com/Jolls/arx-legacy/issues/441))
 - arx: hovering a truncated table cell shows a native tooltip with the full text ([#441](https://github.com/Jolls/arx-legacy/issues/441))

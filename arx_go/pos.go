@@ -249,7 +249,8 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────
 
 func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
-	po := models.PurchaseOrder{Status: "pending", IsActive: true}
+	now := time.Now()
+	po := models.PurchaseOrder{Status: "pending", IsActive: true, DateOrdered: &now, DateRequested: &now}
 	if u, err := user.Current(); err == nil {
 		po.Orderer = u.Username
 	}
@@ -648,9 +649,18 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 	for _, item := range items {
 		lineTotal += item.POLQty * item.POLCost
 	}
+
+	var folderPath string
+	if root := h.cfg.POFolderRoot; root != "" {
+		if base := findPOBaseFolder(root, num); base != "" {
+			folderPath = filepath.Join(root, base)
+		}
+	}
+
 	h.renderPrint(w, "po_print.html", map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"SupplierCode": supplierCode, "TestMode": h.cfg.TestMode,
+		"POFolderPath": folderPath,
 	})
 }
 
