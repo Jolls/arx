@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.21] - 2026-06-19 
+- parts_master: after saving a PO, offer to add new vendor PNs to the supplier catalog if no link exists ([#455](https://github.com/Jolls/arx-legacy/issues/455))
+
 ## [0.5.20] - 2026-06-19 
 - parts_master: auto-populate Vendor PN when selecting a part on a PO edit if a supplier part record exists ([#444](https://github.com/Jolls/arx-legacy/issues/444))
 

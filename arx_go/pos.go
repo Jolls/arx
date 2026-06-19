@@ -68,6 +68,51 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 	return out
 }
 
+// ── SuggestLink is a PO line that has a VendorPN with no supplier_part entry ─
+
+type SuggestLink struct {
+	Index      int
+	PartID     int
+	PartNumber string
+	VendorPN   string
+}
+
+func (h *Handler) fetchSuggestLinks(r *http.Request, poNum string) []SuggestLink {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT pol.POLPNID, pol.POLPNPartNumber, pol.VendorPN
+		FROM %s pol
+		JOIN %s po ON pol.POLPOID = po.ID
+		WHERE po.number = @p1
+		  AND pol.POLPNID IS NOT NULL
+		  AND pol.VendorPN IS NOT NULL AND pol.VendorPN <> ''
+		  AND po.supplier_id IS NOT NULL
+		  AND NOT EXISTS (
+		    SELECT 1 FROM %s sp
+		    WHERE sp.part_id = pol.POLPNID
+		      AND sp.supplier_id = po.supplier_id
+		      AND sp.supplier_pn = pol.VendorPN
+		  )
+	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.SupplierPartTable()), poNum)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []SuggestLink
+	for rows.Next() {
+		var l SuggestLink
+		var partID sql.NullInt64
+		var partNum, vendorPN sql.NullString
+		if rows.Scan(&partID, &partNum, &vendorPN) == nil {
+			l.Index = len(out)
+			l.PartID = int(partID.Int64)
+			l.PartNumber = partNum.String
+			l.VendorPN = vendorPN.String
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 // ── polRow is a parsed line-item from the edit form ──────────────────────────
 
 type polRow struct {
@@ -238,12 +283,19 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "po_detail.html", map[string]any{
+	tplData := map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"ActiveTab": "pos", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode": h.cfg.TestMode,
-	})
+	}
+	if r.URL.Query().Get("suggest_links") == "1" {
+		if links := h.fetchSuggestLinks(r, num); len(links) > 0 {
+			tplData["SuggestLinks"] = links
+			tplData["CSRFToken"] = h.csrfToken(w, r)
+		}
+	}
+	h.render(w, "po_detail.html", tplData)
 }
 
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────
@@ -402,7 +454,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	committed = true
 
 	h.createPOFolder(r, newNumber, fv(r, "supplier_id"))
-	http.Redirect(w, r, "/po/"+newNumber, http.StatusFound)
+	http.Redirect(w, r, "/po/"+newNumber+"?suggest_links=1", http.StatusFound)
 }
 
 // ── POEdit — GET /po/{id}/edit ───────────────────────────────────────────────
@@ -569,6 +621,40 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	committed = true
+	http.Redirect(w, r, "/po/"+num+"?suggest_links=1", http.StatusFound)
+}
+
+// ── POAddSupplierLinks — POST /po/{id}/add-supplier-links ────────────────────
+
+func (h *Handler) POAddSupplierLinks(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, "Error parsing form: "+err.Error())
+		return
+	}
+	supplierID := r.FormValue("supplier_id")
+	count, _ := strconv.Atoi(r.FormValue("count"))
+	for i := 0; i < count; i++ {
+		if r.FormValue(fmt.Sprintf("add_%d", i)) != "1" {
+			continue
+		}
+		partID := r.FormValue(fmt.Sprintf("part_id_%d", i))
+		supplierPN := r.FormValue(fmt.Sprintf("supplier_pn_%d", i))
+		if partID == "" || supplierPN == "" || supplierID == "" {
+			continue
+		}
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
+			IF NOT EXISTS (
+			  SELECT 1 FROM %s WHERE part_id=@p1 AND supplier_id=@p2 AND supplier_pn=@p3
+			)
+			INSERT INTO %s (part_id, supplier_id, supplier_pn) VALUES (@p1,@p2,@p3)
+		`, h.cfg.SupplierPartTable(), h.cfg.SupplierPartTable()),
+			partID, supplierID, supplierPN,
+		); err != nil {
+			h.renderError(w, "Error adding supplier link: "+err.Error())
+			return
+		}
+	}
 	http.Redirect(w, r, "/po/"+num, http.StatusFound)
 }
 
