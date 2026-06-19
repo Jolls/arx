@@ -113,6 +113,9 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(subStatic))))
 
 	// Always accessible — no DB connection required.
+	r.Get("/login", h.LoginGet)
+	r.Post("/login", h.LoginPost)
+	r.Post("/logout", h.Logout)
 	r.Get("/settings", h.Settings)
 	r.Post("/settings", h.SettingsSave)
 	r.Post("/settings/attachment-categories", h.SettingsAttachmentCategoriesSave)
@@ -123,6 +126,11 @@ func buildRouter(h *Handler) *chi.Mux {
 	// All other routes require a live database connection.
 	r.Group(func(r chi.Router) {
 		r.Use(h.RequireAuth)
+
+		// User management (Settings → Users tab)
+		r.Post("/settings/users", h.SettingsUsersCreate)
+		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)
+		r.Post("/settings/users/{userID}/toggle-active", h.SettingsUsersToggleActive)
 
 		// Local file serving (Parts Master)
 		r.Get("/local/*", h.ServeLocalFile)

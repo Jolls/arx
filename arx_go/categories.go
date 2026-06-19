@@ -62,7 +62,7 @@ func (h *Handler) SettingsCategoriesSave(w http.ResponseWriter, r *http.Request)
 	}
 	data, _ := json.Marshal(cats)
 	if err := h.appConfigSet(r.Context(), partCategoriesKey, string(data)); err != nil {
-		h.renderError(w, "Could not save categories: "+err.Error())
+		h.renderError(w, r, "Could not save categories: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusFound)

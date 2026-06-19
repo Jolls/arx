@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -254,7 +253,7 @@ func parseFormFloat(s string) interface{} {
 // ── POList — GET /pos ────────────────────────────────────────────────────────
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "pos.html", map[string]any{
+	h.render(w, r, "pos.html", map[string]any{
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
 	})
 }
@@ -345,7 +344,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 			tplData["CSRFToken"] = h.csrfToken(w, r)
 		}
 	}
-	h.render(w, "po_detail.html", tplData)
+	h.render(w, r, "po_detail.html", tplData)
 }
 
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────
@@ -353,8 +352,8 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	po := models.PurchaseOrder{Status: "pending", IsActive: true, DateOrdered: &now, DateRequested: &now}
-	if u, err := user.Current(); err == nil {
-		po.Orderer = u.Username
+	if u := h.currentUser(r); u != nil {
+		po.Orderer = u.DisplayName
 	}
 
 	// Apply PO defaults from settings
@@ -393,7 +392,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	h.render(w, "po_edit.html", map[string]any{
+	h.render(w, r, "po_edit.html", map[string]any{
 		"PO": po, "POItems": nil, "IsNew": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
@@ -405,7 +404,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, "Error parsing form: "+err.Error())
+		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
 
@@ -416,13 +415,13 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	if err := h.queryRowContext(r.Context(),
 		fmt.Sprintf("SELECT CAST(NEXT VALUE FOR %s AS VARCHAR)", seqName),
 	).Scan(&newNumber); err != nil {
-		h.renderError(w, "Error getting PO number: "+err.Error())
+		h.renderError(w, r, "Error getting PO number: "+err.Error())
 		return
 	}
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		h.renderError(w, "Error starting transaction: "+err.Error())
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
 		return
 	}
 	committed := false
@@ -464,7 +463,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		parseFormDate(fv(r, "date_ordered")), parseFormDate(fv(r, "date_requested")), parseFormDate(fv(r, "date_closed")),
 		now, 0.0,
 	).Scan(&newID); err != nil {
-		h.renderError(w, "Error creating PO: "+err.Error())
+		h.renderError(w, r, "Error creating PO: "+err.Error())
 		return
 	}
 
@@ -480,7 +479,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 			INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLRev, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
 		`, h.cfg.POLineTable()), newID, item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
-			h.renderError(w, "Error adding PO line: "+err.Error())
+			h.renderError(w, r, "Error adding PO line: "+err.Error())
 			return
 		}
 		lineTotal += qty * cost
@@ -493,12 +492,12 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET total_cost=@p1 WHERE ID=@p2`, h.cfg.POTable(),
 	), totalCost, newID); err != nil {
-		h.renderError(w, "Error updating PO total: "+err.Error())
+		h.renderError(w, r, "Error updating PO total: "+err.Error())
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		h.renderError(w, "Error saving PO: "+err.Error())
+		h.renderError(w, r, "Error saving PO: "+err.Error())
 		return
 	}
 	committed = true
@@ -527,7 +526,7 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "po_edit.html", map[string]any{
+	h.render(w, r, "po_edit.html", map[string]any{
 		"PO": po, "POItems": items, "IsNew": false,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
@@ -542,13 +541,13 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	num := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, "Error parsing form: "+err.Error())
+		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		h.renderError(w, "Error starting transaction: "+err.Error())
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
 		return
 	}
 	committed := false
@@ -563,7 +562,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 			`DELETE FROM %s WHERE POLID=@p1`, h.cfg.POLineTable(),
 		), idStr); err != nil {
-			h.renderError(w, "Error deleting PO line: "+err.Error())
+			h.renderError(w, r, "Error deleting PO line: "+err.Error())
 			return
 		}
 	}
@@ -585,7 +584,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 			              POLQty=@p5, POLCost=@p6, VendorPN=@p7, POLPNID=@p8
 			WHERE POLID=@p9
 		`, h.cfg.POLineTable()), item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid, polID); err != nil {
-			h.renderError(w, "Error updating PO line: "+err.Error())
+			h.renderError(w, r, "Error updating PO line: "+err.Error())
 			return
 		}
 	}
@@ -597,7 +596,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
 			`SELECT ID FROM %s WHERE number=@p1`, h.cfg.POTable(),
 		), num).Scan(&poID); err != nil {
-			h.renderError(w, "Error resolving PO ID: "+err.Error())
+			h.renderError(w, r, "Error resolving PO ID: "+err.Error())
 			return
 		}
 		for _, row := range newRows {
@@ -610,7 +609,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 				INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLRev, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
 				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
 			`, h.cfg.POLineTable()), poID, item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
-				h.renderError(w, "Error adding PO line: "+err.Error())
+				h.renderError(w, r, "Error adding PO line: "+err.Error())
 				return
 			}
 		}
@@ -625,7 +624,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		JOIN %s po ON pol.POLPOID = po.ID
 		WHERE po.number = @p1
 	`, h.cfg.POLineTable(), h.cfg.POTable()), num).Scan(&lineSum); err != nil {
-		h.renderError(w, "Error recalculating PO total: "+err.Error())
+		h.renderError(w, r, "Error recalculating PO total: "+err.Error())
 		return
 	}
 
@@ -662,12 +661,12 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		parseFormDate(fv(r, "date_ordered")), parseFormDate(fv(r, "date_requested")), parseFormDate(fv(r, "date_closed")), parseFormDate(fv(r, "date_printed")),
 		time.Now(), totalCost, num,
 	); err != nil {
-		h.renderError(w, "Error saving PO: "+err.Error())
+		h.renderError(w, r, "Error saving PO: "+err.Error())
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		h.renderError(w, "Error saving PO: "+err.Error())
+		h.renderError(w, r, "Error saving PO: "+err.Error())
 		return
 	}
 	committed = true
@@ -679,7 +678,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) POAddSupplierLinks(w http.ResponseWriter, r *http.Request) {
 	num := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, "Error parsing form: "+err.Error())
+		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
 	supplierID := r.FormValue("supplier_id")
@@ -701,7 +700,7 @@ func (h *Handler) POAddSupplierLinks(w http.ResponseWriter, r *http.Request) {
 		`, h.cfg.SupplierPartTable(), h.cfg.SupplierPartTable()),
 			partID, supplierID, supplierPN,
 		); err != nil {
-			h.renderError(w, "Error adding supplier link: "+err.Error())
+			h.renderError(w, r, "Error adding supplier link: "+err.Error())
 			return
 		}
 	}
@@ -713,7 +712,7 @@ func (h *Handler) POAddSupplierLinks(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) POAddPrices(w http.ResponseWriter, r *http.Request) {
 	num := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, "Error parsing form: "+err.Error())
+		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
 	supplierID := r.FormValue("supplier_id")
@@ -734,14 +733,14 @@ func (h *Handler) POAddPrices(w http.ResponseWriter, r *http.Request) {
 			UPDATE %s SET is_active=0
 			WHERE part_id=@p1 AND supplier_id=@p2 AND pack_size=1 AND is_active=1
 		`, pr), partID, supplierID); err != nil {
-			h.renderError(w, "Error updating price: "+err.Error())
+			h.renderError(w, r, "Error updating price: "+err.Error())
 			return
 		}
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
 			VALUES (@p1, @p2, 1, @p3, @p3, @p4, 1)
 		`, pr), partID, supplierID, cost, today); err != nil {
-			h.renderError(w, "Error inserting price: "+err.Error())
+			h.renderError(w, r, "Error inserting price: "+err.Error())
 			return
 		}
 	}
@@ -775,7 +774,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 	if source.ReceiverID != nil {
 		recID = *source.ReceiverID
 	}
-	h.render(w, "po_edit.html", map[string]any{
+	h.render(w, r, "po_edit.html", map[string]any{
 		"PO": source, "POItems": nil, "DuplicateItems": sourceItems,
 		"IsNew": true, "IsDuplicate": true, "DuplicateFrom": num,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
@@ -796,7 +795,7 @@ func (h *Handler) PONote(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "po_note.html", map[string]any{
+	h.render(w, r, "po_note.html", map[string]any{
 		"PO": po, "ActiveTab": "pos", "ActiveSubTab": "note",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
@@ -961,7 +960,7 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "local_dir.html", map[string]any{
+	h.render(w, r, "local_dir.html", map[string]any{
 		"PO":        &po,
 		"DirName":   dirName,
 		"FullPath":  path,
@@ -1084,11 +1083,11 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		&dateOrdered, &dateRequested, &dateClosed, &datePrinted, &dateMod,
 	)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Purchase order not found")
+		h.renderError(w, r, "Purchase order not found")
 		return po, false
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving purchase order: "+err.Error())
+		h.renderError(w, r, "Error retrieving purchase order: "+err.Error())
 		return po, false
 	}
 	po.Number = number.String

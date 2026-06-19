@@ -1,3 +1,16 @@
+Arx v0.5.24 — June 2026
+========================
+
+NEW FEATURES
+
+  Both Apps — User Accounts and Sign-In
+  Arx now requires signing in with a username and password. On first run,
+  you will be prompted to create the initial admin account. Additional users
+  can be added, reset, and deactivated from Settings. Your name now appears
+  in the header and on lock/unlock events, form-definition history, and PO
+  and part creation defaults — giving every change a real author instead of
+  the server account.
+
 Arx v0.5.17 — June 2026
 =======================
 

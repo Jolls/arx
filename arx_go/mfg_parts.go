@@ -22,17 +22,17 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 
 	mfgParts, err := h.fetchMfgParts(r, id)
 	if err != nil {
-		h.renderError(w, "Error retrieving manufacturer parts: "+err.Error())
+		h.renderError(w, r, "Error retrieving manufacturer parts: "+err.Error())
 		return
 	}
 
 	manufacturers, err := h.fetchManufacturers(r)
 	if err != nil {
-		h.renderError(w, "Error retrieving manufacturers: "+err.Error())
+		h.renderError(w, r, "Error retrieving manufacturers: "+err.Error())
 		return
 	}
 
-	h.render(w, "mfg_parts.html", map[string]any{
+	h.render(w, r, "mfg_parts.html", map[string]any{
 		"Part":          p,
 		"MfgParts":      mfgParts,
 		"Manufacturers": manufacturers,
@@ -86,11 +86,11 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 		&mp.ID, &mp.PartID, &mp.MfgID, &mpn, &desc,
 	)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Manufacturer part not found")
+		h.renderError(w, r, "Manufacturer part not found")
 		return
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving manufacturer part: "+err.Error())
+		h.renderError(w, r, "Error retrieving manufacturer part: "+err.Error())
 		return
 	}
 	mp.MfgPartNumber = mpn.String
@@ -98,17 +98,17 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 
 	mfgParts, err := h.fetchMfgParts(r, id)
 	if err != nil {
-		h.renderError(w, "Error retrieving manufacturer parts: "+err.Error())
+		h.renderError(w, r, "Error retrieving manufacturer parts: "+err.Error())
 		return
 	}
 
 	manufacturers, err := h.fetchManufacturers(r)
 	if err != nil {
-		h.renderError(w, "Error retrieving manufacturers: "+err.Error())
+		h.renderError(w, r, "Error retrieving manufacturers: "+err.Error())
 		return
 	}
 
-	h.render(w, "mfg_parts.html", map[string]any{
+	h.render(w, r, "mfg_parts.html", map[string]any{
 		"Part":           p,
 		"MfgParts":       mfgParts,
 		"EditingMfgPart": &mp,
@@ -139,7 +139,7 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 		mfgID, mpn, strings.TrimSpace(r.FormValue("description")), mid, id,
 	)
 	if err != nil {
-		h.renderError(w, "Error updating manufacturer part: "+err.Error())
+		h.renderError(w, r, "Error updating manufacturer part: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/mfg-parts", id), http.StatusFound)
@@ -155,7 +155,7 @@ func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET is_active=0 WHERE id=@p1 AND part_id=@p2
 	`, h.cfg.MfgPartTable()), mid, id)
 	if err != nil {
-		h.renderError(w, "Error deleting manufacturer part: "+err.Error())
+		h.renderError(w, r, "Error deleting manufacturer part: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/mfg-parts", id), http.StatusFound)
@@ -229,7 +229,7 @@ func (h *Handler) renderMfgPartsWithError(w http.ResponseWriter, r *http.Request
 	}
 	mfgParts, _ := h.fetchMfgParts(r, partID)
 	manufacturers, _ := h.fetchManufacturers(r)
-	h.render(w, "mfg_parts.html", map[string]any{
+	h.render(w, r, "mfg_parts.html", map[string]any{
 		"Part":          p,
 		"MfgParts":      mfgParts,
 		"Manufacturers": manufacturers,

@@ -137,16 +137,20 @@ func (h *Handler) CloseDB() {
 	}
 }
 
-// RequireAuth is a middleware that redirects to /settings when no database
-// connection is available. All application routes use this except /settings
-// and /static/*.
+// RequireAuth redirects to /settings when no DB is connected, to /login when
+// no user is logged in, and otherwise stashes the user on the request context.
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h.db == nil {
 			http.Redirect(w, r, "/settings", http.StatusSeeOther)
 			return
 		}
-		next.ServeHTTP(w, r)
+		r2, u := h.withUser(r)
+		if u == nil {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		next.ServeHTTP(w, r2)
 	})
 }
 
@@ -166,11 +170,13 @@ func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
 }
 
 // render parses layout + partials + the named page template and executes "layout".
-func (h *Handler) render(w http.ResponseWriter, page string, data any) {
+func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	if m, ok := data.(map[string]any); ok {
 		m["AppVersion"] = h.cfg.Version
 		m["SchemaMismatch"] = h.schemaMismatch
 		m["TestRecordsURL"] = h.cfg.TestRecordsURL
+		m["CurrentUser"] = h.currentUser(r)
+		m["CSRFToken"] = h.csrfToken(w, r)
 	}
 	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/pm/layout.html",
@@ -188,13 +194,13 @@ func (h *Handler) render(w http.ResponseWriter, page string, data any) {
 
 func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
-	h.render(w, "not_found.html", map[string]any{
+	h.render(w, r, "not_found.html", map[string]any{
 		"ActiveTab": "", "TestMode": h.cfg.TestMode,
 	})
 }
 
-func (h *Handler) renderError(w http.ResponseWriter, msg string) {
-	h.render(w, "error.html", map[string]any{
+func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, msg string) {
+	h.render(w, r, "error.html", map[string]any{
 		"Error":    msg,
 		"TestMode": h.cfg.TestMode,
 	})

@@ -22,16 +22,16 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 	}
 	links, err := h.fetchSupplierLinks(r, id)
 	if err != nil {
-		h.renderError(w, "Error retrieving supplier links: "+err.Error())
+		h.renderError(w, r, "Error retrieving supplier links: "+err.Error())
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, "part_sourcing.html", map[string]any{
-		"Part":              p,
-		"Links":             links,
-		"PricesBySupplier":  h.fetchActivePricesBySupplier(r, id),
-		"Suppliers":         h.fetchSuppliersOnly(r),
-		"Units":             units,
+	h.render(w, r, "part_sourcing.html", map[string]any{
+		"Part":             p,
+		"Links":            links,
+		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
+		"Suppliers":        h.fetchSuppliersOnly(r),
+		"Units":            units,
 		"ActiveTab": "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -86,11 +86,11 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		&sp.ID, &sp.SupplierID, &sp.PartID, &pref, &supplierPN, &supplierDesc, &leadTime, &minIncr, &unitID,
 	)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Supplier link not found")
+		h.renderError(w, r, "Supplier link not found")
 		return
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving supplier link: "+err.Error())
+		h.renderError(w, r, "Error retrieving supplier link: "+err.Error())
 		return
 	}
 	sp.Preference = pref.String
@@ -107,11 +107,11 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 
 	links, err := h.fetchSupplierLinks(r, id)
 	if err != nil {
-		h.renderError(w, "Error retrieving supplier links: "+err.Error())
+		h.renderError(w, r, "Error retrieving supplier links: "+err.Error())
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, "part_sourcing.html", map[string]any{
+	h.render(w, r, "part_sourcing.html", map[string]any{
 		"Part":        p,
 		"Links":       links,
 		"EditingLink": &sp,
@@ -148,7 +148,7 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		spID, id,
 	)
 	if err != nil {
-		h.renderError(w, "Error updating supplier link: "+err.Error())
+		h.renderError(w, r, "Error updating supplier link: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/suppliers", id), http.StatusFound)
@@ -163,7 +163,7 @@ func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 		DELETE FROM %s WHERE id=@p1 AND part_id=@p2
 	`, h.cfg.SupplierPartTable()), spID, id)
 	if err != nil {
-		h.renderError(w, "Error deleting supplier link: "+err.Error())
+		h.renderError(w, r, "Error deleting supplier link: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/suppliers", id), http.StatusFound)
@@ -290,7 +290,7 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	}
 	links, _ := h.fetchSupplierLinks(r, partID)
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, "part_sourcing.html", map[string]any{
+	h.render(w, r, "part_sourcing.html", map[string]any{
 		"Part":      p,
 		"Links":     links,
 		"Suppliers": h.fetchSuppliersOnly(r),

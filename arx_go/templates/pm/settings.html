@@ -25,6 +25,22 @@
     </div>
     {{end}}
 
+    <div class="sub-tabs" style="margin-bottom:20px;">
+        <a href="#connection" class="sub-tab" data-tab="connection">Connection</a>
+        {{if .Connected}}
+        <a href="#configuration" class="sub-tab" data-tab="configuration">Configuration</a>
+        {{end}}
+        {{if and .Connected .CurrentUser}}
+        <a href="#users" class="sub-tab" data-tab="users">Users</a>
+        {{end}}
+        {{if .ReleaseNotes}}
+        <a href="#release-notes" class="sub-tab" data-tab="release-notes">Release Notes</a>
+        {{end}}
+    </div>
+
+    <!-- ── Connection tab ───────────────────────────────────────────────── -->
+    <div class="settings-tab-panel" id="tab-connection">
+
     <form method="POST" action="/settings">
     <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
 
@@ -225,15 +241,6 @@
         </div>
     </div>
 
-    <script>
-    function confirmTestModeToggle(cb) {
-      var msg = cb.checked
-        ? "Switching TO test mode will reconnect to the test database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
-        : "Switching OUT of test mode will reconnect to the production database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
-      if (!confirm(msg)) cb.checked = !cb.checked;
-    }
-    </script>
-
     <!-- ── Save button ───────────────────────────────────────────────── -->
     <div style="margin-top:24px; display:flex; align-items:center; gap:16px;">
         <button type="submit" class="btn btn-primary" style="padding:10px 32px; font-size:0.95em;">
@@ -245,10 +252,14 @@
     </div>
     </form>
 
-    <!-- ── Application Configuration ────────────────────────────────── -->
+    </div><!-- /tab-connection -->
+
+    <!-- ── Configuration tab ────────────────────────────────────────────── -->
     {{if .Connected}}
-    <div class="detail-section" style="margin-top:36px;">
-        <h3>Application Configuration</h3>
+    <div class="settings-tab-panel" id="tab-configuration">
+
+    <div class="detail-section">
+        <h3>Attachment Categories</h3>
         <form method="post" action="/settings/attachment-categories">
             <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
             <div class="detail-row">
@@ -266,7 +277,6 @@
         </form>
     </div>
 
-    <!-- ── Part Categories ──────────────────────────────────────────── -->
     <div class="detail-section" style="margin-top:24px;">
         <h3>Part Categories</h3>
         <p style="margin:0 0 12px; color:#888; font-size:0.82em;">
@@ -323,34 +333,150 @@
             </div>
         </form>
     </div>
+
+    </div><!-- /tab-configuration -->
     {{end}}
 
-    <!-- ── Release Notes ──────────────────────────────────────────────── -->
+    <!-- ── Users tab ────────────────────────────────────────────────────── -->
+    {{if and .Connected .CurrentUser}}
+    <div class="settings-tab-panel" id="tab-users">
+
+    <div class="detail-section">
+        <h3>Users</h3>
+        {{if .UsersError}}
+        <div style="background:#f8d7da; border:1px solid #f5c2c7; border-radius:6px;
+                    padding:10px 14px; margin-bottom:14px; color:#842029; font-size:0.9em;">
+            {{.UsersError}}
+        </div>
+        {{end}}
+        <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+            <thead>
+                <tr style="text-align:left; color:#888; font-size:0.8em; border-bottom:1px solid #e0e0e0;">
+                    <th style="padding:4px 8px;">Username</th>
+                    <th style="padding:4px 8px;">Display Name</th>
+                    <th style="padding:4px 8px; text-align:center;">Active</th>
+                    <th style="padding:4px 8px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+            {{range .Users}}
+                <tr style="border-bottom:1px solid #f0f0f0;">
+                    <td style="padding:6px 8px; font-family:monospace; font-size:0.9em;">{{.Username}}</td>
+                    <td style="padding:6px 8px;">{{.DisplayName}}</td>
+                    <td style="padding:6px 8px; text-align:center;">
+                        {{if .IsActive}}<span style="color:#155724;">&#10003;</span>{{else}}<span style="color:#842029;">&#10007;</span>{{end}}
+                    </td>
+                    <td style="padding:6px 8px; display:flex; gap:6px; flex-wrap:wrap;">
+                        <form method="post" action="/settings/users/{{.ID}}/password" style="display:inline;"
+                              onsubmit="return resetPwForm(this)">
+                            <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
+                            <input type="hidden" name="password" class="new-pw-field">
+                            <button type="submit" class="btn btn-secondary btn-sm"
+                                    onclick="promptPw(this)">Reset password</button>
+                        </form>
+                        <form method="post" action="/settings/users/{{.ID}}/toggle-active" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
+                            <button type="submit" class="btn btn-secondary btn-sm">
+                                {{if .IsActive}}Deactivate{{else}}Activate{{end}}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            {{else}}
+                <tr><td colspan="4" style="padding:10px 8px; color:#888; font-size:0.9em;">No users yet.</td></tr>
+            {{end}}
+            </tbody>
+        </table>
+
+        <form method="post" action="/settings/users">
+            <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Username</label>
+                    <input type="text" name="username" autocomplete="off"
+                           style="width:160px; padding:6px 10px; border:1px solid #ccc;
+                                  border-radius:4px; font-size:0.9em; font-family:monospace;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Display Name</label>
+                    <input type="text" name="display_name" autocomplete="off"
+                           style="width:200px; padding:6px 10px; border:1px solid #ccc;
+                                  border-radius:4px; font-size:0.9em;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Password</label>
+                    <input type="password" name="password" autocomplete="new-password"
+                           style="width:180px; padding:6px 10px; border:1px solid #ccc;
+                                  border-radius:4px; font-size:0.9em;">
+                </div>
+                <button type="submit" class="btn btn-primary">Add User</button>
+            </div>
+        </form>
+    </div>
+
+    </div><!-- /tab-users -->
+    {{end}}
+
+    <!-- ── Release Notes tab ────────────────────────────────────────────── -->
     {{if .ReleaseNotes}}
-    <div class="detail-section" style="margin-top:24px;">
+    <div class="settings-tab-panel" id="tab-release-notes">
+    <div class="detail-section">
         <h3 style="margin-bottom:4px;">Release Notes</h3>
         <p style="margin:0 0 12px; font-size:0.85em; color:#888;">
             <a href="/whats-new" target="_blank" style="color:#888;">Open full page &#8599;</a>
         </p>
         <div style="white-space:pre-wrap; overflow-wrap:break-word; line-height:1.7; color:#333; font-size:0.88em;">{{.ReleaseNotes}}</div>
     </div>
+    </div><!-- /tab-release-notes -->
     {{end}}
+
 </div>
 
 <script>
-// Part-category editor: clone a blank row, and index every row's fields on submit
-// (code_i, label_i, bom_i, …) so the server can rebuild the list. Blank-code rows
-// are skipped, which is how a category is deleted.
+(function () {
+    var panels = document.querySelectorAll('.settings-tab-panel');
+    var tabs   = document.querySelectorAll('.sub-tabs [data-tab]');
+
+    function showTab(name) {
+        panels.forEach(function (p) {
+            p.style.display = (p.id === 'tab-' + name) ? '' : 'none';
+        });
+        tabs.forEach(function (t) {
+            t.classList.toggle('active', t.dataset.tab === name);
+        });
+        history.replaceState(null, '', '#' + name);
+    }
+
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function (e) {
+            e.preventDefault();
+            showTab(t.dataset.tab);
+        });
+    });
+
+    var validTabs = Array.from(tabs).map(function (t) { return t.dataset.tab; });
+    var initial   = (location.hash || '').replace('#', '');
+    showTab(validTabs.indexOf(initial) >= 0 ? initial : validTabs[0]);
+}());
+
+function confirmTestModeToggle(cb) {
+    var msg = cb.checked
+        ? "Switching TO test mode will reconnect to the test database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
+        : "Switching OUT of test mode will reconnect to the production database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
+    if (!confirm(msg)) cb.checked = !cb.checked;
+}
+
 function addCatRow() {
     var t = document.getElementById('cat-row-tmpl');
     document.getElementById('cat-rows').appendChild(t.content.cloneNode(true));
 }
+
 function numberCats(form) {
     var n = 0;
-    form.querySelectorAll('tr.cat-row').forEach(function(row) {
+    form.querySelectorAll('tr.cat-row').forEach(function (row) {
         var code = row.querySelector('[data-f=code]');
         if (!code.value.trim()) { return; }
-        row.querySelectorAll('[data-f]').forEach(function(inp) {
+        row.querySelectorAll('[data-f]').forEach(function (inp) {
             inp.name = inp.getAttribute('data-f') + '_' + n;
             if (inp.type === 'checkbox') { inp.value = '1'; }
         });
@@ -364,16 +490,21 @@ function browseFolder(inputId) {
     btn.disabled = true;
     btn.textContent = 'Browsing…';
     fetch('/api/browse-folder')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.path) {
-                document.getElementById(inputId).value = data.path;
-            }
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.path) { document.getElementById(inputId).value = data.path; }
         })
-        .finally(function() {
+        .finally(function () {
             btn.disabled = false;
             btn.textContent = 'Browse…';
         });
+}
+
+function promptPw(btn) {
+    var pw = prompt('New password for this user:');
+    if (!pw) { event.preventDefault(); return false; }
+    btn.closest('form').querySelector('.new-pw-field').value = pw;
+    return true;
 }
 </script>
 {{end}}

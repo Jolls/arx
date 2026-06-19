@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/user"
 	"regexp"
 	"strconv"
 	"strings"
@@ -148,7 +146,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 		forms = append(forms, f)
 	}
 
-	h.renderTR(w, "index.html", map[string]any{
+	h.renderTR(w, r, "index.html", map[string]any{
 		"Forms":    forms,
 		"ActiveTab": "records",
 		"TestMode": h.cfg.TestMode,
@@ -215,7 +213,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		records = append(records, rec)
 	}
 
-	h.renderTR(w, "records_index.html", map[string]any{
+	h.renderTR(w, r, "records_index.html", map[string]any{
 		"Form":     form,
 		"Records":  records,
 		"WIPOnly":  wipOnly,
@@ -371,7 +369,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderTR(w, "form_def.html", map[string]any{
+	h.renderTR(w, r, "form_def.html", map[string]any{
 		"Form":        form,
 		"Steps":       steps,
 		"HistPoints":  histPoints,
@@ -536,7 +534,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderTR(w, "form_def_edit.html", map[string]any{
+	h.renderTR(w, r, "form_def_edit.html", map[string]any{
 		"Form":      form,
 		"Steps":     steps,
 		"CSRFToken": h.csrfToken(w, r),
@@ -584,6 +582,19 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Open a transaction so SET CONTEXT_INFO (connection-scoped) is seen by the
+	// trg_test_definition_history trigger on every UPDATE in this batch.
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if u := h.currentUser(r); u != nil {
+		tx.ExecContext(r.Context(), "SET CONTEXT_INFO @p1", []byte(u.Username))
+	}
+
 	for id := range stepIDs {
 		stepType := 0
 		if t, err := strconv.Atoi(sid(id, "type")); err == nil {
@@ -614,7 +625,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		h.execContext(r.Context(), fmt.Sprintf(`
+		tx.ExecContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET
 			  type=@p1, Parameter=@p2, Specification=@p3,
 			  spec_nom=@p4, spec_min=@p5, spec_max=@p6, spec_units=@p7,
@@ -706,7 +717,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 		hideFormula := row.Hide
 		var newID int
-		if err2 := h.queryRowContext(r.Context(), fmt.Sprintf(`
+		if err2 := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s
 			  (form_id, type, Parameter, Specification, spec_nom, spec_min, spec_max, spec_units,
 			   pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
@@ -724,6 +735,11 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		newIDMap[idx] = newID
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "could not save steps: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// Update Forms.test_order if the order changed or new rows were added.
@@ -976,7 +992,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderTR(w, "records_show.html", map[string]any{
+	h.renderTR(w, r, "records_show.html", map[string]any{
 		"Form":      form,
 		"Record":    record,
 		"Rows":      resultRows,
@@ -1223,7 +1239,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		nextSNStr = strconv.FormatInt(nextSN.Int64, 10)
 	}
 
-	h.renderTR(w, "record_new.html", map[string]any{
+	h.renderTR(w, r, "record_new.html", map[string]any{
 		"Form":      form,
 		"BOMParts":  bomParts,
 		"NextSN":    nextSNStr,
@@ -1448,7 +1464,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		row.Step.DefaultResult = substituteStepSelf(substituteRefs(row.Step.DefaultResult, results, steps, &record, &form), row.Step)
 	}
 
-	h.renderTR(w, "record_edit.html", map[string]any{
+	h.renderTR(w, r, "record_edit.html", map[string]any{
 		"Form":      form,
 		"Record":    record,
 		"Rows":      resultRows,
@@ -1467,9 +1483,8 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// #207: replace with authenticated app user once auth is implemented.
-	username := os.Getenv("USERNAME")
-	if u, err := user.Current(); err == nil {
+	username := ""
+	if u := h.currentUser(r); u != nil {
 		username = u.Username
 	}
 
@@ -1509,9 +1524,8 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// #207: replace with authenticated app user once auth is implemented.
-	username := os.Getenv("USERNAME")
-	if u, err := user.Current(); err == nil {
+	username := ""
+	if u := h.currentUser(r); u != nil {
 		username = u.Username
 	}
 
@@ -1541,9 +1555,8 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// #207: replace with authenticated app user once auth is implemented.
-	username := os.Getenv("USERNAME")
-	if u, err := user.Current(); err == nil {
+	username := ""
+	if u := h.currentUser(r); u != nil {
 		username = u.Username
 	}
 
@@ -1583,9 +1596,8 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// #207: replace with authenticated app user once auth is implemented.
-	username := os.Getenv("USERNAME")
-	if u, err := user.Current(); err == nil {
+	username := ""
+	if u := h.currentUser(r); u != nil {
 		username = u.Username
 	}
 
@@ -1925,7 +1937,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 		sourceForms = append(sourceForms, f)
 	}
 
-	h.renderTR(w, "form_new.html", map[string]any{
+	h.renderTR(w, r, "form_new.html", map[string]any{
 		"PNs":         pns,
 		"SourceForms": sourceForms,
 		"CSRFToken":   h.csrfToken(w, r),
@@ -2032,7 +2044,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderTR(w, "form_duplicate.html", map[string]any{
+	h.renderTR(w, r, "form_duplicate.html", map[string]any{
 		"Form":      form,
 		"StepCount": stepCount,
 		"PNs":       pns,
@@ -2208,11 +2220,11 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
-	h.renderTR(w, "test_report.html", map[string]any{
-		"Form":     form,
-		"Step":     step,
-		"Rows":     rows,
+	h.renderTR(w, r, "test_report.html", map[string]any{
+		"Form":      form,
+		"Step":      step,
+		"Rows":      rows,
 		"ActiveTab": "records",
-		"TestMode": h.cfg.TestMode,
+		"TestMode":  h.cfg.TestMode,
 	})
 }

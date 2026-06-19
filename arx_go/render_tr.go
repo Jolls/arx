@@ -13,11 +13,13 @@ import (
 )
 
 // renderTR renders a Test Records page using TR's layout and template funcs.
-func (h *Handler) renderTR(w http.ResponseWriter, page string, data any) {
+func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, data any) {
 	if m, ok := data.(map[string]any); ok {
 		m["AppVersion"] = h.cfg.Version
 		m["SchemaMismatch"] = h.schemaMismatch
 		m["PartsMasterURL"] = h.cfg.PartsMasterURL
+		m["CurrentUser"] = h.currentUser(r)
+		m["CSRFToken"] = h.csrfToken(w, r)
 	}
 	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/tr/layout.html",

@@ -13,7 +13,7 @@ import (
 )
 
 func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "contacts.html", map[string]any{
+	h.render(w, r, "contacts.html", map[string]any{
 		"ActiveTab": "contacts", "TestMode": h.cfg.TestMode,
 	})
 }
@@ -96,7 +96,7 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.CNID), c.CNName)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "contact_detail.html", map[string]any{
+	h.render(w, r, "contact_detail.html", map[string]any{
 		"Contact": c, "ActiveTab": "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
@@ -104,7 +104,7 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ContactsNew(w http.ResponseWriter, r *http.Request) {
 	suppliers := h.fetchSupplierList(r)
-	h.render(w, "contact_edit.html", map[string]any{
+	h.render(w, r, "contact_edit.html", map[string]any{
 		"Contact": models.Contact{}, "IsNew": true, "Suppliers": suppliers,
 		"ActiveTab": "contacts",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -115,7 +115,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 	name := fv(r, "CNName")
 	if name == "" {
 		suppliers := h.fetchSupplierList(r)
-		h.render(w, "contact_edit.html", map[string]any{
+		h.render(w, r, "contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": true, "Suppliers": suppliers,
 			"Error": "Contact name is required", "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -139,7 +139,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 	).Scan(&newID)
 	if err != nil {
 		suppliers := h.fetchSupplierList(r)
-		h.render(w, "contact_edit.html", map[string]any{
+		h.render(w, r, "contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": true, "Suppliers": suppliers,
 			"Error": "Error creating contact: " + err.Error(), "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -159,7 +159,7 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.CNID), c.CNName)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, "contact_edit.html", map[string]any{
+	h.render(w, r, "contact_edit.html", map[string]any{
 		"Contact": c, "IsNew": false, "Suppliers": suppliers,
 		"ActiveTab": "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -172,7 +172,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 	name := fv(r, "CNName")
 	if name == "" {
 		suppliers := h.fetchSupplierList(r)
-		h.render(w, "contact_edit.html", map[string]any{
+		h.render(w, r, "contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": false, "Suppliers": suppliers,
 			"Error": "Contact name is required", "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -195,7 +195,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		suppliers := h.fetchSupplierList(r)
-		h.render(w, "contact_edit.html", map[string]any{
+		h.render(w, r, "contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": false, "Suppliers": suppliers,
 			"Error": "Error saving contact: " + err.Error(), "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -231,11 +231,11 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 		&web, &userLink, &notes, &active, &dateModified, &suName,
 	)
 	if err == sql.ErrNoRows {
-		h.renderError(w, "Contact not found")
+		h.renderError(w, r, "Contact not found")
 		return c, false
 	}
 	if err != nil {
-		h.renderError(w, "Error retrieving contact: "+err.Error())
+		h.renderError(w, r, "Error retrieving contact: "+err.Error())
 		return c, false
 	}
 	if cnsuid.Valid {
