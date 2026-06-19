@@ -205,6 +205,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/po/{id}/note", h.PONote)
 		r.Get("/po/{id}/print", h.POPrint)
 		r.Post("/po/{id}/mark-printed", h.POMarkPrinted)
+		r.Post("/po/{id}/add-supplier-links", h.POAddSupplierLinks)
 		r.Post("/po/{id}/open-folder", h.POOpenFolder)
 		r.Get("/po/{id}/duplicate", h.PODuplicate)
 		r.Get("/po/{id}/folder", h.POFolder)

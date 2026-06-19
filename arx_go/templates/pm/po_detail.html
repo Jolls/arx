@@ -10,6 +10,30 @@
 <div class="content">
     {{template "po_tabs" .}}
 
+    {{/* ── Suggest supplier links ──────────────────────────── */}}
+    {{if .SuggestLinks}}
+    <div class="suggest-links-banner" id="suggest-links-banner">
+        <strong>New vendor PN(s) — add to supplier catalog?</strong>
+        <form method="POST" action="/po/{{.PO.Number}}/add-supplier-links" style="margin-top:8px;">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="supplier_id" value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
+            <input type="hidden" name="count" value="{{len .SuggestLinks}}">
+            {{range .SuggestLinks}}
+            <label class="suggest-links-row">
+                <input type="checkbox" name="add_{{.Index}}" value="1" checked>
+                <input type="hidden" name="part_id_{{.Index}}" value="{{.PartID}}">
+                <input type="hidden" name="supplier_pn_{{.Index}}" value="{{.VendorPN}}">
+                <span>{{.PartNumber}} &mdash; <code>{{.VendorPN}}</code></span>
+            </label>
+            {{end}}
+            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                <button type="submit" class="btn-primary btn-sm">Save to catalog</button>
+                <button type="button" class="btn-secondary btn-sm" onclick="document.getElementById('suggest-links-banner').remove()">Dismiss</button>
+            </div>
+        </form>
+    </div>
+    {{end}}
+
     {{/* ── Status bar ────────────────────────────────────────── */}}
     <div class="part-status-bar">
         <div class="part-status-cell">
