@@ -288,3 +288,8 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
     display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer;
 }
 .btn-sm { padding: 5px 14px; font-size: 0.85em; }
+
+.sourcing-price-subrow td {
+    background: #f8f9fa; font-size: 0.85em; padding: 3px 12px 5px;
+    border-top: none; color: #555;
+}

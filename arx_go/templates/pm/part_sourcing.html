@@ -56,6 +56,19 @@
                         </form>
                     </td>
                 </tr>
+                {{$prices := index $.PricesBySupplier .SupplierID}}
+                {{if $prices}}
+                <tr class="sourcing-price-subrow">
+                    <td colspan="9">
+                        <span style="color:#666; margin-right:8px;">Pricing:</span>
+                        {{range $i, $pr := $prices}}{{if $i}}<span style="color:#ccc; margin:0 6px;">|</span>{{end}}
+                        {{if $pr.PriceEA}}<strong>{{printf "$%.4f" (deref $pr.PriceEA)}}</strong> ea{{end}}
+                        {{if and $pr.PackSize (gt (deref $pr.PackSize) 1.0)}} &nbsp;(pack of {{printf "%g" (deref $pr.PackSize)}}{{if $pr.PricePack}} = {{printf "$%.4f" (deref $pr.PricePack)}}{{end}}){{end}}
+                        {{end}}
+                        &nbsp;&mdash;&nbsp;<a href="/part/{{$.Part.PNID}}/pricing" style="font-size:0.85em;">View pricing tab &rarr;</a>
+                    </td>
+                </tr>
+                {{end}}
                 {{end}}
             </tbody>
         </table>
