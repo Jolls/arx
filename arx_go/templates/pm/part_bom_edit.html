@@ -1,8 +1,10 @@
 {{define "content"}}
-<header>
-    <h1>Edit BOM</h1>
-    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "part_tabs" .}}
 
@@ -10,8 +12,8 @@
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
         <div class="table-wrapper" style="overflow-x:auto; margin-bottom:12px;">
-            <table style="table-layout:auto; min-width:560px;">
-                <thead>
+            <table class="table table-bordered table-hover table-sm" style="min-width:560px;">
+                <thead class="table-dark">
                     <tr>
                         <th style="width:60px;">#</th>
                         <th style="min-width:150px;">Part Number</th>
@@ -23,7 +25,7 @@
                 <tbody id="bom-tbody">
                     {{range .BOMItems}}
                     <tr data-plid="{{.PLID}}">
-                        <td><input type="number" name="pl[{{.PLID}}][PLItem]" value="{{.PLItem}}" class="tbl-input" style="width:52px;"></td>
+                        <td><input type="number" name="pl[{{.PLID}}][PLItem]" value="{{.PLItem}}" class="form-control form-control-sm" style="width:52px;"></td>
                         <td>
                             <input type="text" name="pl[{{.PLID}}][PLPartNumber]" value="{{.PartNumber}}"
                                    class="tbl-input bom-pn-input" autocomplete="off">
@@ -31,9 +33,9 @@
                         </td>
                         <td><span class="bom-title" style="font-size:0.9em; color:#555;">{{.Title}}</span></td>
                         <td><input type="number" step="any" name="pl[{{.PLID}}][PLQty]" value="{{printf "%g" .PLQty}}"
-                                   class="tbl-input" style="text-align:right;"></td>
+                                   class="form-control form-control-sm" style="text-align:right;"></td>
                         <td style="text-align:center;">
-                            <button type="button" class="btn-remove-row"
+                            <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1"
                                     onclick="removeExistingRow(this,'{{.PLID}}')" title="Remove">&#215;</button>
                         </td>
                     </tr>
@@ -43,12 +45,12 @@
         </div>
 
         <div style="margin-bottom:16px;">
-            <button type="button" class="btn-secondary" onclick="addNewRow()" style="font-size:0.9em;">+ Add Row</button>
+            <button type="button" class="btn btn-secondary" onclick="addNewRow()" style="font-size:0.9em;">+ Add Row</button>
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn-primary">Save BOM</button>
-            <a href="/part/{{.Part.PNID}}/bom" class="btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Save BOM</button>
+            <a href="/part/{{.Part.PNID}}/bom" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 
@@ -69,17 +71,17 @@
 
 <template id="new-row-tpl">
     <tr class="new-row">
-        <td><input type="number" name="new_pl[IDX][PLItem]" class="tbl-input" style="width:52px;" placeholder="#"></td>
+        <td><input type="number" name="new_pl[IDX][PLItem]" class="form-control form-control-sm" style="width:52px;" placeholder="#"></td>
         <td>
             <input type="text" name="new_pl[IDX][PLPartNumber]" class="tbl-input bom-pn-input"
                    placeholder="Part number" autocomplete="off">
             <input type="hidden" name="new_pl[IDX][PLPNID]">
         </td>
         <td><span class="bom-title" style="font-size:0.9em; color:#555;"></span></td>
-        <td><input type="number" step="any" name="new_pl[IDX][PLQty]" class="tbl-input"
+        <td><input type="number" step="any" name="new_pl[IDX][PLQty]" class="form-control form-control-sm"
                    style="text-align:right;" placeholder="1"></td>
         <td style="text-align:center;">
-            <button type="button" class="btn-remove-row" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
+            <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
         </td>
     </tr>
 </template>

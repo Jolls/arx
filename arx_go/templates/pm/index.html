@@ -1,19 +1,16 @@
 {{define "content"}}
-<header>
-    <h1>Parts Master Database</h1>
-    <p>PN Table Viewer</p>
-</header>
-
 <div class="content">
-    <a href="/parts/new" class="new-record-btn">+ New Part</a>
+    <div class="d-flex justify-content-end mb-3">
+        <a href="/parts/new" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle"></i> New Part</a>
+    </div>
 
     <div class="table-wrapper">
-        <table data-rows-url="/api/parts/rows">
+        <table class="table table-bordered table-hover table-sm" data-rows-url="/api/parts/rows">
             <colgroup>
                 <col><col><col><col><col><col><col><col>
             </colgroup>
             <thead>
-                <tr>
+                <tr class="table-dark">
                     <th>Part Number</th>
                     <th><span data-bs-toggle="tooltip" title="Revision letter or number">Rev</span></th>
                     <th>Description</th>

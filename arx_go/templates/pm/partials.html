@@ -16,9 +16,9 @@
 
 {{define "supplier_tabs"}}
 {{if .NavBackURL}}
-<a href="{{.NavBackURL}}" class="back-link">&#8592; Back to {{.NavBackLabel}}</a>
+<a href="{{.NavBackURL}}" class="btn btn-sm btn-light mb-2">&#8592; Back to {{.NavBackLabel}}</a>
 {{else}}
-<a href="/suppliers" class="back-link">&#8592; Back to Vendors List</a>
+<a href="/suppliers" class="btn btn-sm btn-light mb-2">&#8592; Back to Vendors List</a>
 {{end}}
 <div class="sub-tabs">
     <a href="/supplier/{{.Supplier.ID}}"       class="sub-tab{{if eq .ActiveSubTab "details"}} active{{end}}">Details</a>
@@ -31,9 +31,9 @@
 
 {{define "po_tabs"}}
 {{if .NavBackURL}}
-<a href="{{.NavBackURL}}" class="back-link">&#8592; Back to {{.NavBackLabel}}</a>
+<a href="{{.NavBackURL}}" class="btn btn-sm btn-light mb-2">&#8592; Back to {{.NavBackLabel}}</a>
 {{else}}
-<a href="/pos" class="back-link">&#8592; Back to POs List</a>
+<a href="/pos" class="btn btn-sm btn-light mb-2">&#8592; Back to POs List</a>
 {{end}}
 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
     <div class="sub-tabs" style="margin-bottom:0;">
@@ -42,15 +42,15 @@
         <a href="/po/{{.PO.Number}}/print"  class="sub-tab{{if eq .ActiveSubTab "print"}} active{{end}}">Print / PDF</a>
         <a href="/po/{{.PO.Number}}/folder" class="sub-tab{{if eq .ActiveSubTab "folder"}} active{{end}}">Folder</a>
     </div>
-    <a href="/po/{{.PO.Number}}/duplicate" class="btn-secondary" style="font-size:0.85em; white-space:nowrap;">Duplicate PO</a>
+    <a href="/po/{{.PO.Number}}/duplicate" class="btn btn-sm btn-secondary">Duplicate PO</a>
 </div>
 {{end}}
 
 {{define "part_tabs"}}
 {{if .NavBackURL}}
-<a href="{{.NavBackURL}}" class="back-link">&#8592; Back to {{.NavBackLabel}}</a>
+<a href="{{.NavBackURL}}" class="btn btn-sm btn-light mb-2">&#8592; Back to {{.NavBackLabel}}</a>
 {{else}}
-<a href="/" class="back-link">&#8592; Back to Parts List</a>
+<a href="/" class="btn btn-sm btn-light mb-2">&#8592; Back to Parts List</a>
 {{end}}
 
 {{$id := .Part.PNID}}

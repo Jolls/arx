@@ -1,8 +1,16 @@
 {{define "content"}}
-<header>
-    <h1>&#128193; {{.DirName}}</h1>
-    <p>Directory listing</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        {{if .PO}}
+        <li class="breadcrumb-item"><a href="/pos">POs</a></li>
+        <li class="breadcrumb-item"><a href="/po/{{.PO.Number}}">PO #{{.PO.Number}}</a></li>
+        {{else if .Supplier}}
+        <li class="breadcrumb-item"><a href="/suppliers">Vendors</a></li>
+        <li class="breadcrumb-item"><a href="/supplier/{{.Supplier.ID}}">{{.Supplier.Name}}</a></li>
+        {{end}}
+        <li class="breadcrumb-item active">{{.DirName}}</li>
+    </ol>
+</nav>
 
 <div class="content">
     {{if .PO}}
@@ -12,20 +20,20 @@
     {{template "supplier_tabs" .}}
     {{end}}
     {{if .ParentURL}}
-    <a href="{{.ParentURL}}" class="back-link">&#8592; Up one level</a>
+    <a href="{{.ParentURL}}" class="btn btn-sm btn-light">&#8592; Up one level</a>
     {{end}}
 
     <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;
                 background:#f0f4ff; border:1px solid #c7d2fe; border-radius:6px; padding:12px 16px;">
         <code id="dir-path" style="flex:1; font-size:0.88em; word-break:break-all; color:#333;">{{.FullPath}}</code>
-        <button onclick="copyDirPath()" id="copy-btn" class="btn-secondary"
+        <button onclick="copyDirPath()" id="copy-btn" class="btn btn-secondary"
                 style="white-space:nowrap; font-size:0.85em;">Copy Path</button>
     </div>
 
     {{if .Entries}}
     <div class="table-wrapper">
-        <table style="table-layout:auto;">
-            <thead>
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
                 <tr>
                     <th>Name</th>
                     <th style="width:80px;">Type</th>

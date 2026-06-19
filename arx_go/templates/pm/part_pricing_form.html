@@ -1,14 +1,13 @@
 {{define "content"}}
-<header>
-    <h1>{{if .IsNew}}Add Price{{else}}Edit Price{{end}}</h1>
-    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item"><a href="/part/{{.Part.PNID}}/pricing">{{.Part.PartNumber}}</a></li>
+        <li class="breadcrumb-item active">{{if .IsNew}}Add Price{{else}}Edit Price{{end}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "part_tabs" .}}
-
-    <div style="margin-bottom:20px;">
-        <a href="/part/{{.Part.PNID}}/pricing" class="back-link" style="margin-bottom:0;">&#8592; Back to Pricing</a>
-    </div>
 
     <form method="post" action="{{if .IsNew}}/part/{{.Part.PNID}}/pricing{{else}}/part/{{.Part.PNID}}/pricing/{{.Price.ID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -49,10 +48,10 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn-primary">
+            <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Add Price{{else}}Save{{end}}
             </button>
-            <a href="/part/{{.Part.PNID}}/pricing" class="btn-secondary">Cancel</a>
+            <a href="/part/{{.Part.PNID}}/pricing" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>

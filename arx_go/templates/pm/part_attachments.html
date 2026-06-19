@@ -1,17 +1,19 @@
 {{define "content"}}
-<header>
-    <h1>Part Details</h1>
-    <p>{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "part_tabs" .}}
 
-    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     {{if .Attachments}}
     <div class="table-wrapper">
-        <table style="table-layout:auto;">
-            <thead>
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
                 <tr>
                     <th style="width:60px; text-align:center;">Order</th>
                     <th style="width:60px;">Rev</th>
@@ -52,19 +54,19 @@
                             <form method="post" action="/part/{{$.Part.PNID}}/primary_attachment" style="margin:0;">
                                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="filid" value="{{.FILID}}">
-                                <button type="submit" class="btn-secondary" style="padding:2px 8px; font-size:0.8em;">Set</button>
+                                <button type="submit" class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em;">Set</button>
                             </form>
                         {{end}}
                     </td>
                     <td style="text-align:center;">
                         <a href="/part/{{$.Part.PNID}}/attachments?edit={{.FILID}}#edit-form"
-                           class="btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
+                           class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
                     </td>
                     <td style="text-align:center;">
                         <form method="post" action="/part/{{$.Part.PNID}}/attachments/{{.FILID}}/delete"
                               style="margin:0;" onsubmit="return confirm('Remove this attachment?')">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <button type="submit" class="btn-secondary"
+                            <button type="submit" class="btn btn-secondary"
                                     style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
                         </form>
                     </td>
@@ -100,8 +102,8 @@
                        value="{{if .EditingAtt.OrderID}}{{derefInt .EditingAtt.OrderID}}{{end}}">
             </div>
             <div class="form-actions">
-                <button type="submit" class="btn-primary">Save Changes</button>
-                <a href="/part/{{.Part.PNID}}/attachments" class="btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <a href="/part/{{.Part.PNID}}/attachments" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
@@ -131,7 +133,7 @@
                     <input type="number" name="order_id" class="form-input" style="max-width:100px;">
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn-primary">Add Attachment</button>
+                    <button type="submit" class="btn btn-primary">Add Attachment</button>
                 </div>
             </form>
         </div>

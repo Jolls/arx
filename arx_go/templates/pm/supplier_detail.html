@@ -1,8 +1,10 @@
 {{define "content"}}
-<header>
-    <h1>Vendor Details</h1>
-    <p>{{.Supplier.Name}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/suppliers">Vendors</a></li>
+        <li class="breadcrumb-item active">{{.Supplier.Name}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "supplier_tabs" .}}
 
@@ -50,14 +52,14 @@
         <h3>Status &amp; Dates</h3>
         <div class="detail-row">
             <strong>Status:</strong>
-            <span>{{if .Supplier.IsActive}}<span class="badge badge-active">Active</span>
-            {{else}}<span class="badge badge-inactive">Inactive</span>{{end}}</span>
+            <span>{{if .Supplier.IsActive}}<span class="badge bg-success">Active</span>
+            {{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span>
         </div>
         <div class="detail-row">
             <strong>Roles:</strong>
             <span>
-                {{if .Supplier.IsSupplier}}<span class="badge badge-active">Supplier</span> {{end}}
-                {{if .Supplier.IsManufacturer}}<span class="badge badge-active">Manufacturer</span>{{end}}
+                {{if .Supplier.IsSupplier}}<span class="badge bg-success">Supplier</span> {{end}}
+                {{if .Supplier.IsManufacturer}}<span class="badge bg-success">Manufacturer</span>{{end}}
                 {{if and (not .Supplier.IsSupplier) (not .Supplier.IsManufacturer)}}—{{end}}
             </span>
         </div>

@@ -1,17 +1,19 @@
 {{define "content"}}
-<header>
-    <h1>Vendor Details</h1>
-    <p>{{.Supplier.Name}}</p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/suppliers">Vendors</a></li>
+        <li class="breadcrumb-item active">{{.Supplier.Name}}</li>
+    </ol>
+</nav>
 <div class="content">
     {{template "supplier_tabs" .}}
 
-    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     {{if .Attachments}}
     <div class="table-wrapper">
-        <table style="table-layout:auto;">
-            <thead>
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
                 <tr>
                     <th style="width:60px; text-align:center;">Order</th>
                     <th>File / URL</th>
@@ -50,19 +52,19 @@
                             <form method="post" action="/supplier/{{$.Supplier.ID}}/primary_attachment" style="margin:0;">
                                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="attachment_id" value="{{.SupplierAttachmentID}}">
-                                <button type="submit" class="btn-secondary" style="padding:2px 8px; font-size:0.8em;">Set</button>
+                                <button type="submit" class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em;">Set</button>
                             </form>
                         {{end}}
                     </td>
                     <td style="text-align:center;">
                         <a href="/supplier/{{$.Supplier.ID}}/attachments?edit={{.SupplierAttachmentID}}#edit-form"
-                           class="btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
+                           class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
                     </td>
                     <td style="text-align:center;">
                         <form method="post" action="/supplier/{{$.Supplier.ID}}/attachments/{{.SupplierAttachmentID}}/delete"
                               style="margin:0;" onsubmit="return confirm('Remove this attachment?')">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <button type="submit" class="btn-secondary"
+                            <button type="submit" class="btn btn-secondary"
                                     style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
                         </form>
                     </td>
@@ -93,8 +95,8 @@
                        value="{{if .EditingAtt.SortOrder}}{{derefInt .EditingAtt.SortOrder}}{{end}}">
             </div>
             <div class="form-actions">
-                <button type="submit" class="btn-primary">Save Changes</button>
-                <a href="/supplier/{{.Supplier.ID}}/attachments" class="btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <a href="/supplier/{{.Supplier.ID}}/attachments" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
@@ -120,7 +122,7 @@
                     <input type="number" name="sort_order" class="form-input" style="max-width:100px;">
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn-primary">Add Attachment</button>
+                    <button type="submit" class="btn btn-primary">Add Attachment</button>
                 </div>
             </form>
         </div>

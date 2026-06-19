@@ -1,18 +1,16 @@
 {{define "content"}}
-<header>
-    <h1>Contacts</h1>
-    <p>Contact list</p>
-</header>
 <div class="content">
-    <a href="/contacts/new" class="new-record-btn">+ New Contact</a>
+    <div class="d-flex justify-content-end mb-3">
+        <a href="/contacts/new" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle"></i> New Contact</a>
+    </div>
 
     <div class="table-wrapper">
-        <table data-rows-url="/api/contacts/rows">
+        <table class="table table-bordered table-hover table-sm" data-rows-url="/api/contacts/rows">
             <colgroup>
                 <col><col><col><col><col><col><col><col><col><col><col>
             </colgroup>
             <thead>
-                <tr>
+                <tr class="table-dark">
                     <th>Associated Supplier</th>
                     <th>Name</th>
                     <th>Email</th>

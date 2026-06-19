@@ -1,27 +1,28 @@
 {{define "content"}}
-<header>
-    <h1>{{if .IsNew}}New Purchase Order{{else}}Edit PO #{{.PO.Number}}{{end}}</h1>
-    <p>
-        {{if .PO.SupplierID}}
-            <a href="/supplier/{{derefInt .PO.SupplierID}}" style="color:white; text-decoration:underline;">{{.PO.SupplierName}}</a>
-        {{else}}{{.PO.SupplierName}}{{end}}
-    </p>
-</header>
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/pos">POs</a></li>
+        {{if .IsDuplicate}}
+        <li class="breadcrumb-item"><a href="/po/{{.DuplicateFrom}}">PO #{{.DuplicateFrom}}</a></li>
+        <li class="breadcrumb-item active">Copy</li>
+        {{else if .IsNew}}
+        <li class="breadcrumb-item active">New PO</li>
+        {{else}}
+        <li class="breadcrumb-item active">PO #{{.PO.Number}}</li>
+        {{end}}
+    </ol>
+</nav>
 
 <div class="content">
     {{if not .IsNew}}
         {{template "po_tabs" .}}
-    {{else if .IsDuplicate}}
-        <a href="/po/{{.DuplicateFrom}}" class="back-link">&#8592; Back to PO #{{.DuplicateFrom}}</a>
-    {{else}}
-        <a href="/pos" class="back-link">&#8592; Back to POs List</a>
     {{end}}
 
     {{if .IsDuplicate}}
-    <div class="info-banner">Duplicating from PO #{{.DuplicateFrom}} &mdash; a new PO number will be assigned on save.</div>
+    <div class="alert alert-info">Duplicating from PO #{{.DuplicateFrom}} &mdash; a new PO number will be assigned on save.</div>
     {{end}}
 
-    {{if .Error}}<div class="error-banner"><strong>Error:</strong> {{.Error}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     <form method="post" action="{{if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -242,8 +243,8 @@
         <div class="detail-section">
             <h3>Line Items</h3>
             <div class="table-wrapper" style="margin-top:12px; overflow-x:auto;">
-                <table style="table-layout:auto; min-width:860px;">
-                    <thead>
+                <table class="table table-bordered table-hover table-sm" style="min-width:860px;">
+                    <thead class="table-dark">
                         <tr>
                             <th style="width:52px;">#</th>
                             <th style="min-width:110px;">Part Number</th>
@@ -260,32 +261,32 @@
                         {{/* Duplicate source items as new_pol entries */}}
                         {{range $i, $item := .DuplicateItems}}
                         <tr class="new-line">
-                            <td><input type="number" name="new_pol[dup{{$i}}][POLItem]" value="{{$item.POLItem}}" class="tbl-input" style="width:48px;"></td>
-                            <td><input type="text"   name="new_pol[dup{{$i}}][POLPNPartNumber]" value="{{$item.POLPNPartNumber}}" class="tbl-input"></td>
-                            <td><input type="text"   name="new_pol[dup{{$i}}][POLRev]" value="{{$item.POLRev}}" class="tbl-input" style="width:56px;"></td>
-                            <td><input type="text"   name="new_pol[dup{{$i}}][POLDesc]" value="{{$item.POLDesc}}" class="tbl-input"></td>
-                            <td><input type="text"   name="new_pol[dup{{$i}}][VendorPN]" value="{{$item.VendorPN}}" class="tbl-input"></td>
-                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLQty]" value="{{printf "%g" $item.POLQty}}" class="tbl-input" style="text-align:right;"></td>
-                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLCost]" value="{{printf "%g" $item.POLCost}}" class="tbl-input" style="text-align:right;"></td>
-                            <td><input type="number" name="new_pol[dup{{$i}}][POLPNID]" value="{{if $item.POLPNID}}{{derefInt $item.POLPNID}}{{end}}" class="tbl-input"></td>
+                            <td><input type="number" name="new_pol[dup{{$i}}][POLItem]" value="{{$item.POLItem}}" class="form-control form-control-sm" style="width:48px;"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][POLPNPartNumber]" value="{{$item.POLPNPartNumber}}" class="form-control form-control-sm"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][POLRev]" value="{{$item.POLRev}}" class="form-control form-control-sm" style="width:56px;"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][POLDesc]" value="{{$item.POLDesc}}" class="form-control form-control-sm"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][VendorPN]" value="{{$item.VendorPN}}" class="form-control form-control-sm"></td>
+                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLQty]" value="{{printf "%g" $item.POLQty}}" class="form-control form-control-sm" style="text-align:right;"></td>
+                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLCost]" value="{{printf "%g" $item.POLCost}}" class="form-control form-control-sm" style="text-align:right;"></td>
+                            <td><input type="number" name="new_pol[dup{{$i}}][POLPNID]" value="{{if $item.POLPNID}}{{derefInt $item.POLPNID}}{{end}}" class="form-control form-control-sm"></td>
                             <td style="text-align:center;">
-                                <button type="button" class="btn-remove-row" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
                             </td>
                         </tr>
                         {{end}}
                         {{/* Existing items (edit mode) */}}
                         {{range .POItems}}
                         <tr data-polid="{{.POLID}}">
-                            <td><input type="number" name="pol[{{.POLID}}][POLItem]" value="{{.POLItem}}" class="tbl-input" style="width:48px;"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][POLPNPartNumber]" value="{{.POLPNPartNumber}}" class="tbl-input"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][POLRev]" value="{{.POLRev}}" class="tbl-input" style="width:56px;"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][POLDesc]" value="{{.POLDesc}}" class="tbl-input"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][VendorPN]" value="{{.VendorPN}}" class="tbl-input"></td>
-                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLQty]" value="{{printf "%g" .POLQty}}" class="tbl-input" style="text-align:right;"></td>
-                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLCost]" value="{{printf "%g" .POLCost}}" class="tbl-input" style="text-align:right;"></td>
-                            <td><input type="number" name="pol[{{.POLID}}][POLPNID]" value="{{if .POLPNID}}{{derefInt .POLPNID}}{{end}}" class="tbl-input"></td>
+                            <td><input type="number" name="pol[{{.POLID}}][POLItem]" value="{{.POLItem}}" class="form-control form-control-sm" style="width:48px;"></td>
+                            <td><input type="text"   name="pol[{{.POLID}}][POLPNPartNumber]" value="{{.POLPNPartNumber}}" class="form-control form-control-sm"></td>
+                            <td><input type="text"   name="pol[{{.POLID}}][POLRev]" value="{{.POLRev}}" class="form-control form-control-sm" style="width:56px;"></td>
+                            <td><input type="text"   name="pol[{{.POLID}}][POLDesc]" value="{{.POLDesc}}" class="form-control form-control-sm"></td>
+                            <td><input type="text"   name="pol[{{.POLID}}][VendorPN]" value="{{.VendorPN}}" class="form-control form-control-sm"></td>
+                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLQty]" value="{{printf "%g" .POLQty}}" class="form-control form-control-sm" style="text-align:right;"></td>
+                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLCost]" value="{{printf "%g" .POLCost}}" class="form-control form-control-sm" style="text-align:right;"></td>
+                            <td><input type="number" name="pol[{{.POLID}}][POLPNID]" value="{{if .POLPNID}}{{derefInt .POLPNID}}{{end}}" class="form-control form-control-sm"></td>
                             <td style="text-align:center;">
-                                <button type="button" class="btn-remove-row"
+                                <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1"
                                         onclick="removeExistingLine(this,'{{.POLID}}')" title="Remove">&#215;</button>
                             </td>
                         </tr>
@@ -294,32 +295,32 @@
                 </table>
             </div>
             <div style="margin-top:10px;">
-                <button type="button" class="btn-secondary" onclick="addNewLine()" style="font-size:0.9em;">+ Add Line Item</button>
+                <button type="button" class="btn btn-secondary" onclick="addNewLine()" style="font-size:0.9em;">+ Add Line Item</button>
             </div>
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn-primary">
+            <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create PO{{else}}Save Changes{{end}}
             </button>
             <a href="{{if .IsDuplicate}}/po/{{.DuplicateFrom}}{{else if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}"
-               class="btn-secondary">Cancel</a>
+               class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
 
 <template id="new-line-tpl">
     <tr class="new-line">
-        <td><input type="number" name="new_pol[IDX][POLItem]" class="tbl-input" style="width:48px;" placeholder="#"></td>
-        <td><input type="text"   name="new_pol[IDX][POLPNPartNumber]" class="tbl-input" placeholder="Part number"></td>
-        <td><input type="text"   name="new_pol[IDX][POLRev]" class="tbl-input" style="width:56px;" placeholder="Rev"></td>
-        <td><input type="text"   name="new_pol[IDX][POLDesc]" class="tbl-input" placeholder="Description"></td>
-        <td><input type="text"   name="new_pol[IDX][VendorPN]" class="tbl-input" placeholder="Vendor PN"></td>
-        <td><input type="number" step="any" name="new_pol[IDX][POLQty]"  class="tbl-input" style="text-align:right;" placeholder="0"></td>
-        <td><input type="number" step="any" name="new_pol[IDX][POLCost]" class="tbl-input" style="text-align:right;" placeholder="0.0000"></td>
-        <td><input type="number" name="new_pol[IDX][POLPNID]" class="tbl-input" placeholder=""></td>
+        <td><input type="number" name="new_pol[IDX][POLItem]" class="form-control form-control-sm" style="width:48px;" placeholder="#"></td>
+        <td><input type="text"   name="new_pol[IDX][POLPNPartNumber]" class="form-control form-control-sm" placeholder="Part number"></td>
+        <td><input type="text"   name="new_pol[IDX][POLRev]" class="form-control form-control-sm" style="width:56px;" placeholder="Rev"></td>
+        <td><input type="text"   name="new_pol[IDX][POLDesc]" class="form-control form-control-sm" placeholder="Description"></td>
+        <td><input type="text"   name="new_pol[IDX][VendorPN]" class="form-control form-control-sm" placeholder="Vendor PN"></td>
+        <td><input type="number" step="any" name="new_pol[IDX][POLQty]"  class="form-control form-control-sm" style="text-align:right;" placeholder="0"></td>
+        <td><input type="number" step="any" name="new_pol[IDX][POLCost]" class="form-control form-control-sm" style="text-align:right;" placeholder="0.0000"></td>
+        <td><input type="number" name="new_pol[IDX][POLPNID]" class="form-control form-control-sm" placeholder=""></td>
         <td style="text-align:center;">
-            <button type="button" class="btn-remove-row" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
+            <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
         </td>
     </tr>
 </template>
@@ -566,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!banner) {
             banner = document.createElement('div');
             banner.id = 'typeahead-error-banner';
-            banner.className = 'error-banner';
+            banner.className = 'alert alert-danger';
             this.insertBefore(banner, this.firstChild);
         }
         banner.textContent = invalid.map(c => c.label).join(' and ') + ': please select from the dropdown — free text is not accepted.';
