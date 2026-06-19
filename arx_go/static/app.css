@@ -1,7 +1,5 @@
 /* =============================================================
-   Arx Parts Master — application stylesheet
-   All colours and sizing live here. To retheme the app, only
-   this file needs to change.
+   Arx — application stylesheet (shared by PM and Records)
    ============================================================= */
 
 /* --- Tokens -------------------------------------------------- */
@@ -21,17 +19,21 @@ body {
     min-height: 100vh;
 }
 
+/* --- App header ---------------------------------------------- */
 .app-header {
     height: 36px; background: var(--header-bg); color: #e0e0e0;
     display: flex; align-items: center; padding: 0 16px;
-    font-size: 0.85em; font-weight: 600; letter-spacing: 0.5px;
+    font-size: 0.85rem; font-weight: 600; letter-spacing: 0.5px;
     border-bottom: 2px solid var(--header-border);
 }
+.app-header--testmode { background: #b45309; border-bottom-color: #f59e0b; }
 
-.app-header--testmode {
-    background: #b45309;
-    border-bottom-color: #f59e0b;
-}
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.header-app-link { color: #e0e0e0; font-size: 0.8em; font-weight: 400; letter-spacing: 0; text-decoration: none; opacity: 0.55; transition: opacity 0.2s; }
+.header-app-link:hover { opacity: 1; color: #e0e0e0; text-decoration: none; }
+.header-settings-link { color: #e0e0e0; font-size: 1.15rem; text-decoration: none; opacity: 0.65; line-height: 1; transition: opacity 0.2s; }
+.header-settings-link:hover,
+.header-settings-link.active { opacity: 1; color: #e0e0e0; text-decoration: none; }
 
 /* --- Navigation tabs ----------------------------------------- */
 .tabs { display: flex; border-bottom: 1px solid #ddd; background: #fafafa; margin-bottom: 1.5rem; }
@@ -41,8 +43,22 @@ body {
     border-right: 1px solid #ddd; transition: background 0.2s, color 0.2s;
 }
 .tab:last-child { border-right: none; }
-.tab:hover  { background: #f0f0f0; }
+.tab:hover  { background: #f0f0f0; text-decoration: none; color: #444; }
 .tab.active { background: var(--accent-1); color: #fff; }
+
+/* --- Sortable column headers (PM: tr.table-dark; TR: thead.table-dark) */
+tr.table-dark th.sortable,
+thead.table-dark th.sortable { cursor: pointer; user-select: none; }
+tr.table-dark th.sortable:hover,
+thead.table-dark th.sortable:hover { background-image: linear-gradient(rgba(255,255,255,0.12), rgba(255,255,255,0.12)); }
+tr.table-dark th.sort-asc::after,
+thead.table-dark th.sort-asc::after  { content: ' \25B2'; font-size: 0.7em; opacity: 0.7; }
+tr.table-dark th.sort-desc::after,
+thead.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opacity: 0.7; }
+
+/* =============================================================
+   Parts Master (PM) specific
+   ============================================================= */
 
 /* --- Sub-tabs (detail pages) --------------------------------- */
 .sub-tabs {
@@ -58,8 +74,6 @@ body {
 .sub-tab.active        { color: var(--accent-1); border-bottom-color: var(--accent-1); }
 .sub-tab.disabled      { color: #bbb; cursor: default; pointer-events: none; }
 .sub-tab-edit          { margin-left: auto; }
-
-/* --- Content area -------------------------------------------- */
 
 /* --- Tables -------------------------------------------------- */
 .table-wrapper { overflow-x: auto; contain: layout style; }
@@ -107,12 +121,6 @@ table[data-rows-url="/api/contacts/rows"] col:nth-child(9)  { width:  7%; } /* L
 table[data-rows-url="/api/contacts/rows"] col:nth-child(10) { width:  8%; } /* Notes */
 table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* Active */
 
-/* --- Sortable column headers -------------------------------- */
-tr.table-dark th.sortable { cursor: pointer; user-select: none; }
-tr.table-dark th.sortable:hover { background-image: linear-gradient(rgba(255,255,255,0.12), rgba(255,255,255,0.12)); }
-tr.table-dark th.sort-asc::after  { content: ' \25B2'; font-size: 0.7em; opacity: 0.7; }
-tr.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opacity: 0.7; }
-
 /* --- Filter row --------------------------------------------- */
 .filter-row th { padding: 4px 6px; background: #fff; }
 .filter-row input {
@@ -142,27 +150,15 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .part-number-link { color: var(--accent-1); text-decoration: none; font-weight: 600; transition: color 0.2s; }
 .part-number-link:hover { color: var(--accent-2); text-decoration: underline; }
 
-
-.header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-.header-app-link { color: #e0e0e0; font-size: 0.8em; font-weight: 400; letter-spacing: 0; text-decoration: none; opacity: 0.55; transition: opacity 0.2s; }
-.header-app-link:hover { opacity: 1; color: #e0e0e0; text-decoration: none; }
-.header-settings-link { color: #e0e0e0; font-size: 1.15rem; text-decoration: none; opacity: 0.65; line-height: 1; transition: opacity 0.2s; }
-.header-settings-link:hover,
-.header-settings-link.active { opacity: 1; color: #e0e0e0; text-decoration: none; }
-
-/* --- Badges & status ----------------------------------------- */
-
 /* --- Detail sections ----------------------------------------- */
 .detail-section { margin-bottom: 20px; padding: 20px; background: #f9f9f9; border-radius: 4px; border-left: 4px solid var(--accent-1); }
 .detail-section h3 { margin-bottom: 10px; color: #333; }
 .detail-row { display: grid; grid-template-columns: 150px 1fr; margin-bottom: 12px; gap: 20px; }
 .detail-row strong { color: var(--accent-1); }
 
-/* --- Banners ------------------------------------------------- */
-.no-results         { text-align: center; padding: 40px; color: #999; font-size: 1.1em; }
-.table-footer-note  { margin-top: 12px; color: #888; font-size: 0.9em; }
-
-/* --- Buttons ------------------------------------------------- */
+/* --- Misc ---------------------------------------------------- */
+.no-results        { text-align: center; padding: 40px; color: #999; font-size: 1.1em; }
+.table-footer-note { margin-top: 12px; color: #888; font-size: 0.9em; }
 
 /* --- Forms --------------------------------------------------- */
 .form-label { display: block; font-weight: 600; color: var(--accent-1); font-size: 0.95em; }
@@ -179,7 +175,7 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .form-checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-1); cursor: pointer; }
 .form-actions { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
 
-/* --- Part status bar (detail page) --------------------------- */
+/* --- Part status bar ----------------------------------------- */
 .part-status-bar {
     display: flex; flex-wrap: wrap; gap: 0;
     margin-bottom: 20px; background: #f0f4ff;
@@ -195,11 +191,9 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
     color: var(--accent-1); font-weight: 700; margin-bottom: 6px;
 }
 .part-status-value { font-weight: 600; font-size: 0.95em; }
-.part-status-link {
-    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+.part-status-link  { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* --- PO edit line-item table --------------------------------- */
+/* --- PO line items ------------------------------------------- */
 tr.line-removed td { opacity: 0.35; pointer-events: none; }
 
 /* --- Supplier/part search dropdown --------------------------- */
@@ -218,7 +212,6 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 .search-dropdown-item:hover, .search-dropdown-item.active { background: #cfe2ff; }
 .search-dropdown-item strong { color: var(--accent-1); font-weight: 600; }
 
-
 .suggest-links-banner {
     background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px;
     padding: 12px 16px; margin-bottom: 16px; font-size: 0.9em;
@@ -231,3 +224,77 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
     background: #f8f9fa; font-size: 0.85em; padding: 3px 12px 5px;
     border-top: none; color: #555;
 }
+
+/* =============================================================
+   Test Records (TR) specific
+   ============================================================= */
+
+.font-mono { font-family: monospace; }
+
+/* Section heading rows */
+.row-heading-1 td { background-color: #808080 !important; color: #fff; font-weight: bold; }
+.row-heading-2 td { background-color: #ed7d31 !important; color: #fff; font-weight: bold; }
+.row-heading-3 td { background-color: #d5d8dc !important; color: #555; font-style: italic; }
+
+/* Definition history timeline */
+.def-timeline {
+    position: relative;
+    height: 32px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+.def-timeline-line {
+    position: absolute;
+    top: 50%; left: 2%; right: 2%;
+    height: 2px;
+    background: #dee2e6;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+.def-timeline-now { background: #fff; border-color: #6c757d; }
+.def-timeline-now:hover  { background: #f8f9fa; border-color: #495057; }
+.def-timeline-now.active { background: #ed7d31; border-color: #ed7d31; }
+.def-timeline-dot {
+    position: absolute;
+    top: 50%;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #6c757d;
+    border: 2px solid #fff;
+    padding: 0;
+    z-index: 10;
+    cursor: pointer;
+    transform: translate(-50%, -50%);
+    transition: background 0.15s, width 0.15s, height 0.15s;
+}
+.def-timeline-dot:hover  { background: #495057; width: 18px; height: 18px; }
+.def-timeline-dot.active { background: #ed7d31; width: 18px; height: 18px; }
+
+/* Changed row highlight when viewing history */
+#def-table tr.row-changed td   { background-color: #fff3cd !important; }
+
+/* Modified row highlight in step editor */
+#steps-table tr.row-modified td { background-color: #fff8e1 !important; }
+
+/* Formula-computed result inputs */
+input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; cursor: default; }
+
+/* Image hover preview */
+.img-hover-wrap { position: relative; display: inline-block; }
+.img-hover-preview {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1050;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    pointer-events: none;
+}
+.img-hover-preview img { display: block; max-width: 480px; max-height: 480px; }
+.img-hover-wrap:hover .img-hover-preview { display: block; }
