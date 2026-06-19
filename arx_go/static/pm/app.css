@@ -148,7 +148,7 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .header-app-link { color: #e0e0e0; font-size: 0.8em; font-weight: 400; letter-spacing: 0; text-decoration: none; opacity: 0.55; transition: opacity 0.2s; }
 .header-app-link:hover { opacity: 1; color: #e0e0e0; text-decoration: none; }
-.header-settings-link { color: #e0e0e0; font-size: 1.15em; text-decoration: none; opacity: 0.65; line-height: 1; transition: opacity 0.2s; }
+.header-settings-link { color: #e0e0e0; font-size: 1.15rem; text-decoration: none; opacity: 0.65; line-height: 1; transition: opacity 0.2s; }
 .header-settings-link:hover,
 .header-settings-link.active { opacity: 1; color: #e0e0e0; text-decoration: none; }
 
