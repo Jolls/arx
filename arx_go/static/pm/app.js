@@ -5,6 +5,8 @@
 const ROWS_PER_PAGE = 20;
 let currentPage = 1;
 let allRows = [];
+let sortCol = null;
+let sortDir = 'asc';
 
 function escHtml(s) {
     if (s == null) return '';
@@ -88,6 +90,36 @@ function matchesRow(row, filters) {
     return filters.every((f, i) => !f || (row._text[i] || '').includes(f));
 }
 
+function applySort() {
+    if (sortCol === null) return;
+    allRows.sort((a, b) => {
+        const va = a._text[sortCol] || '';
+        const vb = b._text[sortCol] || '';
+        const cmp = va.localeCompare(vb, undefined, { numeric: true, sensitivity: 'base' });
+        return sortDir === 'asc' ? cmp : -cmp;
+    });
+}
+
+function updateSortHeaders() {
+    document.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        if (i === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    });
+}
+
+function sortByCol(colIndex) {
+    if (sortCol === colIndex) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortCol = colIndex;
+        sortDir = 'asc';
+    }
+    applySort();
+    updateSortHeaders();
+    currentPage = 1;
+    applyFilters(false);
+}
+
 function applyFilters(resetPage = true) {
     if (!document.querySelector('tr.filter-row')) return;
     if (resetPage) currentPage = 1;
@@ -160,6 +192,10 @@ function loadListRows() {
                 item._html = buildRow(item);
                 item._text = cellText(item).map(s => (s == null ? '' : String(s)).toLowerCase());
                 return item;
+            });
+            document.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
+                th.classList.add('sortable');
+                th.addEventListener('click', () => sortByCol(i));
             });
             applyFilters(false);
             const tDone = performance.now();

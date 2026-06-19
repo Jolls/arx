@@ -2199,8 +2199,9 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderTR(w, "test_report.html", map[string]any{
-		"Form": form,
-		"Step": step,
-		"Rows": rows,
+		"Form":     form,
+		"Step":     step,
+		"Rows":     rows,
+		"TestMode": h.cfg.TestMode,
 	})
 }
