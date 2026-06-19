@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -90,8 +91,7 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
-	sess := h.session(r)
-	if _, ok := sess.Values["user_id"].(int); ok {
+	if _, u := h.withUser(r); u != nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -102,10 +102,11 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderLogin(w, r, map[string]any{
-		"Bootstrap":  n == 0,
-		"Error":      r.URL.Query().Get("error"),
-		"TestMode":   h.cfg.TestMode,
-		"AppVersion": h.cfg.Version,
+		"Bootstrap":       n == 0,
+		"Error":           r.URL.Query().Get("error"),
+		"TestMode":        h.cfg.TestMode,
+		"AppVersion":      h.cfg.Version,
+		"DefaultUsername": os.Getenv("USERNAME"),
 	})
 }
 

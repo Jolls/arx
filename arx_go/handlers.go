@@ -176,6 +176,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["SchemaMismatch"] = h.schemaMismatch
 		m["TestRecordsURL"] = h.cfg.TestRecordsURL
 		m["CurrentUser"] = h.currentUser(r)
+		m["CSRFToken"] = h.csrfToken(w, r)
 	}
 	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/pm/layout.html",

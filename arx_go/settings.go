@@ -112,6 +112,7 @@ func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
+	r, _ = h.withUser(r)
 	h.render(w, r, "settings.html", h.settingsData(w, r, nil))
 }
 

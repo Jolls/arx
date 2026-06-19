@@ -19,6 +19,7 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 		m["SchemaMismatch"] = h.schemaMismatch
 		m["PartsMasterURL"] = h.cfg.PartsMasterURL
 		m["CurrentUser"] = h.currentUser(r)
+		m["CSRFToken"] = h.csrfToken(w, r)
 	}
 	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/tr/layout.html",
