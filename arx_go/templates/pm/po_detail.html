@@ -34,6 +34,30 @@
     </div>
     {{end}}
 
+    {{/* ── Suggest pricing ────────────────────────────────────── */}}
+    {{if .SuggestPrices}}
+    <div class="suggest-links-banner" id="suggest-prices-banner">
+        <strong>New unit cost(s) — add to part pricing?</strong>
+        <form method="POST" action="/po/{{.PO.Number}}/add-prices" style="margin-top:8px;">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="supplier_id" value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
+            <input type="hidden" name="count" value="{{len .SuggestPrices}}">
+            {{range .SuggestPrices}}
+            <label class="suggest-links-row">
+                <input type="checkbox" name="add_price_{{.Index}}" value="1" checked>
+                <input type="hidden" name="price_part_id_{{.Index}}" value="{{.PartID}}">
+                <input type="hidden" name="price_cost_{{.Index}}" value="{{.Cost}}">
+                <span>{{.PartNumber}} &mdash; <code>{{printf "%.4f" .Cost}}</code> ea</span>
+            </label>
+            {{end}}
+            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                <button type="submit" class="btn-primary btn-sm">Save to pricing</button>
+                <button type="button" class="btn-secondary btn-sm" onclick="document.getElementById('suggest-prices-banner').remove()">Dismiss</button>
+            </div>
+        </form>
+    </div>
+    {{end}}
+
     {{/* ── Status bar ────────────────────────────────────────── */}}
     <div class="part-status-bar">
         <div class="part-status-cell">

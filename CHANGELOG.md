@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.22] - 2026-06-19 
+- parts_master: after saving a PO, offer to add new unit costs to part pricing if no matching active price exists ([#457](https://github.com/Jolls/arx-legacy/issues/457))
+
 ## [0.5.21] - 2026-06-19 
 - parts_master: after saving a PO, offer to add new vendor PNs to the supplier catalog if no link exists ([#455](https://github.com/Jolls/arx-legacy/issues/455))
 
