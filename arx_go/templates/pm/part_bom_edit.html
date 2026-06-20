@@ -65,7 +65,7 @@
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <button type="submit" class="btn btn-secondary">Run Rollup</button>
         </form>
-        <p class="table-footer-note">Sums PNCurrentCost &times; Qty for each direct BOM component.</p>
+        <p class="table-footer-note">Recursively rolls up child costs from leaves — each sub-assembly is fully recomputed. Parts appearing multiple times in the tree are computed once and reused.</p>
     </div>
 </div>
 

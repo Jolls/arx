@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -221,11 +222,22 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 
+	var rollupDelta, rollupDeltaPct float64
+	var rollupSignificant bool
+	if p.PNLastRollupAt != nil && p.PNCurrentCost > 0 {
+		rollupDelta = p.PNLastRollupCost - p.PNCurrentCost
+		rollupDeltaPct = rollupDelta / p.PNCurrentCost * 100
+		rollupSignificant = math.Abs(rollupDeltaPct) >= 5.0
+	}
+
 	h.render(w, r, "part_detail.html", map[string]any{
 		"Part": p, "PrimaryAtt": primaryAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode": h.cfg.TestMode,
+		"TestMode":          h.cfg.TestMode,
+		"RollupDelta":       rollupDelta,
+		"RollupDeltaPct":    rollupDeltaPct,
+		"RollupSignificant": rollupSignificant,
 	})
 }
 
@@ -453,24 +465,29 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.PLItem, pl.PLQty, pl.PLPartID,
-		       pn.part_number, pn.title, pn.revision, pn.category, pn.PNCurrentCost
+		       pn.part_number, pn.title, pn.revision, pn.category,
+		       pn.PNCurrentCost, pn.PNLastRollupCost,
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.PLListID = pn.PNID) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
 		JOIN %s pn ON pl.PLPartID = pn.PNID
 		WHERE pl.PLListID = @p1
 		ORDER BY pl.PLItem
-	`, pl, pn), id)
+	`, pl, pl, pn), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
 	defer rows.Close()
 	var items []models.BOMItem
+	var bomTotal float64
 	for rows.Next() {
 		var item models.BOMItem
 		var partNumber, title, revision, category sql.NullString
-		var currentCost sql.NullFloat64
+		var currentCost, lastRollupCost sql.NullFloat64
+		var childHasBOM sql.NullBool
 		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLPartID,
-			&partNumber, &title, &revision, &category, &currentCost); err != nil {
+			&partNumber, &title, &revision, &category,
+			&currentCost, &lastRollupCost, &childHasBOM); err != nil {
 			h.renderError(w, r, "Error reading BOM: "+err.Error())
 			return
 		}
@@ -479,10 +496,30 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		item.Revision = revision.String
 		item.Category = category.String
 		item.PNCurrentCost = currentCost.Float64
+		item.PNLastRollupCost = lastRollupCost.Float64
+		item.ChildHasBOM = childHasBOM.Bool
+
+		if item.ChildHasBOM {
+			item.LineUnitCost = item.PNLastRollupCost
+			if item.PNLastRollupCost > 0 {
+				item.CostSource = "rollup"
+			} else {
+				item.CostSource = "missing"
+			}
+		} else {
+			item.LineUnitCost = item.PNCurrentCost
+			if item.PNCurrentCost > 0 {
+				item.CostSource = "current_cost"
+			} else {
+				item.CostSource = "missing"
+			}
+		}
+		item.LineExtCost = item.LineUnitCost * item.PLQty
+		bomTotal += item.LineExtCost
 		items = append(items, item)
 	}
 	h.render(w, r, "part_bom.html", map[string]any{
-		"Part": p, "BOMItems": items,
+		"Part": p, "BOMItems": items, "BOMTotal": bomTotal,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
@@ -719,24 +756,94 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/bom", id), http.StatusFound)
 }
 
+// ── BOM cost rollup ──────────────────────────────────────────────────────────
+
+type rollupResult struct {
+	cost  float64
+	cycle bool
+}
+
+// rollupCost recursively computes the rolled-up cost for part pnid.
+// visited is path-scoped (defer-deleted on return) for cycle detection.
+// memo is global to the walk; once a node is computed its result is reused.
+func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool, memo map[int]rollupResult) (rollupResult, error) {
+	if visited[pnid] {
+		return rollupResult{cycle: true}, nil
+	}
+	if res, ok := memo[pnid]; ok {
+		return res, nil
+	}
+	visited[pnid] = true
+	defer delete(visited, pnid)
+
+	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT pl.PLPartID, pl.PLQty, pn.PNCurrentCost,
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.PLListID = pn.PNID) THEN 1 ELSE 0 END AS BIT)
+		FROM %s pl
+		JOIN %s pn ON pl.PLPartID = pn.PNID
+		WHERE pl.PLListID = @p1
+	`, pl, pl, pn), pnid)
+	if err != nil {
+		return rollupResult{}, err
+	}
+	defer rows.Close()
+
+	var total float64
+	var hasCycle bool
+	for rows.Next() {
+		var childID int
+		var qty float64
+		var currentCost sql.NullFloat64
+		var childHasBOM sql.NullBool
+		if err := rows.Scan(&childID, &qty, &currentCost, &childHasBOM); err != nil {
+			return rollupResult{}, err
+		}
+		var unitCost float64
+		if childHasBOM.Bool {
+			res, err := h.rollupCost(ctx, childID, visited, memo)
+			if err != nil {
+				return rollupResult{}, err
+			}
+			if res.cycle {
+				hasCycle = true
+			}
+			unitCost = res.cost
+		} else {
+			unitCost = currentCost.Float64
+		}
+		total += unitCost * qty
+	}
+	if err := rows.Err(); err != nil {
+		return rollupResult{}, err
+	}
+
+	result := rollupResult{cost: total, cycle: hasCycle}
+	memo[pnid] = result
+	return result, nil
+}
+
 // ── PartRollupCost — POST /part/{id}/rollup-cost ─────────────────────────────
 
 func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
-	var cost float64
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ISNULL(SUM(pn.PNCurrentCost * pl.PLQty), 0)
-		FROM %s pl
-		JOIN %s pn ON pl.PLPartID = pn.PNID
-		WHERE pl.PLListID = @p1
-	`, pl, pn), id).Scan(&cost); err != nil {
+	pnid, err := strconv.Atoi(id)
+	if err != nil {
+		h.renderError(w, r, "Invalid part ID")
+		return
+	}
+	res, err := h.rollupCost(r.Context(), pnid, map[int]bool{}, map[int]rollupResult{})
+	if err != nil {
 		h.renderError(w, r, "Error computing rollup cost: "+err.Error())
 		return
 	}
+	if res.cycle {
+		h.renderError(w, r, "BOM contains a cycle — fix the BOM before running rollup.")
+		return
+	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET PNLastRollupCost=@p1, PNLastRollupAt=@p2 WHERE PNID=@p3`, pn,
-	), cost, time.Now(), id); err != nil {
+		`UPDATE %s SET PNLastRollupCost=@p1, PNLastRollupAt=@p2 WHERE PNID=@p3`, h.cfg.PartsTable(),
+	), res.cost, time.Now(), pnid); err != nil {
 		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
 		return
 	}

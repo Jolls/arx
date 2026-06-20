@@ -19,7 +19,9 @@
                     <th class="sortable" onclick="sortTable(this)" style="width:60px;">Rev</th>
                     <th class="sortable" onclick="sortTable(this)" style="width:80px;">Type</th>
                     <th class="sortable" onclick="sortTable(this)" style="width:80px; text-align:right;">Qty</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:90px; text-align:right;">Unit Cost</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Unit Cost</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Ext Cost</th>
+                    <th style="width:90px;">Source</th>
                 </tr>
             </thead>
             <tbody>
@@ -30,11 +32,25 @@
                     <td>{{.Title}}</td>
                     <td>{{.Revision}}</td>
                     <td>{{.Category}}</td>
-                    <td style="text-align:right;">{{printf "%.5g" .PLQty}}</td>
-                    <td style="text-align:right;">{{if .PNCurrentCost}}${{printf "%.4f" .PNCurrentCost}}{{end}}</td>
+                    <td class="text-end">{{printf "%.5g" .PLQty}}</td>
+                    <td class="text-end">{{if .LineUnitCost}}${{printf "%.4f" .LineUnitCost}}{{end}}</td>
+                    <td class="text-end">{{if .LineExtCost}}${{printf "%.4f" .LineExtCost}}{{end}}</td>
+                    <td>
+                        {{if eq .CostSource "rollup"}}<span class="badge bg-info text-dark">Rollup</span>
+                        {{else if eq .CostSource "current_cost"}}<span class="badge bg-secondary">Cost</span>
+                        {{else if eq .CostSource "missing"}}<span class="badge bg-warning text-dark">Missing</span>
+                        {{end}}
+                    </td>
                 </tr>
                 {{end}}
             </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="7" class="text-end"><strong>Total</strong></td>
+                    <td class="text-end"><strong>${{printf "%.4f" .BOMTotal}}</strong></td>
+                    <td></td>
+                </tr>
+            </tfoot>
         </table>
     </div>
     <p class="table-footer-note">{{len .BOMItems}} component{{if ne (len .BOMItems) 1}}s{{end}}</p>

@@ -155,6 +155,12 @@ type BOMItem struct {
 	Revision      string
 	Category      string
 	PNCurrentCost float64
+	// Rollup display fields — populated by PartBOM handler.
+	PNLastRollupCost float64
+	ChildHasBOM      bool
+	LineUnitCost     float64
+	LineExtCost      float64
+	CostSource       string // "rollup" | "current_cost" | "missing"
 }
 
 type Attachment struct {
