@@ -832,7 +832,8 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Invalid part ID")
 		return
 	}
-	res, err := h.rollupCost(r.Context(), pnid, map[int]bool{}, map[int]rollupResult{})
+	memo := map[int]rollupResult{}
+	res, err := h.rollupCost(r.Context(), pnid, map[int]bool{}, memo)
 	if err != nil {
 		h.renderError(w, r, "Error computing rollup cost: "+err.Error())
 		return
@@ -841,12 +842,34 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "BOM contains a cycle — fix the BOM before running rollup.")
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET PNLastRollupCost=@p1, PNLastRollupAt=@p2 WHERE PNID=@p3`, h.cfg.PartsTable(),
-	), res.cost, time.Now(), pnid); err != nil {
+	// Write rollup cost back to every assembly visited during the walk (root + all
+	// sub-assemblies), using a single timestamp so the BOM view is consistent.
+	now := time.Now()
+	pn := h.cfg.PartsTable()
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
 		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
 		return
 	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+	for partID, result := range memo {
+		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+			`UPDATE %s SET PNLastRollupCost=@p1, PNLastRollupAt=@p2 WHERE PNID=@p3`, pn,
+		), result.cost, now, partID); err != nil {
+			h.renderError(w, r, "Error saving rollup cost: "+err.Error())
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
+		return
+	}
+	committed = true
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/bom", id), http.StatusSeeOther)
 }
 
