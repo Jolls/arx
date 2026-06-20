@@ -33,6 +33,7 @@
 | Soft-delete only for `FIL` | `is_active=0`; hard delete is off the table |
 | DB triggers maintain denorm counts | `PNFILLinks`, `PNPOLinks`, `SUNumOfLNKs`, `SUNumOfPOs` — never update in Go code |
 | `NULL` on `PNLastRollupCost` | NULL = no rollup ever run; 0 would mean rollup ran and cost was zero |
+| Your own company as supplier for internal parts | MFG, RAW, and ASM parts get `price` rows with your company as `supplier_id`, unifying all part costs through the `price` table. For ASM parts the `price_ea` row represents value-add (labor, overhead) on top of the BOM rollup. Eliminates `PNCurrentCost` as a special field — it becomes a transitional fallback until all parts have `price` rows. |
 
 ---
 
@@ -60,6 +61,8 @@ Many FK and NOT NULL constraints deferred at table creation. Should be applied i
 ### 5. `price.is_preferred` flag (#223)
 Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.price_id` pointer is stale and unmanaged; replace with `is_preferred BIT` + filtered unique index.
 
+Once `is_preferred` exists and all parts (including MFG/RAW/ASM via your own company as supplier) have `price` rows, `PNCurrentCost` becomes fully redundant and can be dropped. Migration path: backfill `price` rows from `PNCurrentCost` values, verify rollup results match, then `ALTER TABLE PN DROP COLUMN PNCurrentCost`.
+
 ---
 
 ## Parts Master — Feature Roadmap
@@ -84,6 +87,7 @@ Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.pr
 | #225 | LNK: wire up LNKMFRID / LNKMFRPNID (manufacturer sourcing) | `LNK` FK wiring |
 | #222 | `price_type` (standard / qty-break / pack) | `price` new column |
 | #223 | `price.is_preferred` (**prerequisite for rollup**) | `price` new column + index |
+| — | Your company as supplier for internal parts (MFG/RAW/ASM) — enables unified cost model via `price` table; `PNCurrentCost` becomes fallback-only | `company` row + `price` rows; no schema change |
 | #9 | Lead time per sourcing link (`LNKLeadtime` exists as VARCHAR, migrate to DECIMAL) | `LNK` column type change |
 | #276 SUP-2 | Supplier performance metrics (OTD %, avg lead time) | Requires PO-2 receiving dates |
 | #277 SUP-3 | Lead time tracking per PO line (promised vs actual) | `POL` new column; requires PO-2 |
@@ -236,6 +240,7 @@ Next:
 - `LNKLeadtime VARCHAR(55)` — exists, migrate to `DECIMAL(7,2)` when #9 is implemented.
 - `LNKMFRID INT`, `LNKMFRPNID INT` — exist, unwired. Use as FKs to `supplier.id` and `PN.PNID` for #225.
 - `PN.price_id` — stale pointer; replace with `price.is_preferred` (#223) then drop.
+- `PN.PNCurrentCost` — transitional field. Once `price.is_preferred` (#223) is in place and all parts (BUY, MFG, RAW, ASM) have `price` rows with your company as supplier for internal parts, `PNCurrentCost` is redundant. Rollup and pricing should fall back to it until then, but new features should not extend its use. Drop after migration is verified.
 - `price_type` — was dropped; re-add when #222 is implemented.
 - `Forms.custom_sheets` — was dropped; only re-add if custom worksheet feature is scoped (#221).
 - Part categories (code, label, per-category subtab visibility) are stored as JSON in `app_config['part_categories']`, editable in Settings (#345). `PN.category` is a free-text string matched against this list; `models.DefaultCategories()` is the seed when nothing is saved.
