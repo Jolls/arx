@@ -125,7 +125,7 @@ func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
 		MERGE INTO `+h.cfg.AppConfigTable()+` AS t
 		USING (SELECT @p1 AS k, @p2 AS v) AS s ON t.setting_key = s.k
 		WHEN MATCHED THEN UPDATE SET t.setting_value = s.v, t.updated_at = GETDATE()
-		WHEN NOT MATCHED THEN INSERT (setting_key, setting_value) VALUES (s.k, s.v)`,
+		WHEN NOT MATCHED THEN INSERT (setting_key, setting_value) VALUES (s.k, s.v);`,
 		key, value)
 	return err
 }

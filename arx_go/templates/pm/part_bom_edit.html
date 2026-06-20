@@ -63,7 +63,7 @@
         {{end}}
         <form method="POST" action="/part/{{.Part.PNID}}/rollup-cost" style="margin-top:0.5rem;">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <button type="submit" class="btn">Run Rollup</button>
+            <button type="submit" class="btn btn-secondary">Run Rollup</button>
         </form>
         <p class="table-footer-note">Sums PNCurrentCost &times; Qty for each direct BOM component.</p>
     </div>
