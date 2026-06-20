@@ -6,6 +6,7 @@ type PurchaseOrder struct {
 	ID                  int
 	Number              string
 	Status              string
+	ApprovalStatus      string
 	IsActive            bool
 	Orderer             string
 	AccountID           string

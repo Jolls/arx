@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.27] - 2026-06-20 
+- pm: PO approval workflow — Submit / Approve / Reject from the PO page; POs cannot be sent or printed until approved; editing an approved PO resets its approval; designated approvers configured via a "PO Approver" toggle in Settings → Users. Status and approval events now share one unified PO history timeline (`PO_history`, replacing `PO_status_history`) ([#267](https://github.com/Jolls/arx-legacy/issues/267))
+
 ## [0.5.26] - 2026-06-20 
 - pm: PO status lifecycle — Draft → Open → Sent → Partially Received → Closed (plus Cancelled), with transitions driven by buttons on the PO page, an audited status-history log (who/when), prominent status display, and a status filter on the PO list ([#271](https://github.com/Jolls/arx-legacy/issues/271))
 

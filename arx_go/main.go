@@ -131,6 +131,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/settings/users", h.SettingsUsersCreate)
 		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)
 		r.Post("/settings/users/{userID}/toggle-active", h.SettingsUsersToggleActive)
+		r.Post("/settings/users/{userID}/toggle-approve", h.SettingsUsersToggleApprove)
 
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)
@@ -214,6 +215,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/po/{id}/edit", h.POEdit)
 		r.Post("/po/{id}", h.POUpdate)
 		r.Post("/po/{id}/status", h.POStatusTransition)
+		r.Post("/po/{id}/approval", h.POApprovalAction)
 		r.Get("/po/{id}/note", h.PONote)
 		r.Get("/po/{id}/print", h.POPrint)
 		r.Post("/po/{id}/mark-printed", h.POMarkPrinted)

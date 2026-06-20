@@ -6,6 +6,7 @@ CREATE TABLE dbo.users (
     display_name  VARCHAR(128)  NOT NULL,
     password_hash VARCHAR(255)  NOT NULL,
     is_active     BIT           NOT NULL DEFAULT 1,
+    can_approve_po BIT          NOT NULL DEFAULT 0,  -- may approve/reject POs (issue #267)
     created_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     updated_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     CONSTRAINT UQ_users_username UNIQUE (username)

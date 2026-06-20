@@ -2,6 +2,69 @@ package main
 
 import "testing"
 
+func TestPOApprovalNext(t *testing.T) {
+	ok := []struct{ action, from, want string }{
+		{"submit", "not_submitted", "pending"},
+		{"submit", "rejected", "pending"},
+		{"approve", "pending", "approved"},
+		{"reject", "pending", "rejected"},
+	}
+	for _, c := range ok {
+		got, valid := poApprovalNext(c.action, c.from)
+		if !valid || got != c.want {
+			t.Errorf("poApprovalNext(%q,%q) = (%q,%v), want (%q,true)", c.action, c.from, got, valid, c.want)
+		}
+	}
+
+	bad := []struct{ action, from string }{
+		{"submit", "pending"},   // already submitted
+		{"submit", "approved"},  // already approved
+		{"approve", "not_submitted"},
+		{"approve", "approved"}, // not pending
+		{"approve", "rejected"},
+		{"reject", "not_submitted"},
+		{"reject", "approved"},
+		{"bogus", "pending"}, // unknown action
+	}
+	for _, c := range bad {
+		if got, valid := poApprovalNext(c.action, c.from); valid {
+			t.Errorf("poApprovalNext(%q,%q) = (%q,true), want invalid", c.action, c.from, got)
+		}
+	}
+}
+
+func TestPOApprovalAllowsSend(t *testing.T) {
+	if !poApprovalAllowsSend("approved") {
+		t.Error("poApprovalAllowsSend(approved) = false, want true")
+	}
+	for _, s := range []string{"not_submitted", "pending", "rejected", ""} {
+		if poApprovalAllowsSend(s) {
+			t.Errorf("poApprovalAllowsSend(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestPOApprovalActions(t *testing.T) {
+	// A non-approver can submit (when not_submitted/rejected) but never approve/reject.
+	for _, status := range []string{"not_submitted", "rejected"} {
+		acts := poApprovalActions(status, false)
+		if len(acts) != 1 || acts[0].Action != "submit" {
+			t.Errorf("poApprovalActions(%q,false) = %+v, want a single submit", status, acts)
+		}
+	}
+	// Pending offers nothing to a non-approver, approve+reject to an approver.
+	if acts := poApprovalActions("pending", false); len(acts) != 0 {
+		t.Errorf("poApprovalActions(pending,false) = %+v, want none", acts)
+	}
+	if acts := poApprovalActions("pending", true); len(acts) != 2 {
+		t.Errorf("poApprovalActions(pending,true) = %+v, want approve+reject", acts)
+	}
+	// Approved is terminal — no further actions even for an approver.
+	if acts := poApprovalActions("approved", true); len(acts) != 0 {
+		t.Errorf("poApprovalActions(approved,true) = %+v, want none", acts)
+	}
+}
+
 func TestPOCanTransition(t *testing.T) {
 	allowed := []struct{ from, to string }{
 		{"draft", "open"},

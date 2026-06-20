@@ -369,6 +369,7 @@
                     <th style="padding:4px 8px;">Username</th>
                     <th style="padding:4px 8px;">Display Name</th>
                     <th style="padding:4px 8px; text-align:center;">Active</th>
+                    <th style="padding:4px 8px; text-align:center;"><span data-bs-toggle="tooltip" title="May approve or reject purchase orders">PO Approver</span></th>
                     <th style="padding:4px 8px;"></th>
                 </tr>
             </thead>
@@ -380,6 +381,9 @@
                     <td style="padding:6px 8px; text-align:center;">
                         {{if .IsActive}}<span style="color:#155724;">&#10003;</span>{{else}}<span style="color:#842029;">&#10007;</span>{{end}}
                     </td>
+                    <td style="padding:6px 8px; text-align:center;">
+                        {{if .CanApprovePO}}<span style="color:#155724;">&#10003;</span>{{else}}<span style="color:#ccc;">&#10007;</span>{{end}}
+                    </td>
                     <td style="padding:6px 8px; display:flex; gap:6px; flex-wrap:wrap;">
                         <form method="post" action="/settings/users/{{.ID}}/password" style="display:inline;"
                               onsubmit="return resetPwForm(this)">
@@ -387,6 +391,12 @@
                             <input type="hidden" name="password" class="new-pw-field">
                             <button type="submit" class="btn btn-secondary btn-sm"
                                     onclick="promptPw(this)">Reset password</button>
+                        </form>
+                        <form method="post" action="/settings/users/{{.ID}}/toggle-approve" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
+                            <button type="submit" class="btn btn-secondary btn-sm">
+                                {{if .CanApprovePO}}Revoke approver{{else}}Make approver{{end}}
+                            </button>
                         </form>
                         <form method="post" action="/settings/users/{{.ID}}/toggle-active" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
@@ -397,7 +407,7 @@
                     </td>
                 </tr>
             {{else}}
-                <tr><td colspan="4" style="padding:10px 8px; color:#888; font-size:0.9em;">No users yet.</td></tr>
+                <tr><td colspan="5" style="padding:10px 8px; color:#888; font-size:0.9em;">No users yet.</td></tr>
             {{end}}
             </tbody>
         </table>

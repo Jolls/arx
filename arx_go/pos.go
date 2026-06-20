@@ -328,14 +328,21 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
+	canApprove := false
+	if u := h.currentUser(r); u != nil {
+		canApprove = u.CanApprovePO
+	}
 	tplData := map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"ActiveTab": "pos", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode":      h.cfg.TestMode,
-		"StatusActions": poStatusActions(po.Status),
-		"StatusHistory": h.fetchPOStatusHistory(r, po.ID),
-		"CSRFToken":     h.csrfToken(w, r),
+		"TestMode":        h.cfg.TestMode,
+		"StatusActions":   poStatusActions(po.Status),
+		"ApprovalLabel":   poApprovalLabels[po.ApprovalStatus],
+		"ApprovalActions": poApprovalActions(po.ApprovalStatus, canApprove),
+		"History":         h.fetchPOHistory(r, po.ID),
+		"CanSend":         poApprovalAllowsSend(po.ApprovalStatus),
+		"CSRFToken":       h.csrfToken(w, r),
 	}
 	if r.URL.Query().Get("suggest_links") == "1" {
 		if links := h.fetchSuggestLinks(r, num); len(links) > 0 {
@@ -471,11 +478,11 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Record the creation as the first status-history entry (from_status NULL).
+	// Record the creation as the first history entry (status event, from_status NULL).
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, from_status, to_status, changed_by, changed_at)
-		VALUES (@p1, NULL, @p2, @p3, @p4)
-	`, h.cfg.POStatusHistoryTable()), newID, newStatus, h.actorName(r), now); err != nil {
+		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
+		VALUES (@p1, 'status', NULL, @p2, @p3, @p4)
+	`, h.cfg.POHistoryTable()), newID, newStatus, h.actorName(r), now); err != nil {
 		h.renderError(w, r, "Error recording PO status: "+err.Error())
 		return
 	}
@@ -570,6 +577,17 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// Editing a PO that was already approved (or awaiting approval) invalidates
+	// that decision (#267) — capture the current state so we can reset it below.
+	var poID int
+	var priorApproval sql.NullString
+	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT ID, approval_status FROM %s WHERE number=@p1`, h.cfg.POTable()),
+		num).Scan(&poID, &priorApproval); err != nil {
+		h.renderError(w, r, "Error loading PO: "+err.Error())
+		return
+	}
+
 	// Delete flagged line items
 	for _, idStr := range r.Form["delete_pol[]"] {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
@@ -602,16 +620,9 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Insert new line items — resolve PO ID once before the loop
+	// Insert new line items (poID resolved above)
 	newRows := extractPolRows(r.Form, "new_pol")
 	if len(newRows) > 0 {
-		var poID int
-		if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT ID FROM %s WHERE number=@p1`, h.cfg.POTable(),
-		), num).Scan(&poID); err != nil {
-			h.renderError(w, r, "Error resolving PO ID: "+err.Error())
-			return
-		}
 		for _, row := range newRows {
 			if row.PartNumber == "" && row.Desc == "" {
 				continue
@@ -677,6 +688,14 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		h.renderError(w, r, "Error saving PO: "+err.Error())
 		return
+	}
+
+	// Reset approval if this edit invalidated a prior decision (#267).
+	if priorApproval.String == "approved" || priorApproval.String == "pending" {
+		if err := h.resetApproval(r, tx, poID, "PO edited after "+priorApproval.String); err != nil {
+			h.renderError(w, r, "Error resetting approval: "+err.Error())
+			return
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -823,6 +842,11 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Approval gate (#267): a PO cannot be printed until it has been approved.
+	if !poApprovalAllowsSend(po.ApprovalStatus) {
+		h.renderError(w, r, "This PO must be approved before it can be printed.")
+		return
+	}
 
 	var supplierCode string
 	if po.SupplierID != nil {
@@ -857,6 +881,14 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
 	num := chi.URLParam(r, "id")
+	// Approval gate (#267): only set date_printed for approved POs.
+	var approval sql.NullString
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT approval_status FROM %s WHERE number=@p1`, h.cfg.POTable()),
+		num).Scan(&approval); err != nil || !poApprovalAllowsSend(approval.String) {
+		http.Error(w, "PO is not approved", http.StatusForbidden)
+		return
+	}
 	h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET date_printed=@p1 WHERE number=@p2`, h.cfg.POTable(),
 	), time.Now(), num)
@@ -1138,52 +1170,54 @@ func statusIsActive(status string) bool {
 	return false
 }
 
-// actorName returns the logged-in user's display name for audit fields,
-// falling back to the username, then "system" when there is no user.
+// actorName returns the logged-in user's username for audit fields, matching the
+// other audit/event tables (record_events.username, test_definition_history.changed_by).
+// Falls back to "system" when there is no user.
 func (h *Handler) actorName(r *http.Request) string {
-	if u := h.currentUser(r); u != nil {
-		if u.DisplayName != "" {
-			return u.DisplayName
-		}
+	if u := h.currentUser(r); u != nil && u.Username != "" {
 		return u.Username
 	}
 	return "system"
 }
 
-// POStatusEvent is one row of the PO status transition log.
-type POStatusEvent struct {
-	FromStatus string
-	ToStatus   string
-	FromLabel  string
-	ToLabel    string
+// POHistoryEvent is one row of the unified PO activity log (status + approval).
+type POHistoryEvent struct {
+	EventType  string // "status" | "approval"
+	FromStatus string // status events: prior status code for the badge ("" on creation)
+	ToStatus   string // status events: new status code for the badge
+	Action     string // approval events: action code for the badge (submitted|approved|rejected|reset)
+	Note       string // approval events: optional note
 	ChangedBy  string
 	ChangedAt  time.Time
 }
 
-func (h *Handler) fetchPOStatusHistory(r *http.Request, poID int) []POStatusEvent {
+// fetchPOHistory returns the combined status + approval timeline for a PO, newest first.
+func (h *Handler) fetchPOHistory(r *http.Request, poID int) []POHistoryEvent {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT from_status, to_status, changed_by, changed_at
+		SELECT event_type, from_status, to_status, action, note, changed_by, changed_at
 		FROM %s WHERE po_id = @p1 ORDER BY changed_at DESC, id DESC
-	`, h.cfg.POStatusHistoryTable()), poID)
+	`, h.cfg.POHistoryTable()), poID)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
-	var out []POStatusEvent
+	var out []POHistoryEvent
 	for rows.Next() {
-		var e POStatusEvent
-		var from, by sql.NullString
+		var e POHistoryEvent
+		var from, to, action, note, by sql.NullString
 		var at sql.NullTime
-		if rows.Scan(&from, &e.ToStatus, &by, &at) == nil {
-			e.FromStatus = from.String
-			e.FromLabel = poStatusLabels[from.String]
-			e.ToLabel = poStatusLabels[e.ToStatus]
-			e.ChangedBy = by.String
-			if at.Valid {
-				e.ChangedAt = at.Time
-			}
-			out = append(out, e)
+		if rows.Scan(&e.EventType, &from, &to, &action, &note, &by, &at) != nil {
+			continue
 		}
+		e.FromStatus = from.String
+		e.ToStatus = to.String
+		e.Action = action.String
+		e.Note = note.String
+		e.ChangedBy = by.String
+		if at.Valid {
+			e.ChangedAt = at.Time
+		}
+		out = append(out, e)
 	}
 	return out
 }
@@ -1203,10 +1237,10 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var poID int
-	var current sql.NullString
+	var current, approval sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT ID, status FROM %s WHERE number = @p1`, h.cfg.POTable()),
-		num).Scan(&poID, &current)
+		`SELECT ID, status, approval_status FROM %s WHERE number = @p1`, h.cfg.POTable()),
+		num).Scan(&poID, &current, &approval)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
 		return
@@ -1217,6 +1251,11 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 	}
 	if !poCanTransition(current.String, target) {
 		h.renderError(w, r, fmt.Sprintf("Cannot change status from %q to %q.", current.String, target))
+		return
+	}
+	// Approval gate (#267): a PO cannot be sent until it has been approved.
+	if target == "sent" && approval.String != "approved" {
+		h.renderError(w, r, "This PO must be approved before it can be marked Sent.")
 		return
 	}
 
@@ -1233,9 +1272,9 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, from_status, to_status, changed_by, changed_at)
-		VALUES (@p1, @p2, @p3, @p4, @p5)
-	`, h.cfg.POStatusHistoryTable()), poID, current.String, target, h.actorName(r), time.Now()); err != nil {
+		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
+		VALUES (@p1, 'status', @p2, @p3, @p4, @p5)
+	`, h.cfg.POHistoryTable()), poID, current.String, target, h.actorName(r), time.Now()); err != nil {
 		h.renderError(w, r, "Error recording status change: "+err.Error())
 		return
 	}
@@ -1255,8 +1294,167 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Cancelling a PO clears any approval (#267): a cancelled PO is not approved,
+	// and a later reopen must go through approval again.
+	if target == "cancelled" && approval.String != "not_submitted" {
+		if err := h.resetApproval(r, tx, poID, "PO cancelled"); err != nil {
+			h.renderError(w, r, "Error clearing approval: "+err.Error())
+			return
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		h.renderError(w, r, "Error saving status: "+err.Error())
+		return
+	}
+	committed = true
+	http.Redirect(w, r, "/po/"+num, http.StatusFound)
+}
+
+// ── PO approval workflow (issue #267) ────────────────────────────────────────
+
+var poApprovalLabels = map[string]string{
+	"not_submitted": "Not Submitted",
+	"pending":       "Pending Approval",
+	"approved":      "Approved",
+	"rejected":      "Rejected",
+}
+
+// poApprovalNext returns the approval status that results from applying action to
+// current, and whether that action is allowed from the current state.
+func poApprovalNext(action, current string) (string, bool) {
+	switch action {
+	case "submit":
+		if current == "not_submitted" || current == "rejected" {
+			return "pending", true
+		}
+	case "approve":
+		if current == "pending" {
+			return "approved", true
+		}
+	case "reject":
+		if current == "pending" {
+			return "rejected", true
+		}
+	}
+	return "", false
+}
+
+// poApprovalAllowsSend reports whether a PO in the given approval status may be
+// sent or printed.
+func poApprovalAllowsSend(approval string) bool { return approval == "approved" }
+
+// resetApproval clears a PO's approval back to not_submitted and logs a 'reset'
+// approval event with the given note. Used when an edit or a cancellation
+// invalidates a prior approval decision (#267). Runs inside the caller's tx.
+func (h *Handler) resetApproval(r *http.Request, tx *txLogger, poID int, note string) error {
+	ctx := r.Context()
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET approval_status='not_submitted' WHERE ID=@p1`, h.cfg.POTable()), poID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
+		INSERT INTO %s (po_id, event_type, action, note, changed_by, changed_at)
+		VALUES (@p1, 'approval', 'reset', @p2, @p3, @p4)
+	`, h.cfg.POHistoryTable()), poID, note, h.actorName(r), time.Now())
+	return err
+}
+
+// ApprovalAction is an approval button rendered on the PO detail page.
+type ApprovalAction struct {
+	Action  string
+	Label   string
+	Class   string // Bootstrap button variant
+	NeedNote bool  // show a reason/comment field
+}
+
+// poApprovalActions returns the approval buttons available for the current state.
+// Approve/Reject are only offered to designated approvers (can_approve_po).
+func poApprovalActions(current string, canApprove bool) []ApprovalAction {
+	var out []ApprovalAction
+	if current == "not_submitted" || current == "rejected" {
+		out = append(out, ApprovalAction{Action: "submit", Label: "Submit for Approval", Class: "btn-primary"})
+	}
+	if current == "pending" && canApprove {
+		out = append(out, ApprovalAction{Action: "approve", Label: "Approve", Class: "btn-success"})
+		out = append(out, ApprovalAction{Action: "reject", Label: "Reject", Class: "btn-outline-danger", NeedNote: true})
+	}
+	return out
+}
+
+// ── POApprovalAction — POST /po/{id}/approval ────────────────────────────────
+
+func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, "Error parsing form: "+err.Error())
+		return
+	}
+	action := fv(r, "action")
+	if action != "submit" && action != "approve" && action != "reject" {
+		h.renderError(w, r, "Unknown approval action: "+action)
+		return
+	}
+	// Approve/reject require an approver; submit is open to any signed-in user.
+	if action == "approve" || action == "reject" {
+		if u := h.currentUser(r); u == nil || !u.CanApprovePO {
+			h.renderError(w, r, "You are not authorized to approve or reject purchase orders.")
+			return
+		}
+	}
+
+	var poID int
+	var current sql.NullString
+	err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT ID, approval_status FROM %s WHERE number = @p1`, h.cfg.POTable()),
+		num).Scan(&poID, &current)
+	if err == sql.ErrNoRows {
+		h.renderError(w, r, "Purchase order not found")
+		return
+	}
+	if err != nil {
+		h.renderError(w, r, "Error loading PO: "+err.Error())
+		return
+	}
+
+	next, ok := poApprovalNext(action, current.String)
+	if !ok {
+		h.renderError(w, r, fmt.Sprintf("Cannot %s a PO whose approval status is %q.", action, current.String))
+		return
+	}
+
+	// Map the action verb to the logged past-tense form.
+	logged := map[string]string{"submit": "submitted", "approve": "approved", "reject": "rejected"}[action]
+	note := fv(r, "note")
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (po_id, event_type, action, note, changed_by, changed_at)
+		VALUES (@p1, 'approval', @p2, @p3, @p4, @p5)
+	`, h.cfg.POHistoryTable()), poID, logged, nullableText(note), h.actorName(r), time.Now()); err != nil {
+		h.renderError(w, r, "Error recording approval: "+err.Error())
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET approval_status=@p1 WHERE ID=@p2`, h.cfg.POTable()),
+		next, poID); err != nil {
+		h.renderError(w, r, "Error updating approval status: "+err.Error())
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		h.renderError(w, r, "Error saving approval: "+err.Error())
 		return
 	}
 	committed = true
@@ -1270,7 +1468,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 	var (
 		isActive                                        sql.NullBool
 		supplierID, receiverID                          sql.NullInt64
-		number, orderer, accountID, status              sql.NullString
+		number, orderer, accountID, status, approvalStatus sql.NullString
 		supName, supContact, supEmail                   sql.NullString
 		supAddr, supCity, supState, supZip, supCountry  sql.NullString
 		supPhone, supFax                                sql.NullString
@@ -1282,7 +1480,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		dateOrdered, dateRequested, dateClosed, datePrinted, dateMod sql.NullTime
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, number, status, is_active, orderer, account_id,
+		SELECT ID, number, status, approval_status, is_active, orderer, account_id,
 		       supplier_id, supplier_name, supplier_contact, supplier_email,
 		       supplier_address, supplier_city, supplier_state, supplier_zipcode, supplier_country,
 		       supplier_phone_number, supplier_fax_number,
@@ -1294,7 +1492,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		       date_ordered, date_requested, date_closed, date_printed, date_modified
 		FROM %s WHERE number = @p1
 	`, h.cfg.POTable()), num).Scan(
-		&po.ID, &number, &status, &isActive, &orderer, &accountID,
+		&po.ID, &number, &status, &approvalStatus, &isActive, &orderer, &accountID,
 		&supplierID, &supName, &supContact, &supEmail,
 		&supAddr, &supCity, &supState, &supZip, &supCountry, &supPhone, &supFax,
 		&receiverID, &recName, &recContact, &recEmail,
@@ -1313,6 +1511,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 	}
 	po.Number = number.String
 	po.Status = status.String
+	po.ApprovalStatus = approvalStatus.String
 	po.IsActive = isActive.Bool
 	po.Orderer = orderer.String
 	po.AccountID = accountID.String

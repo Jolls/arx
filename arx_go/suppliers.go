@@ -687,3 +687,11 @@ func nullableInt(s string) interface{} {
 	}
 	return nil
 }
+
+// nullableText returns nil for an empty string so the column is stored as NULL.
+func nullableText(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
