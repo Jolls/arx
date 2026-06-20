@@ -2,7 +2,7 @@ IF OBJECT_ID('dbo.app_config', 'U') IS NOT NULL DROP TABLE dbo.app_config;
 
 CREATE TABLE app_config (
     setting_key   VARCHAR(100) NOT NULL PRIMARY KEY,
-    setting_value VARCHAR(500) NOT NULL,
+    setting_value VARCHAR(MAX) NOT NULL,
     updated_at    DATETIME     NOT NULL CONSTRAINT DF_app_config_updated_at DEFAULT GETDATE()
 );
 
