@@ -61,7 +61,8 @@
         {{else}}
         <div class="detail-row"><strong>Last Rollup:</strong> <span class="muted">Never run</span></div>
         {{end}}
-        <form method="POST" action="/part/{{.Part.PNID}}/rollup-cost" style="margin-top:0.5rem;">
+        <form method="POST" action="/part/{{.Part.PNID}}/rollup-cost" style="margin-top:0.5rem;"
+              onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\'></span>Running…';">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <button type="submit" class="btn btn-secondary">Run Rollup</button>
         </form>
