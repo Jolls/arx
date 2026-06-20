@@ -24,7 +24,7 @@
 
     {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
-    <form method="post" action="{{if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}">
+    <form id="po-form" method="post" action="{{if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
         {{/* ── Two-column: Supplier | Ship To ─────────────────── */}}
@@ -373,7 +373,7 @@ recalcTotal();
 
 function removeExistingLine(btn, polid) {
     const row = btn.closest('tr');
-    const form = document.querySelector('form');
+    const form = btn.closest('form');
     const hidden = document.createElement('input');
     hidden.type = 'hidden'; hidden.name = 'delete_pol[]'; hidden.value = polid;
     form.appendChild(hidden);
@@ -553,7 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('receiver_contact')
     );
 
-    document.querySelector('form').addEventListener('submit', function(e) {
+    document.getElementById('po-form').addEventListener('submit', function(e) {
         const checks = [
             { nameEl: document.getElementById('supplier_name'), idEl: document.getElementById('supplier_id'), label: 'Supplier' },
             { nameEl: document.getElementById('receiver_name'), idEl: document.getElementById('receiver_id'), label: 'Receiver' },
