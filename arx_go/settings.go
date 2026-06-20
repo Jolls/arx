@@ -249,7 +249,7 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 		h.cfg.ContactTable(), h.cfg.POTable(), h.cfg.POLineTable(),
 		h.cfg.AttachmentsTable(), h.cfg.LinksTable(), h.cfg.PriceTable(),
 		h.cfg.MfgPartTable(), h.cfg.SupplierPartTable(), h.cfg.CompanyAttachmentsTable(),
-		h.cfg.UnitTable(), h.cfg.AppConfigTable(), h.cfg.UsersTable(),
+		h.cfg.UnitTable(), h.cfg.AppConfigTable(),
 		h.cfg.FormsTable(), h.cfg.RecordsTable(), h.cfg.ResultsTable(),
 		h.cfg.StepsTable(), h.cfg.FormEventsTable(), h.cfg.RecordEventsTable(),
 		h.cfg.NamedQueriesTable(), h.cfg.TestDefinitionHistoryTable(),
@@ -260,9 +260,12 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 			log.Printf("backup: error exporting %s: %v", tbl, err)
 		}
 	}
+	if err := h.writeTableCSV(r, zw, h.cfg.UsersTable(), "password_hash"); err != nil {
+		log.Printf("backup: error exporting %s: %v", h.cfg.UsersTable(), err)
+	}
 }
 
-func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string) error {
+func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string, excludeCols ...string) error {
 	rows, err := h.queryContext(r.Context(), "SELECT * FROM "+table)
 	if err != nil {
 		return err
@@ -274,13 +277,28 @@ func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string) e
 		return err
 	}
 
+	excluded := make(map[string]bool, len(excludeCols))
+	for _, c := range excludeCols {
+		excluded[c] = true
+	}
+
+	// Build index map of columns to include.
+	include := make([]int, 0, len(cols))
+	filteredCols := make([]string, 0, len(cols))
+	for i, c := range cols {
+		if !excluded[c] {
+			include = append(include, i)
+			filteredCols = append(filteredCols, c)
+		}
+	}
+
 	fw, err := zw.Create(table + ".csv")
 	if err != nil {
 		return err
 	}
 
 	cw := csv.NewWriter(fw)
-	if err := cw.Write(cols); err != nil {
+	if err := cw.Write(filteredCols); err != nil {
 		return err
 	}
 
@@ -294,12 +312,12 @@ func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string) e
 		if err := rows.Scan(ptrs...); err != nil {
 			return err
 		}
-		row := make([]string, len(cols))
-		for i, v := range vals {
-			if v == nil {
-				row[i] = ""
+		row := make([]string, len(include))
+		for j, i := range include {
+			if vals[i] == nil {
+				row[j] = ""
 			} else {
-				row[i] = fmt.Sprintf("%v", v)
+				row[j] = fmt.Sprintf("%v", vals[i])
 			}
 		}
 		if err := cw.Write(row); err != nil {
