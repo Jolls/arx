@@ -76,11 +76,12 @@ function printPO(btn) {
       <strong>PO #{{.PO.Number}}</strong><br>
       {{if .PO.DateOrdered}}{{formatDate .PO.DateOrdered}}<br>{{end}}
       <span style="font-size:9pt; font-weight:700; color:{{if .PO.IsActive}}#155724{{else}}#721c24{{end}};">
-        {{if eq .PO.Status "pending"  }}PENDING
-        {{else if eq .PO.Status "placed"   }}PLACED
-        {{else if eq .PO.Status "on_hold"  }}ON HOLD
-        {{else if eq .PO.Status "complete" }}COMPLETE
-        {{else if eq .PO.Status "cancelled"}}CANCELLED
+        {{if eq .PO.Status "draft"             }}DRAFT
+        {{else if eq .PO.Status "open"              }}OPEN
+        {{else if eq .PO.Status "sent"             }}SENT
+        {{else if eq .PO.Status "partially_received"}}PARTIALLY RECEIVED
+        {{else if eq .PO.Status "closed"           }}CLOSED
+        {{else if eq .PO.Status "cancelled"        }}CANCELLED
         {{else}}{{.PO.Status}}{{end}}
       </span>
     </div>

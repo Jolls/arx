@@ -64,8 +64,25 @@ CREATE TABLE PO (
   notes                 VARCHAR(MAX),                   -- Prints on PO document.
   internal_notes        VARCHAR(MAX)   CONSTRAINT DF_PO_internal_notes DEFAULT '', -- Internal-only notes, not printed on PO.
   is_active             BIT            CONSTRAINT DF_PO_is_active DEFAULT 1, -- 1 = open, 0 = closed. Derived from status — do not set directly.
-  status                VARCHAR(20)    CONSTRAINT DF_PO_status DEFAULT 'pending' CONSTRAINT CK_PO_status CHECK (status IN ('pending','placed','complete','cancelled','on_hold')) -- Authoritative PO state.
+  status                VARCHAR(20)    CONSTRAINT DF_PO_status DEFAULT 'draft' CONSTRAINT CK_PO_status CHECK (status IN ('draft','open','sent','partially_received','closed','cancelled')) -- Authoritative PO state (lifecycle #271). Transitions recorded in PO_status_history.
 );
 
 ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_company  FOREIGN KEY (supplier_id) REFERENCES dbo.company (id);
 ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_receiver FOREIGN KEY (receiver_id) REFERENCES dbo.company (id);
+
+-- PO_status_history: append-only log of PO status transitions (issue #271).
+-- One row per transition (and one for creation, with from_status NULL).
+-- changed_by holds the app user's display name, written by the Go handler.
+IF OBJECT_ID('dbo.PO_status_history', 'U') IS NOT NULL DROP TABLE dbo.PO_status_history;
+
+CREATE TABLE PO_status_history (
+  id          INT          PRIMARY KEY IDENTITY,
+  po_id       INT          NOT NULL,                                              -- FK to PO.id.
+  from_status VARCHAR(20),                                                        -- Prior status; NULL for the creation row.
+  to_status   VARCHAR(20)  NOT NULL,                                              -- New status.
+  changed_by  VARCHAR(128) NOT NULL CONSTRAINT DF_PO_status_history_by DEFAULT '', -- App user display name.
+  changed_at  DATETIME     NOT NULL CONSTRAINT DF_PO_status_history_at DEFAULT GETDATE()
+);
+
+ALTER TABLE dbo.PO_status_history ADD CONSTRAINT FK_PO_status_history_PO FOREIGN KEY (po_id) REFERENCES dbo.PO (id);
+CREATE INDEX IX_PO_status_history_po ON dbo.PO_status_history (po_id, changed_at);

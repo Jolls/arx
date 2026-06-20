@@ -39,13 +39,14 @@ func TestStatusIsActive(t *testing.T) {
 		status string
 		want   bool
 	}{
-		{"pending", true},
-		{"placed", true},
-		{"on_hold", true},
+		{"draft", true},
+		{"open", true},
+		{"sent", true},
+		{"partially_received", true},
 		{"closed", false},
 		{"cancelled", false},
 		{"", false},
-		{"PENDING", false}, // case-sensitive
+		{"DRAFT", false}, // case-sensitive
 	}
 	for _, c := range cases {
 		if got := statusIsActive(c.status); got != c.want {

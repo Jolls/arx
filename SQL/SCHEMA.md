@@ -67,6 +67,7 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 |-------|-------|
 | `company` | Mixed: has both generic columns and leftover `SU`-prefixed columns |
 | `PO` | Clean snake_case |
+| `PO_status_history` | Clean snake_case |
 | `price` | Clean snake_case |
 
 ## Column naming
@@ -127,7 +128,8 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 | `PL` | — | BOM / parts list. Links a parent part to child parts. |
 | `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `CN.CNID`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
 | `CN` | `CNID` | Contacts, linked to companies. |
-| `PO` | `id` | Purchase orders. `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative: `pending` \| `placed` \| `complete` \| `cancelled` \| `on_hold`. `is_active` is a convenience bit kept in sync by the app (`pending/placed/on_hold → 1`, `complete/cancelled → 0`) — do not set it directly. Run `SQL/migrations/migrate_po_status.sql` to add the column to existing databases. |
+| `PO` | `id` | Purchase orders. `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative and follows the lifecycle `draft` → `open` → `sent` → `partially_received` → `closed` (plus `cancelled`). Status changes only via `POST /po/{id}/status`, which logs to `PO_status_history`; create/update handlers do not write `status`. `is_active` is a convenience bit kept in sync by the app (`draft/open/sent/partially_received → 1`, `closed/cancelled → 0`) — do not set it directly. Run `SQL/migrations/migrate_po_status_lifecycle.sql` to migrate existing databases from the old value set. |
+| `PO_status_history` | `id` | Append-only log of PO status transitions (issue #271). `po_id` → `PO.id`. `from_status` is NULL for the creation row. `changed_by` = app user display name (written by the Go handler, not a trigger). |
 | `POL` | `POLID` | PO line items → `PO.id`. |
 | `supplier_part` | `id` | Sourcing links — maps parts to supplier catalog entries. `supplier_id` → `company.id`, `part_id` → `PN.PNID`, `mfg_part_id` → `mfg_part.id` (optional), `unit_id` → `unit.unit_id` (purchase unit; NULL = same as `PN.PNUNID`). Writes fire `trg_supplier_part_company_count`. |
 | `mfg_part` | `id` | Manufacturer part numbers. `part_id` → `PN.PNID`, `mfg_id` → `company.id`. `is_active = 0` = soft-deleted. Unique index is filtered on `is_active = 1` (allows re-adding an MPN after soft-delete). |

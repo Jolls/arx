@@ -60,12 +60,7 @@
     <div class="part-status-bar">
         <div class="part-status-cell">
             <div class="part-status-label">Status</div>
-            {{if eq .PO.Status "pending"  }}<span class="badge bg-info text-dark">Pending</span>
-            {{else if eq .PO.Status "placed"   }}<span class="badge bg-success">Placed</span>
-            {{else if eq .PO.Status "on_hold"  }}<span class="badge bg-success">On Hold</span>
-            {{else if eq .PO.Status "complete" }}<span class="badge bg-secondary">Complete</span>
-            {{else if eq .PO.Status "cancelled"}}<span class="badge bg-danger">Cancelled</span>
-            {{else}}<span class="badge bg-secondary">{{.PO.Status}}</span>{{end}}
+            {{template "po_status_badge" .PO.Status}}
         </div>
         <div class="part-status-cell">
             <div class="part-status-label">Ordered</div>
@@ -92,6 +87,20 @@
             <div style="font-size:1.4em; font-weight:700; color:#333;">${{printf "%.2f" (deref .PO.TotalCost)}}</div>
         </div>
     </div>
+
+    {{/* ── Status transition actions ─────────────────────────── */}}
+    {{if .StatusActions}}
+    <div class="d-flex gap-2 flex-wrap mb-4">
+        {{range .StatusActions}}
+        <form method="POST" action="/po/{{$.PO.Number}}/status" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="target" value="{{.Target}}">
+            <button type="submit" class="btn btn-sm {{.Class}}"
+                    {{if .Confirm}}onclick="return confirm('Change PO status to {{.Label}}?')"{{end}}>{{.Label}}</button>
+        </form>
+        {{end}}
+    </div>
+    {{end}}
 
     {{/* ── Two-column: supplier + ship-to ────────────────────── */}}
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
@@ -217,5 +226,28 @@
         <p style="color:#999; font-style:italic; margin-top:8px;">No internal notes.</p>
         {{end}}
     </div>
+
+    {{/* ── Status history ─────────────────────────────────────── */}}
+    {{if .StatusHistory}}
+    <div class="detail-section">
+        <h3>Status History</h3>
+        <div class="table-wrapper" style="margin-top:12px;">
+            <table class="table table-sm table-bordered table-hover">
+                <thead class="table-dark">
+                    <tr><th style="width:160px;">When</th><th>Change</th><th style="width:200px;">By</th></tr>
+                </thead>
+                <tbody>
+                    {{range .StatusHistory}}
+                    <tr>
+                        <td>{{formatDateTime .ChangedAt}}</td>
+                        <td>{{if .FromLabel}}{{.FromLabel}} &rarr; {{end}}{{template "po_status_badge" .ToStatus}}</td>
+                        <td>{{.ChangedBy}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {{end}}
 </div>
 {{end}}

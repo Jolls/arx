@@ -45,6 +45,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.PL',                       'U') IS NOT NULL DROP TABLE dbo.PL;
     IF OBJECT_ID('dbo.price',                    'U') IS NOT NULL DROP TABLE dbo.price;
     IF OBJECT_ID('dbo.POL',                      'U') IS NOT NULL DROP TABLE dbo.POL;
+    IF OBJECT_ID('dbo.PO_status_history',        'U') IS NOT NULL DROP TABLE dbo.PO_status_history;
     IF OBJECT_ID('dbo.PO',                       'U') IS NOT NULL DROP TABLE dbo.PO;
     IF OBJECT_ID('dbo.company_attachment',       'U') IS NOT NULL DROP TABLE dbo.company_attachment;
     IF OBJECT_ID('dbo.company',                  'U') IS NOT NULL DROP TABLE dbo.company;
@@ -72,6 +73,7 @@ BEGIN TRY
     SELECT * INTO dbo.price                   FROM ArxProd.dbo.price;
     SELECT * INTO dbo.POL                     FROM ArxProd.dbo.POL;
     SELECT * INTO dbo.PO                      FROM ArxProd.dbo.PO;
+    SELECT * INTO dbo.PO_status_history       FROM ArxProd.dbo.PO_status_history;
     SELECT * INTO dbo.company_attachment      FROM ArxProd.dbo.company_attachment;
     SELECT * INTO dbo.company                 FROM ArxProd.dbo.company;
     SELECT * INTO dbo.PN                      FROM ArxProd.dbo.PN;

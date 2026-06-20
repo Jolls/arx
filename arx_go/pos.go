@@ -332,7 +332,10 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"ActiveTab": "pos", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode": h.cfg.TestMode,
+		"TestMode":      h.cfg.TestMode,
+		"StatusActions": poStatusActions(po.Status),
+		"StatusHistory": h.fetchPOStatusHistory(r, po.ID),
+		"CSRFToken":     h.csrfToken(w, r),
 	}
 	if r.URL.Query().Get("suggest_links") == "1" {
 		if links := h.fetchSuggestLinks(r, num); len(links) > 0 {
@@ -351,7 +354,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
-	po := models.PurchaseOrder{Status: "pending", IsActive: true, DateOrdered: &now, DateRequested: &now}
+	po := models.PurchaseOrder{Status: "draft", IsActive: true, DateOrdered: &now, DateRequested: &now}
 	if u := h.currentUser(r); u != nil {
 		po.Orderer = u.DisplayName
 	}
@@ -434,7 +437,8 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	// OUTPUT INSERTED.ID is blocked on tables with triggers; combine INSERT + SCOPE_IDENTITY()
 	// in one batch so they share the same scope.
-	newStatus := fv(r, "status")
+	// New POs always start as 'draft'; status changes go through POStatusTransition.
+	newStatus := "draft"
 	var newID int
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (number, status, is_active, orderer, account_id,
@@ -464,6 +468,15 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		now, 0.0,
 	).Scan(&newID); err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
+		return
+	}
+
+	// Record the creation as the first status-history entry (from_status NULL).
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (po_id, from_status, to_status, changed_by, changed_at)
+		VALUES (@p1, NULL, @p2, @p3, @p4)
+	`, h.cfg.POStatusHistoryTable()), newID, newStatus, h.actorName(r), now); err != nil {
+		h.renderError(w, r, "Error recording PO status: "+err.Error())
 		return
 	}
 
@@ -633,23 +646,24 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	misc, _ := strconv.ParseFloat(fv(r, "misc_cost"), 64)
 	totalCost := lineSum + tax + ship + misc
 
-	updStatus := fv(r, "status")
+	// status and is_active are intentionally NOT updated here — they change only
+	// via POStatusTransition (POST /po/{id}/status), which records the transition.
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  status=@p1, is_active=@p2, orderer=@p3, account_id=@p4,
-		  supplier_id=@p5, supplier_name=@p6, supplier_contact=@p7, supplier_email=@p8,
-		  supplier_address=@p9, supplier_city=@p10, supplier_state=@p11, supplier_zipcode=@p12,
-		  supplier_country=@p13, supplier_phone_number=@p14, supplier_fax_number=@p15,
-		  receiver_id=@p16, receiver_name=@p17, receiver_contact=@p18, receiver_email=@p19,
-		  receiver_address=@p20, receiver_city=@p21, receiver_state=@p22, receiver_zipcode=@p23,
-		  receiver_country=@p24, receiver_phone=@p25, receiver_fax=@p26,
-		  tax1=@p27, shipping_cost=@p28, misc_cost=@p29,
-		  notes=@p30, internal_notes=@p31,
-		  date_ordered=@p32, date_requested=@p33, date_closed=@p34, date_printed=@p35,
-		  date_modified=@p36, total_cost=@p37
-		WHERE number=@p38
+		  orderer=@p1, account_id=@p2,
+		  supplier_id=@p3, supplier_name=@p4, supplier_contact=@p5, supplier_email=@p6,
+		  supplier_address=@p7, supplier_city=@p8, supplier_state=@p9, supplier_zipcode=@p10,
+		  supplier_country=@p11, supplier_phone_number=@p12, supplier_fax_number=@p13,
+		  receiver_id=@p14, receiver_name=@p15, receiver_contact=@p16, receiver_email=@p17,
+		  receiver_address=@p18, receiver_city=@p19, receiver_state=@p20, receiver_zipcode=@p21,
+		  receiver_country=@p22, receiver_phone=@p23, receiver_fax=@p24,
+		  tax1=@p25, shipping_cost=@p26, misc_cost=@p27,
+		  notes=@p28, internal_notes=@p29,
+		  date_ordered=@p30, date_requested=@p31, date_closed=@p32, date_printed=@p33,
+		  date_modified=@p34, total_cost=@p35
+		WHERE number=@p36
 	`, h.cfg.POTable()),
-		updStatus, statusIsActive(updStatus), fv(r, "orderer"), fv(r, "account_id"),
+		fv(r, "orderer"), fv(r, "account_id"),
 		nullableInt(fv(r, "supplier_id")), fv(r, "supplier_name"), fv(r, "supplier_contact"), fv(r, "supplier_email"),
 		fv(r, "supplier_address"), fv(r, "supplier_city"), fv(r, "supplier_state"), fv(r, "supplier_zipcode"),
 		fv(r, "supplier_country"), fv(r, "supplier_phone_number"), fv(r, "supplier_fax_number"),
@@ -763,7 +777,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 	source.DateRequested = nil
 	source.DateClosed = nil
 	source.TotalCost = nil
-	source.Status = "pending"
+	source.Status = "draft"
 	source.IsActive = true
 
 	supID := 0
@@ -1036,10 +1050,217 @@ func (h *Handler) POFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
+// ── PO status lifecycle (issue #271) ─────────────────────────────────────────
+// Codes are stored in PO.status; labels are shown in the UI.
+
+var poStatusLabels = map[string]string{
+	"draft":              "Draft",
+	"open":               "Open",
+	"sent":               "Sent",
+	"partially_received": "Partially Received",
+	"closed":             "Closed",
+	"cancelled":          "Cancelled",
+}
+
+// poTransitions maps each status to the statuses it may move to.
+var poTransitions = map[string][]string{
+	"draft":              {"open", "cancelled"},
+	"open":               {"sent", "cancelled"},
+	"sent":               {"partially_received", "closed", "cancelled"},
+	"partially_received": {"closed", "cancelled"},
+	"closed":             {"open"},   // reopen
+	"cancelled":          {"draft"},  // reopen
+}
+
+func poCanTransition(from, to string) bool {
+	for _, t := range poTransitions[from] {
+		if t == to {
+			return true
+		}
+	}
+	return false
+}
+
+// StatusAction is a transition button rendered on the PO detail page.
+type StatusAction struct {
+	Target  string
+	Label   string
+	Class   string // Bootstrap button variant
+	Confirm bool   // ask for confirmation before submitting
+}
+
+func poStatusActions(current string) []StatusAction {
+	var out []StatusAction
+	for _, to := range poTransitions[current] {
+		out = append(out, StatusAction{
+			Target:  to,
+			Label:   poActionLabel(current, to),
+			Class:   poActionClass(to),
+			Confirm: to == "closed" || to == "cancelled",
+		})
+	}
+	return out
+}
+
+func poActionLabel(from, to string) string {
+	switch {
+	case to == "open" && from == "closed":
+		return "Reopen"
+	case to == "draft" && from == "cancelled":
+		return "Reopen as Draft"
+	case to == "cancelled":
+		return "Cancel PO"
+	case to == "closed":
+		return "Close PO"
+	default:
+		return "Mark " + poStatusLabels[to]
+	}
+}
+
+func poActionClass(to string) string {
+	switch to {
+	case "cancelled":
+		return "btn-outline-danger"
+	case "closed":
+		return "btn-secondary"
+	default:
+		return "btn-primary"
+	}
+}
+
 // statusIsActive returns true for statuses that represent an open/in-progress PO.
 // is_active is kept in sync with this value; status is authoritative.
 func statusIsActive(status string) bool {
-	return status == "pending" || status == "placed" || status == "on_hold"
+	switch status {
+	case "draft", "open", "sent", "partially_received":
+		return true
+	}
+	return false
+}
+
+// actorName returns the logged-in user's display name for audit fields,
+// falling back to the username, then "system" when there is no user.
+func (h *Handler) actorName(r *http.Request) string {
+	if u := h.currentUser(r); u != nil {
+		if u.DisplayName != "" {
+			return u.DisplayName
+		}
+		return u.Username
+	}
+	return "system"
+}
+
+// POStatusEvent is one row of the PO status transition log.
+type POStatusEvent struct {
+	FromStatus string
+	ToStatus   string
+	FromLabel  string
+	ToLabel    string
+	ChangedBy  string
+	ChangedAt  time.Time
+}
+
+func (h *Handler) fetchPOStatusHistory(r *http.Request, poID int) []POStatusEvent {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT from_status, to_status, changed_by, changed_at
+		FROM %s WHERE po_id = @p1 ORDER BY changed_at DESC, id DESC
+	`, h.cfg.POStatusHistoryTable()), poID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []POStatusEvent
+	for rows.Next() {
+		var e POStatusEvent
+		var from, by sql.NullString
+		var at sql.NullTime
+		if rows.Scan(&from, &e.ToStatus, &by, &at) == nil {
+			e.FromStatus = from.String
+			e.FromLabel = poStatusLabels[from.String]
+			e.ToLabel = poStatusLabels[e.ToStatus]
+			e.ChangedBy = by.String
+			if at.Valid {
+				e.ChangedAt = at.Time
+			}
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// ── POStatusTransition — POST /po/{id}/status ────────────────────────────────
+
+func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, "Error parsing form: "+err.Error())
+		return
+	}
+	target := fv(r, "target")
+	if poStatusLabels[target] == "" {
+		h.renderError(w, r, "Unknown status: "+target)
+		return
+	}
+
+	var poID int
+	var current sql.NullString
+	err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT ID, status FROM %s WHERE number = @p1`, h.cfg.POTable()),
+		num).Scan(&poID, &current)
+	if err == sql.ErrNoRows {
+		h.renderError(w, r, "Purchase order not found")
+		return
+	}
+	if err != nil {
+		h.renderError(w, r, "Error loading PO: "+err.Error())
+		return
+	}
+	if !poCanTransition(current.String, target) {
+		h.renderError(w, r, fmt.Sprintf("Cannot change status from %q to %q.", current.String, target))
+		return
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (po_id, from_status, to_status, changed_by, changed_at)
+		VALUES (@p1, @p2, @p3, @p4, @p5)
+	`, h.cfg.POStatusHistoryTable()), poID, current.String, target, h.actorName(r), time.Now()); err != nil {
+		h.renderError(w, r, "Error recording status change: "+err.Error())
+		return
+	}
+
+	// date_closed mirrors the closed state: set it when closing (if unset),
+	// clear it when reopening from closed.
+	query := fmt.Sprintf(`UPDATE %s SET status=@p1, is_active=@p2, date_modified=@p3`, h.cfg.POTable())
+	switch {
+	case target == "closed":
+		query += `, date_closed=COALESCE(date_closed, CAST(GETDATE() AS DATE))`
+	case current.String == "closed":
+		query += `, date_closed=NULL`
+	}
+	query += ` WHERE ID=@p4`
+	if _, err := tx.ExecContext(r.Context(), query, target, statusIsActive(target), time.Now(), poID); err != nil {
+		h.renderError(w, r, "Error updating PO: "+err.Error())
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		h.renderError(w, r, "Error saving status: "+err.Error())
+		return
+	}
+	committed = true
+	http.Redirect(w, r, "/po/"+num, http.StatusFound)
 }
 
 // ── shared helpers ───────────────────────────────────────────────────────────

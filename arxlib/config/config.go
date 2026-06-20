@@ -129,6 +129,7 @@ func (c *Config) BOMTable() string                { return "PL" }
 func (c *Config) PriceTable() string              { return "price" }
 func (c *Config) POTable() string                 { return "PO" }
 func (c *Config) POLineTable() string             { return "POL" }
+func (c *Config) POStatusHistoryTable() string    { return "PO_status_history" }
 func (c *Config) CompanyTable() string            { return "company" }
 func (c *Config) SupplierPartTable() string       { return "supplier_part" }
 func (c *Config) MfgPartTable() string            { return "mfg_part" }
