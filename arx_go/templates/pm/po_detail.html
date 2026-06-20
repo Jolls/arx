@@ -63,6 +63,10 @@
             {{template "po_status_badge" .PO.Status}}
         </div>
         <div class="part-status-cell">
+            <div class="part-status-label">Approval</div>
+            {{template "po_approval_badge" .PO.ApprovalStatus}}
+        </div>
+        <div class="part-status-cell">
             <div class="part-status-label">Ordered</div>
             <div class="part-status-value">{{if .PO.DateOrdered}}{{formatDate .PO.DateOrdered}}{{else}}—{{end}}</div>
         </div>
@@ -88,15 +92,36 @@
         </div>
     </div>
 
-    {{/* ── Status transition actions ─────────────────────────── */}}
-    {{if .StatusActions}}
-    <div class="d-flex gap-2 flex-wrap mb-4">
+    {{/* ── Status transition + approval actions ──────────────── */}}
+    {{if or .StatusActions .ApprovalActions}}
+    <div class="d-flex gap-2 flex-wrap mb-4 align-items-center">
         {{range .StatusActions}}
+        {{if and (eq .Target "sent") (not $.CanSend)}}
+        <button type="button" class="btn btn-sm btn-primary" disabled
+                title="This PO must be approved before it can be sent">{{.Label}}</button>
+        {{else}}
         <form method="POST" action="/po/{{$.PO.Number}}/status" class="d-inline">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="target" value="{{.Target}}">
             <button type="submit" class="btn btn-sm {{.Class}}"
                     {{if .Confirm}}onclick="return confirm('Change PO status to {{.Label}}?')"{{end}}>{{.Label}}</button>
+        </form>
+        {{end}}
+        {{end}}
+
+        {{if and .StatusActions .ApprovalActions}}<span class="vr"></span>{{end}}
+
+        {{range .ApprovalActions}}
+        <form method="POST" action="/po/{{$.PO.Number}}/approval" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="action" value="{{.Action}}">
+            {{if .NeedNote}}
+            <button type="submit" class="btn btn-sm {{.Class}}"
+                    onclick="var n=prompt('Reason for rejection (optional):'); if(n===null){return false;} this.form.note.value=n; return true;">{{.Label}}</button>
+            <input type="hidden" name="note" value="">
+            {{else}}
+            <button type="submit" class="btn btn-sm {{.Class}}">{{.Label}}</button>
+            {{end}}
         </form>
         {{end}}
     </div>
@@ -227,21 +252,28 @@
         {{end}}
     </div>
 
-    {{/* ── Status history ─────────────────────────────────────── */}}
-    {{if .StatusHistory}}
+    {{/* ── PO history (status + approval timeline) ────────────── */}}
+    {{if .History}}
     <div class="detail-section">
-        <h3>Status History</h3>
+        <h3>PO History</h3>
         <div class="table-wrapper" style="margin-top:12px;">
             <table class="table table-sm table-bordered table-hover">
                 <thead class="table-dark">
-                    <tr><th style="width:160px;">When</th><th>Change</th><th style="width:200px;">By</th></tr>
+                    <tr><th style="width:160px;">When</th><th style="width:240px;">Event</th><th style="width:180px;">By</th><th>Note</th></tr>
                 </thead>
                 <tbody>
-                    {{range .StatusHistory}}
+                    {{range .History}}
                     <tr>
                         <td>{{formatDateTime .ChangedAt}}</td>
-                        <td>{{if .FromLabel}}{{.FromLabel}} &rarr; {{end}}{{template "po_status_badge" .ToStatus}}</td>
+                        <td>
+                            {{if eq .EventType "status"}}
+                                {{if .FromStatus}}{{template "po_status_badge" .FromStatus}} &rarr; {{end}}{{template "po_status_badge" .ToStatus}}
+                            {{else}}
+                                {{template "po_approval_action_badge" .Action}}
+                            {{end}}
+                        </td>
                         <td>{{.ChangedBy}}</td>
+                        <td>{{.Note}}</td>
                     </tr>
                     {{end}}
                 </tbody>

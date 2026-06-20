@@ -57,6 +57,24 @@
 {{else}}<span class="badge bg-secondary">{{.}}</span>{{end}}
 {{end}}
 
+{{/* po_approval_badge — pass the approval_status code string as the pipeline (.) */}}
+{{define "po_approval_badge"}}
+{{if eq . "not_submitted"}}<span class="badge bg-light text-dark border">Not Submitted</span>
+{{else if eq . "pending"}}<span class="badge bg-warning text-dark">Pending Approval</span>
+{{else if eq . "approved"}}<span class="badge bg-success">Approved</span>
+{{else if eq . "rejected"}}<span class="badge bg-danger">Rejected</span>
+{{else}}<span class="badge bg-secondary">{{.}}</span>{{end}}
+{{end}}
+
+{{/* po_approval_action_badge — pass the approval action code (.) */}}
+{{define "po_approval_action_badge"}}
+{{if eq . "submitted"}}<span class="badge bg-info text-dark">Submitted</span>
+{{else if eq . "approved"}}<span class="badge bg-success">Approved</span>
+{{else if eq . "rejected"}}<span class="badge bg-danger">Rejected</span>
+{{else if eq . "reset"}}<span class="badge bg-secondary">Approval reset</span>
+{{else}}<span class="badge bg-secondary">{{.}}</span>{{end}}
+{{end}}
+
 {{define "part_tabs"}}
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>

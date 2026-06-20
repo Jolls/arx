@@ -64,25 +64,35 @@ CREATE TABLE PO (
   notes                 VARCHAR(MAX),                   -- Prints on PO document.
   internal_notes        VARCHAR(MAX)   CONSTRAINT DF_PO_internal_notes DEFAULT '', -- Internal-only notes, not printed on PO.
   is_active             BIT            CONSTRAINT DF_PO_is_active DEFAULT 1, -- 1 = open, 0 = closed. Derived from status — do not set directly.
-  status                VARCHAR(20)    CONSTRAINT DF_PO_status DEFAULT 'draft' CONSTRAINT CK_PO_status CHECK (status IN ('draft','open','sent','partially_received','closed','cancelled')) -- Authoritative PO state (lifecycle #271). Transitions recorded in PO_status_history.
+  status                VARCHAR(20)    CONSTRAINT DF_PO_status DEFAULT 'draft' CONSTRAINT CK_PO_status CHECK (status IN ('draft','open','sent','partially_received','closed','cancelled')), -- Authoritative PO state (lifecycle #271). Transitions recorded in PO_status_history.
+  approval_status       VARCHAR(20)    CONSTRAINT DF_PO_approval_status DEFAULT 'not_submitted' CONSTRAINT CK_PO_approval_status CHECK (approval_status IN ('not_submitted','pending','approved','rejected')) -- Approval gate (issue #267). Must be 'approved' before a PO can be sent or printed. Actions recorded in PO_approval_history.
 );
 
 ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_company  FOREIGN KEY (supplier_id) REFERENCES dbo.company (id);
 ALTER TABLE dbo.PO ADD CONSTRAINT FK_PO_receiver FOREIGN KEY (receiver_id) REFERENCES dbo.company (id);
 
--- PO_status_history: append-only log of PO status transitions (issue #271).
--- One row per transition (and one for creation, with from_status NULL).
--- changed_by holds the app user's display name, written by the Go handler.
-IF OBJECT_ID('dbo.PO_status_history', 'U') IS NOT NULL DROP TABLE dbo.PO_status_history;
+-- PO_history: append-only activity log for a PO (issues #271 + #267).
+-- One unified timeline covering both kinds of event:
+--   event_type='status'   — a lifecycle transition; from_status -> to_status
+--                           (from_status NULL for the creation row).
+--   event_type='approval' — an approval action in `action`
+--                           (submitted | approved | rejected | reset), with an
+--                           optional `note` (e.g. a rejection reason).
+-- changed_by holds the app user's username (login handle), written by the Go handler
+-- — consistent with record_events.username / test_definition_history.changed_by.
+IF OBJECT_ID('dbo.PO_history', 'U') IS NOT NULL DROP TABLE dbo.PO_history;
 
-CREATE TABLE PO_status_history (
+CREATE TABLE PO_history (
   id          INT          PRIMARY KEY IDENTITY,
-  po_id       INT          NOT NULL,                                              -- FK to PO.id.
-  from_status VARCHAR(20),                                                        -- Prior status; NULL for the creation row.
-  to_status   VARCHAR(20)  NOT NULL,                                              -- New status.
-  changed_by  VARCHAR(128) NOT NULL CONSTRAINT DF_PO_status_history_by DEFAULT '', -- App user display name.
-  changed_at  DATETIME     NOT NULL CONSTRAINT DF_PO_status_history_at DEFAULT GETDATE()
+  po_id       INT          NOT NULL,                                          -- FK to PO.id.
+  event_type  VARCHAR(20)  NOT NULL CONSTRAINT CK_PO_history_event CHECK (event_type IN ('status','approval')),
+  from_status VARCHAR(20),                                                    -- status events: prior status (NULL on creation).
+  to_status   VARCHAR(20),                                                    -- status events: new status.
+  action      VARCHAR(20),                                                    -- approval events: submitted|approved|rejected|reset.
+  note        VARCHAR(MAX),                                                   -- approval events: optional comment / rejection reason.
+  changed_by  VARCHAR(128) NOT NULL CONSTRAINT DF_PO_history_by DEFAULT '',   -- App user username (login handle).
+  changed_at  DATETIME     NOT NULL CONSTRAINT DF_PO_history_at DEFAULT GETDATE()
 );
 
-ALTER TABLE dbo.PO_status_history ADD CONSTRAINT FK_PO_status_history_PO FOREIGN KEY (po_id) REFERENCES dbo.PO (id);
-CREATE INDEX IX_PO_status_history_po ON dbo.PO_status_history (po_id, changed_at);
+ALTER TABLE dbo.PO_history ADD CONSTRAINT FK_PO_history_PO FOREIGN KEY (po_id) REFERENCES dbo.PO (id);
+CREATE INDEX IX_PO_history_po ON dbo.PO_history (po_id, changed_at);
