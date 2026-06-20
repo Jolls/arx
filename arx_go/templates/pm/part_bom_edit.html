@@ -61,11 +61,11 @@
         {{else}}
         <div class="detail-row"><strong>Last Rollup:</strong> <span class="muted">Never run</span></div>
         {{end}}
-        <form method="POST" action="/part/{{.Part.PNID}}/rollup-cost" style="margin-top:0.5rem;">
+        <form method="POST" action="/part/{{.Part.PNID}}/rollup-cost" style="margin-top:0.5rem;" onsubmit="runRollup(this)">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <button type="submit" class="btn btn-secondary">Run Rollup</button>
         </form>
-        <p class="table-footer-note">Sums PNCurrentCost &times; Qty for each direct BOM component.</p>
+        <p class="table-footer-note">Recursively rolls up child costs from leaves — each sub-assembly is fully recomputed. Parts appearing multiple times in the tree are computed once and reused.</p>
     </div>
 </div>
 
@@ -107,7 +107,7 @@ function addNewRow() {
 
 function removeExistingRow(btn, plid) {
     const row = btn.closest('tr');
-    const form = document.querySelector('form');
+    const form = btn.closest('form');
     const hidden = document.createElement('input');
     hidden.type = 'hidden'; hidden.name = 'delete_pl[]'; hidden.value = plid;
     form.appendChild(hidden);
@@ -179,6 +179,14 @@ function setupPartTypeahead(input, row) {
         row.querySelector('[name$="[PLQty]"]')?.focus();
     }
     function close() { dd?.remove(); dd = null; results = []; activeIdx = -1; }
+}
+
+function runRollup(form) {
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Running…';
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
