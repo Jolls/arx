@@ -1,11 +1,14 @@
 package main
 
 import (
+	"archive/zip"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	arxbase "arx/arxlib/config"
 	arxdb "arx/arxlib/db"
@@ -231,4 +234,79 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
 		"Success": "Settings saved. Enter your database password to connect.",
 	}))
+}
+
+func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
+	date := time.Now().Format("2006-01-02")
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="arx-backup-`+date+`.zip"`)
+
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	tables := []string{
+		h.cfg.PartsTable(), h.cfg.BOMTable(), h.cfg.CompanyTable(),
+		h.cfg.ContactTable(), h.cfg.POTable(), h.cfg.POLineTable(),
+		h.cfg.AttachmentsTable(), h.cfg.LinksTable(), h.cfg.PriceTable(),
+		h.cfg.MfgPartTable(), h.cfg.SupplierPartTable(), h.cfg.CompanyAttachmentsTable(),
+		h.cfg.UnitTable(), h.cfg.AppConfigTable(), h.cfg.UsersTable(),
+		h.cfg.FormsTable(), h.cfg.RecordsTable(), h.cfg.ResultsTable(),
+		h.cfg.StepsTable(), h.cfg.FormEventsTable(), h.cfg.RecordEventsTable(),
+		h.cfg.NamedQueriesTable(), h.cfg.TestDefinitionHistoryTable(),
+	}
+
+	for _, tbl := range tables {
+		if err := h.writeTableCSV(r, zw, tbl); err != nil {
+			log.Printf("backup: error exporting %s: %v", tbl, err)
+		}
+	}
+}
+
+func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string) error {
+	rows, err := h.queryContext(r.Context(), "SELECT * FROM "+table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	fw, err := zw.Create(table + ".csv")
+	if err != nil {
+		return err
+	}
+
+	cw := csv.NewWriter(fw)
+	if err := cw.Write(cols); err != nil {
+		return err
+	}
+
+	vals := make([]any, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(ptrs...); err != nil {
+			return err
+		}
+		row := make([]string, len(cols))
+		for i, v := range vals {
+			if v == nil {
+				row[i] = ""
+			} else {
+				row[i] = fmt.Sprintf("%v", v)
+			}
+		}
+		if err := cw.Write(row); err != nil {
+			return err
+		}
+	}
+
+	cw.Flush()
+	return cw.Error()
 }

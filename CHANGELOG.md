@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.25] - 2026-06-19 
+- pm: Settings → Configuration tab — Download Backup button exports all app tables as a ZIP of CSVs ([#467](https://github.com/Jolls/arx-legacy/issues/467))
+
 ## [0.5.24] - 2026-06-19 
 - arx: user identity tracking — username/password login, session-based auth, Settings → Users management ([#207](https://github.com/Jolls/arx-legacy/issues/207))
 - arx: SET CONTEXT_INFO before form-definition saves so trg_test_definition_history records the app user instead of SYSTEM_USER ([#207](https://github.com/Jolls/arx-legacy/issues/207))
