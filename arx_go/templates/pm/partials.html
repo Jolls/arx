@@ -46,6 +46,17 @@
 </div>
 {{end}}
 
+{{/* po_status_badge — pass the status code string as the pipeline (.) */}}
+{{define "po_status_badge"}}
+{{if eq . "draft"}}<span class="badge bg-secondary">Draft</span>
+{{else if eq . "open"}}<span class="badge bg-info text-dark">Open</span>
+{{else if eq . "sent"}}<span class="badge bg-primary">Sent</span>
+{{else if eq . "partially_received"}}<span class="badge bg-warning text-dark">Partially Received</span>
+{{else if eq . "closed"}}<span class="badge bg-success">Closed</span>
+{{else if eq . "cancelled"}}<span class="badge bg-danger">Cancelled</span>
+{{else}}<span class="badge bg-secondary">{{.}}</span>{{end}}
+{{end}}
+
 {{define "part_tabs"}}
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>

@@ -360,6 +360,12 @@ func pmTemplateFuncs() template.FuncMap {
 			}
 			return t.Format("2006-01-02")
 		},
+		"formatDateTime": func(t time.Time) string {
+			if t.IsZero() {
+				return "—"
+			}
+			return t.Format("2006-01-02 15:04")
+		},
 		"fmtFloat": func(f float64) string {
 			if f == 0 {
 				return ""

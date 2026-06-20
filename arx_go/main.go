@@ -213,6 +213,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/po/{id}", h.PODetail)
 		r.Get("/po/{id}/edit", h.POEdit)
 		r.Post("/po/{id}", h.POUpdate)
+		r.Post("/po/{id}/status", h.POStatusTransition)
 		r.Get("/po/{id}/note", h.PONote)
 		r.Get("/po/{id}/print", h.POPrint)
 		r.Post("/po/{id}/mark-printed", h.POMarkPrinted)

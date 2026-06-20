@@ -32,12 +32,7 @@
                     <td>{{formatDate .DateOrdered}}</td>
                     <td>{{formatDate .DateClosed}}</td>
                     <td>
-                        {{if eq .Status "pending"  }}<span class="badge bg-info text-dark">Pending</span>
-                        {{else if eq .Status "placed"   }}<span class="badge bg-success">Placed</span>
-                        {{else if eq .Status "on_hold"  }}<span class="badge bg-success">On Hold</span>
-                        {{else if eq .Status "complete" }}<span class="badge bg-secondary">Complete</span>
-                        {{else if eq .Status "cancelled"}}<span class="badge bg-danger">Cancelled</span>
-                        {{else}}<span class="badge bg-secondary">{{.Status}}</span>{{end}}
+                        {{template "po_status_badge" .Status}}
                     </td>
                     <td style="text-align:right;">{{printf "%.2f" .POLQty}}</td>
                     <td style="text-align:right;">${{printf "%.4f" .POLCost}}</td>

@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.26] - 2026-06-20 
+- pm: PO status lifecycle — Draft → Open → Sent → Partially Received → Closed (plus Cancelled), with transitions driven by buttons on the PO page, an audited status-history log (who/when), prominent status display, and a status filter on the PO list ([#271](https://github.com/Jolls/arx-legacy/issues/271))
+
 ## [0.5.25] - 2026-06-19 
 - pm: Settings → Configuration tab — Download Backup button exports all app tables as a ZIP of CSVs ([#467](https://github.com/Jolls/arx-legacy/issues/467))
 

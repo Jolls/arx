@@ -38,16 +38,15 @@
                     <input type="text" name="number" class="form-input" readonly value="{{.PO.Number}}">
                 </div>
                 {{end}}
+                {{if not .IsNew}}
                 <div class="detail-row">
-                    <label class="form-label" for="status">Status</label>
-                    <select id="status" name="status" class="form-input" style="max-width:180px;">
-                        <option value="pending"   {{if eq .PO.Status "pending"  }}selected{{end}}>Pending</option>
-                        <option value="placed"    {{if eq .PO.Status "placed"   }}selected{{end}}>Placed</option>
-                        <option value="on_hold"   {{if eq .PO.Status "on_hold"  }}selected{{end}}>On Hold</option>
-                        <option value="complete"  {{if eq .PO.Status "complete" }}selected{{end}}>Complete</option>
-                        <option value="cancelled" {{if eq .PO.Status "cancelled"}}selected{{end}}>Cancelled</option>
-                    </select>
+                    <label class="form-label">Status</label>
+                    <div>
+                        {{template "po_status_badge" .PO.Status}}
+                        <a href="/po/{{.PO.Number}}" class="ms-2 small">Change status</a>
+                    </div>
                 </div>
+                {{end}}
                 <div class="detail-row">
                     <label class="form-label">Supplier</label>
                     <div style="position:relative; flex:1;">

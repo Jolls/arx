@@ -52,18 +52,19 @@ const ROW_BUILDERS = {
 
     '/api/pos/rows': r => {
         const badges = {
-            pending:   '<span class="badge badge-info">Pending</span>',
-            placed:    '<span class="badge badge-active">Placed</span>',
-            on_hold:   '<span class="badge badge-active">On Hold</span>',
-            complete:  '<span class="badge badge-neutral">Complete</span>',
-            cancelled: '<span class="badge badge-inactive">Cancelled</span>',
+            draft:              '<span class="badge bg-secondary">Draft</span>',
+            open:               '<span class="badge bg-info text-dark">Open</span>',
+            sent:               '<span class="badge bg-primary">Sent</span>',
+            partially_received: '<span class="badge bg-warning text-dark">Partially Received</span>',
+            closed:             '<span class="badge bg-success">Closed</span>',
+            cancelled:          '<span class="badge bg-danger">Cancelled</span>',
         };
         const vendor = r.sid
             ? `<a href="/supplier/${r.sid}" class="part-number-link">${escHtml(r.supplier)}</a>`
             : escHtml(r.supplier);
         return `<tr>
             <td><a href="/po/${escHtml(r.num)}" class="part-number-link">${escHtml(r.num)}</a></td>
-            <td>${badges[r.status] || `<span class="badge badge-neutral">${escHtml(r.status)}</span>`}</td>
+            <td>${badges[r.status] || `<span class="badge bg-secondary">${escHtml(r.status)}</span>`}</td>
             <td>${vendor}</td>
             <td>${r.ordered || '—'}</td>
             <td>${r.closed  || '—'}</td>
@@ -82,7 +83,7 @@ const CELL_TEXT = {
 };
 
 function getFilterValues() {
-    return Array.from(document.querySelectorAll('tr.filter-row input'))
+    return Array.from(document.querySelectorAll('tr.filter-row input, tr.filter-row select'))
         .map(i => i.value.toLowerCase().trim());
 }
 
@@ -233,6 +234,9 @@ function sortTable(th) {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadListRows();
-    document.querySelectorAll('tr.filter-row input')
-        .forEach(i => i.addEventListener('input', () => applyFilters(true)));
+    document.querySelectorAll('tr.filter-row input, tr.filter-row select')
+        .forEach(i => {
+            i.addEventListener('input', () => applyFilters(true));
+            i.addEventListener('change', () => applyFilters(true));
+        });
 });
