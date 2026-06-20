@@ -137,6 +137,7 @@ func (c *Config) ContactTable() string            { return "CN" }
 func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
 func (c *Config) UsersTable() string              { return "users" }
+func (c *Config) LinksTable() string              { return "LNK" }
 
 // Test Records tables
 func (c *Config) FormsTable() string                 { return "Forms" }

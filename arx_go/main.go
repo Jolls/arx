@@ -132,6 +132,9 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)
 		r.Post("/settings/users/{userID}/toggle-active", h.SettingsUsersToggleActive)
 
+		// Data backup
+		r.Get("/settings/backup", h.SettingsBackup)
+
 		// Local file serving (Parts Master)
 		r.Get("/local/*", h.ServeLocalFile)
 		r.Get("/local-dir/*", h.ServeLocalDir)
