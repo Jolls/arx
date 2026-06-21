@@ -26,7 +26,7 @@ type supplierOption struct {
 
 func (h *Handler) fetchContactOptions(r *http.Request) []contactOption {
 	rows, err := h.queryContext(r.Context(),
-		fmt.Sprintf(`SELECT CNID, CNName FROM %s WHERE CNActive = 1 ORDER BY CNName`,
+		fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = 1 ORDER BY display_name`,
 			h.cfg.ContactTable()))
 	if err != nil {
 		return nil

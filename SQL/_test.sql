@@ -38,7 +38,7 @@ BEGIN TRANSACTION;
 BEGIN TRY
 
     -- Drop existing tables (reverse FK order)
-    IF OBJECT_ID('dbo.CN',                      'U') IS NOT NULL DROP TABLE dbo.CN;
+    IF OBJECT_ID('dbo.contact',                  'U') IS NOT NULL DROP TABLE dbo.contact;
     IF OBJECT_ID('dbo.FIL',                      'U') IS NOT NULL DROP TABLE dbo.FIL;
     IF OBJECT_ID('dbo.supplier_part',            'U') IS NOT NULL DROP TABLE dbo.supplier_part;
     IF OBJECT_ID('dbo.mfg_part',                 'U') IS NOT NULL DROP TABLE dbo.mfg_part;
@@ -66,7 +66,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.users',                    'U') IS NOT NULL DROP TABLE dbo.users;
 
     -- Populate from prod via three-part names
-    SELECT * INTO dbo.CN                      FROM ArxProd.dbo.CN;
+    SELECT * INTO dbo.contact                  FROM ArxProd.dbo.contact;
     SELECT * INTO dbo.FIL                     FROM ArxProd.dbo.FIL;
     SELECT * INTO dbo.supplier_part           FROM ArxProd.dbo.supplier_part;
     SELECT * INTO dbo.mfg_part                FROM ArxProd.dbo.mfg_part;

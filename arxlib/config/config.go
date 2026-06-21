@@ -134,7 +134,7 @@ func (c *Config) CompanyTable() string            { return "company" }
 func (c *Config) SupplierPartTable() string       { return "supplier_part" }
 func (c *Config) MfgPartTable() string            { return "mfg_part" }
 func (c *Config) CompanyAttachmentsTable() string { return "company_attachment" }
-func (c *Config) ContactTable() string            { return "CN" }
+func (c *Config) ContactTable() string            { return "contact" }
 func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) InventoryTxnTable() string       { return "inventory_transaction" }
 func (c *Config) AppConfigTable() string          { return "app_config" }

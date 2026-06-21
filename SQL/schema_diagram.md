@@ -40,14 +40,14 @@ erDiagram
     }
 
 
-    CN {
-        int     CNID            PK
-        varchar CNName
-        int     CNSUID          FK
-        varchar CNEmail
-        varchar CNPhone1
-        varchar CNPhone2
-        bit     CNActive
+    contact {
+        int     id              PK
+        varchar display_name
+        int     company_id      FK
+        varchar email
+        varchar phone_1
+        varchar phone_2
+        bit     is_active
     }
 
     PO {
@@ -178,8 +178,8 @@ erDiagram
     }
 
     %% Core parts & suppliers
-    supplier    ||--o{    CN                  : "has contacts (CNSUID)"
-    supplier    |o--||    CN                  : "default_contact"
+    supplier    ||--o{    contact             : "has contacts (company_id)"
+    supplier    |o--||    contact             : "default_contact"
     supplier    ||--o{    LNK                 : "approved vendors (LNKSUID)"
     supplier    ||--o{    PO                  : "purchase orders (supplier_id)"
     supplier    ||--o{    price               : "pricing (supplier_id)"

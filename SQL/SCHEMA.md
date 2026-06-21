@@ -13,8 +13,8 @@ All new tables use snake_case. Do not extend the legacy prefix style for new wor
 
 ### Columns
 - All lowercase snake_case
-- Primary key: `{table_name}_id` — e.g. `supplier_attachment_id` (never bare `id`)
-- Foreign key: same name as the PK it references — e.g. `supplier_id INT` pointing at `supplier.supplier_id`
+- Primary key: bare `id` — e.g. `id INT PRIMARY KEY IDENTITY`
+- Foreign key: `{stem}_id` referencing that table's `id` — e.g. `supplier_id INT` pointing at `company.id`. Stems: `part`, `po`, `attachment`, `form`, `record`, `test`.
 - Booleans: `is_` prefix — `is_active`, `is_locked` (not `active`, `locked`)
 - Timestamps: `created_at`, `updated_at` (DATETIME, DEFAULT GETDATE())
 - Avoid SQL reserved words as column names: `name`, `date`, `type`, `order`, `value`, `key`
@@ -24,19 +24,19 @@ All new tables use snake_case. Do not extend the legacy prefix style for new wor
 
 ```sql
 CREATE TABLE company_attachment (
-    supplier_attachment_id  INT           PRIMARY KEY IDENTITY,
-    supplier_id             INT           NOT NULL,     -- FK → company.id
-    file_path               NVARCHAR(1024) NOT NULL,    -- LOCAL:... path or https:// URL
-    notes                   NVARCHAR(512),
-    sort_order              INT,
-    created_at              DATETIME      DEFAULT GETDATE(),
-    updated_at              DATETIME      DEFAULT GETDATE()
+    id          INT            PRIMARY KEY IDENTITY,
+    supplier_id INT            NOT NULL,     -- FK → company.id
+    file_path   NVARCHAR(1024) NOT NULL,     -- LOCAL:... path or https:// URL
+    notes       NVARCHAR(512),
+    sort_order  INT,
+    created_at  DATETIME       DEFAULT GETDATE(),
+    updated_at  DATETIME       DEFAULT GETDATE()
 );
 ```
 
 ### What to do with legacy tables
-- Do not rename existing legacy columns — too much churn, the Go app scans by column name.
-- New columns added to legacy tables should still use the legacy prefix style to stay consistent within that table.
+- Legacy tables (`PN`, `FIL`, `PL`, `POL`) are being renamed to snake_case in the db-table-rename effort (one commit per table/group). Go struct fields intentionally retain the old names during this effort — DB column names and Go field names will diverge until a follow-up cleanup aligns them.
+- New columns added to a legacy table that has not yet been renamed should still use the legacy prefix style. Once a table is renamed, use snake_case for any new columns.
 - When a legacy table is fully replaced/migrated, use the go-forward convention for the replacement.
 
 ---
@@ -49,7 +49,7 @@ Two eras of tables exist. When extending or mirroring a legacy table, follow its
 
 Two eras of tables exist in this schema. Follow the era of the table you are extending or parallel-ing.
 
-**Legacy tables** (VBA/Ruby era) — uppercase short abbreviation:
+**Legacy tables** (VBA/Ruby era) — uppercase short abbreviation; being renamed in the db-table-rename effort:
 
 | Table | Abbreviation | Notes |
 |-------|-------------|-------|
@@ -57,7 +57,6 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 | `FIL` | `FIL` | File/URL attachments (to parts) |
 | `supplier_part` | — | Sourcing links (migrated from `LNK`) |
 | `mfg_part` | — | Manufacturer part numbers |
-| `CN`  | `CN`  | Contacts |
 | `PL`  | `PL`  | Parts list / BOM |
 | `POL` | `POL` | PO line items |
 
@@ -66,6 +65,7 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 | Table | Notes |
 |-------|-------|
 | `company` | Mixed: has both generic columns and leftover `SU`-prefixed columns |
+| `contact` | Contacts (renamed from `CN` in db-table-rename commit 1) |
 | `PO` | Clean snake_case |
 | `PO_history` | Clean snake_case |
 | `inventory_transaction` | Clean snake_case |
@@ -127,8 +127,8 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 | `PN` | `PNID` | Parts catalog. `release_status`: U/A/D. `user_field_1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). `PNUNID` → `unit.unit_id` (base/inventory unit). `stock_on_hand` (issue #272) is a cached inventory balance = `SUM(inventory_transaction.qty)`, maintained by the app in the same tx as each ledger write — do not edit directly. (Replaces the former `PNQty` column, dropped in schema v3.) |
 | `FIL` | `FILID` | File/URL attachments. `FILPNID` → `PN.PNID` (INT FK, enforced). `FILFileName` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `category` = free-text document type label; options driven by `app_config.'attachment_categories'`. `order_id` controls sort. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. |
 | `PL` | — | BOM / parts list. Links a parent part to child parts. |
-| `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `CN.CNID`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
-| `CN` | `CNID` | Contacts, linked to companies. |
+| `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `contact.id`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
+| `contact` | `id` | Contacts, linked to companies. `company_id` → `company.id`. `user_account_link` = Windows/network account for internal users. `is_active = 0` = inactive. (Renamed from `CN` in db-table-rename commit 1; Go struct fields still use old `CN`-prefixed names.) |
 | `PO` | `id` | Purchase orders. `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative and follows the lifecycle `draft` → `open` → `sent` → `partially_received` → `closed` (plus `cancelled`). Status changes only via `POST /po/{id}/status`, which logs to `PO_status_history`; create/update handlers do not write `status`. `is_active` is a convenience bit kept in sync by the app (`draft/open/sent/partially_received → 1`, `closed/cancelled → 0`) — do not set it directly. `approval_status` (`not_submitted`/`pending`/`approved`/`rejected`, issue #267) gates sending/printing: a PO can only reach `sent` or be printed once `approved`; editing an approved/pending PO resets it to `not_submitted`. Run `SQL/migrations/migrate_po_status_lifecycle.sql` then `SQL/migrations/migrate_po_approval.sql` to migrate existing databases. |
 | `PO_history` | `id` | Append-only PO activity log (issues #271 + #267). `po_id` → `PO.id`. `event_type`: `status` (lifecycle transition: `from_status`→`to_status`, `from_status` NULL on creation) or `approval` (`action`: `submitted`\|`approved`\|`rejected`\|`reset`, with optional `note`). `changed_by` = app user username/login handle (written by the Go handler, not a trigger; consistent with `record_events.username` and `test_definition_history.changed_by`). |
 | `POL` | `POLID` | PO line items → `PO.id`. |

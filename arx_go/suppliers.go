@@ -38,9 +38,9 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 	su, cn := h.cfg.CompanyTable(), h.cfg.ContactTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, su.SUSupplierCode, su.SUNumOfLNKs, su.SUNumOfPOs,
-		       su.is_active, CN.CNName, CN.CNCountry
+		       su.is_active, CN.display_name, CN.country
 		FROM %s su
-		LEFT JOIN %s CN ON su.default_contact = CN.CNID
+		LEFT JOIN %s CN ON su.default_contact = CN.id
 		ORDER BY su.name ASC
 	`, su, cn))
 	if err != nil {
@@ -430,9 +430,9 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		       su.default_contact, su.is_active, su.is_supplier, su.is_manufacturer,
 		       su.SUNumOfLNKs, su.SUNumOfPOs, su.date_modified,
 		       su.primary_attachment_id,
-		       cn.CNName, cn.CNPhone1, cn.CNEmail, cn.CNCity
+		       cn.display_name, cn.phone_1, cn.email, cn.city
 		FROM %s su
-		LEFT JOIN %s cn ON su.default_contact = cn.CNID
+		LEFT JOIN %s cn ON su.default_contact = cn.id
 		WHERE su.id = @p1
 	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), id).Scan(
 		&s.ID, &name, &code, &notes,

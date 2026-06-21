@@ -39,9 +39,9 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 		return nil
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT CNID, CNName, CNAddress, CNCity, CNState, CNZipcode,
-		       CNCountry, CNPhone1, CNFAX, CNEmail
-		FROM %s WHERE CNSUID = @p1 AND CNActive = 1 ORDER BY CNName
+		SELECT id, display_name, address, city, state, zipcode,
+		       country, phone_1, fax, email
+		FROM %s WHERE company_id = @p1 AND is_active = 1 ORDER BY display_name
 	`, h.cfg.ContactTable()), supplierID)
 	if err != nil {
 		return nil
@@ -370,7 +370,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 	if cid := h.cfg.PODefaults.ContactID; cid > 0 {
 		var cnName sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT CNName FROM %s WHERE CNID = @p1`, h.cfg.ContactTable(),
+			`SELECT display_name FROM %s WHERE id = @p1`, h.cfg.ContactTable(),
 		), cid).Scan(&cnName)
 		po.SupplierContact = cnName.String
 	}
