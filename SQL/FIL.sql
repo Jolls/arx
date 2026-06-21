@@ -19,7 +19,7 @@ CREATE TABLE part_attachment (
   id             INT           PRIMARY KEY IDENTITY,
   part_id        INT NOT NULL  REFERENCES dbo.part (id),  -- FK to part.id.
   file_name      VARCHAR(1000),  -- File path or URL.
-  category       VARCHAR(100),   -- Attachment category (e.g. Datasheet, Drawing). Options managed via app_config 'attachment_categories'.
+  category       VARCHAR(500),   -- Attachment category (e.g. Datasheet, Drawing). Options managed via app_config 'attachment_categories'. (Live length 500, inherited from the former FILNotes column.)
   part_revision  VARCHAR(10),    -- Part revision this file is associated with.
   sort_order     INT            CONSTRAINT DF_part_attachment_sort_order DEFAULT 1,  -- Display sort order.
   is_active      BIT NOT NULL  CONSTRAINT DF_part_attachment_is_active  DEFAULT 1

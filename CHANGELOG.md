@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.5.29] - 2026-06-21 
 - db: renamed legacy tables/columns to the go-forward snake_case convention — `CN`→`contact`, `PL`→`bom`, `FIL`→`part_attachment`, `PO`/`PO_history`→`purchase_order`/`purchase_order_history`, `POL`→`po_line`, `PN`→`part_number`→`part`, and the test-records group (`Forms`→`form`, `TestRecords`→`test_record`, `TestResults`→`test_result`); columns modernized to bare `id` PKs, `{stem}_id` FKs, and `is_` boolean prefixes. Internal only — no behavior change; Go struct/field names are unchanged (reads are positional)
 - db: this build expects the renamed schema — run the `SQL/migrations/migrate_rename_*.sql` scripts in commit order (contact → bom → part_attachment → purchase_order → po_line → part_number → test_records → part) against the DB before deploying
+- db: dropped vestigial `*_Test` legacy table copies (and `Tests_vba_archive_bak`) left over from before TEST_MODE used a separate ArxDev database — run `SQL/migrations/drop_legacy_test_tables.sql` against both ArxProd and ArxDev
 
 ## [0.5.28] - 2026-06-20 
 - pm: Inventory core — per-part stock on hand backed by an append-only `inventory_transaction` ledger; Transactions tab on stockable parts (configurable per category in Settings) with running balance + manual adjustments (reason required) ([#272](https://github.com/Jolls/arx-legacy/issues/272), [#274](https://github.com/Jolls/arx-legacy/issues/274))
