@@ -98,7 +98,7 @@ BEGIN TRY
     ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at DEFAULT GETDATE() FOR updated_at;
     ALTER TABLE dbo.part_attachment ADD CONSTRAINT DF_part_attachment_is_active DEFAULT 1 FOR is_active;
     CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;
-    ALTER TABLE dbo.part ADD CONSTRAINT CK_part_number_category   CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
+    ALTER TABLE dbo.part ADD CONSTRAINT CK_part_number_category   CHECK (category IN ('', 'ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
 
     -- Triggers not copied by SELECT * INTO
     EXEC('

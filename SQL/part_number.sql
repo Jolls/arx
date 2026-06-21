@@ -19,7 +19,7 @@ CREATE TABLE part (
   id                  INT              PRIMARY KEY IDENTITY,
   part_number         VARCHAR(255)     NOT NULL CONSTRAINT UQ_part_number_part_number UNIQUE,  -- live DB is nullable (pre-existing); NOT NULL is the intent.
   category            VARCHAR(10)      CONSTRAINT DF_part_number_category         DEFAULT 'BUY'
-                                       CONSTRAINT CK_part_number_category         CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL')),
+                                       CONSTRAINT CK_part_number_category         CHECK (category IN ('', 'ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL')),  -- '' permitted for legacy/uncategorized rows (matches live).
   has_bom             BIT              CONSTRAINT DF_part_number_has_bom          DEFAULT 0,
   revision            VARCHAR(10)      CONSTRAINT DF_part_number_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
   title               VARCHAR(255)     CONSTRAINT DF_part_number_title            DEFAULT '',
