@@ -208,7 +208,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'pos_for_pn',
   'PO numbers where a line item part number prefix matches (active = not soft-deleted)',
-  'SELECT PO.number FROM POL LEFT JOIN PO ON POL.POLPOID = PO.id WHERE is_active = 1 AND POL.POLPNPartNumber LIKE @pn + ''%'' ORDER BY POL.POLPOID DESC',
+  'SELECT purchase_order.number FROM POL LEFT JOIN purchase_order ON POL.POLPOID = purchase_order.id WHERE is_active = 1 AND POL.POLPNPartNumber LIKE @pn + ''%'' ORDER BY POL.POLPOID DESC',
   'pn', 'list',
   GETDATE()
 );

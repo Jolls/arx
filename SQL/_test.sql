@@ -22,7 +22,7 @@
 
 -- ── Sequence restart (Azure: run this after portal Copy; on-prem: included below) ──────────────
 --
---   DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO);
+--   DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.purchase_order);
 --   IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq')
 --       EXEC('ALTER SEQUENCE dbo.PO_Number_Seq RESTART WITH ' + @next_po);
 --   ELSE
@@ -46,8 +46,8 @@ BEGIN TRY
     IF OBJECT_ID('dbo.price',                    'U') IS NOT NULL DROP TABLE dbo.price;
     IF OBJECT_ID('dbo.inventory_transaction',    'U') IS NOT NULL DROP TABLE dbo.inventory_transaction;
     IF OBJECT_ID('dbo.POL',                      'U') IS NOT NULL DROP TABLE dbo.POL;
-    IF OBJECT_ID('dbo.PO_history',               'U') IS NOT NULL DROP TABLE dbo.PO_history;
-    IF OBJECT_ID('dbo.PO',                       'U') IS NOT NULL DROP TABLE dbo.PO;
+    IF OBJECT_ID('dbo.purchase_order_history',   'U') IS NOT NULL DROP TABLE dbo.purchase_order_history;
+    IF OBJECT_ID('dbo.purchase_order',           'U') IS NOT NULL DROP TABLE dbo.purchase_order;
     IF OBJECT_ID('dbo.company_attachment',       'U') IS NOT NULL DROP TABLE dbo.company_attachment;
     IF OBJECT_ID('dbo.company',                  'U') IS NOT NULL DROP TABLE dbo.company;
     IF OBJECT_ID('dbo.PN',                       'U') IS NOT NULL DROP TABLE dbo.PN;
@@ -73,8 +73,8 @@ BEGIN TRY
     SELECT * INTO dbo.bom                     FROM ArxProd.dbo.bom;
     SELECT * INTO dbo.price                   FROM ArxProd.dbo.price;
     SELECT * INTO dbo.POL                     FROM ArxProd.dbo.POL;
-    SELECT * INTO dbo.PO                      FROM ArxProd.dbo.PO;
-    SELECT * INTO dbo.PO_history              FROM ArxProd.dbo.PO_history;
+    SELECT * INTO dbo.purchase_order          FROM ArxProd.dbo.purchase_order;
+    SELECT * INTO dbo.purchase_order_history  FROM ArxProd.dbo.purchase_order_history;
     SELECT * INTO dbo.company_attachment      FROM ArxProd.dbo.company_attachment;
     SELECT * INTO dbo.company                 FROM ArxProd.dbo.company;
     SELECT * INTO dbo.PN                      FROM ArxProd.dbo.PN;
@@ -94,7 +94,7 @@ BEGIN TRY
     SELECT * INTO dbo.users                   FROM ArxProd.dbo.users;
 
     -- Constraints not copied by SELECT * INTO
-    ALTER TABLE dbo.PO         ADD CONSTRAINT UQ_PO_number             UNIQUE (number);
+    ALTER TABLE dbo.purchase_order ADD CONSTRAINT UQ_purchase_order_number UNIQUE (number);
     ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at DEFAULT GETDATE() FOR updated_at;
     ALTER TABLE dbo.part_attachment ADD CONSTRAINT DF_part_attachment_is_active DEFAULT 1 FOR is_active;
     CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;
@@ -121,7 +121,7 @@ END
     ');
     EXEC('
 CREATE OR ALTER TRIGGER dbo.trg_PO_company_count
-ON dbo.PO
+ON dbo.purchase_order
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -132,7 +132,7 @@ BEGIN
         SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO p WHERE p.supplier_id = s.id)
+    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.purchase_order p WHERE p.supplier_id = s.id)
     FROM   dbo.company s
     JOIN   affected a ON a.id = s.id
 END
@@ -177,7 +177,7 @@ END
     -- Recalibrate snapshot counts
     UPDATE s
     SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id),
-           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO             p  WHERE p.supplier_id  = s.id)
+           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.purchase_order p  WHERE p.supplier_id  = s.id)
     FROM   dbo.company s;
 
     UPDATE p
@@ -186,7 +186,7 @@ END
     FROM   dbo.PN p;
 
     -- PO sequence: starts after current max so dev POs don't collide with snapshot data
-    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO);
+    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.purchase_order);
     IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq')
         EXEC('ALTER SEQUENCE dbo.PO_Number_Seq RESTART WITH ' + @next_po);
     ELSE

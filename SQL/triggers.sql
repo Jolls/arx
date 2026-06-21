@@ -33,9 +33,9 @@ BEGIN
 END;
 GO
 
--- PO → company.SUNumOfPOs
+-- purchase_order → company.SUNumOfPOs
 CREATE OR ALTER TRIGGER dbo.trg_PO_company_count
-ON dbo.PO
+ON dbo.purchase_order
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -46,7 +46,7 @@ BEGIN
         SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO p WHERE p.supplier_id = s.id)
+    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.purchase_order p WHERE p.supplier_id = s.id)
     FROM   dbo.company s
     JOIN   affected a ON a.id = s.id;
 END;
@@ -96,7 +96,7 @@ GO
 -- Safe to re-run.
 UPDATE s
 SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id),
-       s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO             p  WHERE p.supplier_id  = s.id)
+       s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.purchase_order p  WHERE p.supplier_id  = s.id)
 FROM   dbo.company s;
 
 UPDATE p

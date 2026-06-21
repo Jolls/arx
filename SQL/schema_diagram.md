@@ -50,7 +50,7 @@ erDiagram
         bit     is_active
     }
 
-    PO {
+    purchase_order {
         int     id              PK
         varchar number          "UNIQUE"
         int     supplier_id     FK
@@ -181,7 +181,7 @@ erDiagram
     supplier    ||--o{    contact             : "has contacts (company_id)"
     supplier    |o--||    contact             : "default_contact"
     supplier    ||--o{    LNK                 : "approved vendors (LNKSUID)"
-    supplier    ||--o{    PO                  : "purchase orders (supplier_id)"
+    supplier    ||--o{    purchase_order      : "purchase orders (supplier_id)"
     supplier    ||--o{    price               : "pricing (supplier_id)"
     supplier    ||--o{    supplier_attachment : "attachments (supplier_id)"
     supplier    |o--||    supplier_attachment : "primary_attachment_id"
@@ -194,8 +194,8 @@ erDiagram
     PN          |o--||    price       : "active price (price_id)"
 
     %% Purchasing
-    PO          ||--o{    POL         : "line items (POLPOID)"
-    PO          ||--o{    part_attachment : "attached files (sort_order)"
+    purchase_order ||--o{ POL         : "line items (POLPOID)"
+    purchase_order ||--o{ part_attachment : "attached files (sort_order)"
 
     %% Test records
     PN          ||--o{    Forms       : "test forms (PNID)"
@@ -211,6 +211,6 @@ erDiagram
 
 - **part_attachment.part_id** is an INT FK to `PN.PNID` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
-- **PO.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
+- **purchase_order.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
 - **TestRecordHistory.record_id** is polymorphic — it references either `Forms.ID` or `TestRecords.ID` depending on `history_type`.
 - **part_types**, **logs**, and **release_notes** have no foreign key relationships.
