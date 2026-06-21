@@ -93,12 +93,12 @@ erDiagram
         varchar FILPNRev
     }
 
-    PL {
-        int     PLID            PK
-        int     PLListID
-        int     PLPartID        FK
-        int     PLItem
-        decimal PLQty
+    bom {
+        int     id                  PK
+        int     parent_part_id      FK
+        int     component_part_id   FK
+        int     line_number
+        decimal qty
     }
 
     price {
@@ -189,7 +189,7 @@ erDiagram
     PN          ||--o{    LNK         : "vendor links (LNKPNID)"
     PN          ||--o{    LNK         : "substitute parts (LNKToPNID)"
     PN          ||--o{    POL         : "on PO lines (POLPNID)"
-    PN          ||--o{    PL          : "in parts lists (PLPartID)"
+    PN          ||--o{    bom         : "in parts lists (component_part_id)"
     PN          ||--o{    FIL         : "attached files (FILPNID)"
     PN          |o--||    price       : "active price (price_id)"
 

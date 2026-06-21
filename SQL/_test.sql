@@ -42,7 +42,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.FIL',                      'U') IS NOT NULL DROP TABLE dbo.FIL;
     IF OBJECT_ID('dbo.supplier_part',            'U') IS NOT NULL DROP TABLE dbo.supplier_part;
     IF OBJECT_ID('dbo.mfg_part',                 'U') IS NOT NULL DROP TABLE dbo.mfg_part;
-    IF OBJECT_ID('dbo.PL',                       'U') IS NOT NULL DROP TABLE dbo.PL;
+    IF OBJECT_ID('dbo.bom',                      'U') IS NOT NULL DROP TABLE dbo.bom;
     IF OBJECT_ID('dbo.price',                    'U') IS NOT NULL DROP TABLE dbo.price;
     IF OBJECT_ID('dbo.inventory_transaction',    'U') IS NOT NULL DROP TABLE dbo.inventory_transaction;
     IF OBJECT_ID('dbo.POL',                      'U') IS NOT NULL DROP TABLE dbo.POL;
@@ -70,7 +70,7 @@ BEGIN TRY
     SELECT * INTO dbo.FIL                     FROM ArxProd.dbo.FIL;
     SELECT * INTO dbo.supplier_part           FROM ArxProd.dbo.supplier_part;
     SELECT * INTO dbo.mfg_part                FROM ArxProd.dbo.mfg_part;
-    SELECT * INTO dbo.PL                      FROM ArxProd.dbo.PL;
+    SELECT * INTO dbo.bom                     FROM ArxProd.dbo.bom;
     SELECT * INTO dbo.price                   FROM ArxProd.dbo.price;
     SELECT * INTO dbo.POL                     FROM ArxProd.dbo.POL;
     SELECT * INTO dbo.PO                      FROM ArxProd.dbo.PO;

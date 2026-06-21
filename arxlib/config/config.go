@@ -125,7 +125,7 @@ func Load(version string) *Config {
 // Parts Master tables
 func (c *Config) PartsTable() string              { return "PN" }
 func (c *Config) AttachmentsTable() string        { return "FIL" }
-func (c *Config) BOMTable() string                { return "PL" }
+func (c *Config) BOMTable() string                { return "bom" }
 func (c *Config) PriceTable() string              { return "price" }
 func (c *Config) POTable() string                 { return "PO" }
 func (c *Config) POLineTable() string             { return "POL" }

@@ -35,7 +35,7 @@ CREATE TABLE company_attachment (
 ```
 
 ### What to do with legacy tables
-- Legacy tables (`PN`, `FIL`, `PL`, `POL`) are being renamed to snake_case in the db-table-rename effort (one commit per table/group). Go struct fields intentionally retain the old names during this effort — DB column names and Go field names will diverge until a follow-up cleanup aligns them.
+- Legacy tables (`PN`, `FIL`, `POL`) are being renamed to snake_case in the db-table-rename effort (one commit per table/group). (`PL` was renamed to `bom` in commit 2.) Go struct fields intentionally retain the old names during this effort — DB column names and Go field names will diverge until a follow-up cleanup aligns them.
 - New columns added to a legacy table that has not yet been renamed should still use the legacy prefix style. Once a table is renamed, use snake_case for any new columns.
 - When a legacy table is fully replaced/migrated, use the go-forward convention for the replacement.
 
@@ -57,7 +57,7 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 | `FIL` | `FIL` | File/URL attachments (to parts) |
 | `supplier_part` | — | Sourcing links (migrated from `LNK`) |
 | `mfg_part` | — | Manufacturer part numbers |
-| `PL`  | `PL`  | Parts list / BOM |
+| `bom` | —     | Parts list / BOM (renamed from `PL` in db-table-rename commit 2) |
 | `POL` | `POL` | PO line items |
 
 **Go-era tables** — lowercase snake_case:
@@ -126,7 +126,7 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 |-------|----|-------|
 | `PN` | `PNID` | Parts catalog. `release_status`: U/A/D. `user_field_1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). `PNUNID` → `unit.unit_id` (base/inventory unit). `stock_on_hand` (issue #272) is a cached inventory balance = `SUM(inventory_transaction.qty)`, maintained by the app in the same tx as each ledger write — do not edit directly. (Replaces the former `PNQty` column, dropped in schema v3.) |
 | `FIL` | `FILID` | File/URL attachments. `FILPNID` → `PN.PNID` (INT FK, enforced). `FILFileName` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `category` = free-text document type label; options driven by `app_config.'attachment_categories'`. `order_id` controls sort. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. |
-| `PL` | — | BOM / parts list. Links a parent part to child parts. |
+| `bom` | `id` | BOM / parts list. Links a parent part to child parts. `parent_part_id` → `PN.PNID` (parent assembly). `component_part_id` → `PN.PNID` (component part). `line_number` = user-assigned line item number. `qty` = quantity required. (Renamed from `PL` in db-table-rename commit 2; Go struct fields still use old `PL`-prefixed names.) |
 | `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `contact.id`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
 | `contact` | `id` | Contacts, linked to companies. `company_id` → `company.id`. `user_account_link` = Windows/network account for internal users. `is_active = 0` = inactive. (Renamed from `CN` in db-table-rename commit 1; Go struct fields still use old `CN`-prefixed names.) |
 | `PO` | `id` | Purchase orders. `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative and follows the lifecycle `draft` → `open` → `sent` → `partially_received` → `closed` (plus `cancelled`). Status changes only via `POST /po/{id}/status`, which logs to `PO_status_history`; create/update handlers do not write `status`. `is_active` is a convenience bit kept in sync by the app (`draft/open/sent/partially_received → 1`, `closed/cancelled → 0`) — do not set it directly. `approval_status` (`not_submitted`/`pending`/`approved`/`rejected`, issue #267) gates sending/printing: a PO can only reach `sent` or be printed once `approved`; editing an approved/pending PO resets it to `not_submitted`. Run `SQL/migrations/migrate_po_status_lifecycle.sql` then `SQL/migrations/migrate_po_approval.sql` to migrate existing databases. |

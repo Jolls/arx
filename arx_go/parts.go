@@ -467,14 +467,14 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	}
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.PLItem, pl.PLQty, pl.PLPartID,
+		SELECT pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.title, pn.revision, pn.category,
 		       pn.PNCurrentCost, pn.PNLastRollupCost,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.PLListID = pn.PNID) THEN 1 ELSE 0 END AS BIT)
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.PNID) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
-		JOIN %s pn ON pl.PLPartID = pn.PNID
-		WHERE pl.PLListID = @p1
-		ORDER BY pl.PLItem
+		JOIN %s pn ON pl.component_part_id = pn.PNID
+		WHERE pl.parent_part_id = @p1
+		ORDER BY pl.line_number
 	`, pl, pl, pn), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
@@ -536,11 +536,11 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	}
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.PLItem, pl.PLQty, pl.PLListID,
+		SELECT pl.line_number, pl.qty, pl.parent_part_id,
 		       pn.part_number, pn.title, pn.revision, pn.category
 		FROM %s pl
-		JOIN %s pn ON pl.PLListID = pn.PNID
-		WHERE pl.PLPartID = @p1
+		JOIN %s pn ON pl.parent_part_id = pn.PNID
+		WHERE pl.component_part_id = @p1
 		ORDER BY pn.part_number
 	`, pl, pn), id)
 	if err != nil {
@@ -622,12 +622,12 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.PLID, pl.PLItem, pl.PLQty, pl.PLPartID,
+		SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.title
 		FROM %s pl
-		JOIN %s pn ON pl.PLPartID = pn.PNID
-		WHERE pl.PLListID = @p1
-		ORDER BY pl.PLItem
+		JOIN %s pn ON pl.component_part_id = pn.PNID
+		WHERE pl.parent_part_id = @p1
+		ORDER BY pl.line_number
 	`, pl, pn), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
@@ -691,7 +691,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	for _, plidStr := range r.Form["delete_pl[]"] {
 		deleteSet[plidStr] = true
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE PLID=@p1`, pl,
+			`DELETE FROM %s WHERE id=@p1`, pl,
 		), plidStr); err != nil {
 			h.renderError(w, r, "Error deleting BOM row: "+err.Error())
 			return
@@ -717,7 +717,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET PLItem=@p1, PLQty=@p2, PLPartID=@p3 WHERE PLID=@p4
+			UPDATE %s SET line_number=@p1, qty=@p2, component_part_id=@p3 WHERE id=@p4
 		`, pl), item, qty, pnid, plidStr); err != nil {
 			h.renderError(w, r, "Error updating BOM row: "+err.Error())
 			return
@@ -744,7 +744,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s (PLListID, PLPartID, PLItem, PLQty) VALUES (@p1,@p2,@p3,@p4)
+			INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES (@p1,@p2,@p3,@p4)
 		`, pl), parentID, pnid, item, qty); err != nil {
 			h.renderError(w, r, "Error inserting BOM row: "+err.Error())
 			return
@@ -781,11 +781,11 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pl.PLPartID, pl.PLQty, pn.PNCurrentCost,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.PLListID = pn.PNID) THEN 1 ELSE 0 END AS BIT)
+		SELECT pl.component_part_id, pl.qty, pn.PNCurrentCost,
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.PNID) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
-		JOIN %s pn ON pl.PLPartID = pn.PNID
-		WHERE pl.PLListID = @p1
+		JOIN %s pn ON pl.component_part_id = pn.PNID
+		WHERE pl.parent_part_id = @p1
 	`, pl, pl, pn), pnid)
 	if err != nil {
 		return rollupResult{}, err

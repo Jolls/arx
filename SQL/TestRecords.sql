@@ -216,7 +216,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'bom_pn_by_item',
   'Part number at a specific BOM item position for a given parent assembly PN',
-  'SELECT PN.part_number, PN.title FROM PL JOIN PN ON PL.PLPartID = PN.PNID WHERE PL.PLListID = (SELECT PNID FROM PN WHERE part_number = @pn) AND PL.PLItem = @item',
+  'SELECT PN.part_number, PN.title FROM bom JOIN PN ON bom.component_part_id = PN.PNID WHERE bom.parent_part_id = (SELECT PNID FROM PN WHERE part_number = @pn) AND bom.line_number = @item',
   'pn, item', 'list',
   GETDATE()
 );

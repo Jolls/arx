@@ -1213,8 +1213,8 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	var bomParts []BOMPart
 	bomRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT PN.PNID, PN.part_number, PN.title
-		FROM %s PL JOIN %s PN ON PL.PLPartID = PN.PNID
-		WHERE PL.PLListID = @p1
+		FROM %s PL JOIN %s PN ON PL.component_part_id = PN.PNID
+		WHERE PL.parent_part_id = @p1
 		ORDER BY PN.title`,
 		h.cfg.BOMTable(), h.cfg.PartsTable()), form.PNID)
 	if err == nil {
