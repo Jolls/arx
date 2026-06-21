@@ -8,7 +8,7 @@ All new tables use snake_case. Do not extend the legacy prefix style for new wor
 
 ### Tables
 - Singular noun: `purchase_order`, not `purchase_orders`
-- All lowercase snake_case: `company_attachment`, `part_number`
+- All lowercase snake_case: `company_attachment`, `inventory_transaction`
 - New tables must exist in both prod and `ArxDev` (re-run `SQL/_test.sql` to populate)
 
 ### Columns
