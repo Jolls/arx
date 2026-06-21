@@ -297,6 +297,7 @@
                         <th style="padding:4px 8px; text-align:center;">Pricing</th>
                         <th style="padding:4px 8px; text-align:center;">Mfg Parts</th>
                         <th style="padding:4px 8px; text-align:center;">Suppliers</th>
+                        <th style="padding:4px 8px; text-align:center;"><span data-bs-toggle="tooltip" title="Track stock on hand + a Transactions tab">Inventory</span></th>
                         <th></th>
                     </tr>
                 </thead>
@@ -310,6 +311,7 @@
                         <td style="text-align:center;"><input type="checkbox" data-f="pricing" {{if .Pricing}}checked{{end}}></td>
                         <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" {{if .MfgParts}}checked{{end}}></td>
                         <td style="text-align:center;"><input type="checkbox" data-f="suppliers" {{if .Suppliers}}checked{{end}}></td>
+                        <td style="text-align:center;"><input type="checkbox" data-f="inventory" {{if .Inventory}}checked{{end}}></td>
                         <td style="text-align:center;"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
                     </tr>
                     {{end}}
@@ -324,6 +326,7 @@
                     <td style="text-align:center;"><input type="checkbox" data-f="pricing" checked></td>
                     <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" checked></td>
                     <td style="text-align:center;"><input type="checkbox" data-f="suppliers" checked></td>
+                    <td style="text-align:center;"><input type="checkbox" data-f="inventory" checked></td>
                     <td style="text-align:center;"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
                 </tr>
             </template>

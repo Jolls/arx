@@ -1,0 +1,73 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}</li>
+    </ol>
+</nav>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{/* ── Stock on hand + adjustment form ───────────────────── */}}
+    <div class="part-status-bar mb-3">
+        <div class="part-status-cell">
+            <div class="part-status-label">Stock on hand</div>
+            <div style="font-size:1.4em; font-weight:700; color:#333;">{{printf "%.2f" .Part.StockOnHand}}</div>
+        </div>
+        <div class="part-status-cell part-status-cell--flex">
+            <div class="part-status-label">Adjust stock</div>
+            <form method="post" action="/part/{{.Part.PNID}}/adjust-stock" class="d-flex flex-wrap gap-2 align-items-end mt-1">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <div>
+                    <label class="form-label mb-0" style="font-size:0.8em;">Qty (+/−)</label>
+                    <input type="number" step="any" name="qty" class="form-control form-control-sm" style="width:110px;" placeholder="e.g. 10 or -5" required>
+                </div>
+                <div>
+                    <label class="form-label mb-0" style="font-size:0.8em;">Date</label>
+                    <input type="date" name="txn_date" class="form-control form-control-sm" value="{{.Today}}">
+                </div>
+                <div style="flex:1; min-width:180px;">
+                    <label class="form-label mb-0" style="font-size:0.8em;">Reason (required)</label>
+                    <input type="text" name="reason" class="form-control form-control-sm" placeholder="Cycle count, scrap, correction…" required>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Adjust</button>
+            </form>
+        </div>
+    </div>
+
+    {{/* ── Ledger ────────────────────────────────────────────── */}}
+    {{if .Txns}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th style="width:100px;">Date</th>
+                    <th style="width:110px;">Type</th>
+                    <th style="width:90px; text-align:right;">Qty</th>
+                    <th style="width:90px; text-align:right;">Balance</th>
+                    <th style="width:150px;">By</th>
+                    <th style="width:120px;">Reference</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Txns}}
+                <tr>
+                    <td>{{.Date}}</td>
+                    <td>{{template "inv_txn_badge" .Type}}</td>
+                    <td style="text-align:right;">{{printf "%+.2f" .Qty}}</td>
+                    <td style="text-align:right;">{{printf "%.2f" .Balance}}</td>
+                    <td>{{.Username}}</td>
+                    <td>{{.Reference}}</td>
+                    <td>{{.Note}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Txns}} transaction{{if ne (len .Txns) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No inventory transactions yet. Use the adjust form above to set an opening balance.</p>
+    {{end}}
+</div>
+{{end}}

@@ -44,6 +44,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.mfg_part',                 'U') IS NOT NULL DROP TABLE dbo.mfg_part;
     IF OBJECT_ID('dbo.PL',                       'U') IS NOT NULL DROP TABLE dbo.PL;
     IF OBJECT_ID('dbo.price',                    'U') IS NOT NULL DROP TABLE dbo.price;
+    IF OBJECT_ID('dbo.inventory_transaction',    'U') IS NOT NULL DROP TABLE dbo.inventory_transaction;
     IF OBJECT_ID('dbo.POL',                      'U') IS NOT NULL DROP TABLE dbo.POL;
     IF OBJECT_ID('dbo.PO_history',               'U') IS NOT NULL DROP TABLE dbo.PO_history;
     IF OBJECT_ID('dbo.PO',                       'U') IS NOT NULL DROP TABLE dbo.PO;
@@ -77,6 +78,7 @@ BEGIN TRY
     SELECT * INTO dbo.company_attachment      FROM ArxProd.dbo.company_attachment;
     SELECT * INTO dbo.company                 FROM ArxProd.dbo.company;
     SELECT * INTO dbo.PN                      FROM ArxProd.dbo.PN;
+    SELECT * INTO dbo.inventory_transaction   FROM ArxProd.dbo.inventory_transaction;
     SELECT * INTO dbo.Forms                   FROM ArxProd.dbo.Forms;
     SELECT * INTO dbo.form_events             FROM ArxProd.dbo.form_events;
     SELECT * INTO dbo.record_events           FROM ArxProd.dbo.record_events;

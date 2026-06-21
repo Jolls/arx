@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.28] - 2026-06-20 
+- pm: Inventory core — per-part stock on hand backed by an append-only `inventory_transaction` ledger; Transactions tab on stockable parts (configurable per category in Settings) with running balance + manual adjustments (reason required) ([#272](https://github.com/Jolls/arx-legacy/issues/272), [#274](https://github.com/Jolls/arx-legacy/issues/274))
+- pm: dropped the legacy `PN.PNQty` column (superseded by `stock_on_hand`); DB schema bumped to v3 — run `migrate_inventory_core.sql` before deploying this build
+
 ## [0.5.27] - 2026-06-20 
 - pm: PO approval workflow — Submit / Approve / Reject from the PO page; POs cannot be sent or printed until approved; editing an approved PO resets its approval; designated approvers configured via a "PO Approver" toggle in Settings → Users. Status and approval events now share one unified PO history timeline (`PO_history`, replacing `PO_status_history`) ([#267](https://github.com/Jolls/arx-legacy/issues/267))
 
