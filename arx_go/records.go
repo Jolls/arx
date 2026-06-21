@@ -51,9 +51,9 @@ func substituteStepSelf(s string, step *models.TestStep) string {
 // substituteRefs replaces tokens in s:
 //   - {123}              → recorded result for step 123, falling back to that step's spec_nom
 //   - {record.type}      → record's Type (comments field)
-//   - {record.pn}        → record's unit-under-test part number (serial_number_PN)
+//   - {record.pn}        → record's unit-under-test part number (serial_number_pn)
 //   - {record.sn}        → record's serial number
-//   - {record.pndesc}    → record's unit-under-test description (serial_number_PNDesc / title)
+//   - {record.pndesc}    → record's unit-under-test description (serial_number_pn_desc / title)
 //   - {record.date}      → record's test date (MM/DD/YYYY) — date only, safe for SQL format 101
 //   - {record.datetime}  → record's test date + time (MM/DD/YYYY H:MM AM/PM)
 //
@@ -125,10 +125,10 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 // FormsList â€" GET /
 func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.id
-		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.active = 1
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.is_active = 1
 		ORDER BY pn.part_number ASC`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()))
 	if err != nil {
@@ -164,10 +164,10 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	// Load the form header.
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.id
-		WHERE f.ID = @p1`,
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
@@ -183,12 +183,12 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	wipOnly := r.URL.Query().Get("wip") != "false"
 
 	query := fmt.Sprintf(`
-		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
+		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
 		FROM %s
-		WHERE form_id = @p1 AND active = 1`, h.cfg.RecordsTable())
+		WHERE form_id = @p1 AND is_active = 1`, h.cfg.RecordsTable())
 	if wipOnly {
-		query += " AND locked = 0"
+		query += " AND is_locked = 0"
 	}
 	// serial_number + 0 forces numeric sort (same trick as Ruby Arel version)
 	query += " ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC"
@@ -234,10 +234,10 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.id
-		WHERE f.ID = @p1`,
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
@@ -250,7 +250,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
+		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
 		       instrument_types, format, comment,
@@ -413,7 +413,7 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT t.id,
 		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.type,0)            ELSE COALESCE(t.type,0)            END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.Parameter,'')      ELSE COALESCE(t.Parameter,'')      END,
+		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.parameter,'')      ELSE COALESCE(t.parameter,'')      END,
 		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.spec_nom,'')       ELSE COALESCE(t.spec_nom,'')       END,
 		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.spec_min,'')       ELSE COALESCE(t.spec_min,'')       END,
 		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.spec_max,'')       ELSE COALESCE(t.spec_max,'')       END,
@@ -424,7 +424,7 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		       CASE WHEN h.test_id IS NOT NULL THEN 1 ELSE 0 END
 		FROM %s t
 		LEFT JOIN (
-		    SELECT test_id, type, Parameter, spec_nom, spec_min, spec_max,
+		    SELECT test_id, type, parameter, spec_nom, spec_min, spec_max,
 		           spec_units, pf_type, default_result, hide_formula
 		    FROM %s
 		    WHERE CAST(changed_at AS DATE) = CAST(@p2 AS DATE)
@@ -467,9 +467,9 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title,
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title,
 		       f.record_types, f.instrument_types
-		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title,
 			&recordTypes, &instrumentTypes)
@@ -486,7 +486,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 
 	// Load raw step values â€" no substituteRefs, we want to edit the actual stored values.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, COALESCE(type,0) AS type, Parameter, Specification, spec_nom, spec_min, spec_max, spec_units,
+		SELECT id, COALESCE(type,0) AS type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
 		       pf_type, default_result, hide_formula, category, sheet_name,
 		       instrument_types, format, comment
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
@@ -627,7 +627,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 
 		tx.ExecContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET
-			  type=@p1, Parameter=@p2, Specification=@p3,
+			  type=@p1, parameter=@p2, specification=@p3,
 			  spec_nom=@p4, spec_min=@p5, spec_max=@p6, spec_units=@p7,
 			  pf_type=@p8, default_result=@p9, hide_formula=@p10,
 			  category=@p11, sheet_name=@p12, instrument_types=@p13,
@@ -719,7 +719,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		var newID int
 		if err2 := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s
-			  (form_id, type, Parameter, Specification, spec_nom, spec_min, spec_max, spec_units,
+			  (form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
 			   pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
 			   format, comment, created_at, updated_at)
 			OUTPUT INSERTED.id
@@ -791,11 +791,11 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 
 		var currentOrder string
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			"SELECT COALESCE(test_order,'') FROM %s WHERE ID=@p1", h.cfg.FormsTable()),
+			"SELECT COALESCE(test_order,'') FROM %s WHERE id=@p1", h.cfg.FormsTable()),
 			formID).Scan(&currentOrder)
 		if normalizeOrder(stepOrder) != normalizeOrder(currentOrder) {
 			h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET test_order=@p1 WHERE ID=@p2", h.cfg.FormsTable()),
+				"UPDATE %s SET test_order=@p1 WHERE id=@p2", h.cfg.FormsTable()),
 				normalizeOrder(stepOrder), formID)
 		}
 	}
@@ -806,7 +806,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	if newRecordTypes != r.FormValue("original_record_types") ||
 		newInstrTypes != r.FormValue("original_instrument_types") {
 		h.execContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET record_types=@p1, instrument_types=@p2 WHERE ID=@p3",
+			"UPDATE %s SET record_types=@p1, instrument_types=@p2 WHERE id=@p3",
 			h.cfg.FormsTable()),
 			nullOrVal(newRecordTypes), nullOrVal(newInstrTypes), formID)
 	}
@@ -824,9 +824,9 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
-		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
+		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
@@ -841,10 +841,10 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.id
-		WHERE f.ID = @p1`,
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err != nil {
@@ -855,7 +855,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	// debug columns still needed for form authoring — see FUTURE_GOALS.md (debug fields cleanup)
 	// Load all test steps for this form, keyed by ID.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
+		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
 		       instrument_types, format, comment,
@@ -913,7 +913,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	// Load all results for this record, keyed by test ID.
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, record_id, test_id,
+		SELECT id, record_id, test_id,
 		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
 		       pass_fail, COALESCE(comment,''), updated_at
 		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
@@ -977,12 +977,12 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	var prevID, nextID int
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
 		WITH ordered AS (
-			SELECT ID,
-			       LAG(ID)  OVER (ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC) AS prev_id,
-			       LEAD(ID) OVER (ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC) AS next_id
-			FROM %s WHERE form_id = @p1 AND active = 1
+			SELECT id,
+			       LAG(id)  OVER (ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC) AS prev_id,
+			       LEAD(id) OVER (ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC) AS next_id
+			FROM %s WHERE form_id = @p1 AND is_active = 1
 		)
-		SELECT COALESCE(prev_id, 0), COALESCE(next_id, 0) FROM ordered WHERE ID = @p2`,
+		SELECT COALESCE(prev_id, 0), COALESCE(next_id, 0) FROM ordered WHERE id = @p2`,
 		h.cfg.RecordsTable()), record.FormID, recordID).Scan(&prevID, &nextID)
 
 	var imageRows []models.ResultRow
@@ -1016,9 +1016,9 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
-		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
+		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
@@ -1033,10 +1033,10 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.id
-		WHERE f.ID = @p1`,
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err != nil {
@@ -1045,7 +1045,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
+		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
 		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
 		       instrument_types, format, comment,
@@ -1102,7 +1102,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, record_id, test_id,
+		SELECT id, record_id, test_id,
 		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
 		       pass_fail, COALESCE(comment,''), updated_at
 		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
@@ -1194,8 +1194,8 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.record_types, f.instrument_types
-		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title, f.record_types, f.instrument_types
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes, &instrumentTypes)
 	if err == sql.ErrNoRows {
@@ -1264,8 +1264,8 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
-		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
@@ -1309,9 +1309,9 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	var newID int
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s
-		  (form_id, part_number_id, serial_number, serial_number_PN, serial_number_PNDesc,
-		   comments, instrument_type, test_order, record_date, created_at, active, locked)
-		OUTPUT INSERTED.ID
+		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
+		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked)
+		OUTPUT INSERTED.id
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0)`,
 		h.cfg.RecordsTable()),
 		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate).Scan(&newID)
@@ -1333,9 +1333,9 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
-		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
+		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
@@ -1355,8 +1355,8 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	var editInstrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.instrument_types
-		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title, f.instrument_types
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &editInstrumentTypes)
 	if err != nil {
@@ -1366,7 +1366,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	form.InstrumentTypes = editInstrumentTypes.String
 
 	editStepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
+		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type, spec_units, spec_nom
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
@@ -1399,7 +1399,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	editResRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, record_id, test_id,
+		SELECT id, record_id, test_id,
 		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
 		       pass_fail, COALESCE(comment,''), updated_at
 		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
@@ -1489,7 +1489,7 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET locked=1, updated_at=GETDATE() WHERE ID=@p1 AND locked=0",
+		"UPDATE %s SET is_locked=1, updated_at=GETDATE() WHERE id=@p1 AND is_locked=0",
 		h.cfg.RecordsTable()), recordID)
 	if err != nil {
 		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
@@ -1530,7 +1530,7 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET locked=0, updated_at=GETDATE() WHERE ID=@p1 AND locked=1",
+		"UPDATE %s SET is_locked=0, updated_at=GETDATE() WHERE id=@p1 AND is_locked=1",
 		h.cfg.RecordsTable()), recordID)
 	if err != nil {
 		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
@@ -1561,7 +1561,7 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET locked=1 WHERE ID=@p1 AND locked=0",
+		"UPDATE %s SET is_locked=1 WHERE id=@p1 AND is_locked=0",
 		h.cfg.FormsTable()), formID)
 	if err != nil {
 		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
@@ -1602,7 +1602,7 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET locked=0 WHERE ID=@p1 AND locked=1",
+		"UPDATE %s SET is_locked=0 WHERE id=@p1 AND is_locked=1",
 		h.cfg.FormsTable()), formID)
 	if err != nil {
 		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
@@ -1632,9 +1632,9 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, form_id, COALESCE(part_number_id,0), serial_number, serial_number_PN, serial_number_PNDesc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, locked, active, test_order
-		FROM %s WHERE ID = @p1`, h.cfg.RecordsTable()), recordID).
+		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
@@ -1653,7 +1653,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 
 	// Load steps for pass_fail computation and INSERT snapshots.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, Parameter, Specification, default_result, hide_formula, COALESCE(type,0) AS type,
+		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type, spec_units, spec_nom
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
@@ -1693,7 +1693,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 	existing := map[int]savedResult{}
 	exRows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		"SELECT ID, test_id, result, comment FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
+		"SELECT id, test_id, result, comment FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1734,7 +1734,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 				// #251: insert into TestResultHistory here when per-result change history is added
 				h.execContext(r.Context(), fmt.Sprintf(`
 					UPDATE %s SET result=@p1, comment=@p2, pass_fail=@p3, updated_at=GETDATE()
-					WHERE ID=@p4`, h.cfg.ResultsTable()),
+					WHERE id=@p4`, h.cfg.ResultsTable()),
 					result, comment, passFail, prev.ID)
 			}
 		} else if result != "" || comment != "" {
@@ -1761,16 +1761,16 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		}
 		if parseErr == nil {
 			h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, updated_at=GETDATE() WHERE ID=@p4",
+				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, updated_at=GETDATE() WHERE id=@p4",
 				h.cfg.RecordsTable()), rd, comments, instrumentType, recordID)
 		} else {
 			h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE ID=@p3",
+				"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE id=@p3",
 				h.cfg.RecordsTable()), comments, instrumentType, recordID)
 		}
 	} else {
 		h.execContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE ID=@p3",
+			"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE id=@p3",
 			h.cfg.RecordsTable()), comments, instrumentType, recordID)
 	}
 
@@ -1792,7 +1792,7 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 		FROM %s
 		WHERE category = 'FORM' AND is_active = 1
 		  AND NOT EXISTS (
-		      SELECT 1 FROM %s WHERE PNID = %s.id AND active = 1
+		      SELECT 1 FROM %s WHERE part_number_id = %s.id AND is_active = 1
 		  )
 		ORDER BY part_number`,
 		h.cfg.PartsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()))
@@ -1816,13 +1816,13 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFormID int) error {
 	var sourceOrder string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		"SELECT COALESCE(test_order,'') FROM %s WHERE ID=@p1", h.cfg.FormsTable()), sourceID).
+		"SELECT COALESCE(test_order,'') FROM %s WHERE id=@p1", h.cfg.FormsTable()), sourceID).
 		Scan(&sourceOrder); err != nil {
 		return err
 	}
 
 	stepRows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, COALESCE(type,0), Parameter, Specification, spec_nom, spec_min, spec_max,
+		SELECT id, COALESCE(type,0), parameter, specification, spec_nom, spec_min, spec_max,
 		       spec_units, pf_type, default_result, hide_formula,
 		       category, sheet_name, instrument_types, format, comment,
 		       archive_id, revision
@@ -1881,7 +1881,7 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFo
 		var newStepID int
 		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s
-			  (form_id, type, Parameter, Specification, spec_nom, spec_min, spec_max,
+			  (form_id, type, parameter, specification, spec_nom, spec_min, spec_max,
 			   spec_units, pf_type, default_result, hide_formula,
 			   category, sheet_name, instrument_types, format, comment,
 			   archive_id, revision)
@@ -1904,7 +1904,7 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFo
 		idParts[i] = strconv.Itoa(id)
 	}
 	_, err = tx.ExecContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET test_order=@p1 WHERE ID=@p2", h.cfg.FormsTable()),
+		"UPDATE %s SET test_order=@p1 WHERE id=@p2", h.cfg.FormsTable()),
 		strings.Join(idParts, ","), newFormID)
 	return err
 }
@@ -1919,9 +1919,9 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 
 	// Load existing active forms for the "copy steps from" dropdown.
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, pn.part_number, pn.title
-		FROM %s f JOIN %s pn ON f.PNID = pn.id
-		WHERE f.active = 1 ORDER BY pn.part_number`,
+		SELECT f.id, pn.part_number, pn.title
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id
+		WHERE f.is_active = 1 ORDER BY pn.part_number`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()))
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
@@ -1976,7 +1976,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	var srcRecordTypes, srcInstrTypes sql.NullString
 	if sourceID > 0 {
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			"SELECT record_types, instrument_types FROM %s WHERE ID=@p1",
+			"SELECT record_types, instrument_types FROM %s WHERE id=@p1",
 			h.cfg.FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
 	}
 
@@ -1988,7 +1988,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 
 	var newID int
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-		"INSERT INTO %s (PNID, active, locked, test_order, record_types, instrument_types) OUTPUT INSERTED.ID VALUES (@p1, 1, 0, '', @p2, @p3)",
+		"INSERT INTO %s (part_number_id, is_active, is_locked, test_order, record_types, instrument_types) OUTPUT INSERTED.id VALUES (@p1, 1, 0, '', @p2, @p3)",
 		h.cfg.FormsTable()), pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
 		tx.Rollback()
 		http.Error(w, "create error: "+err.Error(), http.StatusInternalServerError)
@@ -2021,8 +2021,8 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
-		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
@@ -2085,7 +2085,7 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	// Carry over form-level settings from the source form.
 	var srcRecordTypes, srcInstrTypes sql.NullString
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT record_types, instrument_types FROM %s WHERE ID=@p1",
+		"SELECT record_types, instrument_types FROM %s WHERE id=@p1",
 		h.cfg.FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
 
 	tx, err := h.db.BeginTx(r.Context(), nil)
@@ -2096,7 +2096,7 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 
 	var newFormID int
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-		"INSERT INTO %s (PNID, active, locked, test_order, record_types, instrument_types) OUTPUT INSERTED.ID VALUES (@p1, 1, 0, '', @p2, @p3)",
+		"INSERT INTO %s (part_number_id, is_active, is_locked, test_order, record_types, instrument_types) OUTPUT INSERTED.id VALUES (@p1, 1, 0, '', @p2, @p3)",
 		h.cfg.FormsTable()), pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {
 		tx.Rollback()
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
@@ -2133,10 +2133,10 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.id
-		WHERE f.ID = @p1`,
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
@@ -2159,7 +2159,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 	var step stepMeta
 	var param, spec, specUnits, format sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(Parameter,''), COALESCE(Specification,''),
+		SELECT id, form_id, COALESCE(parameter,''), COALESCE(specification,''),
 		       COALESCE(spec_units,''), COALESCE(format,'')
 		FROM %s WHERE id = @p1`, h.cfg.StepsTable()), testID).
 		Scan(&step.ID, &step.FormID, &param, &spec, &specUnits, &format)
@@ -2190,14 +2190,14 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT trec.ID, trec.serial_number, COALESCE(trec.serial_number_PN,''),
+		SELECT trec.id, trec.serial_number, COALESCE(trec.serial_number_pn,''),
 		       COALESCE(trec.part_number_id,0),
-		       trec.record_date, trec.locked,
+		       trec.record_date, trec.is_locked,
 		       COALESCE(res.result,''), res.pass_fail, COALESCE(res.comment,''),
 		       res.updated_at
 		FROM %s res
-		JOIN %s trec ON res.record_id = trec.ID
-		WHERE res.test_id = @p1 AND trec.form_id = @p2 AND trec.active = 1
+		JOIN %s trec ON res.record_id = trec.id
+		WHERE res.test_id = @p1 AND trec.form_id = @p2 AND trec.is_active = 1
 		ORDER BY TRY_CAST(trec.serial_number AS INT) DESC, trec.record_date DESC`,
 		h.cfg.ResultsTable(), h.cfg.RecordsTable()), testID, formID)
 	if err != nil {

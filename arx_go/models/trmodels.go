@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// TestForm is a row in the Forms table.
-// PartNumber and Title are joined from the PN table.
+// TestForm is a row in the form table.
+// PartNumber and Title are joined from the part_number table.
 type TestForm struct {
 	ID          int
 	PNID        int
@@ -55,7 +55,7 @@ func (f TestForm) RecordTypeList() []string {
 	return out
 }
 
-// TestRecord is a row in the TestRecords table.
+// TestRecord is a row in the test_record table.
 type TestRecord struct {
 	ID               int
 	FormID           int
@@ -104,7 +104,7 @@ type TestStep struct {
 	StepUpdatedAt    *time.Time
 }
 
-// TestResult is a row in the TestResults table.
+// TestResult is a row in the test_result table.
 type TestResult struct {
 	ID            int
 	RecordID      int

@@ -142,10 +142,10 @@ func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "LNK" }
 
 // Test Records tables
-func (c *Config) FormsTable() string                 { return "Forms" }
-func (c *Config) RecordsTable() string               { return "TestRecords" }
+func (c *Config) FormsTable() string                 { return "form" }
+func (c *Config) RecordsTable() string               { return "test_record" }
 func (c *Config) StepsTable() string                 { return "test_definition" }
-func (c *Config) ResultsTable() string               { return "TestResults" }
+func (c *Config) ResultsTable() string               { return "test_result" }
 func (c *Config) NamedQueriesTable() string          { return "named_queries" }
 func (c *Config) TestDefinitionHistoryTable() string { return "test_definition_history" }
 func (c *Config) FormEventsTable() string            { return "form_events" }

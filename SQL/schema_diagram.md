@@ -118,18 +118,18 @@ erDiagram
         int     has_links
     }
 
-    Forms {
-        int     ID              PK
-        int     PNID            FK
-        bit     locked
-        bit     active
+    form {
+        int     id              PK
+        int     part_number_id  FK
+        bit     is_locked
+        bit     is_active
     }
 
     test_definition {
         int     id              PK
         int     form_id         FK
-        varchar Parameter
-        varchar Specification
+        varchar parameter
+        varchar specification
         varchar spec_min
         varchar spec_max
         varchar spec_nom
@@ -137,18 +137,18 @@ erDiagram
         int     revision
     }
 
-    TestRecords {
-        int      ID             PK
+    test_record {
+        int      id             PK
         int      form_id        FK
         int      part_number_id FK
         varchar  serial_number
         datetime record_date
-        bit      locked
-        bit      active
+        bit      is_locked
+        bit      is_active
     }
 
-    TestResults {
-        int     ID              PK
+    test_result {
+        int     id              PK
         int     record_id       FK
         int     test_id         FK
         int     form_id         FK
@@ -198,13 +198,13 @@ erDiagram
     purchase_order ||--o{ part_attachment : "attached files (sort_order)"
 
     %% Test records
-    part_number ||--o{    Forms       : "test forms (PNID)"
-    part_number ||--o{    TestRecords : "test records (part_number_id)"
-    Forms       ||--o{    test_definition : "test definitions (form_id)"
-    Forms       ||--o{    TestRecords : "executed records (form_id)"
-    Forms       ||--o{    TestResults : "results (form_id)"
-    TestRecords ||--o{    TestResults : "results (record_id)"
-    test_definition ||--o{    TestResults : "result per test (test_id)"
+    part_number ||--o{    form        : "test forms (part_number_id)"
+    part_number ||--o{    test_record : "test records (part_number_id)"
+    form        ||--o{    test_definition : "test definitions (form_id)"
+    form        ||--o{    test_record : "executed records (form_id)"
+    form        ||--o{    test_result : "results (form_id)"
+    test_record ||--o{    test_result : "results (record_id)"
+    test_definition ||--o{    test_result : "result per test (test_id)"
 ```
 
 ## Notes
@@ -212,5 +212,5 @@ erDiagram
 - **part_attachment.part_id** is an INT FK to `part_number.id` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
 - **purchase_order.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
-- **TestRecordHistory.record_id** is polymorphic — it references either `Forms.ID` or `TestRecords.ID` depending on `history_type`.
+- **TestRecordHistory.record_id** is polymorphic — it references either `form.id` or `test_record.id` depending on `history_type`.
 - **part_types**, **logs**, and **release_notes** have no foreign key relationships.
