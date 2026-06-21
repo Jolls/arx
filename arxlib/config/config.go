@@ -13,7 +13,7 @@ import (
 
 // ExpectedSchemaVersion is the app_config schema_version this build requires.
 // Bump this whenever a migration changes the DB schema.
-const ExpectedSchemaVersion = "2"
+const ExpectedSchemaVersion = "3"
 
 // Config holds all configuration for the merged Arx application.
 type Config struct {
@@ -136,6 +136,7 @@ func (c *Config) MfgPartTable() string            { return "mfg_part" }
 func (c *Config) CompanyAttachmentsTable() string { return "company_attachment" }
 func (c *Config) ContactTable() string            { return "CN" }
 func (c *Config) UnitTable() string               { return "unit" }
+func (c *Config) InventoryTxnTable() string       { return "inventory_transaction" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
 func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "LNK" }

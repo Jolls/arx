@@ -9,13 +9,16 @@ func TestTabsForCategory(t *testing.T) {
 		code string
 		want CategoryTabs
 	}{
-		// Assemblies and manufactured parts author a BOM + full procurement.
-		{"ASM", CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true}},
-		{"MFG", CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true}},
+		// Assemblies and manufactured parts author a BOM + full procurement + inventory.
+		{"ASM", CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true}},
+		{"MFG", CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true}},
 		// Test Form authors a BOM but isn't procured.
 		{"FORM", CategoryTabs{BOM: true}},
-		// Purchased: procurement tabs, BOM left data-driven.
-		{"BUY", CategoryTabs{Orders: true, Pricing: true, MfgParts: true, Suppliers: true}},
+		// Purchased + stocked: procurement tabs + inventory, BOM left data-driven.
+		{"BUY", CategoryTabs{Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true}},
+		// Purchased but not stocked: procurement tabs, no inventory.
+		{"SVC", CategoryTabs{Orders: true, Pricing: true, MfgParts: true, Suppliers: true}},
+		{"TOOL", CategoryTabs{Orders: true, Pricing: true, MfgParts: true, Suppliers: true}},
 		// Paperwork: nothing optional.
 		{"DOC", CategoryTabs{}},
 		// Unknown and empty codes fall back to the permissive default.
@@ -48,6 +51,29 @@ func TestDefaultCategories(t *testing.T) {
 	}
 	if (tabs["DOC"] != CategoryTabs{}) {
 		t.Errorf("DOC should expose no optional tabs, got %+v", tabs["DOC"])
+	}
+}
+
+func TestShowInventory(t *testing.T) {
+	cats := DefaultCategories()
+	stocked := []string{"BUY", "RAW", "MFG", "ASM"}
+	notStocked := []string{"DOC", "DWG", "FORM", "SVC", "TOOL"}
+	for _, code := range stocked {
+		if !TabsForCategory(cats, code).Inventory {
+			t.Errorf("%s should be stockable (Inventory=true)", code)
+		}
+	}
+	for _, code := range notStocked {
+		if TabsForCategory(cats, code).Inventory {
+			t.Errorf("%s should not be stockable (Inventory=false)", code)
+		}
+	}
+	// ShowInventory reads the resolved flag.
+	if !(Part{Tabs: CategoryTabs{Inventory: true}}).ShowInventory() {
+		t.Error("ShowInventory() = false when Tabs.Inventory is true")
+	}
+	if (Part{Tabs: CategoryTabs{}}).ShowInventory() {
+		t.Error("ShowInventory() = true when Tabs.Inventory is false")
 	}
 }
 

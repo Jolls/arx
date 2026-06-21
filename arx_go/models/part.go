@@ -20,7 +20,7 @@ type Part struct {
 	PNDate           *time.Time
 	PNDateModified   *time.Time
 	PNFILIDPrimary   int
-	PNQty            float64
+	StockOnHand      float64
 	PNCurrentCost    float64
 	PNLastRollupCost float64
 	PNLastRollupAt   *time.Time
@@ -52,6 +52,7 @@ type CategoryTabs struct {
 	Pricing   bool `json:"pricing"`
 	MfgParts  bool `json:"mfgParts"`
 	Suppliers bool `json:"suppliers"`
+	Inventory bool `json:"inventory"`
 }
 
 // Category is a configurable part category: a code, a display label, and the
@@ -66,13 +67,15 @@ type Category struct {
 // DefaultCategoryTabs is the permissive fallback for categories that aren't in
 // the configured list (and empty/unknown codes): every procurement tab shown,
 // BOM left data-driven. We only hide tabs for categories explicitly configured.
-var DefaultCategoryTabs = CategoryTabs{Orders: true, Pricing: true, MfgParts: true, Suppliers: true}
+var DefaultCategoryTabs = CategoryTabs{Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true}
 
 // DefaultCategories is the seed list shown until an admin customizes it in
 // Settings. It reproduces the original hardcoded behavior.
 func DefaultCategories() []Category {
-	proc := DefaultCategoryTabs                                                                    // purchased: procurement tabs, BOM data-driven
-	built := CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true} // made + possibly outsourced
+	proc := DefaultCategoryTabs                                                                                    // purchased + stocked: procurement tabs + inventory, BOM data-driven
+	built := CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true} // made + stocked
+	svc := proc                                                                                                    // purchased but not stocked (service, tooling)
+	svc.Inventory = false
 	return []Category{
 		{"ASM", "Assembly", built},
 		{"BUY", "Purchased", proc},
@@ -81,8 +84,8 @@ func DefaultCategories() []Category {
 		{"FORM", "Test Form", CategoryTabs{BOM: true}},
 		{"MFG", "Manufactured", built},
 		{"RAW", "Raw Material", proc},
-		{"SVC", "Service", proc},
-		{"TOOL", "Tooling", proc},
+		{"SVC", "Service", svc},
+		{"TOOL", "Tooling", svc},
 	}
 }
 
@@ -109,6 +112,7 @@ func (p Part) ShowOrders() bool    { return p.Tabs.Orders }
 func (p Part) ShowPricing() bool   { return p.Tabs.Pricing }
 func (p Part) ShowMfgParts() bool  { return p.Tabs.MfgParts }
 func (p Part) ShowSuppliers() bool { return p.Tabs.Suppliers }
+func (p Part) ShowInventory() bool { return p.Tabs.Inventory }
 
 // UserFieldsForEdit returns all 10 PNUser fields for the edit form (including empty ones).
 func (p Part) UserFieldsForEdit() []struct{ Name, Label, Value string } {

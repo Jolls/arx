@@ -75,6 +75,15 @@
 {{else}}<span class="badge bg-secondary">{{.}}</span>{{end}}
 {{end}}
 
+{{/* inv_txn_badge — pass the inventory transaction type code (.) */}}
+{{define "inv_txn_badge"}}
+{{if eq . "receipt"}}<span class="badge bg-success">Receipt</span>
+{{else if eq . "issue"}}<span class="badge bg-warning text-dark">Issue</span>
+{{else if eq . "adjustment"}}<span class="badge bg-info text-dark">Adjustment</span>
+{{else if eq . "count"}}<span class="badge bg-secondary">Count</span>
+{{else}}<span class="badge bg-secondary">{{.}}</span>{{end}}
+{{end}}
+
 {{define "part_tabs"}}
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>
@@ -98,6 +107,11 @@
     <a href="/part/{{$id}}/orders"      class="sub-tab{{if eq $sub "orders"}} active{{end}}">Order History</a>
     {{else}}
     <span class="sub-tab disabled" title="Order history does not apply to {{$part.Category}} parts">Order History</span>
+    {{end}}
+    {{if $part.ShowInventory}}
+    <a href="/part/{{$id}}/transactions" class="sub-tab{{if eq $sub "transactions"}} active{{end}}">Transactions</a>
+    {{else}}
+    <span class="sub-tab disabled" title="Inventory does not apply to {{$part.Category}} parts">Transactions</span>
     {{end}}
     <a href="/part/{{$id}}/attachments" class="sub-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
     {{if $part.ShowPricing}}

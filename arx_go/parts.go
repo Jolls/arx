@@ -23,15 +23,17 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	var partNumber, title, category sql.NullString
 	var hasBOM sql.NullBool
 	var filIDPrimary sql.NullInt64
+	var stockOnHand sql.NullFloat64
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT PNID, part_number, title, category, has_bom, PNFILIDPrimary FROM %s WHERE PNID = @p1`,
+		`SELECT PNID, part_number, title, category, has_bom, PNFILIDPrimary, stock_on_hand FROM %s WHERE PNID = @p1`,
 		h.cfg.PartsTable(),
-	), id).Scan(&p.PNID, &partNumber, &title, &category, &hasBOM, &filIDPrimary)
+	), id).Scan(&p.PNID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand)
 	p.PartNumber = partNumber.String
 	p.Title = title.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
 	p.PNFILIDPrimary = int(filIDPrimary.Int64)
+	p.StockOnHand = stockOnHand.Float64
 	return p, err
 }
 
@@ -130,15 +132,16 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		pnDate, pnDateModified, lastRollupAt          sql.NullTime
 		active, hasBOM                                sql.NullBool
 		filIDPrimary, filLinks, poLinks               sql.NullInt64
-		qty, currentCost, lastRollupCost              sql.NullFloat64
+		currentCost, lastRollupCost                   sql.NullFloat64
+		stockOnHand                                   sql.NullFloat64
 		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT PNID, part_number, revision, title, detail, category, has_bom,
 		       release_status, active, PNReqBy, PNNotes,
 		       PNDate, PNDateModified, PNFILIDPrimary,
-		       PNQty, PNCurrentCost, PNLastRollupCost, PNLastRollupAt, PNFILLinks, PNPOLinks,
-		       PNUNID,
+		       PNCurrentCost, PNLastRollupCost, PNLastRollupAt, PNFILLinks, PNPOLinks,
+		       PNUNID, stock_on_hand,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s WHERE PNID = @p1
@@ -146,8 +149,8 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
-		&qty, &currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
-		&unitID,
+		&currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
+		&unitID, &stockOnHand,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -171,7 +174,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	p.PNReqBy = reqBy.String
 	p.PNNotes = notes.String
 	p.PNFILIDPrimary = int(filIDPrimary.Int64)
-	p.PNQty = qty.Float64
+	p.StockOnHand = stockOnHand.Float64
 	p.PNCurrentCost = currentCost.Float64
 	p.PNLastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {

@@ -57,6 +57,7 @@ func (h *Handler) SettingsCategoriesSave(w http.ResponseWriter, r *http.Request)
 				Pricing:   r.FormValue("pricing_"+strconv.Itoa(i)) == "1",
 				MfgParts:  r.FormValue("mfgparts_"+strconv.Itoa(i)) == "1",
 				Suppliers: r.FormValue("suppliers_"+strconv.Itoa(i)) == "1",
+				Inventory: r.FormValue("inventory_"+strconv.Itoa(i)) == "1",
 			},
 		})
 	}

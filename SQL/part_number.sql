@@ -37,7 +37,6 @@ CREATE TABLE PN (
   user_field_9      VARCHAR(255)     CONSTRAINT DF_PN_user_field_9     DEFAULT '',
   user_field_10     VARCHAR(255)     CONSTRAINT DF_PN_user_field_10    DEFAULT '',
   PNDate            DATE             CONSTRAINT DF_PN_PNDate           DEFAULT GETDATE(),
-  PNQty             DECIMAL(16,8)    CONSTRAINT DF_PN_PNQty            DEFAULT 0,
   PNLastRollupCost  DECIMAL(16,8)    NULL,                                            -- NULL = no rollup ever run.
   PNLastRollupAt    DATETIME         NULL,                                            -- NULL = no rollup ever run.
   PNFILLinks        INT              CONSTRAINT DF_PN_PNFILLinks       DEFAULT 0,    -- Denormalized count of FIL rows for this part.
@@ -47,7 +46,8 @@ CREATE TABLE PN (
   PNPOLinks         INT              CONSTRAINT DF_PN_PNPOLinks        DEFAULT 0,    -- Denormalized count of POL rows for this part.
   PNDateModified    DATE             CONSTRAINT DF_PN_PNDateModified   DEFAULT GETDATE(),
   price_id          INT              CONSTRAINT DF_PN_price_id         DEFAULT 0,    -- FK to price table; FK constraint deferred — see #213.
-  PNUNID            INT              NULL                                              -- FK to unit.unit_id. Base/inventory unit for this part (EA, mL, kg, …).
+  PNUNID            INT              NULL,                                             -- FK to unit.unit_id. Base/inventory unit for this part (EA, mL, kg, …).
+  stock_on_hand     DECIMAL(16,8)    NOT NULL CONSTRAINT DF_PN_stock_on_hand DEFAULT 0 -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
 );
 
 ALTER TABLE dbo.PN ADD CONSTRAINT FK_PN_unit FOREIGN KEY (PNUNID) REFERENCES dbo.unit (unit_id);

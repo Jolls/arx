@@ -97,7 +97,9 @@
     {{/* ── Pricing & quantities ────────────────────────────────── */}}
     <div class="detail-section">
         <h3>Pricing &amp; Quantities</h3>
-        <div class="detail-row"><strong>Quantity:</strong>           <span>{{printf "%.8f" .Part.PNQty}}</span></div>
+        {{if .Part.ShowInventory}}
+        <div class="detail-row"><strong>Stock on hand:</strong>      <span>{{printf "%.2f" .Part.StockOnHand}} <a href="/part/{{.Part.PNID}}/transactions" class="small ms-1">Transactions</a></span></div>
+        {{end}}
         <div class="detail-row"><strong data-bs-toggle="tooltip" title="Manually entered cost; may differ from BOM roll-up">Current Cost:</strong>       <span>${{printf "%.8f" .Part.PNCurrentCost}}</span></div>
         <div class="detail-row"><strong data-bs-toggle="tooltip" title="Cost calculated from last BOM cost roll-up">Last Rollup Cost:</strong>   <span>{{if .Part.PNLastRollupAt}}${{printf "%.4f" .Part.PNLastRollupCost}} <span class="text-muted" style="font-size:0.85em;">{{.Part.PNLastRollupAt.Format "2006-01-02 15:04"}}</span>{{else}}<span class="muted">Never run</span>{{end}}</span></div>
         {{if .Part.PNLastRollupAt}}
