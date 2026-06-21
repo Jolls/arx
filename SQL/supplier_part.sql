@@ -13,9 +13,9 @@ CREATE TABLE supplier_part (
 
   -- Foreign keys
   supplier_id        INT            NOT NULL,    -- FK to company.id (who you buy from).
-  part_id            INT            NOT NULL,    -- FK to part_number.id (the internal part).
+  part_id            INT            NOT NULL,    -- FK to part.id (the internal part).
   mfg_part_id        INT,                        -- FK to mfg_part.id. NULL = buying direct or manufacturer unknown.
-  unit_id            INT,                        -- FK to unit.unit_id. Purchase unit (REEL, BOX, BTL, …). NULL = same as part's base unit (PN.PNUNID).
+  unit_id            INT,                        -- FK to unit.unit_id. Purchase unit (REEL, BOX, BTL, …). NULL = same as part's base unit (part.unit_id).
   -- alt_part_id removed — alternate/substitute parts is separate work (#278)
 
   -- Supplier catalog info
@@ -35,6 +35,6 @@ CREATE TABLE supplier_part (
 );
 
 ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_company  FOREIGN KEY (supplier_id)  REFERENCES dbo.company (id);
-ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_pn       FOREIGN KEY (part_id)      REFERENCES dbo.part_number (id);
+ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_pn       FOREIGN KEY (part_id)      REFERENCES dbo.part (id);
 ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_mfg_part FOREIGN KEY (mfg_part_id)  REFERENCES dbo.mfg_part (id);
 ALTER TABLE dbo.supplier_part ADD CONSTRAINT FK_supplier_part_unit     FOREIGN KEY (unit_id)      REFERENCES dbo.unit (unit_id);

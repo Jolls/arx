@@ -3,7 +3,7 @@
 ```mermaid
 erDiagram
 
-    part_number {
+    part {
         int     id                    PK
         varchar part_number           "UNIQUE"
         varchar category
@@ -186,20 +186,20 @@ erDiagram
     supplier    ||--o{    supplier_attachment : "attachments (supplier_id)"
     supplier    |o--||    supplier_attachment : "primary_attachment_id"
 
-    part_number ||--o{    LNK         : "vendor links (LNKPNID)"
-    part_number ||--o{    LNK         : "substitute parts (LNKToPNID)"
-    part_number ||--o{    po_line     : "on PO lines (part_id)"
-    part_number ||--o{    bom         : "in parts lists (component_part_id)"
-    part_number ||--o{    part_attachment : "attached files (part_id)"
-    part_number |o--||    price       : "active price (price_id)"
+    part ||--o{    LNK         : "vendor links (LNKPNID)"
+    part ||--o{    LNK         : "substitute parts (LNKToPNID)"
+    part ||--o{    po_line     : "on PO lines (part_id)"
+    part ||--o{    bom         : "in parts lists (component_part_id)"
+    part ||--o{    part_attachment : "attached files (part_id)"
+    part |o--||    price       : "active price (price_id)"
 
     %% Purchasing
     purchase_order ||--o{ po_line     : "line items (po_id)"
     purchase_order ||--o{ part_attachment : "attached files (sort_order)"
 
     %% Test records
-    part_number ||--o{    form        : "test forms (part_number_id)"
-    part_number ||--o{    test_record : "test records (part_number_id)"
+    part ||--o{    form        : "test forms (part_number_id)"
+    part ||--o{    test_record : "test records (part_number_id)"
     form        ||--o{    test_definition : "test definitions (form_id)"
     form        ||--o{    test_record : "executed records (form_id)"
     form        ||--o{    test_result : "results (form_id)"
@@ -209,7 +209,7 @@ erDiagram
 
 ## Notes
 
-- **part_attachment.part_id** is an INT FK to `part_number.id` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
+- **part_attachment.part_id** is an INT FK to `part.id` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
 - **purchase_order.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
 - **TestRecordHistory.record_id** is polymorphic — it references either `form.id` or `test_record.id` depending on `history_type`.

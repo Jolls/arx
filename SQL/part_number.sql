@@ -1,4 +1,6 @@
--- part_number: Part Numbers — the core parts catalog (renamed from PN in db-table-rename commit 6).
+-- part: Part Numbers — the core parts catalog (renamed from PN in db-table-rename commit 6;
+--   table renamed part_number → part in commit 8). The part_number COLUMN (the human-readable
+--   PN string) keeps its name; only the table was renamed.
 -- category: descriptive label for what kind of part this is (ASM, BUY, DWG, DOC, FORM, MFG, RAW, SVC, TOOL).
 --   Constrained by CK_part_number_category — see CHECK constraint below.
 -- has_bom: 1 if this part has a Bill of Materials. Drives BOM tab visibility. Decoupled from category.
@@ -11,9 +13,9 @@
 -- NOTE: Go struct fields still use the old PN-prefixed names (e.g. Part.PNID, .PNReqBy);
 --       only the DB columns were renamed. See SQL/schema.md.
 
-IF OBJECT_ID('dbo.part_number', 'U') IS NOT NULL DROP TABLE part_number;
+IF OBJECT_ID('dbo.part', 'U') IS NOT NULL DROP TABLE part;
 
-CREATE TABLE part_number (
+CREATE TABLE part (
   id                  INT              PRIMARY KEY IDENTITY,
   part_number         VARCHAR(255)     NOT NULL CONSTRAINT UQ_part_number_part_number UNIQUE,  -- live DB is nullable (pre-existing); NOT NULL is the intent.
   category            VARCHAR(10)      CONSTRAINT DF_part_number_category         DEFAULT 'BUY'
@@ -49,4 +51,4 @@ CREATE TABLE part_number (
   stock_on_hand       DECIMAL(16,8)    NOT NULL CONSTRAINT DF_part_number_stock_on_hand DEFAULT 0 -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
 );
 
-ALTER TABLE dbo.part_number ADD CONSTRAINT FK_part_number_unit FOREIGN KEY (unit_id) REFERENCES dbo.unit (unit_id);
+ALTER TABLE dbo.part ADD CONSTRAINT FK_part_number_unit FOREIGN KEY (unit_id) REFERENCES dbo.unit (unit_id);

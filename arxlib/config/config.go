@@ -123,7 +123,7 @@ func Load(version string) *Config {
 
 // Table name helpers — TEST_MODE swaps the whole DB via the DSN (see Base.ActiveDBName).
 // Parts Master tables
-func (c *Config) PartsTable() string              { return "part_number" }
+func (c *Config) PartsTable() string              { return "part" }
 func (c *Config) AttachmentsTable() string        { return "part_attachment" }
 func (c *Config) BOMTable() string                { return "bom" }
 func (c *Config) PriceTable() string              { return "price" }
