@@ -84,13 +84,13 @@ erDiagram
         bit     LNKUse
     }
 
-    FIL {
-        int     FILID           PK
-        int     FILPNID         FK
-        int     order_id        FK
-        varchar FILFileName
+    part_attachment {
+        int     id              PK
+        int     part_id         FK
+        int     sort_order
+        varchar file_name
         varchar category
-        varchar FILPNRev
+        varchar part_revision
     }
 
     bom {
@@ -190,12 +190,12 @@ erDiagram
     PN          ||--o{    LNK         : "substitute parts (LNKToPNID)"
     PN          ||--o{    POL         : "on PO lines (POLPNID)"
     PN          ||--o{    bom         : "in parts lists (component_part_id)"
-    PN          ||--o{    FIL         : "attached files (FILPNID)"
+    PN          ||--o{    part_attachment : "attached files (part_id)"
     PN          |o--||    price       : "active price (price_id)"
 
     %% Purchasing
     PO          ||--o{    POL         : "line items (POLPOID)"
-    PO          ||--o{    FIL         : "attached files (order_id)"
+    PO          ||--o{    part_attachment : "attached files (sort_order)"
 
     %% Test records
     PN          ||--o{    Forms       : "test forms (PNID)"
@@ -209,7 +209,7 @@ erDiagram
 
 ## Notes
 
-- **FIL.FILPNID** is an INT FK to `PN.PNID` with an enforced constraint. Migrated from VARCHAR in #297.
+- **part_attachment.part_id** is an INT FK to `PN.PNID` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
 - **PO.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
 - **TestRecordHistory.record_id** is polymorphic — it references either `Forms.ID` or `TestRecords.ID` depending on `history_type`.

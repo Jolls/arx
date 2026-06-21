@@ -52,21 +52,22 @@ BEGIN
 END;
 GO
 
--- FIL → PN.PNFILLinks
+-- part_attachment → PN.PNFILLinks
 -- Counts only is_active=1 rows (soft-deleted rows are excluded).
+-- Note: PN columns (PNFILLinks, PNID) are renamed in commit 6, not here.
 CREATE OR ALTER TRIGGER dbo.trg_FIL_part_count
-ON dbo.FIL
+ON dbo.part_attachment
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT FILPNID FROM inserted WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT FILPNID FROM deleted  WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1)
+    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1)
     FROM   dbo.PN p
     JOIN   affected a ON a.id = p.PNID;
 END;
@@ -99,7 +100,7 @@ SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.suppl
 FROM   dbo.company s;
 
 UPDATE p
-SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1),
+SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1),
        p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
 FROM   dbo.PN p;
 GO

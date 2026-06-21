@@ -210,7 +210,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		var att models.Attachment
 		var fname, fnotes, frev sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT FILID, FILFileName, category, FILPNRev FROM %s WHERE FILID = @p1`,
+			`SELECT id, file_name, category, part_revision FROM %s WHERE id = @p1`,
 			h.cfg.AttachmentsTable(),
 		), p.PNFILIDPrimary).Scan(&att.FILID, &fname, &fnotes, &frev); err == nil {
 			att.FILFileName = fname.String
@@ -883,8 +883,8 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT FILID, FILFileName, category, FILPNRev, order_id
-		FROM %s WHERE FILPNID = @p1 AND is_active = 1 ORDER BY order_id, FILID
+		SELECT id, file_name, category, part_revision, sort_order
+		FROM %s WHERE part_id = @p1 AND is_active = 1 ORDER BY sort_order, id
 	`, h.cfg.AttachmentsTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
@@ -938,7 +938,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`INSERT INTO %s (FILPNID, FILFileName, FILPNRev, category, order_id) VALUES (@p1,@p2,@p3,@p4,@p5)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 		h.cfg.AttachmentsTable(),
 	), id, fv(r, "FILFileName"), fv(r, "FILPNRev"), fv(r, "FILNotes"), oID); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
@@ -957,7 +957,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	attIDInt, _ := strconv.Atoi(attID)
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET FILPNRev=@p1, category=@p2, order_id=@p3 WHERE FILID=@p4`,
+		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3 WHERE id=@p4`,
 		h.cfg.AttachmentsTable(),
 	), fv(r, "FILPNRev"), fv(r, "category"), oID, attIDInt); err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
@@ -969,7 +969,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
-	if err := h.softDeleteAttachment(r.Context(), h.cfg.AttachmentsTable(), "FILID", attIDInt, "", 0); err != nil {
+	if err := h.softDeleteAttachment(r.Context(), h.cfg.AttachmentsTable(), "id", attIDInt, "", 0); err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
 	}

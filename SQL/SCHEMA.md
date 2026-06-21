@@ -35,7 +35,7 @@ CREATE TABLE company_attachment (
 ```
 
 ### What to do with legacy tables
-- Legacy tables (`PN`, `FIL`, `POL`) are being renamed to snake_case in the db-table-rename effort (one commit per table/group). (`PL` was renamed to `bom` in commit 2.) Go struct fields intentionally retain the old names during this effort — DB column names and Go field names will diverge until a follow-up cleanup aligns them.
+- Legacy tables (`PN`, `POL`) are being renamed to snake_case in the db-table-rename effort (one commit per table/group). (`PL` was renamed to `bom` in commit 2; `FIL` was renamed to `part_attachment` in commit 3.) Go struct fields intentionally retain the old names during this effort — DB column names and Go field names will diverge until a follow-up cleanup aligns them.
 - New columns added to a legacy table that has not yet been renamed should still use the legacy prefix style. Once a table is renamed, use snake_case for any new columns.
 - When a legacy table is fully replaced/migrated, use the go-forward convention for the replacement.
 
@@ -54,7 +54,7 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 | Table | Abbreviation | Notes |
 |-------|-------------|-------|
 | `PN`  | `PN`  | Part numbers |
-| `FIL` | `FIL` | File/URL attachments (to parts) |
+| `part_attachment` | — | File/URL attachments (to parts) (renamed from `FIL` in db-table-rename commit 3) |
 | `supplier_part` | — | Sourcing links (migrated from `LNK`) |
 | `mfg_part` | — | Manufacturer part numbers |
 | `bom` | —     | Parts list / BOM (renamed from `PL` in db-table-rename commit 2) |
@@ -81,7 +81,7 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 {TABLE_ABBREV}ColumnName  -- all other columns (e.g. FILFileName, LNKVendorPN)
 ```
 
-Exception: `order_id` in `FIL` and `SUFIL` breaks the prefix rule (TODO: should be `FILOrder` / `SUFILOrder`).
+Exception: `order_id` in `part_attachment` (formerly `FIL`) broke the prefix rule and was renamed to `sort_order` in db-table-rename commit 3.
 
 **Go-era tables** use generic snake_case: `id`, `name`, `is_active`, `date_modified`, `supplier_id`.
 
@@ -100,7 +100,7 @@ Trigger DDL lives in `SQL/triggers.sql`. ArxDev equivalents are recreated by `SQ
 |---------|-------|--------|
 | `trg_supplier_part_company_count` | `supplier_part` | Recalculates `company.SUNumOfLNKs` after any INSERT/UPDATE/DELETE |
 | `trg_PO_company_count` | `PO` | Recalculates `company.SUNumOfPOs` after any INSERT/UPDATE/DELETE |
-| `trg_FIL_part_count` | `FIL` | Recalculates `PN.PNFILLinks` (active rows only) after any INSERT/UPDATE/DELETE |
+| `trg_FIL_part_count` | `part_attachment` | Recalculates `PN.PNFILLinks` (active rows only) after any INSERT/UPDATE/DELETE |
 | `trg_POL_part_count` | `POL` | Recalculates `PN.PNPOLinks` after any INSERT/UPDATE/DELETE |
 | `trg_test_definition_history` | `test_definition` | Snapshots old row values into `test_definition_history` AFTER UPDATE (audit trail). |
 
@@ -125,7 +125,7 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 | Table | PK | Notes |
 |-------|----|-------|
 | `PN` | `PNID` | Parts catalog. `release_status`: U/A/D. `user_field_1-10` = configurable fields. `PNFILLinks` maintained by `trg_FIL_part_count`, `PNPOLinks` by `trg_POL_part_count` — do not update either in code. `PNLastRollupCost` is `DECIMAL(16,8) NULL` (NULL = no rollup run). `PNUNID` → `unit.unit_id` (base/inventory unit). `stock_on_hand` (issue #272) is a cached inventory balance = `SUM(inventory_transaction.qty)`, maintained by the app in the same tx as each ledger write — do not edit directly. (Replaces the former `PNQty` column, dropped in schema v3.) |
-| `FIL` | `FILID` | File/URL attachments. `FILPNID` → `PN.PNID` (INT FK, enforced). `FILFileName` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `category` = free-text document type label; options driven by `app_config.'attachment_categories'`. `order_id` controls sort. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. |
+| `part_attachment` | `id` | File/URL attachments. `part_id` → `PN.PNID` (INT FK, enforced). `file_name` is path or URL — see [docs/conventions.md](../docs/conventions.md) for URL format rules. `category` = free-text document type label; options driven by `app_config.'attachment_categories'`. `sort_order` controls display order. Soft-delete only (`is_active=0`) — never hard-delete. Writes fire `trg_FIL_part_count`. (Renamed from `FIL` in db-table-rename commit 3; Go struct fields still use old `FIL`-prefixed names.) |
 | `bom` | `id` | BOM / parts list. Links a parent part to child parts. `parent_part_id` → `PN.PNID` (parent assembly). `component_part_id` → `PN.PNID` (component part). `line_number` = user-assigned line item number. `qty` = quantity required. (Renamed from `PL` in db-table-rename commit 2; Go struct fields still use old `PL`-prefixed names.) |
 | `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `contact.id`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
 | `contact` | `id` | Contacts, linked to companies. `company_id` → `company.id`. `user_account_link` = Windows/network account for internal users. `is_active = 0` = inactive. (Renamed from `CN` in db-table-rename commit 1; Go struct fields still use old `CN`-prefixed names.) |

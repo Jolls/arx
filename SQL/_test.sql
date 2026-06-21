@@ -39,7 +39,7 @@ BEGIN TRY
 
     -- Drop existing tables (reverse FK order)
     IF OBJECT_ID('dbo.contact',                  'U') IS NOT NULL DROP TABLE dbo.contact;
-    IF OBJECT_ID('dbo.FIL',                      'U') IS NOT NULL DROP TABLE dbo.FIL;
+    IF OBJECT_ID('dbo.part_attachment',           'U') IS NOT NULL DROP TABLE dbo.part_attachment;
     IF OBJECT_ID('dbo.supplier_part',            'U') IS NOT NULL DROP TABLE dbo.supplier_part;
     IF OBJECT_ID('dbo.mfg_part',                 'U') IS NOT NULL DROP TABLE dbo.mfg_part;
     IF OBJECT_ID('dbo.bom',                      'U') IS NOT NULL DROP TABLE dbo.bom;
@@ -67,7 +67,7 @@ BEGIN TRY
 
     -- Populate from prod via three-part names
     SELECT * INTO dbo.contact                  FROM ArxProd.dbo.contact;
-    SELECT * INTO dbo.FIL                     FROM ArxProd.dbo.FIL;
+    SELECT * INTO dbo.part_attachment          FROM ArxProd.dbo.part_attachment;
     SELECT * INTO dbo.supplier_part           FROM ArxProd.dbo.supplier_part;
     SELECT * INTO dbo.mfg_part                FROM ArxProd.dbo.mfg_part;
     SELECT * INTO dbo.bom                     FROM ArxProd.dbo.bom;
@@ -96,7 +96,7 @@ BEGIN TRY
     -- Constraints not copied by SELECT * INTO
     ALTER TABLE dbo.PO         ADD CONSTRAINT UQ_PO_number             UNIQUE (number);
     ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at DEFAULT GETDATE() FOR updated_at;
-    ALTER TABLE dbo.FIL        ADD CONSTRAINT DF_FIL_is_active          DEFAULT 1 FOR is_active;
+    ALTER TABLE dbo.part_attachment ADD CONSTRAINT DF_part_attachment_is_active DEFAULT 1 FOR is_active;
     CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;
     ALTER TABLE dbo.PN         ADD CONSTRAINT CK_PN_category            CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
 
@@ -139,18 +139,18 @@ END
     ');
     EXEC('
 CREATE OR ALTER TRIGGER dbo.trg_FIL_part_count
-ON dbo.FIL
+ON dbo.part_attachment
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT FILPNID FROM inserted WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT FILPNID FROM deleted  WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1)
+    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1)
     FROM   dbo.PN p
     JOIN   affected a ON a.id = p.PNID
 END
@@ -181,7 +181,7 @@ END
     FROM   dbo.company s;
 
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1),
+    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1),
            p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
     FROM   dbo.PN p;
 

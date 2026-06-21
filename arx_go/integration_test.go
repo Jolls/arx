@@ -116,7 +116,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	// Register cleanup — hard-delete FIL rows then the PN row.
 	defer func() {
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE FILPNID=@p1`, h.cfg.AttachmentsTable()), pnID)
+			fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), pnID)
 		_, _ = h.DB().ExecContext(ctx,
 			fmt.Sprintf(`DELETE FROM %s WHERE PNID=@p1`, h.cfg.PartsTable()), pnID)
 	}()
@@ -168,10 +168,10 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	// Capture the new FILID for the delete step.
 	var filID int
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT MAX(FILID) FROM %s WHERE FILPNID=@p1`, h.cfg.AttachmentsTable()), pnID,
+		fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), pnID,
 	).Scan(&filID)
 	if err != nil || filID == 0 {
-		t.Fatalf("could not retrieve FILID after attach create: %v", err)
+		t.Fatalf("could not retrieve id after attach create: %v", err)
 	}
 
 	// ── 4. Attachment soft-delete + trigger check ──────────────────────────────
