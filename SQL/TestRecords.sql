@@ -1,5 +1,5 @@
 -- Forms: Test form definitions. One form per part number / product type.
--- PNID links to PN.PNID in the PartsMaster database (cross-database; no FK constraint).
+-- PNID links to part_number.id in the PartsMaster database (cross-database; no FK constraint).
 -- test_order is a comma-separated list of test_definition.id values in display order.
 -- locked prevents structural changes to the form (adding/removing/reordering tests).
 
@@ -7,7 +7,7 @@ IF OBJECT_ID('dbo.Forms', 'U') IS NOT NULL DROP TABLE Forms;
 
 CREATE TABLE Forms (
   ID            INT          PRIMARY KEY IDENTITY,
-  PNID          INT          NOT NULL,           -- Cross-database reference to PartsMaster PN.PNID. No FK constraint possible.
+  PNID          INT          NOT NULL,           -- Cross-database reference to PartsMaster part_number.id. No FK constraint possible.
   test_order    VARCHAR(MAX),                    -- Comma-separated test_definition.id values in display order.
   locked        BIT          NOT NULL CONSTRAINT DF_Forms_locked DEFAULT 0, -- 1 = locked from structural changes.
   active        BIT          NOT NULL CONSTRAINT DF_Forms_active DEFAULT 1, -- 0 = archived; hidden from UI.
@@ -64,7 +64,7 @@ CREATE TABLE test_definition (
 
 -- TestRecords: A single test session for one serial number against one form.
 -- (serial_number, record_date) is the intended unique pair per instrument.
--- part_number_id FKs to PartsMaster PN.PNID (cross-database; no FK constraint).
+-- part_number_id FKs to PartsMaster part_number.id (cross-database; no FK constraint).
 -- serial_number_PN and serial_number_PNDesc are denormalized snapshots from PartsMaster.
 -- test_order is a snapshot of Forms.test_order at record creation;
 --   the app falls back to Forms.test_order when empty.
@@ -76,7 +76,7 @@ IF OBJECT_ID('dbo.TestRecords', 'U') IS NOT NULL DROP TABLE TestRecords;
 CREATE TABLE TestRecords (
   ID                   INT          PRIMARY KEY IDENTITY,
   form_id              INT          NOT NULL,             -- FK to Forms.ID.
-  part_number_id       INT,                               -- FK to PartsMaster PN.PNID.
+  part_number_id       INT,                               -- FK to PartsMaster part_number.id.
   record_date          DATETIME,                          -- TODO: add UNIQUE (serial_number, record_date).
   serial_number        VARCHAR(64),                       -- TODO: change to INT once all existing records are numeric
   serial_number_PN     VARCHAR(64),                       -- Denormalized PN at record creation.
@@ -191,7 +191,7 @@ CREATE TABLE named_queries (
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'fil_category_for_pn',
   'Attachment categories for a given part number',
-  'SELECT category FROM part_attachment WHERE part_id = (SELECT PNID FROM PN WHERE part_number = @pn) AND is_active = 1',
+  'SELECT category FROM part_attachment WHERE part_id = (SELECT id FROM part_number WHERE part_number = @pn) AND is_active = 1',
   'pn', 'list',
   GETDATE()
 );
@@ -200,7 +200,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'parts_matching',
   'Part numbers matching a LIKE pattern (caller supplies wildcards)',
-  'SELECT part_number FROM PN WHERE part_number LIKE @pattern AND active = 1 ORDER BY part_number DESC',
+  'SELECT part_number FROM part_number WHERE part_number LIKE @pattern AND is_active = 1 ORDER BY part_number DESC',
   'pattern', 'list',
   GETDATE()
 );
@@ -216,15 +216,15 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'bom_pn_by_item',
   'Part number at a specific BOM item position for a given parent assembly PN',
-  'SELECT PN.part_number, PN.title FROM bom JOIN PN ON bom.component_part_id = PN.PNID WHERE bom.parent_part_id = (SELECT PNID FROM PN WHERE part_number = @pn) AND bom.line_number = @item',
+  'SELECT pn.part_number, pn.title FROM bom JOIN part_number pn ON bom.component_part_id = pn.id WHERE bom.parent_part_id = (SELECT id FROM part_number WHERE part_number = @pn) AND bom.line_number = @item',
   'pn, item', 'list',
   GETDATE()
 );
 
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'pn_primary_attachment',
-  'Primary attachment for any part number via PN.PNFILIDPrimary; falls back to lowest sort_order if no primary set.',
-  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN PN pn ON f.part_id = pn.PNID WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.id = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.sort_order ASC',
+  'Primary attachment for any part number via part_number.primary_attachment_id; falls back to lowest sort_order if no primary set.',
+  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part_number pn ON f.part_id = pn.id WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.primary_attachment_id > 0 AND f.id = pn.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
   'pn', 'single',
   GETDATE()
 );
@@ -235,8 +235,8 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'form_primary_attachment',
-  'Primary attachment for the form''s own part number via PN.PNFILIDPrimary; falls back to lowest sort_order if no primary set.',
-  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN PN pn ON f.part_id = pn.PNID WHERE pn.PNID = @pnid AND f.is_active = 1 ORDER BY CASE WHEN pn.PNFILIDPrimary > 0 AND f.id = pn.PNFILIDPrimary THEN 0 ELSE 1 END, f.sort_order ASC',
+  'Primary attachment for the form''s own part number via part_number.primary_attachment_id; falls back to lowest sort_order if no primary set.',
+  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part_number pn ON f.part_id = pn.id WHERE pn.id = @pnid AND f.is_active = 1 ORDER BY CASE WHEN pn.primary_attachment_id > 0 AND f.id = pn.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
   'pnid', 'single',
   GETDATE()
 );

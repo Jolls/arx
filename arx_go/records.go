@@ -127,8 +127,8 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.PNID
-		WHERE pn.category = 'FORM' AND pn.active = 1 AND f.active = 1
+		JOIN %s pn ON f.PNID = pn.id
+		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.active = 1
 		ORDER BY pn.part_number ASC`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()))
 	if err != nil {
@@ -166,7 +166,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.PNID
+		JOIN %s pn ON f.PNID = pn.id
 		WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
@@ -236,7 +236,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.PNID
+		JOIN %s pn ON f.PNID = pn.id
 		WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
@@ -469,7 +469,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title,
 		       f.record_types, f.instrument_types
-		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
+		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title,
 			&recordTypes, &instrumentTypes)
@@ -843,7 +843,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.PNID
+		JOIN %s pn ON f.PNID = pn.id
 		WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
@@ -1035,7 +1035,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.PNID
+		JOIN %s pn ON f.PNID = pn.id
 		WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
@@ -1195,7 +1195,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.record_types, f.instrument_types
-		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
+		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes, &instrumentTypes)
 	if err == sql.ErrNoRows {
@@ -1212,8 +1212,8 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	// BOM lookup: parts listed under the form's own part number in PL.
 	var bomParts []BOMPart
 	bomRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PN.PNID, PN.part_number, PN.title
-		FROM %s PL JOIN %s PN ON PL.component_part_id = PN.PNID
+		SELECT PN.id, PN.part_number, PN.title
+		FROM %s PL JOIN %s PN ON PL.component_part_id = PN.id
 		WHERE PL.parent_part_id = @p1
 		ORDER BY PN.title`,
 		h.cfg.BOMTable(), h.cfg.PartsTable()), form.PNID)
@@ -1265,7 +1265,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
-		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
+		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
@@ -1288,7 +1288,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		if pnid, convErr := strconv.Atoi(pnidStr); convErr == nil {
 			var pn, title sql.NullString
 			if scanErr := h.queryRowContext(r.Context(), fmt.Sprintf(`
-				SELECT part_number, title FROM %s WHERE PNID = @p1`,
+				SELECT part_number, title FROM %s WHERE id = @p1`,
 				h.cfg.PartsTable()), pnid).Scan(&pn, &title); scanErr == nil {
 				snPN = pn.String
 				snDesc = title.String
@@ -1356,7 +1356,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var editInstrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title, f.instrument_types
-		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
+		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title, &editInstrumentTypes)
 	if err != nil {
@@ -1788,11 +1788,11 @@ type formPN struct {
 // Used by both NewForm and DuplicateForm to populate the PN picker.
 func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT PNID, part_number, title
+		SELECT id, part_number, title
 		FROM %s
-		WHERE category = 'FORM' AND active = 1
+		WHERE category = 'FORM' AND is_active = 1
 		  AND NOT EXISTS (
-		      SELECT 1 FROM %s WHERE PNID = %s.PNID AND active = 1
+		      SELECT 1 FROM %s WHERE PNID = %s.id AND active = 1
 		  )
 		ORDER BY part_number`,
 		h.cfg.PartsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()))
@@ -1920,7 +1920,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 	// Load existing active forms for the "copy steps from" dropdown.
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, pn.part_number, pn.title
-		FROM %s f JOIN %s pn ON f.PNID = pn.PNID
+		FROM %s f JOIN %s pn ON f.PNID = pn.id
 		WHERE f.active = 1 ORDER BY pn.part_number`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()))
 	if err != nil {
@@ -1964,7 +1964,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	// Verify the PNID is a valid active FORM-category part number.
 	var exists int
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT COUNT(1) FROM %s WHERE PNID=@p1 AND category='FORM' AND active=1",
+		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=1",
 		h.cfg.PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
@@ -2022,7 +2022,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
-		FROM %s f JOIN %s pn ON f.PNID = pn.PNID WHERE f.ID = @p1`,
+		FROM %s f JOIN %s pn ON f.PNID = pn.id WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
@@ -2076,7 +2076,7 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	// Verify the PNID is a valid active FORM-category part number.
 	var exists int
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT COUNT(1) FROM %s WHERE PNID=@p1 AND category='FORM' AND active=1",
+		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=1",
 		h.cfg.PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
@@ -2135,7 +2135,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.ID, f.PNID, f.locked, f.test_order, pn.part_number, pn.title
 		FROM %s f
-		JOIN %s pn ON f.PNID = pn.PNID
+		JOIN %s pn ON f.PNID = pn.id
 		WHERE f.ID = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
 		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)

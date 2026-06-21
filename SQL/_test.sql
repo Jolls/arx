@@ -50,7 +50,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.purchase_order',           'U') IS NOT NULL DROP TABLE dbo.purchase_order;
     IF OBJECT_ID('dbo.company_attachment',       'U') IS NOT NULL DROP TABLE dbo.company_attachment;
     IF OBJECT_ID('dbo.company',                  'U') IS NOT NULL DROP TABLE dbo.company;
-    IF OBJECT_ID('dbo.PN',                       'U') IS NOT NULL DROP TABLE dbo.PN;
+    IF OBJECT_ID('dbo.part_number',              'U') IS NOT NULL DROP TABLE dbo.part_number;
     IF OBJECT_ID('dbo.Forms',                    'U') IS NOT NULL DROP TABLE dbo.Forms;
     IF OBJECT_ID('dbo.form_events',              'U') IS NOT NULL DROP TABLE dbo.form_events;
     IF OBJECT_ID('dbo.record_events',            'U') IS NOT NULL DROP TABLE dbo.record_events;
@@ -77,7 +77,7 @@ BEGIN TRY
     SELECT * INTO dbo.purchase_order_history  FROM ArxProd.dbo.purchase_order_history;
     SELECT * INTO dbo.company_attachment      FROM ArxProd.dbo.company_attachment;
     SELECT * INTO dbo.company                 FROM ArxProd.dbo.company;
-    SELECT * INTO dbo.PN                      FROM ArxProd.dbo.PN;
+    SELECT * INTO dbo.part_number             FROM ArxProd.dbo.part_number;
     SELECT * INTO dbo.inventory_transaction   FROM ArxProd.dbo.inventory_transaction;
     SELECT * INTO dbo.Forms                   FROM ArxProd.dbo.Forms;
     SELECT * INTO dbo.form_events             FROM ArxProd.dbo.form_events;
@@ -98,7 +98,7 @@ BEGIN TRY
     ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at DEFAULT GETDATE() FOR updated_at;
     ALTER TABLE dbo.part_attachment ADD CONSTRAINT DF_part_attachment_is_active DEFAULT 1 FOR is_active;
     CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;
-    ALTER TABLE dbo.PN         ADD CONSTRAINT CK_PN_category            CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
+    ALTER TABLE dbo.part_number ADD CONSTRAINT CK_part_number_category   CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
 
     -- Triggers not copied by SELECT * INTO
     EXEC('
@@ -150,9 +150,9 @@ BEGIN
         SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1)
-    FROM   dbo.PN p
-    JOIN   affected a ON a.id = p.PNID
+    SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.id AND f.is_active = 1)
+    FROM   dbo.part_number p
+    JOIN   affected a ON a.id = p.id
 END
     ');
     EXEC('
@@ -168,9 +168,9 @@ BEGIN
         SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.PNID)
-    FROM   dbo.PN p
-    JOIN   affected a ON a.id = p.PNID
+    SET    p.po_line_count = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.id)
+    FROM   dbo.part_number p
+    JOIN   affected a ON a.id = p.id
 END
     ');
 
@@ -181,9 +181,9 @@ END
     FROM   dbo.company s;
 
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1),
-           p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.PNID)
-    FROM   dbo.PN p;
+    SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.id AND f.is_active = 1),
+           p.po_line_count   = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.id)
+    FROM   dbo.part_number p;
 
     -- PO sequence: starts after current max so dev POs don't collide with snapshot data
     DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.purchase_order);

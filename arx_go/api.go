@@ -101,7 +101,7 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PNID, part_number, revision, title, detail FROM %s
+		SELECT id, part_number, revision, title, detail FROM %s
 		WHERE part_number LIKE @p1
 		ORDER BY part_number
 		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY

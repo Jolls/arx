@@ -1622,7 +1622,7 @@ func (h *Handler) resolvePolRev(r *http.Request, formRev, pnidStr string) string
 	}
 	var rev sql.NullString
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT revision FROM %s WHERE PNID=@p1`, h.cfg.PartsTable(),
+		`SELECT revision FROM %s WHERE id=@p1`, h.cfg.PartsTable(),
 	), pnidStr).Scan(&rev)
 	return rev.String
 }

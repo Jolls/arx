@@ -59,7 +59,7 @@ func (f TestForm) RecordTypeList() []string {
 type TestRecord struct {
 	ID               int
 	FormID           int
-	PartNumberID     int        // FK to PN.PNID; 0 if NULL
+	PartNumberID     int        // FK to part_number.id; 0 if NULL
 	SerialNumber     string // #214: migrate to INT once DB column is migrated from VARCHAR(64)
 	SerialNumberPN   string     // part number of the unit under test
 	SerialNumberDesc string     // description of the unit under test

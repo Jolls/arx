@@ -1,53 +1,52 @@
--- PN: Part Numbers — the core parts catalog.
+-- part_number: Part Numbers — the core parts catalog (renamed from PN in db-table-rename commit 6).
 -- category: descriptive label for what kind of part this is (ASM, BUY, DWG, DOC, FORM, MFG, RAW, SVC, TOOL).
---   Constrained by CK_PN_category — see CHECK constraint below.
+--   Constrained by CK_part_number_category — see CHECK constraint below.
 -- has_bom: 1 if this part has a Bill of Materials. Drives BOM tab visibility. Decoupled from category.
 -- release_status: U = Under Review, A = Active (Released), D = Deprecated (Obsolete).
--- PNFILLinks and PNPOLinks are denormalized counts maintained by DB triggers — do not update them in code.
--- PNPOLinks: trg_POL_part_count fires on POL INSERT/UPDATE/DELETE (see SQL/triggers.sql).
--- PNFILLinks: trg_FIL_part_count fires on FIL INSERT/UPDATE/DELETE, counts is_active=1 rows only.
+-- attachment_count and po_line_count are denormalized counts maintained by DB triggers — do not update them in code.
+-- po_line_count: trg_POL_part_count fires on po_line INSERT/UPDATE/DELETE (see SQL/triggers.sql).
+-- attachment_count: trg_FIL_part_count fires on part_attachment INSERT/UPDATE/DELETE, counts is_active=1 rows only.
 -- user_field_1-10 are configurable user-defined fields.
 -- price_id FKs to the price table; FK constraint deferred — see #213.
--- NOTE: The PN table was originally named PN_Test and renamed via sp_rename. The DEFAULT and UNIQUE
---       constraint names on the live DB still carry the PN_Test prefix (e.g. DF__PN_Test__PNActiv__*).
---       Run SQL/rename_constraints.sql to normalize them.
+-- NOTE: Go struct fields still use the old PN-prefixed names (e.g. Part.PNID, .PNReqBy);
+--       only the DB columns were renamed. See SQL/schema.md.
 
-IF OBJECT_ID('dbo.PN', 'U') IS NOT NULL DROP TABLE PN;
+IF OBJECT_ID('dbo.part_number', 'U') IS NOT NULL DROP TABLE part_number;
 
-CREATE TABLE PN (
-  PNID              INT              PRIMARY KEY IDENTITY,
-  part_number       VARCHAR(255)     NOT NULL CONSTRAINT UQ_PN_part_number UNIQUE,  -- live DB is nullable (pre-existing); NOT NULL is the intent.
-  category          VARCHAR(10)      CONSTRAINT DF_PN_category         DEFAULT 'BUY'
-                                     CONSTRAINT CK_PN_category         CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL')),
-  has_bom           BIT              CONSTRAINT DF_PN_has_bom          DEFAULT 0,
-  revision          VARCHAR(10)      CONSTRAINT DF_PN_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
-  title             VARCHAR(255)     CONSTRAINT DF_PN_title            DEFAULT '',
-  detail            VARCHAR(255)     CONSTRAINT DF_PN_detail           DEFAULT '',
-  release_status    VARCHAR(255)     CONSTRAINT DF_PN_release_status   DEFAULT 'U',  -- U/A/D only; CHECK/narrowing deferred — see #213.
-  PNReqBy           VARCHAR(50)      CONSTRAINT DF_PN_PNReqBy          DEFAULT '',
-  PNNotes           VARCHAR(MAX)     CONSTRAINT DF_PN_PNNotes          DEFAULT '',
-  user_field_1      VARCHAR(255)     CONSTRAINT DF_PN_user_field_1     DEFAULT '',
-  user_field_2      VARCHAR(255)     CONSTRAINT DF_PN_user_field_2     DEFAULT '',
-  user_field_3      VARCHAR(255)     CONSTRAINT DF_PN_user_field_3     DEFAULT '',
-  user_field_4      VARCHAR(255)     CONSTRAINT DF_PN_user_field_4     DEFAULT '',
-  user_field_5      VARCHAR(255)     CONSTRAINT DF_PN_user_field_5     DEFAULT '',
-  user_field_6      VARCHAR(255)     CONSTRAINT DF_PN_user_field_6     DEFAULT '',
-  user_field_7      VARCHAR(255)     CONSTRAINT DF_PN_user_field_7     DEFAULT '',
-  user_field_8      VARCHAR(255)     CONSTRAINT DF_PN_user_field_8     DEFAULT '',
-  user_field_9      VARCHAR(255)     CONSTRAINT DF_PN_user_field_9     DEFAULT '',
-  user_field_10     VARCHAR(255)     CONSTRAINT DF_PN_user_field_10    DEFAULT '',
-  PNDate            DATE             CONSTRAINT DF_PN_PNDate           DEFAULT GETDATE(),
-  PNLastRollupCost  DECIMAL(16,8)    NULL,                                            -- NULL = no rollup ever run.
-  PNLastRollupAt    DATETIME         NULL,                                            -- NULL = no rollup ever run.
-  PNFILLinks        INT              CONSTRAINT DF_PN_PNFILLinks       DEFAULT 0,    -- Denormalized count of FIL rows for this part.
-  PNFILIDPrimary    INT              CONSTRAINT DF_PN_PNFILIDPrimary   DEFAULT 0,    -- FILID of the primary attachment.
-  PNCurrentCost     DECIMAL(16,8)    CONSTRAINT DF_PN_PNCurrentCost    DEFAULT 0,
-  active            BIT              CONSTRAINT DF_PN_active           DEFAULT 1,
-  PNPOLinks         INT              CONSTRAINT DF_PN_PNPOLinks        DEFAULT 0,    -- Denormalized count of POL rows for this part.
-  PNDateModified    DATE             CONSTRAINT DF_PN_PNDateModified   DEFAULT GETDATE(),
-  price_id          INT              CONSTRAINT DF_PN_price_id         DEFAULT 0,    -- FK to price table; FK constraint deferred — see #213.
-  PNUNID            INT              NULL,                                             -- FK to unit.unit_id. Base/inventory unit for this part (EA, mL, kg, …).
-  stock_on_hand     DECIMAL(16,8)    NOT NULL CONSTRAINT DF_PN_stock_on_hand DEFAULT 0 -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
+CREATE TABLE part_number (
+  id                  INT              PRIMARY KEY IDENTITY,
+  part_number         VARCHAR(255)     NOT NULL CONSTRAINT UQ_part_number_part_number UNIQUE,  -- live DB is nullable (pre-existing); NOT NULL is the intent.
+  category            VARCHAR(10)      CONSTRAINT DF_part_number_category         DEFAULT 'BUY'
+                                       CONSTRAINT CK_part_number_category         CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL')),
+  has_bom             BIT              CONSTRAINT DF_part_number_has_bom          DEFAULT 0,
+  revision            VARCHAR(10)      CONSTRAINT DF_part_number_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
+  title               VARCHAR(255)     CONSTRAINT DF_part_number_title            DEFAULT '',
+  detail              VARCHAR(255)     CONSTRAINT DF_part_number_detail           DEFAULT '',
+  release_status      VARCHAR(255)     CONSTRAINT DF_part_number_release_status   DEFAULT 'U',  -- U/A/D only; CHECK/narrowing deferred — see #213.
+  requested_by        VARCHAR(50)      CONSTRAINT DF_part_number_requested_by     DEFAULT '',
+  notes               VARCHAR(MAX)     CONSTRAINT DF_part_number_notes            DEFAULT '',
+  user_field_1        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_1     DEFAULT '',
+  user_field_2        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_2     DEFAULT '',
+  user_field_3        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_3     DEFAULT '',
+  user_field_4        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_4     DEFAULT '',
+  user_field_5        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_5     DEFAULT '',
+  user_field_6        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_6     DEFAULT '',
+  user_field_7        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_7     DEFAULT '',
+  user_field_8        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_8     DEFAULT '',
+  user_field_9        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_9     DEFAULT '',
+  user_field_10       VARCHAR(255)     CONSTRAINT DF_part_number_user_field_10    DEFAULT '',
+  created_date        DATE             CONSTRAINT DF_part_number_created_date     DEFAULT GETDATE(),
+  last_rollup_cost    DECIMAL(16,8)    NULL,                                            -- NULL = no rollup ever run.
+  last_rollup_at      DATETIME         NULL,                                            -- NULL = no rollup ever run.
+  attachment_count    INT              CONSTRAINT DF_part_number_attachment_count DEFAULT 0,    -- Denormalized count of part_attachment rows for this part.
+  primary_attachment_id INT            CONSTRAINT DF_part_number_primary_attachment_id DEFAULT 0,  -- part_attachment.id of the primary attachment.
+  current_cost        DECIMAL(16,8)    CONSTRAINT DF_part_number_current_cost     DEFAULT 0,
+  is_active           BIT              CONSTRAINT DF_part_number_is_active        DEFAULT 1,
+  po_line_count       INT              CONSTRAINT DF_part_number_po_line_count    DEFAULT 0,    -- Denormalized count of po_line rows for this part.
+  modified_date       DATE             CONSTRAINT DF_part_number_modified_date    DEFAULT GETDATE(),
+  price_id            INT              CONSTRAINT DF_part_number_price_id         DEFAULT 0,    -- FK to price table; FK constraint deferred — see #213.
+  unit_id             INT              NULL,                                             -- FK to unit.unit_id. Base/inventory unit for this part (EA, mL, kg, …).
+  stock_on_hand       DECIMAL(16,8)    NOT NULL CONSTRAINT DF_part_number_stock_on_hand DEFAULT 0 -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
 );
 
-ALTER TABLE dbo.PN ADD CONSTRAINT FK_PN_unit FOREIGN KEY (PNUNID) REFERENCES dbo.unit (unit_id);
+ALTER TABLE dbo.part_number ADD CONSTRAINT FK_part_number_unit FOREIGN KEY (unit_id) REFERENCES dbo.unit (unit_id);

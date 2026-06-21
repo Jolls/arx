@@ -57,7 +57,7 @@ type SupplierPart struct {
 	MfgName         string
 	UnitID               *int
 	PurchaseUnitAbbr     string // joined from unit table; COALESCE(purchase unit, part base unit)
-	PurchaseUnitIsExplicit bool // true = unit_id set on supplier_part; false = inherited from PN.PNUNID
+	PurchaseUnitIsExplicit bool // true = unit_id set on supplier_part; false = inherited from part_number.unit_id
 }
 
 type MfgPart struct {

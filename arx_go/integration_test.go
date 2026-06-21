@@ -118,7 +118,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 		_, _ = h.DB().ExecContext(ctx,
 			fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), pnID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE PNID=@p1`, h.cfg.PartsTable()), pnID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID)
 	}()
 
 	// ── 2. Update ─────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 
 	var gotTitle string
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT title FROM %s WHERE PNID=@p1`, h.cfg.PartsTable()), pnID,
+		fmt.Sprintf(`SELECT title FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
 	).Scan(&gotTitle)
 	if err != nil {
 		t.Fatalf("SELECT title after PartUpdate: %v", err)
@@ -156,7 +156,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 
 	var filLinks int
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT PNFILLinks FROM %s WHERE PNID=@p1`, h.cfg.PartsTable()), pnID,
+		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
 	).Scan(&filLinks)
 	if err != nil {
 		t.Fatalf("SELECT PNFILLinks after attach create: %v", err)
@@ -183,7 +183,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	assert302(t, "PartAttachmentDelete", rec)
 
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT PNFILLinks FROM %s WHERE PNID=@p1`, h.cfg.PartsTable()), pnID,
+		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
 	).Scan(&filLinks)
 	if err != nil {
 		t.Fatalf("SELECT PNFILLinks after attach delete: %v", err)

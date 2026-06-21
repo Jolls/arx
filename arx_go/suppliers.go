@@ -226,14 +226,14 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,
-		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category,
+		       pn.id, pn.part_number, pn.title, pn.revision, pn.category,
 		       sp.unit_id,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
 		       CASE WHEN sp.unit_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
 		FROM %s sp
-		JOIN %s pn ON sp.part_id = pn.PNID
+		JOIN %s pn ON sp.part_id = pn.id
 		LEFT JOIN %s pu ON sp.unit_id  = pu.unit_id   -- explicit purchase unit
-		LEFT JOIN %s bu ON pn.PNUNID   = bu.unit_id   -- base unit fallback
+		LEFT JOIN %s bu ON pn.unit_id  = bu.unit_id   -- base unit fallback
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
 	`, sp, pn, ut, ut), id)

@@ -3,20 +3,20 @@
 ```mermaid
 erDiagram
 
-    PN {
-        int     PNID            PK
-        varchar part_number     "UNIQUE"
+    part_number {
+        int     id                    PK
+        varchar part_number           "UNIQUE"
         varchar category
         varchar revision
         varchar title
         varchar detail
-        varchar release_status  "U/A/D"
-        varchar PNReqBy
-        int     PNFILIDPrimary  FK
-        int     price_id        FK
-        int     PNFILLinks
-        int     PNPOLinks
-        bit     active
+        varchar release_status        "U/A/D"
+        varchar requested_by
+        int     primary_attachment_id FK
+        int     price_id              FK
+        int     attachment_count
+        int     po_line_count
+        bit     is_active
     }
 
     supplier {
@@ -186,20 +186,20 @@ erDiagram
     supplier    ||--o{    supplier_attachment : "attachments (supplier_id)"
     supplier    |o--||    supplier_attachment : "primary_attachment_id"
 
-    PN          ||--o{    LNK         : "vendor links (LNKPNID)"
-    PN          ||--o{    LNK         : "substitute parts (LNKToPNID)"
-    PN          ||--o{    po_line     : "on PO lines (part_id)"
-    PN          ||--o{    bom         : "in parts lists (component_part_id)"
-    PN          ||--o{    part_attachment : "attached files (part_id)"
-    PN          |o--||    price       : "active price (price_id)"
+    part_number ||--o{    LNK         : "vendor links (LNKPNID)"
+    part_number ||--o{    LNK         : "substitute parts (LNKToPNID)"
+    part_number ||--o{    po_line     : "on PO lines (part_id)"
+    part_number ||--o{    bom         : "in parts lists (component_part_id)"
+    part_number ||--o{    part_attachment : "attached files (part_id)"
+    part_number |o--||    price       : "active price (price_id)"
 
     %% Purchasing
     purchase_order ||--o{ po_line     : "line items (po_id)"
     purchase_order ||--o{ part_attachment : "attached files (sort_order)"
 
     %% Test records
-    PN          ||--o{    Forms       : "test forms (PNID)"
-    PN          ||--o{    TestRecords : "test records (part_number_id)"
+    part_number ||--o{    Forms       : "test forms (PNID)"
+    part_number ||--o{    TestRecords : "test records (part_number_id)"
     Forms       ||--o{    test_definition : "test definitions (form_id)"
     Forms       ||--o{    TestRecords : "executed records (form_id)"
     Forms       ||--o{    TestResults : "results (form_id)"
@@ -209,7 +209,7 @@ erDiagram
 
 ## Notes
 
-- **part_attachment.part_id** is an INT FK to `PN.PNID` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
+- **part_attachment.part_id** is an INT FK to `part_number.id` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
 - **purchase_order.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
 - **TestRecordHistory.record_id** is polymorphic — it references either `Forms.ID` or `TestRecords.ID` depending on `history_type`.

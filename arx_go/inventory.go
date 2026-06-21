@@ -30,7 +30,7 @@ func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, 
 		return err
 	}
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET stock_on_hand = stock_on_hand + @p1 WHERE PNID = @p2`, h.cfg.PartsTable()),
+		`UPDATE %s SET stock_on_hand = stock_on_hand + @p1 WHERE id = @p2`, h.cfg.PartsTable()),
 		qty, partID)
 	return err
 }

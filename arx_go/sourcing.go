@@ -182,8 +182,8 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 		FROM %s sp
 		JOIN %s c  ON sp.supplier_id = c.id
 		LEFT JOIN %s pu ON sp.unit_id  = pu.unit_id
-		LEFT JOIN %s p  ON sp.part_id  = p.PNID
-		LEFT JOIN %s bu ON p.PNUNID    = bu.unit_id
+		LEFT JOIN %s p  ON sp.part_id  = p.id
+		LEFT JOIN %s bu ON p.unit_id   = bu.unit_id
 		WHERE sp.part_id = @p1
 		ORDER BY c.name, sp.supplier_pn
 	`, sp, co, ut, pn, ut), partID)
