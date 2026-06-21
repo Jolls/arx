@@ -2,7 +2,7 @@
 --   company.SUNumOfLNKs — active supplier_part rows for a supplier
 --   company.SUNumOfPOs  — PO rows for a supplier
 --   PN.PNFILLinks       — active FIL attachment rows for a part
---   PN.PNPOLinks        — POL line-item rows for a part
+--   PN.PNPOLinks        — po_line line-item rows for a part
 --
 -- Each trigger recomputes a full COUNT(*) from live data (not increment/decrement),
 -- so any drift is self-correcting on the next write to an affected row.
@@ -73,20 +73,20 @@ BEGIN
 END;
 GO
 
--- POL → PN.PNPOLinks
+-- po_line → PN.PNPOLinks
 CREATE OR ALTER TRIGGER dbo.trg_POL_part_count
-ON dbo.POL
+ON dbo.po_line
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT POLPNID FROM inserted WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT POLPNID FROM deleted  WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
+    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.PNID)
     FROM   dbo.PN p
     JOIN   affected a ON a.id = p.PNID;
 END;
@@ -101,6 +101,6 @@ FROM   dbo.company s;
 
 UPDATE p
 SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1),
-       p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
+       p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.PNID)
 FROM   dbo.PN p;
 GO

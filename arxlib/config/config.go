@@ -128,7 +128,7 @@ func (c *Config) AttachmentsTable() string        { return "part_attachment" }
 func (c *Config) BOMTable() string                { return "bom" }
 func (c *Config) PriceTable() string              { return "price" }
 func (c *Config) POTable() string                 { return "purchase_order" }
-func (c *Config) POLineTable() string             { return "POL" }
+func (c *Config) POLineTable() string             { return "po_line" }
 func (c *Config) POHistoryTable() string          { return "purchase_order_history" }
 func (c *Config) CompanyTable() string            { return "company" }
 func (c *Config) SupplierPartTable() string       { return "supplier_part" }

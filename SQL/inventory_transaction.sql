@@ -18,10 +18,10 @@ CREATE TABLE inventory_transaction (
   username    VARCHAR(128) NOT NULL CONSTRAINT DF_inv_txn_user DEFAULT '',                 -- App user login handle.
   reference   VARCHAR(255),                                                               -- PO number / count sheet / free note.
   note        VARCHAR(MAX),                                                               -- Adjustment reason or comment.
-  po_line_id  INT          NULL,                                                          -- FK to POL.POLID for receipts (#269); NULL otherwise.
+  po_line_id  INT          NULL,                                                          -- FK to po_line.id for receipts (#269); NULL otherwise.
   created_at  DATETIME     NOT NULL CONSTRAINT DF_inv_txn_created DEFAULT GETDATE()
 );
 
 ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_PN  FOREIGN KEY (part_id)    REFERENCES dbo.PN (PNID);
-ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_POL FOREIGN KEY (po_line_id) REFERENCES dbo.POL (POLID);
+ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_po_line FOREIGN KEY (po_line_id) REFERENCES dbo.po_line (id);
 CREATE INDEX IX_inv_txn_part ON dbo.inventory_transaction (part_id, txn_date);

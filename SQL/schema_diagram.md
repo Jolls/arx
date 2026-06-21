@@ -61,15 +61,15 @@ erDiagram
         bit     is_active
     }
 
-    POL {
-        int     POLID           PK
-        int     POLPOID         FK
-        int     POLPNID         FK
-        varchar POLPNPartNumber
-        int     POLItem
-        decimal POLQty
-        decimal POLCost
-        varchar VendorPN
+    po_line {
+        int     id                   PK
+        int     po_id                FK
+        int     part_id              FK
+        varchar part_number_snapshot
+        int     line_number
+        decimal qty
+        decimal unit_cost
+        varchar vendor_part_number
     }
 
     LNK {
@@ -188,13 +188,13 @@ erDiagram
 
     PN          ||--o{    LNK         : "vendor links (LNKPNID)"
     PN          ||--o{    LNK         : "substitute parts (LNKToPNID)"
-    PN          ||--o{    POL         : "on PO lines (POLPNID)"
+    PN          ||--o{    po_line     : "on PO lines (part_id)"
     PN          ||--o{    bom         : "in parts lists (component_part_id)"
     PN          ||--o{    part_attachment : "attached files (part_id)"
     PN          |o--||    price       : "active price (price_id)"
 
     %% Purchasing
-    purchase_order ||--o{ POL         : "line items (POLPOID)"
+    purchase_order ||--o{ po_line     : "line items (po_id)"
     purchase_order ||--o{ part_attachment : "attached files (sort_order)"
 
     %% Test records

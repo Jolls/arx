@@ -1000,10 +1000,10 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT po.number, po.supplier_name, po.date_ordered, po.date_closed, po.status,
-		       pol.POLItem, pol.POLQty, pol.POLCost, pol.POLDesc, pol.VendorPN
+		       pol.line_number, pol.qty, pol.unit_cost, pol.description, pol.vendor_part_number
 		FROM %s pol
-		JOIN %s po ON pol.POLPOID = po.ID
-		WHERE pol.POLPNID = @p1
+		JOIN %s po ON pol.po_id = po.ID
+		WHERE pol.part_id = @p1
 		ORDER BY po.date_ordered DESC
 	`, pol, po), id)
 	if err != nil {

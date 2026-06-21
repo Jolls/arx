@@ -58,7 +58,7 @@ Two eras of tables exist in this schema. Follow the era of the table you are ext
 | `supplier_part` | — | Sourcing links (migrated from `LNK`) |
 | `mfg_part` | — | Manufacturer part numbers |
 | `bom` | —     | Parts list / BOM (renamed from `PL` in db-table-rename commit 2) |
-| `POL` | `POL` | PO line items |
+| `po_line` | — | PO line items (renamed from `POL` in db-table-rename commit 5) |
 
 **Go-era tables** — lowercase snake_case:
 
@@ -101,7 +101,7 @@ Trigger DDL lives in `SQL/triggers.sql`. ArxDev equivalents are recreated by `SQ
 | `trg_supplier_part_company_count` | `supplier_part` | Recalculates `company.SUNumOfLNKs` after any INSERT/UPDATE/DELETE |
 | `trg_PO_company_count` | `purchase_order` | Recalculates `company.SUNumOfPOs` after any INSERT/UPDATE/DELETE |
 | `trg_FIL_part_count` | `part_attachment` | Recalculates `PN.PNFILLinks` (active rows only) after any INSERT/UPDATE/DELETE |
-| `trg_POL_part_count` | `POL` | Recalculates `PN.PNPOLinks` after any INSERT/UPDATE/DELETE |
+| `trg_POL_part_count` | `po_line` | Recalculates `PN.PNPOLinks` after any INSERT/UPDATE/DELETE |
 | `trg_test_definition_history` | `test_definition` | Snapshots old row values into `test_definition_history` AFTER UPDATE (audit trail). |
 
 > **Dropped trigger:** `trg_Tests_history` was a legacy AFTER UPDATE trigger on `test_definition` created when the table was named `Tests`. It referenced the old column `applicable_instrs` (since renamed to `instrument_types`), silently rolling back every UPDATE once the rename was applied. It was dropped in v0.4.1 and superseded by `trg_test_definition_history`.
@@ -131,8 +131,8 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 | `contact` | `id` | Contacts, linked to companies. `company_id` → `company.id`. `user_account_link` = Windows/network account for internal users. `is_active = 0` = inactive. (Renamed from `CN` in db-table-rename commit 1; Go struct fields still use old `CN`-prefixed names.) |
 | `purchase_order` | `id` | Purchase orders (renamed from `PO` in db-table-rename commit 4). `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative and follows the lifecycle `draft` → `open` → `sent` → `partially_received` → `closed` (plus `cancelled`). Status changes only via `POST /po/{id}/status`, which logs to `PO_status_history`; create/update handlers do not write `status`. `is_active` is a convenience bit kept in sync by the app (`draft/open/sent/partially_received → 1`, `closed/cancelled → 0`) — do not set it directly. `approval_status` (`not_submitted`/`pending`/`approved`/`rejected`, issue #267) gates sending/printing: a PO can only reach `sent` or be printed once `approved`; editing an approved/pending PO resets it to `not_submitted`. Run `SQL/migrations/migrate_po_status_lifecycle.sql` then `SQL/migrations/migrate_po_approval.sql` to migrate existing databases. |
 | `purchase_order_history` | `id` | Append-only PO activity log (issues #271 + #267; renamed from `PO_history` in db-table-rename commit 4). `po_id` → `purchase_order.id`. `event_type`: `status` (lifecycle transition: `from_status`→`to_status`, `from_status` NULL on creation) or `approval` (`action`: `submitted`\|`approved`\|`rejected`\|`reset`, with optional `note`). `changed_by` = app user username/login handle (written by the Go handler, not a trigger; consistent with `record_events.username` and `test_definition_history.changed_by`). |
-| `POL` | `POLID` | PO line items → `purchase_order.id`. |
-| `inventory_transaction` | `id` | Append-only stock-movement ledger (issues #272/#274). `part_id` → `PN.PNID`. `txn_type`: `receipt`\|`issue`\|`adjustment`\|`count`. `qty` is **signed** (+ adds, − removes) so on-hand = `SUM(qty)`; `PN.stock_on_hand` caches that sum (app-maintained). `username` = app login handle. `po_line_id` → `POL.POLID` for receipts (#269), else NULL. `reference`/`note` = PO number / reason / comment. |
+| `po_line` | `id` | PO line items → `purchase_order.id` via `po_id`; `part_id` → `PN.PNID`. `part_number_snapshot`/`revision_snapshot` denormalize the part at order time. Writes fire `trg_POL_part_count`. (Renamed from `POL` in db-table-rename commit 5; Go struct fields still use old `POL`-prefixed names.) |
+| `inventory_transaction` | `id` | Append-only stock-movement ledger (issues #272/#274). `part_id` → `PN.PNID`. `txn_type`: `receipt`\|`issue`\|`adjustment`\|`count`. `qty` is **signed** (+ adds, − removes) so on-hand = `SUM(qty)`; `PN.stock_on_hand` caches that sum (app-maintained). `username` = app login handle. `po_line_id` → `po_line.id` for receipts (#269), else NULL. `reference`/`note` = PO number / reason / comment. |
 | `supplier_part` | `id` | Sourcing links — maps parts to supplier catalog entries. `supplier_id` → `company.id`, `part_id` → `PN.PNID`, `mfg_part_id` → `mfg_part.id` (optional), `unit_id` → `unit.unit_id` (purchase unit; NULL = same as `PN.PNUNID`). Writes fire `trg_supplier_part_company_count`. |
 | `mfg_part` | `id` | Manufacturer part numbers. `part_id` → `PN.PNID`, `mfg_id` → `company.id`. `is_active = 0` = soft-deleted. Unique index is filtered on `is_active = 1` (allows re-adding an MPN after soft-delete). |
 | `unit` | `unit_id` | Reference list of units of measure. `unit_type`: count/volume/length/mass/package. Base unit on `PN.PNUNID`; purchase unit on `supplier_part.unit_id`. |

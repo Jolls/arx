@@ -45,7 +45,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.bom',                      'U') IS NOT NULL DROP TABLE dbo.bom;
     IF OBJECT_ID('dbo.price',                    'U') IS NOT NULL DROP TABLE dbo.price;
     IF OBJECT_ID('dbo.inventory_transaction',    'U') IS NOT NULL DROP TABLE dbo.inventory_transaction;
-    IF OBJECT_ID('dbo.POL',                      'U') IS NOT NULL DROP TABLE dbo.POL;
+    IF OBJECT_ID('dbo.po_line',                  'U') IS NOT NULL DROP TABLE dbo.po_line;
     IF OBJECT_ID('dbo.purchase_order_history',   'U') IS NOT NULL DROP TABLE dbo.purchase_order_history;
     IF OBJECT_ID('dbo.purchase_order',           'U') IS NOT NULL DROP TABLE dbo.purchase_order;
     IF OBJECT_ID('dbo.company_attachment',       'U') IS NOT NULL DROP TABLE dbo.company_attachment;
@@ -72,7 +72,7 @@ BEGIN TRY
     SELECT * INTO dbo.mfg_part                FROM ArxProd.dbo.mfg_part;
     SELECT * INTO dbo.bom                     FROM ArxProd.dbo.bom;
     SELECT * INTO dbo.price                   FROM ArxProd.dbo.price;
-    SELECT * INTO dbo.POL                     FROM ArxProd.dbo.POL;
+    SELECT * INTO dbo.po_line                 FROM ArxProd.dbo.po_line;
     SELECT * INTO dbo.purchase_order          FROM ArxProd.dbo.purchase_order;
     SELECT * INTO dbo.purchase_order_history  FROM ArxProd.dbo.purchase_order_history;
     SELECT * INTO dbo.company_attachment      FROM ArxProd.dbo.company_attachment;
@@ -157,18 +157,18 @@ END
     ');
     EXEC('
 CREATE OR ALTER TRIGGER dbo.trg_POL_part_count
-ON dbo.POL
+ON dbo.po_line
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT POLPNID FROM inserted WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT POLPNID FROM deleted  WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
+    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.PNID)
     FROM   dbo.PN p
     JOIN   affected a ON a.id = p.PNID
 END
@@ -182,7 +182,7 @@ END
 
     UPDATE p
     SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.PNID AND f.is_active = 1),
-           p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
+           p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.PNID)
     FROM   dbo.PN p;
 
     -- PO sequence: starts after current max so dev POs don't collide with snapshot data

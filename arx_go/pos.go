@@ -78,18 +78,18 @@ type SuggestLink struct {
 
 func (h *Handler) fetchSuggestLinks(r *http.Request, poNum string) []SuggestLink {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pol.POLPNID, pol.POLPNPartNumber, pol.VendorPN
+		SELECT pol.part_id, pol.part_number_snapshot, pol.vendor_part_number
 		FROM %s pol
-		JOIN %s po ON pol.POLPOID = po.ID
+		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
-		  AND pol.POLPNID IS NOT NULL
-		  AND pol.VendorPN IS NOT NULL AND pol.VendorPN <> ''
+		  AND pol.part_id IS NOT NULL
+		  AND pol.vendor_part_number IS NOT NULL AND pol.vendor_part_number <> ''
 		  AND po.supplier_id IS NOT NULL
 		  AND NOT EXISTS (
 		    SELECT 1 FROM %s sp
-		    WHERE sp.part_id = pol.POLPNID
+		    WHERE sp.part_id = pol.part_id
 		      AND sp.supplier_id = po.supplier_id
-		      AND sp.supplier_pn = pol.VendorPN
+		      AND sp.supplier_pn = pol.vendor_part_number
 		  )
 	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.SupplierPartTable()), poNum)
 	if err != nil {
@@ -123,20 +123,20 @@ type SuggestPrice struct {
 
 func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPrice {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT DISTINCT pol.POLPNID, pol.POLPNPartNumber, pol.POLCost
+		SELECT DISTINCT pol.part_id, pol.part_number_snapshot, pol.unit_cost
 		FROM %s pol
-		JOIN %s po ON pol.POLPOID = po.ID
+		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
-		  AND pol.POLPNID IS NOT NULL
-		  AND pol.POLCost > 0
+		  AND pol.part_id IS NOT NULL
+		  AND pol.unit_cost > 0
 		  AND po.supplier_id IS NOT NULL
 		  AND NOT EXISTS (
 		    SELECT 1 FROM %s pr
-		    WHERE pr.part_id = pol.POLPNID
+		    WHERE pr.part_id = pol.part_id
 		      AND pr.supplier_id = po.supplier_id
 		      AND pr.pack_size = 1
 		      AND pr.is_active = 1
-		      AND pr.price_ea = pol.POLCost
+		      AND pr.price_ea = pol.unit_cost
 		  )
 	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PriceTable()), poNum)
 	if err != nil {
@@ -496,7 +496,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		item, qty, cost, pnid := polRowToArgs(row)
 		rev := h.resolvePolRev(r, row.Rev, row.PNID)
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLRev, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
+			INSERT INTO %s (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
 		`, h.cfg.POLineTable()), newID, item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
 			h.renderError(w, r, "Error adding PO line: "+err.Error())
@@ -591,7 +591,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	// Delete flagged line items
 	for _, idStr := range r.Form["delete_pol[]"] {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE POLID=@p1`, h.cfg.POLineTable(),
+			`DELETE FROM %s WHERE id=@p1`, h.cfg.POLineTable(),
 		), idStr); err != nil {
 			h.renderError(w, r, "Error deleting PO line: "+err.Error())
 			return
@@ -611,9 +611,9 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		item, qty, cost, pnid := polRowToArgs(row)
 		rev := h.resolvePolRev(r, row.Rev, row.PNID)
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET POLItem=@p1, POLPNPartNumber=@p2, POLRev=@p3, POLDesc=@p4,
-			              POLQty=@p5, POLCost=@p6, VendorPN=@p7, POLPNID=@p8
-			WHERE POLID=@p9
+			UPDATE %s SET line_number=@p1, part_number_snapshot=@p2, revision_snapshot=@p3, description=@p4,
+			              qty=@p5, unit_cost=@p6, vendor_part_number=@p7, part_id=@p8
+			WHERE id=@p9
 		`, h.cfg.POLineTable()), item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid, polID); err != nil {
 			h.renderError(w, r, "Error updating PO line: "+err.Error())
 			return
@@ -630,7 +630,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 			item, qty, cost, pnid := polRowToArgs(row)
 			rev := h.resolvePolRev(r, row.Rev, row.PNID)
 			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-				INSERT INTO %s (POLPOID, POLItem, POLPNPartNumber, POLRev, POLDesc, POLQty, POLCost, VendorPN, POLPNID)
+				INSERT INTO %s (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
 				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
 			`, h.cfg.POLineTable()), poID, item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid); err != nil {
 				h.renderError(w, r, "Error adding PO line: "+err.Error())
@@ -643,9 +643,9 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	// so it sees the deletes/inserts above before any other writer can interfere)
 	var lineSum float64
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ISNULL(SUM(pol.POLQty * pol.POLCost), 0)
+		SELECT ISNULL(SUM(pol.qty * pol.unit_cost), 0)
 		FROM %s pol
-		JOIN %s po ON pol.POLPOID = po.ID
+		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
 	`, h.cfg.POLineTable(), h.cfg.POTable()), num).Scan(&lineSum); err != nil {
 		h.renderError(w, r, "Error recalculating PO total: "+err.Error())
@@ -1578,12 +1578,12 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num string) []models.PurchaseOrderLine {
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pol.POLID, pol.POLItem, pol.POLPNPartNumber, pol.POLRev, pol.POLDesc,
-		       pol.POLQty, pol.POLCost, pol.VendorPN, pol.POLPNID
+		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
+		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id
 		FROM %s pol
-		JOIN %s po ON pol.POLPOID = po.ID
+		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
-		ORDER BY pol.POLItem
+		ORDER BY pol.line_number
 	`, pol, po), num)
 	if err != nil {
 		return nil
