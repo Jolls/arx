@@ -38,9 +38,9 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 	su, cn := h.cfg.CompanyTable(), h.cfg.ContactTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, su.SUSupplierCode, su.SUNumOfLNKs, su.SUNumOfPOs,
-		       su.is_active, CN.CNName, CN.CNCountry
+		       su.is_active, CN.display_name, CN.country
 		FROM %s su
-		LEFT JOIN %s CN ON su.default_contact = CN.CNID
+		LEFT JOIN %s CN ON su.default_contact = CN.id
 		ORDER BY su.name ASC
 	`, su, cn))
 	if err != nil {
@@ -226,14 +226,14 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,
-		       pn.PNID, pn.part_number, pn.title, pn.revision, pn.category,
+		       pn.id, pn.part_number, pn.title, pn.revision, pn.category,
 		       sp.unit_id,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
 		       CASE WHEN sp.unit_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
 		FROM %s sp
-		JOIN %s pn ON sp.part_id = pn.PNID
+		JOIN %s pn ON sp.part_id = pn.id
 		LEFT JOIN %s pu ON sp.unit_id  = pu.unit_id   -- explicit purchase unit
-		LEFT JOIN %s bu ON pn.PNUNID   = bu.unit_id   -- base unit fallback
+		LEFT JOIN %s bu ON pn.unit_id  = bu.unit_id   -- base unit fallback
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
 	`, sp, pn, ut, ut), id)
@@ -430,9 +430,9 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		       su.default_contact, su.is_active, su.is_supplier, su.is_manufacturer,
 		       su.SUNumOfLNKs, su.SUNumOfPOs, su.date_modified,
 		       su.primary_attachment_id,
-		       cn.CNName, cn.CNPhone1, cn.CNEmail, cn.CNCity
+		       cn.display_name, cn.phone_1, cn.email, cn.city
 		FROM %s su
-		LEFT JOIN %s cn ON su.default_contact = cn.CNID
+		LEFT JOIN %s cn ON su.default_contact = cn.id
 		WHERE su.id = @p1
 	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), id).Scan(
 		&s.ID, &name, &code, &notes,

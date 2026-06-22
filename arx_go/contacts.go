@@ -37,12 +37,12 @@ func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
 	}
 	cn, su := h.cfg.ContactTable(), h.cfg.CompanyTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT cn.CNID, cn.CNSUID, cn.CNName, cn.CNEmail, cn.CNPhone1,
-		       cn.CNCity, cn.CNState, cn.CNCountry, cn.CNWeb,
-		       cn.CNActive, cn.CNNotes, cn.CNDateModified, su.name
+		SELECT cn.id, cn.company_id, cn.display_name, cn.email, cn.phone_1,
+		       cn.city, cn.state, cn.country, cn.website,
+		       cn.is_active, cn.notes, cn.updated_at, su.name
 		FROM %s cn
-		LEFT JOIN %s su ON cn.CNSUID = su.id
-		ORDER BY su.name, cn.CNName ASC
+		LEFT JOIN %s su ON cn.company_id = su.id
+		ORDER BY su.name, cn.display_name ASC
 	`, cn, su))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -124,10 +124,10 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	var newID int
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (CNName, CNSUID, CNEmail, CNPhone1, CNPhone2, CNFAX,
-		                CNAddress, CNCity, CNState, CNZipcode, CNCountry,
-		                CNWeb, CNUserAccountLink, CNActive, CNNotes, CNDateModified)
-		OUTPUT INSERTED.CNID
+		INSERT INTO %s (display_name, company_id, email, phone_1, phone_2, fax,
+		                address, city, state, zipcode, country,
+		                website, user_account_link, is_active, notes, updated_at)
+		OUTPUT INSERTED.id
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16)
 	`, h.cfg.ContactTable()),
 		name, nullableInt(fv(r, "CNSUID")),
@@ -181,10 +181,10 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  CNName=@p1, CNSUID=@p2, CNEmail=@p3, CNPhone1=@p4, CNPhone2=@p5, CNFAX=@p6,
-		  CNAddress=@p7, CNCity=@p8, CNState=@p9, CNZipcode=@p10, CNCountry=@p11,
-		  CNWeb=@p12, CNUserAccountLink=@p13, CNActive=@p14, CNNotes=@p15, CNDateModified=@p16
-		WHERE CNID=@p17
+		  display_name=@p1, company_id=@p2, email=@p3, phone_1=@p4, phone_2=@p5, fax=@p6,
+		  address=@p7, city=@p8, state=@p9, zipcode=@p10, country=@p11,
+		  website=@p12, user_account_link=@p13, is_active=@p14, notes=@p15, updated_at=@p16
+		WHERE id=@p17
 	`, h.cfg.ContactTable()),
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
@@ -216,14 +216,14 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 	var active sql.NullBool
 	var dateModified sql.NullTime
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT cn.CNID, cn.CNSUID, cn.CNName, cn.CNEmail,
-		       cn.CNPhone1, cn.CNPhone2, cn.CNFAX,
-		       cn.CNAddress, cn.CNCity, cn.CNState, cn.CNZipcode, cn.CNCountry,
-		       cn.CNWeb, cn.CNUserAccountLink, cn.CNNotes, cn.CNActive, cn.CNDateModified,
+		SELECT cn.id, cn.company_id, cn.display_name, cn.email,
+		       cn.phone_1, cn.phone_2, cn.fax,
+		       cn.address, cn.city, cn.state, cn.zipcode, cn.country,
+		       cn.website, cn.user_account_link, cn.notes, cn.is_active, cn.updated_at,
 		       su.name
 		FROM %s cn
-		LEFT JOIN %s su ON cn.CNSUID = su.id
-		WHERE cn.CNID = @p1
+		LEFT JOIN %s su ON cn.company_id = su.id
+		WHERE cn.id = @p1
 	`, cn, su), id).Scan(
 		&c.CNID, &cnsuid, &name, &email,
 		&phone1, &phone2, &fax,

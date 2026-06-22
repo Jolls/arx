@@ -18,9 +18,9 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT su.id, su.name, cn.CNCity
+		SELECT su.id, su.name, cn.city
 		FROM %s su
-		LEFT JOIN %s cn ON su.default_contact = cn.CNID
+		LEFT JOIN %s cn ON su.default_contact = cn.id
 		WHERE su.name LIKE @p1 AND su.is_active = 1
 		ORDER BY su.name
 		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
@@ -51,11 +51,11 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT CNID, CNName, CNAddress, CNCity, CNState, CNZipcode,
-		       CNCountry, CNPhone1, CNFAX, CNEmail
+		SELECT id, display_name, address, city, state, zipcode,
+		       country, phone_1, fax, email
 		FROM %s
-		WHERE CNSUID = @p1 AND CNActive = 1
-		ORDER BY CNName
+		WHERE company_id = @p1 AND is_active = 1
+		ORDER BY display_name
 	`, h.cfg.ContactTable()), id)
 	if err != nil {
 		writeJSON(w, []any{})
@@ -101,7 +101,7 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PNID, part_number, revision, title, detail FROM %s
+		SELECT id, part_number, revision, title, detail FROM %s
 		WHERE part_number LIKE @p1
 		ORDER BY part_number
 		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY

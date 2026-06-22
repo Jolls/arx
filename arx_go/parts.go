@@ -25,7 +25,7 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	var filIDPrimary sql.NullInt64
 	var stockOnHand sql.NullFloat64
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT PNID, part_number, title, category, has_bom, PNFILIDPrimary, stock_on_hand FROM %s WHERE PNID = @p1`,
+		`SELECT id, part_number, title, category, has_bom, primary_attachment_id, stock_on_hand FROM %s WHERE id = @p1`,
 		h.cfg.PartsTable(),
 	), id).Scan(&p.PNID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand)
 	p.PartNumber = partNumber.String
@@ -78,8 +78,8 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		Modified string `json:"modified"`
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PNID, part_number, revision, title, detail,
-		       PNReqBy, PNDate, category, PNDateModified
+		SELECT id, part_number, revision, title, detail,
+		       requested_by, created_date, category, modified_date
 		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
 	if err != nil {
@@ -137,14 +137,14 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT PNID, part_number, revision, title, detail, category, has_bom,
-		       release_status, active, PNReqBy, PNNotes,
-		       PNDate, PNDateModified, PNFILIDPrimary,
-		       PNCurrentCost, PNLastRollupCost, PNLastRollupAt, PNFILLinks, PNPOLinks,
-		       PNUNID, stock_on_hand,
+		SELECT id, part_number, revision, title, detail, category, has_bom,
+		       release_status, is_active, requested_by, notes,
+		       created_date, modified_date, primary_attachment_id,
+		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
+		       unit_id, stock_on_hand,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s WHERE PNID = @p1
+		FROM %s WHERE id = @p1
 	`, h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
@@ -210,7 +210,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		var att models.Attachment
 		var fname, fnotes, frev sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT FILID, FILFileName, category, FILPNRev FROM %s WHERE FILID = @p1`,
+			`SELECT id, file_name, category, part_revision FROM %s WHERE id = @p1`,
 			h.cfg.AttachmentsTable(),
 		), p.PNFILIDPrimary).Scan(&att.FILID, &fname, &fnotes, &frev); err == nil {
 			att.FILFileName = fname.String
@@ -277,11 +277,11 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	var newID int
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_number, revision, title, detail, category, has_bom,
-		                release_status, active, PNReqBy, PNNotes, PNDate, PNDateModified,
-		                PNUNID,
+		                release_status, is_active, requested_by, notes, created_date, modified_date,
+		                unit_id,
 		                user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		                user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
-		OUTPUT INSERTED.PNID
+		OUTPUT INSERTED.id
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,
 		        @p13,
 		        @p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23)
@@ -355,11 +355,11 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
 		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5, has_bom=@p6,
-		  release_status=@p7, active=@p8, PNReqBy=@p9, PNNotes=@p10, PNDateModified=@p11,
-		  PNUNID=@p12,
+		  release_status=@p7, is_active=@p8, requested_by=@p9, notes=@p10, modified_date=@p11,
+		  unit_id=@p12,
 		  user_field_1=@p13, user_field_2=@p14, user_field_3=@p15, user_field_4=@p16, user_field_5=@p17,
 		  user_field_6=@p18, user_field_7=@p19, user_field_8=@p20, user_field_9=@p21, user_field_10=@p22
-		WHERE PNID=@p23
+		WHERE id=@p23
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"), r.FormValue("has_bom") == "1",
 		fv(r, "release_status"), r.FormValue("active") == "1", fv(r, "PNReqBy"), fv(r, "PNNotes"),
@@ -422,12 +422,12 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT PNID, part_number, revision, title, detail, category, has_bom,
-		       release_status, active, PNReqBy, PNNotes,
-		       PNUNID,
+		SELECT id, part_number, revision, title, detail, category, has_bom,
+		       release_status, is_active, requested_by, notes,
+		       unit_id,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s WHERE PNID = @p1
+		FROM %s WHERE id = @p1
 	`, h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
@@ -467,14 +467,14 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	}
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.PLItem, pl.PLQty, pl.PLPartID,
+		SELECT pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.title, pn.revision, pn.category,
-		       pn.PNCurrentCost, pn.PNLastRollupCost,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.PLListID = pn.PNID) THEN 1 ELSE 0 END AS BIT)
+		       pn.current_cost, pn.last_rollup_cost,
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
-		JOIN %s pn ON pl.PLPartID = pn.PNID
-		WHERE pl.PLListID = @p1
-		ORDER BY pl.PLItem
+		JOIN %s pn ON pl.component_part_id = pn.id
+		WHERE pl.parent_part_id = @p1
+		ORDER BY pl.line_number
 	`, pl, pl, pn), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
@@ -536,11 +536,11 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	}
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.PLItem, pl.PLQty, pl.PLListID,
+		SELECT pl.line_number, pl.qty, pl.parent_part_id,
 		       pn.part_number, pn.title, pn.revision, pn.category
 		FROM %s pl
-		JOIN %s pn ON pl.PLListID = pn.PNID
-		WHERE pl.PLPartID = @p1
+		JOIN %s pn ON pl.parent_part_id = pn.id
+		WHERE pl.component_part_id = @p1
 		ORDER BY pn.part_number
 	`, pl, pn), id)
 	if err != nil {
@@ -622,12 +622,12 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.PLID, pl.PLItem, pl.PLQty, pl.PLPartID,
+		SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.title
 		FROM %s pl
-		JOIN %s pn ON pl.PLPartID = pn.PNID
-		WHERE pl.PLListID = @p1
-		ORDER BY pl.PLItem
+		JOIN %s pn ON pl.component_part_id = pn.id
+		WHERE pl.parent_part_id = @p1
+		ORDER BY pl.line_number
 	`, pl, pn), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
@@ -650,7 +650,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	var lastRollupCost sql.NullFloat64
 	var lastRollupAt sql.NullTime
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT PNLastRollupCost, PNLastRollupAt FROM %s WHERE PNID = @p1`, pn,
+		`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id = @p1`, pn,
 	), id).Scan(&lastRollupCost, &lastRollupAt)
 	p.PNLastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {
@@ -691,7 +691,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	for _, plidStr := range r.Form["delete_pl[]"] {
 		deleteSet[plidStr] = true
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE PLID=@p1`, pl,
+			`DELETE FROM %s WHERE id=@p1`, pl,
 		), plidStr); err != nil {
 			h.renderError(w, r, "Error deleting BOM row: "+err.Error())
 			return
@@ -710,14 +710,14 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 		if pnid == 0 && row.PartPN != "" {
 			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT PNID FROM %s WHERE part_number = @p1`, pn,
+				`SELECT id FROM %s WHERE part_number = @p1`, pn,
 			), row.PartPN).Scan(&pnid)
 		}
 		if pnid == 0 {
 			continue
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET PLItem=@p1, PLQty=@p2, PLPartID=@p3 WHERE PLID=@p4
+			UPDATE %s SET line_number=@p1, qty=@p2, component_part_id=@p3 WHERE id=@p4
 		`, pl), item, qty, pnid, plidStr); err != nil {
 			h.renderError(w, r, "Error updating BOM row: "+err.Error())
 			return
@@ -737,14 +737,14 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 		if pnid == 0 && row.PartPN != "" {
 			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT PNID FROM %s WHERE part_number = @p1`, pn,
+				`SELECT id FROM %s WHERE part_number = @p1`, pn,
 			), row.PartPN).Scan(&pnid)
 		}
 		if pnid == 0 {
 			continue
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s (PLListID, PLPartID, PLItem, PLQty) VALUES (@p1,@p2,@p3,@p4)
+			INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES (@p1,@p2,@p3,@p4)
 		`, pl), parentID, pnid, item, qty); err != nil {
 			h.renderError(w, r, "Error inserting BOM row: "+err.Error())
 			return
@@ -781,11 +781,11 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pl.PLPartID, pl.PLQty, pn.PNCurrentCost,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.PLListID = pn.PNID) THEN 1 ELSE 0 END AS BIT)
+		SELECT pl.component_part_id, pl.qty, pn.current_cost,
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
-		JOIN %s pn ON pl.PLPartID = pn.PNID
-		WHERE pl.PLListID = @p1
+		JOIN %s pn ON pl.component_part_id = pn.id
+		WHERE pl.parent_part_id = @p1
 	`, pl, pl, pn), pnid)
 	if err != nil {
 		return rollupResult{}, err
@@ -862,7 +862,7 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	}()
 	for partID, result := range memo {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET PNLastRollupCost=@p1, PNLastRollupAt=@p2 WHERE PNID=@p3`, pn,
+			`UPDATE %s SET last_rollup_cost=@p1, last_rollup_at=@p2 WHERE id=@p3`, pn,
 		), result.cost, now, partID); err != nil {
 			h.renderError(w, r, "Error saving rollup cost: "+err.Error())
 			return
@@ -883,8 +883,8 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT FILID, FILFileName, category, FILPNRev, order_id
-		FROM %s WHERE FILPNID = @p1 AND is_active = 1 ORDER BY order_id, FILID
+		SELECT id, file_name, category, part_revision, sort_order
+		FROM %s WHERE part_id = @p1 AND is_active = 1 ORDER BY sort_order, id
 	`, h.cfg.AttachmentsTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
@@ -938,7 +938,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`INSERT INTO %s (FILPNID, FILFileName, FILPNRev, category, order_id) VALUES (@p1,@p2,@p3,@p4,@p5)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 		h.cfg.AttachmentsTable(),
 	), id, fv(r, "FILFileName"), fv(r, "FILPNRev"), fv(r, "FILNotes"), oID); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
@@ -957,7 +957,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	attIDInt, _ := strconv.Atoi(attID)
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET FILPNRev=@p1, category=@p2, order_id=@p3 WHERE FILID=@p4`,
+		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3 WHERE id=@p4`,
 		h.cfg.AttachmentsTable(),
 	), fv(r, "FILPNRev"), fv(r, "category"), oID, attIDInt); err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
@@ -969,7 +969,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
-	if err := h.softDeleteAttachment(r.Context(), h.cfg.AttachmentsTable(), "FILID", attIDInt, "", 0); err != nil {
+	if err := h.softDeleteAttachment(r.Context(), h.cfg.AttachmentsTable(), "id", attIDInt, "", 0); err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
 	}
@@ -984,7 +984,7 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 	if n, err2 := strconv.Atoi(filID); err2 == nil && n != 0 {
 		val = n
 	}
-	if err := h.setPrimaryAttachment(r.Context(), h.cfg.PartsTable(), "PNID", "PNFILIDPrimary", idInt, val); err != nil {
+	if err := h.setPrimaryAttachment(r.Context(), h.cfg.PartsTable(), "id", "primary_attachment_id", idInt, val); err != nil {
 		h.renderError(w, r, "Error setting primary attachment: "+err.Error())
 		return
 	}
@@ -1000,10 +1000,10 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT po.number, po.supplier_name, po.date_ordered, po.date_closed, po.status,
-		       pol.POLItem, pol.POLQty, pol.POLCost, pol.POLDesc, pol.VendorPN
+		       pol.line_number, pol.qty, pol.unit_cost, pol.description, pol.vendor_part_number
 		FROM %s pol
-		JOIN %s po ON pol.POLPOID = po.ID
-		WHERE pol.POLPNID = @p1
+		JOIN %s po ON pol.po_id = po.ID
+		WHERE pol.part_id = @p1
 		ORDER BY po.date_ordered DESC
 	`, pol, po), id)
 	if err != nil {

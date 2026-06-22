@@ -123,18 +123,18 @@ func Load(version string) *Config {
 
 // Table name helpers — TEST_MODE swaps the whole DB via the DSN (see Base.ActiveDBName).
 // Parts Master tables
-func (c *Config) PartsTable() string              { return "PN" }
-func (c *Config) AttachmentsTable() string        { return "FIL" }
-func (c *Config) BOMTable() string                { return "PL" }
+func (c *Config) PartsTable() string              { return "part" }
+func (c *Config) AttachmentsTable() string        { return "part_attachment" }
+func (c *Config) BOMTable() string                { return "bom" }
 func (c *Config) PriceTable() string              { return "price" }
-func (c *Config) POTable() string                 { return "PO" }
-func (c *Config) POLineTable() string             { return "POL" }
-func (c *Config) POHistoryTable() string          { return "PO_history" }
+func (c *Config) POTable() string                 { return "purchase_order" }
+func (c *Config) POLineTable() string             { return "po_line" }
+func (c *Config) POHistoryTable() string          { return "purchase_order_history" }
 func (c *Config) CompanyTable() string            { return "company" }
 func (c *Config) SupplierPartTable() string       { return "supplier_part" }
 func (c *Config) MfgPartTable() string            { return "mfg_part" }
 func (c *Config) CompanyAttachmentsTable() string { return "company_attachment" }
-func (c *Config) ContactTable() string            { return "CN" }
+func (c *Config) ContactTable() string            { return "contact" }
 func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) InventoryTxnTable() string       { return "inventory_transaction" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
@@ -142,10 +142,10 @@ func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "LNK" }
 
 // Test Records tables
-func (c *Config) FormsTable() string                 { return "Forms" }
-func (c *Config) RecordsTable() string               { return "TestRecords" }
+func (c *Config) FormsTable() string                 { return "form" }
+func (c *Config) RecordsTable() string               { return "test_record" }
 func (c *Config) StepsTable() string                 { return "test_definition" }
-func (c *Config) ResultsTable() string               { return "TestResults" }
+func (c *Config) ResultsTable() string               { return "test_result" }
 func (c *Config) NamedQueriesTable() string          { return "named_queries" }
 func (c *Config) TestDefinitionHistoryTable() string { return "test_definition_history" }
 func (c *Config) FormEventsTable() string            { return "form_events" }

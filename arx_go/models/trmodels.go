@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// TestForm is a row in the Forms table.
-// PartNumber and Title are joined from the PN table.
+// TestForm is a row in the form table.
+// PartNumber and Title are joined from the part_number table.
 type TestForm struct {
 	ID          int
 	PNID        int
@@ -55,11 +55,11 @@ func (f TestForm) RecordTypeList() []string {
 	return out
 }
 
-// TestRecord is a row in the TestRecords table.
+// TestRecord is a row in the test_record table.
 type TestRecord struct {
 	ID               int
 	FormID           int
-	PartNumberID     int        // FK to PN.PNID; 0 if NULL
+	PartNumberID     int        // FK to part_number.id; 0 if NULL
 	SerialNumber     string // #214: migrate to INT once DB column is migrated from VARCHAR(64)
 	SerialNumberPN   string     // part number of the unit under test
 	SerialNumberDesc string     // description of the unit under test
@@ -104,7 +104,7 @@ type TestStep struct {
 	StepUpdatedAt    *time.Time
 }
 
-// TestResult is a row in the TestResults table.
+// TestResult is a row in the test_result table.
 type TestResult struct {
 	ID            int
 	RecordID      int

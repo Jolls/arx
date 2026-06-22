@@ -22,7 +22,7 @@
 
 -- ── Sequence restart (Azure: run this after portal Copy; on-prem: included below) ──────────────
 --
---   DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO);
+--   DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.purchase_order);
 --   IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq')
 --       EXEC('ALTER SEQUENCE dbo.PO_Number_Seq RESTART WITH ' + @next_po);
 --   ELSE
@@ -38,24 +38,24 @@ BEGIN TRANSACTION;
 BEGIN TRY
 
     -- Drop existing tables (reverse FK order)
-    IF OBJECT_ID('dbo.CN',                      'U') IS NOT NULL DROP TABLE dbo.CN;
-    IF OBJECT_ID('dbo.FIL',                      'U') IS NOT NULL DROP TABLE dbo.FIL;
+    IF OBJECT_ID('dbo.contact',                  'U') IS NOT NULL DROP TABLE dbo.contact;
+    IF OBJECT_ID('dbo.part_attachment',           'U') IS NOT NULL DROP TABLE dbo.part_attachment;
     IF OBJECT_ID('dbo.supplier_part',            'U') IS NOT NULL DROP TABLE dbo.supplier_part;
     IF OBJECT_ID('dbo.mfg_part',                 'U') IS NOT NULL DROP TABLE dbo.mfg_part;
-    IF OBJECT_ID('dbo.PL',                       'U') IS NOT NULL DROP TABLE dbo.PL;
+    IF OBJECT_ID('dbo.bom',                      'U') IS NOT NULL DROP TABLE dbo.bom;
     IF OBJECT_ID('dbo.price',                    'U') IS NOT NULL DROP TABLE dbo.price;
     IF OBJECT_ID('dbo.inventory_transaction',    'U') IS NOT NULL DROP TABLE dbo.inventory_transaction;
-    IF OBJECT_ID('dbo.POL',                      'U') IS NOT NULL DROP TABLE dbo.POL;
-    IF OBJECT_ID('dbo.PO_history',               'U') IS NOT NULL DROP TABLE dbo.PO_history;
-    IF OBJECT_ID('dbo.PO',                       'U') IS NOT NULL DROP TABLE dbo.PO;
+    IF OBJECT_ID('dbo.po_line',                  'U') IS NOT NULL DROP TABLE dbo.po_line;
+    IF OBJECT_ID('dbo.purchase_order_history',   'U') IS NOT NULL DROP TABLE dbo.purchase_order_history;
+    IF OBJECT_ID('dbo.purchase_order',           'U') IS NOT NULL DROP TABLE dbo.purchase_order;
     IF OBJECT_ID('dbo.company_attachment',       'U') IS NOT NULL DROP TABLE dbo.company_attachment;
     IF OBJECT_ID('dbo.company',                  'U') IS NOT NULL DROP TABLE dbo.company;
-    IF OBJECT_ID('dbo.PN',                       'U') IS NOT NULL DROP TABLE dbo.PN;
-    IF OBJECT_ID('dbo.Forms',                    'U') IS NOT NULL DROP TABLE dbo.Forms;
+    IF OBJECT_ID('dbo.part',                     'U') IS NOT NULL DROP TABLE dbo.part;
+    IF OBJECT_ID('dbo.form',                     'U') IS NOT NULL DROP TABLE dbo.form;
     IF OBJECT_ID('dbo.form_events',              'U') IS NOT NULL DROP TABLE dbo.form_events;
     IF OBJECT_ID('dbo.record_events',            'U') IS NOT NULL DROP TABLE dbo.record_events;
-    IF OBJECT_ID('dbo.TestRecords',              'U') IS NOT NULL DROP TABLE dbo.TestRecords;
-    IF OBJECT_ID('dbo.TestResults',              'U') IS NOT NULL DROP TABLE dbo.TestResults;
+    IF OBJECT_ID('dbo.test_record',              'U') IS NOT NULL DROP TABLE dbo.test_record;
+    IF OBJECT_ID('dbo.test_result',              'U') IS NOT NULL DROP TABLE dbo.test_result;
     IF OBJECT_ID('dbo.test_definition',          'U') IS NOT NULL DROP TABLE dbo.test_definition;
     IF OBJECT_ID('dbo.test_definition_history',  'U') IS NOT NULL DROP TABLE dbo.test_definition_history;
     IF OBJECT_ID('dbo.named_queries',            'U') IS NOT NULL DROP TABLE dbo.named_queries;
@@ -66,24 +66,24 @@ BEGIN TRY
     IF OBJECT_ID('dbo.users',                    'U') IS NOT NULL DROP TABLE dbo.users;
 
     -- Populate from prod via three-part names
-    SELECT * INTO dbo.CN                      FROM ArxProd.dbo.CN;
-    SELECT * INTO dbo.FIL                     FROM ArxProd.dbo.FIL;
+    SELECT * INTO dbo.contact                  FROM ArxProd.dbo.contact;
+    SELECT * INTO dbo.part_attachment          FROM ArxProd.dbo.part_attachment;
     SELECT * INTO dbo.supplier_part           FROM ArxProd.dbo.supplier_part;
     SELECT * INTO dbo.mfg_part                FROM ArxProd.dbo.mfg_part;
-    SELECT * INTO dbo.PL                      FROM ArxProd.dbo.PL;
+    SELECT * INTO dbo.bom                     FROM ArxProd.dbo.bom;
     SELECT * INTO dbo.price                   FROM ArxProd.dbo.price;
-    SELECT * INTO dbo.POL                     FROM ArxProd.dbo.POL;
-    SELECT * INTO dbo.PO                      FROM ArxProd.dbo.PO;
-    SELECT * INTO dbo.PO_history              FROM ArxProd.dbo.PO_history;
+    SELECT * INTO dbo.po_line                 FROM ArxProd.dbo.po_line;
+    SELECT * INTO dbo.purchase_order          FROM ArxProd.dbo.purchase_order;
+    SELECT * INTO dbo.purchase_order_history  FROM ArxProd.dbo.purchase_order_history;
     SELECT * INTO dbo.company_attachment      FROM ArxProd.dbo.company_attachment;
     SELECT * INTO dbo.company                 FROM ArxProd.dbo.company;
-    SELECT * INTO dbo.PN                      FROM ArxProd.dbo.PN;
+    SELECT * INTO dbo.part                    FROM ArxProd.dbo.part;
     SELECT * INTO dbo.inventory_transaction   FROM ArxProd.dbo.inventory_transaction;
-    SELECT * INTO dbo.Forms                   FROM ArxProd.dbo.Forms;
+    SELECT * INTO dbo.form                    FROM ArxProd.dbo.form;
     SELECT * INTO dbo.form_events             FROM ArxProd.dbo.form_events;
     SELECT * INTO dbo.record_events           FROM ArxProd.dbo.record_events;
-    SELECT * INTO dbo.TestRecords             FROM ArxProd.dbo.TestRecords;
-    SELECT * INTO dbo.TestResults             FROM ArxProd.dbo.TestResults;
+    SELECT * INTO dbo.test_record             FROM ArxProd.dbo.test_record;
+    SELECT * INTO dbo.test_result             FROM ArxProd.dbo.test_result;
     SELECT * INTO dbo.test_definition         FROM ArxProd.dbo.test_definition;
     SELECT * INTO dbo.test_definition_history FROM ArxProd.dbo.test_definition_history;
     SELECT * INTO dbo.named_queries           FROM ArxProd.dbo.named_queries;
@@ -94,11 +94,15 @@ BEGIN TRY
     SELECT * INTO dbo.users                   FROM ArxProd.dbo.users;
 
     -- Constraints not copied by SELECT * INTO
-    ALTER TABLE dbo.PO         ADD CONSTRAINT UQ_PO_number             UNIQUE (number);
+    ALTER TABLE dbo.purchase_order ADD CONSTRAINT UQ_purchase_order_number UNIQUE (number);
     ALTER TABLE dbo.app_config ADD CONSTRAINT DF_app_config_updated_at DEFAULT GETDATE() FOR updated_at;
-    ALTER TABLE dbo.FIL        ADD CONSTRAINT DF_FIL_is_active          DEFAULT 1 FOR is_active;
+    ALTER TABLE dbo.part_attachment ADD CONSTRAINT DF_part_attachment_is_active DEFAULT 1 FOR is_active;
     CREATE UNIQUE INDEX UQ_price_active_combo ON dbo.price (part_id, supplier_id, pack_size) WHERE is_active = 1;
-    ALTER TABLE dbo.PN         ADD CONSTRAINT CK_PN_category            CHECK (category IN ('ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
+    ALTER TABLE dbo.part ADD CONSTRAINT CK_part_number_category   CHECK (category IN ('', 'ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'RAW', 'SVC', 'TOOL'));
+    ALTER TABLE dbo.form        ADD CONSTRAINT DF_form_is_locked        DEFAULT 0 FOR is_locked;
+    ALTER TABLE dbo.form        ADD CONSTRAINT DF_form_is_active        DEFAULT 1 FOR is_active;
+    ALTER TABLE dbo.test_record ADD CONSTRAINT DF_test_record_is_locked DEFAULT 0 FOR is_locked;
+    ALTER TABLE dbo.test_record ADD CONSTRAINT DF_test_record_is_active DEFAULT 1 FOR is_active;
 
     -- Triggers not copied by SELECT * INTO
     EXEC('
@@ -121,7 +125,7 @@ END
     ');
     EXEC('
 CREATE OR ALTER TRIGGER dbo.trg_PO_company_count
-ON dbo.PO
+ON dbo.purchase_order
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -132,61 +136,61 @@ BEGIN
         SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO p WHERE p.supplier_id = s.id)
+    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.purchase_order p WHERE p.supplier_id = s.id)
     FROM   dbo.company s
     JOIN   affected a ON a.id = s.id
 END
     ');
     EXEC('
 CREATE OR ALTER TRIGGER dbo.trg_FIL_part_count
-ON dbo.FIL
+ON dbo.part_attachment
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT FILPNID FROM inserted WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT FILPNID FROM deleted  WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1)
-    FROM   dbo.PN p
-    JOIN   affected a ON a.id = p.PNID
+    SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.id AND f.is_active = 1)
+    FROM   dbo.part p
+    JOIN   affected a ON a.id = p.id
 END
     ');
     EXEC('
 CREATE OR ALTER TRIGGER dbo.trg_POL_part_count
-ON dbo.POL
+ON dbo.po_line
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT POLPNID FROM inserted WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT POLPNID FROM deleted  WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
-    FROM   dbo.PN p
-    JOIN   affected a ON a.id = p.PNID
+    SET    p.po_line_count = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.id)
+    FROM   dbo.part p
+    JOIN   affected a ON a.id = p.id
 END
     ');
 
     -- Recalibrate snapshot counts
     UPDATE s
     SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id),
-           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO             p  WHERE p.supplier_id  = s.id)
+           s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.purchase_order p  WHERE p.supplier_id  = s.id)
     FROM   dbo.company s;
 
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1),
-           p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
-    FROM   dbo.PN p;
+    SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.id AND f.is_active = 1),
+           p.po_line_count   = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.id)
+    FROM   dbo.part p;
 
     -- PO sequence: starts after current max so dev POs don't collide with snapshot data
-    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.PO);
+    DECLARE @next_po INT = (SELECT ISNULL(MAX(TRY_CAST(number AS INT)), 99999) + 1 FROM dbo.purchase_order);
     IF EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'PO_Number_Seq')
         EXEC('ALTER SEQUENCE dbo.PO_Number_Seq RESTART WITH ' + @next_po);
     ELSE

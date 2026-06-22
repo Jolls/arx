@@ -3,20 +3,20 @@
 ```mermaid
 erDiagram
 
-    PN {
-        int     PNID            PK
-        varchar part_number     "UNIQUE"
+    part {
+        int     id                    PK
+        varchar part_number           "UNIQUE"
         varchar category
         varchar revision
         varchar title
         varchar detail
-        varchar release_status  "U/A/D"
-        varchar PNReqBy
-        int     PNFILIDPrimary  FK
-        int     price_id        FK
-        int     PNFILLinks
-        int     PNPOLinks
-        bit     active
+        varchar release_status        "U/A/D"
+        varchar requested_by
+        int     primary_attachment_id FK
+        int     price_id              FK
+        int     attachment_count
+        int     po_line_count
+        bit     is_active
     }
 
     supplier {
@@ -40,17 +40,17 @@ erDiagram
     }
 
 
-    CN {
-        int     CNID            PK
-        varchar CNName
-        int     CNSUID          FK
-        varchar CNEmail
-        varchar CNPhone1
-        varchar CNPhone2
-        bit     CNActive
+    contact {
+        int     id              PK
+        varchar display_name
+        int     company_id      FK
+        varchar email
+        varchar phone_1
+        varchar phone_2
+        bit     is_active
     }
 
-    PO {
+    purchase_order {
         int     id              PK
         varchar number          "UNIQUE"
         int     supplier_id     FK
@@ -61,15 +61,15 @@ erDiagram
         bit     is_active
     }
 
-    POL {
-        int     POLID           PK
-        int     POLPOID         FK
-        int     POLPNID         FK
-        varchar POLPNPartNumber
-        int     POLItem
-        decimal POLQty
-        decimal POLCost
-        varchar VendorPN
+    po_line {
+        int     id                   PK
+        int     po_id                FK
+        int     part_id              FK
+        varchar part_number_snapshot
+        int     line_number
+        decimal qty
+        decimal unit_cost
+        varchar vendor_part_number
     }
 
     LNK {
@@ -84,21 +84,21 @@ erDiagram
         bit     LNKUse
     }
 
-    FIL {
-        int     FILID           PK
-        int     FILPNID         FK
-        int     order_id        FK
-        varchar FILFileName
+    part_attachment {
+        int     id              PK
+        int     part_id         FK
+        int     sort_order
+        varchar file_name
         varchar category
-        varchar FILPNRev
+        varchar part_revision
     }
 
-    PL {
-        int     PLID            PK
-        int     PLListID
-        int     PLPartID        FK
-        int     PLItem
-        decimal PLQty
+    bom {
+        int     id                  PK
+        int     parent_part_id      FK
+        int     component_part_id   FK
+        int     line_number
+        decimal qty
     }
 
     price {
@@ -118,18 +118,18 @@ erDiagram
         int     has_links
     }
 
-    Forms {
-        int     ID              PK
-        int     PNID            FK
-        bit     locked
-        bit     active
+    form {
+        int     id              PK
+        int     part_number_id  FK
+        bit     is_locked
+        bit     is_active
     }
 
     test_definition {
         int     id              PK
         int     form_id         FK
-        varchar Parameter
-        varchar Specification
+        varchar parameter
+        varchar specification
         varchar spec_min
         varchar spec_max
         varchar spec_nom
@@ -137,18 +137,18 @@ erDiagram
         int     revision
     }
 
-    TestRecords {
-        int      ID             PK
+    test_record {
+        int      id             PK
         int      form_id        FK
         int      part_number_id FK
         varchar  serial_number
         datetime record_date
-        bit      locked
-        bit      active
+        bit      is_locked
+        bit      is_active
     }
 
-    TestResults {
-        int     ID              PK
+    test_result {
+        int     id              PK
         int     record_id       FK
         int     test_id         FK
         int     form_id         FK
@@ -178,39 +178,39 @@ erDiagram
     }
 
     %% Core parts & suppliers
-    supplier    ||--o{    CN                  : "has contacts (CNSUID)"
-    supplier    |o--||    CN                  : "default_contact"
+    supplier    ||--o{    contact             : "has contacts (company_id)"
+    supplier    |o--||    contact             : "default_contact"
     supplier    ||--o{    LNK                 : "approved vendors (LNKSUID)"
-    supplier    ||--o{    PO                  : "purchase orders (supplier_id)"
+    supplier    ||--o{    purchase_order      : "purchase orders (supplier_id)"
     supplier    ||--o{    price               : "pricing (supplier_id)"
     supplier    ||--o{    supplier_attachment : "attachments (supplier_id)"
     supplier    |o--||    supplier_attachment : "primary_attachment_id"
 
-    PN          ||--o{    LNK         : "vendor links (LNKPNID)"
-    PN          ||--o{    LNK         : "substitute parts (LNKToPNID)"
-    PN          ||--o{    POL         : "on PO lines (POLPNID)"
-    PN          ||--o{    PL          : "in parts lists (PLPartID)"
-    PN          ||--o{    FIL         : "attached files (FILPNID)"
-    PN          |o--||    price       : "active price (price_id)"
+    part ||--o{    LNK         : "vendor links (LNKPNID)"
+    part ||--o{    LNK         : "substitute parts (LNKToPNID)"
+    part ||--o{    po_line     : "on PO lines (part_id)"
+    part ||--o{    bom         : "in parts lists (component_part_id)"
+    part ||--o{    part_attachment : "attached files (part_id)"
+    part |o--||    price       : "active price (price_id)"
 
     %% Purchasing
-    PO          ||--o{    POL         : "line items (POLPOID)"
-    PO          ||--o{    FIL         : "attached files (order_id)"
+    purchase_order ||--o{ po_line     : "line items (po_id)"
+    purchase_order ||--o{ part_attachment : "attached files (sort_order)"
 
     %% Test records
-    PN          ||--o{    Forms       : "test forms (PNID)"
-    PN          ||--o{    TestRecords : "test records (part_number_id)"
-    Forms       ||--o{    test_definition : "test definitions (form_id)"
-    Forms       ||--o{    TestRecords : "executed records (form_id)"
-    Forms       ||--o{    TestResults : "results (form_id)"
-    TestRecords ||--o{    TestResults : "results (record_id)"
-    test_definition ||--o{    TestResults : "result per test (test_id)"
+    part ||--o{    form        : "test forms (part_number_id)"
+    part ||--o{    test_record : "test records (part_number_id)"
+    form        ||--o{    test_definition : "test definitions (form_id)"
+    form        ||--o{    test_record : "executed records (form_id)"
+    form        ||--o{    test_result : "results (form_id)"
+    test_record ||--o{    test_result : "results (record_id)"
+    test_definition ||--o{    test_result : "result per test (test_id)"
 ```
 
 ## Notes
 
-- **FIL.FILPNID** is an INT FK to `PN.PNID` with an enforced constraint. Migrated from VARCHAR in #297.
+- **part_attachment.part_id** is an INT FK to `part.id` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
-- **PO.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
-- **TestRecordHistory.record_id** is polymorphic — it references either `Forms.ID` or `TestRecords.ID` depending on `history_type`.
+- **purchase_order.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
+- **TestRecordHistory.record_id** is polymorphic — it references either `form.id` or `test_record.id` depending on `history_type`.
 - **part_types**, **logs**, and **release_notes** have no foreign key relationships.

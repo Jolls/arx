@@ -1,8 +1,8 @@
--- Triggers that maintain denormalized counts on company and PN.
---   company.SUNumOfLNKs — active supplier_part rows for a supplier
---   company.SUNumOfPOs  — PO rows for a supplier
---   PN.PNFILLinks       — active FIL attachment rows for a part
---   PN.PNPOLinks        — POL line-item rows for a part
+-- Triggers that maintain denormalized counts on company and part.
+--   company.SUNumOfLNKs            — active supplier_part rows for a supplier
+--   company.SUNumOfPOs             — purchase_order rows for a supplier
+--   part.attachment_count          — active part_attachment rows for a part
+--   part.po_line_count             — po_line line-item rows for a part
 --
 -- Each trigger recomputes a full COUNT(*) from live data (not increment/decrement),
 -- so any drift is self-correcting on the next write to an affected row.
@@ -33,9 +33,9 @@ BEGIN
 END;
 GO
 
--- PO → company.SUNumOfPOs
+-- purchase_order → company.SUNumOfPOs
 CREATE OR ALTER TRIGGER dbo.trg_PO_company_count
-ON dbo.PO
+ON dbo.purchase_order
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -46,48 +46,48 @@ BEGIN
         SELECT supplier_id FROM deleted  WHERE supplier_id IS NOT NULL
     )
     UPDATE s
-    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.PO p WHERE p.supplier_id = s.id)
+    SET    s.SUNumOfPOs = (SELECT COUNT(*) FROM dbo.purchase_order p WHERE p.supplier_id = s.id)
     FROM   dbo.company s
     JOIN   affected a ON a.id = s.id;
 END;
 GO
 
--- FIL → PN.PNFILLinks
+-- part_attachment → part.attachment_count
 -- Counts only is_active=1 rows (soft-deleted rows are excluded).
 CREATE OR ALTER TRIGGER dbo.trg_FIL_part_count
-ON dbo.FIL
+ON dbo.part_attachment
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT FILPNID FROM inserted WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT FILPNID FROM deleted  WHERE FILPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1)
-    FROM   dbo.PN p
-    JOIN   affected a ON a.id = p.PNID;
+    SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.id AND f.is_active = 1)
+    FROM   dbo.part p
+    JOIN   affected a ON a.id = p.id;
 END;
 GO
 
--- POL → PN.PNPOLinks
+-- po_line → part.po_line_count
 CREATE OR ALTER TRIGGER dbo.trg_POL_part_count
-ON dbo.POL
+ON dbo.po_line
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
     WITH affected (id) AS (
-        SELECT POLPNID FROM inserted WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM inserted WHERE part_id IS NOT NULL
         UNION
-        SELECT POLPNID FROM deleted  WHERE POLPNID IS NOT NULL
+        SELECT part_id FROM deleted  WHERE part_id IS NOT NULL
     )
     UPDATE p
-    SET    p.PNPOLinks = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
-    FROM   dbo.PN p
-    JOIN   affected a ON a.id = p.PNID;
+    SET    p.po_line_count = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.id)
+    FROM   dbo.part p
+    JOIN   affected a ON a.id = p.id;
 END;
 GO
 
@@ -95,11 +95,11 @@ GO
 -- Safe to re-run.
 UPDATE s
 SET    s.SUNumOfLNKs = (SELECT COUNT(*) FROM dbo.supplier_part sp WHERE sp.supplier_id = s.id),
-       s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.PO             p  WHERE p.supplier_id  = s.id)
+       s.SUNumOfPOs  = (SELECT COUNT(*) FROM dbo.purchase_order p  WHERE p.supplier_id  = s.id)
 FROM   dbo.company s;
 
 UPDATE p
-SET    p.PNFILLinks = (SELECT COUNT(*) FROM dbo.FIL f WHERE f.FILPNID = p.PNID AND f.is_active = 1),
-       p.PNPOLinks  = (SELECT COUNT(*) FROM dbo.POL pol WHERE pol.POLPNID = p.PNID)
-FROM   dbo.PN p;
+SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.id AND f.is_active = 1),
+       p.po_line_count   = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.id)
+FROM   dbo.part p;
 GO
