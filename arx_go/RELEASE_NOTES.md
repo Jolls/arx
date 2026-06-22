@@ -1,3 +1,33 @@
+Arx v0.5.29 — June 2026
+========================
+
+NEW FEATURES
+
+  Parts Master — Inventory and Stock Tracking
+  Stockable parts now track stock on hand. A new Transactions tab shows
+  every stock movement with a running balance, and you can record manual
+  adjustments — a reason is required for each. Which part categories are
+  stockable is configurable in Settings.
+
+  Parts Master — Purchase Order Status
+  Purchase orders now move through a clear lifecycle — Draft, Open, Sent,
+  Partially Received, and Closed (or Cancelled) — with buttons on the PO
+  page to advance the status. Every change is logged with who and when,
+  the current status is shown prominently, and the PO list can be filtered
+  by status.
+
+  Parts Master — Purchase Order Approval
+  Purchase orders now go through an approval step. Submit a PO for
+  approval, and a designated approver can approve or reject it. A PO
+  cannot be sent or printed until it has been approved, and editing an
+  approved PO clears its approval so the change gets re-reviewed.
+  Approvers are designated with a "PO Approver" toggle in Settings. PO
+  status and approval events share one combined history timeline.
+
+  Settings — Download Backup
+  The Configuration tab in Settings has a Download Backup button that
+  exports all of your data as a ZIP of spreadsheet-friendly CSV files.
+
 Arx v0.5.24 — June 2026
 ========================
 
