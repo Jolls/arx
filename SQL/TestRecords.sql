@@ -207,7 +207,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'bom_pn_by_item',
   'Part number at a specific BOM item position for a given parent assembly PN',
-  'SELECT pn.part_number, pn.title FROM bom JOIN part pn ON bom.component_part_id = pn.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
+  'SELECT p.part_number, p.title FROM bom JOIN part p ON bom.component_part_id = p.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
   'pn, item', 'list',
   GETDATE()
 );
@@ -215,7 +215,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'pn_primary_attachment',
   'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
-  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part pn ON f.part_id = pn.id WHERE pn.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN pn.primary_attachment_id > 0 AND f.id = pn.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
+  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part p ON f.part_id = p.id WHERE p.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN p.primary_attachment_id > 0 AND f.id = p.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
   'pn', 'single',
   GETDATE()
 );
@@ -227,7 +227,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'form_primary_attachment',
   'Primary attachment for the form''s own part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
-  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part pn ON f.part_id = pn.id WHERE pn.id = @pnid AND f.is_active = 1 ORDER BY CASE WHEN pn.primary_attachment_id > 0 AND f.id = pn.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
+  'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part p ON f.part_id = p.id WHERE p.id = @pnid AND f.is_active = 1 ORDER BY CASE WHEN p.primary_attachment_id > 0 AND f.id = p.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
   'pnid', 'single',
   GETDATE()
 );
