@@ -2,7 +2,7 @@
    Arx Parts Master — application JavaScript
    ============================================================= */
 
-const ROWS_PER_PAGE = 20;
+const ROWS_PER_PAGE = 30;
 let currentPage = 1;
 let allRows = [];
 let sortCol = null;
@@ -15,8 +15,8 @@ function escHtml(s) {
 
 // One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
 const ROW_BUILDERS = {
-    '/api/parts/rows': r => `<tr>
-        <td><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a></td>
+    '/api/parts/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
+        <td><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}</td>
         <td>${escHtml(r.rev)}</td>
         <td>${escHtml(r.title)}</td>
         <td>${escHtml(r.detail)}</td>
@@ -26,7 +26,7 @@ const ROW_BUILDERS = {
         <td>${r.modified || 'N/A'}</td>
     </tr>`,
 
-    '/api/suppliers/rows': r => `<tr>
+    '/api/suppliers/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
         <td><a href="/supplier/${r.id}" class="part-number-link">${escHtml(r.name)}</a></td>
         <td>${r.active ? 'Active' : 'Inactive'}</td>
         <td>${escHtml(r.country)}</td>
@@ -131,6 +131,12 @@ function applyFilters(resetPage = true) {
     const showRFQs = document.getElementById('show-rfqs');
     if (showRFQs && !showRFQs.checked) {
         rows = rows.filter(r => r.gid == null);
+    }
+    // Parts/Vendors lists: hide soft-deleted (inactive) rows unless the
+    // "Show inactive" switch is on. Endpoints without an active flag are kept.
+    const showInactive = document.getElementById('show-inactive');
+    if (showInactive && !showInactive.checked) {
+        rows = rows.filter(r => r.active !== false);
     }
     renderRows(rows);
 }
@@ -248,4 +254,5 @@ document.addEventListener('DOMContentLoaded', () => {
             i.addEventListener('change', () => applyFilters(true));
         });
     document.getElementById('show-rfqs')?.addEventListener('change', () => applyFilters(true));
+    document.getElementById('show-inactive')?.addEventListener('change', () => applyFilters(true));
 });

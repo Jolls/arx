@@ -23,6 +23,7 @@
                     <th style="width:90px;">Lead Time</th>
                     <th style="width:80px; text-align:right;">Min Incr.</th>
                     <th style="width:80px;">Purchase Unit</th>
+                    <th>PO Links</th>
                 </tr>
             </thead>
             <tbody>
@@ -46,6 +47,7 @@
                             {{end}}
                         {{else}}—{{end}}
                     </td>
+                    <td>{{range $i, $n := .POLinks}}{{if $i}}, {{end}}<a href="/po/{{$n}}" class="part-number-link">{{$n}}</a>{{end}}</td>
                 </tr>
                 {{end}}
             </tbody>

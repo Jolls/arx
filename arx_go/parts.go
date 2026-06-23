@@ -76,10 +76,11 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		Date     string `json:"date"`
 		Cat      string `json:"cat"`
 		Modified string `json:"modified"`
+		Active   bool   `json:"active"`
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail,
-		       requested_by, created_date, category, modified_date
+		       requested_by, created_date, category, modified_date, is_active
 		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
 	if err != nil {
@@ -92,11 +93,13 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		var p row
 		var pn, rev, title, detail, reqBy, cat sql.NullString
 		var date, modified sql.NullTime
-		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified); err != nil {
+		var active sql.NullBool
+		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		p.PN = pn.String
+		p.Active = !active.Valid || active.Bool
 		p.Rev = rev.String
 		p.Title = title.String
 		p.Detail = detail.String

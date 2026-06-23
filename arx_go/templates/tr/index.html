@@ -6,7 +6,7 @@
   </a>
 </div>
 
-<table class="table table-bordered table-hover table-sm">
+<table class="table table-bordered table-hover table-sm" data-paginate>
   <thead class="table-dark">
     <tr>
       <th class="sortable" onclick="sortTable(this)">Part Number</th>
@@ -35,4 +35,14 @@
     {{end}}
   </tbody>
 </table>
+<div class="pagination-controls">
+  <span class="pagination-info"></span>
+  <div class="pagination-buttons">
+    <button type="button" class="page-nav prev">&#8592; Previous</button>
+    <button type="button" class="page-nav next">Next &#8594;</button>
+  </div>
+</div>
+<p style="margin-top:15px; color:#666; text-align:right;">
+  Total matching: <strong><span class="record-count">0</span></strong>
+</p>
 {{end}}

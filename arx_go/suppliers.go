@@ -279,6 +279,41 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		lk.PurchaseUnitIsExplicit = unitIsExplicit
 		links = append(links, lk)
 	}
+
+	// PO links: numbers of POs placed with this vendor for each part (RFQ quotes excluded).
+	poByPart := map[int][]string{}
+	poRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT pol.part_id, po.number
+		FROM %s pol
+		JOIN %s po ON pol.po_id = po.ID
+		WHERE po.supplier_id = @p1 AND po.rfq_group_id IS NULL
+		ORDER BY po.number DESC
+	`, h.cfg.POLineTable(), h.cfg.POTable()), id)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving PO links: "+err.Error())
+		return
+	}
+	defer poRows.Close()
+	for poRows.Next() {
+		var partID sql.NullInt64
+		var number sql.NullString
+		if err := poRows.Scan(&partID, &number); err != nil {
+			h.renderError(w, r, "Error reading PO links: "+err.Error())
+			return
+		}
+		if partID.Valid && number.Valid {
+			pid := int(partID.Int64)
+			poByPart[pid] = append(poByPart[pid], number.String)
+		}
+	}
+	if err := poRows.Err(); err != nil {
+		h.renderError(w, r, "Error reading PO links: "+err.Error())
+		return
+	}
+	for i := range links {
+		links[i].POLinks = poByPart[links[i].PNID]
+	}
+
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
