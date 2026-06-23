@@ -213,6 +213,12 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/pos", h.POList)
 		r.Get("/pos/new", h.PONew)
 		r.Post("/pos", h.POCreate)
+		// RFQ (issue #270) — an RFQ is a purchase_order with status 'rfq'
+		r.Get("/rfqs/new", h.RFQNew)
+		r.Get("/rfq/{id}/add-supplier", h.RFQAddSupplier)
+		r.Get("/rfq/{group}/compare", h.RFQCompare)
+		r.Post("/rfq/{group}/compare", h.RFQCompareSave)
+		r.Post("/rfq/{id}/convert", h.RFQConvert)
 		r.Get("/po/{id}", h.PODetail)
 		r.Get("/po/{id}/edit", h.POEdit)
 		r.Post("/po/{id}", h.POUpdate)

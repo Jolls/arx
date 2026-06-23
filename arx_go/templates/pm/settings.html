@@ -224,6 +224,31 @@
             {{end}}
         </div>
     </div>
+    <script>
+    // Scope the Default Contact dropdown to the selected Default Receiver's contacts.
+    (function() {
+        const recSel = document.querySelector('select[name="po_default_receiver_id"]');
+        const conSel = document.querySelector('select[name="po_default_contact_id"]');
+        if (!recSel || !conSel) return;
+        const currentContact = '{{.PODefaultContactID}}';
+        recSel.addEventListener('change', function() {
+            conSel.innerHTML = '';
+            conSel.add(new Option('— none —', '0'));
+            const rid = this.value;
+            if (!rid || rid === '0') return;
+            fetch('/api/suppliers/' + encodeURIComponent(rid) + '/contacts')
+                .then(r => r.json())
+                .then(function(contacts) {
+                    (contacts || []).forEach(function(c) {
+                        const opt = new Option(c.name + ' (' + c.id + ')', c.id);
+                        if (String(c.id) === currentContact) opt.selected = true;
+                        conSel.add(opt);
+                    });
+                })
+                .catch(function() {});
+        });
+    })();
+    </script>
 
     <!-- ── Developer ────────────────────────────────────────────────── -->
     <div class="settings-card" style="margin-top:24px;">

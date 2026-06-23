@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.30] - 2026-06-22 
+- pm: Request for Quotation (RFQ) — request a quote from a supplier, add more suppliers' quotes to the same RFQ, enter each supplier's unit price and lead time per line on a side-by-side comparison grid, and award by converting the winning quote into a new PO (the RFQ and its quotes are retained, closed/cancelled, for the record). An RFQ group consumes a single PO number (quotes are `<base>R1`, `<base>R2`, … and the awarded PO is the bare `<base>`), and RFQ quotes are hidden on the PO list behind a "Show RFQs" toggle ([#270](https://github.com/Jolls/arx-legacy/issues/270))
+- pm: schema — adds `purchase_order.rfq_group_id` and `po_line.lead_time_days` (both nullable) and the `rfq` status; additive and rollback-safe — run `SQL/migrations/migrate_po_rfq.sql` against ArxProd and ArxDev before deploying ([#270](https://github.com/Jolls/arx-legacy/issues/270))
+- pm: fixed PO/RFQ default contact — the Settings default contact now populates the receiver contact (it was using the receiver company's own default contact instead), and the Settings default-contact dropdown is scoped to the selected default receiver's contacts
+
 ## [0.5.29] - 2026-06-21 
 - db: renamed legacy tables/columns to the go-forward snake_case convention — `CN`→`contact`, `PL`→`bom`, `FIL`→`part_attachment`, `PO`/`PO_history`→`purchase_order`/`purchase_order_history`, `POL`→`po_line`, `PN`→`part_number`→`part`, and the test-records group (`Forms`→`form`, `TestRecords`→`test_record`, `TestResults`→`test_result`); columns modernized to bare `id` PKs, `{stem}_id` FKs, and `is_` boolean prefixes. Internal only — no behavior change; Go struct/field names are unchanged (reads are positional)
 - db: this build expects the renamed schema — run the `SQL/migrations/migrate_rename_*.sql` scripts in commit order (contact → bom → part_attachment → purchase_order → po_line → part_number → test_records → part) against the DB before deploying

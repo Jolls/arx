@@ -39,6 +39,7 @@ func TestStatusIsActive(t *testing.T) {
 		status string
 		want   bool
 	}{
+		{"rfq", true}, // RFQ is in-progress (#270)
 		{"draft", true},
 		{"open", true},
 		{"sent", true},

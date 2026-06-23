@@ -43,6 +43,7 @@ type PurchaseOrder struct {
 	TotalCost           *float64
 	Notes               string
 	InternalNotes       string
+	RFQGroupID          *int
 }
 
 type PurchaseOrderLine struct {
@@ -56,6 +57,7 @@ type PurchaseOrderLine struct {
 	POLCost         float64
 	VendorPN        string
 	POLPNID         *int
+	LeadTimeDays    *int
 	// joined fields
 	PONumber     string
 	SupplierName string

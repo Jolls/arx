@@ -1,0 +1,100 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/pos">POs</a></li>
+        <li class="breadcrumb-item active">RFQ Comparison</li>
+    </ol>
+</nav>
+<div class="content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0" style="font-size:1.4em;">RFQ Comparison &mdash; {{len .Suppliers}} quote(s)</h2>
+    </div>
+
+    {{/* ── Editable comparison grid ───────────────────────────── */}}
+    <form method="POST" action="/rfq/{{.Group}}/compare">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="table-wrapper" style="overflow-x:auto;">
+            <table class="table table-bordered table-sm align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="min-width:160px;">Item</th>
+                        <th style="width:54px;">Rev</th>
+                        <th style="width:64px; text-align:right;">Qty</th>
+                        {{range .Suppliers}}
+                        <th style="min-width:150px;{{if .Best}}background:#198754;{{end}}">
+                            <a href="/po/{{.Number}}" class="text-white">{{if .SupplierName}}{{.SupplierName}}{{else}}(no supplier){{end}}</a>
+                            <div class="mt-1">{{template "po_status_badge" .Status}}{{if .Best}} <span class="badge bg-light text-success">Lowest</span>{{end}}</div>
+                            <div class="small fw-normal">PO #{{.Number}}</div>
+                        </th>
+                        {{end}}
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Rows}}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{if .PartNumber}}{{.PartNumber}}{{else}}&mdash;{{end}}</div>
+                            {{if .Description}}<div class="small text-muted">{{.Description}}</div>{{end}}
+                        </td>
+                        <td>{{.Rev}}</td>
+                        <td style="text-align:right;">{{printf "%.2f" .Qty}}</td>
+                        {{range .Cells}}
+                        <td {{if .Best}}class="table-success"{{end}}>
+                            {{if .POLID}}
+                            <div class="input-group input-group-sm mb-1">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="any" class="form-control" name="cost_{{.POLID}}"
+                                       value="{{if .Quoted}}{{printf "%g" .Cost}}{{end}}" placeholder="price">
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control" name="lead_{{.POLID}}"
+                                       value="{{if .LeadDays}}{{derefInt .LeadDays}}{{end}}" placeholder="lead">
+                                <span class="input-group-text">d</span>
+                            </div>
+                            {{else}}
+                            <span class="text-muted">&mdash;</span>
+                            {{end}}
+                        </td>
+                        {{end}}
+                    </tr>
+                    {{end}}
+                </tbody>
+                <tfoot>
+                    <tr class="fw-bold" style="background:#f5f5f5;">
+                        <td colspan="3" style="text-align:right;">Quote Total</td>
+                        {{range .Suppliers}}
+                        <td {{if .Best}}class="table-success"{{end}}>${{printf "%.2f" .TotalCost}}</td>
+                        {{end}}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="mt-2">
+            <button type="submit" class="btn btn-primary">Save Quotes</button>
+            <span class="text-muted small ms-2">Enter each supplier's unit price and lead time, then save to compare totals.</span>
+        </div>
+    </form>
+
+    {{/* ── Convert a winning quote to a PO ────────────────────── */}}
+    <h3 class="mt-4" style="font-size:1.1em;">Award</h3>
+    <div class="d-flex gap-3 flex-wrap mt-2">
+        {{range .Suppliers}}
+        <div class="card" style="min-width:230px;">
+            <div class="card-body">
+                <h6 class="card-title mb-1">{{if .SupplierName}}{{.SupplierName}}{{else}}(no supplier){{end}}{{if .Best}} <span class="badge bg-success">Lowest</span>{{end}}</h6>
+                <div class="small text-muted mb-2">Total ${{printf "%.2f" .TotalCost}} &middot; {{template "po_status_badge" .Status}}</div>
+                {{if eq .Status "rfq"}}
+                <form method="POST" action="/rfq/{{.Number}}/convert">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button type="submit" class="btn btn-sm btn-success w-100"
+                            onclick="return confirm('Create a PO from this quote and close out the RFQ?')">Convert to PO</button>
+                </form>
+                {{else}}
+                <a href="/po/{{.Number}}" class="btn btn-sm btn-outline-secondary w-100">View PO #{{.Number}}</a>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}
