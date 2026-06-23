@@ -24,10 +24,18 @@ type supplierOption struct {
 	Name string
 }
 
-func (h *Handler) fetchContactOptions(r *http.Request) []contactOption {
-	rows, err := h.queryContext(r.Context(),
-		fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = 1 ORDER BY display_name`,
-			h.cfg.ContactTable()))
+// fetchContactOptions returns active contacts for the Default Contact dropdown.
+// When companyID > 0 it is scoped to that company's contacts (the configured
+// default receiver); companyID == 0 returns all contacts as a fallback.
+func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactOption {
+	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = 1`, h.cfg.ContactTable())
+	var args []any
+	if companyID > 0 {
+		q += ` AND company_id = @p1`
+		args = append(args, companyID)
+	}
+	q += ` ORDER BY display_name`
+	rows, err := h.queryContext(r.Context(), q, args...)
 	if err != nil {
 		return nil
 	}
@@ -66,7 +74,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var users []map[string]any
 	var usersError string
 	if h.db != nil {
-		contacts = h.fetchContactOptions(r)
+		contacts = h.fetchContactOptions(r, h.cfg.PODefaults.ReceiverID)
 		suppliers = h.fetchSupplierOptions(r)
 		var err error
 		users, err = h.listUsers(r.Context())

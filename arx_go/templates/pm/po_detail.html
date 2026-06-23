@@ -62,10 +62,12 @@
             <div class="part-status-label">Status</div>
             {{template "po_status_badge" .PO.Status}}
         </div>
+        {{if ne .PO.Status "rfq"}}
         <div class="part-status-cell">
             <div class="part-status-label">Approval</div>
             {{template "po_approval_badge" .PO.ApprovalStatus}}
         </div>
+        {{end}}
         <div class="part-status-cell">
             <div class="part-status-label">Ordered</div>
             <div class="part-status-value">{{if .PO.DateOrdered}}{{formatDate .PO.DateOrdered}}{{else}}—{{end}}</div>
@@ -92,8 +94,28 @@
         </div>
     </div>
 
+    {{/* ── RFQ action bar ─────────────────────────────────────── */}}
+    {{if eq .PO.Status "rfq"}}
+    <div class="d-flex gap-2 flex-wrap mb-4 align-items-center">
+        <a href="/rfq/{{.PO.Number}}/add-supplier" class="btn btn-sm btn-secondary">Add Supplier Quote</a>
+        {{if .PO.RFQGroupID}}<a href="/rfq/{{derefInt .PO.RFQGroupID}}/compare" class="btn btn-sm btn-primary">Compare Quotes</a>{{end}}
+        <span class="vr"></span>
+        <form method="POST" action="/rfq/{{.PO.Number}}/convert" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="btn btn-sm btn-success"
+                    onclick="return confirm('Create a PO from this quote and close out the RFQ?')">Convert to PO</button>
+        </form>
+        <form method="POST" action="/po/{{.PO.Number}}/status" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="target" value="cancelled">
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('Decline this RFQ?')">Decline RFQ</button>
+        </form>
+    </div>
+    {{end}}
+
     {{/* ── Status transition + approval actions ──────────────── */}}
-    {{if or .StatusActions .ApprovalActions}}
+    {{if and (ne .PO.Status "rfq") (or .StatusActions .ApprovalActions)}}
     <div class="d-flex gap-2 flex-wrap mb-4 align-items-center">
         {{range .StatusActions}}
         {{if and (eq .Target "sent") (not $.CanSend)}}

@@ -52,6 +52,7 @@ const ROW_BUILDERS = {
 
     '/api/pos/rows': r => {
         const badges = {
+            rfq:                '<span class="badge bg-dark">RFQ</span>',
             draft:              '<span class="badge bg-secondary">Draft</span>',
             open:               '<span class="badge bg-info text-dark">Open</span>',
             sent:               '<span class="badge bg-primary">Sent</span>',
@@ -124,7 +125,14 @@ function sortByCol(colIndex) {
 function applyFilters(resetPage = true) {
     if (!document.querySelector('tr.filter-row')) return;
     if (resetPage) currentPage = 1;
-    renderRows(allRows.filter(r => matchesRow(r, getFilterValues())));
+    let rows = allRows.filter(r => matchesRow(r, getFilterValues()));
+    // PO list only: hide RFQ quotes (any row in an RFQ group) unless the
+    // "Show RFQs" switch is on. Converted POs have no group id and always show.
+    const showRFQs = document.getElementById('show-rfqs');
+    if (showRFQs && !showRFQs.checked) {
+        rows = rows.filter(r => r.gid == null);
+    }
+    renderRows(rows);
 }
 
 function applyTruncationTooltips(tbody) {
@@ -239,4 +247,5 @@ document.addEventListener('DOMContentLoaded', () => {
             i.addEventListener('input', () => applyFilters(true));
             i.addEventListener('change', () => applyFilters(true));
         });
+    document.getElementById('show-rfqs')?.addEventListener('change', () => applyFilters(true));
 });

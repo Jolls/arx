@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -264,6 +265,7 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		Num      string  `json:"num"`
 		Status   string  `json:"status"`
 		SID      *int    `json:"sid"`
+		GID      *int    `json:"gid"` // rfq_group_id — set when this row is an RFQ quote
 		Supplier string  `json:"supplier"`
 		Ordered  string  `json:"ordered"`
 		Closed   string  `json:"closed"`
@@ -271,7 +273,7 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		Cost     float64 `json:"cost"`
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT number, status, supplier_id, supplier_name,
+		SELECT number, status, supplier_id, rfq_group_id, supplier_name,
 		       date_ordered, date_closed, orderer, total_cost
 		FROM %s ORDER BY number DESC
 	`, h.cfg.POTable()))
@@ -283,11 +285,11 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 	out := make([]row, 0)
 	for rows.Next() {
 		var po row
-		var supplierID sql.NullInt64
+		var supplierID, groupID sql.NullInt64
 		var supplierName, orderer, status sql.NullString
 		var dateOrdered, dateClosed sql.NullTime
 		var totalCost sql.NullFloat64
-		if err := rows.Scan(&po.Num, &status, &supplierID, &supplierName,
+		if err := rows.Scan(&po.Num, &status, &supplierID, &groupID, &supplierName,
 			&dateOrdered, &dateClosed, &orderer, &totalCost); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -299,6 +301,10 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		if supplierID.Valid {
 			v := int(supplierID.Int64)
 			po.SID = &v
+		}
+		if groupID.Valid {
+			v := int(groupID.Int64)
+			po.GID = &v
 		}
 		if dateOrdered.Valid {
 			po.Ordered = dateOrdered.Time.Format("2006-01-02")
@@ -359,22 +365,10 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────
 
-func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
-	po := models.PurchaseOrder{Status: "draft", IsActive: true, DateOrdered: &now, DateRequested: &now}
-	if u := h.currentUser(r); u != nil {
-		po.Orderer = u.DisplayName
-	}
-
-	// Apply PO defaults from settings
-	if cid := h.cfg.PODefaults.ContactID; cid > 0 {
-		var cnName sql.NullString
-		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT display_name FROM %s WHERE id = @p1`, h.cfg.ContactTable(),
-		), cid).Scan(&cnName)
-		po.SupplierContact = cnName.String
-	}
-	var supplierContacts, receiverContacts []ContactSummary
+// applyPODefaults populates a new PO/RFQ with the configured default contact and
+// default receiver organization (Settings → PO defaults), returning the contact
+// dropdown lists for the edit form.
+func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (supplierContacts, receiverContacts []ContactSummary) {
 	if rid := h.cfg.PODefaults.ReceiverID; rid > 0 {
 		var rName sql.NullString
 		var rDefaultContact sql.NullInt64
@@ -385,9 +379,16 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 		v := rid
 		po.ReceiverID = &v
 		receiverContacts = h.contactsForSupplier(r, rid)
-		if rDefaultContact.Valid && rDefaultContact.Int64 > 0 {
+
+		// Pick the receiver contact: the configured PO default contact wins;
+		// otherwise fall back to the receiver company's own default_contact.
+		wantContact := h.cfg.PODefaults.ContactID
+		if wantContact <= 0 && rDefaultContact.Valid {
+			wantContact = int(rDefaultContact.Int64)
+		}
+		if wantContact > 0 {
 			for _, c := range receiverContacts {
-				if c.CNID == int(rDefaultContact.Int64) {
+				if c.CNID == wantContact {
 					po.ReceiverContact = c.CNName
 					po.ReceiverEmail = c.Email
 					po.ReceiverAddress = c.Address
@@ -402,6 +403,16 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	return supplierContacts, receiverContacts
+}
+
+func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	po := models.PurchaseOrder{Status: "draft", IsActive: true, DateOrdered: &now, DateRequested: &now}
+	if u := h.currentUser(r); u != nil {
+		po.Orderer = u.DisplayName
+	}
+	supplierContacts, receiverContacts := h.applyPODefaults(r, &po)
 	h.render(w, r, "po_edit.html", map[string]any{
 		"PO": po, "POItems": nil, "IsNew": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
@@ -418,15 +429,46 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sequence is outside the transaction — sequences never roll back in SQL Server,
-	// which is correct: a rolled-back PO should not reuse its number.
-	seqName := "dbo.PO_Number_Seq"
+	// RFQs (#270) reuse one sequence number per group: the first quote takes a
+	// number and stores it as "<base>R1"; additional supplier quotes reuse <base>
+	// with the next R suffix; the winner is renamed to bare <base> on convert.
+	isRFQ := fv(r, "rfq") == "1"
+	rfqGroup := ""
+	if isRFQ {
+		rfqGroup = fv(r, "rfq_group_id")
+	}
+
 	var newNumber string
-	if err := h.queryRowContext(r.Context(),
-		fmt.Sprintf("SELECT CAST(NEXT VALUE FOR %s AS VARCHAR)", seqName),
-	).Scan(&newNumber); err != nil {
-		h.renderError(w, r, "Error getting PO number: "+err.Error())
-		return
+	if isRFQ && rfqGroup != "" {
+		// Additional supplier quote: reuse the group's base number, next R suffix.
+		var anchorNum sql.NullString
+		var count int
+		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+			`SELECT number FROM %s WHERE id=@p1`, h.cfg.POTable()), rfqGroup).Scan(&anchorNum); err != nil {
+			h.renderError(w, r, "Error loading RFQ group: "+err.Error())
+			return
+		}
+		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+			`SELECT COUNT(*) FROM %s WHERE rfq_group_id=@p1`, h.cfg.POTable()), rfqGroup).Scan(&count); err != nil {
+			h.renderError(w, r, "Error counting RFQ quotes: "+err.Error())
+			return
+		}
+		newNumber = fmt.Sprintf("%sR%d", rfqBaseNumber(anchorNum.String), count+1)
+	} else {
+		// New PO or first RFQ quote: take one sequence number. The sequence is
+		// outside the transaction — sequences never roll back in SQL Server, which
+		// is correct: a rolled-back PO should not reuse its number.
+		var base string
+		if err := h.queryRowContext(r.Context(),
+			"SELECT CAST(NEXT VALUE FOR dbo.PO_Number_Seq AS VARCHAR)",
+		).Scan(&base); err != nil {
+			h.renderError(w, r, "Error getting PO number: "+err.Error())
+			return
+		}
+		newNumber = base
+		if isRFQ {
+			newNumber = base + "R1"
+		}
 	}
 
 	tx, err := h.beginTx(r.Context())
@@ -444,8 +486,12 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	// OUTPUT INSERTED.ID is blocked on tables with triggers; combine INSERT + SCOPE_IDENTITY()
 	// in one batch so they share the same scope.
-	// New POs always start as 'draft'; status changes go through POStatusTransition.
+	// New POs start as 'draft'; RFQs (#270) start as 'rfq'. Later status changes go
+	// through POStatusTransition.
 	newStatus := "draft"
+	if isRFQ {
+		newStatus = "rfq"
+	}
 	var newID int
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (number, status, is_active, orderer, account_id,
@@ -487,6 +533,21 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// RFQ grouping (#270): join an existing group when adding another supplier's quote,
+	// otherwise anchor a new group to this RFQ's own id.
+	if isRFQ {
+		groupID := newID
+		if g := nullableInt(fv(r, "rfq_group_id")); g != nil {
+			groupID = g.(int)
+		}
+		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+			`UPDATE %s SET rfq_group_id=@p1 WHERE ID=@p2`, h.cfg.POTable(),
+		), groupID, newID); err != nil {
+			h.renderError(w, r, "Error setting RFQ group: "+err.Error())
+			return
+		}
+	}
+
 	newRows := extractPolRows(r.Form, "new_pol")
 	var lineTotal float64
 	for _, row := range newRows {
@@ -522,7 +583,12 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	committed = true
 
-	h.createPOFolder(r, newNumber, fv(r, "supplier_id"))
+	// RFQs don't get a folder yet — the winning quote's folder is created on convert,
+	// keyed to the bare base number (the folder lookup is a prefix match, so an
+	// "1050R1" folder would wrongly match a converted PO "1050").
+	if !isRFQ {
+		h.createPOFolder(r, newNumber, fv(r, "supplier_id"))
+	}
 	http.Redirect(w, r, "/po/"+newNumber+"?suggest_links=1", http.StatusFound)
 }
 
@@ -843,7 +909,8 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Approval gate (#267): a PO cannot be printed until it has been approved.
-	if !poApprovalAllowsSend(po.ApprovalStatus) {
+	// RFQs (#270) print without approval — they are quote requests, not commitments.
+	if po.Status != "rfq" && !poApprovalAllowsSend(po.ApprovalStatus) {
 		h.renderError(w, r, "This PO must be approved before it can be printed.")
 		return
 	}
@@ -873,7 +940,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 	h.renderPrint(w, "po_print.html", map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"SupplierCode": supplierCode, "TestMode": h.cfg.TestMode,
-		"POFolderPath": folderPath,
+		"POFolderPath": folderPath, "IsRFQ": po.Status == "rfq",
 	})
 }
 
@@ -881,11 +948,12 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
 	num := chi.URLParam(r, "id")
-	// Approval gate (#267): only set date_printed for approved POs.
-	var approval sql.NullString
+	// Approval gate (#267): only set date_printed for approved POs. RFQs (#270)
+	// print without approval.
+	var approval, status sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT approval_status FROM %s WHERE number=@p1`, h.cfg.POTable()),
-		num).Scan(&approval); err != nil || !poApprovalAllowsSend(approval.String) {
+		`SELECT approval_status, status FROM %s WHERE number=@p1`, h.cfg.POTable()),
+		num).Scan(&approval, &status); err != nil || (status.String != "rfq" && !poApprovalAllowsSend(approval.String)) {
 		http.Error(w, "PO is not approved", http.StatusForbidden)
 		return
 	}
@@ -1086,6 +1154,7 @@ func (h *Handler) POFile(w http.ResponseWriter, r *http.Request) {
 // Codes are stored in PO.status; labels are shown in the UI.
 
 var poStatusLabels = map[string]string{
+	"rfq":                "RFQ",
 	"draft":              "Draft",
 	"open":               "Open",
 	"sent":               "Sent",
@@ -1096,6 +1165,7 @@ var poStatusLabels = map[string]string{
 
 // poTransitions maps each status to the statuses it may move to.
 var poTransitions = map[string][]string{
+	"rfq":                {"cancelled"}, // decline (#270); awarding is a duplicate-to-PO via RFQConvert
 	"draft":              {"open", "cancelled"},
 	"open":               {"sent", "cancelled"},
 	"sent":               {"partially_received", "closed", "cancelled"},
@@ -1136,6 +1206,10 @@ func poStatusActions(current string) []StatusAction {
 
 func poActionLabel(from, to string) string {
 	switch {
+	case from == "rfq" && to == "draft":
+		return "Convert to PO"
+	case from == "rfq" && to == "cancelled":
+		return "Decline RFQ"
 	case to == "open" && from == "closed":
 		return "Reopen"
 	case to == "draft" && from == "cancelled":
@@ -1164,7 +1238,7 @@ func poActionClass(to string) string {
 // is_active is kept in sync with this value; status is authoritative.
 func statusIsActive(status string) bool {
 	switch status {
-	case "draft", "open", "sent", "partially_received":
+	case "rfq", "draft", "open", "sent", "partially_received":
 		return true
 	}
 	return false
@@ -1467,7 +1541,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 	var po models.PurchaseOrder
 	var (
 		isActive                                        sql.NullBool
-		supplierID, receiverID                          sql.NullInt64
+		supplierID, receiverID, rfqGroupID              sql.NullInt64
 		number, orderer, accountID, status, approvalStatus sql.NullString
 		supName, supContact, supEmail                   sql.NullString
 		supAddr, supCity, supState, supZip, supCountry  sql.NullString
@@ -1488,7 +1562,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		       receiver_address, receiver_city, receiver_state, receiver_zipcode, receiver_country,
 		       receiver_phone, receiver_fax,
 		       tax1, shipping_cost, misc_cost, total_cost,
-		       notes, internal_notes,
+		       notes, internal_notes, rfq_group_id,
 		       date_ordered, date_requested, date_closed, date_printed, date_modified
 		FROM %s WHERE number = @p1
 	`, h.cfg.POTable()), num).Scan(
@@ -1498,7 +1572,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		&receiverID, &recName, &recContact, &recEmail,
 		&recAddr, &recCity, &recState, &recZip, &recCountry, &recPhone, &recFax,
 		&tax1, &shipping, &misc, &totalCost,
-		&notes, &internalNotes,
+		&notes, &internalNotes, &rfqGroupID,
 		&dateOrdered, &dateRequested, &dateClosed, &datePrinted, &dateMod,
 	)
 	if err == sql.ErrNoRows {
@@ -1545,6 +1619,10 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		v := int(receiverID.Int64)
 		po.ReceiverID = &v
 	}
+	if rfqGroupID.Valid {
+		v := int(rfqGroupID.Int64)
+		po.RFQGroupID = &v
+	}
 	if tax1.Valid {
 		po.Tax1 = &tax1.Float64
 	}
@@ -1579,7 +1657,7 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
-		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id
+		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id, pol.lead_time_days
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
@@ -1593,9 +1671,9 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 	for rows.Next() {
 		var item models.PurchaseOrderLine
 		var partNumber, rev, desc, vendorPN sql.NullString
-		var polpnid sql.NullInt64
+		var polpnid, leadTime sql.NullInt64
 		if err := rows.Scan(&item.POLID, &item.POLItem, &partNumber, &rev, &desc,
-			&item.POLQty, &item.POLCost, &vendorPN, &polpnid); err == nil {
+			&item.POLQty, &item.POLCost, &vendorPN, &polpnid, &leadTime); err == nil {
 			item.POLPNPartNumber = partNumber.String
 			item.POLRev = rev.String
 			item.POLDesc = desc.String
@@ -1603,6 +1681,10 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 			if polpnid.Valid {
 				v := int(polpnid.Int64)
 				item.POLPNID = &v
+			}
+			if leadTime.Valid {
+				v := int(leadTime.Int64)
+				item.LeadTimeDays = &v
 			}
 			items = append(items, item)
 		}
@@ -1646,4 +1728,507 @@ func (h *Handler) createPOFolder(r *http.Request, poNumber, supplierIDStr string
 		folderName += "-testmode"
 	}
 	os.MkdirAll(filepath.Join(root, folderName), 0755)
+}
+
+// ── RFQ — Request for Quotation (issue #270) ─────────────────────────────────
+// An RFQ is a purchase_order with status 'rfq'. Sibling quotes (one per supplier)
+// share rfq_group_id. Responses (price + lead time per line) are captured on the
+// comparison grid. "Convert to PO" is the rfq -> draft transition.
+//
+// Numbering (#270): an RFQ group consumes one sequence number. Quotes are stored as
+// "<base>R<n>" (e.g. 1050R1, 1050R2); the winning quote is renamed to bare "<base>"
+// on convert, so only one PO number is used per RFQ regardless of supplier count.
+
+var rfqSuffixRE = regexp.MustCompile(`R\d+$`)
+
+// rfqBaseNumber strips a trailing RFQ quote suffix: "1050R2" -> "1050".
+func rfqBaseNumber(number string) string {
+	return rfqSuffixRE.ReplaceAllString(number, "")
+}
+
+// RFQNew — GET /rfqs/new
+func (h *Handler) RFQNew(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	po := models.PurchaseOrder{Status: "rfq", IsActive: true, DateRequested: &now}
+	if u := h.currentUser(r); u != nil {
+		po.Orderer = u.DisplayName
+	}
+	supplierContacts, receiverContacts := h.applyPODefaults(r, &po)
+	h.render(w, r, "po_edit.html", map[string]any{
+		"PO": po, "POItems": nil, "IsNew": true, "IsRFQ": true,
+		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
+		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r),
+	})
+}
+
+// RFQAddSupplier — GET /rfq/{id}/add-supplier
+// Clones an existing RFQ into the same group for a different supplier: same parts
+// and quantities, blank supplier and quoted figures.
+func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	source, ok := h.fetchPO(w, r, num)
+	if !ok {
+		return
+	}
+	if source.Status != "rfq" {
+		h.renderError(w, r, "Only an RFQ can have supplier quotes added.")
+		return
+	}
+	group := source.ID
+	if source.RFQGroupID != nil {
+		group = *source.RFQGroupID
+	}
+	items := h.fetchPOItems(w, r, num)
+	for i := range items {
+		items[i].POLCost = 0
+		items[i].VendorPN = ""
+		items[i].LeadTimeDays = nil
+	}
+	recID := 0
+	if source.ReceiverID != nil {
+		recID = *source.ReceiverID
+	}
+	// Blank supplier-specific fields; keep ship-to, notes and quantities.
+	source.Number = ""
+	source.SupplierID = nil
+	source.SupplierName, source.SupplierContact, source.SupplierEmail = "", "", ""
+	source.SupplierAddress, source.SupplierCity, source.SupplierState = "", "", ""
+	source.SupplierZipcode, source.SupplierCountry = "", ""
+	source.SupplierPhoneNumber, source.SupplierFaxNumber = "", ""
+	source.TotalCost = nil
+
+	h.render(w, r, "po_edit.html", map[string]any{
+		"PO": source, "POItems": nil, "DuplicateItems": items,
+		"IsNew": true, "IsRFQ": true, "RFQGroupID": group, "RFQAddFrom": num,
+		"ReceiverContacts": h.contactsForSupplier(r, recID),
+		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r),
+	})
+}
+
+// rfqCell is one supplier's quote for one part (a cell in the comparison grid).
+type rfqCell struct {
+	POLID    int
+	Cost     float64
+	LeadDays *int
+	Quoted   bool // supplier entered a unit cost
+	Best     bool // lowest quoted cost in the row
+}
+
+// rfqRow is one part across all suppliers in the group.
+type rfqRow struct {
+	PartNumber  string
+	Rev         string
+	Description string
+	Qty         float64
+	Cells       []rfqCell // aligned to the suppliers slice
+}
+
+// rfqSupplier is one quote (one PO) in the group — a column in the grid.
+type rfqSupplier struct {
+	Number       string
+	SupplierName string
+	SupplierID   *int
+	Status       string
+	TotalCost    float64
+	Best         bool // lowest non-zero total in the group
+}
+
+// rfqScanLine is one (quote, line) row from the comparison query, decoded out of
+// the SQL nullable types so the grid algorithm can be built and tested without a DB.
+// HasLine is false when the LEFT JOIN produced no po_line (a quote with no lines).
+type rfqScanLine struct {
+	Number       string
+	SupplierName string
+	SupplierID   *int
+	Status       string
+	Total        float64
+	HasLine      bool
+	POLID        int
+	PartNumber   string
+	Rev          string
+	Description  string
+	Qty          float64
+	Cost         float64
+	LeadDays     *int
+}
+
+// buildRFQGrid turns the flat (quote, line) rows into the comparison grid: one
+// column per quote (first-seen order), one row per part, cells aligned to columns
+// and padded to a rectangle. It marks the cheapest quoted cell in each row and the
+// quote with the lowest non-zero total. Pure — no DB, no request.
+func buildRFQGrid(lines []rfqScanLine) (suppliers []rfqSupplier, rows []*rfqRow) {
+	supIdx := map[string]int{}     // PO number -> column index
+	rowIdx := map[string]*rfqRow{} // part key -> row
+
+	for _, ln := range lines {
+		col, ok := supIdx[ln.Number]
+		if !ok {
+			col = len(suppliers)
+			supIdx[ln.Number] = col
+			suppliers = append(suppliers, rfqSupplier{
+				Number: ln.Number, SupplierName: ln.SupplierName,
+				SupplierID: ln.SupplierID, Status: ln.Status, TotalCost: ln.Total,
+			})
+		}
+		if !ln.HasLine {
+			continue // quote with no lines yet
+		}
+		key := ln.PartNumber
+		if key == "" {
+			key = ln.Description
+		}
+		row, ok := rowIdx[key]
+		if !ok {
+			row = &rfqRow{PartNumber: ln.PartNumber, Rev: ln.Rev,
+				Description: ln.Description, Qty: ln.Qty, Cells: make([]rfqCell, 0)}
+			rowIdx[key] = row
+			rows = append(rows, row)
+		}
+		// Grow the cells slice to cover this column.
+		for len(row.Cells) <= col {
+			row.Cells = append(row.Cells, rfqCell{})
+		}
+		row.Cells[col] = rfqCell{POLID: ln.POLID, Cost: ln.Cost, Quoted: ln.Cost > 0, LeadDays: ln.LeadDays}
+	}
+
+	// Pad every row to the full column count so the grid is rectangular, and mark
+	// the lowest quoted cost in each row.
+	for _, row := range rows {
+		for len(row.Cells) < len(suppliers) {
+			row.Cells = append(row.Cells, rfqCell{})
+		}
+		bestIdx, bestCost := -1, 0.0
+		for i, c := range row.Cells {
+			if c.Quoted && (bestIdx < 0 || c.Cost < bestCost) {
+				bestIdx, bestCost = i, c.Cost
+			}
+		}
+		if bestIdx >= 0 {
+			row.Cells[bestIdx].Best = true
+		}
+	}
+
+	// Mark the quote with the lowest non-zero total.
+	bestSup, bestTotal := -1, 0.0
+	for i, s := range suppliers {
+		if s.TotalCost > 0 && (bestSup < 0 || s.TotalCost < bestTotal) {
+			bestSup, bestTotal = i, s.TotalCost
+		}
+	}
+	if bestSup >= 0 {
+		suppliers[bestSup].Best = true
+	}
+
+	return suppliers, rows
+}
+
+// RFQCompare — GET /rfq/{group}/compare
+func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
+	group := chi.URLParam(r, "group")
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT po.number, po.supplier_name, po.supplier_id, po.status, po.total_cost,
+		       pol.id, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
+		       pol.qty, pol.unit_cost, pol.lead_time_days
+		FROM %s po
+		LEFT JOIN %s pol ON pol.po_id = po.ID
+		WHERE po.rfq_group_id = @p1
+		ORDER BY po.ID, pol.line_number
+	`, h.cfg.POTable(), h.cfg.POLineTable()), group)
+	if err != nil {
+		h.renderError(w, r, "Error loading RFQ group: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	var lines []rfqScanLine
+	for rows.Next() {
+		var number, supName, status, partNum, rev, desc sql.NullString
+		var supID, polID, leadDays sql.NullInt64
+		var total, qty, cost sql.NullFloat64
+		if rows.Scan(&number, &supName, &supID, &status, &total,
+			&polID, &partNum, &rev, &desc, &qty, &cost, &leadDays) != nil {
+			continue
+		}
+		ln := rfqScanLine{
+			Number: number.String, SupplierName: supName.String, Status: status.String,
+			Total: total.Float64, HasLine: polID.Valid, POLID: int(polID.Int64),
+			PartNumber: partNum.String, Rev: rev.String, Description: desc.String,
+			Qty: qty.Float64, Cost: cost.Float64,
+		}
+		if supID.Valid {
+			v := int(supID.Int64)
+			ln.SupplierID = &v
+		}
+		if leadDays.Valid {
+			v := int(leadDays.Int64)
+			ln.LeadDays = &v
+		}
+		lines = append(lines, ln)
+	}
+
+	suppliers, orderedRows := buildRFQGrid(lines)
+	if len(suppliers) == 0 {
+		h.renderError(w, r, "RFQ group not found.")
+		return
+	}
+
+	h.render(w, r, "rfq_compare.html", map[string]any{
+		"Group": group, "Suppliers": suppliers, "Rows": orderedRows,
+		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r),
+	})
+}
+
+// RFQCompareSave — POST /rfq/{group}/compare
+// Persists the quoted unit cost + lead time entered per cell, then recomputes
+// every quote's total in the group.
+func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
+	group := chi.URLParam(r, "group")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, "Error parsing form: "+err.Error())
+		return
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	// All line ids in the group, so we only accept input for lines that belong to it.
+	idRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(`
+		SELECT pol.id FROM %s pol JOIN %s po ON pol.po_id = po.ID
+		WHERE po.rfq_group_id = @p1
+	`, h.cfg.POLineTable(), h.cfg.POTable()), group)
+	if err != nil {
+		h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
+		return
+	}
+	var polIDs []int
+	for idRows.Next() {
+		var id int
+		if idRows.Scan(&id) == nil {
+			polIDs = append(polIDs, id)
+		}
+	}
+	idRows.Close()
+
+	for _, id := range polIDs {
+		idStr := strconv.Itoa(id)
+		cost := 0.0
+		if v, ok := parseFormFloat(fv(r, "cost_"+idStr)).(float64); ok {
+			cost = v
+		}
+		lead := nullableInt(fv(r, "lead_"+idStr))
+		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+			`UPDATE %s SET unit_cost=@p1, lead_time_days=@p2 WHERE id=@p3`, h.cfg.POLineTable()),
+			cost, lead, id); err != nil {
+			h.renderError(w, r, "Error saving quote: "+err.Error())
+			return
+		}
+	}
+
+	// Recompute each quote's total (line sum + its own tax/shipping/misc).
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		UPDATE po
+		SET total_cost = ISNULL(ls.s, 0) + ISNULL(po.tax1, 0) + ISNULL(po.shipping_cost, 0) + ISNULL(po.misc_cost, 0),
+		    date_modified = GETDATE()
+		FROM %s po
+		OUTER APPLY (SELECT SUM(pol.qty * pol.unit_cost) AS s FROM %s pol WHERE pol.po_id = po.ID) ls
+		WHERE po.rfq_group_id = @p1
+	`, h.cfg.POTable(), h.cfg.POLineTable()), group); err != nil {
+		h.renderError(w, r, "Error recomputing totals: "+err.Error())
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		h.renderError(w, r, "Error saving quotes: "+err.Error())
+		return
+	}
+	committed = true
+	http.Redirect(w, r, "/rfq/"+group+"/compare", http.StatusFound)
+}
+
+// RFQConvert — POST /rfq/{id}/convert
+// Awards the winning quote: duplicates it into a new real PO at the bare base
+// number, and closes out the RFQ group (awarded quote -> closed, others ->
+// cancelled). The RFQ quotes are retained with their history for the record.
+func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, "Error parsing form: "+err.Error())
+		return
+	}
+
+	var poID int
+	var status sql.NullString
+	var groupID, supplierID sql.NullInt64
+	err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT ID, status, rfq_group_id, supplier_id FROM %s WHERE number = @p1`, h.cfg.POTable()),
+		num).Scan(&poID, &status, &groupID, &supplierID)
+	if err == sql.ErrNoRows {
+		h.renderError(w, r, "Purchase order not found")
+		return
+	}
+	if err != nil {
+		h.renderError(w, r, "Error loading RFQ: "+err.Error())
+		return
+	}
+	if status.String != "rfq" {
+		h.renderError(w, r, "Only an RFQ can be converted to a PO.")
+		return
+	}
+
+	// The new PO takes the bare base number (1050R2 -> 1050). Guard against the
+	// base already being in use before inserting it.
+	base := rfqBaseNumber(num)
+	var taken int
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE number=@p1`, h.cfg.POTable()), base).Scan(&taken); err != nil {
+		h.renderError(w, r, "Error checking PO number: "+err.Error())
+		return
+	}
+	if taken > 0 {
+		h.renderError(w, r, "Cannot convert: PO number "+base+" is already in use.")
+		return
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	now := time.Now()
+	actor := h.actorName(r)
+
+	// Duplicate the winning quote's header into a new real PO: bare base number,
+	// draft, no rfq_group_id (so it always shows on the PO list).
+	var newID int
+	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (number, status, is_active, approval_status, rfq_group_id,
+		  orderer, account_id,
+		  supplier_id, supplier_name, supplier_contact, supplier_email,
+		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+		  supplier_country, supplier_phone_number, supplier_fax_number,
+		  receiver_id, receiver_name, receiver_contact, receiver_email,
+		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+		  receiver_country, receiver_phone, receiver_fax,
+		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
+		  date_ordered, date_requested, date_closed, date_printed, date_modified)
+		SELECT @p1, 'draft', 1, 'not_submitted', NULL,
+		  orderer, account_id,
+		  supplier_id, supplier_name, supplier_contact, supplier_email,
+		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+		  supplier_country, supplier_phone_number, supplier_fax_number,
+		  receiver_id, receiver_name, receiver_contact, receiver_email,
+		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+		  receiver_country, receiver_phone, receiver_fax,
+		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
+		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, @p2
+		FROM %s WHERE id=@p3;
+		SELECT CAST(SCOPE_IDENTITY() AS INT)
+	`, h.cfg.POTable(), h.cfg.POTable()), base, now, poID).Scan(&newID); err != nil {
+		h.renderError(w, r, "Error creating PO: "+err.Error())
+		return
+	}
+
+	// Copy the line items onto the new PO.
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (po_id, line_number, part_number_snapshot, revision_snapshot,
+		  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days)
+		SELECT @p1, line_number, part_number_snapshot, revision_snapshot,
+		  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days
+		FROM %s WHERE po_id=@p2
+	`, h.cfg.POLineTable(), h.cfg.POLineTable()), newID, poID); err != nil {
+		h.renderError(w, r, "Error copying line items: "+err.Error())
+		return
+	}
+
+	// Record the new PO's creation, noting the RFQ it came from.
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by, changed_at)
+		VALUES (@p1, 'status', NULL, 'draft', @p2, @p3, @p4)
+	`, h.cfg.POHistoryTable()), newID, "Converted from RFQ "+num, actor, now); err != nil {
+		h.renderError(w, r, "Error recording PO creation: "+err.Error())
+		return
+	}
+
+	// Close out the awarded quote (retained for the record).
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by, changed_at)
+		VALUES (@p1, 'status', 'rfq', 'closed', @p2, @p3, @p4)
+	`, h.cfg.POHistoryTable()), poID, "Awarded — converted to PO #"+base, actor, now); err != nil {
+		h.renderError(w, r, "Error recording award: "+err.Error())
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET status='closed', is_active=0, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable()),
+		now, poID); err != nil {
+		h.renderError(w, r, "Error closing awarded quote: "+err.Error())
+		return
+	}
+
+	// Decline the other quotes in the group (retained, not deleted).
+	if groupID.Valid {
+		sibRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
+			`SELECT ID FROM %s WHERE rfq_group_id=@p1 AND status='rfq' AND ID<>@p2`, h.cfg.POTable()),
+			groupID.Int64, poID)
+		if err != nil {
+			h.renderError(w, r, "Error finding sibling quotes: "+err.Error())
+			return
+		}
+		var sibIDs []int
+		for sibRows.Next() {
+			var id int
+			if sibRows.Scan(&id) == nil {
+				sibIDs = append(sibIDs, id)
+			}
+		}
+		sibRows.Close()
+		note := "Not awarded — PO #" + base + " issued"
+		for _, id := range sibIDs {
+			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+				INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by, changed_at)
+				VALUES (@p1, 'status', 'rfq', 'cancelled', @p2, @p3, @p4)
+			`, h.cfg.POHistoryTable()), id, note, actor, now); err != nil {
+				h.renderError(w, r, "Error recording decline: "+err.Error())
+				return
+			}
+			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+				`UPDATE %s SET status='cancelled', is_active=0, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable()),
+				now, id); err != nil {
+				h.renderError(w, r, "Error declining quote: "+err.Error())
+				return
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		h.renderError(w, r, "Error saving conversion: "+err.Error())
+		return
+	}
+	committed = true
+
+	// Give the new PO a folder under the bare base number.
+	supplierIDStr := ""
+	if supplierID.Valid {
+		supplierIDStr = strconv.FormatInt(supplierID.Int64, 10)
+	}
+	h.createPOFolder(r, base, supplierIDStr)
+	http.Redirect(w, r, "/po/"+base, http.StatusFound)
 }

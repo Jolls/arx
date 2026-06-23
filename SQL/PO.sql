@@ -64,8 +64,9 @@ CREATE TABLE purchase_order (
   notes                 VARCHAR(MAX),                   -- Prints on PO document.
   internal_notes        VARCHAR(MAX)   CONSTRAINT DF_purchase_order_internal_notes DEFAULT '', -- Internal-only notes, not printed on PO.
   is_active             BIT            CONSTRAINT DF_purchase_order_is_active DEFAULT 1, -- 1 = open, 0 = closed. Derived from status — do not set directly.
-  status                VARCHAR(20)    CONSTRAINT DF_purchase_order_status DEFAULT 'draft' CONSTRAINT CK_purchase_order_status CHECK (status IN ('draft','open','sent','partially_received','closed','cancelled')), -- Authoritative PO state (lifecycle #271). Transitions recorded in purchase_order_history.
-  approval_status       VARCHAR(20)    CONSTRAINT DF_purchase_order_approval_status DEFAULT 'not_submitted' CONSTRAINT CK_purchase_order_approval_status CHECK (approval_status IN ('not_submitted','pending','approved','rejected')) -- Approval gate (issue #267). Must be 'approved' before a PO can be sent or printed. Actions recorded in purchase_order_history.
+  status                VARCHAR(20)    CONSTRAINT DF_purchase_order_status DEFAULT 'draft' CONSTRAINT CK_purchase_order_status CHECK (status IN ('rfq','draft','open','sent','partially_received','closed','cancelled')), -- Authoritative PO state (lifecycle #271; 'rfq' added #270). Transitions recorded in purchase_order_history.
+  approval_status       VARCHAR(20)    CONSTRAINT DF_purchase_order_approval_status DEFAULT 'not_submitted' CONSTRAINT CK_purchase_order_approval_status CHECK (approval_status IN ('not_submitted','pending','approved','rejected')), -- Approval gate (issue #267). Must be 'approved' before a PO can be sent or printed. Actions recorded in purchase_order_history.
+  rfq_group_id          INT                                                              -- RFQ grouping (issue #270). Sibling quotes share this; anchored to the originating RFQ's own id. NULL for ordinary POs.
 );
 
 ALTER TABLE dbo.purchase_order ADD CONSTRAINT FK_purchase_order_company  FOREIGN KEY (supplier_id) REFERENCES dbo.company (id);

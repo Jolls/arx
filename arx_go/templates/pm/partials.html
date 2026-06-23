@@ -42,13 +42,21 @@
         <a href="/po/{{.PO.Number}}/print"  class="sub-tab{{if eq .ActiveSubTab "print"}} active{{end}}">Print / PDF</a>
         <a href="/po/{{.PO.Number}}/folder" class="sub-tab{{if eq .ActiveSubTab "folder"}} active{{end}}">Folder</a>
     </div>
+    {{if eq .PO.Status "rfq"}}
+    <div class="d-flex gap-2">
+        <a href="/rfq/{{.PO.Number}}/add-supplier" class="btn btn-sm btn-secondary">Add Supplier Quote</a>
+        {{if .PO.RFQGroupID}}<a href="/rfq/{{derefInt .PO.RFQGroupID}}/compare" class="btn btn-sm btn-primary">Compare Quotes</a>{{end}}
+    </div>
+    {{else}}
     <a href="/po/{{.PO.Number}}/duplicate" class="btn btn-sm btn-secondary">Duplicate PO</a>
+    {{end}}
 </div>
 {{end}}
 
 {{/* po_status_badge — pass the status code string as the pipeline (.) */}}
 {{define "po_status_badge"}}
-{{if eq . "draft"}}<span class="badge bg-secondary">Draft</span>
+{{if eq . "rfq"}}<span class="badge bg-dark">RFQ</span>
+{{else if eq . "draft"}}<span class="badge bg-secondary">Draft</span>
 {{else if eq . "open"}}<span class="badge bg-info text-dark">Open</span>
 {{else if eq . "sent"}}<span class="badge bg-primary">Sent</span>
 {{else if eq . "partially_received"}}<span class="badge bg-warning text-dark">Partially Received</span>

@@ -2,9 +2,14 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/pos">POs</a></li>
-        {{if .IsDuplicate}}
+        {{if .RFQAddFrom}}
+        <li class="breadcrumb-item"><a href="/po/{{.RFQAddFrom}}">RFQ #{{.RFQAddFrom}}</a></li>
+        <li class="breadcrumb-item active">Add Supplier Quote</li>
+        {{else if .IsDuplicate}}
         <li class="breadcrumb-item"><a href="/po/{{.DuplicateFrom}}">PO #{{.DuplicateFrom}}</a></li>
         <li class="breadcrumb-item active">Copy</li>
+        {{else if and .IsRFQ .IsNew}}
+        <li class="breadcrumb-item active">New RFQ</li>
         {{else if .IsNew}}
         <li class="breadcrumb-item active">New PO</li>
         {{else}}
@@ -22,10 +27,17 @@
     <div class="alert alert-info">Duplicating from PO #{{.DuplicateFrom}} &mdash; a new PO number will be assigned on save.</div>
     {{end}}
 
+    {{if .RFQAddFrom}}
+    <div class="alert alert-info">Adding another supplier's quote to this RFQ &mdash; pick the supplier; quantities carry over. Enter quoted prices and lead times here or on the comparison grid after saving.</div>
+    {{else if and .IsRFQ .IsNew}}
+    <div class="alert alert-info">New Request for Quotation &mdash; choose the supplier and the parts/quantities to quote. Add more suppliers and compare responses after saving.</div>
+    {{end}}
+
     {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
     <form id="po-form" method="post" action="{{if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        {{if .IsRFQ}}<input type="hidden" name="rfq" value="1">{{if .RFQGroupID}}<input type="hidden" name="rfq_group_id" value="{{.RFQGroupID}}">{{end}}{{end}}
 
         {{/* ── Two-column: Supplier | Ship To ─────────────────── */}}
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
@@ -300,9 +312,9 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">
-                {{if .IsNew}}Create PO{{else}}Save Changes{{end}}
+                {{if .IsNew}}{{if .IsRFQ}}Create RFQ{{else}}Create PO{{end}}{{else}}Save Changes{{end}}
             </button>
-            <a href="{{if .IsDuplicate}}/po/{{.DuplicateFrom}}{{else if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}"
+            <a href="{{if .RFQAddFrom}}/po/{{.RFQAddFrom}}{{else if .IsDuplicate}}/po/{{.DuplicateFrom}}{{else if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}"
                class="btn btn-secondary">Cancel</a>
         </div>
     </form>
@@ -555,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('po-form').addEventListener('submit', function(e) {
         const checks = [
             { nameEl: document.getElementById('supplier_name'), idEl: document.getElementById('supplier_id'), label: 'Supplier' },
-            { nameEl: document.getElementById('receiver_name'), idEl: document.getElementById('receiver_id'), label: 'Receiver' },
+            {{if not .IsRFQ}}{ nameEl: document.getElementById('receiver_name'), idEl: document.getElementById('receiver_id'), label: 'Receiver' },{{end}}
         ];
         // Fail if ID is missing (empty = not selected) OR text present without a valid ID
         const invalid = checks.filter(c => !c.idEl.value);
