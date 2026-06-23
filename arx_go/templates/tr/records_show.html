@@ -78,15 +78,32 @@
   </div>
 </div>
 
-<table class="table table-bordered table-sm align-middle">
+<div class="d-flex justify-content-end mb-2" data-col-table="results-table">
+  <div class="dropdown">
+    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+      Columns
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:150px">
+      <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-param" checked> Parameter</label></li>
+      <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-spec" checked> Specification</label></li>
+      <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-result" checked> Result</label></li>
+      <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pf" checked> P/F</label></li>
+      <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-comment" checked> Comment</label></li>
+      <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-updated" checked> Updated</label></li>
+      <li><hr class="dropdown-divider my-1"></li>
+      <li><a href="#" class="dropdown-item small text-muted" data-col-reset>Reset</a></li>
+    </ul>
+  </div>
+</div>
+<table class="table table-bordered table-sm align-middle" id="results-table">
   <thead class="table-dark">
     <tr>
-      <th>Parameter</th>
-      <th data-bs-toggle="tooltip" title="Expected value range or nominal (Min / Nom / Max)">Specification</th>
-      <th class="text-center">Result</th>
-      <th class="text-center" data-bs-toggle="tooltip" title="Pass/Fail result for each test step">P/F</th>
-      <th style="width:240px">Comment</th>
-      <th class="text-nowrap">Updated</th>
+      <th data-col="col-param">Parameter</th>
+      <th data-col="col-spec" data-bs-toggle="tooltip" title="Expected value range or nominal (Min / Nom / Max)">Specification</th>
+      <th data-col="col-result" class="text-center">Result</th>
+      <th data-col="col-pf" class="text-center" data-bs-toggle="tooltip" title="Pass/Fail result for each test step">P/F</th>
+      <th data-col="col-comment" style="width:240px">Comment</th>
+      <th data-col="col-updated" class="text-nowrap">Updated</th>
     </tr>
   </thead>
   <tbody>
@@ -99,7 +116,7 @@
     {{$val := .EffectiveValue}}
     {{$sid := .Step.ID}}
     <tr>
-      <td>
+      <td data-col="col-param">
         {{.EffectiveParameter}}
         {{if $.DebugMode}}
         <button class="btn btn-link btn-sm p-0 ms-1 text-muted" type="button"
@@ -109,8 +126,8 @@
         </button>
         {{end}}
       </td>
-      <td>{{.EffectiveSpec}}</td>
-      <td class="text-center font-mono">
+      <td data-col="col-spec">{{.EffectiveSpec}}</td>
+      <td data-col="col-result" class="text-center font-mono">
         {{if imageResult $val}}
           {{$imgURL := imageURL $.Form.PartNumber $val}}
           <span class="img-hover-wrap" data-src="{{$imgURL}}">
@@ -135,9 +152,9 @@
           {{applyFormat $val .Step.Format}}
         {{end}}
       </td>
-      <td class="text-center">{{pfBadge .Result}}</td>
-      <td style="word-break:break-word">{{if .Result}}{{.Result.Comment}}{{end}}</td>
-      <td class="text-nowrap small text-muted">
+      <td data-col="col-pf" class="text-center">{{pfBadge .Result}}</td>
+      <td data-col="col-comment" style="word-break:break-word">{{if .Result}}{{.Result.Comment}}{{end}}</td>
+      <td data-col="col-updated" class="text-nowrap small text-muted">
         {{if .Result}}{{formatDateTime .Result.UpdatedAt}}{{end}}
       </td>
     </tr>

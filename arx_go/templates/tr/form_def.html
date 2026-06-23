@@ -25,7 +25,31 @@
     </form>
     {{end}}
   </h4>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2" data-col-table="def-table">
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        Columns
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:180px">
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-id" checked> ID</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-type" checked> Type</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-param" checked> Parameter</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-spec" checked> Specification</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-nom" checked> spec_nom</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-min" checked> spec_min</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-max" checked> spec_max</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-units" checked> spec_units</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pftype" checked> pf_type</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-default" checked> default_result</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-hide" checked> Hide</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-cat" checked> category</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-sheet" checked> sheet_name</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-instr" checked> instrument_types</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-comment" checked> comment</label></li>
+        <li><hr class="dropdown-divider my-1"></li>
+        <li><a href="#" class="dropdown-item small text-muted" data-col-reset>Reset</a></li>
+      </ul>
+    </div>
     <a href="/forms/{{.Form.ID}}/duplicate" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-copy"></i> Duplicate
     </a>
@@ -87,21 +111,21 @@
 <table class="table table-bordered table-sm align-middle" id="def-table" style="min-width:2400px">
   <thead class="table-dark" style="position:sticky;top:0;z-index:1">
     <tr>
-      <th style="width:40px">ID</th>
-      <th style="width:60px">Type</th>
-      <th style="width:180px">Parameter</th>
-      <th style="width:180px">Specification</th>
-      <th style="width:220px">spec_nom</th>
-      <th style="width:90px">spec_min</th>
-      <th style="width:90px">spec_max</th>
-      <th style="width:70px">spec_units</th>
-      <th style="width:90px">pf_type</th>
-      <th style="width:120px">default_result</th>
-      <th style="width:60px">Hide</th>
-      <th style="width:120px">category</th>
-      <th style="width:120px">sheet_name</th>
-      <th style="width:180px">instrument_types</th>
-      <th style="width:200px">comment</th>
+      <th data-col="col-id" style="width:40px">ID</th>
+      <th data-col="col-type" style="width:60px">Type</th>
+      <th data-col="col-param" style="width:180px">Parameter</th>
+      <th data-col="col-spec" style="width:180px">Specification</th>
+      <th data-col="col-nom" style="width:220px">spec_nom</th>
+      <th data-col="col-min" style="width:90px">spec_min</th>
+      <th data-col="col-max" style="width:90px">spec_max</th>
+      <th data-col="col-units" style="width:70px">spec_units</th>
+      <th data-col="col-pftype" style="width:90px">pf_type</th>
+      <th data-col="col-default" style="width:120px">default_result</th>
+      <th data-col="col-hide" style="width:60px">Hide</th>
+      <th data-col="col-cat" style="width:120px">category</th>
+      <th data-col="col-sheet" style="width:120px">sheet_name</th>
+      <th data-col="col-instr" style="width:180px">instrument_types</th>
+      <th data-col="col-comment" style="width:200px">comment</th>
     </tr>
   </thead>
   <tbody>
@@ -114,21 +138,21 @@
     </tr>
     {{else}}
     <tr data-step-id="{{.ID}}">
-      <td class="text-muted small">{{.ID}} <a href="/forms/{{$.Form.ID}}/tests/{{.ID}}/report" class="ms-1 text-decoration-none" title="View all results for this test"><i class="bi bi-bar-chart-line"></i></a></td>
-      <td class="text-muted small">{{.Type}}</td>
-      <td data-field="parameter">{{.Parameter}}</td>
-      <td>{{.Specification}}</td>
-      <td class="font-mono" data-field="spec_nom">{{.SpecNom}}</td>
-      <td class="font-mono" data-field="spec_min">{{.SpecMin}}</td>
-      <td class="font-mono" data-field="spec_max">{{.SpecMax}}</td>
-      <td data-field="spec_units">{{.SpecUnits}}</td>
-      <td data-field="pf_type">{{.PFType}}</td>
-      <td class="font-mono" data-field="default_result">{{.DefaultResult}}</td>
-      <td class="text-center">{{if .HideFormula}}{{if eq .HideFormula "HIDE"}}<i class="bi bi-eye-slash text-muted"></i>{{else}}<span class="font-mono small text-muted" title="hide: {{.HideFormula}}">{{.HideFormula}}</span>{{end}}{{end}}</td>
-      <td class="small text-muted">{{.Category}}</td>
-      <td class="small text-muted">{{.SheetName}}</td>
-      <td class="small text-muted">{{.InstrumentTypes}}</td>
-      <td class="small text-muted">{{.StepComment}}</td>
+      <td data-col="col-id" class="text-muted small">{{.ID}} <a href="/forms/{{$.Form.ID}}/tests/{{.ID}}/report" class="ms-1 text-decoration-none" title="View all results for this test"><i class="bi bi-bar-chart-line"></i></a></td>
+      <td data-col="col-type" class="text-muted small">{{.Type}}</td>
+      <td data-col="col-param" data-field="parameter">{{.Parameter}}</td>
+      <td data-col="col-spec">{{.Specification}}</td>
+      <td data-col="col-nom" class="font-mono" data-field="spec_nom">{{.SpecNom}}</td>
+      <td data-col="col-min" class="font-mono" data-field="spec_min">{{.SpecMin}}</td>
+      <td data-col="col-max" class="font-mono" data-field="spec_max">{{.SpecMax}}</td>
+      <td data-col="col-units" data-field="spec_units">{{.SpecUnits}}</td>
+      <td data-col="col-pftype" data-field="pf_type">{{.PFType}}</td>
+      <td data-col="col-default" class="font-mono" data-field="default_result">{{.DefaultResult}}</td>
+      <td data-col="col-hide" class="text-center">{{if .HideFormula}}{{if eq .HideFormula "HIDE"}}<i class="bi bi-eye-slash text-muted"></i>{{else}}<span class="font-mono small text-muted" title="hide: {{.HideFormula}}">{{.HideFormula}}</span>{{end}}{{end}}</td>
+      <td data-col="col-cat" class="small text-muted">{{.Category}}</td>
+      <td data-col="col-sheet" class="small text-muted">{{.SheetName}}</td>
+      <td data-col="col-instr" class="small text-muted">{{.InstrumentTypes}}</td>
+      <td data-col="col-comment" class="small text-muted">{{.StepComment}}</td>
     </tr>
     {{end}}
     {{end}}

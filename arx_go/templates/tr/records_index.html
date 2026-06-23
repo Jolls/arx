@@ -8,7 +8,22 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2" data-col-table="records-table">
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        Columns
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-sn" checked> Serial Number</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-desc" checked> Description</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-date" checked> Date</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-type" checked> Type</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-status" checked> Status</label></li>
+        <li><hr class="dropdown-divider my-1"></li>
+        <li><a href="#" class="dropdown-item small text-muted" data-col-reset>Reset</a></li>
+      </ul>
+    </div>
     <a href="/forms/{{.Form.ID}}/records/new" class="btn btn-sm btn-primary">
       <i class="bi bi-plus-circle"></i> New Record
     </a>
@@ -27,15 +42,15 @@
   </div>
 </div>
 
-<table class="table table-bordered table-hover table-sm" data-paginate>
+<table class="table table-bordered table-hover table-sm" id="records-table" data-paginate>
   <thead class="table-dark">
     <tr>
-      <th class="sortable" onclick="sortTable(this)">Serial Number</th>
-      <th class="sortable" onclick="sortTable(this)">Part Number</th>
-      <th class="sortable" onclick="sortTable(this)">Description</th>
-      <th class="sortable" onclick="sortTable(this)">Date</th>
-      <th class="sortable" onclick="sortTable(this)" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
-      <th class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
+      <th data-col="col-sn" class="sortable" onclick="sortTable(this)">Serial Number</th>
+      <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
+      <th data-col="col-desc" class="sortable" onclick="sortTable(this)">Description</th>
+      <th data-col="col-date" class="sortable" onclick="sortTable(this)">Date</th>
+      <th data-col="col-type" class="sortable" onclick="sortTable(this)" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
+      <th data-col="col-status" class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
     </tr>
   </thead>
   <tbody>
@@ -44,14 +59,14 @@
     {{end}}
     {{range .Records}}
     <tr>
-      <td>
+      <td data-col="col-sn">
         <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
       </td>
-      <td>{{if .PartNumberID}}<a href="/part/{{.PartNumberID}}">{{.SerialNumberPN}}</a>{{else}}{{.SerialNumberPN}}{{end}}</td>
-      <td>{{.SerialNumberDesc}}</td>
-      <td class="text-nowrap">{{formatDateTimeFull .RecordDate}}</td>
-      <td>{{.Comments}}</td>
-      <td class="text-center">
+      <td data-col="col-pn">{{if .PartNumberID}}<a href="/part/{{.PartNumberID}}">{{.SerialNumberPN}}</a>{{else}}{{.SerialNumberPN}}{{end}}</td>
+      <td data-col="col-desc">{{.SerialNumberDesc}}</td>
+      <td data-col="col-date" class="text-nowrap">{{formatDateTimeFull .RecordDate}}</td>
+      <td data-col="col-type">{{.Comments}}</td>
+      <td data-col="col-status" class="text-center">
         {{if .Locked}}
         <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Locked</span>
         {{else}}
