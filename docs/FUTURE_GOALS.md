@@ -99,7 +99,7 @@ Once `is_preferred` exists and all parts (including MFG/RAW/ASM via your own com
 |---|---|---|---|
 | #267 PO-1 | PO approval workflow (Draft/Pending/Approved/Rejected) | `PO` approval fields | Auth (#207) |
 | #271 PO-4 | PO status lifecycle (Draft→Open→Sent→Partial→Closed→Cancelled) | `PO` status + timestamps | — |
-| #269 PO-2 | Receiving / goods receipt (received qty + date per POL line) | `POL` received fields | PO-4 |
+| ~~#269 PO-2~~ | ~~Receiving / goods receipt (received qty + date per POL line)~~ ✓ | `po_line.received_qty` + `date_received` | PO-4 |
 | #270 PO-3 | Request for Quotation (RFQ → compare → convert to PO) | New `rfq` / `rfq_line` tables | PO-4 |
 | #224 | Auto-name PO file, open folder, auto-create if missing | No schema change (already has folder logic) | — |
 | #156 | Import files from part into PO folder | No schema change | — |

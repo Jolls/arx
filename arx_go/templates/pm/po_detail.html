@@ -201,9 +201,12 @@
     </div>
 
     {{/* ── Line items ─────────────────────────────────────────── */}}
+    {{$canReceive := or (eq .PO.Status "sent") (eq .PO.Status "partially_received")}}
     <div class="detail-section">
         <h3>Line Items ({{len .POItems}})</h3>
         {{if .POItems}}
+        {{if $canReceive}}<form method="POST" action="/po/{{.PO.Number}}/receive">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">{{end}}
         <div class="table-wrapper" style="margin-top:12px;">
             <table class="table table-bordered table-hover table-sm">
                 <thead class="table-dark">
@@ -214,6 +217,7 @@
                         <th>Description</th>
                         <th>Vendor PN</th>
                         <th style="width:72px; text-align:right;">Qty</th>
+                        <th style="width:130px; text-align:right;">Received</th>
                         <th style="width:110px; text-align:right;">Unit Cost</th>
                         <th style="width:110px; text-align:right;">Extended</th>
                     </tr>
@@ -230,6 +234,10 @@
                         <td>{{.POLDesc}}</td>
                         <td>{{.VendorPN}}</td>
                         <td style="text-align:right;">{{printf "%.2f" .POLQty}}</td>
+                        <td style="text-align:right;">
+                            <span {{if ge .ReceivedQty .POLQty}}class="badge bg-success"{{end}}>{{printf "%.2f" .ReceivedQty}} / {{printf "%.2f" .POLQty}}</span>
+                            {{if $canReceive}}<input type="number" step="any" min="0" name="recv[{{.POLID}}]" class="form-control form-control-sm mt-1" style="text-align:right;" placeholder="+ qty">{{end}}
+                        </td>
                         <td style="text-align:right;">${{printf "%.4f" .POLCost}}</td>
                         <td style="text-align:right;">${{printf "%.2f" (mul .POLQty .POLCost)}}</td>
                     </tr>
@@ -237,32 +245,70 @@
                 </tbody>
                 <tfoot>
                     <tr style="font-weight:700; border-top:2px solid var(--accent-1); background:#f5f5f5;">
-                        <td colspan="7" style="text-align:right; padding:10px;">Line Items Subtotal:</td>
+                        <td colspan="8" style="text-align:right; padding:10px;">Line Items Subtotal:</td>
                         <td style="text-align:right; padding:10px;">${{printf "%.2f" .LineTotal}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="7" style="text-align:right; padding:5px 10px; color:#555;">Tax:</td>
+                        <td colspan="8" style="text-align:right; padding:5px 10px; color:#555;">Tax:</td>
                         <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.Tax1)}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="7" style="text-align:right; padding:5px 10px; color:#555;">Shipping:</td>
+                        <td colspan="8" style="text-align:right; padding:5px 10px; color:#555;">Shipping:</td>
                         <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.ShippingCost)}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="7" style="text-align:right; padding:5px 10px; color:#555;">Misc:</td>
+                        <td colspan="8" style="text-align:right; padding:5px 10px; color:#555;">Misc:</td>
                         <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.MiscCost)}}</td>
                     </tr>
                     <tr style="font-weight:700; background:#f0f4ff; border-top:1px solid #c7d2fe;">
-                        <td colspan="7" style="text-align:right; padding:10px; color:var(--accent-1);">PO Total:</td>
+                        <td colspan="8" style="text-align:right; padding:10px; color:var(--accent-1);">PO Total:</td>
                         <td style="text-align:right; padding:10px; color:var(--accent-1);">${{printf "%.2f" (deref .PO.TotalCost)}}</td>
                     </tr>
                 </tfoot>
             </table>
         </div>
+        {{if $canReceive}}
+        <div class="d-flex align-items-end gap-2 mt-2">
+            <div>
+                <label for="recv-date" class="form-label mb-0">Receipt date</label>
+                <input type="date" id="recv-date" name="txn_date" value="{{.Today}}" class="form-control form-control-sm">
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-down"></i> Receive</button>
+        </div>
+        </form>{{end}}
         {{else}}
         <p style="color:#999; font-style:italic; margin-top:10px;">No line items on record for this PO.</p>
         {{end}}
     </div>
+
+    {{/* ── Receipts ───────────────────────────────────────────── */}}
+    {{if .Receipts}}
+    <div class="detail-section">
+        <h3>Receipts</h3>
+        <div class="table-wrapper" style="margin-top:12px;">
+            <table class="table table-bordered table-sm">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width:120px;">Date</th>
+                        <th>Part Number</th>
+                        <th style="width:100px; text-align:right;">Qty</th>
+                        <th style="width:160px;">By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Receipts}}
+                    <tr>
+                        <td>{{.Date}}</td>
+                        <td>{{if .PartID}}<a href="/part/{{derefInt .PartID}}/transactions" class="part-number-link">{{.PartNumber}}</a>{{else}}{{.PartNumber}}{{end}}</td>
+                        <td style="text-align:right;">{{printf "%.2f" .Qty}}</td>
+                        <td>{{.Username}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {{end}}
 
     {{/* ── Internal notes ─────────────────────────────────────── */}}
     <div class="detail-section">
