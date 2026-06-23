@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.31] - 2026-06-23 
+- pm: Parts and Vendors lists gain a "Show inactive" toggle (off by default) that hides soft-deleted (inactive) rows; shown inactive rows are styled muted/struck-through ([#477](https://github.com/Jolls/arx-legacy/issues/477))
+- pm: list pagination is now a fixed 30 rows per page (was 20), and the Test Records form and record lists are now paginated ([#479](https://github.com/Jolls/arx-legacy/issues/479))
+- pm: added a "PO Links" column to the vendor's parts page listing the POs placed with that vendor for each part ([#475](https://github.com/Jolls/arx-legacy/issues/475))
+
 ## [0.5.30] - 2026-06-22 
 - pm: Request for Quotation (RFQ) — request a quote from a supplier, add more suppliers' quotes to the same RFQ, enter each supplier's unit price and lead time per line on a side-by-side comparison grid, and award by converting the winning quote into a new PO (the RFQ and its quotes are retained, closed/cancelled, for the record). An RFQ group consumes a single PO number (quotes are `<base>R1`, `<base>R2`, … and the awarded PO is the bare `<base>`), and RFQ quotes are hidden on the PO list behind a "Show RFQs" toggle ([#270](https://github.com/Jolls/arx-legacy/issues/270))
 - pm: schema — adds `purchase_order.rfq_group_id` and `po_line.lead_time_days` (both nullable) and the `rfq` status; additive and rollback-safe — run `SQL/migrations/migrate_po_rfq.sql` against ArxProd and ArxDev before deploying ([#270](https://github.com/Jolls/arx-legacy/issues/270))

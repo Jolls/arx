@@ -143,6 +143,10 @@ table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* A
 .page-nav:hover:not(:disabled):not(.disabled) { background: #e0e0e0; }
 .page-nav:disabled, .page-nav.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
+/* --- Soft-deleted (inactive) rows ---------------------------- */
+.row-inactive { color: #999; }
+.row-inactive a.part-number-link { text-decoration: line-through; }
+
 /* --- Links --------------------------------------------------- */
 a { color: var(--accent-1); text-decoration: none; transition: color 0.2s; }
 a:hover { color: var(--accent-2); text-decoration: underline; }

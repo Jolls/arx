@@ -17,7 +17,75 @@ function sortTable(th) {
     return asc ? aText.localeCompare(bText) : bText.localeCompare(aText)
   })
   rows.forEach(function(row) { tbody.appendChild(row) })
+  if (window.__trRepaginate) window.__trRepaginate()
 }
+
+// --- Client-side pagination for server-rendered list tables ---
+// Operates on tables marked with data-paginate; shows 30 rows per page by
+// toggling display, and re-applies after sortTable() reorders the rows.
+;(function () {
+  var ROWS_PER_PAGE = 30
+  var currentPage = 1
+
+  function dataRows(tbody) {
+    // Real rows only — skip the empty-state row (single td with colspan).
+    return Array.from(tbody.children).filter(function (tr) {
+      return !tr.querySelector('td[colspan]')
+    })
+  }
+
+  function render(table) {
+    var tbody = table.querySelector('tbody')
+    if (!tbody) return
+    var rows = dataRows(tbody)
+    var controls = table.nextElementSibling
+    var hasControls = controls && controls.classList.contains('pagination-controls')
+
+    var rc = document.querySelector('.record-count')
+    if (rc) rc.textContent = rows.length
+
+    if (rows.length <= ROWS_PER_PAGE) {
+      rows.forEach(function (tr) { tr.style.display = '' })
+      if (hasControls) controls.style.display = 'none'
+      return
+    }
+    if (hasControls) controls.style.display = ''
+
+    var totalPages = Math.ceil(rows.length / ROWS_PER_PAGE)
+    if (currentPage > totalPages) currentPage = totalPages
+    var start = (currentPage - 1) * ROWS_PER_PAGE
+    var end = start + ROWS_PER_PAGE
+    rows.forEach(function (tr, i) {
+      tr.style.display = (i >= start && i < end) ? '' : 'none'
+    })
+
+    if (hasControls) {
+      var info = controls.querySelector('.pagination-info')
+      var prev = controls.querySelector('.page-nav.prev')
+      var next = controls.querySelector('.page-nav.next')
+      if (info) info.textContent = 'Showing ' + (start + 1) + '–' + Math.min(end, rows.length) +
+        ' of ' + rows.length + ' (Page ' + currentPage + ' of ' + totalPages + ')'
+      if (prev) prev.disabled = currentPage === 1
+      if (next) next.disabled = currentPage >= totalPages
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var table = document.querySelector('table[data-paginate]')
+    if (!table) return
+    var controls = table.nextElementSibling
+    if (controls && controls.classList.contains('pagination-controls')) {
+      var prev = controls.querySelector('.page-nav.prev')
+      var next = controls.querySelector('.page-nav.next')
+      if (prev) prev.addEventListener('click', function () {
+        if (currentPage > 1) { currentPage--; render(table) }
+      })
+      if (next) next.addEventListener('click', function () { currentPage++; render(table) })
+    }
+    window.__trRepaginate = function () { render(table) }
+    render(table)
+  })
+}())
 
 // --- Pass/fail badge computation for edit view ---
 
