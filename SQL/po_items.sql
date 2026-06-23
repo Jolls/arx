@@ -20,6 +20,8 @@ CREATE TABLE po_line (
   unit_cost            DECIMAL(16,8)  NOT NULL DEFAULT 0, -- Unit cost at time of order.
   vendor_part_number   VARCHAR(55),                   -- Supplier's part number for this item.
   lead_time_days       INT,                           -- Quoted lead time in days (issue #270, RFQ responses). NULL = not quoted.
+  received_qty         DECIMAL(11,2)  NOT NULL DEFAULT 0, -- Cumulative qty received (issue #269). Receipts post to inventory_transaction.
+  date_received        DATE,                          -- Date of the most recent receipt on this line (issue #269). NULL = none received.
 );
 
 ALTER TABLE dbo.po_line ADD CONSTRAINT FK_po_line_po   FOREIGN KEY (po_id)   REFERENCES dbo.purchase_order (id);

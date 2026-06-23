@@ -45,9 +45,12 @@ Decisions taken: **single-location** stock (one on-hand per part); **`PN.PNQty` 
 
 ---
 
-## Stage 1 — Inventory Core  (closes #272 INV-1 + #274 INV-3)  ← foundation
+## Stage 1 — Inventory Core  (closes #272 INV-1 + #274 INV-3)  ← ✓ DONE (PR #474)
 
 INV-1 and INV-3 are inseparable in a ledger-first design; they ship together.
+**Shipped** in PR #474 (commit `7574cd5`): `inventory_transaction` ledger, cached `part.stock_on_hand`,
+the `recordInventoryTxn` helper (with its `poLineID` seam for Stage 2), the Transactions subtab, and
+the manual stock-adjust action.
 
 **Schema**
 - New `SQL/inventory_transaction.sql`:
@@ -76,7 +79,7 @@ gains an Inventory checkbox.
 
 ---
 
-## Stage 2 — Receiving / Goods Receipt  (closes #269 PO-2)  ← needs Stage 1 + #271 ✓
+## Stage 2 — Receiving / Goods Receipt  (closes #269 PO-2)  ← active PR (Stage 1 ✓ + #271 ✓)
 
 - **Schema:** POL `received_qty DECIMAL(11,2) NOT NULL DEFAULT 0`, `date_received DATE NULL`. Receipts
   live in the ledger (`txn_type='receipt'`, `po_line_id` set, `reference`=PO#) — no separate table.

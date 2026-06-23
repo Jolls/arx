@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.32] - 2026-06-23 
+- pm: PO receiving / goods receipt — receive line items (partial or full) from the PO detail page; each receipt posts to the inventory ledger so stock-on-hand rises, the PO auto-advances to Partially Received or Closed, and receipt history is shown on the PO. Receipts cross-link to the part's transactions, and receipt rows on the transactions tab link back to the originating PO ([#269](https://github.com/Jolls/arx-legacy/issues/269))
+- pm: schema — adds `po_line.received_qty` (defaulted) and `po_line.date_received` (nullable); additive and rollback-safe — run `SQL/migrations/migrate_po_receiving.sql` against ArxProd and ArxDev before deploying ([#269](https://github.com/Jolls/arx-legacy/issues/269))
+
 ## [0.5.31] - 2026-06-23 
 - pm: Parts and Vendors lists gain a "Show inactive" toggle (off by default) that hides soft-deleted (inactive) rows; shown inactive rows are styled muted/struck-through ([#477](https://github.com/Jolls/arx-legacy/issues/477))
 - pm: list pagination is now a fixed 30 rows per page (was 20), and the Test Records form and record lists are now paginated ([#479](https://github.com/Jolls/arx-legacy/issues/479))

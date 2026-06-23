@@ -58,7 +58,7 @@
                     <td style="text-align:right;">{{printf "%+.2f" .Qty}}</td>
                     <td style="text-align:right;">{{printf "%.2f" .Balance}}</td>
                     <td>{{.Username}}</td>
-                    <td>{{.Reference}}</td>
+                    <td>{{if and (eq .Type "receipt") .Reference}}<a href="/po/{{.Reference}}" class="part-number-link">{{.Reference}}</a>{{else}}{{.Reference}}{{end}}</td>
                     <td>{{.Note}}</td>
                 </tr>
                 {{end}}

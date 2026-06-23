@@ -347,6 +347,8 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 		"ApprovalLabel":   poApprovalLabels[po.ApprovalStatus],
 		"ApprovalActions": poApprovalActions(po.ApprovalStatus, canApprove),
 		"History":         h.fetchPOHistory(r, po.ID),
+		"Receipts":        h.fetchPOReceipts(r, po.ID),
+		"Today":           time.Now().Format("2006-01-02"),
 		"CanSend":         poApprovalAllowsSend(po.ApprovalStatus),
 		"CSRFToken":       h.csrfToken(w, r),
 	}
@@ -1345,26 +1347,8 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
-		VALUES (@p1, 'status', @p2, @p3, @p4, @p5)
-	`, h.cfg.POHistoryTable()), poID, current.String, target, h.actorName(r), time.Now()); err != nil {
-		h.renderError(w, r, "Error recording status change: "+err.Error())
-		return
-	}
-
-	// date_closed mirrors the closed state: set it when closing (if unset),
-	// clear it when reopening from closed.
-	query := fmt.Sprintf(`UPDATE %s SET status=@p1, is_active=@p2, date_modified=@p3`, h.cfg.POTable())
-	switch {
-	case target == "closed":
-		query += `, date_closed=COALESCE(date_closed, CAST(GETDATE() AS DATE))`
-	case current.String == "closed":
-		query += `, date_closed=NULL`
-	}
-	query += ` WHERE ID=@p4`
-	if _, err := tx.ExecContext(r.Context(), query, target, statusIsActive(target), time.Now(), poID); err != nil {
-		h.renderError(w, r, "Error updating PO: "+err.Error())
+	if err := h.recordPOStatusChange(r, tx, poID, current.String, target); err != nil {
+		h.renderError(w, r, "Error updating PO status: "+err.Error())
 		return
 	}
 
@@ -1379,6 +1363,182 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 
 	if err := tx.Commit(); err != nil {
 		h.renderError(w, r, "Error saving status: "+err.Error())
+		return
+	}
+	committed = true
+	http.Redirect(w, r, "/po/"+num, http.StatusFound)
+}
+
+// recordPOStatusChange writes the PO_history status event and updates the PO's
+// status/is_active/date_closed inside the caller's tx. Shared by the manual status
+// transition handler (#271) and PO receiving (#269) so both audit identically.
+// The caller is responsible for validating the transition (poCanTransition) first.
+func (h *Handler) recordPOStatusChange(r *http.Request, tx *txLogger, poID int, from, to string) error {
+	ctx := r.Context()
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
+		VALUES (@p1, 'status', @p2, @p3, @p4, @p5)
+	`, h.cfg.POHistoryTable()), poID, from, to, h.actorName(r), time.Now()); err != nil {
+		return err
+	}
+	// date_closed mirrors the closed state: set it when closing (if unset),
+	// clear it when reopening from closed.
+	query := fmt.Sprintf(`UPDATE %s SET status=@p1, is_active=@p2, date_modified=@p3`, h.cfg.POTable())
+	switch {
+	case to == "closed":
+		query += `, date_closed=COALESCE(date_closed, CAST(GETDATE() AS DATE))`
+	case from == "closed":
+		query += `, date_closed=NULL`
+	}
+	query += ` WHERE ID=@p4`
+	_, err := tx.ExecContext(ctx, query, to, statusIsActive(to), time.Now(), poID)
+	return err
+}
+
+// ── PO receiving / goods receipt (issue #269) ────────────────────────────────
+
+// derivePOReceiptStatus returns the status a sent / partially-received PO should
+// hold given its current lines: "closed" when every line is fully received
+// (received >= ordered), "partially_received" when any qty has been received, or
+// "" (no change) when nothing has been received.
+func derivePOReceiptStatus(items []models.PurchaseOrderLine) string {
+	if len(items) == 0 {
+		return ""
+	}
+	anyReceived, allFull := false, true
+	for _, it := range items {
+		if it.ReceivedQty > 0 {
+			anyReceived = true
+		}
+		if it.ReceivedQty < it.POLQty {
+			allFull = false
+		}
+	}
+	switch {
+	case allFull:
+		return "closed"
+	case anyReceived:
+		return "partially_received"
+	default:
+		return ""
+	}
+}
+
+// parseReceiveDeltas reads the per-line "receive now" quantities from a submitted
+// receive form. Each line is looked up via get("recv[<POLID>]"); blank entries are
+// skipped and non-positive values are ignored. A value that is present but not a
+// number is a hard error. The returned map holds only the positive deltas keyed by
+// po_line id; an empty map means nothing was entered to receive.
+func parseReceiveDeltas(items []models.PurchaseOrderLine, get func(string) string) (map[int]float64, error) {
+	deltas := map[int]float64{}
+	for _, it := range items {
+		raw := strings.TrimSpace(get(fmt.Sprintf("recv[%d]", it.POLID)))
+		if raw == "" {
+			continue
+		}
+		d, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid quantity %q for line %d", raw, it.POLID)
+		}
+		if d > 0 {
+			deltas[it.POLID] = d
+		}
+	}
+	return deltas, nil
+}
+
+// POReceive — POST /po/{id}/receive. Records a (partial or full) goods receipt:
+// per line, the posted "receive now" delta bumps po_line.received_qty/date_received
+// and — when the line maps to a catalog part — posts a 'receipt' row to the
+// inventory ledger (raising stock_on_hand). The PO status is then re-derived
+// (partially_received / closed) through the audited status path.
+func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, "Error parsing form: "+err.Error())
+		return
+	}
+
+	var poID int
+	var status sql.NullString
+	err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT ID, status FROM %s WHERE number = @p1`, h.cfg.POTable()),
+		num).Scan(&poID, &status)
+	if err == sql.ErrNoRows {
+		h.renderError(w, r, "Purchase order not found")
+		return
+	}
+	if err != nil {
+		h.renderError(w, r, "Error loading PO: "+err.Error())
+		return
+	}
+	if status.String != "sent" && status.String != "partially_received" {
+		h.renderError(w, r, "Only a sent or partially-received PO can receive goods.")
+		return
+	}
+
+	items := h.fetchPOItems(w, r, num)
+	txnDate := parseFormDate(fv(r, "txn_date"))
+	if txnDate == nil {
+		now := time.Now()
+		txnDate = &now
+	}
+
+	deltas, err := parseReceiveDeltas(items, func(k string) string { return fv(r, k) })
+	if err != nil {
+		h.renderError(w, r, "Invalid quantity for a line item.")
+		return
+	}
+	if len(deltas) == 0 {
+		h.renderError(w, r, "Enter a quantity to receive on at least one line.")
+		return
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	for i := range items {
+		d, ok := deltas[items[i].POLID]
+		if !ok {
+			continue
+		}
+		// Catalog-mapped lines move stock via the ledger; others just record receipt.
+		if items[i].POLPNID != nil {
+			polID := items[i].POLID
+			if err := h.recordInventoryTxn(r, tx, *items[i].POLPNID, "receipt", d, *txnDate, num, "", &polID); err != nil {
+				h.renderError(w, r, "Error recording receipt: "+err.Error())
+				return
+			}
+		}
+		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+			`UPDATE %s SET received_qty = received_qty + @p1, date_received = @p2 WHERE id = @p3`,
+			h.cfg.POLineTable()), d, *txnDate, items[i].POLID); err != nil {
+			h.renderError(w, r, "Error updating line item: "+err.Error())
+			return
+		}
+		items[i].ReceivedQty += d // keep in-memory copy current for status derivation
+	}
+
+	// Re-derive the PO status from the now-updated line receipts.
+	if target := derivePOReceiptStatus(items); target != "" && target != status.String &&
+		poCanTransition(status.String, target) {
+		if err := h.recordPOStatusChange(r, tx, poID, status.String, target); err != nil {
+			h.renderError(w, r, "Error updating PO status: "+err.Error())
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		h.renderError(w, r, "Error saving receipt: "+err.Error())
 		return
 	}
 	committed = true
@@ -1657,7 +1817,8 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
-		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id, pol.lead_time_days
+		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id, pol.lead_time_days,
+		       pol.received_qty, pol.date_received
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
@@ -1672,8 +1833,10 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 		var item models.PurchaseOrderLine
 		var partNumber, rev, desc, vendorPN sql.NullString
 		var polpnid, leadTime sql.NullInt64
+		var dateReceived sql.NullTime
 		if err := rows.Scan(&item.POLID, &item.POLItem, &partNumber, &rev, &desc,
-			&item.POLQty, &item.POLCost, &vendorPN, &polpnid, &leadTime); err == nil {
+			&item.POLQty, &item.POLCost, &vendorPN, &polpnid, &leadTime,
+			&item.ReceivedQty, &dateReceived); err == nil {
 			item.POLPNPartNumber = partNumber.String
 			item.POLRev = rev.String
 			item.POLDesc = desc.String
@@ -1686,10 +1849,58 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 				v := int(leadTime.Int64)
 				item.LeadTimeDays = &v
 			}
+			if dateReceived.Valid {
+				t := dateReceived.Time
+				item.DateReceived = &t
+			}
 			items = append(items, item)
 		}
 	}
 	return items
+}
+
+// POReceiptView is one goods-receipt (a 'receipt' ledger row) for the PO detail page.
+type POReceiptView struct {
+	Date       string
+	PartID     *int // catalog part, for linking to its transactions tab
+	PartNumber string
+	Qty        float64
+	Username   string
+}
+
+// fetchPOReceipts returns the receipt ledger rows recorded against a PO, newest first.
+func (h *Handler) fetchPOReceipts(r *http.Request, poID int) []POReceiptView {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT it.txn_date, pol.part_id, pol.part_number_snapshot, it.qty, it.username
+		FROM %s it
+		JOIN %s pol ON it.po_line_id = pol.id
+		WHERE pol.po_id = @p1 AND it.txn_type = 'receipt'
+		ORDER BY it.txn_date DESC, it.id DESC
+	`, h.cfg.InventoryTxnTable(), h.cfg.POLineTable()), poID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []POReceiptView
+	for rows.Next() {
+		var v POReceiptView
+		var date sql.NullTime
+		var partID sql.NullInt64
+		var pn, user sql.NullString
+		if err := rows.Scan(&date, &partID, &pn, &v.Qty, &user); err == nil {
+			if date.Valid {
+				v.Date = date.Time.Format("2006-01-02")
+			}
+			if partID.Valid {
+				id := int(partID.Int64)
+				v.PartID = &id
+			}
+			v.PartNumber = pn.String
+			v.Username = user.String
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // resolvePolRev returns the revision to store on a POL row. It prefers the

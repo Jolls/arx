@@ -58,6 +58,8 @@ type PurchaseOrderLine struct {
 	VendorPN        string
 	POLPNID         *int
 	LeadTimeDays    *int
+	ReceivedQty     float64
+	DateReceived    *time.Time
 	// joined fields
 	PONumber     string
 	SupplierName string

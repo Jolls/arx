@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"arx/arx_go/models"
+)
 
 func TestPOApprovalNext(t *testing.T) {
 	ok := []struct{ action, from, want string }{
@@ -190,6 +194,68 @@ func TestBuildRFQGridEmpty(t *testing.T) {
 	suppliers, rows := buildRFQGrid(nil)
 	if len(suppliers) != 0 || len(rows) != 0 {
 		t.Errorf("buildRFQGrid(nil) = (%d suppliers, %d rows), want (0, 0)", len(suppliers), len(rows))
+	}
+}
+
+func TestDerivePOReceiptStatus(t *testing.T) {
+	line := func(ordered, received float64) models.PurchaseOrderLine {
+		return models.PurchaseOrderLine{POLQty: ordered, ReceivedQty: received}
+	}
+	cases := []struct {
+		name  string
+		items []models.PurchaseOrderLine
+		want  string
+	}{
+		{"nothing received", []models.PurchaseOrderLine{line(10, 0), line(5, 0)}, ""},
+		{"some received", []models.PurchaseOrderLine{line(10, 4), line(5, 0)}, "partially_received"},
+		{"all fully received", []models.PurchaseOrderLine{line(10, 10), line(5, 5)}, "closed"},
+		{"over-receipt counts as full", []models.PurchaseOrderLine{line(10, 12), line(5, 5)}, "closed"},
+		{"mixed full and partial", []models.PurchaseOrderLine{line(10, 10), line(5, 2)}, "partially_received"},
+		{"no lines", nil, ""},
+	}
+	for _, c := range cases {
+		if got := derivePOReceiptStatus(c.items); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestParseReceiveDeltas(t *testing.T) {
+	items := []models.PurchaseOrderLine{{POLID: 1}, {POLID: 2}, {POLID: 3}}
+
+	// Mixed submission: line 1 a valid qty, line 2 blank (skipped), line 3 zero (ignored).
+	form := map[string]string{"recv[1]": "  4.5 ", "recv[2]": "", "recv[3]": "0"}
+	got, err := parseReceiveDeltas(items, func(k string) string { return form[k] })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[1] != 4.5 {
+		t.Errorf("got %v, want only {1:4.5}", got)
+	}
+
+	// Nothing entered → empty map, no error (caller rejects empties).
+	if got, err := parseReceiveDeltas(items, func(string) string { return "" }); err != nil || len(got) != 0 {
+		t.Errorf("empty submission = (%v, %v), want (empty, nil)", got, err)
+	}
+
+	// Negative quantities are ignored, not errors.
+	if got, _ := parseReceiveDeltas(items, func(k string) string {
+		if k == "recv[2]" {
+			return "-3"
+		}
+		return ""
+	}); len(got) != 0 {
+		t.Errorf("negative qty produced %v, want empty", got)
+	}
+
+	// A non-numeric value is a hard error.
+	if _, err := parseReceiveDeltas(items, func(k string) string {
+		if k == "recv[1]" {
+			return "abc"
+		}
+		return ""
+	}); err == nil {
+		t.Error("non-numeric quantity should error")
 	}
 }
 
