@@ -86,6 +86,7 @@ type TestStep struct {
 	DefaultResult string
 	HideFormula   string
 	Type          int    // 0=data, 1=Heading1, 2=Heading2, 3=Heading3
+	Archived      bool   // true = retired step; hidden from new records and live def view, kept on historical records that recorded a result
 	SpecMin       string // acceptance window lower bound (VARCHAR in DB)
 	SpecMax       string // acceptance window upper bound (VARCHAR in DB)
 	PFType        string // evaluator type: 'range' or empty = range check

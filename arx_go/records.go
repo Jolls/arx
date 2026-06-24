@@ -35,6 +35,13 @@ func stepAppliesToRecord(instrumentTypes, recordType string) bool {
 	return false
 }
 
+// stepVisibleOnRecord decides whether an archived step should appear on a record.
+// Archived (retired) steps are kept off new records but stay visible on historical
+// records that already recorded a result for them. Non-archived steps are unaffected.
+func stepVisibleOnRecord(archived, hasResult bool) bool {
+	return !archived || hasResult
+}
+
 // substituteStepSelf replaces {min}, {max}, {nom} in s with the step's own spec bound values.
 // Called after substituteRefs so cross-step tokens resolve first.
 func substituteStepSelf(s string, step *models.TestStep) string {
@@ -252,7 +259,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
-		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
+		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
 		       instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
@@ -276,7 +283,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
-			&archiveID, &revision, &category, &sheetName,
+			&s.Archived, &archiveID, &revision, &category, &sheetName,
 			&specUnits, &specNom, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
@@ -308,6 +315,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 
 	ids := form.OrderedTestIDs()
 	var steps []*models.TestStep
+	hasArchived := false
 	for _, tid := range ids {
 		step, ok := stepsMap[tid]
 		if !ok {
@@ -317,6 +325,11 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		// leave the formula unchanged so comparisons don't match → step shown. Intentional.
 		if evaluateHide(step.HideFormula, nil, stepsMap, nil, &form) {
 			continue
+		}
+		// Archived steps are still rendered here but hidden by default; the "Show archived"
+		// toggle reveals them. Skipping them entirely would hide them from the definition view.
+		if step.Archived {
+			hasArchived = true
 		}
 		steps = append(steps, step)
 	}
@@ -372,6 +385,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 	h.renderTR(w, r, "form_def.html", map[string]any{
 		"Form":        form,
 		"Steps":       steps,
+		"HasArchived": hasArchived,
 		"HistPoints":  histPoints,
 		"CSRFToken":   h.csrfToken(w, r),
 		"ActiveTab":   "records",
@@ -487,7 +501,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	// Load raw step values â€" no substituteRefs, we want to edit the actual stored values.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, COALESCE(type,0) AS type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
-		       pf_type, default_result, hide_formula, category, sheet_name,
+		       pf_type, default_result, hide_formula, archived, category, sheet_name,
 		       instrument_types, format, comment
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
 	if err != nil {
@@ -504,7 +518,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		var instrumentTypes, format, comment sql.NullString
 		if err := stepRows.Scan(
 			&s.ID, &s.Type, &param, &spec, &specNom, &specMin, &specMax, &specUnits,
-			&pfType, &defaultResult, &hideFormula, &category, &sheetName,
+			&pfType, &defaultResult, &hideFormula, &s.Archived, &category, &sheetName,
 			&instrumentTypes, &format, &comment,
 		); err != nil {
 			continue
@@ -528,18 +542,23 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 
 	ids := form.OrderedTestIDs()
 	var steps []*models.TestStep
+	hasArchived := false
 	for _, tid := range ids {
 		if s, ok := stepsMap[tid]; ok {
+			if s.Archived {
+				hasArchived = true
+			}
 			steps = append(steps, s)
 		}
 	}
 
 	h.renderTR(w, r, "form_def_edit.html", map[string]any{
-		"Form":      form,
-		"Steps":     steps,
-		"CSRFToken": h.csrfToken(w, r),
-		"ActiveTab": "records",
-		"TestMode":  h.cfg.TestMode,
+		"Form":        form,
+		"Steps":       steps,
+		"HasArchived": hasArchived,
+		"CSRFToken":   h.csrfToken(w, r),
+		"ActiveTab":   "records",
+		"TestMode":    h.cfg.TestMode,
 	})
 }
 
@@ -857,7 +876,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
-		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
+		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
 		       instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
@@ -881,7 +900,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
-			&archiveID, &revision, &category, &sheetName,
+			&s.Archived, &archiveID, &revision, &category, &sheetName,
 			&specUnits, &specNom, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
@@ -943,6 +962,10 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	for _, tid := range ids {
 		step, ok := steps[tid]
 		if !ok {
+			continue
+		}
+		// Archived steps are kept off new records but stay on historical records with a result.
+		if !stepVisibleOnRecord(step.Archived, results[tid] != nil) {
 			continue
 		}
 		level := step.Type
@@ -1047,7 +1070,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type,
-		       archive_id, revision, category, sheet_name, spec_units, spec_nom,
+		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
 		       instrument_types, format, comment,
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
@@ -1071,7 +1094,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType,
-			&archiveID, &revision, &category, &sheetName,
+			&s.Archived, &archiveID, &revision, &category, &sheetName,
 			&specUnits, &specNom, &instrumentTypes,
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
@@ -1131,6 +1154,10 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	for _, tid := range ids {
 		step, ok := steps[tid]
 		if !ok {
+			continue
+		}
+		// Archived steps are kept off new records but stay on historical records with a result.
+		if !stepVisibleOnRecord(step.Archived, results[tid] != nil) {
 			continue
 		}
 		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
@@ -1367,7 +1394,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 
 	editStepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type, spec_units, spec_nom
+		       spec_min, spec_max, pf_type, spec_units, spec_nom, archived
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
@@ -1382,7 +1409,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		var specMin, specMax, pfType, specUnits, specNom sql.NullString
 		if err := editStepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType, &specUnits, &specNom,
+			&specMin, &specMax, &pfType, &specUnits, &specNom, &s.Archived,
 		); err != nil {
 			continue
 		}
@@ -1427,6 +1454,10 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	for _, tid := range ids {
 		step, ok := steps[tid]
 		if !ok {
+			continue
+		}
+		// Archived steps are kept off new records but stay on historical records with a result.
+		if !stepVisibleOnRecord(step.Archived, results[tid] != nil) {
 			continue
 		}
 		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
@@ -1618,6 +1649,56 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
 }
 
+// ArchiveStep — POST /forms/{id}/tests/{testID}/archive
+// Toggles test_definition.archived for a single step. Form field "archived"=1 archives,
+// anything else unarchives. No hard delete. Wrapped in a transaction so SET CONTEXT_INFO
+// attributes the history-trigger row to the current user (same pattern as SaveFormDef).
+func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	testID, err := strconv.Atoi(chi.URLParam(r, "testID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+	archived := 0
+	if r.FormValue("archived") == "1" {
+		archived = 1
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if u := h.currentUser(r); u != nil {
+		tx.ExecContext(r.Context(), "SET CONTEXT_INFO @p1", []byte(u.Username))
+	}
+
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET archived=@p1, updated_at=GETDATE() WHERE id=@p2 AND form_id=@p3",
+		h.cfg.StepsTable()), archived, testID, formID); err != nil {
+		http.Error(w, "archive error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "archive error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def/edit", formID), http.StatusSeeOther)
+}
+
 // SaveResults â€" POST /records/{id}/edit
 func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -1654,7 +1735,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	// Load steps for pass_fail computation and INSERT snapshots.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type, spec_units, spec_nom
+		       spec_min, spec_max, pf_type, spec_units, spec_nom, archived
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
@@ -1669,7 +1750,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		var specMin, specMax, pfType, specUnits, specNom sql.NullString
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType, &specUnits, &specNom,
+			&specMin, &specMax, &pfType, &specUnits, &specNom, &s.Archived,
 		); err != nil {
 			continue
 		}

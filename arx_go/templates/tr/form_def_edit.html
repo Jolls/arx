@@ -14,7 +14,13 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 align-items-center">
+    {{if .HasArchived}}
+    <div class="form-check form-switch mb-0 me-1">
+      <input class="form-check-input" type="checkbox" id="show-archived-toggle" data-archived-toggle data-archived-table="steps-table">
+      <label class="form-check-label small text-muted" for="show-archived-toggle">Show archived</label>
+    </div>
+    {{end}}
     <a href="/forms/{{.Form.ID}}/def" class="btn btn-sm btn-outline-secondary">Cancel</a>
     <button type="submit" form="steps-form" class="btn btn-sm btn-primary">
       <i class="bi bi-floppy"></i> Save Changes
@@ -95,12 +101,13 @@
           <th style="width:180px">instrument_types</th>
           <th style="width:80px">format</th>
           <th style="width:200px">comment</th>
+          <th style="width:90px">Archive</th>
         </tr>
       </thead>
       <tbody>
         {{range .Steps}}
         {{if gt .Type 0}}
-        <tr class="row-heading-{{.Type}}" data-step-id="{{.ID}}">
+        <tr class="row-heading-{{.Type}}{{if .Archived}} step-archived{{end}}" data-step-id="{{.ID}}">
           <td class="drag-handle text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
           <td class="text-muted small">{{.ID}}</td>
           <td>
@@ -125,9 +132,16 @@
                    value="{{.HideFormula}}" data-original="{{.HideFormula}}">
           </td>
           <td colspan="5"></td>
+          <td class="text-center">
+            {{if .Archived}}
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="archiveStep({{.ID}}, 0)" title="Restore this step">Unarchive</button>
+            {{else}}
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="archiveStep({{.ID}}, 1)" title="Retire this step">Archive</button>
+            {{end}}
+          </td>
         </tr>
         {{else}}
-        <tr data-step-id="{{.ID}}">
+        <tr data-step-id="{{.ID}}"{{if .Archived}} class="step-archived"{{end}}>
           <td class="drag-handle text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
           {{/* Hidden originals for server-side change detection */}}
           <input type="hidden" name="original_parameter_{{.ID}}"        value="{{.Parameter}}">
@@ -180,6 +194,13 @@
           <td><input type="text" class="form-control form-control-sm" name="instrument_types_{{.ID}}" value="{{.InstrumentTypes}}" data-original="{{.InstrumentTypes}}"></td>
           <td><input type="text" class="form-control form-control-sm font-mono" name="format_{{.ID}}" value="{{.Format}}" data-original="{{.Format}}" placeholder="e.g. 0.00"></td>
           <td><input type="text" class="form-control form-control-sm" name="comment_{{.ID}}" value="{{.StepComment}}" data-original="{{.StepComment}}"></td>
+          <td class="text-center">
+            {{if .Archived}}
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="archiveStep({{.ID}}, 0)" title="Restore this step">Unarchive</button>
+            {{else}}
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="archiveStep({{.ID}}, 1)" title="Retire this step">Archive</button>
+            {{end}}
+          </td>
         </tr>
         {{end}}
         {{end}}
@@ -233,6 +254,7 @@
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][instrument_types]"></td>
     <td><input type="text" class="form-control form-control-sm font-mono" name="new_row[IDX][format]" placeholder="e.g. 0.00"></td>
     <td><input type="text" class="form-control form-control-sm" name="new_row[IDX][comment]"></td>
+    <td class="text-center text-muted small">&mdash;</td>
   </tr>
 </template>
 
@@ -250,6 +272,20 @@
       .map(tr => tr.dataset.stepId);
     document.getElementById('step_order').value = ids.join(',');
   });
+
+  // Archive/unarchive a single step. Posts to a dedicated route (separate from the bulk
+  // save) via a generated form, so it works without nesting a form inside #steps-form.
+  window.archiveStep = function (id, archived) {
+    const verb = archived ? 'Archive' : 'Unarchive';
+    if (!confirm(verb + ' this step? Any unsaved edits on this page will be lost.')) return;
+    const f = document.createElement('form');
+    f.method = 'POST';
+    f.action = '/forms/{{.Form.ID}}/tests/' + id + '/archive';
+    f.innerHTML = '<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">' +
+                  '<input type="hidden" name="archived" value="' + archived + '">';
+    document.body.appendChild(f);
+    f.submit();
+  };
 
   let newRowCounter = 0;
   window.addRow = function () {

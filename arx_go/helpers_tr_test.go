@@ -98,6 +98,26 @@ func TestStepAppliesToRecord(t *testing.T) {
 	}
 }
 
+func TestStepVisibleOnRecord(t *testing.T) {
+	cases := []struct {
+		name      string
+		archived  bool
+		hasResult bool
+		want      bool
+	}{
+		{"active step always shown", false, false, true},
+		{"active step with result shown", false, true, true},
+		{"archived step without result hidden", true, false, false},
+		{"archived step with result shown", true, true, true},
+	}
+	for _, c := range cases {
+		if got := stepVisibleOnRecord(c.archived, c.hasResult); got != c.want {
+			t.Errorf("%s: stepVisibleOnRecord(%v, %v) = %v, want %v",
+				c.name, c.archived, c.hasResult, got, c.want)
+		}
+	}
+}
+
 func TestImageResult(t *testing.T) {
 	cases := []struct {
 		val  string

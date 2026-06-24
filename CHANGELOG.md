@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.35] - 2026-06-23 
+- archive/retire a test step instead of the `hide_formula="HIDE"` workaround — archived steps drop off new records and the live definition view, stay rendered on historical records that already recorded a result for them, and can be archived/restored from the definition editor with a "Show archived" toggle on the definition view ([#403](https://github.com/Jolls/arx-legacy/issues/403))
+- schema — adds `test_definition.archived` (BIT, defaulted); additive and rollback-safe — run `SQL/migrations/migrate_tr_archive.sql` against ArxProd and ArxDev before deploying ([#403](https://github.com/Jolls/arx-legacy/issues/403))
+
 ## [0.5.34] - 2026-06-23 
 - import a part's LOCAL: file into the PO folder from the PO detail page ([#156](https://github.com/Jolls/arx-legacy/issues/156))
 

@@ -103,6 +103,7 @@ BEGIN TRY
     ALTER TABLE dbo.form        ADD CONSTRAINT DF_form_is_active        DEFAULT 1 FOR is_active;
     ALTER TABLE dbo.test_record ADD CONSTRAINT DF_test_record_is_locked DEFAULT 0 FOR is_locked;
     ALTER TABLE dbo.test_record ADD CONSTRAINT DF_test_record_is_active DEFAULT 1 FOR is_active;
+    ALTER TABLE dbo.test_definition ADD CONSTRAINT DF_test_definition_archived DEFAULT 0 FOR archived;
 
     -- Triggers not copied by SELECT * INTO
     EXEC('
