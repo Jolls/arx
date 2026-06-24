@@ -1329,8 +1329,15 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
 	var newID int
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s
 		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
 		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked)
@@ -1349,8 +1356,13 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		SerialNumberPN: snPN, SerialNumberDesc: snDesc, Comments: comments,
 		InstrumentType: instrumentType, RecordDate: &recordDate, TestOrder: form.TestOrder,
 	}
-	if err := h.materializeRecordSteps(r.Context(), &rec, &form); err != nil {
+	if err := h.materializeRecordSteps(r.Context(), tx, &rec, &form); err != nil {
 		http.Error(w, "materialize error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -1361,7 +1373,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 // form's order at record creation (#487): headings included (type > 0); archived and non-applicable
 // instrument-type data steps skipped. Self/record/form tokens are baked; {id} cross-step tokens are
 // left for render-time resolution. result/comment/pass_fail start empty.
-func (h *Handler) materializeRecordSteps(ctx context.Context, record *models.TestRecord, form *models.TestForm) error {
+func (h *Handler) materializeRecordSteps(ctx context.Context, tx *txLogger, record *models.TestRecord, form *models.TestForm) error {
 	steps, err := h.loadSteps(ctx, form.ID)
 	if err != nil {
 		return err
@@ -1382,7 +1394,7 @@ func (h *Handler) materializeRecordSteps(ctx context.Context, record *models.Tes
 			continue
 		}
 		bakeStepTokens(step, record, form)
-		if _, err := h.execContext(ctx, fmt.Sprintf(`
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s
 			  (record_id, test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 			   spec_units, pf_type, format, hide_formula, default_result, updated_at)
