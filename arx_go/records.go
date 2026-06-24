@@ -42,6 +42,58 @@ func stepVisibleOnRecord(archived, hasResult bool) bool {
 	return !archived || hasResult
 }
 
+// stepFromResult builds a render step from a materialized snapshot row (#487). A saved record
+// renders entirely from these — the live test_definition is never consulted for a materialized row.
+func stepFromResult(tid int, res *models.TestResult) *models.TestStep {
+	return &models.TestStep{
+		ID:            tid,
+		Type:          res.Type,
+		Parameter:     res.Parameter,
+		Specification: res.Specification,
+		SpecMin:       res.SpecMin,
+		SpecNom:       res.SpecNom,
+		SpecMax:       res.SpecMax,
+		SpecUnits:     res.SpecUnits,
+		PFType:        res.PFType,
+		Format:        res.Format,
+		HideFormula:   res.HideFormula,
+		DefaultResult: res.DefaultResult,
+	}
+}
+
+// bakeStepTokens resolves self ({nom}/{min}/{max}/{units}), {record.X} and {form.X} tokens on a step
+// in place, leaving numeric {id} cross-step tokens intact for render-time resolution (#487). Passing
+// nil results/steps to substituteRefs is what preserves the {id} tokens. Used at materialization and
+// for live-definition fallback rows so every row reaches the caller in the same "baked except {id}"
+// state.
+func bakeStepTokens(step *models.TestStep, record *models.TestRecord, form *models.TestForm) {
+	step.SpecMin = substituteRefs(step.SpecMin, nil, nil, record, form)
+	step.SpecMax = substituteRefs(step.SpecMax, nil, nil, record, form)
+	step.SpecNom = substituteRefs(step.SpecNom, nil, nil, record, form)
+	step.SpecUnits = substituteRefs(step.SpecUnits, nil, nil, record, form)
+	step.Parameter = substituteRefs(step.Parameter, nil, nil, record, form)
+	step.Specification = substituteRefs(step.Specification, nil, nil, record, form)
+	step.DefaultResult = substituteRefs(step.DefaultResult, nil, nil, record, form)
+	// Self tokens ({nom}/{min}/{max}/{units}) only when spec_nom is a literal — a query:/List:
+	// directive must not be baked into the spec/parameter text (it's resolved live during edit).
+	if !strings.HasPrefix(step.SpecNom, "query:") && !strings.HasPrefix(step.SpecNom, "List:") {
+		step.Parameter = substituteStepSelf(step.Parameter, step)
+		step.Specification = substituteStepSelf(step.Specification, step)
+		step.DefaultResult = substituteStepSelf(step.DefaultResult, step)
+	}
+}
+
+// resolveStepRefs resolves numeric {id} cross-step tokens against the record's own results (frozen —
+// never the live definition). Self/record/form tokens are assumed already baked.
+func resolveStepRefs(step *models.TestStep, results map[int]*models.TestResult, refSteps map[int]*models.TestStep, record *models.TestRecord, form *models.TestForm) {
+	step.Parameter = substituteRefs(step.Parameter, results, refSteps, record, form)
+	step.Specification = substituteRefs(step.Specification, results, refSteps, record, form)
+	step.SpecNom = substituteRefs(step.SpecNom, results, refSteps, record, form)
+	step.SpecMin = substituteRefs(step.SpecMin, results, refSteps, record, form)
+	step.SpecMax = substituteRefs(step.SpecMax, results, refSteps, record, form)
+	step.DefaultResult = substituteRefs(step.DefaultResult, results, refSteps, record, form)
+}
+
 // substituteStepSelf replaces {min}, {max}, {nom} in s with the step's own spec bound values.
 // Called after substituteRefs so cross-step tokens resolve first.
 func substituteStepSelf(s string, step *models.TestStep) string {
@@ -833,6 +885,152 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
 }
 
+// loadSteps loads all test_definition rows for a form keyed by id, with every field used for
+// rendering and token resolution. Used as the live-definition fallback for un-materialized rows.
+func (h *Handler) loadSteps(ctx context.Context, formID int) (map[int]*models.TestStep, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
+		       spec_min, spec_max, pf_type,
+		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
+		       instrument_types, format, comment,
+		       created_at, updated_at
+		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	steps := map[int]*models.TestStep{}
+	for rows.Next() {
+		var s models.TestStep
+		var archiveID, revision sql.NullInt32
+		var param, spec, defaultResult, hideFormula sql.NullString
+		var specMin, specMax, pfType sql.NullString
+		var category, sheetName, specUnits, specNom sql.NullString
+		var instrumentTypes, format, stepComment sql.NullString
+		if err := rows.Scan(
+			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
+			&specMin, &specMax, &pfType,
+			&s.Archived, &archiveID, &revision, &category, &sheetName,
+			&specUnits, &specNom, &instrumentTypes,
+			&format, &stepComment,
+			&s.StepCreatedAt, &s.StepUpdatedAt,
+		); err != nil {
+			continue
+		}
+		s.Parameter = param.String
+		s.Specification = spec.String
+		s.DefaultResult = defaultResult.String
+		s.HideFormula = hideFormula.String
+		s.SpecMin = specMin.String
+		s.SpecMax = specMax.String
+		s.PFType = pfType.String
+		if archiveID.Valid {
+			s.ArchiveID = int(archiveID.Int32)
+		}
+		if revision.Valid {
+			s.Revision = int(revision.Int32)
+		}
+		s.Category = category.String
+		s.SheetName = sheetName.String
+		s.SpecUnits = specUnits.String
+		s.SpecNom = specNom.String
+		s.InstrumentTypes = instrumentTypes.String
+		s.Format = format.String
+		s.StepComment = stepComment.String
+		steps[s.ID] = &s
+	}
+	return steps, nil
+}
+
+// loadRecordResults loads the materialized snapshot rows for a record, keyed by test_id (#487).
+func (h *Handler) loadRecordResults(ctx context.Context, recordID int) (map[int]*models.TestResult, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT id, record_id, test_id,
+		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
+		       pass_fail, COALESCE(comment,''),
+		       COALESCE(spec_min,''), COALESCE(spec_nom,''), COALESCE(spec_max,''),
+		       COALESCE(spec_units,''), COALESCE(pf_type,''), COALESCE(format,''),
+		       COALESCE(type,0), COALESCE(hide_formula,''), COALESCE(default_result,''),
+		       updated_at
+		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	results := map[int]*models.TestResult{}
+	for rows.Next() {
+		var res models.TestResult
+		if err := rows.Scan(&res.ID, &res.RecordID, &res.TestID, &res.Parameter,
+			&res.Specification, &res.Result, &res.PassFail, &res.Comment,
+			&res.SpecMin, &res.SpecNom, &res.SpecMax, &res.SpecUnits, &res.PFType, &res.Format,
+			&res.Type, &res.HideFormula, &res.DefaultResult, &res.UpdatedAt); err != nil {
+			continue
+		}
+		results[res.TestID] = &res
+	}
+	return results, nil
+}
+
+// loadFrozenRows builds the ordered, frozen rows for a saved record. Content comes from the
+// materialized snapshot; steps with no snapshot row (headings/unrecorded rows on a pre-#487 record)
+// fall back to the live definition, baked the same way. Visibility (hide_formula, archived, instrument
+// type) is applied. {id} cross-step tokens are LEFT UNRESOLVED so the caller resolves them against the
+// record's own results (view) or captures Raw* fields first (edit). Returns the rows, the record's
+// result map, and the synthetic step map used for {id} spec_nom fallback.
+func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord, form *models.TestForm) ([]models.ResultRow, map[int]*models.TestResult, map[int]*models.TestStep, error) {
+	results, err := h.loadRecordResults(ctx, record.ID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	liveSteps, err := h.loadSteps(ctx, form.ID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Synthetic step map for {id} spec_nom fallback: prefer the frozen snapshot nominal.
+	refSteps := map[int]*models.TestStep{}
+	for tid, st := range liveSteps {
+		refSteps[tid] = st
+	}
+	for tid, res := range results {
+		refSteps[tid] = &models.TestStep{ID: tid, SpecNom: res.SpecNom}
+	}
+
+	ids := record.OrderedTestIDs()
+	if len(ids) == 0 {
+		ids = form.OrderedTestIDs()
+	}
+
+	var rows []models.ResultRow
+	for _, tid := range ids {
+		if res, ok := results[tid]; ok {
+			// Frozen snapshot row — visibility from the frozen hide formula against own results.
+			if evaluateHide(res.HideFormula, results, refSteps, record, form) {
+				continue
+			}
+			rows = append(rows, models.ResultRow{Step: stepFromResult(tid, res), Result: res, Level: res.Type})
+			continue
+		}
+		// Legacy fallback: render from the live definition (un-materialized row on an old record).
+		step, ok := liveSteps[tid]
+		if !ok {
+			continue
+		}
+		if !stepVisibleOnRecord(step.Archived, false) {
+			continue
+		}
+		if evaluateHide(step.HideFormula, results, refSteps, record, form) {
+			continue
+		}
+		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
+			continue
+		}
+		bakeStepTokens(step, record, form)
+		rows = append(rows, models.ResultRow{Step: step, Result: nil, Level: step.Type})
+	}
+	return rows, results, refSteps, nil
+}
+
 // RecordDetail â€" GET /records/{id}
 func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -871,129 +1069,25 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// debug columns still needed for form authoring — see FUTURE_GOALS.md (debug fields cleanup)
-	// Load all test steps for this form, keyed by ID.
-	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type,
-		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       instrument_types, format, comment,
-		       created_at, updated_at
-		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
+	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
+	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer stepRows.Close()
 
-	steps := map[int]*models.TestStep{}
-	for stepRows.Next() {
-		var s models.TestStep
-		var (
-			archiveID, revision                             sql.NullInt32
-			param, spec, defaultResult, hideFormula         sql.NullString
-			specMin, specMax, pfType                        sql.NullString
-			category, sheetName, specUnits, specNom         sql.NullString
-			instrumentTypes, format                         sql.NullString
-			stepComment                                     sql.NullString
-		)
-		if err := stepRows.Scan(
-			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType,
-			&s.Archived, &archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &instrumentTypes,
-			&format, &stepComment,
-			&s.StepCreatedAt, &s.StepUpdatedAt,
-		); err != nil {
-			continue
-		}
-		s.Parameter = param.String
-		s.Specification = spec.String
-		s.DefaultResult = defaultResult.String
-		s.HideFormula = hideFormula.String
-		s.SpecMin = specMin.String
-		s.SpecMax = specMax.String
-		s.PFType = pfType.String
-		if archiveID.Valid {
-			s.ArchiveID = int(archiveID.Int32)
-		}
-		if revision.Valid {
-			s.Revision = int(revision.Int32)
-		}
-		s.Category = category.String
-		s.SheetName = sheetName.String
-		s.SpecUnits = specUnits.String
-		s.SpecNom = specNom.String
-		s.InstrumentTypes = instrumentTypes.String
-		s.Format = format.String
-		s.StepComment = stepComment.String
-		steps[s.ID] = &s
-	}
-
-	// Load all results for this record, keyed by test ID.
-	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, record_id, test_id,
-		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
-		       pass_fail, COALESCE(comment,''), updated_at
-		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
-	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer resRows.Close()
-
-	results := map[int]*models.TestResult{}
-	for resRows.Next() {
-		var res models.TestResult
-		if err := resRows.Scan(&res.ID, &res.RecordID, &res.TestID, &res.Parameter,
-			&res.Specification, &res.Result, &res.PassFail, &res.Comment, &res.UpdatedAt); err != nil {
-			continue
-		}
-		results[res.TestID] = &res
-	}
-
-	// Determine display order: record snapshot first, fall back to form order.
-	ids := record.OrderedTestIDs()
-	if len(ids) == 0 {
-		ids = form.OrderedTestIDs()
-	}
-
-	var resultRows []models.ResultRow
-	for _, tid := range ids {
-		step, ok := steps[tid]
-		if !ok {
-			continue
-		}
-		// Archived steps are kept off new records but stay on historical records with a result.
-		if !stepVisibleOnRecord(step.Archived, results[tid] != nil) {
-			continue
-		}
-		level := step.Type
-		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
-			continue
-		}
-		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
-			continue
-		}
-		resultRows = append(resultRows, models.ResultRow{
-			Step:   step,
-			Result: results[tid],
-			Level:  level,
-		})
-	}
-
-	// Resolve {id} cross-reference tokens using recorded results, falling back to spec_nom.
+	// Resolve {id} cross-step tokens against the record's own results (frozen). The read-only view
+	// shows only what was recorded: drop the frozen default and present an unfilled row as untouched.
 	for i := range resultRows {
 		row := &resultRows[i]
 		if row.Level > 0 || row.Step == nil {
 			continue
 		}
-		row.Step.Parameter = substituteRefs(row.Step.Parameter, results, steps, &record, &form)
-		row.Step.Specification = substituteStepSelf(substituteRefs(row.Step.Specification, results, steps, &record, &form), row.Step)
-		row.Step.SpecNom = substituteRefs(row.Step.SpecNom, results, steps, &record, &form)
-		row.Step.SpecMin = substituteRefs(row.Step.SpecMin, results, steps, &record, &form)
-		row.Step.SpecMax = substituteRefs(row.Step.SpecMax, results, steps, &record, &form)
-		row.Step.DefaultResult = substituteStepSelf(substituteRefs(row.Step.DefaultResult, results, steps, &record, &form), row.Step)
+		resolveStepRefs(row.Step, results, refSteps, &record, &form)
+		row.Step.DefaultResult = ""
+		if row.Result != nil && row.Result.Result == "" && row.Result.Comment == "" {
+			row.Result = nil
+		}
 	}
 
 	// Prev/next record IDs within this form, same ordering as the records list.
@@ -1067,123 +1161,25 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type,
-		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       instrument_types, format, comment,
-		       created_at, updated_at
-		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
+	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
+	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer stepRows.Close()
 
-	steps := map[int]*models.TestStep{}
-	for stepRows.Next() {
-		var s models.TestStep
-		var (
-			archiveID, revision                         sql.NullInt32
-			param, spec, defaultResult, hideFormula     sql.NullString
-			specMin, specMax, pfType                    sql.NullString
-			category, sheetName, specUnits, specNom     sql.NullString
-			instrumentTypes, format                     sql.NullString
-			stepComment                                 sql.NullString
-		)
-		if err := stepRows.Scan(
-			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType,
-			&s.Archived, &archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &instrumentTypes,
-			&format, &stepComment,
-			&s.StepCreatedAt, &s.StepUpdatedAt,
-		); err != nil {
-			continue
-		}
-		s.Parameter = param.String
-		s.Specification = spec.String
-		s.DefaultResult = defaultResult.String
-		s.HideFormula = hideFormula.String
-		s.SpecMin = specMin.String
-		s.SpecMax = specMax.String
-		s.PFType = pfType.String
-		if archiveID.Valid {
-			s.ArchiveID = int(archiveID.Int32)
-		}
-		if revision.Valid {
-			s.Revision = int(revision.Int32)
-		}
-		s.Category = category.String
-		s.SheetName = sheetName.String
-		s.SpecUnits = specUnits.String
-		s.SpecNom = specNom.String
-		s.InstrumentTypes = instrumentTypes.String
-		s.Format = format.String
-		s.StepComment = stepComment.String
-		steps[s.ID] = &s
-	}
-
-	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, record_id, test_id,
-		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
-		       pass_fail, COALESCE(comment,''), updated_at
-		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
-	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer resRows.Close()
-
-	results := map[int]*models.TestResult{}
-	for resRows.Next() {
-		var res models.TestResult
-		if err := resRows.Scan(&res.ID, &res.RecordID, &res.TestID, &res.Parameter,
-			&res.Specification, &res.Result, &res.PassFail, &res.Comment, &res.UpdatedAt); err != nil {
-			continue
-		}
-		results[res.TestID] = &res
-	}
-
-	ids := record.OrderedTestIDs()
-	if len(ids) == 0 {
-		ids = form.OrderedTestIDs()
-	}
-
-	var resultRows []models.ResultRow
-	for _, tid := range ids {
-		step, ok := steps[tid]
-		if !ok {
-			continue
-		}
-		// Archived steps are kept off new records but stay on historical records with a result.
-		if !stepVisibleOnRecord(step.Archived, results[tid] != nil) {
-			continue
-		}
-		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
-			continue
-		}
-		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
-			continue
-		}
-		resultRows = append(resultRows, models.ResultRow{
-			Step:   step,
-			Result: results[tid],
-			Level:  step.Type,
-		})
-	}
-
+	// Resolve {id} cross-step tokens against the record's own results (frozen). The read-only view
+	// shows only what was recorded: drop the frozen default and present an unfilled row as untouched.
 	for i := range resultRows {
 		row := &resultRows[i]
 		if row.Level > 0 || row.Step == nil {
 			continue
 		}
-		row.Step.Parameter = substituteRefs(row.Step.Parameter, results, steps, &record, &form)
-		row.Step.Specification = substituteStepSelf(substituteRefs(row.Step.Specification, results, steps, &record, &form), row.Step)
-		row.Step.SpecNom = substituteRefs(row.Step.SpecNom, results, steps, &record, &form)
-		row.Step.SpecMin = substituteRefs(row.Step.SpecMin, results, steps, &record, &form)
-		row.Step.SpecMax = substituteRefs(row.Step.SpecMax, results, steps, &record, &form)
-		row.Step.DefaultResult = substituteStepSelf(substituteRefs(row.Step.DefaultResult, results, steps, &record, &form), row.Step)
+		resolveStepRefs(row.Step, results, refSteps, &record, &form)
+		row.Step.DefaultResult = ""
+		if row.Result != nil && row.Result.Result == "" && row.Result.Comment == "" {
+			row.Result = nil
+		}
 	}
 
 	var imageRows []models.ResultRow
@@ -1347,7 +1343,58 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Freeze the record from the start: materialize a snapshot row per applicable step (#487).
+	rec := models.TestRecord{
+		ID: newID, FormID: formID, SerialNumber: serialNumber,
+		SerialNumberPN: snPN, SerialNumberDesc: snDesc, Comments: comments,
+		InstrumentType: instrumentType, RecordDate: &recordDate, TestOrder: form.TestOrder,
+	}
+	if err := h.materializeRecordSteps(r.Context(), &rec, &form); err != nil {
+		http.Error(w, "materialize error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	http.Redirect(w, r, fmt.Sprintf("/records/%d/edit", newID), http.StatusSeeOther)
+}
+
+// materializeRecordSteps creates a frozen test_result snapshot row for every applicable step in the
+// form's order at record creation (#487): headings included (type > 0); archived and non-applicable
+// instrument-type data steps skipped. Self/record/form tokens are baked; {id} cross-step tokens are
+// left for render-time resolution. result/comment/pass_fail start empty.
+func (h *Handler) materializeRecordSteps(ctx context.Context, record *models.TestRecord, form *models.TestForm) error {
+	steps, err := h.loadSteps(ctx, form.ID)
+	if err != nil {
+		return err
+	}
+	ids := record.OrderedTestIDs()
+	if len(ids) == 0 {
+		ids = form.OrderedTestIDs()
+	}
+	for _, tid := range ids {
+		step, ok := steps[tid]
+		if !ok {
+			continue
+		}
+		if step.Archived {
+			continue
+		}
+		if step.Type == 0 && !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
+			continue
+		}
+		bakeStepTokens(step, record, form)
+		if _, err := h.execContext(ctx, fmt.Sprintf(`
+			INSERT INTO %s
+			  (record_id, test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+			   spec_units, pf_type, format, hide_formula, default_result, updated_at)
+			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,GETDATE())`,
+			h.cfg.ResultsTable()),
+			record.ID, tid, step.Type, step.Parameter, step.Specification,
+			step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
+			step.HideFormula, step.DefaultResult); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // EditRecord — GET /records/{id}/edit
@@ -1392,85 +1439,12 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	form.InstrumentTypes = editInstrumentTypes.String
 
-	editStepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type, spec_units, spec_nom, archived
-		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
+	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
+	// Edit always works against the frozen spec; "Update to latest" is the only re-pull path (#487).
+	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
-	}
-	defer editStepRows.Close()
-
-	steps := map[int]*models.TestStep{}
-	for editStepRows.Next() {
-		var s models.TestStep
-		var param, spec, defaultResult, hideFormula sql.NullString
-		var specMin, specMax, pfType, specUnits, specNom sql.NullString
-		if err := editStepRows.Scan(
-			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType, &specUnits, &specNom, &s.Archived,
-		); err != nil {
-			continue
-		}
-		s.Parameter = param.String
-		s.Specification = spec.String
-		s.DefaultResult = defaultResult.String
-		s.HideFormula = hideFormula.String
-		s.SpecMin = specMin.String
-		s.SpecMax = specMax.String
-		s.PFType = pfType.String
-		s.SpecUnits = specUnits.String
-		s.SpecNom = specNom.String
-		steps[s.ID] = &s
-	}
-
-	editResRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, record_id, test_id,
-		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
-		       pass_fail, COALESCE(comment,''), updated_at
-		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
-	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer editResRows.Close()
-
-	results := map[int]*models.TestResult{}
-	for editResRows.Next() {
-		var res models.TestResult
-		if err := editResRows.Scan(&res.ID, &res.RecordID, &res.TestID, &res.Parameter,
-			&res.Specification, &res.Result, &res.PassFail, &res.Comment, &res.UpdatedAt); err != nil {
-			continue
-		}
-		results[res.TestID] = &res
-	}
-
-	ids := record.OrderedTestIDs()
-	if len(ids) == 0 {
-		ids = form.OrderedTestIDs()
-	}
-	var resultRows []models.ResultRow
-	for _, tid := range ids {
-		step, ok := steps[tid]
-		if !ok {
-			continue
-		}
-		// Archived steps are kept off new records but stay on historical records with a result.
-		if !stepVisibleOnRecord(step.Archived, results[tid] != nil) {
-			continue
-		}
-		if evaluateHide(step.HideFormula, results, steps, &record, &form) {
-			continue
-		}
-		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
-			continue
-		}
-		resultRows = append(resultRows, models.ResultRow{
-			Step:   step,
-			Result: results[tid],
-			Level:  step.Type,
-		})
 	}
 
 	for i := range resultRows {
@@ -1478,21 +1452,16 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		if row.Level > 0 || row.Step == nil {
 			continue
 		}
-		// For named-query steps, capture a partially-resolved spec (record tokens only,
-		// {id} tokens left intact) so the edit page can re-resolve live as results change.
+		// Rows come back baked (self/record/form resolved) with {id} intact — exactly the
+		// "raw" state the edit JS re-resolves live as cross-step results change.
 		if strings.HasPrefix(row.Step.SpecNom, "query:") {
-			row.RawSpecNom = substituteRefs(row.Step.SpecNom, nil, nil, &record, &form)
+			row.RawSpecNom = row.Step.SpecNom
 		}
-		// Capture partially-resolved default_result for formula evaluation in JS.
 		if row.Step.DefaultResult != "" {
-			row.RawDefault = substituteRefs(row.Step.DefaultResult, nil, nil, &record, &form)
+			row.RawDefault = row.Step.DefaultResult
 		}
-		row.Step.Parameter = substituteRefs(row.Step.Parameter, results, steps, &record, &form)
-		row.Step.Specification = substituteStepSelf(substituteRefs(row.Step.Specification, results, steps, &record, &form), row.Step)
-		row.Step.SpecNom = substituteRefs(row.Step.SpecNom, results, steps, &record, &form)
-		row.Step.SpecMin = substituteRefs(row.Step.SpecMin, results, steps, &record, &form)
-		row.Step.SpecMax = substituteRefs(row.Step.SpecMax, results, steps, &record, &form)
-		row.Step.DefaultResult = substituteStepSelf(substituteRefs(row.Step.DefaultResult, results, steps, &record, &form), row.Step)
+		// Resolve {id} cross-step tokens against the record's own results (frozen).
+		resolveStepRefs(row.Step, results, refSteps, &record, &form)
 	}
 
 	h.renderTR(w, r, "record_edit.html", map[string]any{
@@ -1732,6 +1701,14 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Form context for resolving {form.X} tokens when snapshotting (#487).
+	var form models.TestForm
+	h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT f.id, f.part_number_id, pn.part_number
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
+		Scan(&form.ID, &form.PNID, &form.PartNumber)
+
 	// Load steps for pass_fail computation and INSERT snapshots.
 	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
@@ -1767,14 +1744,19 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load existing results keyed by test_id â€" used for change detection and UPDATE vs INSERT.
+	// SpecMin/SpecMax/PFType carry the frozen snapshot so edits re-evaluate P/F against the spec
+	// the record was taken under, not the live definition (#487).
 	type savedResult struct {
 		ID      int
 		Result  string
 		Comment string
+		SpecMin string
+		SpecMax string
+		PFType  string
 	}
 	existing := map[int]savedResult{}
 	exRows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		"SELECT id, test_id, result, comment FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
+		"SELECT id, test_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1783,10 +1765,12 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	for exRows.Next() {
 		var rid, tid int
 		var result, comment sql.NullString
-		if err := exRows.Scan(&rid, &tid, &result, &comment); err != nil {
+		var specMin, specMax, pfType string
+		if err := exRows.Scan(&rid, &tid, &result, &comment, &specMin, &specMax, &pfType); err != nil {
 			continue
 		}
-		existing[tid] = savedResult{ID: rid, Result: result.String, Comment: comment.String}
+		existing[tid] = savedResult{ID: rid, Result: result.String, Comment: comment.String,
+			SpecMin: specMin, SpecMax: specMax, PFType: pfType}
 	}
 
 	for key, vals := range r.Form {
@@ -1804,14 +1788,19 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		result := strings.TrimSpace(vals[0])
 		comment := strings.TrimSpace(r.FormValue(fmt.Sprintf("comment_%d", testID)))
 
-		var passFail *bool
-		if result != "" {
-			passFail = models.ComputePassFail(result, step)
-		}
-
 		if prev, exists := existing[testID]; exists {
 			// Only UPDATE if result or comment actually changed
 			if result != prev.Result || comment != prev.Comment {
+				// Re-evaluate against the frozen snapshot, falling back to the live def for
+				// pre-#487 rows whose snapshot columns are empty.
+				pfStep := step
+				if prev.SpecMin != "" || prev.SpecMax != "" || prev.PFType != "" {
+					pfStep = &models.TestStep{SpecMin: prev.SpecMin, SpecMax: prev.SpecMax, PFType: prev.PFType}
+				}
+				var passFail *bool
+				if result != "" {
+					passFail = models.ComputePassFail(result, pfStep)
+				}
 				// #251: insert into TestResultHistory here when per-result change history is added
 				h.execContext(r.Context(), fmt.Sprintf(`
 					UPDATE %s SET result=@p1, comment=@p2, pass_fail=@p3, updated_at=GETDATE()
@@ -1819,16 +1808,26 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 					result, comment, passFail, prev.ID)
 			}
 		} else if result != "" || comment != "" {
+			// Legacy path: a pre-#487 record's previously-unrecorded row gets its first value.
+			// Materialize it now as a frozen snapshot, identical in shape to creation-time
+			// materialization ({id} kept for render-time resolution; self/record/form baked).
+			bakeStepTokens(step, &record, &form)
+			var passFail *bool
+			if result != "" {
+				passFail = models.ComputePassFail(result, step)
+			}
 			h.execContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
-				  (record_id, test_id, result, comment, pass_fail,
-				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, updated_at)
-				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,GETDATE())`,
+				  (record_id, test_id, result, comment, pass_fail, type,
+				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, pf_type, format,
+				   hide_formula, default_result, updated_at)
+				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE())`,
 				h.cfg.ResultsTable()),
 				recordID, testID,
-				result, comment, passFail,
+				result, comment, passFail, step.Type,
 				step.Parameter, step.Specification,
-				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits)
+				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
+				step.HideFormula, step.DefaultResult)
 		}
 	}
 
@@ -1853,6 +1852,150 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		h.execContext(r.Context(), fmt.Sprintf(
 			"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE id=@p3",
 			h.cfg.RecordsTable()), comments, instrumentType, recordID)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
+}
+
+// ResyncRecord — POST /records/{id}/resync
+// Re-pulls the current (live) definition into the record's frozen snapshot (#487): refreshes the
+// snapshot definition fields (incl. type/hide_formula/default_result) on every existing row,
+// materializes rows for steps added since creation, recomputes pass_fail against the current limits,
+// and refreshes the record's test_order. Locked records are rejected. Rows for steps removed/archived
+// from the form are left untouched, preserving their historical result.
+func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
+	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var record models.TestRecord
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
+		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
+			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
+			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if record.Locked {
+		http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
+		return
+	}
+
+	var form models.TestForm
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT f.id, f.part_number_id, COALESCE(f.test_order,''), pn.part_number
+		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
+		Scan(&form.ID, &form.PNID, &form.TestOrder, &form.PartNumber); err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Live definition (full) and the record's existing snapshot rows.
+	steps, err := h.loadSteps(r.Context(), record.FormID)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	existing := map[int]int{}                  // test_id -> test_result row id
+	curResults := map[int]*models.TestResult{} // test_id -> recorded value (for {id} P/F resolution)
+	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(
+		"SELECT id, test_id, COALESCE(result,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for resRows.Next() {
+		var id, tid int
+		var result string
+		if err := resRows.Scan(&id, &tid, &result); err != nil {
+			continue
+		}
+		existing[tid] = id
+		curResults[tid] = &models.TestResult{ID: id, TestID: tid, Result: result}
+	}
+	resRows.Close()
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Walk the form's CURRENT order so newly added steps are materialized too.
+	for _, tid := range form.OrderedTestIDs() {
+		step, ok := steps[tid]
+		if !ok {
+			continue
+		}
+		if step.Archived {
+			continue
+		}
+		if step.Type == 0 && !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
+			continue
+		}
+		bakeStepTokens(step, &record, &form)
+
+		// P/F against the refreshed spec; resolve {id} bounds against the record's own results.
+		var passFail *bool
+		if res, ok := curResults[tid]; ok && res.Result != "" {
+			pfStep := *step
+			pfStep.SpecMin = substituteRefs(step.SpecMin, curResults, steps, &record, &form)
+			pfStep.SpecMax = substituteRefs(step.SpecMax, curResults, steps, &record, &form)
+			passFail = models.ComputePassFail(res.Result, &pfStep)
+		}
+
+		if rowID, ok := existing[tid]; ok {
+			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+				UPDATE %s SET type=@p1, parameter=@p2, specification=@p3, spec_min=@p4, spec_nom=@p5, spec_max=@p6,
+				              spec_units=@p7, pf_type=@p8, format=@p9, hide_formula=@p10, default_result=@p11,
+				              pass_fail=@p12, updated_at=GETDATE()
+				WHERE id=@p13`, h.cfg.ResultsTable()),
+				step.Type, step.Parameter, step.Specification, step.SpecMin, step.SpecNom, step.SpecMax,
+				step.SpecUnits, step.PFType, step.Format, step.HideFormula, step.DefaultResult,
+				passFail, rowID); err != nil {
+				http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Step added to the form since this record was created — materialize an empty row.
+			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+				INSERT INTO %s
+				  (record_id, test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+				   spec_units, pf_type, format, hide_formula, default_result, updated_at)
+				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,GETDATE())`,
+				h.cfg.ResultsTable()),
+				recordID, tid, step.Type, step.Parameter, step.Specification,
+				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
+				step.HideFormula, step.DefaultResult); err != nil {
+				http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	// Refresh the record's step-order snapshot so newly added steps appear on edit/view.
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET test_order=@p1, updated_at=GETDATE() WHERE id=@p2", h.cfg.RecordsTable()),
+		form.TestOrder, recordID); err != nil {
+		http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)

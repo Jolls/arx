@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.36] - 2026-06-23 
+- freeze saved test records to a materialized snapshot — every applicable step (incl. section headings) is captured into the record at creation, so a record renders spec/parameter/limits/units/pf_type/format/headings and evaluates pass/fail entirely from what it was created with, never the live definition; editing a form no longer changes existing records ([#487](https://github.com/Jolls/arx-legacy/issues/487))
+- editing a record always works against its frozen snapshot; "Update to latest" on an unlocked record is the only way to re-pull the current definition (refreshing the snapshot, materializing newly-added steps, and re-evaluating pass/fail) ([#487](https://github.com/Jolls/arx-legacy/issues/487))
+- schema — adds `test_result.pf_type`, `format`, `type`, `hide_formula`, `default_result` snapshot columns; additive and rollback-safe — run `SQL/migrations/migrate_record_snapshot.sql` against ArxProd and ArxDev before deploying ([#487](https://github.com/Jolls/arx-legacy/issues/487))
+
 ## [0.5.35] - 2026-06-23 
 - archive/retire a test step instead of the `hide_formula="HIDE"` workaround — archived steps drop off new records and the live definition view, stay rendered on historical records that already recorded a result for them, and can be archived/restored from the definition editor with a "Show archived" toggle on the definition view ([#403](https://github.com/Jolls/arx-legacy/issues/403))
 - schema — adds `test_definition.archived` (BIT, defaulted); additive and rollback-safe — run `SQL/migrations/migrate_tr_archive.sql` against ArxProd and ArxDev before deploying ([#403](https://github.com/Jolls/arx-legacy/issues/403))

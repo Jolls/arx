@@ -106,16 +106,34 @@ type TestStep struct {
 }
 
 // TestResult is a row in the test_result table.
+// The snapshot fields (Parameter, Specification, SpecMin/Nom/Max, SpecUnits, PFType, Format)
+// freeze the definition as it was when the result was recorded (#487). Stored resolved.
 type TestResult struct {
 	ID            int
 	RecordID      int
 	TestID        int
-	Parameter     string     // snapshot of parameter at commit time
-	Specification string     // snapshot
+	Parameter     string     // snapshot of parameter at commit time (resolved)
+	Specification string     // snapshot (resolved)
 	Result        string
 	PassFail      *bool
 	Comment       string
+	SpecMin       string // snapshot
+	SpecNom       string // snapshot
+	SpecMax       string // snapshot
+	SpecUnits     string // snapshot
+	PFType        string // snapshot of pf_type — saved records evaluate P/F against this
+	Format        string // snapshot of format — controls how the recorded value renders
+	Type          int    // snapshot of test_definition.type — 0=data, 1/2/3=heading
+	HideFormula   string // snapshot of hide_formula — frozen visibility, evaluated vs the record's own results
+	DefaultResult string // snapshot of default_result — used by the edit page for auto-calc; not shown on the view
 	UpdatedAt     *time.Time
+}
+
+// HasSnapshot reports whether this result carries frozen definition fields (a record
+// saved after #487). Old records have empty snapshot columns and fall back to the live def.
+func (r *TestResult) HasSnapshot() bool {
+	return r != nil && (r.PFType != "" || r.SpecMin != "" || r.SpecMax != "" ||
+		r.SpecNom != "" || r.SpecUnits != "" || r.Format != "")
 }
 
 // ResultRow pairs a step definition with its recorded result for template rendering.
