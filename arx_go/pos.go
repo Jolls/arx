@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -2442,4 +2443,98 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 	}
 	h.createPOFolder(r, base, supplierIDStr)
 	http.Redirect(w, r, "/po/"+base, http.StatusFound)
+}
+
+// ── PO import part file (issue #156) ────────────────────────────────────────
+
+// localFilePath resolves a LOCAL: FILFileName value to an absolute path.
+// Returns ("", false) when root is empty, the value isn't LOCAL:, or it is a directory reference.
+func localFilePath(root, filename string) (string, bool) {
+	if root == "" || !strings.HasPrefix(strings.ToUpper(filename), "LOCAL:") {
+		return "", false
+	}
+	rel := strings.ReplaceAll(filename[6:], "\\", "/")
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" || strings.HasSuffix(rel, "/") {
+		return "", false
+	}
+	return filepath.Join(root, filepath.FromSlash(rel)), true
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
+// POImportPartFile — POST /po/{id}/import-part-file (#156)
+// Copies a LOCAL: file attachment from a catalog part into the PO's folder.
+func (h *Handler) POImportPartFile(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, "Error parsing form: "+err.Error())
+		return
+	}
+
+	if h.cfg.POFolderRoot == "" {
+		h.renderError(w, r, "PO_FOLDER_ROOT is not configured.")
+		return
+	}
+	if h.cfg.DocControlRoot == "" {
+		h.renderError(w, r, "DOC_CONTROL_ROOT is not configured.")
+		return
+	}
+
+	var poID int
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT ID FROM %s WHERE number = @p1`, h.cfg.POTable()), num).Scan(&poID); err != nil {
+		h.renderError(w, r, "Purchase order not found.")
+		return
+	}
+
+	attID := r.FormValue("att_id")
+	partID := r.FormValue("part_id")
+	if attID == "" || partID == "" {
+		h.renderError(w, r, "Missing attachment or part.")
+		return
+	}
+
+	var fname sql.NullString
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT file_name FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = 1`,
+		h.cfg.AttachmentsTable()), attID, partID).Scan(&fname); err != nil {
+		h.renderError(w, r, "Attachment not found.")
+		return
+	}
+
+	srcPath, ok := localFilePath(h.cfg.DocControlRoot, fname.String)
+	if !ok {
+		h.renderError(w, r, "Selected attachment is not a LOCAL: file.")
+		return
+	}
+
+	base := findPOBaseFolder(h.cfg.POFolderRoot, num)
+	if base == "" {
+		h.renderError(w, r, "No folder found for PO "+num+". Open the PO folder first to create it.")
+		return
+	}
+
+	dst := filepath.Join(h.cfg.POFolderRoot, base, filepath.Base(srcPath))
+	if err := copyFile(srcPath, dst); err != nil {
+		h.renderError(w, r, "Error copying file: "+err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/po/"+num, http.StatusFound)
 }

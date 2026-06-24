@@ -228,6 +228,9 @@
                         <td>{{.POLItem}}</td>
                         <td>
                             {{if .POLPNID}}<a href="/part/{{derefInt .POLPNID}}" class="part-number-link">{{.POLPNPartNumber}}</a>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-1 py-0 px-1"
+                                    onclick="openImportModal({{derefInt .POLPNID}}, '{{.POLPNPartNumber}}')"
+                                    title="Copy a file from this part into the PO folder"><i class="bi bi-paperclip"></i></button>
                             {{else}}{{.POLPNPartNumber}}{{end}}
                         </td>
                         <td>{{.POLRev}}</td>
@@ -350,4 +353,55 @@
     </div>
     {{end}}
 </div>
+
+{{/* ── Import part file modal (#156) ──────────────────────────── */}}
+<div class="modal fade" id="importFileModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Copy file to PO folder &mdash; <span id="importModalPN"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="/po/{{.PO.Number}}/import-part-file">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="part_id" id="importPartID">
+        <div class="modal-body">
+          <div id="importFileList"><span class="text-muted small">Loading&hellip;</span></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="importSubmitBtn" disabled>Copy to folder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function openImportModal(partId, partNumber) {
+  document.getElementById('importPartID').value = partId;
+  document.getElementById('importModalPN').textContent = partNumber;
+  document.getElementById('importSubmitBtn').disabled = true;
+  document.getElementById('importFileList').innerHTML = '<span class="text-muted small">Loading…</span>';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('importFileModal')).show();
+  fetch('/api/part/' + partId + '/local-attachments')
+    .then(function(r) { return r.json(); })
+    .then(function(atts) {
+      if (!atts.length) {
+        document.getElementById('importFileList').innerHTML = '<span class="text-muted small">No local files attached to this part.</span>';
+        return;
+      }
+      var html = atts.map(function(a) {
+        return '<div class="form-check">' +
+          '<input class="form-check-input" type="radio" name="att_id" value="' + a.id + '" id="impatt' + a.id + '" ' +
+          'onchange="document.getElementById(\'importSubmitBtn\').disabled=false">' +
+          '<label class="form-check-label" for="impatt' + a.id + '">' + a.base_name + '</label>' +
+          '</div>';
+      }).join('');
+      document.getElementById('importFileList').innerHTML = html;
+    })
+    .catch(function() {
+      document.getElementById('importFileList').innerHTML = '<span class="text-danger small">Error loading attachments.</span>';
+    });
+}
+</script>
 {{end}}
