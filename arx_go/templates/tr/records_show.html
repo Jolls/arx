@@ -46,6 +46,14 @@
           <i class="bi bi-lock"></i> Lock
         </button>
       </form>
+      <form method="POST" action="/records/{{.Record.ID}}/resync" class="d-inline"
+            onsubmit="return confirm('Update this record to the latest form definition? This refreshes the spec/parameter snapshot and re-evaluates pass/fail against the current limits.');">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn-sm btn-outline-secondary ms-1"
+                title="Re-pull the current form definition into this record's snapshot">
+          <i class="bi bi-arrow-repeat"></i> Update to latest
+        </button>
+      </form>
       {{end}}
       <a href="/records/{{.Record.ID}}/print" target="_blank" class="btn btn-sm btn-outline-secondary ms-2">
         <i class="bi bi-printer"></i> Print

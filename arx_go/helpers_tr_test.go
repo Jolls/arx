@@ -118,6 +118,43 @@ func TestStepVisibleOnRecord(t *testing.T) {
 	}
 }
 
+func TestStepFromResult(t *testing.T) {
+	res := &models.TestResult{
+		Parameter: "P", Specification: "S", SpecMin: "1", SpecNom: "5", SpecMax: "9",
+		SpecUnits: "V", PFType: "range", Format: "0.0", Type: 2, HideFormula: "H", DefaultResult: "D",
+	}
+	step := stepFromResult(7, res)
+	if step.ID != 7 || step.Type != 2 || step.Parameter != "P" || step.Specification != "S" ||
+		step.SpecMin != "1" || step.SpecNom != "5" || step.SpecMax != "9" || step.SpecUnits != "V" ||
+		step.PFType != "range" || step.Format != "0.0" || step.HideFormula != "H" || step.DefaultResult != "D" {
+		t.Errorf("stepFromResult did not carry the snapshot: %+v", step)
+	}
+}
+
+func TestBakeStepTokens(t *testing.T) {
+	rec := &models.TestRecord{SerialNumber: "42", SerialNumberPN: "PN-1"}
+
+	// Self + record tokens bake; {id} cross-step tokens stay for render-time resolution.
+	step := &models.TestStep{
+		SpecMin: "1", SpecMax: "9", SpecNom: "5", SpecUnits: "V",
+		Specification: "{nom}{units} ({min}-{max}) for {record.sn} vs {3}",
+	}
+	bakeStepTokens(step, rec, nil)
+	if step.Specification != "5V (1-9) for 42 vs {3}" {
+		t.Errorf("bake should resolve self/record tokens and keep {id}: %q", step.Specification)
+	}
+
+	// A query: directive in spec_nom must NOT be baked into the spec text.
+	q := &models.TestStep{SpecNom: "query:lookup(@pn={record.pn})", Specification: "{nom}"}
+	bakeStepTokens(q, rec, nil)
+	if q.Specification != "{nom}" {
+		t.Errorf("query directive must not bake into spec text, got %q", q.Specification)
+	}
+	if q.SpecNom != "query:lookup(@pn=PN-1)" {
+		t.Errorf("record tokens inside the query directive should still resolve, got %q", q.SpecNom)
+	}
+}
+
 func TestImageResult(t *testing.T) {
 	cases := []struct {
 		val  string
