@@ -45,6 +45,7 @@ CREATE TABLE test_definition (
   spec_nom            VARCHAR(255),
   default_result      VARCHAR(255),
   hide_formula        VARCHAR(255),                      -- 'HIDE' excludes this row from display.
+  archived            BIT          NOT NULL CONSTRAINT DF_test_definition_archived DEFAULT 0, -- 1 = retired step; hidden from new records and the live def view, still rendered on historical records that have a result for it.
   pf_type             VARCHAR(50),                       -- Go evaluator: 'range' (default/NULL = range check).
   instrument_types    VARCHAR(255),                      -- Comma-separated instrument type names this step applies to. NULL/empty = applies to all. Matched against test_record.instrument_type.
   format              VARCHAR(255),

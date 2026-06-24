@@ -25,7 +25,13 @@
     </form>
     {{end}}
   </h4>
-  <div class="d-flex gap-2" data-col-table="def-table">
+  <div class="d-flex gap-2 align-items-center" data-col-table="def-table">
+    {{if .HasArchived}}
+    <div class="form-check form-switch mb-0 me-1">
+      <input class="form-check-input" type="checkbox" id="show-archived-toggle" data-archived-toggle data-archived-table="def-table">
+      <label class="form-check-label small text-muted" for="show-archived-toggle">Show archived</label>
+    </div>
+    {{end}}
     <div class="dropdown">
       <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
         Columns
@@ -131,16 +137,16 @@
   <tbody>
     {{range .Steps}}
     {{if gt .Type 0}}
-    <tr class="row-heading-{{.Type}}" data-step-id="{{.ID}}">
+    <tr class="row-heading-{{.Type}}{{if .Archived}} step-archived{{end}}" data-step-id="{{.ID}}">
       <td class="text-muted small">{{.ID}}</td>
       <td class="text-muted small">{{.Type}}</td>
-      <td colspan="14" data-field="parameter">{{.Parameter}}</td>
+      <td colspan="14" data-field="parameter">{{.Parameter}}{{if .Archived}} <span class="badge bg-secondary">archived</span>{{end}}</td>
     </tr>
     {{else}}
-    <tr data-step-id="{{.ID}}">
+    <tr data-step-id="{{.ID}}"{{if .Archived}} class="step-archived"{{end}}>
       <td data-col="col-id" class="text-muted small">{{.ID}} <a href="/forms/{{$.Form.ID}}/tests/{{.ID}}/report" class="ms-1 text-decoration-none" title="View all results for this test"><i class="bi bi-bar-chart-line"></i></a></td>
       <td data-col="col-type" class="text-muted small">{{.Type}}</td>
-      <td data-col="col-param" data-field="parameter">{{.Parameter}}</td>
+      <td data-col="col-param" data-field="parameter">{{.Parameter}}{{if .Archived}} <span class="badge bg-secondary">archived</span>{{end}}</td>
       <td data-col="col-spec">{{.Specification}}</td>
       <td data-col="col-nom" class="font-mono" data-field="spec_nom">{{.SpecNom}}</td>
       <td data-col="col-min" class="font-mono" data-field="spec_min">{{.SpecMin}}</td>

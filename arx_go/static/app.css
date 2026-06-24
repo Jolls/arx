@@ -305,3 +305,11 @@ input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; c
 
 /* Column visibility toggle (#386) */
 .col-hidden { display: none; }
+
+/* Archived step rows (#403): hidden on the definition view and its editor until "Show archived" is on */
+#def-table tbody tr.step-archived,
+#steps-table tbody tr.step-archived { display: none; }
+#def-table.show-archived tbody tr.step-archived,
+#steps-table.show-archived tbody tr.step-archived { display: table-row; }
+#def-table.show-archived tbody tr.step-archived td,
+#steps-table.show-archived tbody tr.step-archived td { background-color: #f1f3f5; }

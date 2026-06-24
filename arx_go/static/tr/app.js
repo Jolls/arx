@@ -52,6 +52,19 @@ document.addEventListener('DOMContentLoaded', function () {
   })
 })
 
+// --- Archived step rows toggle (#403) ---
+// A [data-archived-toggle] switch reveals rows marked .step-archived in the table named by
+// its data-archived-table attribute. Used on both the definition view and its editor.
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('[data-archived-toggle]').forEach(function (toggle) {
+    var table = document.getElementById(toggle.dataset.archivedTable)
+    if (!table) return
+    toggle.addEventListener('change', function () {
+      table.classList.toggle('show-archived', toggle.checked)
+    })
+  })
+})
+
 // --- Client-side table sort ---
 function sortTable(th) {
   var tr = th.closest('tr')
