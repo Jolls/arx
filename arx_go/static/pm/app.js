@@ -8,6 +8,51 @@ let allRows = [];
 let sortCol = null;
 let sortDir = 'asc';
 
+// --- Filter/sort state persistence across navigation (#390) ---
+// Saves to sessionStorage so the list restores its view when you hit Back.
+
+function _filterStorageKey() {
+    return 'arx.filter.' + window.location.pathname;
+}
+
+function saveFilterState() {
+    if (!document.querySelector('tr.filter-row')) return;
+    const filters = Array.from(document.querySelectorAll('tr.filter-row input, tr.filter-row select'))
+        .map(el => el.value);
+    const rfqs     = document.getElementById('show-rfqs');
+    const inactive = document.getElementById('show-inactive');
+    try {
+        sessionStorage.setItem(_filterStorageKey(), JSON.stringify({
+            filters,
+            sort: { col: sortCol, dir: sortDir },
+            showRFQs:     rfqs     ? rfqs.checked     : null,
+            showInactive: inactive ? inactive.checked : null,
+            page: currentPage
+        }));
+    } catch (e) {}
+}
+
+function restoreFilterState() {
+    try {
+        const raw = sessionStorage.getItem(_filterStorageKey());
+        if (!raw) return;
+        const st = JSON.parse(raw);
+        if (st.filters) {
+            const inputs = Array.from(document.querySelectorAll('tr.filter-row input, tr.filter-row select'));
+            st.filters.forEach((v, i) => { if (inputs[i]) inputs[i].value = v; });
+        }
+        if (st.sort && st.sort.col !== null) {
+            sortCol = st.sort.col;
+            sortDir = st.sort.dir || 'asc';
+        }
+        const rfqs     = document.getElementById('show-rfqs');
+        const inactive = document.getElementById('show-inactive');
+        if (rfqs     && st.showRFQs     !== null) rfqs.checked     = st.showRFQs;
+        if (inactive && st.showInactive !== null) inactive.checked = st.showInactive;
+        if (st.page) currentPage = st.page;
+    } catch (e) {}
+}
+
 function escHtml(s) {
     if (s == null) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -139,6 +184,7 @@ function applyFilters(resetPage = true) {
         rows = rows.filter(r => r.active !== false);
     }
     renderRows(rows);
+    saveFilterState();
 }
 
 function applyTruncationTooltips(tbody) {
@@ -212,6 +258,9 @@ function loadListRows() {
                 th.classList.add('sortable');
                 th.addEventListener('click', () => sortByCol(i));
             });
+            restoreFilterState();
+            applySort();
+            updateSortHeaders();
             applyFilters(false);
             const tDone = performance.now();
             console.log(`[rows] ${url}: fetch=${Math.round(tFetch - t0)}ms  render=${Math.round(tDone - tFetch)}ms  rows=${allRows.length}`);

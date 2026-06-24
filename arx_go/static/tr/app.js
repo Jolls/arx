@@ -1,3 +1,57 @@
+// --- Column visibility toggle (#386) ---
+// Dropdowns use data-col-table="tableId"; checkboxes use data-toggle-col="key".
+// Hidden state persisted to localStorage as arx.cols.<tableId>.
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('[data-col-table]').forEach(function (container) {
+    var tableId = container.dataset.colTable
+    var storageKey = 'arx.cols.' + tableId
+    var table = document.getElementById(tableId)
+    if (!table) return
+
+    var stored = localStorage.getItem(storageKey)
+    var hidden = stored ? JSON.parse(stored) : []
+
+    function applyState() {
+      table.querySelectorAll('[data-col]').forEach(function (el) {
+        el.classList.remove('col-hidden')
+      })
+      hidden.forEach(function (key) {
+        table.querySelectorAll('[data-col="' + key + '"]').forEach(function (el) {
+          el.classList.add('col-hidden')
+        })
+      })
+      container.querySelectorAll('input[data-toggle-col]').forEach(function (cb) {
+        cb.checked = hidden.indexOf(cb.dataset.toggleCol) === -1
+      })
+    }
+
+    container.querySelectorAll('input[data-toggle-col]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var key = cb.dataset.toggleCol
+        if (cb.checked) {
+          hidden = hidden.filter(function (k) { return k !== key })
+        } else {
+          if (hidden.indexOf(key) === -1) hidden.push(key)
+        }
+        localStorage.setItem(storageKey, JSON.stringify(hidden))
+        applyState()
+      })
+    })
+
+    var resetBtn = container.querySelector('[data-col-reset]')
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function (e) {
+        e.preventDefault()
+        hidden = []
+        localStorage.removeItem(storageKey)
+        applyState()
+      })
+    }
+
+    applyState()
+  })
+})
+
 // --- Client-side table sort ---
 function sortTable(th) {
   var tr = th.closest('tr')
