@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -992,6 +993,43 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
+}
+
+// APIPartLocalAttachments — GET /api/part/{id}/local-attachments (#156)
+// Returns LOCAL: file (not directory) attachments for a part, for the PO import picker.
+func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
+		`SELECT id, file_name FROM %s WHERE part_id = @p1 AND is_active = 1 ORDER BY sort_order, id`,
+		h.cfg.AttachmentsTable()), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	type att struct {
+		ID       int    `json:"id"`
+		BaseName string `json:"base_name"`
+	}
+	out := []att{}
+	for rows.Next() {
+		var a att
+		var fname sql.NullString
+		if rows.Scan(&a.ID, &fname) != nil {
+			continue
+		}
+		fn := fname.String
+		if !strings.HasPrefix(strings.ToUpper(fn), "LOCAL:") {
+			continue
+		}
+		stripped := fn[6:]
+		if strings.HasSuffix(stripped, "/") || strings.HasSuffix(stripped, "\\") {
+			continue
+		}
+		a.BaseName = filepath.Base(strings.ReplaceAll(stripped, "\\", "/"))
+		out = append(out, a)
+	}
+	writeJSON(w, out)
 }
 
 func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {

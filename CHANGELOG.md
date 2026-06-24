@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.34] - 2026-06-23 
+- pm: import a part's LOCAL: file into the PO folder from the PO detail page ([#156](https://github.com/Jolls/arx-legacy/issues/156))
+
 ## [0.5.33] - 2026-06-23 
 - tr: hide/show columns on the Records list, Test Results, and Form Definition tables — toggle per-column visibility from a Columns dropdown; preference persists across navigation in localStorage ([#386](https://github.com/Jolls/arx-legacy/issues/386))
 - pm: filter/sort state preserved on list pages — navigating to a record and back restores the filter and sort that was active ([#390](https://github.com/Jolls/arx-legacy/issues/390))
