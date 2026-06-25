@@ -22,6 +22,7 @@
     <button type="submit" form="edit-form" class="btn btn-sm btn-primary">
       <i class="bi bi-floppy"></i> Save
     </button>
+    <span id="draft-indicator" class="small text-muted ms-2"></span>
   </div>
 </div>
 
@@ -141,4 +142,96 @@
     </button>
   </div>
 </form>
+
+<script>
+// #258 — Enter key advances focus to next result/comment input instead of submitting
+function editInputs() {
+  return [...document.querySelectorAll(
+    '#edit-form input.form-control:not([type=hidden]), #edit-form select.form-select'
+  )];
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  if (!e.target.matches('#edit-form input.form-control, #edit-form select.form-select')) return;
+  e.preventDefault();
+  const inputs = editInputs();
+  const idx = inputs.indexOf(e.target);
+  if (idx >= 0 && idx < inputs.length - 1) {
+    inputs[idx + 1].focus();
+  }
+});
+
+// #259 — Auto-save draft to localStorage every 30s, restore/discard on re-entry
+const DRAFT_KEY = 'arx-record-draft-{{.Record.ID}}';
+
+function draftData() {
+  const data = { _saved: new Date().toISOString() };
+  document.querySelectorAll(
+    '#edit-form input[name^="result_"], #edit-form select[name^="result_"], ' +
+    '#edit-form input[name^="comment_"]'
+  ).forEach(el => { data[el.name] = el.value; });
+  ['record_date', 'comments', 'instrument_type'].forEach(n => {
+    const el = document.querySelector('#edit-form [name="' + n + '"]');
+    if (el) data[n] = el.value;
+  });
+  return data;
+}
+
+function saveDraft() {
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData()));
+  const ts = new Date().toLocaleTimeString();
+  const ind = document.getElementById('draft-indicator');
+  if (ind) ind.textContent = 'Draft saved ' + ts;
+}
+
+function restoreDraft(draft) {
+  Object.entries(draft).forEach(([name, val]) => {
+    if (name.startsWith('_')) return;
+    const el = document.querySelector('#edit-form [name="' + name + '"]');
+    if (el) el.value = val;
+  });
+  // Re-trigger P/F evaluation on inputs that have pf data attrs
+  document.querySelectorAll('#edit-form input[data-pf-target]').forEach(el => {
+    el.dispatchEvent(new Event('input'));
+  });
+}
+
+// On load: check for saved draft and show restore banner
+const _savedRaw = localStorage.getItem(DRAFT_KEY);
+if (_savedRaw) {
+  try {
+    const draft = JSON.parse(_savedRaw);
+    const ts = new Date(draft._saved).toLocaleTimeString();
+    const banner = document.createElement('div');
+    banner.className = 'alert alert-warning d-flex align-items-center gap-3 mb-3';
+    banner.id = 'draft-banner';
+    banner.innerHTML =
+      '<span>Unsaved draft from ' + ts + '</span>' +
+      '<button type="button" class="btn btn-sm btn-warning" id="draft-restore">Restore</button>' +
+      '<button type="button" class="btn btn-sm btn-outline-secondary" id="draft-discard">Discard</button>';
+    const form = document.getElementById('edit-form');
+    form.insertAdjacentElement('beforebegin', banner);
+
+    document.getElementById('draft-restore').addEventListener('click', function() {
+      restoreDraft(draft);
+      banner.remove();
+    });
+    document.getElementById('draft-discard').addEventListener('click', function() {
+      localStorage.removeItem(DRAFT_KEY);
+      banner.remove();
+    });
+  } catch(e) {
+    localStorage.removeItem(DRAFT_KEY);
+  }
+}
+
+// Auto-save every 30s
+setInterval(saveDraft, 30000);
+
+// Clear draft on successful submit (navigates away on success)
+document.getElementById('edit-form').addEventListener('submit', function() {
+  localStorage.removeItem(DRAFT_KEY);
+});
+</script>
 {{end}}
