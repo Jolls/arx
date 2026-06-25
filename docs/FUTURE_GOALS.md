@@ -34,6 +34,7 @@
 | DB triggers maintain denorm counts | `PNFILLinks`, `PNPOLinks`, `SUNumOfLNKs`, `SUNumOfPOs` — never update in Go code |
 | `NULL` on `PNLastRollupCost` | NULL = no rollup ever run; 0 would mean rollup ran and cost was zero |
 | Your own company as supplier for internal parts | MFG, RAW, and ASM parts get `price` rows with your company as `supplier_id`, unifying all part costs through the `price` table. For ASM parts the `price_ea` row represents value-add (labor, overhead) on top of the BOM rollup. Eliminates `PNCurrentCost` as a special field — it becomes a transitional fallback until all parts have `price` rows. |
+| Records are fully materialized self-contained snapshots (#487, PR #489) | A saved `test_record` captures every renderable definition field into `test_result` at creation (spec, parameter, limits, units, pf_type, format, section headings). The live `test_definition` is never consulted to render or evaluate a saved record. Editing a form definition never changes existing records. "Update to latest" (`ResyncRecord`) is the only re-pull path. Record insert + materialization are wrapped in a single transaction (#490, PR #491). |
 
 ---
 
@@ -260,4 +261,4 @@ Next:
 
 ---
 
-*Last updated: 2026-06-02 — struck through completed Tier 1/2/3 Test Records items; added schema cleanup and code quality notes from TODO sweep (#368, #376, #384).*
+*Last updated: 2026-06-24 — added record snapshot materialization to Architecture Decisions (#487 PR #489, #490 PR #491); milestone table reconciled (v0.4.x/v0.5 milestones deleted from repo).*
