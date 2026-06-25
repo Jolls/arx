@@ -215,7 +215,6 @@ if (_savedRaw) {
 
     document.getElementById('draft-restore').addEventListener('click', function() {
       restoreDraft(draft);
-      localStorage.removeItem(DRAFT_KEY);
       banner.remove();
     });
     document.getElementById('draft-discard').addEventListener('click', function() {
