@@ -148,6 +148,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Parts Master — Parts
 		r.Get("/", h.PartsList)
 		r.Get("/parts/new", h.PartsNew)
+		r.Get("/parts/export.csv", h.PartsExportCSV)
 		r.Post("/parts", h.PartsCreate)
 		r.Get("/part/{id}", h.PartDetail)
 		r.Get("/part/{id}/details", h.PartDetail)
@@ -155,6 +156,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/part/{id}", h.PartUpdate)
 		r.Get("/part/{id}/bom", h.PartBOM)
 		r.Get("/part/{id}/bom/edit", h.PartBOMEdit)
+		r.Get("/part/{id}/bom/export.csv", h.BOMExportCSV)
 		r.Post("/part/{id}/bom", h.PartBOMSave)
 		r.Post("/part/{id}/rollup-cost", h.PartRollupCost)
 		r.Get("/part/{id}/where-used", h.PartWhereUsed)
@@ -212,6 +214,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Parts Master — Purchase Orders
 		r.Get("/pos", h.POList)
 		r.Get("/pos/new", h.PONew)
+		r.Get("/pos/export.csv", h.POsExportCSV)
 		r.Post("/pos", h.POCreate)
 		// RFQ (issue #270) — an RFQ is a purchase_order with status 'rfq'
 		r.Get("/rfqs/new", h.RFQNew)

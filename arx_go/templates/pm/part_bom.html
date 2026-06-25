@@ -9,6 +9,9 @@
     {{template "part_tabs" .}}
 
     {{if .BOMItems}}
+    <div class="d-flex justify-content-end mb-2">
+        <a href="/part/{{.Part.PNID}}/bom/export.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
+    </div>
     <div class="table-wrapper">
         <table class="table table-bordered table-hover table-sm">
             <thead class="table-dark">

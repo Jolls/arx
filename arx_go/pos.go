@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
@@ -2537,4 +2538,58 @@ func (h *Handler) POImportPartFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/po/"+num, http.StatusFound)
+}
+
+// ── POsExportCSV — GET /pos/export.csv ──────────────────────────────────────
+
+func (h *Handler) POsExportCSV(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT p.number, p.status, p.supplier_name, p.date_ordered, p.date_closed,
+		       p.orderer, p.total_cost,
+		       l.line_number, l.part_number, l.description, l.qty, l.unit_cost, l.vendor_pn
+		FROM %s p
+		LEFT JOIN %s l ON l.po_number = p.number
+		ORDER BY p.number DESC, l.line_number
+	`, h.cfg.POTable(), h.cfg.POLineTable()))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="purchase-orders.csv"`)
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"PO Number", "Status", "Supplier", "Date Ordered", "Date Closed", "Orderer", "PO Total", "Line #", "Part Number", "Description", "Qty", "Unit Cost", "Vendor PN"})
+	for rows.Next() {
+		var num, status, supplier, orderer sql.NullString
+		var dateOrdered, dateClosed sql.NullTime
+		var totalCost sql.NullFloat64
+		var lineNum sql.NullInt64
+		var linePN, lineDesc, lineVendorPN sql.NullString
+		var lineQty, lineUnitCost sql.NullFloat64
+		if err := rows.Scan(&num, &status, &supplier, &dateOrdered, &dateClosed,
+			&orderer, &totalCost, &lineNum, &linePN, &lineDesc, &lineQty, &lineUnitCost, &lineVendorPN); err != nil {
+			return
+		}
+		orderedStr := ""
+		if dateOrdered.Valid {
+			orderedStr = dateOrdered.Time.Format("2006-01-02")
+		}
+		closedStr := ""
+		if dateClosed.Valid {
+			closedStr = dateClosed.Time.Format("2006-01-02")
+		}
+		lineNumStr := ""
+		if lineNum.Valid {
+			lineNumStr = fmt.Sprintf("%d", lineNum.Int64)
+		}
+		_ = cw.Write([]string{
+			num.String, status.String, supplier.String, orderedStr, closedStr,
+			orderer.String, fmt.Sprintf("%.2f", totalCost.Float64),
+			lineNumStr, linePN.String, lineDesc.String,
+			fmt.Sprintf("%.4g", lineQty.Float64), fmt.Sprintf("%.2f", lineUnitCost.Float64),
+			lineVendorPN.String,
+		})
+	}
+	cw.Flush()
 }
