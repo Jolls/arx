@@ -295,6 +295,45 @@ function sortTable(th) {
     rows.forEach(function(row) { tbody.appendChild(row); });
 }
 
+function exportCSV() {
+    const table = document.querySelector('table[data-rows-url]');
+    if (!table) return;
+    const url = table.dataset.rowsUrl;
+
+    // Apply same filters as the current view (all matching rows, not just current page)
+    let rows = allRows.filter(r => matchesRow(r, getFilterValues()));
+    const showInactive = document.getElementById('show-inactive');
+    if (showInactive && !showInactive.checked) rows = rows.filter(r => r.active !== false);
+    const showRFQs = document.getElementById('show-rfqs');
+    if (showRFQs && !showRFQs.checked) rows = rows.filter(r => r.gid == null);
+
+    const configs = {
+        '/api/parts/rows': {
+            filename: 'parts.csv',
+            headers: ['Part Number','Revision','Title','Detail','Requested By','Date','Category','Modified','Active'],
+            row: r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified, r.active ? 'true' : 'false'],
+        },
+        '/api/pos/rows': {
+            filename: 'purchase-orders.csv',
+            headers: ['PO Number','Status','Supplier','Date Ordered','Date Closed','Orderer','Total Cost'],
+            row: r => [r.num, r.status, r.supplier, r.ordered || '', r.closed || '', r.orderer, r.cost.toFixed(2)],
+        },
+    };
+
+    const cfg = configs[url];
+    if (!cfg) return;
+
+    const csvContent = [cfg.headers, ...rows.map(cfg.row)].map(row =>
+        row.map(v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')
+    ).join('\r\n');
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv' }));
+    a.download = cfg.filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadListRows();
     document.querySelectorAll('tr.filter-row input, tr.filter-row select')

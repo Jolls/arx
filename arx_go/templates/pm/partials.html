@@ -93,11 +93,16 @@
 {{end}}
 
 {{define "part_tabs"}}
+<div class="d-flex justify-content-between align-items-center mb-2">
 {{if .NavBackURL}}
-<a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>
+<a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>
 {{else}}
-<a href="/" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to Parts List</a>
+<a href="/" class="btn btn-sm btn-secondary"><i class="bi bi-arrow-left"></i> Back to Parts List</a>
 {{end}}
+{{if and (eq .ActiveSubTab "bom") .BOMItems}}
+<a href="/part/{{.Part.PNID}}/bom/export.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
+{{end}}
+</div>
 
 {{$id := .Part.PNID}}
 {{$sub := .ActiveSubTab}}
