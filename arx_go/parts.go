@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"math"
@@ -1352,4 +1353,114 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
+}
+
+// ── PartsExportCSV — GET /parts/export.csv ──────────────────────────────────
+
+func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT part_number, revision, title, detail,
+		       requested_by, created_date, category, modified_date, is_active
+		FROM %s ORDER BY part_number
+	`, h.cfg.PartsTable()))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="parts.csv"`)
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"Part Number", "Revision", "Title", "Detail", "Requested By", "Created Date", "Category", "Modified Date", "Active"})
+	for rows.Next() {
+		var pn, rev, title, detail, reqBy, cat sql.NullString
+		var created, modified sql.NullTime
+		var active sql.NullBool
+		if err := rows.Scan(&pn, &rev, &title, &detail, &reqBy, &created, &cat, &modified, &active); err != nil {
+			return
+		}
+		activeStr := "true"
+		if active.Valid && !active.Bool {
+			activeStr = "false"
+		}
+		createdStr := ""
+		if created.Valid {
+			createdStr = created.Time.Format("2006-01-02")
+		}
+		modifiedStr := ""
+		if modified.Valid {
+			modifiedStr = modified.Time.Format("2006-01-02")
+		}
+		_ = cw.Write([]string{pn.String, rev.String, title.String, detail.String, reqBy.String, createdStr, cat.String, modifiedStr, activeStr})
+	}
+	cw.Flush()
+}
+
+// ── BOMExportCSV — GET /part/{id}/bom/export.csv ────────────────────────────
+
+func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	var parentPN string
+	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT part_number FROM %s WHERE id = @p1`, h.cfg.PartsTable()), id).Scan(&parentPN)
+	if parentPN == "" {
+		parentPN = id
+	}
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT pl.line_number, pl.qty, pn.part_number, pn.title, pn.revision, pn.category,
+		       pn.current_cost, pn.last_rollup_cost,
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
+		FROM %s pl
+		JOIN %s pn ON pl.component_part_id = pn.id
+		WHERE pl.parent_part_id = @p1
+		ORDER BY pl.line_number
+	`, pl, pl, pn), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+parentPN+`-bom.csv"`)
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"Line #", "Qty", "Part Number", "Title", "Revision", "Category", "Unit Cost", "Ext Cost", "Cost Source"})
+	for rows.Next() {
+		var lineNum sql.NullInt64
+		var qty sql.NullFloat64
+		var partNum, title, rev, cat sql.NullString
+		var currentCost, rollupCost sql.NullFloat64
+		var childHasBOM sql.NullBool
+		if err := rows.Scan(&lineNum, &qty, &partNum, &title, &rev, &cat,
+			&currentCost, &rollupCost, &childHasBOM); err != nil {
+			return
+		}
+		var unitCost float64
+		var costSrc string
+		if childHasBOM.Bool {
+			unitCost = rollupCost.Float64
+			if rollupCost.Float64 > 0 {
+				costSrc = "rollup"
+			} else {
+				costSrc = "missing"
+			}
+		} else {
+			unitCost = currentCost.Float64
+			if currentCost.Float64 > 0 {
+				costSrc = "current_cost"
+			} else {
+				costSrc = "missing"
+			}
+		}
+		extCost := unitCost * qty.Float64
+		_ = cw.Write([]string{
+			fmt.Sprintf("%d", lineNum.Int64),
+			fmt.Sprintf("%.4g", qty.Float64),
+			partNum.String, title.String, rev.String, cat.String,
+			fmt.Sprintf("%.2f", unitCost),
+			fmt.Sprintf("%.2f", extCost),
+			costSrc,
+		})
+	}
+	cw.Flush()
 }

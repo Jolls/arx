@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.40] - 2026-06-24 
+- CSV export for parts list, PO list (one row per line item), and BOM with costs — download buttons on each list page ([#286](https://github.com/Jolls/arx-legacy/issues/286))
+
 ## [0.5.39] - 2026-06-24 
 - Enter key in result/comment inputs advances focus to next input instead of submitting the form ([#258](https://github.com/Jolls/arx-legacy/issues/258))
 - Auto-save partial results to localStorage every 30s; restore/discard banner on re-entering the edit page; draft cleared on save ([#259](https://github.com/Jolls/arx-legacy/issues/259))
