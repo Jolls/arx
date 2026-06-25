@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.38] - 2026-06-24 
+- relabel "Print" button to "Export PDF" on test record detail view ([#242](https://github.com/Jolls/arx-legacy/issues/242))
+
 ## [0.5.37] - 2026-06-24 
 - wrap `CreateRecord` record insert + step materialization in a single transaction so a record is either fully created+materialized or not at all ([#490](https://github.com/Jolls/arx-legacy/issues/490))
 
