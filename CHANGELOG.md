@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.43] - 2026-06-27 
+- "Duplicate" button on a test record creates a new WIP record with the same serial number and all results copied, for quick re-testing ([#254](https://github.com/Jolls/arx-legacy/issues/254))
+
 ## [0.5.42] - 2026-06-27 
 - Bulk "Lock selected" action on the Test Records list marks multiple WIP records Complete at once ([#253](https://github.com/Jolls/arx-legacy/issues/253))
 

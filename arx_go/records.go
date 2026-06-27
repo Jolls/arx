@@ -1677,6 +1677,124 @@ func (h *Handler) BulkLockRecords(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/records?locked=%d", formID, locked), http.StatusSeeOther)
 }
 
+// DuplicateRecord — POST /records/{id}/duplicate
+// Creates a new WIP record with the same serial number as the source, copying all test_result rows.
+// Redirects to the new record's edit view on success.
+func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
+	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Load source record — same SELECT as RecordDetail.
+	var src models.TestRecord
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
+		Scan(&src.ID, &src.FormID, &src.PartNumberID, &src.SerialNumber, &src.SerialNumberPN,
+			&src.SerialNumberDesc, &src.RecordDate, &src.Comments,
+			&src.InstrumentType, &src.Locked, &src.Approved, &src.Active, &src.TestOrder)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// INSERT new test_record; part_number_id is NULL when PartNumberID == 0 (mirrors CreateRecord).
+	var partNumberID *int
+	if src.PartNumberID != 0 {
+		partNumberID = &src.PartNumberID
+	}
+	var newID int
+	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
+		INSERT INTO %s
+		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
+		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved)
+		OUTPUT INSERTED.id
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0,0)`,
+		h.cfg.RecordsTable()),
+		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
+		src.Comments, src.InstrumentType, src.TestOrder, src.RecordDate).Scan(&newID)
+	if err != nil {
+		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Copy all test_result rows from the source record into the new record.
+	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+		       spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail
+		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resRows.Close()
+
+	for resRows.Next() {
+		var (
+			testID                                     int
+			rowType                                    int
+			parameter, specification                   sql.NullString
+			specMin, specNom, specMax, specUnits       sql.NullString
+			pfType, format, hideFormula, defaultResult sql.NullString
+			result, comment                            sql.NullString
+			passFail                                   sql.NullBool
+		)
+		if err := resRows.Scan(
+			&testID, &rowType, &parameter, &specification,
+			&specMin, &specNom, &specMax, &specUnits,
+			&pfType, &format, &hideFormula, &defaultResult,
+			&result, &comment, &passFail,
+		); err != nil {
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		var pf *bool
+		if passFail.Valid {
+			v := passFail.Bool
+			pf = &v
+		}
+		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+			INSERT INTO %s
+			  (record_id, test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+			   spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
+			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE())`,
+			h.cfg.ResultsTable()),
+			newID, testID, rowType, parameter, specification,
+			specMin, specNom, specMax, specUnits,
+			pfType, format, hideFormula, defaultResult,
+			result, comment, pf,
+		); err != nil {
+			http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := resRows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/records/%d/edit", newID), http.StatusSeeOther)
+}
+
 // LockForm — POST /forms/{id}/lock
 // Sets locked=1 on the form and writes a 'locked' event to form_events.
 func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
