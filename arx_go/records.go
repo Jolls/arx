@@ -272,12 +272,16 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		records = append(records, rec)
 	}
 
+	lockedCount, _ := strconv.Atoi(r.URL.Query().Get("locked"))
+
 	h.renderTR(w, r, "records_index.html", map[string]any{
-		"Form":     form,
-		"Records":  records,
-		"WIPOnly":  wipOnly,
-		"ActiveTab": "records",
-		"TestMode": h.cfg.TestMode,
+		"Form":        form,
+		"Records":     records,
+		"WIPOnly":     wipOnly,
+		"LockedCount": lockedCount,
+		"CSRFToken":   h.csrfToken(w, r),
+		"ActiveTab":   "records",
+		"TestMode":    h.cfg.TestMode,
 	})
 }
 
@@ -1629,6 +1633,48 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
+}
+
+// BulkLockRecords — POST /forms/{id}/records/bulk-lock
+// Marks multiple WIP records as Complete (is_locked=1) and logs a 'completed' event per record.
+// The form_id guard in the UPDATE ensures records belong to this form.
+func (h *Handler) BulkLockRecords(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+
+	username := ""
+	if u := h.currentUser(r); u != nil {
+		username = u.Username
+	}
+
+	var locked int
+	for _, raw := range r.Form["record_ids[]"] {
+		id, err := strconv.Atoi(raw)
+		if err != nil || id <= 0 {
+			continue
+		}
+		res, err := h.execContext(r.Context(), fmt.Sprintf(
+			"UPDATE %s SET is_locked=1, updated_at=GETDATE() WHERE id=@p1 AND form_id=@p2 AND is_locked=0",
+			h.cfg.RecordsTable()), id, formID)
+		if err != nil {
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			locked++
+			h.execContext(r.Context(), fmt.Sprintf(
+				"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'completed', @p2, GETDATE())",
+				h.cfg.RecordEventsTable()), id, username)
+		}
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/forms/%d/records?locked=%d", formID, locked), http.StatusSeeOther)
 }
 
 // LockForm — POST /forms/{id}/lock

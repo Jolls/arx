@@ -6,6 +6,13 @@
   </ol>
 </nav>
 
+{{if gt .LockedCount 0}}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  Marked {{.LockedCount}} record(s) complete.
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{{end}}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
   <div class="d-flex gap-2" data-col-table="records-table">
@@ -42,9 +49,21 @@
   </div>
 </div>
 
+{{if .WIPOnly}}
+<div id="bulk-actions" class="mb-2 d-none">
+  <form method="POST" action="/forms/{{.Form.ID}}/records/bulk-lock" id="bulk-lock-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Mark selected records complete?')">
+      <i class="bi bi-check2-circle"></i> Lock selected (<span id="selected-count">0</span>)
+    </button>
+  </form>
+</div>
+{{end}}
+
 <table class="table table-bordered table-hover table-sm" id="records-table" data-paginate>
   <thead class="table-dark">
     <tr>
+      {{if .WIPOnly}}<th style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
       <th data-col="col-sn" class="sortable" onclick="sortTable(this)">Serial Number</th>
       <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
       <th data-col="col-desc" class="sortable" onclick="sortTable(this)">Description</th>
@@ -55,10 +74,11 @@
   </thead>
   <tbody>
     {{if not .Records}}
-    <tr><td colspan="6" class="text-center text-muted py-3">No records found</td></tr>
+    <tr><td colspan="{{if .WIPOnly}}7{{else}}6{{end}}" class="text-center text-muted py-3">No records found</td></tr>
     {{end}}
     {{range .Records}}
     <tr>
+      {{if $.WIPOnly}}<td><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
       <td data-col="col-sn">
         <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
       </td>
@@ -89,4 +109,52 @@
 <p style="margin-top:15px; color:#666; text-align:right;">
   Total matching: <strong><span class="record-count">0</span></strong>
 </p>
+
+<script>
+(function() {
+  var selAll = document.getElementById('select-all');
+  if (!selAll) return;
+
+  function updateBulkActions() {
+    var checked = document.querySelectorAll('.row-select:checked');
+    var count = checked.length;
+    document.getElementById('selected-count').textContent = count;
+    var toolbar = document.getElementById('bulk-actions');
+    if (count > 0) {
+      toolbar.classList.remove('d-none');
+    } else {
+      toolbar.classList.add('d-none');
+    }
+  }
+
+  selAll.addEventListener('change', function() {
+    document.querySelectorAll('.row-select').forEach(function(cb) {
+      cb.checked = selAll.checked;
+    });
+    updateBulkActions();
+  });
+
+  document.querySelectorAll('.row-select').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+      var all = document.querySelectorAll('.row-select');
+      var allChecked = Array.from(all).every(function(c) { return c.checked; });
+      selAll.checked = allChecked;
+      updateBulkActions();
+    });
+  });
+
+  document.getElementById('bulk-lock-form').addEventListener('submit', function() {
+    // Remove any previously injected hidden inputs.
+    this.querySelectorAll('input[name="record_ids[]"]').forEach(function(el) { el.remove(); });
+    // Inject currently checked IDs as hidden inputs.
+    document.querySelectorAll('.row-select:checked').forEach(function(cb) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'record_ids[]';
+      input.value = cb.value;
+      document.getElementById('bulk-lock-form').appendChild(input);
+    });
+  });
+})();
+</script>
 {{end}}

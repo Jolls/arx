@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.42] - 2026-06-27 
+- Bulk "Lock selected" action on the Test Records list marks multiple WIP records Complete at once ([#253](https://github.com/Jolls/arx-legacy/issues/253))
+
 ## [0.5.41] - 2026-06-25 
 - Test records now have a three-state lifecycle: WIP → Complete → Approved. Any user marks a record Complete; a TR reviewer Approves it, after which only a reviewer can unlock ([#249](https://github.com/Jolls/arx-legacy/issues/249))
 - New per-user "TR Reviewer" permission, toggled in Settings → Users; gates approving and unlocking approved records ([#249](https://github.com/Jolls/arx-legacy/issues/249))
