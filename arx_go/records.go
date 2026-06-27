@@ -1718,15 +1718,16 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		partNumberID = &src.PartNumberID
 	}
 	var newID int
+	// record_date is set to now — a duplicate is a fresh re-test, dated the day it's made.
 	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s
 		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
 		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved)
 		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0,0)`,
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),1,0,0)`,
 		h.cfg.RecordsTable()),
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
-		src.Comments, src.InstrumentType, src.TestOrder, src.RecordDate).Scan(&newID)
+		src.Comments, src.InstrumentType, src.TestOrder).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
