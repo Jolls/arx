@@ -67,6 +67,7 @@ type TestRecord struct {
 	Comments         string // used as "Type" in the UI
 	InstrumentType   string // free-text instrument type label; matched against test_definition.instrument_types to filter steps
 	Locked           bool
+	Approved         bool // 1 = reviewer-approved; only a TR reviewer may unlock (#249). Requires Locked.
 	Active           bool
 	TestOrder        string // comma-separated snapshot of test IDs at record creation
 }

@@ -132,6 +132,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)
 		r.Post("/settings/users/{userID}/toggle-active", h.SettingsUsersToggleActive)
 		r.Post("/settings/users/{userID}/toggle-approve", h.SettingsUsersToggleApprove)
+		r.Post("/settings/users/{userID}/toggle-approve-records", h.SettingsUsersToggleApproveRecords)
 
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)
@@ -268,6 +269,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/records/{id}/edit", h.SaveResults)
 		r.Post("/records/{id}/resync", h.ResyncRecord)
 		r.Post("/records/{id}/lock", h.LockRecord)
+		r.Post("/records/{id}/approve", h.ApproveRecord)
 		r.Post("/records/{id}/unlock", h.UnlockRecord)
 		r.Get("/forms/new", h.NewForm)
 		r.Post("/forms/new", h.CreateForm)

@@ -67,8 +67,10 @@
       <td data-col="col-date" class="text-nowrap">{{formatDateTimeFull .RecordDate}}</td>
       <td data-col="col-type">{{.Comments}}</td>
       <td data-col="col-status" class="text-center">
-        {{if .Locked}}
-        <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Locked</span>
+        {{if .Approved}}
+        <span class="badge bg-success"><i class="bi bi-patch-check-fill"></i> Approved</span>
+        {{else if .Locked}}
+        <span class="badge bg-secondary"><i class="bi bi-check2-circle"></i> Complete</span>
         {{else}}
         <span class="badge bg-info text-dark">WIP</span>
         {{end}}
