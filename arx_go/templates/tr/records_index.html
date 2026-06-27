@@ -21,6 +21,7 @@
         Columns
       </button>
       <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
+        {{if .WIPOnly}}<li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-select" checked> Select</label></li>{{end}}
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-sn" checked> Serial Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-desc" checked> Description</label></li>
@@ -63,7 +64,7 @@
 <table class="table table-bordered table-hover table-sm" id="records-table" data-paginate>
   <thead class="table-dark">
     <tr>
-      {{if .WIPOnly}}<th style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
+      {{if .WIPOnly}}<th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
       <th data-col="col-sn" class="sortable" onclick="sortTable(this)">Serial Number</th>
       <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
       <th data-col="col-desc" class="sortable" onclick="sortTable(this)">Description</th>
@@ -78,7 +79,7 @@
     {{end}}
     {{range .Records}}
     <tr>
-      {{if $.WIPOnly}}<td><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
+      {{if $.WIPOnly}}<td data-col="col-select"><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
       <td data-col="col-sn">
         <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
       </td>

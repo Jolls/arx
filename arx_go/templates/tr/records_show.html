@@ -81,6 +81,13 @@
       <a href="/records/{{.Record.ID}}/print" target="_blank" class="btn btn-sm btn-outline-secondary ms-2">
         <i class="bi bi-file-pdf"></i> Export PDF
       </a>
+      <form method="POST" action="/records/{{.Record.ID}}/duplicate" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn-sm btn-outline-secondary ms-2"
+                onclick="return confirm('Create a duplicate of this record (same SN) for re-testing?')">
+          <i class="bi bi-copy"></i> Duplicate
+        </button>
+      </form>
     </h4>
     <table class="table table-sm table-borderless w-auto small">
       <tr>
