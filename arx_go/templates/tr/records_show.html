@@ -32,18 +32,18 @@
     <h4>
       {{if .Record.PartNumberID}}<a href="/part/{{.Record.PartNumberID}}">{{.Record.SerialNumberPN}}</a>{{else}}{{.Record.SerialNumberPN}}{{end}}
       &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
-      {{if .Record.Locked}}
-      <button class="btn btn-sm btn-outline-secondary ms-2" data-bs-toggle="modal" data-bs-target="#unlockModal">
-        <i class="bi bi-unlock"></i> Unlock
-      </button>
-      {{else}}
+      {{if .Record.Approved}}<span class="badge bg-success ms-2"><i class="bi bi-patch-check-fill"></i> Approved</span>
+      {{else if .Record.Locked}}<span class="badge bg-secondary ms-2"><i class="bi bi-check2-circle"></i> Complete</span>
+      {{else}}<span class="badge bg-info text-dark ms-2">WIP</span>{{end}}
+      {{if not .Record.Locked}}
+      {{/* WIP: edit / complete / resync */}}
       <a href="/records/{{.Record.ID}}/edit" class="btn btn-sm btn-primary ms-2">
         <i class="bi bi-pencil"></i> Edit
       </a>
       <form method="POST" action="/records/{{.Record.ID}}/lock" class="d-inline">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="btn btn-sm btn-outline-secondary ms-1">
-          <i class="bi bi-lock"></i> Lock
+          <i class="bi bi-check2-circle"></i> Mark Complete
         </button>
       </form>
       <form method="POST" action="/records/{{.Record.ID}}/resync" class="d-inline"
@@ -54,6 +54,29 @@
           <i class="bi bi-arrow-repeat"></i> Update to latest
         </button>
       </form>
+      {{else if not .Record.Approved}}
+      {{/* Complete: reviewer may approve; anyone may unlock */}}
+      {{if .CanApproveRecords}}
+      <form method="POST" action="/records/{{.Record.ID}}/approve" class="d-inline"
+            onsubmit="return confirm('Approve this record? Once approved, only a TR reviewer can unlock it.');">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn-sm btn-success ms-2">
+          <i class="bi bi-patch-check"></i> Approve
+        </button>
+      </form>
+      {{end}}
+      <button class="btn btn-sm btn-outline-secondary ms-1" data-bs-toggle="modal" data-bs-target="#unlockModal">
+        <i class="bi bi-unlock"></i> Unlock
+      </button>
+      {{else}}
+      {{/* Approved: only a reviewer may unlock */}}
+      {{if .CanApproveRecords}}
+      <button class="btn btn-sm btn-outline-secondary ms-2" data-bs-toggle="modal" data-bs-target="#unlockModal">
+        <i class="bi bi-unlock"></i> Unlock
+      </button>
+      {{else}}
+      <span class="text-muted small ms-2"><i class="bi bi-lock-fill"></i> Approved &mdash; contact a TR reviewer to unlock</span>
+      {{end}}
       {{end}}
       <a href="/records/{{.Record.ID}}/print" target="_blank" class="btn btn-sm btn-outline-secondary ms-2">
         <i class="bi bi-file-pdf"></i> Export PDF
@@ -246,6 +269,37 @@
         </div>
       </form>
     </div>
+  </div>
+</div>
+{{end}}
+
+{{if .Events}}
+<div class="mt-4">
+  <a class="text-muted small" data-bs-toggle="collapse" href="#auditLog" role="button">
+    <i class="bi bi-clock-history"></i> Audit log ({{len .Events}})
+  </a>
+  <div class="collapse" id="auditLog">
+    <table class="table table-sm mt-2 small w-auto">
+      <thead>
+        <tr><th>Date</th><th>Event</th><th>User</th><th>Comment</th></tr>
+      </thead>
+      <tbody>
+        {{range .Events}}
+        <tr>
+          <td class="text-nowrap text-muted">{{formatDateTime .EventDate}}</td>
+          <td>
+            {{if eq .EventType "approved"}}<span class="badge bg-success">approved</span>
+            {{else if eq .EventType "completed"}}<span class="badge bg-secondary">completed</span>
+            {{else if eq .EventType "unlocked"}}<span class="badge bg-warning text-dark">unlocked</span>
+            {{else if eq .EventType "locked"}}<span class="badge bg-secondary">locked</span>
+            {{else}}<span class="badge bg-light text-dark border">{{.EventType}}</span>{{end}}
+          </td>
+          <td>{{.Username}}</td>
+          <td>{{.Comments}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
   </div>
 </div>
 {{end}}

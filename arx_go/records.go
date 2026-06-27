@@ -243,7 +243,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 
 	query := fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s
 		WHERE form_id = @p1 AND is_active = 1`, h.cfg.RecordsTable())
 	if wipOnly {
@@ -265,7 +265,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(
 			&rec.ID, &rec.FormID, &rec.PartNumberID, &rec.SerialNumber, &rec.SerialNumberPN,
 			&rec.SerialNumberDesc, &rec.RecordDate, &rec.Comments,
-			&rec.InstrumentType, &rec.Locked, &rec.Active, &rec.TestOrder,
+			&rec.InstrumentType, &rec.Locked, &rec.Approved, &rec.Active, &rec.TestOrder,
 		); err != nil {
 			continue
 		}
@@ -1042,11 +1042,11 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1109,17 +1109,42 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Lifecycle audit trail (#250) — complete/approve/unlock events, oldest first.
+	var events []models.RecordEvent
+	eventRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT id, test_record_id, event_type, username, event_date, COALESCE(comments,'')
+		FROM %s WHERE test_record_id = @p1 ORDER BY event_date ASC, id ASC`,
+		h.cfg.RecordEventsTable()), recordID)
+	if err == nil {
+		for eventRows.Next() {
+			var ev models.RecordEvent
+			if err := eventRows.Scan(&ev.ID, &ev.TestRecordID, &ev.EventType, &ev.Username,
+				&ev.EventDate, &ev.Comments); err != nil {
+				continue
+			}
+			events = append(events, ev)
+		}
+		eventRows.Close()
+	}
+
+	canApproveRecords := false
+	if u := h.currentUser(r); u != nil {
+		canApproveRecords = u.CanApproveRecords
+	}
+
 	h.renderTR(w, r, "records_show.html", map[string]any{
-		"Form":      form,
-		"Record":    record,
-		"Rows":      resultRows,
-		"ImageRows": imageRows,
-		"PrevID":    prevID,
-		"NextID":    nextID,
-		"CSRFToken": h.csrfToken(w, r),
-		"ActiveTab": "records",
-		"TestMode":  h.cfg.TestMode,
-		"DebugMode": h.cfg.DebugMode,
+		"Form":              form,
+		"Record":            record,
+		"Rows":              resultRows,
+		"ImageRows":         imageRows,
+		"Events":            events,
+		"CanApproveRecords": canApproveRecords,
+		"PrevID":            prevID,
+		"NextID":            nextID,
+		"CSRFToken":         h.csrfToken(w, r),
+		"ActiveTab":         "records",
+		"TestMode":          h.cfg.TestMode,
+		"DebugMode":         h.cfg.DebugMode,
 	})
 }
 
@@ -1134,11 +1159,11 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1420,11 +1445,11 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1510,15 +1535,49 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 
 	if n, _ := res.RowsAffected(); n > 0 {
 		h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'locked', @p2, GETDATE())",
+			"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'completed', @p2, GETDATE())",
 			h.cfg.RecordEventsTable()), recordID, username)
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
 }
 
+// ApproveRecord — POST /records/{id}/approve
+// Reviewer sign-off (#249). Requires the can_approve_records permission and a Complete
+// record (is_locked=1, is_approved=0). Sets is_approved=1 and logs an 'approved' event.
+func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
+	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	u := h.currentUser(r)
+	if u == nil || !u.CanApproveRecords {
+		http.Error(w, "you do not have permission to approve records", http.StatusForbidden)
+		return
+	}
+
+	res, err := h.execContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET is_approved=1, updated_at=GETDATE() WHERE id=@p1 AND is_locked=1 AND is_approved=0",
+		h.cfg.RecordsTable()), recordID)
+	if err != nil {
+		http.Error(w, "approve error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		h.execContext(r.Context(), fmt.Sprintf(
+			"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'approved', @p2, GETDATE())",
+			h.cfg.RecordEventsTable()), recordID, u.Username)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
+}
+
 // UnlockRecord — POST /records/{id}/unlock
-// Requires a comment, sets locked=0, and writes an 'unlocked' event to record_events.
+// Requires a comment, returns the record to WIP, and writes an 'unlocked' event. Unlocking an
+// approved record requires the can_approve_records permission (#249).
 func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -1536,13 +1595,27 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Approved records may only be unlocked by a TR reviewer.
+	var isApproved bool
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		"SELECT is_approved FROM %s WHERE id=@p1", h.cfg.RecordsTable()), recordID).
+		Scan(&isApproved); err != nil {
+		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	u := h.currentUser(r)
+	if isApproved && (u == nil || !u.CanApproveRecords) {
+		http.Error(w, "only a TR reviewer can unlock an approved record", http.StatusForbidden)
+		return
+	}
+
 	username := ""
-	if u := h.currentUser(r); u != nil {
+	if u != nil {
 		username = u.Username
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=0, updated_at=GETDATE() WHERE id=@p1 AND is_locked=1",
+		"UPDATE %s SET is_locked=0, is_approved=0, updated_at=GETDATE() WHERE id=@p1 AND is_locked=1",
 		h.cfg.RecordsTable()), recordID)
 	if err != nil {
 		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
@@ -1695,11 +1768,11 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1885,11 +1958,11 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.Locked, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return

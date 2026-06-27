@@ -77,7 +77,8 @@ CREATE TABLE test_record (
   test_order             VARCHAR(MAX),                      -- Snapshot of form.test_order at record creation.
   comments               VARCHAR(MAX),
   instrument_type        VARCHAR(100),                      -- Instrument type label (e.g. 'ModelA'). Matched against test_definition.instrument_types to filter applicable steps.
-  is_locked              BIT          NOT NULL CONSTRAINT DF_test_record_is_locked DEFAULT 0, -- 1 = record is locked from further edits.
+  is_locked              BIT          NOT NULL CONSTRAINT DF_test_record_is_locked DEFAULT 0, -- 1 = record is locked from further edits (Complete or Approved).
+  is_approved            BIT          NOT NULL CONSTRAINT DF_test_record_is_approved DEFAULT 0, -- 1 = reviewer-approved; only a TR reviewer may unlock. Requires is_locked = 1.
   is_active              BIT          NOT NULL CONSTRAINT DF_test_record_is_active DEFAULT 1, -- 0 = soft-deleted; excluded from all views.
   created_at             DATETIME,
   updated_at             DATETIME

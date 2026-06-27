@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.41] - 2026-06-25 
+- Test records now have a three-state lifecycle: WIP → Complete → Approved. Any user marks a record Complete; a TR reviewer Approves it, after which only a reviewer can unlock ([#249](https://github.com/Jolls/arx-legacy/issues/249))
+- New per-user "TR Reviewer" permission, toggled in Settings → Users; gates approving and unlocking approved records ([#249](https://github.com/Jolls/arx-legacy/issues/249))
+- Record detail page shows a collapsible audit log of complete/approve/unlock events with user, timestamp, and unlock reason ([#250](https://github.com/Jolls/arx-legacy/issues/250))
+
 ## [0.5.40] - 2026-06-24 
 - CSV export for parts list, PO list (one row per line item), and BOM with costs — download buttons on each list page ([#286](https://github.com/Jolls/arx-legacy/issues/286))
 

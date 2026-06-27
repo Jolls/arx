@@ -21,10 +21,11 @@ const ctxUserKey contextKey = 1
 
 // User holds the identity of the logged-in user.
 type User struct {
-	ID           int
-	Username     string
-	DisplayName  string
-	CanApprovePO bool
+	ID                int
+	Username          string
+	DisplayName       string
+	CanApprovePO      bool
+	CanApproveRecords bool
 }
 
 // --- DB helpers ---
@@ -32,9 +33,9 @@ type User struct {
 func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var u User
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, can_approve_po FROM %s WHERE id = @p1 AND is_active = 1`,
+		`SELECT id, username, display_name, can_approve_po, can_approve_records FROM %s WHERE id = @p1 AND is_active = 1`,
 		h.cfg.UsersTable()), id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -193,7 +194,7 @@ func (h *Handler) createUser(ctx context.Context, username, displayName, passwor
 
 func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, is_active, can_approve_po FROM %s ORDER BY username`,
+		`SELECT id, username, display_name, is_active, can_approve_po, can_approve_records FROM %s ORDER BY username`,
 		h.cfg.UsersTable()))
 	if err != nil {
 		return nil, err
@@ -203,16 +204,17 @@ func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 	for rows.Next() {
 		var id int
 		var username, displayName string
-		var isActive, canApprovePO bool
-		if err := rows.Scan(&id, &username, &displayName, &isActive, &canApprovePO); err != nil {
+		var isActive, canApprovePO, canApproveRecords bool
+		if err := rows.Scan(&id, &username, &displayName, &isActive, &canApprovePO, &canApproveRecords); err != nil {
 			return nil, err
 		}
 		out = append(out, map[string]any{
-			"ID":           id,
-			"Username":     username,
-			"DisplayName":  displayName,
-			"IsActive":     isActive,
-			"CanApprovePO": canApprovePO,
+			"ID":                id,
+			"Username":          username,
+			"DisplayName":       displayName,
+			"IsActive":          isActive,
+			"CanApprovePO":      canApprovePO,
+			"CanApproveRecords": canApproveRecords,
 		})
 	}
 	return out, rows.Err()
@@ -297,6 +299,22 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET can_approve_po = 1 - can_approve_po, updated_at = GETDATE() WHERE id = @p1`,
+		h.cfg.UsersTable()), id); err != nil {
+		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+}
+
+// POST /settings/users/{userID}/toggle-approve-records — toggle can_approve_records (TR reviewer, #249).
+func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET can_approve_records = 1 - can_approve_records, updated_at = GETDATE() WHERE id = @p1`,
 		h.cfg.UsersTable()), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
