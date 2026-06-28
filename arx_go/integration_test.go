@@ -192,3 +192,82 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 		t.Errorf("PNFILLinks after attach delete = %d, want 0", filLinks)
 	}
 }
+
+func TestIntegration_RecordFilters(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Seed one throwaway form (part_number_id is NOT NULL but unconstrained).
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	}()
+
+	// Seed four records: WIP/Complete/Approved + a type/date spread.
+	type seed struct {
+		sn          string
+		comments    string
+		date        string
+		locked, app int
+	}
+	seeds := []seed{
+		{"101", "New Release", "2026-01-10", 0, 0}, // WIP
+		{"102", "Re-Test", "2026-02-10", 1, 0},     // Complete
+		{"103", "Re-Test", "2026-03-10", 1, 1},     // Approved
+		{"104", "New Release", "2026-04-10", 0, 0}, // WIP
+	}
+	for _, s := range seeds {
+		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (form_id, record_date, serial_number, comments, is_locked, is_approved, is_active)
+			 VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)`, h.cfg.RecordsTable()),
+			formID, s.date, s.sn, s.comments, s.locked, s.app); err != nil {
+			t.Fatalf("seed record %s: %v", s.sn, err)
+		}
+	}
+
+	// run applies a filter's clauses to the form's records and returns matching SNs.
+	run := func(q url.Values) []string {
+		f := parseRecordFilters(q)
+		clauses, fargs := f.whereClauses(2)
+		query := fmt.Sprintf(
+			`SELECT serial_number FROM %s WHERE form_id = @p1 AND is_active = 1%s
+			 ORDER BY TRY_CAST(serial_number AS INT)`, h.cfg.RecordsTable(), clauses)
+		rows, err := h.queryContext(ctx, query, append([]any{formID}, fargs...)...)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var sn string
+			if rows.Scan(&sn) == nil {
+				out = append(out, sn)
+			}
+		}
+		return out
+	}
+
+	eq := func(name string, got, want []string) {
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("%s: got %v, want %v", name, got, want)
+		}
+	}
+
+	eq("wip", run(url.Values{}), []string{"101", "104"})
+	eq("complete", run(url.Values{"status": {"complete"}}), []string{"102"})
+	eq("approved", run(url.Values{"status": {"approved"}}), []string{"103"})
+	eq("all", run(url.Values{"status": {"all"}}), []string{"101", "102", "103", "104"})
+	eq("type", run(url.Values{"status": {"all"}, "type": {"Re-Test"}}), []string{"102", "103"})
+	eq("daterange", run(url.Values{"status": {"all"}, "from": {"2026-02-01"}, "to": {"2026-03-31"}}),
+		[]string{"102", "103"})
+}
