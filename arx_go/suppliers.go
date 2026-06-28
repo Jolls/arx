@@ -723,6 +723,14 @@ func nullableInt(s string) interface{} {
 	return nil
 }
 
+// floatOrZero parses s as a float, returning 0 for empty or invalid input.
+func floatOrZero(s string) float64 {
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return f
+	}
+	return 0
+}
+
 // nullableText returns nil for an empty string so the column is stored as NULL.
 func nullableText(s string) interface{} {
 	if s == "" {

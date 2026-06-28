@@ -103,7 +103,7 @@
         <div class="detail-row"><strong data-bs-toggle="tooltip" title="Manually entered cost; may differ from BOM roll-up">Current Cost:</strong>       <span>${{printf "%.8f" .Part.PNCurrentCost}}</span></div>
         <div class="detail-row"><strong data-bs-toggle="tooltip" title="Cost calculated from last BOM cost roll-up">Last Rollup Cost:</strong>   <span>{{if .Part.PNLastRollupAt}}${{printf "%.4f" .Part.PNLastRollupCost}} <span class="text-muted" style="font-size:0.85em;">{{.Part.PNLastRollupAt.Format "2006-01-02 15:04"}}</span>{{else}}<span class="muted">Never run</span>{{end}}</span></div>
         {{if .Part.PNLastRollupAt}}
-        <div class="detail-row"><strong data-bs-toggle="tooltip" title="Difference between rollup cost and manually entered current cost">Rollup vs Cost &Delta;:</strong>
+        <div class="detail-row"><strong data-bs-toggle="tooltip" title="Difference between rollup cost and the purchase price (preferred supplier's cheapest active price, else current cost)">Rollup vs Price &Delta;:</strong>
             <span class="{{if .RollupSignificant}}badge bg-warning text-dark{{end}}">
                 {{if gt .RollupDelta 0.0}}+{{end}}${{printf "%.4f" .RollupDelta}} ({{if gt .RollupDeltaPct 0.0}}+{{end}}{{printf "%.1f" .RollupDeltaPct}}%)
             </span>

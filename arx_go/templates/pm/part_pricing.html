@@ -20,6 +20,16 @@
             {{if .AllInactive}}
             <span class="badge bg-danger" style="font-size:0.7em; vertical-align:middle; margin-left:8px;">Inactive</span>
             {{end}}
+            {{if .IsPreferred}}
+            <span class="badge bg-success" style="font-size:0.7em; vertical-align:middle; margin-left:8px;"
+                  data-bs-toggle="tooltip" title="Cost rollup uses this supplier's cheapest active price as the part's leaf cost">Preferred</span>
+            {{else if .SupplierID}}
+            <form method="post" action="/part/{{$.Part.PNID}}/pricing/preferred" style="display:inline; margin-left:8px;">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="supplier_id" value="{{.SupplierID}}">
+                <button type="submit" class="btn btn-sm btn-outline-secondary" style="font-size:0.7em; vertical-align:middle;">Set preferred</button>
+            </form>
+            {{end}}
         </h3>
         <div class="table-wrapper" style="margin-top:10px;">
             <table class="table table-bordered table-hover table-sm">

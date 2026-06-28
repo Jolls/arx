@@ -57,6 +57,12 @@
                 </select>
             </div>
             <div class="detail-row">
+                <label for="current_cost" class="form-label" data-bs-toggle="tooltip"
+                       title="Manually entered unit cost. For OPS (labor) parts this is the hourly rate; used as the rollup leaf cost when no preferred-supplier price exists.">Unit Cost / Rate</label>
+                <input type="number" id="current_cost" name="current_cost" class="form-input" step="any" min="0"
+                       value="{{if .Part.PNCurrentCost}}{{printf "%g" .Part.PNCurrentCost}}{{end}}">
+            </div>
+            <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
                 <input type="text" id="PNReqBy" name="PNReqBy" class="form-input"
                        value="{{.Part.PNReqBy}}">

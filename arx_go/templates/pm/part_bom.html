@@ -21,7 +21,7 @@
                     <th class="sortable" onclick="sortTable(this)" style="width:80px; text-align:right;">Qty</th>
                     <th class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Unit Cost</th>
                     <th class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Ext Cost</th>
-                    <th style="width:90px;" data-bs-toggle="tooltip" title="Where this line&#39;s unit cost came from: Rollup = computed from sub-assembly BOM, Cost = manually entered current cost, Missing = no cost available">Source</th>
+                    <th style="width:90px;" data-bs-toggle="tooltip" title="Where this line&#39;s unit cost came from: Rollup = computed from sub-assembly BOM, Price = preferred supplier&#39;s active price, Labor = OPS hourly rate, Cost = manually entered current cost, Missing = no cost available">Source</th>
                 </tr>
             </thead>
             <tbody>
@@ -37,6 +37,8 @@
                     <td class="text-end">{{if .LineExtCost}}${{printf "%.4f" .LineExtCost}}{{end}}</td>
                     <td>
                         {{if eq .CostSource "rollup"}}<span class="badge bg-info text-dark">Rollup</span>
+                        {{else if eq .CostSource "price"}}<span class="badge bg-success">Price</span>
+                        {{else if eq .CostSource "labor"}}<span class="badge bg-primary">Labor</span>
                         {{else if eq .CostSource "current_cost"}}<span class="badge bg-secondary">Cost</span>
                         {{else if eq .CostSource "missing"}}<span class="badge bg-warning text-dark">Missing</span>
                         {{end}}
