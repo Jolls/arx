@@ -112,12 +112,13 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "part_sourcing.html", map[string]any{
-		"Part":        p,
-		"Links":       links,
-		"EditingLink": &sp,
-		"Suppliers":   h.fetchSuppliersOnly(r),
-		"Units":       units,
-		"ActiveTab":   "parts", "ActiveSubTab": "suppliers",
+		"Part":             p,
+		"Links":            links,
+		"EditingLink":      &sp,
+		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
+		"Suppliers":        h.fetchSuppliersOnly(r),
+		"Units":            units,
+		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -291,12 +292,13 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	links, _ := h.fetchSupplierLinks(r, partID)
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "part_sourcing.html", map[string]any{
-		"Part":      p,
-		"Links":     links,
-		"Suppliers": h.fetchSuppliersOnly(r),
-		"Units":     units,
-		"Error":     errMsg,
-		"ActiveTab": "parts", "ActiveSubTab": "suppliers",
+		"Part":             p,
+		"Links":            links,
+		"PricesBySupplier": h.fetchActivePricesBySupplier(r, partID),
+		"Suppliers":        h.fetchSuppliersOnly(r),
+		"Units":            units,
+		"Error":            errMsg,
+		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
