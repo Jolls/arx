@@ -107,6 +107,13 @@ func substituteStepSelf(s string, step *models.TestStep) string {
 	return s
 }
 
+// isAutoSerial reports whether the submitted serial number is the unchanged
+// GET-time suggestion (the user accepted the default), meaning the server should
+// re-derive it atomically. A differing value is a deliberate manual override.
+func isAutoSerial(submitted, suggested string) bool {
+	return strings.TrimSpace(submitted) == strings.TrimSpace(suggested)
+}
+
 // substituteRefs replaces tokens in s:
 //   - {123}              → recorded result for step 123, falling back to that step's spec_nom
 //   - {record.type}      → record's Type (comments field)
@@ -1280,7 +1287,8 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Next serial number: max numeric SN + 1, defaulting to 1 if none exist.
-	// MAX()+1 SN is not safe under concurrent creates — see FUTURE_GOALS.md (serial number sequence)
+	// This is only a suggestion shown in the form; CreateRecord re-derives the SN
+	// atomically under a lock when the user accepts it, closing the concurrent-create race (#369).
 	var nextSN sql.NullInt64
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT COALESCE(MAX(TRY_CAST(serial_number AS INT)) + 1, 1)
@@ -1330,6 +1338,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serialNumber := strings.TrimSpace(r.FormValue("serial_number"))
+	suggestedSN := strings.TrimSpace(r.FormValue("suggested_serial_number"))
 	comments := strings.TrimSpace(r.FormValue("comments"))
 	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
 
@@ -1364,6 +1373,23 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+
+	// SN allocation is atomic when the user accepted the suggested default (#369).
+	// Re-derive the next per-form SN inside the transaction under a lock so two
+	// concurrent creates for the same form get N and N+1, not the same value.
+	// A user-typed override (serialNumber != suggestedSN) is inserted as-is.
+	if isAutoSerial(serialNumber, suggestedSN) {
+		var nextSN int
+		err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
+			SELECT COALESCE(MAX(TRY_CAST(serial_number AS INT)), 0) + 1
+			FROM %s WITH (UPDLOCK, HOLDLOCK) WHERE form_id = @p1`,
+			h.cfg.RecordsTable()), formID).Scan(&nextSN)
+		if err != nil {
+			http.Error(w, "serial number error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		serialNumber = strconv.Itoa(nextSN)
+	}
 
 	var newID int
 	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`

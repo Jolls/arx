@@ -6,6 +6,26 @@ import (
 	"arx/arx_go/models"
 )
 
+func TestIsAutoSerial(t *testing.T) {
+	cases := []struct {
+		submitted string
+		suggested string
+		want      bool
+	}{
+		{"42", "42", true},        // exact match → auto
+		{"42", "43", false},       // differing value → override
+		{" 42 ", "42", true},      // whitespace differences that trim to equal → true
+		{"42", " 42 ", true},      // whitespace on suggested side
+		{"", "42", false},         // empty submitted vs non-empty suggested → false
+		{"", "", true},            // both empty → true
+	}
+	for _, c := range cases {
+		if got := isAutoSerial(c.submitted, c.suggested); got != c.want {
+			t.Errorf("isAutoSerial(%q, %q) = %v, want %v", c.submitted, c.suggested, got, c.want)
+		}
+	}
+}
+
 func TestIsSafeQuery(t *testing.T) {
 	cases := []struct {
 		query string

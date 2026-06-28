@@ -257,7 +257,7 @@ Next:
 
 - **Debug fields cleanup** (`test_records_go/models/models.go` `TestStep` struct, and the matching query in `records.go` ~838): fields `ArchiveID`, `Revision`, `Category`, `SheetName` are still loaded but only needed during form-def authoring. Remove when the edit UI stabilises and those fields are no longer needed client-side.
 - **Records index query refactor** (`records.go` ~413): the `RecordsIndex` SQL query is verbose inline SQL; candidate for a SQL view or stored proc once the schema stabilises.
-- **Serial number sequence** (`records.go` ~1213): `MAX(serial_number)+1` is not safe under concurrent record creates for the same form. Replace with a per-form sequence/counter table.
+- ~~**Serial number sequence** (`records.go` ~1213): `MAX(serial_number)+1` is not safe under concurrent record creates for the same form. Replace with a per-form sequence/counter table.~~ (Done #369 — atomic in-transaction re-derive with UPDLOCK/HOLDLOCK.)
 
 ---
 
