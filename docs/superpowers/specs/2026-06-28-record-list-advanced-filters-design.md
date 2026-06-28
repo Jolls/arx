@@ -7,9 +7,13 @@
 ## Goal
 
 Extend the per-form records list (`GET /forms/{id}/records`) beyond the current
-WIP-only toggle with filter controls for **lifecycle status**, **type**,
-**pass/fail**, and **date range**. Filters persist as query params so a filtered
-view is shareable/bookmarkable.
+WIP-only toggle with filter controls for **lifecycle status**, **type**, and
+**date range**. Filters persist as query params so a filtered view is
+shareable/bookmarkable.
+
+**Pass/fail is intentionally out of scope.** The records list has no pass/fail
+column today and doesn't need one; a verdict filter with no visible verdict
+would be opaque. (The issue lists pass/fail, but it's descoped here by decision.)
 
 **No DB change** — pure binary swap.
 
@@ -17,16 +21,14 @@ view is shareable/bookmarkable.
 
 The Recording-Reports filter (#449, PR #453) is client-side: per-column text
 inputs filtering rendered rows with JS `.includes()`, not persisted to the URL.
-That pattern cannot satisfy #247's explicit requirements:
+That pattern cannot satisfy #247's core requirement:
 
-- **Shareable/bookmarkable URLs** → state must live in query params.
-- **Date range** and **pass/fail** → pass/fail is stored per *result*
-  (`test_result.pass_fail`, nullable BIT); a record-level verdict must be
-  aggregated across result rows, which JS over a paginated row set can't do.
+- **Shareable/bookmarkable URLs** → filter state must live in query params, not
+  in transient client-side input boxes.
 
 So #247 filters **server-side** in the `RecordsList` handler. This is a
-deliberately different pattern from #449, justified by the shareable-URL and
-aggregation requirements — not an inconsistency.
+deliberately different pattern from #449, justified by the shareable-URL
+requirement — not an inconsistency.
 
 ## Current state
 
@@ -51,7 +53,6 @@ params to the URL. Each control repopulates from the current query params.
 |---|---|---|
 | **Status** `<select>` | `status` | `wip` (default) / `complete` / `approved` / `all`. **Replaces** the WIP toggle. |
 | **Type** combobox | `type` | `<input list="type-options">` + `<datalist>` populated with distinct `comments` for this form. Exact match when set; free-typeable. |
-| **Pass/Fail** `<select>` | `pf` | `all` (default) / `pass` / `fail`. |
 | **From** `<input type=date>` | `from` | `record_date >= from`. |
 | **To** `<input type=date>` | `to` | `record_date < to + 1 day` (whole day inclusive). |
 | **Apply** button | — | Submits the GET form. |
@@ -70,11 +71,6 @@ param (never interpolate user values into SQL):
   - `all` → no clause
   - missing/unrecognized → treated as `wip` (preserves today's default view)
 - **type** → `AND comments = @pN`
-- **pf** (EXISTS over `test_result`, aliased table via `cfg.ResultsTable()`):
-  - `fail` → `AND EXISTS (SELECT 1 FROM <results> tr WHERE tr.record_id = <rec>.id AND tr.pass_fail = 0)`
-  - `pass` → `AND NOT EXISTS (… pass_fail = 0) AND EXISTS (… pass_fail = 1)`
-    (has at least one evaluated passing result and no failing result)
-  - `all` → no clause
 - **from** → `AND record_date >= @pN`
 - **to** → `AND record_date < DATEADD(day, 1, @pN)`
 
@@ -103,13 +99,10 @@ template via a small `Filters` view struct (replaces the bare `WIPOnly` key).
 
 ## Verification
 
-The filter logic lives in SQL, so a `ComputePassFail`-style unit test isn't the
-right fit. Recommended: a **build-tagged integration test** (`//go:build
-integration`, ArxDev only) that seeds a handful of records with varied
-status/type/date and result pass_fail values, then asserts each filter param
-returns the expected record set — including the pass/fail aggregation edge case
-(record with only NULL pass_fail results appears under `all` but neither `pass`
-nor `fail`).
+The filter logic lives in SQL, so a unit test isn't the right fit. Recommended:
+a **build-tagged integration test** (`//go:build integration`, ArxDev only) that
+seeds a handful of records with varied status / type / date, then asserts each
+filter param returns the expected record set.
 
 ## Out of scope
 
