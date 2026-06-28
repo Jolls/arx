@@ -35,6 +35,7 @@
     <label class="form-label fw-semibold" for="serial_number">Serial Number</label>
     <input type="text" class="form-control font-mono" id="serial_number"
            name="serial_number" value="{{.NextSN}}" required>
+    <input type="hidden" name="suggested_serial_number" value="{{.NextSN}}">
   </div>
 
   <div class="mb-3">
