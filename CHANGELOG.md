@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.44] - 2026-06-27 
+- BOM cost rollup now sources each part's leaf cost from its preferred supplier's cheapest active price (falling back to the unit cost), with a "Set preferred" control on the Pricing tab ([#465](https://github.com/Jolls/arx-legacy/issues/465))
+- New OPS (Operation / Labor) part category — add a labor job to an assembly's BOM with qty = hours and the rollup includes hours × hourly rate; the unit cost / rate is now editable on the part form ([#465](https://github.com/Jolls/arx-legacy/issues/465))
+
 ## [0.5.43] - 2026-06-27 
 - "Duplicate" button on a test record creates a new WIP record with the same serial number, dated today, and all results copied, for quick re-testing ([#254](https://github.com/Jolls/arx-legacy/issues/254))
 

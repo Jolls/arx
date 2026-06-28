@@ -230,11 +230,24 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 
+	// Phase 2 (#465): the delta compares the rollup against the part's purchase
+	// price — the cheapest active price from its preferred supplier, falling back
+	// to current_cost when no preferred-supplier price exists.
+	purchasePrice := p.PNCurrentCost
+	var prefPrice sql.NullFloat64
+	h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT MIN(price_ea) FROM %s WHERE part_id=@p1 AND is_active=1
+		 AND supplier_id=(SELECT default_supplier_id FROM %s WHERE id=@p1)`,
+		h.cfg.PriceTable(), h.cfg.PartsTable()), p.PNID).Scan(&prefPrice)
+	if prefPrice.Valid && prefPrice.Float64 > 0 {
+		purchasePrice = prefPrice.Float64
+	}
+
 	var rollupDelta, rollupDeltaPct float64
 	var rollupSignificant bool
-	if p.PNLastRollupAt != nil && p.PNCurrentCost > 0 {
-		rollupDelta = p.PNLastRollupCost - p.PNCurrentCost
-		rollupDeltaPct = rollupDelta / p.PNCurrentCost * 100
+	if p.PNLastRollupAt != nil && purchasePrice > 0 {
+		rollupDelta = p.PNLastRollupCost - purchasePrice
+		rollupDeltaPct = rollupDelta / purchasePrice * 100
 		rollupSignificant = math.Abs(rollupDeltaPct) >= 5.0
 	}
 
@@ -283,18 +296,18 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_number, revision, title, detail, category, has_bom,
 		                release_status, is_active, requested_by, notes, created_date, modified_date,
-		                unit_id,
+		                unit_id, current_cost,
 		                user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		                user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
 		OUTPUT INSERTED.id
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,
-		        @p13,
-		        @p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23)
+		        @p13,@p14,
+		        @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24)
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"), r.FormValue("has_bom") == "1",
 		fv(r, "release_status"), r.FormValue("active") == "1", fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		now, now,
-		nullableInt(fv(r, "PNUNID")),
+		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
 	).Scan(&newID)
@@ -361,15 +374,15 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET
 		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5, has_bom=@p6,
 		  release_status=@p7, is_active=@p8, requested_by=@p9, notes=@p10, modified_date=@p11,
-		  unit_id=@p12,
-		  user_field_1=@p13, user_field_2=@p14, user_field_3=@p15, user_field_4=@p16, user_field_5=@p17,
-		  user_field_6=@p18, user_field_7=@p19, user_field_8=@p20, user_field_9=@p21, user_field_10=@p22
-		WHERE id=@p23
+		  unit_id=@p12, current_cost=@p13,
+		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
+		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23
+		WHERE id=@p24
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"), r.FormValue("has_bom") == "1",
 		fv(r, "release_status"), r.FormValue("active") == "1", fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		time.Now(),
-		nullableInt(fv(r, "PNUNID")),
+		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
 		id,
@@ -407,6 +420,11 @@ func partFromForm(r *http.Request) models.Part {
 		UserField7: fv(r, "user_field_7"), UserField8: fv(r, "user_field_8"), UserField9: fv(r, "user_field_9"),
 		UserField10: fv(r, "user_field_10"),
 	}
+	if v := fv(r, "current_cost"); v != "" {
+		if c, err := strconv.ParseFloat(v, 64); err == nil {
+			p.PNCurrentCost = c
+		}
+	}
 	if v := fv(r, "PNUNID"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			p.UnitID = &n
@@ -425,24 +443,26 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		user6, user7, user8, user9, user10            sql.NullString
 		active, hasBOM                                sql.NullBool
 		unitID                                        sql.NullInt64
+		currentCost                                   sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail, category, has_bom,
 		       release_status, is_active, requested_by, notes,
-		       unit_id,
+		       unit_id, current_cost,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s WHERE id = @p1
 	`, h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
-		&unitID,
+		&unitID, &currentCost,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
 	if err != nil {
 		return p, err
 	}
+	p.PNCurrentCost = currentCost.Float64
 	p.PartNumber = partNumber.String
 	p.Revision = revision.String
 	p.Title = title.String
@@ -464,23 +484,49 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 
 // ── Sub-tab handlers ────────────────────────────────────────────────────────
 
+// bomLeafCost picks the per-line unit cost and CostSource label for a BOM row,
+// shared by the read-only BOM view (PartBOM) and CSV export (BOMExportCSV).
+// Assembly rows use the stored rollup; leaf rows prefer the preferred-supplier
+// price, else current_cost — labelled "labor" for OPS lines whose current_cost
+// is an hourly rate. Mirrors the leaf-cost rule in rollupCost.
+func bomLeafCost(childHasBOM bool, lastRollupCost float64, preferredPrice sql.NullFloat64, currentCost float64, category string) (float64, string) {
+	if childHasBOM {
+		if lastRollupCost > 0 {
+			return lastRollupCost, "rollup"
+		}
+		return 0, "missing"
+	}
+	if preferredPrice.Valid && preferredPrice.Float64 > 0 {
+		return preferredPrice.Float64, "price"
+	}
+	if currentCost > 0 {
+		if category == "OPS" {
+			return currentCost, "labor"
+		}
+		return currentCost, "current_cost"
+	}
+	return 0, "missing"
+}
+
 func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
 	if !ok {
 		return
 	}
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn, prc := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.title, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
+		       (SELECT MIN(p.price_ea) FROM %s p
+		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
 		ORDER BY pl.line_number
-	`, pl, pl, pn), id)
+	`, prc, pl, pl, pn), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
@@ -491,11 +537,11 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item models.BOMItem
 		var partNumber, title, revision, category sql.NullString
-		var currentCost, lastRollupCost sql.NullFloat64
+		var currentCost, lastRollupCost, preferredPrice sql.NullFloat64
 		var childHasBOM sql.NullBool
 		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLPartID,
 			&partNumber, &title, &revision, &category,
-			&currentCost, &lastRollupCost, &childHasBOM); err != nil {
+			&currentCost, &lastRollupCost, &preferredPrice, &childHasBOM); err != nil {
 			h.renderError(w, r, "Error reading BOM: "+err.Error())
 			return
 		}
@@ -507,21 +553,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		item.PNLastRollupCost = lastRollupCost.Float64
 		item.ChildHasBOM = childHasBOM.Bool
 
-		if item.ChildHasBOM {
-			item.LineUnitCost = item.PNLastRollupCost
-			if item.PNLastRollupCost > 0 {
-				item.CostSource = "rollup"
-			} else {
-				item.CostSource = "missing"
-			}
-		} else {
-			item.LineUnitCost = item.PNCurrentCost
-			if item.PNCurrentCost > 0 {
-				item.CostSource = "current_cost"
-			} else {
-				item.CostSource = "missing"
-			}
-		}
+		item.LineUnitCost, item.CostSource = bomLeafCost(item.ChildHasBOM, item.PNLastRollupCost, preferredPrice, item.PNCurrentCost, item.Category)
 		item.LineExtCost = item.LineUnitCost * item.PLQty
 		bomTotal += item.LineExtCost
 		items = append(items, item)
@@ -784,14 +816,16 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn, pr := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, pn.current_cost,
+		       (SELECT MIN(p.price_ea) FROM %s p
+		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
-	`, pl, pl, pn), pnid)
+	`, pr, pl, pl, pn), pnid)
 	if err != nil {
 		return rollupResult{}, err
 	}
@@ -802,9 +836,9 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	for rows.Next() {
 		var childID int
 		var qty float64
-		var currentCost sql.NullFloat64
+		var currentCost, preferredPrice sql.NullFloat64
 		var childHasBOM sql.NullBool
-		if err := rows.Scan(&childID, &qty, &currentCost, &childHasBOM); err != nil {
+		if err := rows.Scan(&childID, &qty, &currentCost, &preferredPrice, &childHasBOM); err != nil {
 			return rollupResult{}, err
 		}
 		var unitCost float64
@@ -817,6 +851,8 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 				hasCycle = true
 			}
 			unitCost = res.cost
+		} else if preferredPrice.Valid {
+			unitCost = preferredPrice.Float64
 		} else {
 			unitCost = currentCost.Float64
 		}
@@ -1089,6 +1125,7 @@ type SupplierPriceGroup struct {
 	SupplierID   int
 	SupplierName string
 	AllInactive  bool
+	IsPreferred  bool // this supplier is the part's preferred source for cost rollup (#465)
 	Rows         []models.Price
 }
 
@@ -1157,6 +1194,9 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 			groups = append(groups, SupplierPriceGroup{SupplierID: sid, SupplierName: row.SupplierName, Rows: []models.Price{row}})
 		}
 	}
+	var defSup sql.NullInt64
+	h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT default_supplier_id FROM %s WHERE id=@p1`, h.cfg.PartsTable()), id).Scan(&defSup)
 	for i := range groups {
 		allInactive := true
 		for _, r := range groups[i].Rows {
@@ -1166,6 +1206,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		groups[i].AllInactive = allInactive
+		groups[i].IsPreferred = defSup.Valid && groups[i].SupplierID == int(defSup.Int64)
 	}
 	h.render(w, r, "part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
@@ -1191,6 +1232,32 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
+}
+
+// ensureDefaultSupplier pins supplierID as the part's preferred supplier for cost
+// rollup the first time a price is added (#465). No-op once one is already set.
+func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID any) {
+	_, _ = h.execContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET default_supplier_id=@p1 WHERE id=@p2 AND default_supplier_id IS NULL`,
+		h.cfg.PartsTable()), supplierID, partID)
+}
+
+// PricePreferred — POST /part/{id}/pricing/preferred. Sets the preferred supplier
+// used for cost rollup (the multi-supplier review case from migration #484).
+func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
+	partID := chi.URLParam(r, "id")
+	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
+	if err != nil || supplierID == 0 {
+		h.renderError(w, r, "Invalid supplier")
+		return
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET default_supplier_id=@p1 WHERE id=@p2`, h.cfg.PartsTable(),
+	), supplierID, partID); err != nil {
+		h.renderError(w, r, "Error setting preferred supplier: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
 }
 
 func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
@@ -1220,6 +1287,7 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error saving price: "+err.Error())
 		return
 	}
+	h.ensureDefaultSupplier(r.Context(), partID, supplierID)
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
 }
 
@@ -1322,6 +1390,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error committing price update: "+err.Error())
 		return
 	}
+	h.ensureDefaultSupplier(r.Context(), partID, supplierID)
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
 }
 
@@ -1407,15 +1476,18 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	if parentPN == "" {
 		parentPN = id
 	}
+	prc := h.cfg.PriceTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pn.part_number, pn.title, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
+		       (SELECT MIN(p.price_ea) FROM %s p
+		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
 		ORDER BY pl.line_number
-	`, pl, pl, pn), id)
+	`, prc, pl, pl, pn), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1429,29 +1501,13 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 		var lineNum sql.NullInt64
 		var qty sql.NullFloat64
 		var partNum, title, rev, cat sql.NullString
-		var currentCost, rollupCost sql.NullFloat64
+		var currentCost, rollupCost, preferredPrice sql.NullFloat64
 		var childHasBOM sql.NullBool
 		if err := rows.Scan(&lineNum, &qty, &partNum, &title, &rev, &cat,
-			&currentCost, &rollupCost, &childHasBOM); err != nil {
+			&currentCost, &rollupCost, &preferredPrice, &childHasBOM); err != nil {
 			return
 		}
-		var unitCost float64
-		var costSrc string
-		if childHasBOM.Bool {
-			unitCost = rollupCost.Float64
-			if rollupCost.Float64 > 0 {
-				costSrc = "rollup"
-			} else {
-				costSrc = "missing"
-			}
-		} else {
-			unitCost = currentCost.Float64
-			if currentCost.Float64 > 0 {
-				costSrc = "current_cost"
-			} else {
-				costSrc = "missing"
-			}
-		}
+		unitCost, costSrc := bomLeafCost(childHasBOM.Bool, rollupCost.Float64, preferredPrice, currentCost.Float64, cat.String)
 		extCost := unitCost * qty.Float64
 		_ = cw.Write([]string{
 			fmt.Sprintf("%d", lineNum.Int64),

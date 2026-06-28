@@ -26,6 +26,7 @@ type Part struct {
 	PNLastRollupAt   *time.Time
 	PNFILLinks       int
 	PNPOLinks        int
+	DefaultSupplierID *int // preferred supplier for cost rollup (#465); nil = none pinned
 	UserField1       string
 	UserField2       string
 	UserField3       string
@@ -83,6 +84,7 @@ func DefaultCategories() []Category {
 		{"DOC", "Document", CategoryTabs{}},
 		{"FORM", "Test Form", CategoryTabs{BOM: true}},
 		{"MFG", "Manufactured", built},
+		{"OPS", "Operation / Labor", CategoryTabs{}},
 		{"RAW", "Raw Material", proc},
 		{"SVC", "Service", svc},
 		{"TOOL", "Tooling", svc},
@@ -164,7 +166,7 @@ type BOMItem struct {
 	ChildHasBOM      bool
 	LineUnitCost     float64
 	LineExtCost      float64
-	CostSource       string // "rollup" | "current_cost" | "missing"
+	CostSource       string // "rollup" | "price" | "labor" | "current_cost" | "missing"
 }
 
 type Attachment struct {

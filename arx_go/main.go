@@ -172,6 +172,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/part/{id}/pricing", h.PartPricing)
 		r.Get("/part/{id}/pricing/new", h.PriceNew)
 		r.Post("/part/{id}/pricing", h.PriceCreate)
+		r.Post("/part/{id}/pricing/preferred", h.PricePreferred)
 		r.Get("/part/{id}/pricing/{priceID}/edit", h.PriceEdit)
 		r.Post("/part/{id}/pricing/{priceID}", h.PriceUpdate)
 		r.Post("/part/{id}/pricing/{priceID}/deactivate", h.PriceDeactivate)

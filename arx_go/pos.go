@@ -846,6 +846,7 @@ func (h *Handler) POAddPrices(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error inserting price: "+err.Error())
 			return
 		}
+		h.ensureDefaultSupplier(r.Context(), partID, supplierID)
 	}
 	http.Redirect(w, r, "/po/"+num, http.StatusFound)
 }

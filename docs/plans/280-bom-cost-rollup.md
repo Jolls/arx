@@ -58,17 +58,28 @@ For the initial rollup implementation, use `PNCurrentCost` as the leaf cost. Thi
 - Add a UI note that rollup cost reflects `PNCurrentCost`; link to the Pricing tab.
 - Do **not** add new code paths that read or write `PNCurrentCost` beyond what's needed for the rollup query — avoid deepening the dependency.
 
-### Phase 2 — after `price.is_preferred` (#223)
+### Phase 2 — re-scoped (#465 / #484), implemented
 
-Switch the leaf-cost query to: preferred `price` row (`is_preferred = 1 AND is_active = 1`), falling back to `PNCurrentCost` only when no preferred row exists. No algorithm change — just the query inside `rollupCost` gains a LEFT JOIN to `price`.
+`price.is_preferred` (#223) was rejected — a single manually-pinned price ignores that the
+applicable price depends on purchase quantity. Phase 2 was re-scoped (#484) to two decisions:
 
-For ASM parts that have a value-add `price` row (your company as supplier), add that `price_ea` to the recursed BOM total:
+**Leaf cost = preferred supplier's cheapest active price, else `current_cost`.** A new
+nullable `part.default_supplier_id` pins the preferred supplier; the rollup leaf query takes
+`MIN(price_ea)` among that supplier's `is_active = 1` rows via a correlated subquery (no
+algorithm change), falling back to `current_cost` when unset. The preferred supplier is
+auto-pinned to the first supplier a price is added for, settable via a "Set preferred"
+control on the Pricing tab. Quantity-correct price selection within that supplier is Phase 3
+(#466). The delta on `part_detail.html` compares the rollup against this preferred price.
 
-```
-ASM cost = rollupCost(children) + price_ea (value-add row, if any)
-```
+**Value-add (labor) is modeled as BOM line items, not algorithm logic.** A labor job is a
+part in the new `OPS` category whose `current_cost` is an hourly rate; added to an assembly's
+BOM with `qty = hours`, the existing `total += unitCost × qty` walk includes it automatically.
+No "own company" supplier and no ASM special-casing are required.
 
-This is a one-line change inside the recursive walk once the price rows exist.
+`CostSource` gains `"price"` (leaf using the preferred-supplier price) and `"labor"` (OPS
+line). The single shared helper `bomLeafCost` (parts.go) encodes the leaf rule for both the
+BOM view and CSV export; `rollupCost` applies the same preferred-price-else-`current_cost`
+selection.
 
 ### Phase 3 — qty-break aware (deferred)
 
@@ -79,9 +90,9 @@ Qty-break pricing (choosing the right `price_ea` based on extended BOM quantity)
 | Value | Meaning |
 |---|---|
 | `"rollup"` | Child is an assembly; cost was recursively computed (Phase 1+) |
-| `"rollup+valueadd"` | Assembly with a value-add price row added on top (Phase 2+) |
-| `"price"` | Leaf with a preferred `price` row (Phase 2+) |
-| `"current_cost"` | Leaf using `PNCurrentCost` fallback (Phase 1, or fallback in Phase 2) |
+| `"price"` | Leaf priced from its preferred supplier's cheapest active `price` row (Phase 2+) |
+| `"labor"` | Leaf is an `OPS` line; unit cost is the hourly rate in `current_cost` (Phase 2+) |
+| `"current_cost"` | Leaf using `current_cost` fallback (Phase 1, or fallback in Phase 2) |
 | `"missing"` | Leaf with zero/NULL cost and no price row; contribution is 0 |
 
 ---
