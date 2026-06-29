@@ -151,6 +151,42 @@ func TestStepFromResult(t *testing.T) {
 	}
 }
 
+// TestEvaluateHide guards the conditional step-visibility semantics (#257) that both the
+// server (frozen-row filtering) and the record-editor JS mirror. Step {12} resolves to its
+// recorded result; {record.type} resolves to the record comment.
+func TestEvaluateHide(t *testing.T) {
+	results := map[int]*models.TestResult{
+		12: {Result: "N/A"},
+	}
+	record := &models.TestRecord{Comments: "Re-Test"}
+
+	cases := []struct {
+		name    string
+		formula string
+		want    bool // true = hidden
+	}{
+		{"blank shows", "", false},
+		{"SHOW shows", "SHOW", false},
+		{"HIDE hides", "HIDE", true},
+		{"case-insensitive HIDE", "hide", true},
+		{"eq match hides", "{12}=N/A", true},
+		{"eq mismatch shows", "{12}=PASS", false},
+		{"eq is case-insensitive", "{12}=n/a", true},
+		{"neq match shows", "{12}!=N/A", false},
+		{"neq mismatch hides", "{12}!=PASS", true},
+		{"record token eq hides", "{record.type}=Re-Test", true},
+		{"unresolvable step ref shows", "{99}=N/A", false},
+		{"whitespace tolerated", "  {12} = N/A ", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := evaluateHide(c.formula, results, nil, record, nil); got != c.want {
+				t.Errorf("evaluateHide(%q) = %v, want %v", c.formula, got, c.want)
+			}
+		})
+	}
+}
+
 func TestBakeStepTokens(t *testing.T) {
 	rec := &models.TestRecord{SerialNumber: "42", SerialNumberPN: "PN-1"}
 

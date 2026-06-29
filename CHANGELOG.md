@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.47] - 2026-06-28 
+- Test steps with a conditional hide formula now show/hide live in the record editor as you enter results, instead of only when the record is reloaded ([#257](https://github.com/Jolls/arx-legacy/issues/257))
+
 ## [0.5.46] - 2026-06-28 
 - Advanced filters (status, type, date range) on the test-record list, persisted as shareable query params; replaces the WIP-only toggle with a Status dropdown ([#247](https://github.com/Jolls/arx-legacy/issues/247))
 
