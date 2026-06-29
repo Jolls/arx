@@ -41,38 +41,6 @@
   </div>
 </div>
 
-<form method="GET" class="row g-2 align-items-end mb-3">
-  <div class="col-auto">
-    <label class="form-label mb-1 small text-muted">Status</label>
-    <select name="status" class="form-select form-select-sm">
-      <option value="wip"      {{if eq .Filters.Status "wip"}}selected{{end}}>WIP</option>
-      <option value="complete" {{if eq .Filters.Status "complete"}}selected{{end}}>Complete</option>
-      <option value="approved" {{if eq .Filters.Status "approved"}}selected{{end}}>Approved</option>
-      <option value="all"      {{if eq .Filters.Status "all"}}selected{{end}}>All</option>
-    </select>
-  </div>
-  <div class="col-auto">
-    <label class="form-label mb-1 small text-muted">Type</label>
-    <input type="text" name="type" list="type-options" class="form-control form-control-sm"
-           value="{{.Filters.Type}}" placeholder="Any" autocomplete="off">
-    <datalist id="type-options">
-      {{range .TypeOptions}}<option value="{{.}}"></option>{{end}}
-    </datalist>
-  </div>
-  <div class="col-auto">
-    <label class="form-label mb-1 small text-muted">From</label>
-    <input type="date" name="from" class="form-control form-control-sm" value="{{.Filters.FromStr}}">
-  </div>
-  <div class="col-auto">
-    <label class="form-label mb-1 small text-muted">To</label>
-    <input type="date" name="to" class="form-control form-control-sm" value="{{.Filters.ToStr}}">
-  </div>
-  <div class="col-auto">
-    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Apply</button>
-    <a href="/forms/{{.Form.ID}}/records" class="btn btn-sm btn-outline-secondary">Clear</a>
-  </div>
-</form>
-
 {{if .Filters.StatusWIP}}
 <div id="bulk-actions" class="mb-2 d-none">
   <form method="POST" action="/forms/{{.Form.ID}}/records/bulk-lock" id="bulk-lock-form">
@@ -84,9 +52,10 @@
 </div>
 {{end}}
 
+<form method="GET" id="records-filter-form">
 <table class="table table-bordered table-hover table-sm" id="records-table" data-paginate>
-  <thead class="table-dark">
-    <tr>
+  <thead>
+    <tr class="table-dark">
       {{if .Filters.StatusWIP}}<th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
       <th data-col="col-sn" class="sortable" onclick="sortTable(this)">Serial Number</th>
       <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
@@ -94,6 +63,44 @@
       <th data-col="col-date" class="sortable" onclick="sortTable(this)">Date</th>
       <th data-col="col-type" class="sortable" onclick="sortTable(this)" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
       <th data-col="col-status" class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
+    </tr>
+    <tr class="filter-row">
+      {{if .Filters.StatusWIP}}<th data-col="col-select"></th>{{end}}
+      <th data-col="col-sn"><input type="text" class="form-control form-control-sm" data-filter-col="col-sn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter serial number"></th>
+      <th data-col="col-pn"><input type="text" class="form-control form-control-sm" data-filter-col="col-pn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter part number"></th>
+      <th data-col="col-desc"><input type="text" class="form-control form-control-sm" data-filter-col="col-desc" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter description"></th>
+      <th data-col="col-date">
+        <div class="dropdown">
+          <button type="button" class="btn btn-sm {{if or .Filters.FromStr .Filters.ToStr}}btn-primary{{else}}btn-outline-secondary{{end}}"
+                  data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+                  aria-label="Date range filter" title="Filter by record date range">
+            <i class="bi bi-calendar-range"></i>
+          </button>
+          <div class="dropdown-menu p-3" style="min-width:230px">
+            <label class="form-label mb-1 small text-muted">From</label>
+            <input type="date" name="from" class="form-control form-control-sm mb-2" value="{{.Filters.FromStr}}">
+            <label class="form-label mb-1 small text-muted">To</label>
+            <input type="date" name="to" class="form-control form-control-sm mb-3" value="{{.Filters.ToStr}}">
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      onclick="this.form.from.value='';this.form.to.value='';this.form.submit();">Clear</button>
+            </div>
+          </div>
+        </div>
+      </th>
+      <th data-col="col-type">
+        <input type="text" name="type" list="type-options" class="form-control form-control-sm" value="{{.Filters.Type}}" placeholder="All" autocomplete="off" onchange="this.form.submit()" aria-label="Type filter">
+        <datalist id="type-options">{{range .TypeOptions}}<option value="{{.}}"></option>{{end}}</datalist>
+      </th>
+      <th data-col="col-status">
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Status filter">
+          <option value="wip"      {{if eq .Filters.Status "wip"}}selected{{end}}>WIP</option>
+          <option value="complete" {{if eq .Filters.Status "complete"}}selected{{end}}>Complete</option>
+          <option value="approved" {{if eq .Filters.Status "approved"}}selected{{end}}>Approved</option>
+          <option value="all"      {{if eq .Filters.Status "all"}}selected{{end}}>All</option>
+        </select>
+      </th>
     </tr>
   </thead>
   <tbody>
@@ -123,6 +130,7 @@
     {{end}}
   </tbody>
 </table>
+</form>
 <div class="pagination-controls">
   <span class="pagination-info"></span>
   <div class="pagination-buttons">
@@ -179,6 +187,40 @@
       document.getElementById('bulk-lock-form').appendChild(input);
     });
   });
+})();
+
+// Client-side substring filters for Serial Number / Part Number / Description.
+// These refine the server-filtered row set in the browser and integrate with the
+// shared TR paginator (rows flagged data-filtered-out are excluded from pagination).
+(function() {
+  var inputs = document.querySelectorAll('tr.filter-row input[data-filter-col]');
+  if (!inputs.length) return;
+  var table = document.querySelector('table[data-paginate]');
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+
+  function apply() {
+    var active = Array.prototype.map.call(inputs, function(i) {
+      return { col: i.getAttribute('data-filter-col'), val: i.value.trim().toLowerCase() };
+    }).filter(function(f) { return f.val; });
+
+    Array.prototype.forEach.call(tbody.children, function(tr) {
+      if (tr.querySelector('td[colspan]')) return; // empty-state row
+      var match = active.every(function(f) {
+        var cell = tr.querySelector('[data-col="' + f.col + '"]');
+        return cell && cell.textContent.toLowerCase().indexOf(f.val) !== -1;
+      });
+      if (match) {
+        delete tr.dataset.filteredOut;
+      } else {
+        tr.dataset.filteredOut = '1';
+        tr.style.display = 'none';
+      }
+    });
+    if (window.__trRepaginate) window.__trRepaginate();
+  }
+
+  inputs.forEach(function(i) { i.addEventListener('input', apply); });
 })();
 </script>
 {{end}}

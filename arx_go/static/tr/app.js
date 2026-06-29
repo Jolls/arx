@@ -95,9 +95,10 @@ function sortTable(th) {
   var currentPage = 1
 
   function dataRows(tbody) {
-    // Real rows only — skip the empty-state row (single td with colspan).
+    // Real rows only — skip the empty-state row (single td with colspan) and any
+    // rows hidden by the client-side column filters (data-filtered-out).
     return Array.from(tbody.children).filter(function (tr) {
-      return !tr.querySelector('td[colspan]')
+      return !tr.querySelector('td[colspan]') && tr.dataset.filteredOut !== '1'
     })
   }
 
