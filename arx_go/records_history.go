@@ -27,7 +27,8 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 	}
 
 	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
-		SELECT test_id, COALESCE(parameter,''), COALESCE(result,''), pass_fail, COALESCE(comment,'')
+		SELECT test_id, COALESCE(parameter,''), COALESCE(specification,''), COALESCE(spec_units,''),
+		       COALESCE(result,''), pass_fail, COALESCE(comment,'')
 		FROM %s WHERE record_id=@p1 AND COALESCE(type,0)=0`, h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		return err
@@ -35,7 +36,8 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 	byTest := map[int]models.RecordResultSnapshot{}
 	for rows.Next() {
 		var s models.RecordResultSnapshot
-		if err := rows.Scan(&s.TestID, &s.Parameter, &s.Result, &s.PassFail, &s.Comment); err != nil {
+		if err := rows.Scan(&s.TestID, &s.Parameter, &s.Specification, &s.SpecUnits,
+			&s.Result, &s.PassFail, &s.Comment); err != nil {
 			rows.Close()
 			return err
 		}
@@ -46,11 +48,12 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 		return err
 	}
 
-	ins := fmt.Sprintf(`INSERT INTO %s (event_id, test_id, parameter, result, pass_fail, comment)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6)`, h.cfg.RecordEventResultsTable())
+	ins := fmt.Sprintf(`INSERT INTO %s (event_id, test_id, parameter, specification, spec_units, result, pass_fail, comment)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)`, h.cfg.RecordEventResultsTable())
 	for _, tid := range orderedResultIDs(testOrder, byTest) {
 		s := byTest[tid]
-		if _, err := tx.ExecContext(ctx, ins, eventID, tid, s.Parameter, s.Result, s.PassFail, s.Comment); err != nil {
+		if _, err := tx.ExecContext(ctx, ins, eventID, tid, s.Parameter, s.Specification, s.SpecUnits,
+			s.Result, s.PassFail, s.Comment); err != nil {
 			return err
 		}
 	}
@@ -183,8 +186,8 @@ func (h *Handler) backfillRecordTx(ctx context.Context, recordID, formID int) (b
 // unchanged). Events without a snapshot are absent from the map.
 func (h *Handler) loadEventSnapshots(ctx context.Context, recordID int) (map[int][]models.SnapshotDiffRow, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT rer.event_id, rer.test_id, COALESCE(rer.parameter,''), COALESCE(rer.result,''),
-		       rer.pass_fail, COALESCE(rer.comment,'')
+		SELECT rer.event_id, rer.test_id, COALESCE(rer.parameter,''), COALESCE(rer.specification,''),
+		       COALESCE(rer.spec_units,''), COALESCE(rer.result,''), rer.pass_fail, COALESCE(rer.comment,'')
 		FROM %s rer
 		JOIN %s re ON re.id = rer.event_id
 		WHERE re.test_record_id = @p1
@@ -199,7 +202,8 @@ func (h *Handler) loadEventSnapshots(ctx context.Context, recordID int) (map[int
 	grouped := map[int][]models.RecordResultSnapshot{}
 	for rows.Next() {
 		var s models.RecordResultSnapshot
-		if err := rows.Scan(&s.EventID, &s.TestID, &s.Parameter, &s.Result, &s.PassFail, &s.Comment); err != nil {
+		if err := rows.Scan(&s.EventID, &s.TestID, &s.Parameter, &s.Specification, &s.SpecUnits,
+			&s.Result, &s.PassFail, &s.Comment); err != nil {
 			continue
 		}
 		if _, ok := grouped[s.EventID]; !ok {

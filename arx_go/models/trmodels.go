@@ -194,12 +194,14 @@ type RecordEvent struct {
 // RecordResultSnapshot is one captured result value within a Complete-event snapshot (#251).
 // Stored in record_event_results, keyed to a record_events row.
 type RecordResultSnapshot struct {
-	EventID   int
-	TestID    int
-	Parameter string
-	Result    string
-	PassFail  *bool
-	Comment   string
+	EventID       int
+	TestID        int
+	Parameter     string
+	Specification string // resolved spec snapshot, frozen at completion (tokens already baked in)
+	SpecUnits     string
+	Result        string
+	PassFail      *bool
+	Comment       string
 }
 
 // PF renders the snapshot's pass/fail as "PASS", "FAIL", or "" for templates.

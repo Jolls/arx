@@ -317,12 +317,14 @@
           <td colspan="5" class="bg-light">
             <table class="table table-sm small mb-0 w-auto">
               <thead>
-                <tr><th>Parameter</th><th>Result</th><th>P/F</th><th>Comment</th><th></th></tr>
+                <tr><th>Parameter</th><th>Spec</th><th>Units</th><th>Result</th><th>P/F</th><th>Comment</th><th></th></tr>
               </thead>
               <tbody>
                 {{range $snap}}
                 <tr class="{{if eq .Status "changed"}}table-warning{{else if eq .Status "added"}}table-success{{end}}">
                   <td>{{.Parameter}}</td>
+                  <td>{{.Specification}}</td>
+                  <td>{{.SpecUnits}}</td>
                   <td>{{.Result}}</td>
                   <td>{{.PF}}</td>
                   <td>{{.Comment}}</td>
