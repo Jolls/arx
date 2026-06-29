@@ -288,10 +288,11 @@
   <div class="collapse" id="auditLog">
     <table class="table table-sm mt-2 small w-auto">
       <thead>
-        <tr><th>Date</th><th>Event</th><th>User</th><th>Comment</th></tr>
+        <tr><th>Date</th><th>Event</th><th>User</th><th>Comment</th><th>Results</th></tr>
       </thead>
       <tbody>
         {{range .Events}}
+        {{$snap := index $.Snapshots .ID}}
         <tr>
           <td class="text-nowrap text-muted">{{formatDateTime .EventDate}}</td>
           <td>
@@ -303,7 +304,36 @@
           </td>
           <td>{{.Username}}</td>
           <td>{{.Comments}}</td>
+          <td>
+            {{if $snap}}
+            <button class="btn btn-sm btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#snap{{.ID}}">
+              <i class="bi bi-table"></i> View ({{len $snap}})
+            </button>
+            {{end}}
+          </td>
         </tr>
+        {{if $snap}}
+        <tr class="collapse" id="snap{{.ID}}">
+          <td colspan="5" class="bg-light">
+            <table class="table table-sm small mb-0 w-auto">
+              <thead>
+                <tr><th>Parameter</th><th>Result</th><th>P/F</th><th>Comment</th><th></th></tr>
+              </thead>
+              <tbody>
+                {{range $snap}}
+                <tr class="{{if eq .Status "changed"}}table-warning{{else if eq .Status "added"}}table-success{{end}}">
+                  <td>{{.Parameter}}</td>
+                  <td>{{.Result}}</td>
+                  <td>{{.PF}}</td>
+                  <td>{{.Comment}}</td>
+                  <td class="text-muted">{{if ne .Status "unchanged"}}{{.Status}}{{end}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+        {{end}}
         {{end}}
       </tbody>
     </table>

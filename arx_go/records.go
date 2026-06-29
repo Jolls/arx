@@ -279,6 +279,16 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lockedCount, _ := strconv.Atoi(r.URL.Query().Get("locked"))
+	backfilledCount, _ := strconv.Atoi(r.URL.Query().Get("backfilled"))
+
+	// Row-select column: shown in WIP mode (bulk complete) and, for TR reviewers in the
+	// Complete view, when the form still has records needing the #251 history backfill.
+	canApprove := false
+	if u := h.currentUser(r); u != nil {
+		canApprove = u.CanApproveRecords
+	}
+	backfillMode := filters.StatusComplete() && canApprove && h.formHasBackfillableRecords(r.Context(), formID)
+	showSelect := filters.StatusWIP() || backfillMode
 
 	// Distinct Type (comments) values for this form, to populate the filter datalist.
 	var typeOptions []string
@@ -299,12 +309,15 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	h.renderTR(w, r, "records_index.html", map[string]any{
 		"Form":        form,
 		"Records":     records,
-		"Filters":     filters,
-		"TypeOptions": typeOptions,
-		"LockedCount": lockedCount,
-		"CSRFToken":   h.csrfToken(w, r),
-		"ActiveTab":   "records",
-		"TestMode":    h.cfg.TestMode,
+		"Filters":         filters,
+		"TypeOptions":     typeOptions,
+		"LockedCount":     lockedCount,
+		"BackfilledCount": backfilledCount,
+		"ShowSelect":      showSelect,
+		"BackfillMode":    backfillMode,
+		"CSRFToken":       h.csrfToken(w, r),
+		"ActiveTab":       "records",
+		"TestMode":        h.cfg.TestMode,
 	})
 }
 
@@ -1159,6 +1172,9 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		eventRows.Close()
 	}
 
+	// Per-lock result snapshots (#251), keyed by event_id and diffed against the prior snapshot.
+	snapshots, _ := h.loadEventSnapshots(r.Context(), recordID)
+
 	canApproveRecords := false
 	if u := h.currentUser(r); u != nil {
 		canApproveRecords = u.CanApproveRecords
@@ -1170,6 +1186,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		"Rows":              resultRows,
 		"ImageRows":         imageRows,
 		"Events":            events,
+		"Snapshots":         snapshots,
 		"CanApproveRecords": canApproveRecords,
 		"PrevID":            prevID,
 		"NextID":            nextID,
@@ -1577,18 +1594,10 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 		username = u.Username
 	}
 
-	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=1, updated_at=GETDATE() WHERE id=@p1 AND is_locked=0",
-		h.cfg.RecordsTable()), recordID)
-	if err != nil {
+	// Lock and, on transition, log the 'completed' event + result snapshot (#251).
+	if _, err := h.completeRecordTx(r.Context(), recordID, 0, username); err != nil {
 		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	if n, _ := res.RowsAffected(); n > 0 {
-		h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'completed', @p2, GETDATE())",
-			h.cfg.RecordEventsTable()), recordID, username)
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
@@ -1708,17 +1717,8 @@ func (h *Handler) BulkLockRecords(w http.ResponseWriter, r *http.Request) {
 		if err != nil || id <= 0 {
 			continue
 		}
-		res, err := h.execContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET is_locked=1, updated_at=GETDATE() WHERE id=@p1 AND form_id=@p2 AND is_locked=0",
-			h.cfg.RecordsTable()), id, formID)
-		if err != nil {
-			continue
-		}
-		if n, _ := res.RowsAffected(); n > 0 {
+		if ok, err := h.completeRecordTx(r.Context(), id, formID, username); err == nil && ok {
 			locked++
-			h.execContext(r.Context(), fmt.Sprintf(
-				"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'completed', @p2, GETDATE())",
-				h.cfg.RecordEventsTable()), id, username)
 		}
 	}
 

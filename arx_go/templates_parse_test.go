@@ -30,6 +30,32 @@ func TestPMTemplatesParse(t *testing.T) {
 	}
 }
 
+// TestTRTemplatesParse parses every tr page template the way renderTR does (with layout),
+// and standalone print templates the way renderPrintTR does.
+func TestTRTemplatesParse(t *testing.T) {
+	pages, err := fs.Glob(templatesFS, "templates/tr/*.html")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	for _, page := range pages {
+		base := strings.TrimPrefix(page, "templates/tr/")
+		if base == "layout.html" {
+			continue
+		}
+		if strings.HasSuffix(base, "_print.html") {
+			if _, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(templatesFS, page); err != nil {
+				t.Errorf("parse %s: %v", base, err)
+			}
+			continue
+		}
+		if _, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(templatesFS,
+			"templates/tr/layout.html", page,
+		); err != nil {
+			t.Errorf("parse %s: %v", base, err)
+		}
+	}
+}
+
 // TestPMPrintTemplatesParse parses standalone print templates the way renderPrint does.
 func TestPMPrintTemplatesParse(t *testing.T) {
 	pages, err := fs.Glob(templatesFS, "templates/pm/*_print.html")
