@@ -21,7 +21,7 @@
         Columns
       </button>
       <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
-        {{if .WIPOnly}}<li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-select" checked> Select</label></li>{{end}}
+        {{if .Filters.StatusWIP}}<li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-select" checked> Select</label></li>{{end}}
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-sn" checked> Serial Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-desc" checked> Description</label></li>
@@ -38,19 +38,10 @@
     <a href="/forms/{{.Form.ID}}/def" class="btn btn-sm btn-outline-primary">
       <i class="bi bi-list-check"></i> View Definition
     </a>
-    {{if .WIPOnly}}
-    <a href="?wip=false" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-eye"></i> Show All (incl. Locked)
-    </a>
-    {{else}}
-    <a href="?" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-funnel"></i> WIP Only
-    </a>
-    {{end}}
   </div>
 </div>
 
-{{if .WIPOnly}}
+{{if .Filters.StatusWIP}}
 <div id="bulk-actions" class="mb-2 d-none">
   <form method="POST" action="/forms/{{.Form.ID}}/records/bulk-lock" id="bulk-lock-form">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -61,10 +52,11 @@
 </div>
 {{end}}
 
+<form method="GET" id="records-filter-form">
 <table class="table table-bordered table-hover table-sm" id="records-table" data-paginate>
-  <thead class="table-dark">
-    <tr>
-      {{if .WIPOnly}}<th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
+  <thead>
+    <tr class="table-dark">
+      {{if .Filters.StatusWIP}}<th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
       <th data-col="col-sn" class="sortable" onclick="sortTable(this)">Serial Number</th>
       <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
       <th data-col="col-desc" class="sortable" onclick="sortTable(this)">Description</th>
@@ -72,14 +64,52 @@
       <th data-col="col-type" class="sortable" onclick="sortTable(this)" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
       <th data-col="col-status" class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
     </tr>
+    <tr class="filter-row">
+      {{if .Filters.StatusWIP}}<th data-col="col-select"></th>{{end}}
+      <th data-col="col-sn"><input type="text" class="form-control form-control-sm" data-filter-col="col-sn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter serial number"></th>
+      <th data-col="col-pn"><input type="text" class="form-control form-control-sm" data-filter-col="col-pn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter part number"></th>
+      <th data-col="col-desc"><input type="text" class="form-control form-control-sm" data-filter-col="col-desc" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter description"></th>
+      <th data-col="col-date">
+        <div class="dropdown">
+          <button type="button" class="btn btn-sm {{if or .Filters.FromStr .Filters.ToStr}}btn-primary{{else}}btn-outline-secondary{{end}}"
+                  data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+                  aria-label="Date range filter" title="Filter by record date range">
+            <i class="bi bi-calendar-range"></i>
+          </button>
+          <div class="dropdown-menu p-3" style="min-width:230px">
+            <label class="form-label mb-1 small text-muted">From</label>
+            <input type="date" name="from" class="form-control form-control-sm mb-2" value="{{.Filters.FromStr}}">
+            <label class="form-label mb-1 small text-muted">To</label>
+            <input type="date" name="to" class="form-control form-control-sm mb-3" value="{{.Filters.ToStr}}">
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      onclick="this.form.from.value='';this.form.to.value='';this.form.submit();">Clear</button>
+            </div>
+          </div>
+        </div>
+      </th>
+      <th data-col="col-type">
+        <input type="text" name="type" list="type-options" class="form-control form-control-sm" value="{{.Filters.Type}}" placeholder="All" autocomplete="off" onchange="this.form.submit()" aria-label="Type filter">
+        <datalist id="type-options">{{range .TypeOptions}}<option value="{{.}}"></option>{{end}}</datalist>
+      </th>
+      <th data-col="col-status">
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Status filter">
+          <option value="wip"      {{if eq .Filters.Status "wip"}}selected{{end}}>WIP</option>
+          <option value="complete" {{if eq .Filters.Status "complete"}}selected{{end}}>Complete</option>
+          <option value="approved" {{if eq .Filters.Status "approved"}}selected{{end}}>Approved</option>
+          <option value="all"      {{if eq .Filters.Status "all"}}selected{{end}}>All</option>
+        </select>
+      </th>
+    </tr>
   </thead>
   <tbody>
     {{if not .Records}}
-    <tr><td colspan="{{if .WIPOnly}}7{{else}}6{{end}}" class="text-center text-muted py-3">No records found</td></tr>
+    <tr><td colspan="{{if .Filters.StatusWIP}}7{{else}}6{{end}}" class="text-center text-muted py-3">No records found</td></tr>
     {{end}}
     {{range .Records}}
     <tr>
-      {{if $.WIPOnly}}<td data-col="col-select"><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
+      {{if $.Filters.StatusWIP}}<td data-col="col-select"><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
       <td data-col="col-sn">
         <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
       </td>
@@ -100,6 +130,7 @@
     {{end}}
   </tbody>
 </table>
+</form>
 <div class="pagination-controls">
   <span class="pagination-info"></span>
   <div class="pagination-buttons">
@@ -115,10 +146,18 @@
 (function() {
   var selAll = document.getElementById('select-all');
   if (!selAll) return;
+  var form = document.getElementById('bulk-lock-form');
+
+  // Row-selects whose row is not hidden by the client-side column filters.
+  function visibleSelects() {
+    return Array.prototype.filter.call(document.querySelectorAll('.row-select'), function(cb) {
+      var tr = cb.closest('tr');
+      return !tr || tr.dataset.filteredOut !== '1';
+    });
+  }
 
   function updateBulkActions() {
-    var checked = document.querySelectorAll('.row-select:checked');
-    var count = checked.length;
+    var count = document.querySelectorAll('.row-select:checked').length;
     document.getElementById('selected-count').textContent = count;
     var toolbar = document.getElementById('bulk-actions');
     if (count > 0) {
@@ -127,35 +166,73 @@
       toolbar.classList.add('d-none');
     }
   }
+  // Exposed so the column-filter code can refresh the count after hiding rows.
+  window.__trUpdateBulk = updateBulkActions;
 
   selAll.addEventListener('change', function() {
-    document.querySelectorAll('.row-select').forEach(function(cb) {
-      cb.checked = selAll.checked;
-    });
+    visibleSelects().forEach(function(cb) { cb.checked = selAll.checked; });
     updateBulkActions();
   });
 
   document.querySelectorAll('.row-select').forEach(function(cb) {
     cb.addEventListener('change', function() {
-      var all = document.querySelectorAll('.row-select');
-      var allChecked = Array.from(all).every(function(c) { return c.checked; });
-      selAll.checked = allChecked;
+      var vis = visibleSelects();
+      selAll.checked = vis.length > 0 && vis.every(function(c) { return c.checked; });
       updateBulkActions();
     });
   });
 
-  document.getElementById('bulk-lock-form').addEventListener('submit', function() {
+  form.addEventListener('submit', function() {
     // Remove any previously injected hidden inputs.
-    this.querySelectorAll('input[name="record_ids[]"]').forEach(function(el) { el.remove(); });
-    // Inject currently checked IDs as hidden inputs.
-    document.querySelectorAll('.row-select:checked').forEach(function(cb) {
+    form.querySelectorAll('input[name="record_ids[]"]').forEach(function(el) { el.remove(); });
+    // Inject checked IDs — but only rows currently visible (not filtered out).
+    visibleSelects().forEach(function(cb) {
+      if (!cb.checked) return;
       var input = document.createElement('input');
       input.type = 'hidden';
       input.name = 'record_ids[]';
       input.value = cb.value;
-      document.getElementById('bulk-lock-form').appendChild(input);
+      form.appendChild(input);
     });
   });
+})();
+
+// Client-side substring filters for Serial Number / Part Number / Description.
+// These refine the server-filtered row set in the browser and integrate with the
+// shared TR paginator (rows flagged data-filtered-out are excluded from pagination).
+(function() {
+  var inputs = document.querySelectorAll('tr.filter-row input[data-filter-col]');
+  if (!inputs.length) return;
+  var table = document.querySelector('table[data-paginate]');
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+
+  function apply() {
+    var active = Array.prototype.map.call(inputs, function(i) {
+      return { col: i.getAttribute('data-filter-col'), val: i.value.trim().toLowerCase() };
+    }).filter(function(f) { return f.val; });
+
+    Array.prototype.forEach.call(tbody.children, function(tr) {
+      if (tr.querySelector('td[colspan]')) return; // empty-state row
+      var match = active.every(function(f) {
+        var cell = tr.querySelector('[data-col="' + f.col + '"]');
+        return cell && cell.textContent.toLowerCase().indexOf(f.val) !== -1;
+      });
+      if (match) {
+        delete tr.dataset.filteredOut;
+      } else {
+        tr.dataset.filteredOut = '1';
+        tr.style.display = 'none';
+        // A hidden row must not stay selected for bulk-lock.
+        var rs = tr.querySelector('.row-select');
+        if (rs) rs.checked = false;
+      }
+    });
+    if (window.__trUpdateBulk) window.__trUpdateBulk();
+    if (window.__trRepaginate) window.__trRepaginate();
+  }
+
+  inputs.forEach(function(i) { i.addEventListener('input', apply); });
 })();
 </script>
 {{end}}

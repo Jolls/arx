@@ -245,21 +245,20 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default to WIP-only; ?wip=false shows all.
-	wipOnly := r.URL.Query().Get("wip") != "false"
+	filters := parseRecordFilters(r.URL.Query())
+	clauses, filterArgs := filters.whereClauses(2)
 
 	query := fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s
 		WHERE form_id = @p1 AND is_active = 1`, h.cfg.RecordsTable())
-	if wipOnly {
-		query += " AND is_locked = 0"
-	}
+	query += clauses
 	// serial_number + 0 forces numeric sort (same trick as Ruby Arel version)
 	query += " ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC"
 
-	rows, err := h.queryContext(r.Context(), query, formID)
+	args := append([]any{formID}, filterArgs...)
+	rows, err := h.queryContext(r.Context(), query, args...)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -281,10 +280,27 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 
 	lockedCount, _ := strconv.Atoi(r.URL.Query().Get("locked"))
 
+	// Distinct Type (comments) values for this form, to populate the filter datalist.
+	var typeOptions []string
+	typeRows, terr := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT DISTINCT comments FROM %s
+		WHERE form_id = @p1 AND is_active = 1 AND comments <> ''
+		ORDER BY comments`, h.cfg.RecordsTable()), formID)
+	if terr == nil {
+		defer typeRows.Close()
+		for typeRows.Next() {
+			var c string
+			if typeRows.Scan(&c) == nil {
+				typeOptions = append(typeOptions, c)
+			}
+		}
+	}
+
 	h.renderTR(w, r, "records_index.html", map[string]any{
 		"Form":        form,
 		"Records":     records,
-		"WIPOnly":     wipOnly,
+		"Filters":     filters,
+		"TypeOptions": typeOptions,
 		"LockedCount": lockedCount,
 		"CSRFToken":   h.csrfToken(w, r),
 		"ActiveTab":   "records",

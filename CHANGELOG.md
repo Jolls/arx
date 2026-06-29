@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.46] - 2026-06-28 
+- Advanced filters (status, type, date range) on the test-record list, persisted as shareable query params; replaces the WIP-only toggle with a Status dropdown ([#247](https://github.com/Jolls/arx-legacy/issues/247))
+
 ## [0.5.45] - 2026-06-28 
 - Concurrent "New Record" creations for the same form now get distinct sequential serial numbers — the serial number is allocated atomically at save time instead of when the form opens ([#369](https://github.com/Jolls/arx-legacy/issues/369))
 

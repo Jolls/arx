@@ -130,6 +130,9 @@ func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
 	return err
 }
 
+// DB returns the underlying *sql.DB. Used in integration tests.
+func (h *Handler) DB() *sql.DB { return h.db }
+
 // CloseDB closes the underlying database connection if one is open.
 func (h *Handler) CloseDB() {
 	if h.db != nil {
