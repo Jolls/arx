@@ -53,6 +53,7 @@ BEGIN TRY
     IF OBJECT_ID('dbo.part',                     'U') IS NOT NULL DROP TABLE dbo.part;
     IF OBJECT_ID('dbo.form',                     'U') IS NOT NULL DROP TABLE dbo.form;
     IF OBJECT_ID('dbo.form_events',              'U') IS NOT NULL DROP TABLE dbo.form_events;
+    IF OBJECT_ID('dbo.record_event_results',     'U') IS NOT NULL DROP TABLE dbo.record_event_results;
     IF OBJECT_ID('dbo.record_events',            'U') IS NOT NULL DROP TABLE dbo.record_events;
     IF OBJECT_ID('dbo.test_record',              'U') IS NOT NULL DROP TABLE dbo.test_record;
     IF OBJECT_ID('dbo.test_result',              'U') IS NOT NULL DROP TABLE dbo.test_result;
@@ -82,6 +83,7 @@ BEGIN TRY
     SELECT * INTO dbo.form                    FROM ArxProd.dbo.form;
     SELECT * INTO dbo.form_events             FROM ArxProd.dbo.form_events;
     SELECT * INTO dbo.record_events           FROM ArxProd.dbo.record_events;
+    SELECT * INTO dbo.record_event_results    FROM ArxProd.dbo.record_event_results;
     SELECT * INTO dbo.test_record             FROM ArxProd.dbo.test_record;
     SELECT * INTO dbo.test_result             FROM ArxProd.dbo.test_result;
     SELECT * INTO dbo.test_definition         FROM ArxProd.dbo.test_definition;

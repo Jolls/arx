@@ -13,6 +13,13 @@
 </div>
 {{end}}
 
+{{if gt .BackfilledCount 0}}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  Captured result history for {{.BackfilledCount}} record(s).
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{{end}}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
   <div class="d-flex gap-2" data-col-table="records-table">
@@ -21,7 +28,7 @@
         Columns
       </button>
       <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
-        {{if .Filters.StatusWIP}}<li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-select" checked> Select</label></li>{{end}}
+        {{if .ShowSelect}}<li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-select" checked> Select</label></li>{{end}}
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-sn" checked> Serial Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-desc" checked> Description</label></li>
@@ -41,14 +48,23 @@
   </div>
 </div>
 
-{{if .Filters.StatusWIP}}
+{{if .ShowSelect}}
 <div id="bulk-actions" class="mb-2 d-none">
-  <form method="POST" action="/forms/{{.Form.ID}}/records/bulk-lock" id="bulk-lock-form">
+  {{if .BackfillMode}}
+  <form method="POST" action="/forms/{{.Form.ID}}/records/backfill-history" id="bulk-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Capture result history for the selected completed records? This is a one-time migration step.')">
+      <i class="bi bi-clock-history"></i> Capture history (<span id="selected-count">0</span>)
+    </button>
+  </form>
+  {{else}}
+  <form method="POST" action="/forms/{{.Form.ID}}/records/bulk-lock" id="bulk-form">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Mark selected records complete?')">
       <i class="bi bi-check2-circle"></i> Lock selected (<span id="selected-count">0</span>)
     </button>
   </form>
+  {{end}}
 </div>
 {{end}}
 
@@ -56,7 +72,7 @@
 <table class="table table-bordered table-hover table-sm" id="records-table" data-paginate>
   <thead>
     <tr class="table-dark">
-      {{if .Filters.StatusWIP}}<th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
+      {{if .ShowSelect}}<th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
       <th data-col="col-sn" class="sortable" onclick="sortTable(this)">Serial Number</th>
       <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
       <th data-col="col-desc" class="sortable" onclick="sortTable(this)">Description</th>
@@ -65,7 +81,7 @@
       <th data-col="col-status" class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
     </tr>
     <tr class="filter-row">
-      {{if .Filters.StatusWIP}}<th data-col="col-select"></th>{{end}}
+      {{if .ShowSelect}}<th data-col="col-select"></th>{{end}}
       <th data-col="col-sn"><input type="text" class="form-control form-control-sm" data-filter-col="col-sn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter serial number"></th>
       <th data-col="col-pn"><input type="text" class="form-control form-control-sm" data-filter-col="col-pn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter part number"></th>
       <th data-col="col-desc"><input type="text" class="form-control form-control-sm" data-filter-col="col-desc" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter description"></th>
@@ -105,11 +121,11 @@
   </thead>
   <tbody>
     {{if not .Records}}
-    <tr><td colspan="{{if .Filters.StatusWIP}}7{{else}}6{{end}}" class="text-center text-muted py-3">No records found</td></tr>
+    <tr><td colspan="{{if .ShowSelect}}7{{else}}6{{end}}" class="text-center text-muted py-3">No records found</td></tr>
     {{end}}
     {{range .Records}}
     <tr>
-      {{if $.Filters.StatusWIP}}<td data-col="col-select"><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
+      {{if $.ShowSelect}}<td data-col="col-select"><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
       <td data-col="col-sn">
         <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
       </td>
@@ -146,7 +162,7 @@
 (function() {
   var selAll = document.getElementById('select-all');
   if (!selAll) return;
-  var form = document.getElementById('bulk-lock-form');
+  var form = document.getElementById('bulk-form');
 
   // Row-selects whose row is not hidden by the client-side column filters.
   function visibleSelects() {

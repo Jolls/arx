@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.48] - 2026-06-28 
+- Test records now capture a snapshot of their results each time they are completed; expand a "completed" entry in a record's audit log to see the result values at that moment with changes since the previous completion highlighted. Includes a one-time bulk action (TR reviewers, Complete view) to backfill history for already-completed records ([#251](https://github.com/Jolls/arx-legacy/issues/251))
+
 ## [0.5.47] - 2026-06-28 
 - Test steps with a conditional hide formula now show/hide live in the record editor as you enter results, instead of only when the record is reloaded ([#257](https://github.com/Jolls/arx-legacy/issues/257))
 

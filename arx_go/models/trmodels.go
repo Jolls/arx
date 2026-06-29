@@ -191,6 +191,45 @@ type RecordEvent struct {
 	Comments     string
 }
 
+// RecordResultSnapshot is one captured result value within a Complete-event snapshot (#251).
+// Stored in record_event_results, keyed to a record_events row.
+type RecordResultSnapshot struct {
+	EventID       int
+	TestID        int
+	Parameter     string
+	Specification string // resolved spec snapshot, frozen at completion (tokens already baked in)
+	SpecUnits     string
+	Result        string
+	PassFail      *bool
+	Comment       string
+}
+
+// PF renders the snapshot's pass/fail as "PASS", "FAIL", or "" for templates.
+func (s RecordResultSnapshot) PF() string {
+	if s.PassFail == nil {
+		return ""
+	}
+	if *s.PassFail {
+		return "PASS"
+	}
+	return "FAIL"
+}
+
+// SnapshotDiffRow is a snapshot row annotated with how it changed vs. the prior snapshot:
+// "added" (test_id absent from the prior snapshot), "changed" (value/pass-fail/comment
+// differ), or "unchanged".
+type SnapshotDiffRow struct {
+	RecordResultSnapshot
+	Status string
+}
+
+// EventSnapshot pairs a Complete event with its result snapshot, already diffed against
+// the previous Complete snapshot, for the record detail view.
+type EventSnapshot struct {
+	EventID int
+	Rows    []SnapshotDiffRow
+}
+
 // ComputePassFail evaluates pass/fail for a result value against a step's spec bounds.
 // Returns nil if the result cannot be evaluated (empty, non-numeric, no bounds).
 // pf_type values:

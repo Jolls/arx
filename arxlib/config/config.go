@@ -153,6 +153,7 @@ func (c *Config) NamedQueriesTable() string          { return "named_queries" }
 func (c *Config) TestDefinitionHistoryTable() string { return "test_definition_history" }
 func (c *Config) FormEventsTable() string            { return "form_events" }
 func (c *Config) RecordEventsTable() string          { return "record_events" }
+func (c *Config) RecordEventResultsTable() string    { return "record_event_results" }
 
 // CheckSchemaVersion queries app_config for schema_version and returns "" when it
 // matches ExpectedSchemaVersion, or a non-empty mismatch/error message otherwise.
