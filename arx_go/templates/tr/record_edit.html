@@ -72,14 +72,14 @@
     <tbody>
       {{range .Rows}}
       {{if gt .Level 0}}
-      <tr class="row-heading-{{.Level}}">
+      <tr class="row-heading-{{.Level}}" data-hide="{{.Step.HideFormula}}"{{if .Hidden}} style="display:none"{{end}}>
         <td colspan="5">{{.EffectiveParameter}}</td>
       </tr>
       {{else}}
       {{$cur := .EffectiveValue}}
       {{$opts := .Step.ListOptions}}
       {{$sid := .Step.ID}}
-      <tr>
+      <tr data-hide="{{.Step.HideFormula}}"{{if .Hidden}} style="display:none"{{end}}>
         <td>{{.EffectiveParameter}}</td>
         <td class="small text-muted">{{.EffectiveSpec}}</td>
         <td>
@@ -233,5 +233,55 @@ setInterval(saveDraft, 30000);
 document.getElementById('edit-form').addEventListener('submit', function() {
   localStorage.removeItem(DRAFT_KEY);
 });
+
+// #257 — Conditional step visibility. Mirrors Go evaluateHide: re-evaluates each row's
+// hide_formula against the current result values and shows/hides it live as the user types.
+// Supports {id} step refs, {record.type}, and HIDE/SHOW/=/!=. Unresolved tokens are left as-is
+// (comparison won't match → row stays visible), matching the server.
+function resolveHideTokens(formula) {
+  return formula.replace(/\{([^}]+)\}/g, function(m, tok) {
+    tok = tok.trim();
+    if (/^\d+$/.test(tok)) {
+      const el = document.querySelector('#edit-form [name="result_' + tok + '"]');
+      return el ? el.value : m;
+    }
+    if (tok === 'record.type') {
+      const el = document.querySelector('#edit-form [name="comments"]');
+      return el ? el.value : m;
+    }
+    return m;
+  });
+}
+
+function rowHidden(formula) {
+  const resolved = resolveHideTokens(formula).trim();
+  if (resolved === '' || /^show$/i.test(resolved)) return false;
+  if (/^hide$/i.test(resolved)) return true;
+  let idx = resolved.indexOf('!=');
+  if (idx >= 0) {
+    return resolved.slice(0, idx).trim().toLowerCase() !== resolved.slice(idx + 2).trim().toLowerCase();
+  }
+  idx = resolved.indexOf('=');
+  if (idx >= 0) {
+    return resolved.slice(0, idx).trim().toLowerCase() === resolved.slice(idx + 1).trim().toLowerCase();
+  }
+  return false;
+}
+
+function applyHideFormulas() {
+  document.querySelectorAll('#edit-form tr[data-hide]').forEach(function(tr) {
+    const f = tr.getAttribute('data-hide');
+    if (!f) return;
+    tr.style.display = rowHidden(f) ? 'none' : '';
+  });
+}
+
+document.querySelectorAll('#edit-form [name^="result_"]').forEach(function(el) {
+  el.addEventListener('input', applyHideFormulas);
+  el.addEventListener('change', applyHideFormulas);
+});
+const _hideCommentsEl = document.querySelector('#edit-form [name="comments"]');
+if (_hideCommentsEl) _hideCommentsEl.addEventListener('input', applyHideFormulas);
+applyHideFormulas();
 </script>
 {{end}}

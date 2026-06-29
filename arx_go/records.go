@@ -1004,7 +1004,10 @@ func (h *Handler) loadRecordResults(ctx context.Context, recordID int) (map[int]
 // type) is applied. {id} cross-step tokens are LEFT UNRESOLVED so the caller resolves them against the
 // record's own results (view) or captures Raw* fields first (edit). Returns the rows, the record's
 // result map, and the synthetic step map used for {id} spec_nom fallback.
-func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord, form *models.TestForm) ([]models.ResultRow, map[int]*models.TestResult, map[int]*models.TestStep, error) {
+// includeHidden=true keeps steps whose hide_formula currently evaluates to hidden, flagging them
+// ResultRow.Hidden instead of dropping them. The edit view passes true so client-side JS can toggle
+// visibility live as results change; the read-only/print views pass false.
+func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord, form *models.TestForm, includeHidden bool) ([]models.ResultRow, map[int]*models.TestResult, map[int]*models.TestStep, error) {
 	results, err := h.loadRecordResults(ctx, record.ID)
 	if err != nil {
 		return nil, nil, nil, err
@@ -1032,10 +1035,11 @@ func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord,
 	for _, tid := range ids {
 		if res, ok := results[tid]; ok {
 			// Frozen snapshot row — visibility from the frozen hide formula against own results.
-			if evaluateHide(res.HideFormula, results, refSteps, record, form) {
+			hidden := evaluateHide(res.HideFormula, results, refSteps, record, form)
+			if hidden && !includeHidden {
 				continue
 			}
-			rows = append(rows, models.ResultRow{Step: stepFromResult(tid, res), Result: res, Level: res.Type})
+			rows = append(rows, models.ResultRow{Step: stepFromResult(tid, res), Result: res, Level: res.Type, Hidden: hidden})
 			continue
 		}
 		// Legacy fallback: render from the live definition (un-materialized row on an old record).
@@ -1046,14 +1050,15 @@ func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord,
 		if !stepVisibleOnRecord(step.Archived, false) {
 			continue
 		}
-		if evaluateHide(step.HideFormula, results, refSteps, record, form) {
+		hidden := evaluateHide(step.HideFormula, results, refSteps, record, form)
+		if hidden && !includeHidden {
 			continue
 		}
 		if !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {
 			continue
 		}
 		bakeStepTokens(step, record, form)
-		rows = append(rows, models.ResultRow{Step: step, Result: nil, Level: step.Type})
+		rows = append(rows, models.ResultRow{Step: step, Result: nil, Level: step.Type, Hidden: hidden})
 	}
 	return rows, results, refSteps, nil
 }
@@ -1097,7 +1102,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
-	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form)
+	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, false)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1214,7 +1219,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
-	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form)
+	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, false)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1524,7 +1529,8 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
 	// Edit always works against the frozen spec; "Update to latest" is the only re-pull path (#487).
-	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form)
+	// includeHidden=true: render conditionally-hidden steps (display:none) so JS can toggle them live (#257).
+	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, true)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return

@@ -144,6 +144,7 @@ type ResultRow struct {
 	Level       int         // mirrors Step.Type; 0=data, 1/2/3=heading
 	RawSpecNom  string      // spec_nom with {record.X} resolved but {id} tokens kept — edit view only
 	RawDefault  string      // default_result with {record.X} resolved but {id} tokens kept — edit view only
+	Hidden      bool        // hide_formula currently evaluates to hidden — edit view renders it display:none for live toggling
 }
 
 // EffectiveParameter returns the result snapshot if available, else the step definition.
