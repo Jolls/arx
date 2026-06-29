@@ -146,10 +146,18 @@
 (function() {
   var selAll = document.getElementById('select-all');
   if (!selAll) return;
+  var form = document.getElementById('bulk-lock-form');
+
+  // Row-selects whose row is not hidden by the client-side column filters.
+  function visibleSelects() {
+    return Array.prototype.filter.call(document.querySelectorAll('.row-select'), function(cb) {
+      var tr = cb.closest('tr');
+      return !tr || tr.dataset.filteredOut !== '1';
+    });
+  }
 
   function updateBulkActions() {
-    var checked = document.querySelectorAll('.row-select:checked');
-    var count = checked.length;
+    var count = document.querySelectorAll('.row-select:checked').length;
     document.getElementById('selected-count').textContent = count;
     var toolbar = document.getElementById('bulk-actions');
     if (count > 0) {
@@ -158,33 +166,33 @@
       toolbar.classList.add('d-none');
     }
   }
+  // Exposed so the column-filter code can refresh the count after hiding rows.
+  window.__trUpdateBulk = updateBulkActions;
 
   selAll.addEventListener('change', function() {
-    document.querySelectorAll('.row-select').forEach(function(cb) {
-      cb.checked = selAll.checked;
-    });
+    visibleSelects().forEach(function(cb) { cb.checked = selAll.checked; });
     updateBulkActions();
   });
 
   document.querySelectorAll('.row-select').forEach(function(cb) {
     cb.addEventListener('change', function() {
-      var all = document.querySelectorAll('.row-select');
-      var allChecked = Array.from(all).every(function(c) { return c.checked; });
-      selAll.checked = allChecked;
+      var vis = visibleSelects();
+      selAll.checked = vis.length > 0 && vis.every(function(c) { return c.checked; });
       updateBulkActions();
     });
   });
 
-  document.getElementById('bulk-lock-form').addEventListener('submit', function() {
+  form.addEventListener('submit', function() {
     // Remove any previously injected hidden inputs.
-    this.querySelectorAll('input[name="record_ids[]"]').forEach(function(el) { el.remove(); });
-    // Inject currently checked IDs as hidden inputs.
-    document.querySelectorAll('.row-select:checked').forEach(function(cb) {
+    form.querySelectorAll('input[name="record_ids[]"]').forEach(function(el) { el.remove(); });
+    // Inject checked IDs — but only rows currently visible (not filtered out).
+    visibleSelects().forEach(function(cb) {
+      if (!cb.checked) return;
       var input = document.createElement('input');
       input.type = 'hidden';
       input.name = 'record_ids[]';
       input.value = cb.value;
-      document.getElementById('bulk-lock-form').appendChild(input);
+      form.appendChild(input);
     });
   });
 })();
@@ -215,8 +223,12 @@
       } else {
         tr.dataset.filteredOut = '1';
         tr.style.display = 'none';
+        // A hidden row must not stay selected for bulk-lock.
+        var rs = tr.querySelector('.row-select');
+        if (rs) rs.checked = false;
       }
     });
+    if (window.__trUpdateBulk) window.__trUpdateBulk();
     if (window.__trRepaginate) window.__trRepaginate();
   }
 
