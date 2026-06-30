@@ -35,34 +35,111 @@ function restoreFilterState() {
     try {
         const raw = sessionStorage.getItem(_filterStorageKey());
         if (!raw) return;
-        const st = JSON.parse(raw);
-        if (st.filters) {
-            const ths = Array.from(document.querySelectorAll('tr.filter-row th'));
-            st.filters.forEach((f, i) => {
-                const th = ths[i];
-                if (!th || !f) return;
-                if (f.type === 'date') {
-                    const from = th.querySelector('.date-filter-from');
-                    const to   = th.querySelector('.date-filter-to');
-                    if (from) from.value = f.from || '';
-                    if (to)   to.value   = f.to   || '';
-                    updateDateFilterButton(th);
-                } else {
-                    const input = th.querySelector('input, select');
-                    if (input) input.value = f.value || '';
-                }
-            });
-        }
-        if (st.sort && st.sort.col !== null) {
-            sortCol = st.sort.col;
-            sortDir = st.sort.dir || 'asc';
-        }
-        const rfqs     = document.getElementById('show-rfqs');
-        const inactive = document.getElementById('show-inactive');
-        if (rfqs     && st.showRFQs     !== null) rfqs.checked     = st.showRFQs;
-        if (inactive && st.showInactive !== null) inactive.checked = st.showInactive;
-        if (st.page) currentPage = st.page;
+        _applyState(JSON.parse(raw));
     } catch (e) {}
+}
+
+// Apply a parsed view-state object (filters/sort/toggles/page) to the DOM and
+// engine globals. Shared by the sessionStorage and URL hydration paths.
+function _applyState(st) {
+    if (st.filters) {
+        const ths = Array.from(document.querySelectorAll('tr.filter-row th'));
+        st.filters.forEach((f, i) => {
+            const th = ths[i];
+            if (!th || !f) return;
+            if (f.type === 'date') {
+                const from = th.querySelector('.date-filter-from');
+                const to   = th.querySelector('.date-filter-to');
+                if (from) from.value = f.from || '';
+                if (to)   to.value   = f.to   || '';
+                updateDateFilterButton(th);
+            } else {
+                const input = th.querySelector('input, select');
+                if (input) input.value = f.value || '';
+            }
+        });
+    }
+    if (st.sort && st.sort.col !== null) {
+        sortCol = st.sort.col;
+        sortDir = st.sort.dir || 'asc';
+    }
+    const rfqs     = document.getElementById('show-rfqs');
+    const inactive = document.getElementById('show-inactive');
+    if (rfqs     && st.showRFQs     !== null) rfqs.checked     = st.showRFQs;
+    if (inactive && st.showInactive !== null) inactive.checked = st.showInactive;
+    if (st.page) currentPage = st.page;
+}
+
+// --- Shareable/bookmarkable views via the URL query string (#513) ---
+// Mirror the same state into the URL (replaceState, no reload). A pasted link
+// reproduces the sender's view; URL state wins over sessionStorage on load.
+//
+// Column filters are keyed by position: f{i} for text/select, df{i}/dt{i} for a
+// date column's from/to. Sort is sort={col}.{dir}; toggles rfqs/inactive are
+// emitted only when on; page only when past 1. Column types are read back from
+// the DOM, so they never need to live in the URL.
+function saveFilterStateToURL() {
+    if (!document.querySelector('tr.filter-row')) return;
+    const p = new URLSearchParams();
+    getFilterColumns().forEach((c, i) => {
+        if (c.type === 'date') {
+            if (c.from) p.set('df' + i, c.from);
+            if (c.to)   p.set('dt' + i, c.to);
+        } else if (c.value) {
+            p.set('f' + i, c.value);
+        }
+    });
+    if (sortCol !== null) p.set('sort', sortCol + '.' + sortDir);
+    const rfqs     = document.getElementById('show-rfqs');
+    const inactive = document.getElementById('show-inactive');
+    if (rfqs     && rfqs.checked)     p.set('rfqs', '1');
+    if (inactive && inactive.checked) p.set('inactive', '1');
+    if (currentPage > 1) p.set('page', String(currentPage));
+    const qs = p.toString();
+    const url = window.location.pathname + (qs ? '?' + qs : '') + window.location.hash;
+    try { history.replaceState(null, '', url); } catch (e) {}
+}
+
+// Hydrate from the URL query string. Returns true if any recognized view param
+// was present, so the caller can skip the sessionStorage fallback (URL wins).
+function restoreFilterStateFromURL() {
+    if (!document.querySelector('tr.filter-row')) return false;
+    const p = new URLSearchParams(window.location.search);
+    let had = false;
+    const filters = getFilterColumns().map((c, i) => {
+        if (c.type === 'date') {
+            const from = p.get('df' + i);
+            const to   = p.get('dt' + i);
+            if (from !== null || to !== null) had = true;
+            return { type: 'date', from: from || '', to: to || '' };
+        }
+        const v = p.get('f' + i);
+        if (v !== null) had = true;
+        return { type: 'text', value: v || '' };
+    });
+    const sortRaw     = p.get('sort');
+    const pageRaw     = p.get('page');
+    const rfqsRaw     = p.get('rfqs');
+    const inactiveRaw = p.get('inactive');
+    if (!had && sortRaw === null && pageRaw === null && rfqsRaw === null && inactiveRaw === null) {
+        return false;
+    }
+    let sort = { col: null, dir: 'asc' };
+    if (sortRaw !== null) {
+        const [colStr, dirStr] = sortRaw.split('.');
+        const col = parseInt(colStr, 10);
+        if (!Number.isNaN(col)) sort = { col, dir: dirStr === 'desc' ? 'desc' : 'asc' };
+    }
+    // On a shared link the toggles default off unless their param is present,
+    // so the receiver's view matches the sender's exactly.
+    _applyState({
+        filters,
+        sort,
+        showRFQs:     rfqsRaw     !== null,
+        showInactive: inactiveRaw !== null,
+        page: pageRaw ? (parseInt(pageRaw, 10) || 1) : 1,
+    });
+    return true;
 }
 
 function escHtml(s) {
@@ -299,6 +376,7 @@ function applyFilters(resetPage = true) {
     }
     renderRows(rows);
     saveFilterState();
+    saveFilterStateToURL();
 }
 
 function applyTruncationTooltips(tbody) {
@@ -380,7 +458,9 @@ function loadListRows() {
                 th.classList.add('sortable');
                 th.addEventListener('click', () => sortByCol(i));
             });
-            restoreFilterState();
+            // URL state wins over sessionStorage so a shared link reproduces
+            // the sender's exact view; fall back to the saved session otherwise.
+            if (!restoreFilterStateFromURL()) restoreFilterState();
             applySort();
             updateSortHeaders();
             applyFilters(false);

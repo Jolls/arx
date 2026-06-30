@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.55] - 2026-06-30 
+- Filter, sort, and page state on every main table (Parts, POs, Suppliers, Contacts, Test Records) now mirrors into the URL, so a filtered view can be bookmarked or shared; a pasted link reproduces the sender's view and wins over saved session state ([#513](https://github.com/Jolls/arx-legacy/issues/513))
+
 ## [0.5.54] - 2026-06-30 
 - Swept hand-written inline styles on the settings, login, PO, attachment, sourcing, and pricing pages over to Bootstrap utility classes; kept only genuinely custom values (fixed pixel widths, grid layouts) inline ([#500](https://github.com/Jolls/arx-legacy/issues/500))
 
