@@ -148,7 +148,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	attVals := url.Values{
 		"FILFileName": {"http://example.test/itest"},
 		"FILPNRev":   {"A"},
-		"FILNotes":   {"integration-test-attachment"},
+		"category":    {"integration-test-category"},
 	}
 	rec = httptest.NewRecorder()
 	h.PartAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/attachments", pnID), attVals), pnID))
@@ -172,6 +172,19 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	).Scan(&filID)
 	if err != nil || filID == 0 {
 		t.Fatalf("could not retrieve id after attach create: %v", err)
+	}
+
+	// Regression (#527): PartAttachmentCreate must persist the submitted
+	// "category" form value, not an unrelated field.
+	var attCategory string
+	err = h.DB().QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT category FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), filID,
+	).Scan(&attCategory)
+	if err != nil {
+		t.Fatalf("SELECT category after attach create: %v", err)
+	}
+	if attCategory != "integration-test-category" {
+		t.Errorf("attachment category after create = %q, want %q", attCategory, "integration-test-category")
 	}
 
 	// ── 4. Attachment soft-delete + trigger check ──────────────────────────────

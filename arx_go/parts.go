@@ -981,7 +981,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 		h.cfg.AttachmentsTable(),
-	), id, fv(r, "FILFileName"), fv(r, "FILPNRev"), fv(r, "FILNotes"), oID); err != nil {
+	), id, fv(r, "FILFileName"), fv(r, "FILPNRev"), fv(r, "category"), oID); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
