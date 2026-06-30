@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.52] - 2026-06-30 
+- Settings and login pages now use Bootstrap alert/badge/table components instead of hand-rolled inline-styled equivalents, and the login button uses the proper `btn btn-primary` styling ([#500](https://github.com/Jolls/arx-legacy/issues/500))
+
 ## [0.5.51] - 2026-06-30 
 - Test record lists now use the same client-side filterable/sortable table as Parts/POs/Suppliers/Contacts, instead of full-page reloads ([#502](https://github.com/Jolls/arx-legacy/issues/502))
 - Date columns on Parts, POs, Contacts, and Test Records now support a From/To range filter ([#502](https://github.com/Jolls/arx-legacy/issues/502))
