@@ -245,50 +245,18 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filters := parseRecordFilters(r.URL.Query())
-	clauses, filterArgs := filters.whereClauses(2)
-
-	query := fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order, form_revision
-		FROM %s
-		WHERE form_id = @p1 AND is_active = 1`, h.cfg.RecordsTable())
-	query += clauses
-	// serial_number + 0 forces numeric sort (same trick as Ruby Arel version)
-	query += " ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC"
-
-	args := append([]any{formID}, filterArgs...)
-	rows, err := h.queryContext(r.Context(), query, args...)
-	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	var records []models.TestRecord
-	for rows.Next() {
-		var rec models.TestRecord
-		if err := rows.Scan(
-			&rec.ID, &rec.FormID, &rec.PartNumberID, &rec.SerialNumber, &rec.SerialNumberPN,
-			&rec.SerialNumberDesc, &rec.RecordDate, &rec.Comments,
-			&rec.InstrumentType, &rec.Locked, &rec.Approved, &rec.Active, &rec.TestOrder, &rec.FormRevision,
-		); err != nil {
-			continue
-		}
-		records = append(records, rec)
-	}
-
 	lockedCount, _ := strconv.Atoi(r.URL.Query().Get("locked"))
 	backfilledCount, _ := strconv.Atoi(r.URL.Query().Get("backfilled"))
 
-	// Row-select column: shown in WIP mode (bulk complete) and, for TR reviewers in the
-	// Complete view, when the form still has records needing the #251 history backfill.
+	// Backfill eligibility (#251): offered to TR reviewers when the form still has
+	// completed records needing the one-time history-capture migration. The TR-specific
+	// script shows the select column + bulk toolbar based on this plus the client-side
+	// status filter (the row set itself comes from the API below).
 	canApprove := false
 	if u := h.currentUser(r); u != nil {
 		canApprove = u.CanApproveRecords
 	}
-	backfillMode := filters.StatusComplete() && canApprove && h.formHasBackfillableRecords(r.Context(), formID)
-	showSelect := filters.StatusWIP() || backfillMode
+	backfillEligible := canApprove && h.formHasBackfillableRecords(r.Context(), formID)
 
 	// Distinct Type (comments) values for this form, to populate the filter datalist.
 	var typeOptions []string
@@ -307,18 +275,85 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderTR(w, r, "records_index.html", map[string]any{
-		"Form":        form,
-		"Records":     records,
-		"Filters":         filters,
-		"TypeOptions":     typeOptions,
-		"LockedCount":     lockedCount,
-		"BackfilledCount": backfilledCount,
-		"ShowSelect":      showSelect,
-		"BackfillMode":    backfillMode,
-		"CSRFToken":       h.csrfToken(w, r),
-		"ActiveTab":       "records",
-		"TestMode":        h.cfg.TestMode,
+		"Form":             form,
+		"TypeOptions":      typeOptions,
+		"LockedCount":      lockedCount,
+		"BackfilledCount":  backfilledCount,
+		"BackfillEligible": backfillEligible,
+		"CSRFToken":        h.csrfToken(w, r),
+		"ActiveTab":        "records",
+		"TestMode":         h.cfg.TestMode,
 	})
+}
+
+// RecordsRows — GET /api/forms/{id}/records/rows
+// JSON rows for the shared client-side table (mirrors PartsRows/PORows/etc. in parts.go/pos.go).
+// Filtering/sorting/pagination are done client-side; this returns every active record
+// for the form in the same default order RecordsList used to apply server-side.
+func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	start := time.Now()
+
+	type row struct {
+		ID      int    `json:"id"`
+		PNID    int    `json:"pnId"`
+		SN      string `json:"sn"`
+		SNPN    string `json:"snPN"`
+		SNDesc  string `json:"snDesc"`
+		Date    string `json:"date"`
+		Type    string `json:"type"`
+		Status  string `json:"status"`
+		FormRev string `json:"formRev"`
+	}
+
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		       record_date, comments, is_locked, is_approved, form_revision
+		FROM %s
+		WHERE form_id = @p1 AND is_active = 1
+		ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC`,
+		h.cfg.RecordsTable()), formID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	out := make([]row, 0)
+	for rows.Next() {
+		var rec row
+		var recordDate *time.Time
+		var formRev *int
+		var locked, approved bool
+		if err := rows.Scan(&rec.ID, &rec.PNID, &rec.SN, &rec.SNPN, &rec.SNDesc,
+			&recordDate, &rec.Type, &locked, &approved, &formRev); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if recordDate != nil {
+			rec.Date = recordDate.Format("2006-01-02 15:04")
+		}
+		switch {
+		case approved:
+			rec.Status = "approved"
+		case locked:
+			rec.Status = "complete"
+		default:
+			rec.Status = "wip"
+		}
+		rec.FormRev = models.TestRecord{FormRevision: formRev}.FormRevLabel()
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[rows] records form=%d: %d rows in %v", formID, len(out), time.Since(start))
+	writeJSON(w, out)
 }
 
 // FormDef â€" GET /forms/{id}/def

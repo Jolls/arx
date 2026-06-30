@@ -17,8 +17,7 @@ function _filterStorageKey() {
 
 function saveFilterState() {
     if (!document.querySelector('tr.filter-row')) return;
-    const filters = Array.from(document.querySelectorAll('tr.filter-row input, tr.filter-row select'))
-        .map(el => el.value);
+    const filters = getFilterColumns();
     const rfqs     = document.getElementById('show-rfqs');
     const inactive = document.getElementById('show-inactive');
     try {
@@ -38,8 +37,21 @@ function restoreFilterState() {
         if (!raw) return;
         const st = JSON.parse(raw);
         if (st.filters) {
-            const inputs = Array.from(document.querySelectorAll('tr.filter-row input, tr.filter-row select'));
-            st.filters.forEach((v, i) => { if (inputs[i]) inputs[i].value = v; });
+            const ths = Array.from(document.querySelectorAll('tr.filter-row th'));
+            st.filters.forEach((f, i) => {
+                const th = ths[i];
+                if (!th || !f) return;
+                if (f.type === 'date') {
+                    const from = th.querySelector('.date-filter-from');
+                    const to   = th.querySelector('.date-filter-to');
+                    if (from) from.value = f.from || '';
+                    if (to)   to.value   = f.to   || '';
+                    updateDateFilterButton(th);
+                } else {
+                    const input = th.querySelector('input, select');
+                    if (input) input.value = f.value || '';
+                }
+            });
         }
         if (st.sort && st.sort.col !== null) {
             sortCol = st.sort.col;
@@ -128,13 +140,115 @@ const CELL_TEXT = {
     '/api/pos/rows':       r => [r.num, r.status, r.supplier, r.ordered, r.closed, r.orderer, String(r.cost)],
 };
 
-function getFilterValues() {
-    return Array.from(document.querySelectorAll('tr.filter-row input, tr.filter-row select'))
-        .map(i => i.value.toLowerCase().trim());
+// Status badge markup shared by the TR records row builder (mirrors the badges
+// records_index.html used to render server-side).
+const TR_STATUS_BADGE = {
+    approved: '<span class="badge bg-success"><i class="bi bi-patch-check-fill"></i> Approved</span>',
+    complete: '<span class="badge bg-secondary"><i class="bi bi-check2-circle"></i> Complete</span>',
+    wip:      '<span class="badge bg-info text-dark">WIP</span>',
+};
+
+// Pattern-keyed row builders, for endpoints whose URL varies (e.g. embeds an id).
+// Checked when an exact ROW_BUILDERS/CELL_TEXT key isn't found.
+const ROW_BUILDER_PATTERNS = [
+    {
+        // /api/forms/{id}/records/rows — column order: select, sn, pn, desc, date, type, status, form-rev.
+        // data-col attributes match records_index.html so the #386 column-visibility toggle keeps working.
+        test: /\/api\/forms\/\d+\/records\/rows$/,
+        build: r => {
+            const pn = r.pnId
+                ? `<a href="/part/${r.pnId}">${escHtml(r.snPN)}</a>`
+                : escHtml(r.snPN);
+            return `<tr>
+                <td data-col="col-select"><input type="checkbox" class="row-select" value="${r.id}"></td>
+                <td data-col="col-sn"><a href="/records/${r.id}" class="fw-semibold">${escHtml(r.sn)}</a></td>
+                <td data-col="col-pn">${pn}</td>
+                <td data-col="col-desc">${escHtml(r.snDesc)}</td>
+                <td data-col="col-date" class="text-nowrap">${r.date || ''}</td>
+                <td data-col="col-type">${escHtml(r.type)}</td>
+                <td data-col="col-status" class="text-center">${TR_STATUS_BADGE[r.status] || ''}</td>
+                <td data-col="col-form-rev" class="text-center">${escHtml(r.formRev)}</td>
+            </tr>`;
+        },
+        cellText: r => ['', r.sn, r.snPN, r.snDesc, r.date, r.type, r.status, r.formRev],
+    },
+];
+
+function resolveRowConfig(url) {
+    if (ROW_BUILDERS[url]) return { build: ROW_BUILDERS[url], cellText: CELL_TEXT[url] };
+    const match = ROW_BUILDER_PATTERNS.find(p => p.test.test(url));
+    return match ? { build: match.build, cellText: match.cellText } : null;
 }
 
-function matchesRow(row, filters) {
-    return filters.every((f, i) => !f || (row._text[i] || '').includes(f));
+// One descriptor per filter-row <th>, in column order. A column with no
+// filter control (e.g. a select/checkbox column) reads as an inert text
+// filter. Read from the th itself (not its inputs) so columns with zero,
+// one, or two controls each still occupy exactly one positional slot.
+function getFilterColumns() {
+    return Array.from(document.querySelectorAll('tr.filter-row th')).map(th => {
+        if (th.dataset.filterType === 'date') {
+            const from = th.querySelector('.date-filter-from');
+            const to   = th.querySelector('.date-filter-to');
+            return { type: 'date', from: from ? from.value : '', to: to ? to.value : '' };
+        }
+        const input = th.querySelector('input, select');
+        return { type: 'text', value: input ? input.value : '' };
+    });
+}
+
+function matchesRow(row, cols) {
+    return cols.every((c, i) => {
+        const text = row._text[i] || '';
+        if (c.type === 'date') {
+            if (!c.from && !c.to) return true;
+            const d = text.slice(0, 10); // ISO date prefix
+            if (!d) return false;
+            if (c.from && d < c.from) return false;
+            if (c.to && d > c.to) return false;
+            return true;
+        }
+        const v = (c.value || '').toLowerCase().trim();
+        return !v || text.includes(v);
+    });
+}
+
+// Engine-rendered date-range popover for any filter-row <th data-filter-type="date">.
+// Templates only mark the column; the engine supplies the control.
+function initDateFilters() {
+    document.querySelectorAll('tr.filter-row th[data-filter-type="date"]').forEach(th => {
+        th.innerHTML = `
+            <div class="dropdown date-filter">
+                <button type="button" class="btn btn-sm btn-outline-secondary date-filter-btn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-label="Date range filter" title="Filter by date range">
+                    <i class="bi bi-calendar-range"></i>
+                </button>
+                <div class="dropdown-menu p-3" style="min-width:230px">
+                    <label class="form-label mb-1 small text-muted">From</label>
+                    <input type="date" class="form-control form-control-sm mb-2 date-filter-from">
+                    <label class="form-label mb-1 small text-muted">To</label>
+                    <input type="date" class="form-control form-control-sm mb-3 date-filter-to">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary date-filter-clear">Clear</button>
+                    </div>
+                </div>
+            </div>`;
+        const from  = th.querySelector('.date-filter-from');
+        const to    = th.querySelector('.date-filter-to');
+        const clear = th.querySelector('.date-filter-clear');
+        const onChange = () => { updateDateFilterButton(th); applyFilters(true); };
+        from.addEventListener('change', onChange);
+        to.addEventListener('change', onChange);
+        clear.addEventListener('click', () => { from.value = ''; to.value = ''; onChange(); });
+    });
+}
+
+function updateDateFilterButton(th) {
+    const btn  = th.querySelector('.date-filter-btn');
+    const from = th.querySelector('.date-filter-from');
+    const to   = th.querySelector('.date-filter-to');
+    if (!btn) return;
+    const active = (from && from.value) || (to && to.value);
+    btn.classList.toggle('btn-primary', !!active);
+    btn.classList.toggle('btn-outline-secondary', !active);
 }
 
 function applySort() {
@@ -170,7 +284,7 @@ function sortByCol(colIndex) {
 function applyFilters(resetPage = true) {
     if (!document.querySelector('tr.filter-row')) return;
     if (resetPage) currentPage = 1;
-    let rows = allRows.filter(r => matchesRow(r, getFilterValues()));
+    let rows = allRows.filter(r => matchesRow(r, getFilterColumns()));
     // PO list only: hide RFQ quotes (any row in an RFQ group) unless the
     // "Show RFQs" switch is on. Converted POs have no group id and always show.
     const showRFQs = document.getElementById('show-rfqs');
@@ -201,6 +315,11 @@ function renderRows(rowsToShow) {
     const tbody = document.querySelector('tbody');
     if (!tbody) return;
 
+    // Full filtered+sorted set (pre-pagination), exposed for callers that need
+    // to act across all matching rows rather than just the visible page (e.g.
+    // a "select all" that should reach rows on other pages).
+    window.currentFilteredRows = rowsToShow;
+
     const totalPages = Math.max(1, Math.ceil(rowsToShow.length / ROWS_PER_PAGE));
     if (currentPage > totalPages) currentPage = totalPages;
 
@@ -222,6 +341,8 @@ function renderRows(rowsToShow) {
     const next = document.querySelector('.page-nav.next');
     if (prev) prev.disabled = currentPage === 1;
     if (next) next.disabled = currentPage >= totalPages;
+
+    if (window.onRowsRendered) window.onRowsRendered();
 }
 
 function prevPage() {
@@ -237,9 +358,10 @@ function loadListRows() {
     const table = document.querySelector('table[data-rows-url]');
     if (!table) return;
     const url = table.dataset.rowsUrl;
-    const buildRow = ROW_BUILDERS[url];
-    const cellText = CELL_TEXT[url];
-    if (!buildRow || !cellText) return;
+    const cfg = resolveRowConfig(url);
+    if (!cfg) return;
+    const buildRow = cfg.build;
+    const cellText = cfg.cellText;
 
     const t0 = performance.now();
     fetch(url)
@@ -279,7 +401,7 @@ function exportCSV() {
     const url = table.dataset.rowsUrl;
 
     // Apply same filters as the current view (all matching rows, not just current page)
-    let rows = allRows.filter(r => matchesRow(r, getFilterValues()));
+    let rows = allRows.filter(r => matchesRow(r, getFilterColumns()));
     const showInactive = document.getElementById('show-inactive');
     if (showInactive && !showInactive.checked) rows = rows.filter(r => r.active !== false);
     const showRFQs = document.getElementById('show-rfqs');
@@ -313,8 +435,11 @@ function exportCSV() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    initDateFilters();
     loadListRows();
-    document.querySelectorAll('tr.filter-row input, tr.filter-row select')
+    // Direct children only — excludes the date-popover's own from/to inputs,
+    // which are nested deeper and wire their own listeners in initDateFilters().
+    document.querySelectorAll('tr.filter-row > th > input, tr.filter-row > th > select')
         .forEach(i => {
             i.addEventListener('input', () => applyFilters(true));
             i.addEventListener('change', () => applyFilters(true));

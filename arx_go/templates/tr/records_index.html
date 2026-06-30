@@ -30,7 +30,6 @@
         Columns
       </button>
       <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
-        {{if .ShowSelect}}<li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-select" checked> Select</label></li>{{end}}
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-sn" checked> Serial Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-desc" checked> Description</label></li>
@@ -51,113 +50,65 @@
   </div>
 </div>
 
-{{if .ShowSelect}}
 <div id="bulk-actions" class="mb-2 d-none">
-  {{if .BackfillMode}}
-  <form method="POST" action="/forms/{{.Form.ID}}/records/backfill-history" id="bulk-form">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Capture result history for the selected completed records? This is a one-time migration step.')">
-      <i class="bi bi-clock-history"></i> Capture history (<span id="selected-count">0</span>)
-    </button>
-  </form>
-  {{else}}
-  <form method="POST" action="/forms/{{.Form.ID}}/records/bulk-lock" id="bulk-form">
+  <form method="POST" action="/forms/{{.Form.ID}}/records/bulk-lock" id="bulk-lock-form" class="d-none">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Mark selected records complete?')">
-      <i class="bi bi-check2-circle"></i> Lock selected (<span id="selected-count">0</span>)
+      <i class="bi bi-check2-circle"></i> Lock selected (<span class="selected-count">0</span>)
+    </button>
+  </form>
+  {{if .BackfillEligible}}
+  <form method="POST" action="/forms/{{.Form.ID}}/records/backfill-history" id="backfill-form" class="d-none">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Capture result history for the selected completed records? This is a one-time migration step.')">
+      <i class="bi bi-clock-history"></i> Capture history (<span class="selected-count">0</span>)
     </button>
   </form>
   {{end}}
 </div>
-{{end}}
 
-<form method="GET" id="records-filter-form">
-<table class="table table-bordered table-hover table-sm" id="records-table" data-paginate>
+<table class="table table-bordered table-hover table-sm" id="records-table" data-rows-url="/api/forms/{{.Form.ID}}/records/rows">
   <thead>
     <tr class="table-dark">
-      {{if .ShowSelect}}<th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>{{end}}
-      <th data-col="col-sn" class="sortable" onclick="sortTable(this)">Serial Number</th>
-      <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
-      <th data-col="col-desc" class="sortable" onclick="sortTable(this)">Description</th>
-      <th data-col="col-date" class="sortable" onclick="sortTable(this)">Date</th>
-      <th data-col="col-type" class="sortable" onclick="sortTable(this)" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
+      <th data-col="col-select" style="width:36px"><input type="checkbox" id="select-all"></th>
+      <th data-col="col-sn">Serial Number</th>
+      <th data-col="col-pn">Part Number</th>
+      <th data-col="col-desc">Description</th>
+      <th data-col="col-date">Date</th>
+      <th data-col="col-type" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
       <th data-col="col-status" class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
       <th data-col="col-form-rev" class="text-center">Form Rev</th>
     </tr>
     <tr class="filter-row">
-      {{if .ShowSelect}}<th data-col="col-select"></th>{{end}}
-      <th data-col="col-sn"><input type="text" class="form-control form-control-sm" data-filter-col="col-sn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter serial number"></th>
-      <th data-col="col-pn"><input type="text" class="form-control form-control-sm" data-filter-col="col-pn" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter part number"></th>
-      <th data-col="col-desc"><input type="text" class="form-control form-control-sm" data-filter-col="col-desc" placeholder="Filter" autocomplete="off" onkeydown="if(event.key==='Enter')event.preventDefault()" aria-label="Filter description"></th>
-      <th data-col="col-date">
-        <div class="dropdown">
-          <button type="button" class="btn btn-sm {{if or .Filters.FromStr .Filters.ToStr}}btn-primary{{else}}btn-outline-secondary{{end}}"
-                  data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
-                  aria-label="Date range filter" title="Filter by record date range">
-            <i class="bi bi-calendar-range"></i>
-          </button>
-          <div class="dropdown-menu p-3" style="min-width:230px">
-            <label class="form-label mb-1 small text-muted">From</label>
-            <input type="date" name="from" class="form-control form-control-sm mb-2" value="{{.Filters.FromStr}}">
-            <label class="form-label mb-1 small text-muted">To</label>
-            <input type="date" name="to" class="form-control form-control-sm mb-3" value="{{.Filters.ToStr}}">
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-sm btn-primary">Apply</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      onclick="this.form.from.value='';this.form.to.value='';this.form.submit();">Clear</button>
-            </div>
-          </div>
-        </div>
-      </th>
+      <th data-col="col-select"></th>
+      <th data-col="col-sn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter serial number"></th>
+      <th data-col="col-pn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter part number"></th>
+      <th data-col="col-desc"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter description"></th>
+      <th data-col="col-date" data-filter-type="date"></th>
       <th data-col="col-type">
-        <input type="text" name="type" list="type-options" class="form-control form-control-sm" value="{{.Filters.Type}}" placeholder="All" autocomplete="off" onchange="this.form.submit()" aria-label="Type filter">
+        <input type="text" list="type-options" class="form-control form-control-sm" placeholder="All" autocomplete="off" aria-label="Type filter">
         <datalist id="type-options">{{range .TypeOptions}}<option value="{{.}}"></option>{{end}}</datalist>
       </th>
       <th data-col="col-status">
-        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Status filter">
-          <option value="wip"      {{if eq .Filters.Status "wip"}}selected{{end}}>WIP</option>
-          <option value="complete" {{if eq .Filters.Status "complete"}}selected{{end}}>Complete</option>
-          <option value="approved" {{if eq .Filters.Status "approved"}}selected{{end}}>Approved</option>
-          <option value="all"      {{if eq .Filters.Status "all"}}selected{{end}}>All</option>
+        <select id="status-filter" class="form-select form-select-sm" aria-label="Status filter">
+          <option value="wip" selected>WIP</option>
+          <option value="complete">Complete</option>
+          <option value="approved">Approved</option>
+          <option value="">All</option>
         </select>
       </th>
       <th data-col="col-form-rev"></th>
     </tr>
   </thead>
   <tbody>
-    {{if not .Records}}
-    <tr><td colspan="{{if .ShowSelect}}8{{else}}7{{end}}" class="text-center text-muted py-3">No records found</td></tr>
-    {{end}}
-    {{range .Records}}
-    <tr>
-      {{if $.ShowSelect}}<td data-col="col-select"><input type="checkbox" class="row-select" value="{{.ID}}"></td>{{end}}
-      <td data-col="col-sn">
-        <a href="/records/{{.ID}}" class="fw-semibold">{{.SerialNumber}}</a>
-      </td>
-      <td data-col="col-pn">{{if .PartNumberID}}<a href="/part/{{.PartNumberID}}">{{.SerialNumberPN}}</a>{{else}}{{.SerialNumberPN}}{{end}}</td>
-      <td data-col="col-desc">{{.SerialNumberDesc}}</td>
-      <td data-col="col-date" class="text-nowrap">{{formatDateTimeFull .RecordDate}}</td>
-      <td data-col="col-type">{{.Comments}}</td>
-      <td data-col="col-status" class="text-center">
-        {{if .Approved}}
-        <span class="badge bg-success"><i class="bi bi-patch-check-fill"></i> Approved</span>
-        {{else if .Locked}}
-        <span class="badge bg-secondary"><i class="bi bi-check2-circle"></i> Complete</span>
-        {{else}}
-        <span class="badge bg-info text-dark">WIP</span>
-        {{end}}
-      </td>
-      <td data-col="col-form-rev" class="text-center">{{.FormRevLabel}}</td>
-    </tr>
-    {{end}}
+    <tr><td colspan="8" class="no-results">Loading&hellip;</td></tr>
   </tbody>
 </table>
-</form>
 <div class="pagination-controls">
   <span class="pagination-info"></span>
   <div class="pagination-buttons">
-    <button type="button" class="page-nav prev">&#8592; Previous</button>
-    <button type="button" class="page-nav next">Next &#8594;</button>
+    <button type="button" class="page-nav prev" onclick="prevPage()">&#8592; Previous</button>
+    <button type="button" class="page-nav next" onclick="nextPage()">Next &#8594;</button>
   </div>
 </div>
 <p style="margin-top:15px; color:#666; text-align:right;">
@@ -166,95 +117,92 @@
 
 <script>
 (function() {
-  var selAll = document.getElementById('select-all');
-  if (!selAll) return;
-  var form = document.getElementById('bulk-form');
+  var table = document.getElementById('records-table');
+  if (!table) return;
+  var statusSelect = document.getElementById('status-filter');
+  var backfillEligible = {{if .BackfillEligible}}true{{else}}false{{end}};
+  var selected = new Set();
 
-  // Row-selects whose row is not hidden by the client-side column filters.
-  function visibleSelects() {
-    return Array.prototype.filter.call(document.querySelectorAll('.row-select'), function(cb) {
-      var tr = cb.closest('tr');
-      return !tr || tr.dataset.filteredOut !== '1';
-    });
+  var bulkActions = document.getElementById('bulk-actions');
+  var lockForm = document.getElementById('bulk-lock-form');
+  var backfillForm = document.getElementById('backfill-form');
+
+  // 'lock' in the WIP view, 'backfill' in the Complete view for eligible reviewers,
+  // otherwise no bulk action is available and the select column stays hidden.
+  function currentMode() {
+    if (!statusSelect) return null;
+    if (statusSelect.value === 'wip') return 'lock';
+    if (statusSelect.value === 'complete' && backfillEligible) return 'backfill';
+    return null;
   }
 
   function updateBulkActions() {
-    var count = document.querySelectorAll('.row-select:checked').length;
-    document.getElementById('selected-count').textContent = count;
-    var toolbar = document.getElementById('bulk-actions');
-    if (count > 0) {
-      toolbar.classList.remove('d-none');
-    } else {
-      toolbar.classList.add('d-none');
-    }
+    var mode = currentMode();
+    if (lockForm) lockForm.classList.toggle('d-none', mode !== 'lock');
+    if (backfillForm) backfillForm.classList.toggle('d-none', mode !== 'backfill');
+    document.querySelectorAll('.selected-count').forEach(function (el) { el.textContent = selected.size; });
+    if (bulkActions) bulkActions.classList.toggle('d-none', !mode || selected.size === 0);
   }
-  // Exposed so the column-filter code can refresh the count after hiding rows.
-  window.__trUpdateBulk = updateBulkActions;
 
-  selAll.addEventListener('change', function() {
-    visibleSelects().forEach(function(cb) { cb.checked = selAll.checked; });
+  function updateSelectColumn() {
+    var mode = currentMode();
+    table.classList.toggle('show-select', !!mode);
+    if (!mode) selected.clear();
     updateBulkActions();
-  });
-
-  document.querySelectorAll('.row-select').forEach(function(cb) {
-    cb.addEventListener('change', function() {
-      var vis = visibleSelects();
-      selAll.checked = vis.length > 0 && vis.every(function(c) { return c.checked; });
-      updateBulkActions();
-    });
-  });
-
-  form.addEventListener('submit', function() {
-    // Remove any previously injected hidden inputs.
-    form.querySelectorAll('input[name="record_ids[]"]').forEach(function(el) { el.remove(); });
-    // Inject checked IDs — but only rows currently visible (not filtered out).
-    visibleSelects().forEach(function(cb) {
-      if (!cb.checked) return;
-      var input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'record_ids[]';
-      input.value = cb.value;
-      form.appendChild(input);
-    });
-  });
-})();
-
-// Client-side substring filters for Serial Number / Part Number / Description.
-// These refine the server-filtered row set in the browser and integrate with the
-// shared TR paginator (rows flagged data-filtered-out are excluded from pagination).
-(function() {
-  var inputs = document.querySelectorAll('tr.filter-row input[data-filter-col]');
-  if (!inputs.length) return;
-  var table = document.querySelector('table[data-paginate]');
-  if (!table) return;
-  var tbody = table.querySelector('tbody');
-
-  function apply() {
-    var active = Array.prototype.map.call(inputs, function(i) {
-      return { col: i.getAttribute('data-filter-col'), val: i.value.trim().toLowerCase() };
-    }).filter(function(f) { return f.val; });
-
-    Array.prototype.forEach.call(tbody.children, function(tr) {
-      if (tr.querySelector('td[colspan]')) return; // empty-state row
-      var match = active.every(function(f) {
-        var cell = tr.querySelector('[data-col="' + f.col + '"]');
-        return cell && cell.textContent.toLowerCase().indexOf(f.val) !== -1;
-      });
-      if (match) {
-        delete tr.dataset.filteredOut;
-      } else {
-        tr.dataset.filteredOut = '1';
-        tr.style.display = 'none';
-        // A hidden row must not stay selected for bulk-lock.
-        var rs = tr.querySelector('.row-select');
-        if (rs) rs.checked = false;
-      }
-    });
-    if (window.__trUpdateBulk) window.__trUpdateBulk();
-    if (window.__trRepaginate) window.__trRepaginate();
   }
 
-  inputs.forEach(function(i) { i.addEventListener('input', apply); });
+  function syncSelectAll() {
+    var selectAll = document.getElementById('select-all');
+    if (!selectAll) return;
+    var visible = Array.prototype.slice.call(table.querySelectorAll('.row-select'));
+    selectAll.checked = visible.length > 0 && visible.every(function (cb) { return cb.checked; });
+  }
+
+  // Re-apply selection + hidden-column state to whichever page of rows the
+  // shared engine just rendered (only ~30 rows exist in the DOM at a time).
+  window.onRowsRendered = function () {
+    table.querySelectorAll('.row-select').forEach(function (cb) {
+      cb.checked = selected.has(cb.value);
+    });
+    syncSelectAll();
+    var applyColState = window.__trColState && window.__trColState['records-table'];
+    if (applyColState) applyColState();
+    updateBulkActions();
+  };
+
+  table.addEventListener('change', function (e) {
+    if (e.target.classList.contains('row-select')) {
+      if (e.target.checked) selected.add(e.target.value);
+      else selected.delete(e.target.value);
+      syncSelectAll();
+      updateBulkActions();
+    } else if (e.target.id === 'select-all') {
+      // Acts on every row matching the current filters, not just the visible page.
+      (window.currentFilteredRows || []).forEach(function (r) {
+        if (e.target.checked) selected.add(String(r.id));
+        else selected.delete(String(r.id));
+      });
+      table.querySelectorAll('.row-select').forEach(function (cb) { cb.checked = e.target.checked; });
+      updateBulkActions();
+    }
+  });
+
+  [lockForm, backfillForm].forEach(function (form) {
+    if (!form) return;
+    form.addEventListener('submit', function () {
+      form.querySelectorAll('input[name="record_ids[]"]').forEach(function (el) { el.remove(); });
+      selected.forEach(function (id) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'record_ids[]';
+        input.value = id;
+        form.appendChild(input);
+      });
+    });
+  });
+
+  if (statusSelect) statusSelect.addEventListener('change', updateSelectColumn);
+  updateSelectColumn();
 })();
 </script>
 {{end}}
