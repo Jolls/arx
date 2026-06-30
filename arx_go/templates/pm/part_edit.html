@@ -19,22 +19,22 @@
             <h3>Basic Information</h3>
             <div class="detail-row">
                 <label for="part_number" class="form-label">Part Number *</label>
-                <input type="text" id="part_number" name="part_number" class="form-input" required
+                <input type="text" id="part_number" name="part_number" class="form-control" required
                        value="{{.Part.PartNumber}}">
             </div>
             <div class="detail-row">
                 <label for="revision" class="form-label">Revision</label>
-                <input type="text" id="revision" name="revision" class="form-input"
+                <input type="text" id="revision" name="revision" class="form-control"
                        value="{{.Part.Revision}}">
             </div>
             <div class="detail-row">
                 <label for="title" class="form-label">Title</label>
-                <input type="text" id="title" name="title" class="form-input"
+                <input type="text" id="title" name="title" class="form-control"
                        value="{{.Part.Title}}">
             </div>
             <div class="detail-row">
                 <label for="detail" class="form-label">Detail</label>
-                <input type="text" id="detail" name="detail" class="form-input"
+                <input type="text" id="detail" name="detail" class="form-control"
                        value="{{.Part.Detail}}">
             </div>
             <div class="detail-row">
@@ -59,12 +59,12 @@
             <div class="detail-row">
                 <label for="current_cost" class="form-label" data-bs-toggle="tooltip"
                        title="Manually entered unit cost. For OPS (labor) parts this is the hourly rate; used as the rollup leaf cost when no preferred-supplier price exists.">Unit Cost / Rate</label>
-                <input type="number" id="current_cost" name="current_cost" class="form-input" step="any" min="0"
+                <input type="number" id="current_cost" name="current_cost" class="form-control" step="any" min="0"
                        value="{{if .Part.PNCurrentCost}}{{printf "%g" .Part.PNCurrentCost}}{{end}}">
             </div>
             <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
-                <input type="text" id="PNReqBy" name="PNReqBy" class="form-input"
+                <input type="text" id="PNReqBy" name="PNReqBy" class="form-control"
                        value="{{.Part.PNReqBy}}">
             </div>
         </div>
@@ -100,7 +100,7 @@
 
         <div class="detail-section">
             <h3>Notes</h3>
-            <textarea id="PNNotes" name="PNNotes" class="form-textarea"
+            <textarea id="PNNotes" name="PNNotes" class="form-control" rows="4"
                       style="width:100%; margin-top:8px;">{{.Part.PNNotes}}</textarea>
         </div>
 
@@ -109,7 +109,7 @@
             {{range .Part.UserFieldsForEdit}}
             <div class="detail-row">
                 <label for="{{.Name}}" class="form-label">{{.Label}}</label>
-                <input type="text" id="{{.Name}}" name="{{.Name}}" class="form-input"
+                <input type="text" id="{{.Name}}" name="{{.Name}}" class="form-control"
                        value="{{.Value}}">
             </div>
             {{end}}

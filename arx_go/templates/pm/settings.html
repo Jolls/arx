@@ -276,7 +276,7 @@
                 <label class="form-label" for="attachment_categories">Attachment Categories</label>
                 <div style="flex:1;">
                     <input type="text" id="attachment_categories" name="attachment_categories"
-                           class="form-input" value="{{.AttachmentCategories}}"
+                           class="form-control" value="{{.AttachmentCategories}}"
                            placeholder="Datasheet,Drawing,Certificate,ECO,Photo,Compliance,Other">
                     <p style="margin:4px 0 0; color:#888; font-size:0.82em;">Comma-separated list shown in the attachment Category dropdown.</p>
                 </div>
@@ -314,8 +314,8 @@
                 <tbody id="cat-rows">
                     {{range .PartCategories}}
                     <tr class="cat-row">
-                        <td style="padding:2px 8px;"><input class="form-input" data-f="code" value="{{.Code}}" style="width:80px; text-transform:uppercase;"></td>
-                        <td style="padding:2px 8px;"><input class="form-input" data-f="label" value="{{.Label}}"></td>
+                        <td style="padding:2px 8px;"><input class="form-control" data-f="code" value="{{.Code}}" style="width:80px; text-transform:uppercase;"></td>
+                        <td style="padding:2px 8px;"><input class="form-control" data-f="label" value="{{.Label}}"></td>
                         <td style="text-align:center;"><input type="checkbox" data-f="bom" {{if .BOM}}checked{{end}}></td>
                         <td style="text-align:center;"><input type="checkbox" data-f="orders" {{if .Orders}}checked{{end}}></td>
                         <td style="text-align:center;"><input type="checkbox" data-f="pricing" {{if .Pricing}}checked{{end}}></td>
@@ -329,8 +329,8 @@
             </table>
             <template id="cat-row-tmpl">
                 <tr class="cat-row">
-                    <td style="padding:2px 8px;"><input class="form-input" data-f="code" style="width:80px; text-transform:uppercase;"></td>
-                    <td style="padding:2px 8px;"><input class="form-input" data-f="label"></td>
+                    <td style="padding:2px 8px;"><input class="form-control" data-f="code" style="width:80px; text-transform:uppercase;"></td>
+                    <td style="padding:2px 8px;"><input class="form-control" data-f="label"></td>
                     <td style="text-align:center;"><input type="checkbox" data-f="bom"></td>
                     <td style="text-align:center;"><input type="checkbox" data-f="orders" checked></td>
                     <td style="text-align:center;"><input type="checkbox" data-f="pricing" checked></td>

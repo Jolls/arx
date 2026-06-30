@@ -21,7 +21,7 @@
             <h3>Basic Information</h3>
             <div class="detail-row">
                 <label for="CNName" class="form-label">Name *</label>
-                <input type="text" id="CNName" name="CNName" class="form-input" required
+                <input type="text" id="CNName" name="CNName" class="form-control" required
                        value="{{.Contact.CNName}}">
             </div>
             <div class="detail-row">
@@ -38,17 +38,17 @@
             </div>
             <div class="detail-row">
                 <label for="CNEmail" class="form-label">Email</label>
-                <input type="email" id="CNEmail" name="CNEmail" class="form-input"
+                <input type="email" id="CNEmail" name="CNEmail" class="form-control"
                        value="{{.Contact.CNEmail}}">
             </div>
             <div class="detail-row">
                 <label for="CNWeb" class="form-label">Website</label>
-                <input type="text" id="CNWeb" name="CNWeb" class="form-input"
+                <input type="text" id="CNWeb" name="CNWeb" class="form-control"
                        value="{{.Contact.CNWeb}}">
             </div>
             <div class="detail-row">
                 <label for="CNUserAccountLink" class="form-label">User Account</label>
-                <input type="text" id="CNUserAccountLink" name="CNUserAccountLink" class="form-input"
+                <input type="text" id="CNUserAccountLink" name="CNUserAccountLink" class="form-control"
                        value="{{.Contact.CNUserAccountLink}}">
             </div>
         </div>
@@ -57,17 +57,17 @@
             <h3>Phone</h3>
             <div class="detail-row">
                 <label for="CNPhone1" class="form-label">Phone 1</label>
-                <input type="text" id="CNPhone1" name="CNPhone1" class="form-input"
+                <input type="text" id="CNPhone1" name="CNPhone1" class="form-control"
                        value="{{.Contact.CNPhone1}}">
             </div>
             <div class="detail-row">
                 <label for="CNPhone2" class="form-label">Phone 2</label>
-                <input type="text" id="CNPhone2" name="CNPhone2" class="form-input"
+                <input type="text" id="CNPhone2" name="CNPhone2" class="form-control"
                        value="{{.Contact.CNPhone2}}">
             </div>
             <div class="detail-row">
                 <label for="CNFAX" class="form-label">Fax</label>
-                <input type="text" id="CNFAX" name="CNFAX" class="form-input"
+                <input type="text" id="CNFAX" name="CNFAX" class="form-control"
                        value="{{.Contact.CNFAX}}">
             </div>
         </div>
@@ -76,27 +76,27 @@
             <h3>Address</h3>
             <div class="detail-row">
                 <label for="CNAddress" class="form-label">Street</label>
-                <input type="text" id="CNAddress" name="CNAddress" class="form-input"
+                <input type="text" id="CNAddress" name="CNAddress" class="form-control"
                        value="{{.Contact.CNAddress}}">
             </div>
             <div class="detail-row">
                 <label for="CNCity" class="form-label">City</label>
-                <input type="text" id="CNCity" name="CNCity" class="form-input"
+                <input type="text" id="CNCity" name="CNCity" class="form-control"
                        value="{{.Contact.CNCity}}">
             </div>
             <div class="detail-row">
                 <label for="CNState" class="form-label">State</label>
-                <input type="text" id="CNState" name="CNState" class="form-input"
+                <input type="text" id="CNState" name="CNState" class="form-control"
                        value="{{.Contact.CNState}}">
             </div>
             <div class="detail-row">
                 <label for="CNZipcode" class="form-label">Zip</label>
-                <input type="text" id="CNZipcode" name="CNZipcode" class="form-input"
+                <input type="text" id="CNZipcode" name="CNZipcode" class="form-control"
                        value="{{.Contact.CNZipcode}}">
             </div>
             <div class="detail-row">
                 <label for="CNCountry" class="form-label">Country</label>
-                <input type="text" id="CNCountry" name="CNCountry" class="form-input"
+                <input type="text" id="CNCountry" name="CNCountry" class="form-control"
                        value="{{.Contact.CNCountry}}">
             </div>
         </div>
@@ -115,7 +115,7 @@
 
         <div class="detail-section">
             <h3>Notes</h3>
-            <textarea id="CNNotes" name="CNNotes" class="form-textarea"
+            <textarea id="CNNotes" name="CNNotes" class="form-control" rows="4"
                       style="width:100%; margin-top:8px;">{{.Contact.CNNotes}}</textarea>
         </div>
 

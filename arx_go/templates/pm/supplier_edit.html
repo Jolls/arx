@@ -19,12 +19,12 @@
             <h3>Basic Information</h3>
             <div class="detail-row">
                 <label for="name" class="form-label">Name *</label>
-                <input type="text" id="name" name="name" class="form-input" required
+                <input type="text" id="name" name="name" class="form-control" required
                        value="{{.Supplier.Name}}">
             </div>
             <div class="detail-row">
                 <label for="SUSupplierCode" class="form-label">Supplier Code</label>
-                <input type="text" id="SUSupplierCode" name="SUSupplierCode" class="form-input"
+                <input type="text" id="SUSupplierCode" name="SUSupplierCode" class="form-control"
                        value="{{.Supplier.SUSupplierCode}}">
             </div>
             <div class="detail-row">
@@ -83,7 +83,7 @@
 
         <div class="detail-section">
             <h3>Notes</h3>
-            <textarea id="SUNotes" name="SUNotes" class="form-textarea"
+            <textarea id="SUNotes" name="SUNotes" class="form-control" rows="4"
                       style="width:100%; margin-top:8px;">{{.Supplier.SUNotes}}</textarea>
         </div>
 

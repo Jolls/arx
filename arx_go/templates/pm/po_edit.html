@@ -47,7 +47,7 @@
                 {{if not .IsNew}}
                 <div class="detail-row">
                     <label class="form-label">PO Number</label>
-                    <input type="text" name="number" class="form-input" readonly value="{{.PO.Number}}">
+                    <input type="text" name="number" class="form-control" readonly value="{{.PO.Number}}">
                 </div>
                 {{end}}
                 {{if not .IsNew}}
@@ -62,7 +62,7 @@
                 <div class="detail-row">
                     <label class="form-label">Supplier</label>
                     <div style="position:relative; flex:1;">
-                        <input type="text" id="supplier_name" name="supplier_name" class="form-input"
+                        <input type="text" id="supplier_name" name="supplier_name" class="form-control"
                                value="{{.PO.SupplierName}}" placeholder="Required — type to search…" autocomplete="off">
                         <input type="hidden" id="supplier_id" name="supplier_id"
                                value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
@@ -84,35 +84,35 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Email</label>
-                    <input type="email" id="supplier_email" name="supplier_email" class="form-input" value="{{.PO.SupplierEmail}}">
+                    <input type="email" id="supplier_email" name="supplier_email" class="form-control" value="{{.PO.SupplierEmail}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Address</label>
-                    <input type="text" id="supplier_address" name="supplier_address" class="form-input" value="{{.PO.SupplierAddress}}">
+                    <input type="text" id="supplier_address" name="supplier_address" class="form-control" value="{{.PO.SupplierAddress}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">City</label>
-                    <input type="text" id="supplier_city" name="supplier_city" class="form-input" value="{{.PO.SupplierCity}}">
+                    <input type="text" id="supplier_city" name="supplier_city" class="form-control" value="{{.PO.SupplierCity}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">State</label>
-                    <input type="text" id="supplier_state" name="supplier_state" class="form-input" value="{{.PO.SupplierState}}">
+                    <input type="text" id="supplier_state" name="supplier_state" class="form-control" value="{{.PO.SupplierState}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Zip</label>
-                    <input type="text" id="supplier_zipcode" name="supplier_zipcode" class="form-input" value="{{.PO.SupplierZipcode}}">
+                    <input type="text" id="supplier_zipcode" name="supplier_zipcode" class="form-control" value="{{.PO.SupplierZipcode}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Country</label>
-                    <input type="text" id="supplier_country" name="supplier_country" class="form-input" value="{{.PO.SupplierCountry}}">
+                    <input type="text" id="supplier_country" name="supplier_country" class="form-control" value="{{.PO.SupplierCountry}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Phone</label>
-                    <input type="text" id="supplier_phone_number" name="supplier_phone_number" class="form-input" value="{{.PO.SupplierPhoneNumber}}">
+                    <input type="text" id="supplier_phone_number" name="supplier_phone_number" class="form-control" value="{{.PO.SupplierPhoneNumber}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Fax</label>
-                    <input type="text" id="supplier_fax_number" name="supplier_fax_number" class="form-input" value="{{.PO.SupplierFaxNumber}}">
+                    <input type="text" id="supplier_fax_number" name="supplier_fax_number" class="form-control" value="{{.PO.SupplierFaxNumber}}">
                 </div>
             </div>
 
@@ -121,7 +121,7 @@
                 <div class="detail-row">
                     <label class="form-label">Receiver</label>
                     <div style="position:relative; flex:1;">
-                        <input type="text" id="receiver_name" name="receiver_name" class="form-input"
+                        <input type="text" id="receiver_name" name="receiver_name" class="form-control"
                                value="{{.PO.ReceiverName}}" placeholder="Required — type to search…" autocomplete="off">
                         <input type="hidden" id="receiver_id" name="receiver_id"
                                value="{{if .PO.ReceiverID}}{{derefInt .PO.ReceiverID}}{{end}}">
@@ -143,35 +143,35 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Email</label>
-                    <input type="email" id="receiver_email" name="receiver_email" class="form-input" value="{{.PO.ReceiverEmail}}">
+                    <input type="email" id="receiver_email" name="receiver_email" class="form-control" value="{{.PO.ReceiverEmail}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Address</label>
-                    <input type="text" id="receiver_address" name="receiver_address" class="form-input" value="{{.PO.ReceiverAddress}}">
+                    <input type="text" id="receiver_address" name="receiver_address" class="form-control" value="{{.PO.ReceiverAddress}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">City</label>
-                    <input type="text" id="receiver_city" name="receiver_city" class="form-input" value="{{.PO.ReceiverCity}}">
+                    <input type="text" id="receiver_city" name="receiver_city" class="form-control" value="{{.PO.ReceiverCity}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">State</label>
-                    <input type="text" id="receiver_state" name="receiver_state" class="form-input" value="{{.PO.ReceiverState}}">
+                    <input type="text" id="receiver_state" name="receiver_state" class="form-control" value="{{.PO.ReceiverState}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Zip</label>
-                    <input type="text" id="receiver_zipcode" name="receiver_zipcode" class="form-input" value="{{.PO.ReceiverZipcode}}">
+                    <input type="text" id="receiver_zipcode" name="receiver_zipcode" class="form-control" value="{{.PO.ReceiverZipcode}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Country</label>
-                    <input type="text" id="receiver_country" name="receiver_country" class="form-input" value="{{.PO.ReceiverCountry}}">
+                    <input type="text" id="receiver_country" name="receiver_country" class="form-control" value="{{.PO.ReceiverCountry}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Phone</label>
-                    <input type="text" id="receiver_phone" name="receiver_phone" class="form-input" value="{{.PO.ReceiverPhone}}">
+                    <input type="text" id="receiver_phone" name="receiver_phone" class="form-control" value="{{.PO.ReceiverPhone}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Fax</label>
-                    <input type="text" id="receiver_fax" name="receiver_fax" class="form-input" value="{{.PO.ReceiverFax}}">
+                    <input type="text" id="receiver_fax" name="receiver_fax" class="form-control" value="{{.PO.ReceiverFax}}">
                 </div>
             </div>
         </div>
@@ -183,45 +183,45 @@
                 <div>
                     <div class="detail-row">
                         <label class="form-label">Orderer</label>
-                        <input type="text" id="orderer" name="orderer" class="form-input" value="{{.PO.Orderer}}">
+                        <input type="text" id="orderer" name="orderer" class="form-control" value="{{.PO.Orderer}}">
                     </div>
                     <div class="detail-row">
                         <label class="form-label">Account ID</label>
-                        <input type="text" id="account_id" name="account_id" class="form-input" value="{{.PO.AccountID}}">
+                        <input type="text" id="account_id" name="account_id" class="form-control" value="{{.PO.AccountID}}">
                     </div>
                 </div>
                 <div>
                     <div class="detail-row">
                         <label class="form-label">Date Ordered</label>
-                        <input type="date" id="date_ordered" name="date_ordered" class="form-input" value="{{formatDateInput .PO.DateOrdered}}">
+                        <input type="date" id="date_ordered" name="date_ordered" class="form-control" value="{{formatDateInput .PO.DateOrdered}}">
                     </div>
                     <div class="detail-row">
                         <label class="form-label">Date Requested</label>
-                        <input type="date" id="date_requested" name="date_requested" class="form-input" value="{{formatDateInput .PO.DateRequested}}">
+                        <input type="date" id="date_requested" name="date_requested" class="form-control" value="{{formatDateInput .PO.DateRequested}}">
                     </div>
                     <div class="detail-row">
                         <label class="form-label">Date Closed</label>
-                        <input type="date" id="date_closed" name="date_closed" class="form-input" value="{{formatDateInput .PO.DateClosed}}">
+                        <input type="date" id="date_closed" name="date_closed" class="form-control" value="{{formatDateInput .PO.DateClosed}}">
                     </div>
                     <div class="detail-row">
                         <label class="form-label">Date Printed</label>
-                        <input type="date" id="date_printed" name="date_printed" class="form-input" value="{{formatDateInput .PO.DatePrinted}}">
+                        <input type="date" id="date_printed" name="date_printed" class="form-control" value="{{formatDateInput .PO.DatePrinted}}">
                     </div>
                 </div>
                 <div>
                     <div class="detail-row">
                         <label class="form-label">Tax</label>
-                        <input type="number" step="0.01" id="tax1" name="tax1" class="form-input"
+                        <input type="number" step="0.01" id="tax1" name="tax1" class="form-control"
                                value="{{fmtOptFloat .PO.Tax1}}" placeholder="0.00">
                     </div>
                     <div class="detail-row">
                         <label class="form-label">Shipping</label>
-                        <input type="number" step="0.01" id="shipping_cost" name="shipping_cost" class="form-input"
+                        <input type="number" step="0.01" id="shipping_cost" name="shipping_cost" class="form-control"
                                value="{{fmtOptFloat .PO.ShippingCost}}" placeholder="0.00">
                     </div>
                     <div class="detail-row">
                         <label class="form-label">Misc Costs</label>
-                        <input type="number" step="0.01" id="misc_cost" name="misc_cost" class="form-input"
+                        <input type="number" step="0.01" id="misc_cost" name="misc_cost" class="form-control"
                                value="{{fmtOptFloat .PO.MiscCost}}" placeholder="0.00">
                     </div>
                     <div class="detail-row">
@@ -238,13 +238,13 @@
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
             <div class="detail-section" style="margin-bottom:0;">
                 <h3>External Notes</h3>
-                <textarea id="notes" name="notes" class="form-textarea"
+                <textarea id="notes" name="notes" class="form-control"
                           style="width:100%; margin-top:8px;" rows="5"
                           placeholder="Prints on PO document">{{.PO.Notes}}</textarea>
             </div>
             <div class="detail-section" style="margin-bottom:0;">
                 <h3>Internal Notes</h3>
-                <textarea id="internal_notes" name="internal_notes" class="form-textarea"
+                <textarea id="internal_notes" name="internal_notes" class="form-control"
                           style="width:100%; margin-top:8px;" rows="5"
                           placeholder="Internal use only — not printed">{{.PO.InternalNotes}}</textarea>
             </div>
@@ -427,7 +427,7 @@ function escHtml(s) {
 function setTypeaheadValidity(inputEl, idHiddenEl) {
     const hasText = inputEl.value.trim() !== '';
     const hasId   = idHiddenEl.value !== '';
-    inputEl.classList.toggle('input-invalid', hasText && !hasId);
+    inputEl.classList.toggle('is-invalid', hasText && !hasId);
 }
 
 function setupSupplierTypeahead(inputEl, idHiddenEl, contactSelectEl) {
@@ -436,7 +436,7 @@ function setupSupplierTypeahead(inputEl, idHiddenEl, contactSelectEl) {
     inputEl.addEventListener('input', function() {
         clearTimeout(timer);
         idHiddenEl.value = '';
-        inputEl.classList.remove('input-invalid');
+        inputEl.classList.remove('is-invalid');
         const q = this.value.trim();
         if (q.length < 2) { close(); return; }
         timer = setTimeout(() => {
@@ -475,7 +475,7 @@ function setupSupplierTypeahead(inputEl, idHiddenEl, contactSelectEl) {
     }
     function select(s) {
         inputEl.value = s.name; idHiddenEl.value = s.id;
-        inputEl.classList.remove('input-invalid');
+        inputEl.classList.remove('is-invalid');
         close();
         if (contactSelectEl) refreshContacts(s.id, contactSelectEl);
     }
@@ -573,7 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const invalid = checks.filter(c => !c.idEl.value);
         if (!invalid.length) return;
         e.preventDefault();
-        invalid.forEach(c => c.nameEl.classList.add('input-invalid'));
+        invalid.forEach(c => c.nameEl.classList.add('is-invalid'));
         let banner = document.getElementById('typeahead-error-banner');
         if (!banner) {
             banner = document.createElement('div');
