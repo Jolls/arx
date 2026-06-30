@@ -12,7 +12,7 @@
     {{if .SuggestLinks}}
     <div class="alert alert-warning" id="suggest-links-banner">
         <strong>New vendor PN(s) — add to supplier catalog?</strong>
-        <form method="POST" action="/po/{{.PO.Number}}/add-supplier-links" style="margin-top:8px;">
+        <form method="POST" action="/po/{{.PO.Number}}/add-supplier-links" class="mt-2">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="supplier_id" value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
             <input type="hidden" name="count" value="{{len .SuggestLinks}}">
@@ -24,7 +24,7 @@
                 <span>{{.PartNumber}} &mdash; <code>{{.VendorPN}}</code></span>
             </label>
             {{end}}
-            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <div class="mt-2 d-flex gap-2 align-items-center">
                 <button type="submit" class="btn btn-primary btn-sm">Save to catalog</button>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('suggest-links-banner').remove()">Dismiss</button>
             </div>
@@ -36,7 +36,7 @@
     {{if .SuggestPrices}}
     <div class="alert alert-warning" id="suggest-prices-banner">
         <strong>New unit cost(s) — add to part pricing?</strong>
-        <form method="POST" action="/po/{{.PO.Number}}/add-prices" style="margin-top:8px;">
+        <form method="POST" action="/po/{{.PO.Number}}/add-prices" class="mt-2">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="supplier_id" value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
             <input type="hidden" name="count" value="{{len .SuggestPrices}}">
@@ -48,7 +48,7 @@
                 <span>{{.PartNumber}} &mdash; <code>{{printf "%.4f" .Cost}}</code> ea</span>
             </label>
             {{end}}
-            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <div class="mt-2 d-flex gap-2 align-items-center">
                 <button type="submit" class="btn btn-primary btn-sm">Save to pricing</button>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('suggest-prices-banner').remove()">Dismiss</button>
             </div>
@@ -88,9 +88,9 @@
             <div class="part-status-label">Last Modified</div>
             <div class="part-status-value">{{formatDate .PO.DateModified}}</div>
         </div>
-        <div class="part-status-cell" style="margin-left:auto;">
+        <div class="part-status-cell ms-auto">
             <div class="part-status-label">PO Total</div>
-            <div style="font-size:1.4em; font-weight:700; color:#333;">${{printf "%.2f" (deref .PO.TotalCost)}}</div>
+            <div class="fw-bold" style="font-size:1.4em; color:#333;">${{printf "%.2f" (deref .PO.TotalCost)}}</div>
         </div>
     </div>
 
@@ -151,7 +151,7 @@
 
     {{/* ── Two-column: supplier + ship-to ────────────────────── */}}
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
-        <div class="detail-section" style="margin-bottom:0;">
+        <div class="detail-section mb-0">
             <h3>Supplier</h3>
             <div class="detail-row">
                 <strong>Company:</strong>
@@ -170,7 +170,7 @@
             <div class="detail-row"><strong>Email:</strong>     <span>{{.PO.SupplierEmail}}</span></div>
         </div>
 
-        <div class="detail-section" style="margin-bottom:0;">
+        <div class="detail-section mb-0">
             <h3>Ship To</h3>
             <div class="detail-row">
                 <strong>Company:</strong>
@@ -194,9 +194,9 @@
     <div class="detail-section">
         <h3>Notes</h3>
         {{if .PO.Notes}}
-        <p style="white-space:pre-wrap; word-break:break-word; line-height:1.6; margin-top:8px;">{{.PO.Notes}}</p>
+        <p class="mt-2" style="white-space:pre-wrap; word-break:break-word; line-height:1.6;">{{.PO.Notes}}</p>
         {{else}}
-        <p style="color:#999; font-style:italic; margin-top:8px;">No notes.</p>
+        <p class="text-muted fst-italic mt-2">No notes.</p>
         {{end}}
     </div>
 
@@ -207,7 +207,7 @@
         {{if .POItems}}
         {{if $canReceive}}<form method="POST" action="/po/{{.PO.Number}}/receive">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">{{end}}
-        <div class="table-wrapper" style="margin-top:12px;">
+        <div class="table-wrapper mt-2">
             <table class="table table-bordered table-hover table-sm">
                 <thead class="table-dark">
                     <tr>
@@ -216,10 +216,10 @@
                         <th style="width:60px;">Rev</th>
                         <th>Description</th>
                         <th>Vendor PN</th>
-                        <th style="width:72px; text-align:right;">Qty</th>
-                        <th style="width:130px; text-align:right;">Received</th>
-                        <th style="width:110px; text-align:right;">Unit Cost</th>
-                        <th style="width:110px; text-align:right;">Extended</th>
+                        <th class="text-end" style="width:72px;">Qty</th>
+                        <th class="text-end" style="width:130px;">Received</th>
+                        <th class="text-end" style="width:110px;">Unit Cost</th>
+                        <th class="text-end" style="width:110px;">Extended</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -236,36 +236,36 @@
                         <td>{{.POLRev}}</td>
                         <td>{{.POLDesc}}</td>
                         <td>{{.VendorPN}}</td>
-                        <td style="text-align:right;">{{printf "%.2f" .POLQty}}</td>
-                        <td style="text-align:right;">
+                        <td class="text-end">{{printf "%.2f" .POLQty}}</td>
+                        <td class="text-end">
                             <span {{if ge .ReceivedQty .POLQty}}class="badge bg-success"{{end}}>{{printf "%.2f" .ReceivedQty}} / {{printf "%.2f" .POLQty}}</span>
-                            {{if $canReceive}}<input type="number" step="any" min="0" name="recv[{{.POLID}}]" class="form-control form-control-sm mt-1" style="text-align:right;" placeholder="+ qty">{{end}}
+                            {{if $canReceive}}<input type="number" step="any" min="0" name="recv[{{.POLID}}]" class="form-control form-control-sm mt-1 text-end" placeholder="+ qty">{{end}}
                         </td>
-                        <td style="text-align:right;">${{printf "%.4f" .POLCost}}</td>
-                        <td style="text-align:right;">${{printf "%.2f" (mul .POLQty .POLCost)}}</td>
+                        <td class="text-end">${{printf "%.4f" .POLCost}}</td>
+                        <td class="text-end">${{printf "%.2f" (mul .POLQty .POLCost)}}</td>
                     </tr>
                     {{end}}
                 </tbody>
                 <tfoot>
-                    <tr style="font-weight:700; border-top:2px solid var(--accent-1); background:#f5f5f5;">
-                        <td colspan="8" style="text-align:right; padding:10px;">Line Items Subtotal:</td>
-                        <td style="text-align:right; padding:10px;">${{printf "%.2f" .LineTotal}}</td>
+                    <tr class="fw-bold" style="border-top:2px solid var(--accent-1); background:#f5f5f5;">
+                        <td colspan="8" class="text-end" style="padding:10px;">Line Items Subtotal:</td>
+                        <td class="text-end" style="padding:10px;">${{printf "%.2f" .LineTotal}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="8" style="text-align:right; padding:5px 10px; color:#555;">Tax:</td>
-                        <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.Tax1)}}</td>
+                        <td colspan="8" class="text-end text-muted" style="padding:5px 10px;">Tax:</td>
+                        <td class="text-end text-muted" style="padding:5px 10px;">${{printf "%.2f" (deref .PO.Tax1)}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="8" style="text-align:right; padding:5px 10px; color:#555;">Shipping:</td>
-                        <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.ShippingCost)}}</td>
+                        <td colspan="8" class="text-end text-muted" style="padding:5px 10px;">Shipping:</td>
+                        <td class="text-end text-muted" style="padding:5px 10px;">${{printf "%.2f" (deref .PO.ShippingCost)}}</td>
                     </tr>
                     <tr style="background:#fafafa;">
-                        <td colspan="8" style="text-align:right; padding:5px 10px; color:#555;">Misc:</td>
-                        <td style="text-align:right; padding:5px 10px; color:#555;">${{printf "%.2f" (deref .PO.MiscCost)}}</td>
+                        <td colspan="8" class="text-end text-muted" style="padding:5px 10px;">Misc:</td>
+                        <td class="text-end text-muted" style="padding:5px 10px;">${{printf "%.2f" (deref .PO.MiscCost)}}</td>
                     </tr>
-                    <tr style="font-weight:700; background:#f0f4ff; border-top:1px solid #c7d2fe;">
-                        <td colspan="8" style="text-align:right; padding:10px; color:var(--accent-1);">PO Total:</td>
-                        <td style="text-align:right; padding:10px; color:var(--accent-1);">${{printf "%.2f" (deref .PO.TotalCost)}}</td>
+                    <tr class="fw-bold" style="background:#f0f4ff; border-top:1px solid #c7d2fe;">
+                        <td colspan="8" class="text-end" style="padding:10px; color:var(--accent-1);">PO Total:</td>
+                        <td class="text-end" style="padding:10px; color:var(--accent-1);">${{printf "%.2f" (deref .PO.TotalCost)}}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -280,7 +280,7 @@
         </div>
         </form>{{end}}
         {{else}}
-        <p style="color:#999; font-style:italic; margin-top:10px;">No line items on record for this PO.</p>
+        <p class="text-muted fst-italic mt-2">No line items on record for this PO.</p>
         {{end}}
     </div>
 
@@ -288,13 +288,13 @@
     {{if .Receipts}}
     <div class="detail-section">
         <h3>Receipts</h3>
-        <div class="table-wrapper" style="margin-top:12px;">
+        <div class="table-wrapper mt-2">
             <table class="table table-bordered table-sm">
                 <thead class="table-dark">
                     <tr>
                         <th style="width:120px;">Date</th>
                         <th>Part Number</th>
-                        <th style="width:100px; text-align:right;">Qty</th>
+                        <th class="text-end" style="width:100px;">Qty</th>
                         <th style="width:160px;">By</th>
                     </tr>
                 </thead>
@@ -303,7 +303,7 @@
                     <tr>
                         <td>{{.Date}}</td>
                         <td>{{if .PartID}}<a href="/part/{{derefInt .PartID}}/transactions" class="part-number-link">{{.PartNumber}}</a>{{else}}{{.PartNumber}}{{end}}</td>
-                        <td style="text-align:right;">{{printf "%.2f" .Qty}}</td>
+                        <td class="text-end">{{printf "%.2f" .Qty}}</td>
                         <td>{{.Username}}</td>
                     </tr>
                     {{end}}
@@ -317,9 +317,9 @@
     <div class="detail-section">
         <h3>Internal Notes</h3>
         {{if .PO.InternalNotes}}
-        <p style="white-space:pre-wrap; word-break:break-word; line-height:1.6; margin-top:8px;">{{.PO.InternalNotes}}</p>
+        <p class="mt-2" style="white-space:pre-wrap; word-break:break-word; line-height:1.6;">{{.PO.InternalNotes}}</p>
         {{else}}
-        <p style="color:#999; font-style:italic; margin-top:8px;">No internal notes.</p>
+        <p class="text-muted fst-italic mt-2">No internal notes.</p>
         {{end}}
     </div>
 
@@ -327,7 +327,7 @@
     {{if .History}}
     <div class="detail-section">
         <h3>PO History</h3>
-        <div class="table-wrapper" style="margin-top:12px;">
+        <div class="table-wrapper mt-2">
             <table class="table table-sm table-bordered table-hover">
                 <thead class="table-dark">
                     <tr><th style="width:160px;">When</th><th style="width:240px;">Event</th><th style="width:180px;">By</th><th>Note</th></tr>
