@@ -441,8 +441,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // which are nested deeper and wire their own listeners in initDateFilters().
     document.querySelectorAll('tr.filter-row > th > input, tr.filter-row > th > select')
         .forEach(i => {
+            // input fires on every keystroke (and on select changes), so it
+            // fully covers re-filtering. A change listener here is redundant and
+            // fires on blur — i.e. exactly when the user clicks a row link —
+            // re-rendering the tbody and detaching the in-flight anchor, which
+            // swallows the first click (#525).
             i.addEventListener('input', () => applyFilters(true));
-            i.addEventListener('change', () => applyFilters(true));
         });
     document.getElementById('show-rfqs')?.addEventListener('change', () => applyFilters(true));
     document.getElementById('show-inactive')?.addEventListener('change', () => applyFilters(true));

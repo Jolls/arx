@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.56] - 2026-06-30 
+- Fixed needing to double-click a row link after filtering a list; a redundant `change` listener re-rendered the table on blur and swallowed the first click ([#525](https://github.com/Jolls/arx-legacy/issues/525))
+
 ## [0.5.55] - 2026-06-30 
 - Fixed new attachments saving with an empty Category; the add form's selected category is now persisted instead of an unused field ([#527](https://github.com/Jolls/arx-legacy/issues/527))
 
