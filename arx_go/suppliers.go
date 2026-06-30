@@ -555,12 +555,16 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 	}
 
 	info, err := os.Stat(path)
-	if os.IsNotExist(err) || (err == nil && !info.IsDir()) {
-		http.NotFound(w, r)
+	if os.IsNotExist(err) {
+		h.renderError(w, r, "Vendor folder not found: "+path)
+		return
+	}
+	if err == nil && !info.IsDir() {
+		h.renderError(w, r, "Vendor folder not found: "+path+" is not a directory")
 		return
 	}
 	if err != nil {
-		http.Error(w, "Error accessing folder", http.StatusInternalServerError)
+		h.renderError(w, r, "Error accessing vendor folder "+path+": "+err.Error())
 		return
 	}
 
