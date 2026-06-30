@@ -104,27 +104,27 @@
             </div>
             <div class="detail-row">
                 <label class="form-label">Supplier PN</label>
-                <input type="text" name="supplier_pn" class="form-input"
+                <input type="text" name="supplier_pn" class="form-control"
                        value="{{.EditingLink.SupplierPN}}">
             </div>
             <div class="detail-row">
                 <label class="form-label">Description</label>
-                <input type="text" name="supplier_desc" class="form-input"
+                <input type="text" name="supplier_desc" class="form-control"
                        value="{{.EditingLink.SupplierDesc}}">
             </div>
             <div class="detail-row">
                 <label class="form-label">Preference</label>
-                <input type="text" name="preference" class="form-input"
+                <input type="text" name="preference" class="form-control"
                        value="{{.EditingLink.Preference}}" placeholder="e.g. Primary, Secondary">
             </div>
             <div class="detail-row">
                 <label class="form-label">Lead Time</label>
-                <input type="text" name="lead_time" class="form-input"
+                <input type="text" name="lead_time" class="form-control"
                        value="{{.EditingLink.LeadTime}}" placeholder="e.g. 2 weeks">
             </div>
             <div class="detail-row">
                 <label class="form-label">Min Increment</label>
-                <input type="number" name="min_increment" class="form-input" step="any" min="0"
+                <input type="number" name="min_increment" class="form-control" step="any" min="0"
                        value="{{if .EditingLink.MinIncrement}}{{printf "%g" (deref .EditingLink.MinIncrement)}}{{end}}">
             </div>
             <div class="detail-row">
@@ -169,27 +169,27 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Supplier PN</label>
-                    <input type="text" name="supplier_pn" class="form-input"
+                    <input type="text" name="supplier_pn" class="form-control"
                            placeholder="Supplier's part number">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Description</label>
-                    <input type="text" name="supplier_desc" class="form-input"
+                    <input type="text" name="supplier_desc" class="form-control"
                            placeholder="Supplier's description">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Preference</label>
-                    <input type="text" name="preference" class="form-input"
+                    <input type="text" name="preference" class="form-control"
                            placeholder="e.g. Primary, Secondary">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Lead Time</label>
-                    <input type="text" name="lead_time" class="form-input"
+                    <input type="text" name="lead_time" class="form-control"
                            placeholder="e.g. 2 weeks">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Min Increment</label>
-                    <input type="number" name="min_increment" class="form-input" step="any" min="0"
+                    <input type="number" name="min_increment" class="form-control" step="any" min="0"
                            placeholder="Minimum order quantity">
                 </div>
                 <div class="detail-row">

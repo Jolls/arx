@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.53] - 2026-06-30 
+- Form fields, select boxes, and inline validation now use native Bootstrap `form-control`/`form-select`/`is-invalid` styling instead of hand-maintained CSS clones; removed the duplicate rules from app.css ([#500](https://github.com/Jolls/arx-legacy/issues/500))
+
 ## [0.5.52] - 2026-06-30 
 - Settings and login pages now use Bootstrap alert/badge/table components instead of hand-rolled inline-styled equivalents, and the login button uses the proper `btn btn-primary` styling ([#500](https://github.com/Jolls/arx-legacy/issues/500))
 

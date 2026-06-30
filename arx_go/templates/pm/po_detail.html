@@ -10,7 +10,7 @@
 
     {{/* ── Suggest supplier links ──────────────────────────── */}}
     {{if .SuggestLinks}}
-    <div class="suggest-links-banner" id="suggest-links-banner">
+    <div class="alert alert-warning" id="suggest-links-banner">
         <strong>New vendor PN(s) — add to supplier catalog?</strong>
         <form method="POST" action="/po/{{.PO.Number}}/add-supplier-links" style="margin-top:8px;">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -34,7 +34,7 @@
 
     {{/* ── Suggest pricing ────────────────────────────────────── */}}
     {{if .SuggestPrices}}
-    <div class="suggest-links-banner" id="suggest-prices-banner">
+    <div class="alert alert-warning" id="suggest-prices-banner">
         <strong>New unit cost(s) — add to part pricing?</strong>
         <form method="POST" action="/po/{{.PO.Number}}/add-prices" style="margin-top:8px;">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

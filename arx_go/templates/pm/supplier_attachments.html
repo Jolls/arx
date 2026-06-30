@@ -87,11 +87,11 @@
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
                 <label class="form-label">Notes</label>
-                <input type="text" name="notes" class="form-input" value="{{.EditingAtt.Notes}}">
+                <input type="text" name="notes" class="form-control" value="{{.EditingAtt.Notes}}">
             </div>
             <div class="detail-row">
                 <label class="form-label">Sort Order</label>
-                <input type="number" name="sort_order" class="form-input" style="max-width:100px;"
+                <input type="number" name="sort_order" class="form-control" style="max-width:100px;"
                        value="{{if .EditingAtt.SortOrder}}{{derefInt .EditingAtt.SortOrder}}{{end}}">
             </div>
             <div class="form-actions">
@@ -110,16 +110,16 @@
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
                     <label class="form-label">File / URL *</label>
-                    <input type="text" name="file_path" class="form-input"
+                    <input type="text" name="file_path" class="form-control"
                            placeholder="https://... or LOCAL:relative\path\to\file.pdf or LOCAL:folder\" required>
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Notes</label>
-                    <input type="text" name="notes" class="form-input">
+                    <input type="text" name="notes" class="form-control">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Sort Order</label>
-                    <input type="number" name="sort_order" class="form-input" style="max-width:100px;">
+                    <input type="number" name="sort_order" class="form-control" style="max-width:100px;">
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Add Attachment</button>

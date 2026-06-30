@@ -133,9 +133,6 @@ table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* A
 .filter-row .date-filter { display: flex; justify-content: center; }
 .filter-row .date-filter-btn { padding: 4px 8px; }
 
-.form-input.input-invalid { border-color: #dc3545 !important; background: #fff8f8; }
-.form-input.input-invalid:focus { box-shadow: 0 0 3px rgba(220,53,69,0.4); }
-
 /* --- Pagination ---------------------------------------------- */
 .pagination-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0; }
 .pagination-info     { color: #666; font-size: 0.95em; }
@@ -170,15 +167,6 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 
 /* --- Forms --------------------------------------------------- */
 .form-label { display: block; font-weight: 600; color: var(--accent-1); font-size: 0.95em; }
-.form-input, .form-select, .form-textarea {
-    width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px;
-    font-size: 0.95em; font-family: inherit; box-sizing: border-box;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-.form-input:focus, .form-select:focus, .form-textarea:focus {
-    outline: none; border-color: var(--accent-1); box-shadow: 0 0 0 3px rgba(13,110,253,0.15);
-}
-.form-textarea { min-height: 100px; resize: vertical; }
 .form-checkbox-row { display: flex; align-items: center; gap: 10px; }
 .form-checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-1); cursor: pointer; }
 .form-actions { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
@@ -199,7 +187,6 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
     color: var(--accent-1); font-weight: 700; margin-bottom: 6px;
 }
 .part-status-value { font-weight: 600; font-size: 0.95em; }
-.part-status-link  { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* --- PO line items ------------------------------------------- */
 tr.line-removed td { opacity: 0.35; pointer-events: none; }
@@ -220,10 +207,6 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 .search-dropdown-item:hover, .search-dropdown-item.active { background: #cfe2ff; }
 .search-dropdown-item strong { color: var(--accent-1); font-weight: 600; }
 
-.suggest-links-banner {
-    background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px;
-    padding: 12px 16px; margin-bottom: 16px; font-size: 0.9em;
-}
 .suggest-links-row {
     display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer;
 }

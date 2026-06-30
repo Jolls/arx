@@ -44,14 +44,14 @@
                 {{$f := .PrimaryAtt.FILFileName}}
                 {{$n := .PrimaryAtt.Category}}
                 {{if isHTTPURL $f}}
-                    <a href="{{$f}}" target="_blank" rel="noopener noreferrer" class="part-status-value part-status-link">{{attachLabel $f $n}}</a>
+                    <a href="{{$f}}" target="_blank" rel="noopener noreferrer" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
                 {{else if isLocalDir $f}}
-                    <a href="{{localDirURL $f}}" class="part-status-value part-status-link">&#128193; {{attachLabel $f $n}}</a>
+                    <a href="{{localDirURL $f}}" class="part-status-value d-block text-truncate">&#128193; {{attachLabel $f $n}}</a>
                 {{else if isLocalFile $f}}
                     {{if isPDF $f}}
-                        <a href="{{localFileURL $f}}" target="_blank" class="part-status-value part-status-link">{{attachLabel $f $n}}</a>
+                        <a href="{{localFileURL $f}}" target="_blank" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
                     {{else}}
-                        <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" class="part-status-value part-status-link">{{attachLabel $f $n}}</a>
+                        <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
                     {{end}}
                 {{else}}
                     <span class="part-status-value">{{$f}}</span>
