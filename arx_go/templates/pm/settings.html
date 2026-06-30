@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="content">
-    <h2 style="margin-bottom:4px; color:#333;">Settings</h2>
-    <p style="color:#999; font-size:0.85em; margin-bottom:20px;">Arx Parts Master v{{.AppVersion}}</p>
+    <h2 class="mb-1" style="color:#333;">Settings</h2>
+    <p class="text-muted mb-4" style="font-size:0.85em;">Arx Parts Master v{{.AppVersion}}</p>
 
     {{if not .Connected}}
     <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
@@ -22,7 +22,7 @@
     </div>
     {{end}}
 
-    <div class="sub-tabs" style="margin-bottom:20px;">
+    <div class="sub-tabs mb-4">
         <a href="#connection" class="sub-tab" data-tab="connection">Connection</a>
         {{if .Connected}}
         <a href="#configuration" class="sub-tab" data-tab="configuration">Configuration</a>
@@ -43,7 +43,7 @@
 
     <!-- ── Database Connection ───────────────────────────────────────── -->
     <div class="detail-section">
-        <h3 style="display:flex; align-items:center; gap:10px;">
+        <h3 class="d-flex align-items-center gap-2">
             Database Connection
             {{if .Connected}}
             <span class="badge rounded-pill text-bg-success fw-normal">&#10003; Connected</span>
@@ -53,45 +53,40 @@
             <span class="badge rounded-pill text-bg-secondary fw-normal">{{.ActiveDBName}}{{if .TestMode}} &mdash; TEST MODE{{end}}</span>
         </h3>
 
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">DB Server</strong>
             <input type="text" name="db_server" value="{{.DBServer}}"
                    placeholder="yourserver.database.windows.net"
-                   style="width:360px; padding:6px 10px; border:1px solid #ccc;
-                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+                   class="form-control font-monospace" style="width:360px;">
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Prod DB Name</strong>
             <input type="text" name="db_name" value="{{.DBName}}"
                    placeholder="ArxProd"
-                   style="width:240px; padding:6px 10px; border:1px solid #ccc;
-                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+                   class="form-control font-monospace" style="width:240px;">
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Test DB Name</strong>
             <input type="text" name="test_db_name" value="{{.TestDBName}}"
                    placeholder="ArxDev"
-                   style="width:240px; padding:6px 10px; border:1px solid #ccc;
-                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+                   class="form-control font-monospace" style="width:240px;">
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Username</strong>
             <input type="text" name="db_user" value="{{.DBUser}}"
                    placeholder="dbuser"
                    autocomplete="username"
-                   style="width:240px; padding:6px 10px; border:1px solid #ccc;
-                          border-radius:4px; font-size:0.9em; font-family:monospace;">
+                   class="form-control font-monospace" style="width:240px;">
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Password</strong>
-            <div style="display:flex; gap:8px; align-items:center;">
+            <div class="d-flex align-items-center gap-2">
                 <input type="password" name="db_password" id="db_password"
                        placeholder="{{if .Connected}}Leave blank to keep current{{else}}Required to connect{{end}}"
                        autocomplete="current-password"
-                       style="width:280px; padding:6px 10px; border:1px solid #ccc;
-                              border-radius:4px; font-size:0.9em;">
-                <label style="display:flex; align-items:center; gap:4px;
-                              font-size:0.85em; color:#666; cursor:pointer; user-select:none;">
+                       class="form-control" style="width:280px;">
+                <label class="d-flex align-items-center gap-1 text-muted"
+                       style="font-size:0.85em; cursor:pointer; user-select:none;">
                     <input type="checkbox"
                            onchange="document.getElementById('db_password').type=this.checked?'text':'password'">
                     Show
@@ -101,79 +96,74 @@
     </div>
 
     <!-- ── File Paths ────────────────────────────────────────────────── -->
-    <div class="detail-section" style="margin-top:20px;">
+    <div class="detail-section mt-4">
         <h3>File Paths</h3>
-        <p style="font-size:0.85em; color:#888; margin:4px 0 14px;">
+        <p class="text-muted" style="font-size:0.85em; margin:4px 0 14px;">
             Override the default paths from your .env file. Changes are saved to
             <code>config/local.json</code> and take effect immediately.
         </p>
 
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">DOC_CONTROL_ROOT</strong>
-            <div style="display:flex; gap:6px; align-items:center;">
+            <div class="d-flex align-items-center gap-2">
                 <input type="text" name="doc_control_root" id="doc_control_root"
                        value="{{.DocControlRoot}}"
                        placeholder="e.g. C:\DocControl"
-                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
-                              border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn btn-secondary"
+                       class="form-control font-monospace" style="width:400px;">
+                <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('doc_control_root')"
-                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+                        style="font-size:0.85em;">Browse&hellip;</button>
             </div>
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">PO_FOLDER_ROOT</strong>
-            <div style="display:flex; gap:6px; align-items:center;">
+            <div class="d-flex align-items-center gap-2">
                 <input type="text" name="po_folder_root" id="po_folder_root"
                        value="{{.POFolderRoot}}"
                        placeholder="e.g. C:\PurchaseOrders"
-                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
-                              border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn btn-secondary"
+                       class="form-control font-monospace" style="width:400px;">
+                <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('po_folder_root')"
-                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+                        style="font-size:0.85em;">Browse&hellip;</button>
             </div>
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">SUPPLIER_FILES_ROOT</strong>
-            <div style="display:flex; gap:6px; align-items:center;">
+            <div class="d-flex align-items-center gap-2">
                 <input type="text" name="supplier_files_root" id="supplier_files_root"
                        value="{{.SupplierFilesRoot}}"
                        placeholder="e.g. C:\SupplierDocs (blank = use DOC_CONTROL_ROOT)"
-                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
-                              border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn btn-secondary"
+                       class="form-control font-monospace" style="width:400px;">
+                <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('supplier_files_root')"
-                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+                        style="font-size:0.85em;">Browse&hellip;</button>
             </div>
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">IMAGE_ROOT</strong>
-            <div style="display:flex; gap:6px; align-items:center;">
+            <div class="d-flex align-items-center gap-2">
                 <input type="text" name="image_root" id="image_root"
                        value="{{.ImageRoot}}"
                        placeholder="e.g. C:\Images (used by Test Records)"
-                       style="width:400px; padding:6px 10px; border:1px solid #ccc;
-                              border-radius:4px; font-size:0.9em; font-family:monospace;">
-                <button type="button" class="btn btn-secondary"
+                       class="form-control font-monospace" style="width:400px;">
+                <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('image_root')"
-                        style="white-space:nowrap; font-size:0.85em;">Browse&hellip;</button>
+                        style="font-size:0.85em;">Browse&hellip;</button>
             </div>
         </div>
     </div>
 
     <!-- ── PO Defaults ───────────────────────────────────────────────── -->
-    <div class="detail-section" style="margin-top:20px;">
+    <div class="detail-section mt-4">
         <h3>PO Defaults</h3>
-        <p style="font-size:0.85em; color:#888; margin:4px 0 14px;">
+        <p class="text-muted" style="font-size:0.85em; margin:4px 0 14px;">
             Saved to <code>config/local.json</code>. Connect to the database to see contact names.
         </p>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Default Contact</strong>
             {{if .Contacts}}
             <select name="po_default_contact_id"
-                    style="padding:6px 10px; border:1px solid #ccc; border-radius:4px;
-                           font-size:0.9em; min-width:260px;">
+                    class="form-select" style="font-size:0.9em; min-width:260px; width:auto;">
                 <option value="0">— none —</option>
                 {{range .Contacts}}
                 <option value="{{.ID}}" {{if eq .ID $.PODefaultContactID}}selected{{end}}>
@@ -184,16 +174,14 @@
             {{else}}
             <input type="number" name="po_default_contact_id" value="{{.PODefaultContactID}}"
                    placeholder="Contact ID"
-                   style="width:120px; padding:6px 10px; border:1px solid #ccc;
-                          border-radius:4px; font-size:0.9em;">
+                   class="form-control" style="width:120px;">
             {{end}}
         </div>
-        <div class="detail-row" style="align-items:center; padding:6px 0;">
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Default Receiver</strong>
             {{if .Suppliers}}
             <select name="po_default_receiver_id"
-                    style="padding:6px 10px; border:1px solid #ccc; border-radius:4px;
-                           font-size:0.9em; min-width:260px;">
+                    class="form-select" style="font-size:0.9em; min-width:260px; width:auto;">
                 <option value="0">— none —</option>
                 {{range .Suppliers}}
                 <option value="{{.ID}}" {{if eq .ID $.PODefaultReceiverID}}selected{{end}}>
@@ -204,8 +192,7 @@
             {{else}}
             <input type="number" name="po_default_receiver_id" value="{{.PODefaultReceiverID}}"
                    placeholder="Supplier ID"
-                   style="width:120px; padding:6px 10px; border:1px solid #ccc;
-                          border-radius:4px; font-size:0.9em;">
+                   class="form-control" style="width:120px;">
             {{end}}
         </div>
     </div>
@@ -236,15 +223,15 @@
     </script>
 
     <!-- ── Developer ────────────────────────────────────────────────── -->
-    <div class="settings-card" style="margin-top:24px;">
+    <div class="settings-card mt-4">
         <div class="settings-card-header">Developer</div>
         <div class="settings-card-body">
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:8px;">
+            <label class="d-flex align-items-center gap-2 mb-2" style="cursor:pointer;">
                 <input type="checkbox" name="test_mode" value="1" {{if .TestMode}}checked{{end}}
                        onchange="confirmTestModeToggle(this)">
-                Test mode — connect to <code>{{.TestDBName}}</code> instead of <code>{{.DBName}}</code> <span style="color:#c0392b; font-weight:600;">(writes go to test data)</span>
+                Test mode — connect to <code>{{.TestDBName}}</code> instead of <code>{{.DBName}}</code> <span class="fw-semibold" style="color:#c0392b;">(writes go to test data)</span>
             </label>
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
                 <input type="checkbox" name="debug_mode" value="1" {{if .DebugMode}}checked{{end}}>
                 Debug mode — reserved for future use
             </label>
@@ -252,12 +239,12 @@
     </div>
 
     <!-- ── Save button ───────────────────────────────────────────────── -->
-    <div style="margin-top:24px; display:flex; align-items:center; gap:16px;">
+    <div class="mt-4 d-flex align-items-center gap-3">
         <button type="submit" class="btn btn-primary" style="padding:10px 32px; font-size:0.95em;">
             Save Settings
         </button>
         {{if .Connected}}
-        <a href="/" style="color:#666; font-size:0.9em; text-decoration:none;">&#8592; Back to app</a>
+        <a href="/" class="text-muted text-decoration-none" style="font-size:0.9em;">&#8592; Back to app</a>
         {{end}}
     </div>
     </form>
@@ -278,18 +265,18 @@
                     <input type="text" id="attachment_categories" name="attachment_categories"
                            class="form-control" value="{{.AttachmentCategories}}"
                            placeholder="Datasheet,Drawing,Certificate,ECO,Photo,Compliance,Other">
-                    <p style="margin:4px 0 0; color:#888; font-size:0.82em;">Comma-separated list shown in the attachment Category dropdown.</p>
+                    <p class="text-muted" style="margin:4px 0 0; font-size:0.82em;">Comma-separated list shown in the attachment Category dropdown.</p>
                 </div>
             </div>
-            <div class="form-actions" style="margin-top:12px;">
+            <div class="form-actions mt-2">
                 <button type="submit" class="btn btn-primary">Save Categories</button>
             </div>
         </form>
     </div>
 
-    <div class="detail-section" style="margin-top:24px;">
+    <div class="detail-section mt-4">
         <h3>Part Categories</h3>
-        <p style="margin:0 0 12px; color:#888; font-size:0.82em;">
+        <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
             Categories shown in the part Category dropdown, and which subtabs each one exposes.
             Stored in the database, so changes apply to every instance. The BOM tab also appears
             automatically whenever a part already has a BOM, regardless of these settings.
@@ -302,12 +289,12 @@
                     <tr>
                         <th style="padding:4px 8px;">Code</th>
                         <th style="padding:4px 8px;">Label</th>
-                        <th style="padding:4px 8px; text-align:center;">BOM</th>
-                        <th style="padding:4px 8px; text-align:center;">Orders</th>
-                        <th style="padding:4px 8px; text-align:center;">Pricing</th>
-                        <th style="padding:4px 8px; text-align:center;">Mfg Parts</th>
-                        <th style="padding:4px 8px; text-align:center;">Suppliers</th>
-                        <th style="padding:4px 8px; text-align:center;"><span data-bs-toggle="tooltip" title="Track stock on hand + a Transactions tab">Inventory</span></th>
+                        <th class="text-center" style="padding:4px 8px;">BOM</th>
+                        <th class="text-center" style="padding:4px 8px;">Orders</th>
+                        <th class="text-center" style="padding:4px 8px;">Pricing</th>
+                        <th class="text-center" style="padding:4px 8px;">Mfg Parts</th>
+                        <th class="text-center" style="padding:4px 8px;">Suppliers</th>
+                        <th class="text-center" style="padding:4px 8px;"><span data-bs-toggle="tooltip" title="Track stock on hand + a Transactions tab">Inventory</span></th>
                         <th></th>
                     </tr>
                 </thead>
@@ -316,13 +303,13 @@
                     <tr class="cat-row">
                         <td style="padding:2px 8px;"><input class="form-control" data-f="code" value="{{.Code}}" style="width:80px; text-transform:uppercase;"></td>
                         <td style="padding:2px 8px;"><input class="form-control" data-f="label" value="{{.Label}}"></td>
-                        <td style="text-align:center;"><input type="checkbox" data-f="bom" {{if .BOM}}checked{{end}}></td>
-                        <td style="text-align:center;"><input type="checkbox" data-f="orders" {{if .Orders}}checked{{end}}></td>
-                        <td style="text-align:center;"><input type="checkbox" data-f="pricing" {{if .Pricing}}checked{{end}}></td>
-                        <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" {{if .MfgParts}}checked{{end}}></td>
-                        <td style="text-align:center;"><input type="checkbox" data-f="suppliers" {{if .Suppliers}}checked{{end}}></td>
-                        <td style="text-align:center;"><input type="checkbox" data-f="inventory" {{if .Inventory}}checked{{end}}></td>
-                        <td style="text-align:center;"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
+                        <td class="text-center"><input type="checkbox" data-f="bom" {{if .BOM}}checked{{end}}></td>
+                        <td class="text-center"><input type="checkbox" data-f="orders" {{if .Orders}}checked{{end}}></td>
+                        <td class="text-center"><input type="checkbox" data-f="pricing" {{if .Pricing}}checked{{end}}></td>
+                        <td class="text-center"><input type="checkbox" data-f="mfgparts" {{if .MfgParts}}checked{{end}}></td>
+                        <td class="text-center"><input type="checkbox" data-f="suppliers" {{if .Suppliers}}checked{{end}}></td>
+                        <td class="text-center"><input type="checkbox" data-f="inventory" {{if .Inventory}}checked{{end}}></td>
+                        <td class="text-center"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
                     </tr>
                     {{end}}
                 </tbody>
@@ -331,25 +318,25 @@
                 <tr class="cat-row">
                     <td style="padding:2px 8px;"><input class="form-control" data-f="code" style="width:80px; text-transform:uppercase;"></td>
                     <td style="padding:2px 8px;"><input class="form-control" data-f="label"></td>
-                    <td style="text-align:center;"><input type="checkbox" data-f="bom"></td>
-                    <td style="text-align:center;"><input type="checkbox" data-f="orders" checked></td>
-                    <td style="text-align:center;"><input type="checkbox" data-f="pricing" checked></td>
-                    <td style="text-align:center;"><input type="checkbox" data-f="mfgparts" checked></td>
-                    <td style="text-align:center;"><input type="checkbox" data-f="suppliers" checked></td>
-                    <td style="text-align:center;"><input type="checkbox" data-f="inventory" checked></td>
-                    <td style="text-align:center;"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
+                    <td class="text-center"><input type="checkbox" data-f="bom"></td>
+                    <td class="text-center"><input type="checkbox" data-f="orders" checked></td>
+                    <td class="text-center"><input type="checkbox" data-f="pricing" checked></td>
+                    <td class="text-center"><input type="checkbox" data-f="mfgparts" checked></td>
+                    <td class="text-center"><input type="checkbox" data-f="suppliers" checked></td>
+                    <td class="text-center"><input type="checkbox" data-f="inventory" checked></td>
+                    <td class="text-center"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" title="Remove">&times;</button></td>
                 </tr>
             </template>
-            <div class="form-actions" style="margin-top:12px; display:flex; gap:8px;">
+            <div class="form-actions mt-2 d-flex gap-2">
                 <button type="button" class="btn btn-secondary" onclick="addCatRow()">+ Add Category</button>
                 <button type="submit" class="btn btn-primary">Save Part Categories</button>
             </div>
         </form>
     </div>
 
-    <div class="detail-section" style="margin-top:24px;">
+    <div class="detail-section mt-4">
         <h3>Data Backup</h3>
-        <p style="margin:0 0 12px; color:#888; font-size:0.82em;">
+        <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
             Downloads a ZIP archive containing one CSV file per table.
             This is a portable data export, not a SQL Server native backup.
         </p>
@@ -436,24 +423,21 @@
 
         <form method="post" action="/settings/users">
             <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
-            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+            <div class="d-flex align-items-end flex-wrap gap-2">
                 <div>
-                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Username</label>
+                    <label class="text-muted d-block mb-1" style="font-size:0.82em;">Username</label>
                     <input type="text" name="username" autocomplete="off"
-                           style="width:160px; padding:6px 10px; border:1px solid #ccc;
-                                  border-radius:4px; font-size:0.9em; font-family:monospace;">
+                           class="form-control font-monospace" style="width:160px;">
                 </div>
                 <div>
-                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Display Name</label>
+                    <label class="text-muted d-block mb-1" style="font-size:0.82em;">Display Name</label>
                     <input type="text" name="display_name" autocomplete="off"
-                           style="width:200px; padding:6px 10px; border:1px solid #ccc;
-                                  border-radius:4px; font-size:0.9em;">
+                           class="form-control" style="width:200px;">
                 </div>
                 <div>
-                    <label style="display:block; font-size:0.82em; color:#888; margin-bottom:3px;">Password</label>
+                    <label class="text-muted d-block mb-1" style="font-size:0.82em;">Password</label>
                     <input type="password" name="password" autocomplete="new-password"
-                           style="width:180px; padding:6px 10px; border:1px solid #ccc;
-                                  border-radius:4px; font-size:0.9em;">
+                           class="form-control" style="width:180px;">
                 </div>
                 <button type="submit" class="btn btn-primary">Add User</button>
             </div>
@@ -467,9 +451,9 @@
     {{if .ReleaseNotes}}
     <div class="settings-tab-panel" id="tab-release-notes">
     <div class="detail-section">
-        <h3 style="margin-bottom:4px;">Release Notes</h3>
-        <p style="margin:0 0 12px; font-size:0.85em; color:#888;">
-            <a href="/whats-new" target="_blank" style="color:#888;">Open full page &#8599;</a>
+        <h3 class="mb-1">Release Notes</h3>
+        <p class="text-muted" style="margin:0 0 12px; font-size:0.85em;">
+            <a href="/whats-new" target="_blank" class="text-muted">Open full page &#8599;</a>
         </p>
         <div style="white-space:pre-wrap; overflow-wrap:break-word; line-height:1.7; color:#333; font-size:0.88em;">{{.ReleaseNotes}}</div>
     </div>

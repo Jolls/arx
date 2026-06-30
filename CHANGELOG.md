@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.54] - 2026-06-30 
+- Swept hand-written inline styles on the settings, login, PO, attachment, sourcing, and pricing pages over to Bootstrap utility classes; kept only genuinely custom values (fixed pixel widths, grid layouts) inline ([#500](https://github.com/Jolls/arx-legacy/issues/500))
+
 ## [0.5.53] - 2026-06-30 
 - Form fields, select boxes, and inline validation now use native Bootstrap `form-control`/`form-select`/`is-invalid` styling instead of hand-maintained CSS clones; removed the duplicate rules from app.css ([#500](https://github.com/Jolls/arx-legacy/issues/500))
 

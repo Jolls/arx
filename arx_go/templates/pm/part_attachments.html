@@ -15,11 +15,11 @@
         <table class="table table-bordered table-hover table-sm">
             <thead class="table-dark">
                 <tr>
-                    <th style="width:60px; text-align:center;">Order</th>
+                    <th class="text-center" style="width:60px;">Order</th>
                     <th style="width:60px;">Rev</th>
                     <th>File / URL</th>
                     <th>Category</th>
-                    <th style="width:70px; text-align:center;">Default</th>
+                    <th class="text-center" style="width:70px;">Default</th>
                     <th style="width:50px;"></th>
                     <th style="width:50px;"></th>
                 </tr>
@@ -29,9 +29,9 @@
                 {{$f := .FILFileName}}
                 {{$isPrimary := eq .FILID $.Part.PNFILIDPrimary}}
                 <tr>
-                    <td style="text-align:center; color:#888;">{{if .OrderID}}{{derefInt .OrderID}}{{end}}</td>
+                    <td class="text-center text-muted">{{if .OrderID}}{{derefInt .OrderID}}{{end}}</td>
                     <td>{{.FILPNRev}}</td>
-                    <td style="max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    <td class="text-truncate" style="max-width:340px;">
                         {{if isHTTPURL $f}}
                             <a href="{{$f}}" target="_blank" rel="noopener noreferrer" title="{{$f}}">{{$f}}</a>
                         {{else if isLocalDir $f}}
@@ -43,31 +43,31 @@
                                 <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
                             {{end}}
                         {{else}}
-                            <span style="font-family:monospace; font-size:0.9em;" title="{{$f}}">{{$f}}</span>
+                            <span class="font-monospace" style="font-size:0.9em;" title="{{$f}}">{{$f}}</span>
                         {{end}}
                     </td>
                     <td>{{.Category}}</td>
-                    <td style="text-align:center;">
+                    <td class="text-center">
                         {{if $isPrimary}}
                             <span style="color:#f5a623; font-size:1.1em;" title="Primary attachment">&#9733;</span>
                         {{else}}
-                            <form method="post" action="/part/{{$.Part.PNID}}/primary_attachment" style="margin:0;">
+                            <form method="post" action="/part/{{$.Part.PNID}}/primary_attachment" class="m-0">
                                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="filid" value="{{.FILID}}">
                                 <button type="submit" class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em;">Set</button>
                             </form>
                         {{end}}
                     </td>
-                    <td style="text-align:center;">
+                    <td class="text-center">
                         <a href="/part/{{$.Part.PNID}}/attachments?edit={{.FILID}}#edit-form"
-                           class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
+                           class="btn btn-secondary text-decoration-none" style="padding:2px 8px; font-size:0.8em;">Edit</a>
                     </td>
-                    <td style="text-align:center;">
+                    <td class="text-center">
                         <form method="post" action="/part/{{$.Part.PNID}}/attachments/{{.FILID}}/delete"
-                              style="margin:0;" onsubmit="return confirm('Remove this attachment?')">
+                              class="m-0" onsubmit="return confirm('Remove this attachment?')">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <button type="submit" class="btn btn-secondary"
-                                    style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
+                            <button type="submit" class="btn btn-secondary text-danger"
+                                    style="padding:2px 8px; font-size:0.8em;">Delete</button>
                         </form>
                     </td>
                 </tr>
@@ -82,9 +82,9 @@
 
     {{/* ── Edit form ─────────────────────────────────────────── */}}
     {{if .EditingAtt}}
-    <div id="edit-form" class="detail-section" style="margin-top:24px;">
+    <div id="edit-form" class="detail-section mt-4">
         <h3>Edit Attachment</h3>
-        <p style="font-size:0.9em; color:#888; margin-bottom:12px; font-family:monospace;">{{.EditingAtt.FILFileName}}</p>
+        <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{.EditingAtt.FILFileName}}</p>
         <form method="post" action="/part/{{.Part.PNID}}/attachments/{{.EditingAtt.FILID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
@@ -110,9 +110,9 @@
     {{end}}
 
     {{/* ── Add form ──────────────────────────────────────────── */}}
-    <details style="margin-top:24px;">
-        <summary style="cursor:pointer; font-weight:600; font-size:1em; padding:8px 0;">Add Attachment</summary>
-        <div class="detail-section" style="margin-top:8px;">
+    <details class="mt-4">
+        <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Attachment</summary>
+        <div class="detail-section mt-2">
             <form method="post" action="/part/{{.Part.PNID}}/attachments">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">

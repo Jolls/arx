@@ -42,7 +42,7 @@
         {{/* ── Two-column: Supplier | Ship To ─────────────────── */}}
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
 
-            <div class="detail-section" style="margin-bottom:0;">
+            <div class="detail-section mb-0">
                 <h3>Supplier Info</h3>
                 {{if not .IsNew}}
                 <div class="detail-row">
@@ -116,7 +116,7 @@
                 </div>
             </div>
 
-            <div class="detail-section" style="margin-bottom:0;">
+            <div class="detail-section mb-0">
                 <h3>Ship To</h3>
                 <div class="detail-row">
                     <label class="form-label">Receiver</label>
@@ -226,7 +226,7 @@
                     </div>
                     <div class="detail-row">
                         <label class="form-label">Total Cost</label>
-                        <div id="total-cost-display" style="font-size:1.15em; font-weight:700; color:#333; padding:5px 0;">
+                        <div id="total-cost-display" class="fw-bold" style="font-size:1.15em; color:#333; padding:5px 0;">
                             ${{printf "%.2f" (deref .PO.TotalCost)}}
                         </div>
                     </div>
@@ -236,16 +236,14 @@
 
         {{/* ── Notes ───────────────────────────────────────────── */}}
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
-            <div class="detail-section" style="margin-bottom:0;">
+            <div class="detail-section mb-0">
                 <h3>External Notes</h3>
-                <textarea id="notes" name="notes" class="form-control"
-                          style="width:100%; margin-top:8px;" rows="5"
+                <textarea id="notes" name="notes" class="form-control w-100 mt-2" rows="5"
                           placeholder="Prints on PO document">{{.PO.Notes}}</textarea>
             </div>
-            <div class="detail-section" style="margin-bottom:0;">
+            <div class="detail-section mb-0">
                 <h3>Internal Notes</h3>
-                <textarea id="internal_notes" name="internal_notes" class="form-control"
-                          style="width:100%; margin-top:8px;" rows="5"
+                <textarea id="internal_notes" name="internal_notes" class="form-control w-100 mt-2" rows="5"
                           placeholder="Internal use only — not printed">{{.PO.InternalNotes}}</textarea>
             </div>
         </div>
@@ -253,7 +251,7 @@
         {{/* ── Line items ──────────────────────────────────────── */}}
         <div class="detail-section">
             <h3>Line Items</h3>
-            <div class="table-wrapper" style="margin-top:12px; overflow-x:auto;">
+            <div class="table-wrapper mt-2" style="overflow-x:auto;">
                 <table class="table table-bordered table-hover table-sm" style="min-width:860px;">
                     <thead class="table-dark">
                         <tr>
@@ -262,8 +260,8 @@
                             <th style="width:60px;">Rev</th>
                             <th style="min-width:180px;">Description</th>
                             <th style="min-width:110px;">Vendor PN</th>
-                            <th style="width:72px; text-align:right;">Qty</th>
-                            <th style="width:100px; text-align:right;">Unit Cost</th>
+                            <th class="text-end" style="width:72px;">Qty</th>
+                            <th class="text-end" style="width:100px;">Unit Cost</th>
                             <th style="width:76px;">Part ID</th>
                             <th style="width:32px;"></th>
                         </tr>
@@ -277,10 +275,10 @@
                             <td><input type="text"   name="new_pol[dup{{$i}}][POLRev]" value="{{$item.POLRev}}" class="form-control form-control-sm" style="width:56px;"></td>
                             <td><input type="text"   name="new_pol[dup{{$i}}][POLDesc]" value="{{$item.POLDesc}}" class="form-control form-control-sm"></td>
                             <td><input type="text"   name="new_pol[dup{{$i}}][VendorPN]" value="{{$item.VendorPN}}" class="form-control form-control-sm"></td>
-                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLQty]" value="{{printf "%g" $item.POLQty}}" class="form-control form-control-sm" style="text-align:right;"></td>
-                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLCost]" value="{{printf "%g" $item.POLCost}}" class="form-control form-control-sm" style="text-align:right;"></td>
+                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLQty]" value="{{printf "%g" $item.POLQty}}" class="form-control form-control-sm text-end"></td>
+                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLCost]" value="{{printf "%g" $item.POLCost}}" class="form-control form-control-sm text-end"></td>
                             <td><input type="number" name="new_pol[dup{{$i}}][POLPNID]" value="{{if $item.POLPNID}}{{derefInt $item.POLPNID}}{{end}}" class="form-control form-control-sm"></td>
-                            <td style="text-align:center;">
+                            <td class="text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
                             </td>
                         </tr>
@@ -293,10 +291,10 @@
                             <td><input type="text"   name="pol[{{.POLID}}][POLRev]" value="{{.POLRev}}" class="form-control form-control-sm" style="width:56px;"></td>
                             <td><input type="text"   name="pol[{{.POLID}}][POLDesc]" value="{{.POLDesc}}" class="form-control form-control-sm"></td>
                             <td><input type="text"   name="pol[{{.POLID}}][VendorPN]" value="{{.VendorPN}}" class="form-control form-control-sm"></td>
-                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLQty]" value="{{printf "%g" .POLQty}}" class="form-control form-control-sm" style="text-align:right;"></td>
-                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLCost]" value="{{printf "%g" .POLCost}}" class="form-control form-control-sm" style="text-align:right;"></td>
+                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLQty]" value="{{printf "%g" .POLQty}}" class="form-control form-control-sm text-end"></td>
+                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLCost]" value="{{printf "%g" .POLCost}}" class="form-control form-control-sm text-end"></td>
                             <td><input type="number" name="pol[{{.POLID}}][POLPNID]" value="{{if .POLPNID}}{{derefInt .POLPNID}}{{end}}" class="form-control form-control-sm"></td>
-                            <td style="text-align:center;">
+                            <td class="text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1"
                                         onclick="removeExistingLine(this,'{{.POLID}}')" title="Remove">&#215;</button>
                             </td>
@@ -305,7 +303,7 @@
                     </tbody>
                 </table>
             </div>
-            <div style="margin-top:10px;">
+            <div class="mt-2">
                 <button type="button" class="btn btn-secondary" onclick="addNewLine()" style="font-size:0.9em;">+ Add Line Item</button>
             </div>
         </div>
@@ -327,10 +325,10 @@
         <td><input type="text"   name="new_pol[IDX][POLRev]" class="form-control form-control-sm" style="width:56px;" placeholder="Rev"></td>
         <td><input type="text"   name="new_pol[IDX][POLDesc]" class="form-control form-control-sm" placeholder="Description"></td>
         <td><input type="text"   name="new_pol[IDX][VendorPN]" class="form-control form-control-sm" placeholder="Vendor PN"></td>
-        <td><input type="number" step="any" name="new_pol[IDX][POLQty]"  class="form-control form-control-sm" style="text-align:right;" placeholder="0"></td>
-        <td><input type="number" step="any" name="new_pol[IDX][POLCost]" class="form-control form-control-sm" style="text-align:right;" placeholder="0.0000"></td>
+        <td><input type="number" step="any" name="new_pol[IDX][POLQty]"  class="form-control form-control-sm text-end" placeholder="0"></td>
+        <td><input type="number" step="any" name="new_pol[IDX][POLCost]" class="form-control form-control-sm text-end" placeholder="0.0000"></td>
         <td><input type="number" name="new_pol[IDX][POLPNID]" class="form-control form-control-sm" placeholder=""></td>
-        <td style="text-align:center;">
+        <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
         </td>
     </tr>

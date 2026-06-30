@@ -21,7 +21,7 @@
                     <th>Description</th>
                     <th style="width:80px;"><span data-bs-toggle="tooltip" title="Sourcing ranking, e.g. Primary or Secondary">Preference</span></th>
                     <th style="width:90px;"><span data-bs-toggle="tooltip" title="Typical supplier delivery time">Lead Time</span></th>
-                    <th style="width:80px; text-align:right;"><span data-bs-toggle="tooltip" title="Minimum order increment — smallest purchasable quantity">Min Incr.</span></th>
+                    <th class="text-end" style="width:80px;"><span data-bs-toggle="tooltip" title="Minimum order increment — smallest purchasable quantity">Min Incr.</span></th>
                     <th style="width:80px;"><span data-bs-toggle="tooltip" title="Unit of measure for this supplier (may differ from part's base unit)">Purchase Unit</span></th>
                     <th style="width:60px;"></th>
                     <th style="width:60px;"></th>
@@ -31,30 +31,30 @@
                 {{range .Links}}
                 <tr>
                     <td><a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a></td>
-                    <td style="font-family:monospace;">{{.SupplierPN}}</td>
+                    <td class="font-monospace">{{.SupplierPN}}</td>
                     <td>{{.SupplierDesc}}</td>
                     <td>{{.Preference}}</td>
                     <td>{{.LeadTime}}</td>
-                    <td style="text-align:right;">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
+                    <td class="text-end">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
                     <td>
                         {{if .PurchaseUnitAbbr}}
                             {{if .PurchaseUnitIsExplicit}}
                                 {{.PurchaseUnitAbbr}}
                             {{else}}
-                                <span style="color:#999;" title="Base unit (inherited from part)">{{.PurchaseUnitAbbr}}</span>
+                                <span class="text-muted" title="Base unit (inherited from part)">{{.PurchaseUnitAbbr}}</span>
                             {{end}}
                         {{else}}—{{end}}
                     </td>
-                    <td style="text-align:center;">
+                    <td class="text-center">
                         <a href="/part/{{$.Part.PNID}}/suppliers/{{.ID}}/edit#edit-form"
                            class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
                     </td>
-                    <td style="text-align:center;">
+                    <td class="text-center">
                         <form method="post" action="/part/{{$.Part.PNID}}/suppliers/{{.ID}}/delete"
-                              style="margin:0;" onsubmit="return confirm('Remove this supplier link?')">
+                              class="m-0" onsubmit="return confirm('Remove this supplier link?')">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <button type="submit" class="btn btn-secondary"
-                                    style="padding:2px 8px; font-size:0.8em; color:#c00;">Delete</button>
+                            <button type="submit" class="btn btn-secondary text-danger"
+                                    style="padding:2px 8px; font-size:0.8em;">Delete</button>
                         </form>
                     </td>
                 </tr>
@@ -62,8 +62,8 @@
                 {{if $prices}}
                 <tr class="sourcing-price-subrow">
                     <td colspan="9">
-                        <span style="color:#666; margin-right:8px;">Pricing:</span>
-                        {{range $i, $pr := $prices}}{{if $i}}<span style="color:#ccc; margin:0 6px;">|</span>{{end}}
+                        <span class="text-muted me-2">Pricing:</span>
+                        {{range $i, $pr := $prices}}{{if $i}}<span class="text-muted mx-1">|</span>{{end}}
                         {{if $pr.PriceEA}}<strong>{{printf "$%.4f" (deref $pr.PriceEA)}}</strong> ea{{end}}
                         {{if and $pr.PackSize (gt (deref $pr.PackSize) 1.0)}} &nbsp;(pack of {{printf "%g" (deref $pr.PackSize)}}{{if $pr.PricePack}} = {{printf "$%.4f" (deref $pr.PricePack)}}{{end}}){{end}}
                         {{end}}
@@ -82,7 +82,7 @@
 
     {{/* ── Edit form ─────────────────────────────────────────── */}}
     {{if .EditingLink}}
-    <div id="edit-form" class="detail-section" style="margin-top:24px;">
+    <div id="edit-form" class="detail-section mt-4">
         <h3>Edit Supplier Link</h3>
         <form method="post" action="/part/{{.Part.PNID}}/suppliers/{{.EditingLink.ID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -96,7 +96,7 @@
                     {{end}}
                 </select>
                 {{else}}
-                <span style="color:#888; font-size:0.9em;">
+                <span class="text-muted" style="font-size:0.9em;">
                     No suppliers found. Edit a company and enable <em>Supplier</em>.
                 </span>
                 <input type="hidden" name="supplier_id" value="">
@@ -148,11 +148,11 @@
 
     {{/* ── Add form ──────────────────────────────────────────── */}}
     {{if not .EditingLink}}
-    <details style="margin-top:24px;">
-        <summary style="cursor:pointer; font-weight:600; font-size:1em; padding:8px 0;">Add Supplier Link</summary>
-        <div class="detail-section" style="margin-top:8px;">
+    <details class="mt-4">
+        <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Supplier Link</summary>
+        <div class="detail-section mt-2">
             {{if not .Suppliers}}
-            <p style="color:#888; font-size:0.9em; margin-bottom:12px;">
+            <p class="text-muted mb-2" style="font-size:0.9em;">
                 No suppliers found. Edit a company and enable <em>Supplier</em> first.
             </p>
             {{end}}
