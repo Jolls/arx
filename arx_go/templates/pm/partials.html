@@ -129,6 +129,7 @@
     <a href="/part/{{$id}}/attachments" class="sub-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
     {{if $part.ShowPricing}}
     <a href="/part/{{$id}}/pricing"     class="sub-tab{{if eq $sub "pricing"}} active{{end}}">Pricing</a>
+    <a href="/part/{{$id}}/price-history" class="sub-tab{{if eq $sub "price-history"}} active{{end}}">Price History</a>
     {{else}}
     <span class="sub-tab disabled" title="Pricing does not apply to {{$part.Category}} parts">Pricing</span>
     {{end}}
