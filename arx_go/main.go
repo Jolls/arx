@@ -256,6 +256,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Test Records — Forms and Records
 		r.Get("/records", h.FormsList)
 		r.Get("/forms/{id}/records", h.RecordsList)
+		r.Get("/api/forms/{id}/records/rows", h.RecordsRows)
 		r.Post("/forms/{id}/records/bulk-lock", h.BulkLockRecords)
 		r.Post("/forms/{id}/records/backfill-history", h.BackfillRecordHistory)
 		r.Get("/forms/{id}/records/new", h.NewRecord)

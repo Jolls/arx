@@ -48,6 +48,11 @@ document.addEventListener('DOMContentLoaded', function () {
       })
     }
 
+    // Exposed so pages whose rows render asynchronously (e.g. the shared
+    // API-driven table) can re-apply hidden columns after each render.
+    window.__trColState = window.__trColState || {}
+    window.__trColState[tableId] = applyState
+
     applyState()
   })
 })

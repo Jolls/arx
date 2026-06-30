@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.51] - 2026-06-30 
+- Test record lists now use the same client-side filterable/sortable table as Parts/POs/Suppliers/Contacts, instead of full-page reloads ([#502](https://github.com/Jolls/arx-legacy/issues/502))
+- Date columns on Parts, POs, Contacts, and Test Records now support a From/To range filter ([#502](https://github.com/Jolls/arx-legacy/issues/502))
+
 ## [0.5.50] - 2026-06-29 
 - Test record headers (type 1/2/3) are now collapsible, hiding rows until the next header of the same or shallower level ([#509](https://github.com/Jolls/arx-legacy/issues/509))
 
