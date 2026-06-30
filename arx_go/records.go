@@ -191,7 +191,7 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 // FormsList â€" GET /
 func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.revision, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.is_active = 1
@@ -206,7 +206,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	var forms []models.TestForm
 	for rows.Next() {
 		var f models.TestForm
-		if err := rows.Scan(&f.ID, &f.PNID, &f.Locked, &f.PartNumber, &f.Title); err != nil {
+		if err := rows.Scan(&f.ID, &f.PNID, &f.Locked, &f.Revision, &f.PartNumber, &f.Title); err != nil {
 			continue
 		}
 		forms = append(forms, f)
@@ -230,12 +230,12 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	// Load the form header.
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -250,7 +250,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 
 	query := fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order, form_revision
 		FROM %s
 		WHERE form_id = @p1 AND is_active = 1`, h.cfg.RecordsTable())
 	query += clauses
@@ -271,7 +271,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(
 			&rec.ID, &rec.FormID, &rec.PartNumberID, &rec.SerialNumber, &rec.SerialNumberPN,
 			&rec.SerialNumberDesc, &rec.RecordDate, &rec.Comments,
-			&rec.InstrumentType, &rec.Locked, &rec.Approved, &rec.Active, &rec.TestOrder,
+			&rec.InstrumentType, &rec.Locked, &rec.Approved, &rec.Active, &rec.TestOrder, &rec.FormRevision,
 		); err != nil {
 			continue
 		}
@@ -333,12 +333,12 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1362,10 +1362,10 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.title
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PNID, &form.Locked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Title)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1433,11 +1433,11 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s
 		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
-		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked)
+		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision)
 		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0)`,
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0,@p10)`,
 		h.cfg.RecordsTable()),
-		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate).Scan(&newID)
+		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1765,17 +1765,27 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	if src.PartNumberID != 0 {
 		partNumberID = &src.PartNumberID
 	}
+
+	// A duplicate is a fresh re-test, so it captures the CURRENT form revision, not the
+	// source record's frozen form_revision (#260).
+	var formRevision int
+	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
+		"SELECT revision FROM %s WHERE id=@p1", h.cfg.FormsTable()), src.FormID).Scan(&formRevision); err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	var newID int
 	// record_date is set to now — a duplicate is a fresh re-test, dated the day it's made.
 	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s
 		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
-		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved)
+		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision)
 		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),1,0,0)`,
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),1,0,0,@p9)`,
 		h.cfg.RecordsTable()),
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
-		src.Comments, src.InstrumentType, src.TestOrder).Scan(&newID)
+		src.Comments, src.InstrumentType, src.TestOrder, formRevision).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1859,7 +1869,7 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=1 WHERE id=@p1 AND is_locked=0",
+		"UPDATE %s SET is_locked=1, revision = revision + 1 WHERE id=@p1 AND is_locked=0",
 		h.cfg.FormsTable()), formID)
 	if err != nil {
 		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
@@ -2191,10 +2201,10 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, COALESCE(f.test_order,''), pn.part_number
+		SELECT f.id, f.part_number_id, COALESCE(f.test_order,''), f.revision, pn.part_number
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PNID, &form.TestOrder, &form.PartNumber); err != nil {
+		Scan(&form.ID, &form.PNID, &form.TestOrder, &form.Revision, &form.PartNumber); err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2284,9 +2294,11 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Refresh the record's step-order snapshot so newly added steps appear on edit/view.
+	// Re-pulling the live definition also re-captures the form's current revision (#260):
+	// the snapshot now represents that revision.
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET test_order=@p1, updated_at=GETDATE() WHERE id=@p2", h.cfg.RecordsTable()),
-		form.TestOrder, recordID); err != nil {
+		"UPDATE %s SET test_order=@p1, form_revision=@p2, updated_at=GETDATE() WHERE id=@p3", h.cfg.RecordsTable()),
+		form.TestOrder, form.Revision, recordID); err != nil {
 		http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

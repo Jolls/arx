@@ -18,6 +18,7 @@ type TestForm struct {
 	Title       string // joined: PN.title
 	RecordTypes     string // comma-separated allowed record types; empty = free-text
 	InstrumentTypes string // comma-separated valid instrument types for this form; empty = free-text
+	Revision        int    // number of times this form has been released (locked); 0 = never released ("Draft"). Bumped on unlock->lock, never on save (#260).
 }
 
 // OrderedTestIDs parses TestOrder into a slice of integer step IDs.
@@ -70,11 +71,25 @@ type TestRecord struct {
 	Approved         bool // 1 = reviewer-approved; only a TR reviewer may unlock (#249). Requires Locked.
 	Active           bool
 	TestOrder        string // comma-separated snapshot of test IDs at record creation
+	FormRevision     *int   // snapshot of form.Revision at record creation; nil for pre-#260 records or legacy data
 }
 
 // OrderedTestIDs parses TestOrder into a slice of integer step IDs.
 func (r *TestRecord) OrderedTestIDs() []int {
 	return parseIDList(r.TestOrder)
+}
+
+// FormRevLabel is the display label for the captured form revision: "" when unknown
+// (nil — pre-#260 or legacy), "Draft" when captured against an unreleased form (0),
+// or "Rev N" for a released revision (#260).
+func (r TestRecord) FormRevLabel() string {
+	if r.FormRevision == nil {
+		return ""
+	}
+	if *r.FormRevision == 0 {
+		return "Draft"
+	}
+	return "Rev " + strconv.Itoa(*r.FormRevision)
 }
 
 // TestStep is a row in the test_definition table.

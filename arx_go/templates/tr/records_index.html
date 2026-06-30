@@ -21,7 +21,9 @@
 {{end}}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}</h4>
+  <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}
+    <span class="badge bg-secondary ms-2">{{if .Form.Revision}}Rev {{.Form.Revision}}{{else}}Draft{{end}}</span>
+  </h4>
   <div class="d-flex gap-2" data-col-table="records-table">
     <div class="dropdown">
       <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -35,6 +37,7 @@
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-date" checked> Date</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-type" checked> Type</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-status" checked> Status</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-form-rev" checked> Form Rev</label></li>
         <li><hr class="dropdown-divider my-1"></li>
         <li><a href="#" class="dropdown-item small text-muted" data-col-reset>Reset</a></li>
       </ul>
@@ -79,6 +82,7 @@
       <th data-col="col-date" class="sortable" onclick="sortTable(this)">Date</th>
       <th data-col="col-type" class="sortable" onclick="sortTable(this)" data-bs-toggle="tooltip" title="Test type label, e.g. New Release or Re-Test">Type</th>
       <th data-col="col-status" class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
+      <th data-col="col-form-rev" class="text-center">Form Rev</th>
     </tr>
     <tr class="filter-row">
       {{if .ShowSelect}}<th data-col="col-select"></th>{{end}}
@@ -117,11 +121,12 @@
           <option value="all"      {{if eq .Filters.Status "all"}}selected{{end}}>All</option>
         </select>
       </th>
+      <th data-col="col-form-rev"></th>
     </tr>
   </thead>
   <tbody>
     {{if not .Records}}
-    <tr><td colspan="{{if .ShowSelect}}7{{else}}6{{end}}" class="text-center text-muted py-3">No records found</td></tr>
+    <tr><td colspan="{{if .ShowSelect}}8{{else}}7{{end}}" class="text-center text-muted py-3">No records found</td></tr>
     {{end}}
     {{range .Records}}
     <tr>
@@ -142,6 +147,7 @@
         <span class="badge bg-info text-dark">WIP</span>
         {{end}}
       </td>
+      <td data-col="col-form-rev" class="text-center">{{.FormRevLabel}}</td>
     </tr>
     {{end}}
   </tbody>
