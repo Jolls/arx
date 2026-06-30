@@ -12,12 +12,14 @@ CREATE TABLE form (
   is_locked     BIT          NOT NULL CONSTRAINT DF_form_is_locked DEFAULT 0, -- 1 = locked from structural changes.
   is_active     BIT          NOT NULL CONSTRAINT DF_form_is_active DEFAULT 1, -- 0 = archived; hidden from UI.
   record_types      VARCHAR(500),                -- comma-separated list of allowed record types (e.g. 'New Release,Re-Test,Upgrade'). NULL = free-text.
-  instrument_types  VARCHAR(500)                 -- comma-separated instrument types valid for this form (e.g. 'ModelA,ModelB'). Drives the Instrument Type dropdown on records. NULL = free-text.
+  instrument_types  VARCHAR(500),                -- comma-separated instrument types valid for this form (e.g. 'ModelA,ModelB'). Drives the Instrument Type dropdown on records. NULL = free-text.
+  revision      INT          NOT NULL CONSTRAINT DF_form_revision DEFAULT 0 -- number of times this form has been released (locked). 0 = never released ("Draft"); bumped on every unlock->lock transition (#260).
 );
 
 -- Migration (run once on live DB; _test.sql SELECT * INTO picks it up automatically):
 -- ALTER TABLE form ADD record_types VARCHAR(500) NULL;
 -- ALTER TABLE form ADD instrument_types VARCHAR(500) NULL;
+-- form.revision / test_record.form_revision (#260): see migrations/migrate_form_revision.sql
 
 
 -- test_definition: Individual test step / parameter definitions within a form.
@@ -81,7 +83,8 @@ CREATE TABLE test_record (
   is_approved            BIT          NOT NULL CONSTRAINT DF_test_record_is_approved DEFAULT 0, -- 1 = reviewer-approved; only a TR reviewer may unlock. Requires is_locked = 1.
   is_active              BIT          NOT NULL CONSTRAINT DF_test_record_is_active DEFAULT 1, -- 0 = soft-deleted; excluded from all views.
   created_at             DATETIME,
-  updated_at             DATETIME
+  updated_at             DATETIME,
+  form_revision          INT                                                                  -- Snapshot of form.revision at record creation. NULL for pre-#260 records.
 );
 
 -- Migration (run once on live DB; _test.sql SELECT * INTO picks it up automatically):

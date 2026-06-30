@@ -12,6 +12,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4>
     {{.Form.PartNumber}} &mdash; {{.Form.Title}}
+    <span class="badge bg-secondary ms-2">{{if .Form.Revision}}Rev {{.Form.Revision}}{{else}}Draft{{end}}</span>
     {{if .Form.Locked}}
     <button class="btn btn-sm btn-outline-secondary ms-2" data-bs-toggle="modal" data-bs-target="#unlockModal">
       <i class="bi bi-unlock"></i> Unlock
