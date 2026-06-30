@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.55] - 2026-06-30 
+- Fixed new attachments saving with an empty Category; the add form's selected category is now persisted instead of an unused field ([#527](https://github.com/Jolls/arx-legacy/issues/527))
+
 ## [0.5.54] - 2026-06-30 
 - Swept hand-written inline styles on the settings, login, PO, attachment, sourcing, and pricing pages over to Bootstrap utility classes; kept only genuinely custom values (fixed pixel widths, grid layouts) inline ([#500](https://github.com/Jolls/arx-legacy/issues/500))
 
