@@ -4,23 +4,20 @@
     <p style="color:#999; font-size:0.85em; margin-bottom:20px;">Arx Parts Master v{{.AppVersion}}</p>
 
     {{if not .Connected}}
-    <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:6px;
-                padding:12px 16px; margin-bottom:24px; display:flex; align-items:center; gap:10px;">
-        <span style="font-size:1.2em;">&#9888;</span>
+    <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+        <span class="fs-5">&#9888;</span>
         <span><strong>Not connected to database.</strong> Enter your connection details below to connect.</span>
     </div>
     {{end}}
 
     {{if .Error}}
-    <div style="background:#f8d7da; border:1px solid #f5c2c7; border-radius:6px;
-                padding:12px 16px; margin-bottom:20px; color:#842029;">
+    <div class="alert alert-danger" role="alert">
         <strong>Error:</strong> {{.Error}}
     </div>
     {{end}}
 
     {{if .Success}}
-    <div style="background:#d1e7dd; border:1px solid #badbcc; border-radius:6px;
-                padding:12px 16px; margin-bottom:20px; color:#0f5132;">
+    <div class="alert alert-success" role="alert">
         {{.Success}}
     </div>
     {{end}}
@@ -49,23 +46,11 @@
         <h3 style="display:flex; align-items:center; gap:10px;">
             Database Connection
             {{if .Connected}}
-            <span style="font-size:0.72em; font-weight:500; color:#155724;
-                         background:#d1e7dd; border:1px solid #badbcc;
-                         border-radius:20px; padding:2px 12px; line-height:1.6;">
-                &#10003; Connected
-            </span>
+            <span class="badge rounded-pill text-bg-success fw-normal">&#10003; Connected</span>
             {{else}}
-            <span style="font-size:0.72em; font-weight:500; color:#842029;
-                         background:#f8d7da; border:1px solid #f5c2c7;
-                         border-radius:20px; padding:2px 12px; line-height:1.6;">
-                &#10007; Not connected
-            </span>
+            <span class="badge rounded-pill text-bg-danger fw-normal">&#10007; Not connected</span>
             {{end}}
-            <span style="font-size:0.72em; font-weight:500; color:#555;
-                         background:#f0f0f0; border:1px solid #ccc;
-                         border-radius:20px; padding:2px 12px; line-height:1.6;">
-                {{.ActiveDBName}}{{if .TestMode}} &mdash; TEST MODE{{end}}
-            </span>
+            <span class="badge rounded-pill text-bg-secondary fw-normal">{{.ActiveDBName}}{{if .TestMode}} &mdash; TEST MODE{{end}}</span>
         </h3>
 
         <div class="detail-row" style="align-items:center; padding:6px 0;">
@@ -386,57 +371,56 @@
     <div class="detail-section">
         <h3>Users</h3>
         {{if .UsersError}}
-        <div style="background:#f8d7da; border:1px solid #f5c2c7; border-radius:6px;
-                    padding:10px 14px; margin-bottom:14px; color:#842029; font-size:0.9em;">
+        <div class="alert alert-danger" role="alert">
             {{.UsersError}}
         </div>
         {{end}}
-        <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+        <table class="table table-sm align-middle mb-3">
             <thead>
-                <tr style="text-align:left; color:#888; font-size:0.8em; border-bottom:1px solid #e0e0e0;">
-                    <th style="padding:4px 8px;">Username</th>
-                    <th style="padding:4px 8px;">Display Name</th>
-                    <th style="padding:4px 8px; text-align:center;">Active</th>
-                    <th style="padding:4px 8px; text-align:center;"><span data-bs-toggle="tooltip" title="May approve or reject purchase orders">PO Approver</span></th>
-                    <th style="padding:4px 8px; text-align:center;"><span data-bs-toggle="tooltip" title="May approve test records and unlock approved ones">TR Reviewer</span></th>
-                    <th style="padding:4px 8px;"></th>
+                <tr>
+                    <th>Username</th>
+                    <th>Display Name</th>
+                    <th class="text-center">Active</th>
+                    <th class="text-center"><span data-bs-toggle="tooltip" title="May approve or reject purchase orders">PO Approver</span></th>
+                    <th class="text-center"><span data-bs-toggle="tooltip" title="May approve test records and unlock approved ones">TR Reviewer</span></th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
             {{range .Users}}
-                <tr style="border-bottom:1px solid #f0f0f0;">
-                    <td style="padding:6px 8px; font-family:monospace; font-size:0.9em;">{{.Username}}</td>
-                    <td style="padding:6px 8px;">{{.DisplayName}}</td>
-                    <td style="padding:6px 8px; text-align:center;">
-                        {{if .IsActive}}<span style="color:#155724;">&#10003;</span>{{else}}<span style="color:#842029;">&#10007;</span>{{end}}
+                <tr>
+                    <td class="font-monospace">{{.Username}}</td>
+                    <td>{{.DisplayName}}</td>
+                    <td class="text-center">
+                        {{if .IsActive}}<span class="text-success">&#10003;</span>{{else}}<span class="text-danger">&#10007;</span>{{end}}
                     </td>
-                    <td style="padding:6px 8px; text-align:center;">
-                        {{if .CanApprovePO}}<span style="color:#155724;">&#10003;</span>{{else}}<span style="color:#ccc;">&#10007;</span>{{end}}
+                    <td class="text-center">
+                        {{if .CanApprovePO}}<span class="text-success">&#10003;</span>{{else}}<span class="text-muted">&#10007;</span>{{end}}
                     </td>
-                    <td style="padding:6px 8px; text-align:center;">
-                        {{if .CanApproveRecords}}<span style="color:#155724;">&#10003;</span>{{else}}<span style="color:#ccc;">&#10007;</span>{{end}}
+                    <td class="text-center">
+                        {{if .CanApproveRecords}}<span class="text-success">&#10003;</span>{{else}}<span class="text-muted">&#10007;</span>{{end}}
                     </td>
-                    <td style="padding:6px 8px; display:flex; gap:6px; flex-wrap:wrap;">
-                        <form method="post" action="/settings/users/{{.ID}}/password" style="display:inline;"
+                    <td class="d-flex gap-1 flex-wrap">
+                        <form method="post" action="/settings/users/{{.ID}}/password" class="m-0"
                               onsubmit="return resetPwForm(this)">
                             <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
                             <input type="hidden" name="password" class="new-pw-field">
                             <button type="submit" class="btn btn-secondary btn-sm"
                                     onclick="promptPw(this)">Reset password</button>
                         </form>
-                        <form method="post" action="/settings/users/{{.ID}}/toggle-approve" style="display:inline;">
+                        <form method="post" action="/settings/users/{{.ID}}/toggle-approve" class="m-0">
                             <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
                             <button type="submit" class="btn btn-secondary btn-sm">
                                 {{if .CanApprovePO}}Revoke PO approver{{else}}Make PO approver{{end}}
                             </button>
                         </form>
-                        <form method="post" action="/settings/users/{{.ID}}/toggle-approve-records" style="display:inline;">
+                        <form method="post" action="/settings/users/{{.ID}}/toggle-approve-records" class="m-0">
                             <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
                             <button type="submit" class="btn btn-secondary btn-sm">
                                 {{if .CanApproveRecords}}Revoke TR reviewer{{else}}Make TR reviewer{{end}}
                             </button>
                         </form>
-                        <form method="post" action="/settings/users/{{.ID}}/toggle-active" style="display:inline;">
+                        <form method="post" action="/settings/users/{{.ID}}/toggle-active" class="m-0">
                             <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
                             <button type="submit" class="btn btn-secondary btn-sm">
                                 {{if .IsActive}}Deactivate{{else}}Activate{{end}}
@@ -445,7 +429,7 @@
                     </td>
                 </tr>
             {{else}}
-                <tr><td colspan="6" style="padding:10px 8px; color:#888; font-size:0.9em;">No users yet.</td></tr>
+                <tr><td colspan="6" class="text-muted">No users yet.</td></tr>
             {{end}}
             </tbody>
         </table>
