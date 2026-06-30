@@ -65,27 +65,37 @@ document.addEventListener('DOMContentLoaded', function () {
   })
 })
 
-// --- Client-side table sort ---
-function sortTable(th) {
-  var tr = th.closest('tr')
-  var table = th.closest('table')
-  var tbody = table.querySelector('tbody')
-  var ths = Array.from(tr.querySelectorAll('th.sortable'))
-  var col = Array.from(tr.querySelectorAll('th')).indexOf(th)
-  var asc = !th.classList.contains('sort-asc')
-  ths.forEach(function(h) { h.classList.remove('sort-asc', 'sort-desc') })
-  th.classList.add(asc ? 'sort-asc' : 'sort-desc')
-  var rows = Array.from(tbody.querySelectorAll('tr'))
-  rows.sort(function(a, b) {
-    var aText = (a.cells[col] ? a.cells[col].textContent.trim() : '')
-    var bText = (b.cells[col] ? b.cells[col].textContent.trim() : '')
-    var aNum = parseFloat(aText), bNum = parseFloat(bText)
-    if (!isNaN(aNum) && !isNaN(bNum)) return asc ? aNum - bNum : bNum - aNum
-    return asc ? aText.localeCompare(bText) : bText.localeCompare(aText)
+// --- Collapsible record headers (#509) ---
+// .row-heading-N rows (type 1/2/3 steps) collapse every row that follows,
+// including nested headers, until the next header whose level is the same
+// or shallower (data-level <= this row's level).
+document.addEventListener('DOMContentLoaded', function () {
+  function recompute(tbody) {
+    var active = []
+    Array.from(tbody.children).forEach(function (row) {
+      var level = parseInt(row.dataset.level || '0', 10)
+      if (level > 0) {
+        while (active.length && level <= active[active.length - 1]) active.pop()
+        row.classList.toggle('row-collapsed', active.length > 0)
+        if (row.classList.contains('row-collapsed-self')) active.push(level)
+      } else {
+        row.classList.toggle('row-collapsed', active.length > 0)
+      }
+    })
+  }
+
+  document.querySelectorAll('.row-collapsible').forEach(function (row) {
+    var tbody = row.closest('tbody')
+    row.addEventListener('click', function () {
+      row.classList.toggle('row-collapsed-self')
+      recompute(tbody)
+    })
   })
-  rows.forEach(function(row) { tbody.appendChild(row) })
-  if (window.__trRepaginate) window.__trRepaginate()
-}
+
+  document.querySelectorAll('tbody').forEach(function (tbody) {
+    if (tbody.querySelector('.row-collapsible')) recompute(tbody)
+  })
+})
 
 // --- Client-side pagination for server-rendered list tables ---
 // Operates on tables marked with data-paginate; shows 30 rows per page by

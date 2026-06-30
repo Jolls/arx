@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.50] - 2026-06-29 
+- Test record headers (type 1/2/3) are now collapsible, hiding rows until the next header of the same or shallower level ([#509](https://github.com/Jolls/arx-legacy/issues/509))
+
 ## [0.5.49] - 2026-06-29 
 - Formal revision numbers on form definitions, captured on test records ([#260](https://github.com/Jolls/arx-legacy/issues/260))
 

@@ -240,6 +240,12 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 .row-heading-2 td { background-color: #ed7d31 !important; color: #fff; font-weight: bold; }
 .row-heading-3 td { background-color: #d5d8dc !important; color: #555; font-style: italic; }
 
+/* Collapsible section headers (#509) */
+.row-collapsible { cursor: pointer; }
+.row-collapse-icon { transition: transform 0.15s ease; display: inline-block; }
+.row-collapsed-self .row-collapse-icon { transform: rotate(-90deg); }
+.row-collapsed { display: none !important; }
+
 /* Definition history timeline */
 .def-timeline {
     position: relative;
