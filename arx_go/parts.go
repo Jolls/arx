@@ -253,6 +253,15 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		rollupSignificant = math.Abs(rollupDeltaPct) >= 5.0
 	}
 
+	var recentPOs []partPOSummary
+	var recentTxns []partTxnSummary
+	if p.ShowOrders() {
+		recentPOs = h.recentPartPOs(r.Context(), id, 5)
+	}
+	if p.ShowInventory() {
+		recentTxns = h.recentPartTxns(r.Context(), id, 5)
+	}
+
 	h.render(w, r, "part_detail.html", map[string]any{
 		"Part": p, "PrimaryAtt": primaryAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
@@ -261,6 +270,8 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		"RollupDelta":       rollupDelta,
 		"RollupDeltaPct":    rollupDeltaPct,
 		"RollupSignificant": rollupSignificant,
+		"RecentPOs":         recentPOs,
+		"RecentTxns":        recentTxns,
 	})
 }
 
@@ -1136,6 +1147,86 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		"ActiveTab": "parts", "ActiveSubTab": "orders",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
+}
+
+// partPOSummary is one row in the Part dashboard "Recent POs" card (#521).
+type partPOSummary struct {
+	Number       string
+	SupplierName string
+	Status       string
+	DateOrdered  *time.Time
+	Qty          float64
+	UnitCost     float64
+}
+
+// recentPartPOs returns the most recent PO lines for a part, newest first,
+// capped at limit. Returns nil on error so the caller can omit the card.
+func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) []partPOSummary {
+	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p2) po.number, po.supplier_name, po.status, po.date_ordered,
+		       pol.qty, pol.unit_cost
+		FROM %s pol
+		JOIN %s po ON pol.po_id = po.ID
+		WHERE pol.part_id = @p1
+		ORDER BY po.date_ordered DESC, po.ID DESC
+	`, pol, po), partID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []partPOSummary
+	for rows.Next() {
+		var s partPOSummary
+		var num, sup, status sql.NullString
+		var d sql.NullTime
+		var qty, cost sql.NullFloat64
+		if rows.Scan(&num, &sup, &status, &d, &qty, &cost) != nil {
+			continue
+		}
+		s.Number, s.SupplierName, s.Status = num.String, sup.String, status.String
+		s.Qty, s.UnitCost = qty.Float64, cost.Float64
+		if d.Valid {
+			s.DateOrdered = &d.Time
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// partTxnSummary is one row in the Part dashboard "Inventory" card (#521).
+type partTxnSummary struct {
+	Type string
+	Qty  float64
+	Date string
+}
+
+// recentPartTxns returns the most recent inventory transactions for a part,
+// newest first, capped at limit. Returns nil on error.
+func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) []partTxnSummary {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p2) txn_type, qty, txn_date
+		FROM %s WHERE part_id = @p1 ORDER BY txn_date DESC, id DESC
+	`, h.cfg.InventoryTxnTable()), partID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []partTxnSummary
+	for rows.Next() {
+		var s partTxnSummary
+		var d sql.NullTime
+		var qty sql.NullFloat64
+		if rows.Scan(&s.Type, &qty, &d) != nil {
+			continue
+		}
+		s.Qty = qty.Float64
+		if d.Valid {
+			s.Date = d.Time.Format("2006-01-02")
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // PartPriceHistory renders the Price History tab: a unit-cost-over-time chart
