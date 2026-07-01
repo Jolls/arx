@@ -1,3 +1,91 @@
+Arx v0.5.66 — July 2026
+========================
+
+NEW FEATURES
+
+  Purchasing — Request for Quotation (RFQ)
+  Request a quote from a supplier, add competing quotes from other
+  suppliers to the same RFQ, and enter each one's unit price and lead
+  time on a side-by-side comparison grid. Award the winner with one click
+  to turn it into a purchase order; the RFQ and its quotes are kept on
+  record.
+
+  Purchasing — Receiving and Goods Receipt
+  Receive line items on a PO, in full or partially, straight from the PO
+  page. Each receipt updates stock on hand, advances the PO status, and is
+  recorded in a receipt history that cross-links to the part's stock
+  transactions.
+
+  Parts — Price History
+  A new Price History tab on each part charts its unit cost over time,
+  with a point for every purchase-order line and price-list entry. Hover
+  any point to see the PO number, supplier, date, and cost.
+
+  Parts — BOM Cost Rollup and Labor
+  Assembly cost rollups now use each part's preferred supplier price, set
+  with a "Set preferred" control on the Pricing tab. A new Operation/Labor
+  part type lets you add a labor job to a BOM (quantity = hours) so the
+  rollup includes hours times the hourly rate.
+
+  Parts — Duplicate a Part
+  Duplicate an existing part, including its full bill of materials, from
+  the part page — a fast start for a similar part.
+
+  Parts — Attachment Browse and Import
+  A Browse button on part attachments copies (or moves) a file you pick
+  into Doc Control, automatically renaming it from the part number,
+  revision, title, and category. If a matching file already exists, it
+  offers to link to that one instead.
+
+  Test Records — Approval Lifecycle
+  Test records now move through WIP, Complete, and Approved. Anyone can
+  mark a record Complete; a designated TR Reviewer approves it, after
+  which only a reviewer can unlock it. Every complete, approve, and unlock
+  event is kept in an audit log with the user, time, and reason.
+
+  Test Records — Result Snapshots and Frozen Definitions
+  A saved record is frozen to a snapshot of the form as it was at
+  creation, so later edits to a form never change existing records. Each
+  time a record is completed it also captures a snapshot of its results,
+  viewable in the audit log with changes since the previous completion
+  highlighted.
+
+  Test Records — Form Revisions and Step Archiving
+  Form definitions now carry a formal revision number that is captured on
+  each record. Individual test steps can be archived and restored, so they
+  drop off new records while staying on historical ones.
+
+  Test Records — Faster Data Entry
+  Duplicate a record to quickly re-test with the same serial number, lock
+  several records Complete at once, auto-save partial results as you go
+  with a restore prompt if you leave and come back, and press Enter to
+  advance to the next input.
+
+  Lists — Export, Sharing, and Columns
+  Export the Parts, PO, and BOM lists to CSV. Filter, sort, and page
+  settings are now stored in the page address, so a filtered view can be
+  bookmarked or shared and a pasted link reproduces exactly what the
+  sender saw. Every list has a Columns dropdown to hide or show columns,
+  new Attachments and PO Lines counts, a "Show inactive" toggle, and
+  From/To date-range filters.
+
+  Detail Pages Redesigned
+  Part, Supplier, and Contact pages are now dashboard-style summaries that
+  pull together highlights from each of their sub-tabs at a glance.
+
+  Ease-of-Use Improvements
+  Supplier pickers across pricing, contact, sourcing, and settings forms
+  now search as you type. New prices and new PO dates default to today,
+  and the part's title now appears beside its number throughout the part
+  pages.
+
+BUG FIXES
+
+  Fixed new attachments saving without their selected category.
+  Fixed needing to double-click a row link right after filtering a list.
+  Fixed the PO/RFQ default contact using the wrong company's contact.
+  Fixed simultaneous new test records occasionally sharing a serial number.
+
 Arx v0.5.29 — June 2026
 ========================
 
