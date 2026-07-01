@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.58] - 2026-06-30 
+- New Price History tab on the part detail page: an SVG chart of unit cost over time, one point per purchase-order line plus any price-list entries, with hover tooltips showing PO number, supplier, date, and cost ([#284](https://github.com/Jolls/arx-legacy/issues/284))
+
 ## [0.5.57] - 2026-06-30 
 - Filter, sort, and page state on every main table (Parts, POs, Suppliers, Contacts, Test Records) now mirrors into the URL, so a filtered view can be bookmarked or shared; a pasted link reproduces the sender's view and wins over saved session state ([#513](https://github.com/Jolls/arx-legacy/issues/513))
 

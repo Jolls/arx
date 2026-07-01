@@ -1,0 +1,30 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}</li>
+    </ol>
+</nav>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{if .HasData}}
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <span class="d-inline-flex align-items-center gap-1 small text-muted">
+            <span class="ph-swatch ph-swatch-po"></span> Purchase orders
+        </span>
+        <span class="d-inline-flex align-items-center gap-1 small text-muted">
+            <span class="ph-swatch ph-swatch-price"></span> Price list
+        </span>
+    </div>
+    <div id="price-history-chart" class="position-relative"></div>
+    <script>window.PRICE_HISTORY = {{.PriceDataJSON}};</script>
+    <script src="/static/pm/price_history.js?v={{.AppVersion}}"></script>
+    {{else}}
+    <div class="alert alert-info">
+        No price history yet for this part. Unit costs from purchase orders and
+        price-list entries will appear here over time.
+    </div>
+    {{end}}
+</div>
+{{end}}

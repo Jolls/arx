@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"math"
 	"net/http"
@@ -1117,6 +1119,89 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "part_orders.html", map[string]any{
 		"Part": p, "OrderItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "orders",
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+	})
+}
+
+// PartPriceHistory renders the Price History tab: a unit-cost-over-time chart
+// sourced from this part's PO lines (one point per line) plus any active
+// price-list entries (#284). Points are emitted as JSON for the SVG renderer in
+// static/pm/price_history.js.
+func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "price-history")
+	if !ok {
+		return
+	}
+
+	type pricePoint struct {
+		Date     string  `json:"date"` // YYYY-MM-DD
+		Cost     float64 `json:"cost"`
+		PO       string  `json:"po"`
+		Supplier string  `json:"supplier"`
+		Source   string  `json:"source"` // "po" | "price"
+	}
+	var points []pricePoint
+
+	// One point per PO line that has an order date.
+	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT po.number, po.supplier_name, po.date_ordered, pol.unit_cost
+		FROM %s pol
+		JOIN %s po ON pol.po_id = po.ID
+		WHERE pol.part_id = @p1 AND po.date_ordered IS NOT NULL
+		ORDER BY po.date_ordered
+	`, pol, po), id)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving price history: "+err.Error())
+		return
+	}
+	for rows.Next() {
+		var num, sup sql.NullString
+		var d sql.NullTime
+		var cost float64
+		if err := rows.Scan(&num, &sup, &d, &cost); err != nil {
+			rows.Close()
+			h.renderError(w, r, "Error reading price history: "+err.Error())
+			return
+		}
+		if !d.Valid {
+			continue
+		}
+		points = append(points, pricePoint{
+			Date: d.Time.Format("2006-01-02"), Cost: cost,
+			PO: num.String, Supplier: sup.String, Source: "po",
+		})
+	}
+	rows.Close()
+
+	// Incorporate active price-list entries if any are populated.
+	pr, comp := h.cfg.PriceTable(), h.cfg.CompanyTable()
+	if prRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT c.name, p.effective_date, p.price_ea
+		FROM %s p
+		LEFT JOIN %s c ON p.supplier_id = c.id
+		WHERE p.part_id = @p1 AND p.is_active = 1 AND p.effective_date IS NOT NULL
+		ORDER BY p.effective_date
+	`, pr, comp), id); err == nil {
+		for prRows.Next() {
+			var sup sql.NullString
+			var d sql.NullTime
+			var ea sql.NullFloat64
+			if prRows.Scan(&sup, &d, &ea) == nil && d.Valid && ea.Valid {
+				points = append(points, pricePoint{
+					Date: d.Time.Format("2006-01-02"), Cost: ea.Float64,
+					PO: "", Supplier: sup.String, Source: "price",
+				})
+			}
+		}
+		prRows.Close()
+	}
+
+	data, _ := json.Marshal(points)
+	h.render(w, r, "part_price_history.html", map[string]any{
+		"Part": p, "PriceDataJSON": template.JS(data), "HasData": len(points) > 0,
+		"ActiveTab": "parts", "ActiveSubTab": "price-history",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
 }
