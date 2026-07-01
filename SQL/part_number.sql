@@ -29,7 +29,7 @@ CREATE TABLE part (
   revision            VARCHAR(10)      CONSTRAINT DF_part_number_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
   title               VARCHAR(255)     CONSTRAINT DF_part_number_title            DEFAULT '',
   detail              VARCHAR(255)     CONSTRAINT DF_part_number_detail           DEFAULT '',
-  release_status      VARCHAR(255)     CONSTRAINT DF_part_number_release_status   DEFAULT 'U',  -- U/A/D only; CHECK/narrowing deferred — see #213.
+  release_status      VARCHAR(255)     NOT NULL CONSTRAINT DF_part_number_release_status   DEFAULT 'U',  -- U/A/D only; NOT NULL + default 'U' (#542); CHECK/narrowing deferred — see #213.
   requested_by        VARCHAR(50)      CONSTRAINT DF_part_number_requested_by     DEFAULT '',
   notes               VARCHAR(MAX)     CONSTRAINT DF_part_number_notes            DEFAULT '',
   user_field_1        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_1     DEFAULT '',

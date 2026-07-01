@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.60] - 2026-06-30 
+- Part Release Status now always has a value: new parts default to "Under Review", the blank option is gone, and the column is enforced `NOT NULL` in the database ([#542](https://github.com/Jolls/arx-legacy/issues/542))
+
 ## [0.5.59] - 2026-06-30 
 - Renamed the part "Add Supplier Link" control to "Add Supplier" ([#531](https://github.com/Jolls/arx-legacy/issues/531))
 - Removed the redundant "Active" and "Has BOM" checkboxes from the part form; a part's active state now derives from its Release Status (Deprecated = inactive) and BOM visibility is governed by the part type ([#532](https://github.com/Jolls/arx-legacy/issues/532))
