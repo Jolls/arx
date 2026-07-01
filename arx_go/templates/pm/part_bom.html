@@ -9,33 +9,57 @@
     {{template "part_tabs" .}}
 
     {{if .BOMItems}}
+    <div class="d-flex justify-content-end mb-2" data-col-table="bom-table">
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Columns
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-item" checked> Item</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-title" checked> Title</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-rev" checked> Rev</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-cat" checked> Type</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-qty" checked> Qty</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-unit-cost" checked> Unit Cost</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-ext-cost" checked> Ext Cost</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-source" checked> Source</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-attach" checked> Attachments</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-polines" checked> PO Lines</label></li>
+                <li><hr class="dropdown-divider my-1"></li>
+                <li><a href="#" class="dropdown-item small text-muted" data-col-reset>Reset</a></li>
+            </ul>
+        </div>
+    </div>
     <div class="table-wrapper">
-        <table class="table table-bordered table-hover table-sm">
+        <table class="table table-bordered table-hover table-sm" id="bom-table">
             <thead class="table-dark">
                 <tr>
-                    <th class="sortable" onclick="sortTable(this)" style="width:50px;">Item</th>
-                    <th class="sortable" onclick="sortTable(this)">Part Number</th>
-                    <th class="sortable" onclick="sortTable(this)">Title</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:60px;">Rev</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:80px;">Type</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:80px; text-align:right;">Qty</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Unit Cost</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Ext Cost</th>
-                    <th style="width:90px;" data-bs-toggle="tooltip" title="Where this line&#39;s unit cost came from: Rollup = computed from sub-assembly BOM, Price = preferred supplier&#39;s active price, Labor = OPS hourly rate, Cost = manually entered current cost, Missing = no cost available">Source</th>
+                    <th data-col="col-item" class="sortable" onclick="sortTable(this)" style="width:50px;">Item</th>
+                    <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
+                    <th data-col="col-title" class="sortable" onclick="sortTable(this)">Title</th>
+                    <th data-col="col-rev" class="sortable" onclick="sortTable(this)" style="width:60px;">Rev</th>
+                    <th data-col="col-cat" class="sortable" onclick="sortTable(this)" style="width:80px;">Type</th>
+                    <th data-col="col-qty" class="sortable" onclick="sortTable(this)" style="width:80px; text-align:right;">Qty</th>
+                    <th data-col="col-unit-cost" class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Unit Cost</th>
+                    <th data-col="col-ext-cost" class="sortable" onclick="sortTable(this)" style="width:100px; text-align:right;">Ext Cost</th>
+                    <th data-col="col-source" style="width:90px;" data-bs-toggle="tooltip" title="Where this line&#39;s unit cost came from: Rollup = computed from sub-assembly BOM, Price = preferred supplier&#39;s active price, Labor = OPS hourly rate, Cost = manually entered current cost, Missing = no cost available">Source</th>
+                    <th data-col="col-attach" class="text-end" style="width:110px;">Attachments</th>
+                    <th data-col="col-polines" class="text-end" style="width:90px;">PO Lines</th>
                 </tr>
             </thead>
             <tbody>
                 {{range .BOMItems}}
                 <tr>
-                    <td>{{.PLItem}}</td>
-                    <td><a href="/part/{{.PLPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
-                    <td>{{.Title}}</td>
-                    <td>{{.Revision}}</td>
-                    <td>{{.Category}}</td>
-                    <td class="text-end">{{printf "%.5g" .PLQty}}</td>
-                    <td class="text-end">{{if .LineUnitCost}}${{printf "%.4f" .LineUnitCost}}{{end}}</td>
-                    <td class="text-end">{{if .LineExtCost}}${{printf "%.4f" .LineExtCost}}{{end}}</td>
-                    <td>
+                    <td data-col="col-item">{{.PLItem}}</td>
+                    <td data-col="col-pn"><a href="/part/{{.PLPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
+                    <td data-col="col-title">{{.Title}}</td>
+                    <td data-col="col-rev">{{.Revision}}</td>
+                    <td data-col="col-cat">{{.Category}}</td>
+                    <td data-col="col-qty" class="text-end">{{printf "%.5g" .PLQty}}</td>
+                    <td data-col="col-unit-cost" class="text-end">{{if .LineUnitCost}}${{printf "%.4f" .LineUnitCost}}{{end}}</td>
+                    <td data-col="col-ext-cost" class="text-end">{{if .LineExtCost}}${{printf "%.4f" .LineExtCost}}{{end}}</td>
+                    <td data-col="col-source">
                         {{if eq .CostSource "rollup"}}<span class="badge bg-info text-dark">Rollup</span>
                         {{else if eq .CostSource "price"}}<span class="badge bg-success">Price</span>
                         {{else if eq .CostSource "labor"}}<span class="badge bg-primary">Labor</span>
@@ -43,14 +67,24 @@
                         {{else if eq .CostSource "missing"}}<span class="badge bg-warning text-dark">Missing</span>
                         {{end}}
                     </td>
+                    <td data-col="col-attach" class="text-end">{{.AttachCount}}</td>
+                    <td data-col="col-polines" class="text-end">{{.POLineCount}}</td>
                 </tr>
                 {{end}}
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="7" class="text-end"><strong>Total</strong></td>
-                    <td class="text-end"><strong>${{printf "%.4f" .BOMTotal}}</strong></td>
-                    <td></td>
+                    <td data-col="col-item"></td>
+                    <td data-col="col-pn"></td>
+                    <td data-col="col-title"></td>
+                    <td data-col="col-rev"></td>
+                    <td data-col="col-cat"></td>
+                    <td data-col="col-qty" class="text-end"><strong>Total</strong></td>
+                    <td data-col="col-unit-cost"></td>
+                    <td data-col="col-ext-cost" class="text-end"><strong>${{printf "%.4f" .BOMTotal}}</strong></td>
+                    <td data-col="col-source"></td>
+                    <td data-col="col-attach"></td>
+                    <td data-col="col-polines"></td>
                 </tr>
             </tfoot>
         </table>

@@ -5,41 +5,64 @@
             <input class="form-check-input" type="checkbox" role="switch" id="show-inactive">
             <label class="form-check-label" for="show-inactive">Show inactive</label>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2" data-col-table="parts-table">
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Columns
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-rev" checked> Rev</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-title" checked> Description</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-detail" checked> Detail</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-reqby" checked> Originator</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-date" checked> Date</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-cat" checked> Type</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-modified" checked> Last Modified</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-attach" checked> Attachments</label></li>
+                    <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-polines" checked> PO Lines</label></li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li><a href="#" class="dropdown-item small text-muted" data-col-reset>Reset</a></li>
+                </ul>
+            </div>
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="exportCSV()"><i class="bi bi-download"></i> Export CSV</button>
             <a href="/parts/new" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle"></i> New Part</a>
         </div>
     </div>
 
     <div class="table-wrapper">
-        <table class="table table-bordered table-hover table-sm" data-rows-url="/api/parts/rows">
+        <table class="table table-bordered table-hover table-sm" id="parts-table" data-rows-url="/api/parts/rows">
             <colgroup>
-                <col><col><col><col><col><col><col><col>
+                <col><col><col><col><col><col><col><col><col><col>
             </colgroup>
             <thead>
                 <tr class="table-dark">
-                    <th>Part Number</th>
-                    <th><span data-bs-toggle="tooltip" title="Revision letter or number">Rev</span></th>
-                    <th>Description</th>
-                    <th><span data-bs-toggle="tooltip" title="Additional specification or value field">Detail</span></th>
-                    <th><span data-bs-toggle="tooltip" title="Person who submitted this part number">Originator</span></th>
-                    <th>Date</th>
-                    <th><span data-bs-toggle="tooltip" title="Part category, e.g. Make, Buy, Assembly">Type</span></th>
-                    <th>Last Modified</th>
+                    <th data-col="col-pn">Part Number</th>
+                    <th data-col="col-rev"><span data-bs-toggle="tooltip" title="Revision letter or number">Rev</span></th>
+                    <th data-col="col-title">Description</th>
+                    <th data-col="col-detail"><span data-bs-toggle="tooltip" title="Additional specification or value field">Detail</span></th>
+                    <th data-col="col-reqby"><span data-bs-toggle="tooltip" title="Person who submitted this part number">Originator</span></th>
+                    <th data-col="col-date">Date</th>
+                    <th data-col="col-cat"><span data-bs-toggle="tooltip" title="Part category, e.g. Make, Buy, Assembly">Type</span></th>
+                    <th data-col="col-modified">Last Modified</th>
+                    <th data-col="col-attach" class="text-end" style="width:110px;">Attachments</th>
+                    <th data-col="col-polines" class="text-end" style="width:90px;">PO Lines</th>
                 </tr>
                 <tr class="filter-row">
-                    <th><input type="text" placeholder=""></th>
-                    <th><input type="text" placeholder=""></th>
-                    <th><input type="text" placeholder=""></th>
-                    <th><input type="text" placeholder=""></th>
-                    <th><input type="text" placeholder=""></th>
-                    <th data-filter-type="date"></th>
-                    <th><input type="text" placeholder=""></th>
-                    <th data-filter-type="date"></th>
+                    <th data-col="col-pn"><input type="text" placeholder=""></th>
+                    <th data-col="col-rev"><input type="text" placeholder=""></th>
+                    <th data-col="col-title"><input type="text" placeholder=""></th>
+                    <th data-col="col-detail"><input type="text" placeholder=""></th>
+                    <th data-col="col-reqby"><input type="text" placeholder=""></th>
+                    <th data-col="col-date" data-filter-type="date"></th>
+                    <th data-col="col-cat"><input type="text" placeholder=""></th>
+                    <th data-col="col-modified" data-filter-type="date"></th>
+                    <th data-col="col-attach"><input type="text" placeholder=""></th>
+                    <th data-col="col-polines"><input type="text" placeholder=""></th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="8" class="no-results">Loading&hellip;</td></tr>
+                <tr><td colspan="10" class="no-results">Loading&hellip;</td></tr>
             </tbody>
         </table>
     </div>

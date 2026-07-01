@@ -161,6 +161,8 @@ type BOMItem struct {
 	Revision      string
 	Category      string
 	PNCurrentCost float64
+	AttachCount   int
+	POLineCount   int
 	// Rollup display fields — populated by PartBOM handler.
 	PNLastRollupCost float64
 	ChildHasBOM      bool

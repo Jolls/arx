@@ -81,10 +81,13 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		Cat      string `json:"cat"`
 		Modified string `json:"modified"`
 		Active   bool   `json:"active"`
+		Attach   int    `json:"attach"`
+		POLines  int    `json:"poLines"`
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail,
-		       requested_by, created_date, category, modified_date, is_active
+		       requested_by, created_date, category, modified_date, is_active,
+		       attachment_count, po_line_count
 		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
 	if err != nil {
@@ -98,7 +101,8 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		var pn, rev, title, detail, reqBy, cat sql.NullString
 		var date, modified sql.NullTime
 		var active sql.NullBool
-		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active); err != nil {
+		var attach, poLines sql.NullInt64
+		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -109,6 +113,8 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		p.Detail = detail.String
 		p.ReqBy = reqBy.String
 		p.Cat = cat.String
+		p.Attach = int(attach.Int64)
+		p.POLines = int(poLines.Int64)
 		if date.Valid {
 			p.Date = date.Time.Format("2006-01-02")
 		}
@@ -562,7 +568,8 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
 		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
+		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT),
+		       pn.attachment_count, pn.po_line_count
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
@@ -580,9 +587,11 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		var partNumber, title, revision, category sql.NullString
 		var currentCost, lastRollupCost, preferredPrice sql.NullFloat64
 		var childHasBOM sql.NullBool
+		var attachCount, poLineCount sql.NullInt64
 		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLPartID,
 			&partNumber, &title, &revision, &category,
-			&currentCost, &lastRollupCost, &preferredPrice, &childHasBOM); err != nil {
+			&currentCost, &lastRollupCost, &preferredPrice, &childHasBOM,
+			&attachCount, &poLineCount); err != nil {
 			h.renderError(w, r, "Error reading BOM: "+err.Error())
 			return
 		}
@@ -593,6 +602,8 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		item.PNCurrentCost = currentCost.Float64
 		item.PNLastRollupCost = lastRollupCost.Float64
 		item.ChildHasBOM = childHasBOM.Bool
+		item.AttachCount = int(attachCount.Int64)
+		item.POLineCount = int(poLineCount.Int64)
 
 		item.LineUnitCost, item.CostSource = bomLeafCost(item.ChildHasBOM, item.PNLastRollupCost, preferredPrice, item.PNCurrentCost, item.Category)
 		item.LineExtCost = item.LineUnitCost * item.PLQty

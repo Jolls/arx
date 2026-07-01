@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.63] - 2026-07-01 
+- Parts list and BOM view now show Attachments and PO Lines counts, with a Columns dropdown to hide/show any column ([#550](https://github.com/Jolls/arx-legacy/issues/550))
+
 ## [0.5.62] - 2026-07-01 
 - Redesign Part, Supplier, and Contact detail views as 2-wide dashboard grids summarizing sibling sub-tabs ([#521](https://github.com/Jolls/arx-legacy/issues/521))
 
