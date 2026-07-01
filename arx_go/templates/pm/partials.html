@@ -144,7 +144,8 @@
     <span class="sub-tab disabled" title="Suppliers do not apply to {{$part.Category}} parts">Suppliers</span>
     {{end}}
     {{if eq $sub "details"}}
-    <a href="/part/{{$id}}/edit" class="sub-tab sub-tab-edit">Edit</a>
+    <a href="/part/{{$id}}/duplicate" class="sub-tab sub-tab-edit">Duplicate</a>
+    <a href="/part/{{$id}}/edit" class="sub-tab">Edit</a>
     {{else if and $hasBOM (eq $sub "bom")}}
     <a href="/part/{{$id}}/bom/edit" class="sub-tab sub-tab-edit">Edit BOM</a>
     {{end}}
