@@ -296,18 +296,18 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	var newID int
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (part_number, revision, title, detail, category, has_bom,
+		INSERT INTO %s (part_number, revision, title, detail, category,
 		                release_status, is_active, requested_by, notes, created_date, modified_date,
 		                unit_id, current_cost,
 		                user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		                user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
 		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,
-		        @p13,@p14,
-		        @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24)
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
+		        @p12,@p13,
+		        @p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23)
 	`, h.cfg.PartsTable()),
-		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"), r.FormValue("has_bom") == "1",
-		fv(r, "release_status"), r.FormValue("active") == "1", fv(r, "PNReqBy"), fv(r, "PNNotes"),
+		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
+		fv(r, "release_status"), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		now, now,
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
@@ -374,15 +374,15 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5, has_bom=@p6,
-		  release_status=@p7, is_active=@p8, requested_by=@p9, notes=@p10, modified_date=@p11,
-		  unit_id=@p12, current_cost=@p13,
-		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
-		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23
-		WHERE id=@p24
+		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5,
+		  release_status=@p6, is_active=@p7, requested_by=@p8, notes=@p9, modified_date=@p10,
+		  unit_id=@p11, current_cost=@p12,
+		  user_field_1=@p13, user_field_2=@p14, user_field_3=@p15, user_field_4=@p16, user_field_5=@p17,
+		  user_field_6=@p18, user_field_7=@p19, user_field_8=@p20, user_field_9=@p21, user_field_10=@p22
+		WHERE id=@p23
 	`, h.cfg.PartsTable()),
-		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"), r.FormValue("has_bom") == "1",
-		fv(r, "release_status"), r.FormValue("active") == "1", fv(r, "PNReqBy"), fv(r, "PNNotes"),
+		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
+		fv(r, "release_status"), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		time.Now(),
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
@@ -409,13 +409,17 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
+// activeFromStatus derives is_active from the release_status field: a Deprecated
+// ("D") part is inactive, everything else is active. Release status is the single
+// source of truth for a part's active state (#532).
+func activeFromStatus(r *http.Request) bool { return fv(r, "release_status") != "D" }
+
 // partFromForm rebuilds a Part struct from POST form values (for re-displaying on error).
 func partFromForm(r *http.Request) models.Part {
 	p := models.Part{
 		PartNumber: fv(r, "part_number"), Revision: fv(r, "revision"),
 		Title: fv(r, "title"), Detail: fv(r, "detail"), Category: fv(r, "category"),
-		HasBOM:        r.FormValue("has_bom") == "1",
-		ReleaseStatus: fv(r, "release_status"), Active: r.FormValue("active") == "1",
+		ReleaseStatus: fv(r, "release_status"), Active: activeFromStatus(r),
 		PNReqBy: fv(r, "PNReqBy"), PNNotes: fv(r, "PNNotes"),
 		UserField1: fv(r, "user_field_1"), UserField2: fv(r, "user_field_2"), UserField3: fv(r, "user_field_3"),
 		UserField4: fv(r, "user_field_4"), UserField5: fv(r, "user_field_5"), UserField6: fv(r, "user_field_6"),

@@ -126,14 +126,14 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (display_name, company_id, email, phone_1, phone_2, fax,
 		                address, city, state, zipcode, country,
-		                website, user_account_link, is_active, notes, updated_at)
+		                website, is_active, notes, updated_at)
 		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16)
+		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15)
 	`, h.cfg.ContactTable()),
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
 		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
-		fv(r, "CNWeb"), fv(r, "CNUserAccountLink"),
+		fv(r, "CNWeb"),
 		r.FormValue("CNActive") == "1",
 		fv(r, "CNNotes"), time.Now(),
 	).Scan(&newID)
@@ -183,13 +183,13 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET
 		  display_name=@p1, company_id=@p2, email=@p3, phone_1=@p4, phone_2=@p5, fax=@p6,
 		  address=@p7, city=@p8, state=@p9, zipcode=@p10, country=@p11,
-		  website=@p12, user_account_link=@p13, is_active=@p14, notes=@p15, updated_at=@p16
-		WHERE id=@p17
+		  website=@p12, is_active=@p13, notes=@p14, updated_at=@p15
+		WHERE id=@p16
 	`, h.cfg.ContactTable()),
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
 		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
-		fv(r, "CNWeb"), fv(r, "CNUserAccountLink"),
+		fv(r, "CNWeb"),
 		r.FormValue("CNActive") == "1",
 		fv(r, "CNNotes"), time.Now(), id,
 	)
@@ -289,7 +289,7 @@ func contactFromForm(r *http.Request) models.Contact {
 		CNPhone1: fv(r, "CNPhone1"), CNPhone2: fv(r, "CNPhone2"), CNFAX: fv(r, "CNFAX"),
 		CNAddress: fv(r, "CNAddress"), CNCity: fv(r, "CNCity"), CNState: fv(r, "CNState"),
 		CNZipcode: fv(r, "CNZipcode"), CNCountry: fv(r, "CNCountry"),
-		CNWeb: fv(r, "CNWeb"), CNUserAccountLink: fv(r, "CNUserAccountLink"),
+		CNWeb: fv(r, "CNWeb"),
 		CNNotes: fv(r, "CNNotes"), CNActive: r.FormValue("CNActive") == "1",
 	}
 	if v := fv(r, "CNSUID"); v != "" {
