@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.64] - 2026-07-01 
+- Part Title now shown alongside the part number in the breadcrumb on every part subtab ([#552](https://github.com/Jolls/arx-legacy/issues/552))
+
 ## [0.5.63] - 2026-07-01 
 - Parts list and BOM view now show Attachments and PO Lines counts, with a Columns dropdown to hide/show any column ([#550](https://github.com/Jolls/arx-legacy/issues/550))
 
