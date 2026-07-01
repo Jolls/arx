@@ -9,21 +9,18 @@
 <div class="content">
     {{template "part_tabs" .}}
 
-    <form method="post" action="{{if .IsNew}}/part/{{.Part.PNID}}/pricing{{else}}/part/{{.Part.PNID}}/pricing/{{.Price.ID}}{{end}}">
+    <form id="price-form" method="post" action="{{if .IsNew}}/part/{{.Part.PNID}}/pricing{{else}}/part/{{.Part.PNID}}/pricing/{{.Price.ID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
         <div class="detail-section">
             <div class="detail-row">
-                <label for="supplier_id" class="form-label">Supplier *</label>
-                <select id="supplier_id" name="supplier_id" class="form-select" required>
-                    <option value="">-- Select --</option>
-                    {{range .Suppliers}}
-                    <option value="{{.ID}}"
-                        {{if and $.Price.SupplierID (eq (derefInt $.Price.SupplierID) .ID)}}selected{{end}}>
-                        {{.Name}}
-                    </option>
-                    {{end}}
-                </select>
+                <label for="supplier_name" class="form-label">Supplier *</label>
+                <div style="position:relative; flex:1;">
+                    <input type="text" id="supplier_name" class="form-control"
+                           value="{{.Price.SupplierName}}" placeholder="Required — type to search…" autocomplete="off">
+                    <input type="hidden" id="supplier_id" name="supplier_id"
+                           value="{{if .Price.SupplierID}}{{derefInt .Price.SupplierID}}{{end}}">
+                </div>
             </div>
             <div class="detail-row">
                 <label for="pack_size" class="form-label">Pack Size *</label>
@@ -55,4 +52,29 @@
         </div>
     </form>
 </div>
+
+<script src="/static/pm/supplier-typeahead.js?v={{.AppVersion}}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    setupSupplierTypeahead(
+        document.getElementById('supplier_name'),
+        document.getElementById('supplier_id')
+    );
+    const dateEl = document.getElementById('effective_date');
+    if (!dateEl.value) {
+        const d = new Date();
+        dateEl.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    document.getElementById('price-form').addEventListener('submit', function(e) {
+        const nameEl = document.getElementById('supplier_name');
+        const idEl = document.getElementById('supplier_id');
+        if (!idEl.value) {
+            e.preventDefault();
+            nameEl.classList.add('is-invalid');
+            nameEl.focus();
+        }
+    });
+});
+</script>
 {{end}}
