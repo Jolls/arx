@@ -74,8 +74,7 @@
             <div class="detail-row">
                 <label for="release_status" class="form-label">Status</label>
                 <select id="release_status" name="release_status" class="form-select">
-                    <option value=""{{if eq .Part.ReleaseStatus ""}} selected{{end}}>-- Select --</option>
-                    <option value="U"{{if eq .Part.ReleaseStatus "U"}} selected{{end}}>Under Review</option>
+                    <option value="U"{{if or (eq .Part.ReleaseStatus "U") (eq .Part.ReleaseStatus "")}} selected{{end}}>Under Review</option>
                     <option value="A"{{if eq .Part.ReleaseStatus "A"}} selected{{end}}>Active</option>
                     <option value="D"{{if eq .Part.ReleaseStatus "D"}} selected{{end}}>Deprecated</option>
                 </select>

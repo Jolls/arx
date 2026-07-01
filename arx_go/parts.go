@@ -176,7 +176,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	p.Detail = detail.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
-	p.ReleaseStatus = status.String
+	p.ReleaseStatus = releaseStatusOrUnderReview(status.String)
 	p.Active = active.Bool
 	p.PNReqBy = reqBy.String
 	p.PNNotes = notes.String
@@ -307,7 +307,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		        @p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23)
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
-		fv(r, "release_status"), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
+		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		now, now,
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
@@ -382,7 +382,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		WHERE id=@p23
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
-		fv(r, "release_status"), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
+		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		time.Now(),
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
@@ -414,12 +414,23 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 // source of truth for a part's active state (#532).
 func activeFromStatus(r *http.Request) bool { return fv(r, "release_status") != "D" }
 
+// releaseStatusOrUnderReview coalesces a blank release_status to "U" (Under Review).
+// A part with no explicit status is Under Review — never implicitly active/released.
+// Applied on write (so the DB never receives '') and on read (so legacy/old-binary
+// blank rows present as Under Review everywhere) (#542).
+func releaseStatusOrUnderReview(s string) string {
+	if s == "" {
+		return "U"
+	}
+	return s
+}
+
 // partFromForm rebuilds a Part struct from POST form values (for re-displaying on error).
 func partFromForm(r *http.Request) models.Part {
 	p := models.Part{
 		PartNumber: fv(r, "part_number"), Revision: fv(r, "revision"),
 		Title: fv(r, "title"), Detail: fv(r, "detail"), Category: fv(r, "category"),
-		ReleaseStatus: fv(r, "release_status"), Active: activeFromStatus(r),
+		ReleaseStatus: releaseStatusOrUnderReview(fv(r, "release_status")), Active: activeFromStatus(r),
 		PNReqBy: fv(r, "PNReqBy"), PNNotes: fv(r, "PNNotes"),
 		UserField1: fv(r, "user_field_1"), UserField2: fv(r, "user_field_2"), UserField3: fv(r, "user_field_3"),
 		UserField4: fv(r, "user_field_4"), UserField5: fv(r, "user_field_5"), UserField6: fv(r, "user_field_6"),
@@ -475,7 +486,7 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	p.Detail = detail.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
-	p.ReleaseStatus = status.String
+	p.ReleaseStatus = releaseStatusOrUnderReview(status.String)
 	p.Active = active.Bool
 	p.PNReqBy = reqBy.String
 	p.PNNotes = notes.String
