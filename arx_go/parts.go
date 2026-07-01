@@ -310,17 +310,49 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── PartDuplicate — GET /part/{id}/duplicate ────────────────────────────────
+
+// PartDuplicate renders the create form pre-filled from an existing part so the
+// user can clone it. The BOM is carried through via the duplicate_bom_from hidden
+// field and copied by PartsCreate on save; everything else (attachments, pricing,
+// suppliers, mfg parts, history) is intentionally excluded (#548).
+func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	src, err := h.fetchPartFull(r.Context(), id)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving part: "+err.Error())
+		return
+	}
+	sourcePN := src.PartNumber
+	src.PartNumber = ""     // force the user to enter a new, unique number
+	src.ReleaseStatus = "U" // a fresh clone starts Under Review
+	// has_bom is not reliably maintained, so check for actual BOM lines to decide
+	// whether to promise a BOM copy in the UI.
+	var bomLines int
+	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE parent_part_id=@p1`, h.cfg.BOMTable()), src.PNID).Scan(&bomLines)
+	units, _ := h.fetchUnits(r.Context())
+	h.render(w, r, "part_edit.html", map[string]any{
+		"Part": src, "IsNew": true, "IsDuplicate": true,
+		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.PNID, "SourceHasBOM": bomLines > 0,
+		"Units": units, "Categories": h.loadCategories(r.Context()),
+		"ActiveTab": "parts", "ActiveSubTab": "edit",
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+	})
+}
+
 // ── PartsCreate — POST /parts ───────────────────────────────────────────────
 
 func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	partNumber := fv(r, "part_number")
 	if partNumber == "" {
-		h.render(w, r, "part_edit.html", map[string]any{
+		units, _ := h.fetchUnits(r.Context())
+		h.render(w, r, "part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Part Number is required",
-			"Categories": h.loadCategories(r.Context()),
-			"ActiveTab":  "parts", "ActiveSubTab": "edit",
+			"Units": units, "Categories": h.loadCategories(r.Context()),
+			"ActiveTab": "parts", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
-		})
+		}))
 		return
 	}
 	now := time.Now()
@@ -345,15 +377,53 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	).Scan(&newID)
 	if err != nil {
 		units, _ := h.fetchUnits(r.Context())
-		h.render(w, r, "part_edit.html", map[string]any{
+		h.render(w, r, "part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Error creating part: " + err.Error(),
 			"Units": units, "Categories": h.loadCategories(r.Context()),
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
-		})
+		}))
 		return
 	}
+	// Duplicate flow: copy the source part's BOM onto the new part (#548).
+	if srcID, e := strconv.Atoi(fv(r, "duplicate_bom_from")); e == nil && srcID > 0 {
+		if err := h.copyBOM(r.Context(), srcID, newID); err != nil {
+			h.renderError(w, r, "Part created but copying BOM failed: "+err.Error())
+			return
+		}
+	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%d", newID), http.StatusFound)
+}
+
+// copyBOM clones every BOM line from srcID onto dstID and marks the new part as
+// having a BOM. Used by the duplicate-part flow (#548).
+func (h *Handler) copyBOM(ctx context.Context, srcID, dstID int) error {
+	res, err := h.execContext(ctx, fmt.Sprintf(`
+		INSERT INTO %s (parent_part_id, component_part_id, line_number, qty)
+		SELECT @p1, component_part_id, line_number, qty FROM %s WHERE parent_part_id = @p2
+	`, h.cfg.BOMTable(), h.cfg.BOMTable()), dstID, srcID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil // source had no BOM lines
+	}
+	_, err = h.execContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET has_bom = 1 WHERE id = @p1`, h.cfg.PartsTable()), dstID)
+	return err
+}
+
+// dupContext re-adds the duplicate banner/hidden-field context to a render map
+// when a create request came from PartDuplicate, so the info banner and the BOM
+// source survive validation re-renders (#548).
+func dupContext(r *http.Request, m map[string]any) map[string]any {
+	if v := fv(r, "duplicate_bom_from"); v != "" {
+		m["IsDuplicate"] = true
+		m["DuplicateBOMFrom"] = v
+		m["DuplicateFrom"] = fv(r, "duplicate_from")
+		m["SourceHasBOM"] = fv(r, "duplicate_has_bom") == "1"
+	}
+	return m
 }
 
 // ── PartEdit — GET /part/{id}/edit ──────────────────────────────────────────
@@ -838,6 +908,16 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error inserting BOM row: "+err.Error())
 			return
 		}
+	}
+
+	// Keep has_bom in sync with whether any BOM lines remain — flips to 1 when the
+	// first line is added and back to 0 when the last is deleted (#548).
+	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+		UPDATE %s SET has_bom = CASE WHEN EXISTS (SELECT 1 FROM %s WHERE parent_part_id=@p1) THEN 1 ELSE 0 END
+		WHERE id=@p1
+	`, pn, pl), parentID); err != nil {
+		h.renderError(w, r, "Error updating BOM flag: "+err.Error())
+		return
 	}
 
 	if err := tx.Commit(); err != nil {

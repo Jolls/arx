@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/">Parts</a></li>
-        <li class="breadcrumb-item active">{{if .IsNew}}New Part{{else}}{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}{{end}}</li>
+        <li class="breadcrumb-item active">{{if .IsDuplicate}}Duplicate Part{{else if .IsNew}}New Part{{else}}{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}{{end}}</li>
     </ol>
 </nav>
 <div class="content">
@@ -12,8 +12,15 @@
 
     {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
+    {{if .IsDuplicate}}<div class="alert alert-info">Duplicating from <strong>{{.DuplicateFrom}}</strong>{{if .SourceHasBOM}} — the BOM will be copied{{end}}. Enter a new part number.</div>{{end}}
+
     <form method="post" action="{{if .IsNew}}/parts{{else}}/part/{{.Part.PNID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        {{if .DuplicateBOMFrom}}
+        <input type="hidden" name="duplicate_bom_from" value="{{.DuplicateBOMFrom}}">
+        <input type="hidden" name="duplicate_from" value="{{.DuplicateFrom}}">
+        {{if .SourceHasBOM}}<input type="hidden" name="duplicate_has_bom" value="1">{{end}}
+        {{end}}
 
         <div class="detail-section">
             <h3>Basic Information</h3>

@@ -154,6 +154,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/part/{id}", h.PartDetail)
 		r.Get("/part/{id}/details", h.PartDetail)
 		r.Get("/part/{id}/edit", h.PartEdit)
+		r.Get("/part/{id}/duplicate", h.PartDuplicate)
 		r.Post("/part/{id}", h.PartUpdate)
 		r.Get("/part/{id}/bom", h.PartBOM)
 		r.Get("/part/{id}/bom/edit", h.PartBOMEdit)

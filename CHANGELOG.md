@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.65] - 2026-07-01 
+- Duplicate a part, including its BOM, from the part detail view ([#548](https://github.com/Jolls/arx-legacy/issues/548))
+- BOM edits now keep the part's `has_bom` flag in sync (previously never maintained) ([#548](https://github.com/Jolls/arx-legacy/issues/548))
+
 ## [0.5.64] - 2026-07-01 
 - Part Title now shown alongside the part number in the breadcrumb on every part subtab ([#552](https://github.com/Jolls/arx-legacy/issues/552))
 
