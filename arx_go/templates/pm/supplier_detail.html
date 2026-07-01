@@ -8,75 +8,130 @@
 <div class="content">
     {{template "supplier_tabs" .}}
 
-    <div class="detail-section">
-        <h3>Basic Information</h3>
-        <div class="detail-row"><strong>Name:</strong>           <span>{{.Supplier.Name}}</span></div>
-        <div class="detail-row"><strong>Supplier Code:</strong>  <span>{{.Supplier.SUSupplierCode}}</span></div>
-        <div class="detail-row">
-            <strong>Default Attachment:</strong>
-            <span>
-                {{if .PrimaryAtt}}
-                    {{$f := .PrimaryAtt.FilePath}}
-                    {{$n := .PrimaryAtt.Notes}}
-                    {{if isHTTPURL $f}}
-                        <a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{attachLabel $f $n}}</a>
-                    {{else if isLocalDir $f}}
-                        <a href="{{supplierLocalDirURL $f}}">&#128193; {{attachLabel $f $n}}</a>
-                    {{else if isLocalFile $f}}
-                        {{if isPDF $f}}
-                            <a href="{{supplierLocalFileURL $f}}" target="_blank">{{attachLabel $f $n}}</a>
-                        {{else}}
-                            <a href="{{supplierLocalFileURL $f}}" download="{{fileBaseName $f}}">{{attachLabel $f $n}}</a>
+    <div class="row row-cols-1 row-cols-md-2 g-3">
+
+        {{/* Basic info + roles/status */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Supplier</div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Name:</strong><span>{{.Supplier.Name}}</span></div>
+                    <div class="detail-row"><strong>Code:</strong><span>{{.Supplier.SUSupplierCode}}</span></div>
+                    <div class="detail-row"><strong>Status:</strong>
+                        <span>{{if .Supplier.IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span></div>
+                    <div class="detail-row"><strong>Roles:</strong>
+                        <span>
+                            {{if .Supplier.IsSupplier}}<span class="badge bg-success">Supplier</span> {{end}}
+                            {{if .Supplier.IsManufacturer}}<span class="badge bg-success">Manufacturer</span>{{end}}
+                            {{if and (not .Supplier.IsSupplier) (not .Supplier.IsManufacturer)}}—{{end}}
+                        </span></div>
+                    <div class="detail-row"><strong>Last Modified:</strong><span>{{formatDate .Supplier.DateModified}}</span></div>
+                </div>
+            </div>
+        </div>
+
+        {{/* Default contact */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Default Contact</div>
+                <div class="card-body">
+                    {{if .Supplier.DefaultContact}}
+                    <div class="detail-row"><strong>Name:</strong><span><a href="/contact/{{derefInt .Supplier.DefaultContact}}">{{.Supplier.CNName}}</a></span></div>
+                    <div class="detail-row"><strong>Phone:</strong><span>{{if .Supplier.CNPhone1}}{{.Supplier.CNPhone1}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>Email:</strong><span>{{if .Supplier.CNEmail}}{{.Supplier.CNEmail}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>City:</strong><span>{{if .Supplier.CNCity}}{{.Supplier.CNCity}}{{else}}—{{end}}</span></div>
+                    {{else}}<p class="text-muted mb-0">No default contact set.</p>{{end}}
+                </div>
+            </div>
+        </div>
+
+        {{/* Statistics */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Statistics</div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Linked Parts:</strong><span>{{.Supplier.SUNumOfLNKs}}</span></div>
+                    <div class="detail-row"><strong>Purchase Orders:</strong><span>{{.Supplier.SUNumOfPOs}}</span></div>
+                </div>
+            </div>
+        </div>
+
+        {{/* Linked parts (top 5) */}}
+        {{if .TopParts}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Linked Parts</span>
+                    <a href="/supplier/{{.Supplier.ID}}/parts" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                        {{range .TopParts}}
+                            <tr><td><a href="/part/{{.PNID}}">{{.PartNumber}}</a></td><td class="text-truncate" style="max-width:14rem;">{{.Title}}</td></tr>
                         {{end}}
-                    {{else}}
-                        {{$f}}
-                    {{end}}
-                {{else}}—{{end}}
-            </span>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-    </div>
-
-    <div class="detail-section">
-        <h3>Default Contact Information</h3>
-        {{if .Supplier.DefaultContact}}
-        <div class="detail-row"><strong>Name:</strong>   <span><a href="/contact/{{derefInt .Supplier.DefaultContact}}">{{.Supplier.CNName}}</a></span></div>
-        <div class="detail-row"><strong>Phone:</strong>  <span>{{if .Supplier.CNPhone1}}{{.Supplier.CNPhone1}}{{else}}—{{end}}</span></div>
-        <div class="detail-row"><strong>Email:</strong>  <span>{{if .Supplier.CNEmail}}{{.Supplier.CNEmail}}{{else}}—{{end}}</span></div>
-        <div class="detail-row"><strong>City:</strong>   <span>{{if .Supplier.CNCity}}{{.Supplier.CNCity}}{{else}}—{{end}}</span></div>
-        {{else}}
-        <p style="color:#888;">No default contact set.</p>
         {{end}}
-    </div>
 
-    <div class="detail-section">
-        <h3>Status &amp; Dates</h3>
-        <div class="detail-row">
-            <strong>Status:</strong>
-            <span>{{if .Supplier.IsActive}}<span class="badge bg-success">Active</span>
-            {{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span>
+        {{/* Recent POs (top 5) — no PO sub-tab, so no View-all link */}}
+        {{if .RecentPOs}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Recent POs</div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Date</th><th>PO</th><th class="text-end">Total</th><th>Status</th></tr></thead>
+                        <tbody>
+                        {{range .RecentPOs}}
+                            <tr>
+                                <td>{{if .DateOrdered}}{{formatDate .DateOrdered}}{{else}}—{{end}}</td>
+                                <td><a href="/po/{{.Number}}">{{.Number}}</a></td>
+                                <td class="text-end">${{printf "%.2f" .Total}}</td>
+                                <td>{{template "po_status_badge" .Status}}</td>
+                            </tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        <div class="detail-row">
-            <strong>Roles:</strong>
-            <span>
-                {{if .Supplier.IsSupplier}}<span class="badge bg-success">Supplier</span> {{end}}
-                {{if .Supplier.IsManufacturer}}<span class="badge bg-success">Manufacturer</span>{{end}}
-                {{if and (not .Supplier.IsSupplier) (not .Supplier.IsManufacturer)}}—{{end}}
-            </span>
+        {{end}}
+
+        {{/* Default attachment */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Attachments</span>
+                    <a href="/supplier/{{.Supplier.ID}}/attachments" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    {{if .PrimaryAtt}}
+                        {{$f := .PrimaryAtt.FilePath}}{{$n := .PrimaryAtt.Notes}}
+                        <div class="detail-row"><strong>Default:</strong><span>
+                        {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{attachLabel $f $n}}</a>
+                        {{else if isLocalDir $f}}<a href="{{supplierLocalDirURL $f}}">&#128193; {{attachLabel $f $n}}</a>
+                        {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{supplierLocalFileURL $f}}" target="_blank">{{attachLabel $f $n}}</a>{{else}}<a href="{{supplierLocalFileURL $f}}" download="{{fileBaseName $f}}">{{attachLabel $f $n}}</a>{{end}}
+                        {{else}}{{$f}}{{end}}
+                        </span></div>
+                    {{else}}<p class="text-muted mb-0">No default attachment.</p>{{end}}
+                </div>
+            </div>
         </div>
-        <div class="detail-row"><strong>Last Modified:</strong> <span>{{formatDate .Supplier.DateModified}}</span></div>
-    </div>
 
-    <div class="detail-section">
-        <h3>Statistics</h3>
-        <div class="detail-row"><strong>Linked Parts:</strong>     <span>{{.Supplier.SUNumOfLNKs}}</span></div>
-        <div class="detail-row"><strong>Purchase Orders:</strong>  <span>{{.Supplier.SUNumOfPOs}}</span></div>
-    </div>
+        {{/* Notes — full width */}}
+        {{if .Supplier.SUNotes}}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Notes</div>
+                <div class="card-body"><p class="mb-0" style="white-space:pre-wrap; word-break:break-word;">{{.Supplier.SUNotes}}</p></div>
+            </div>
+        </div>
+        {{end}}
 
-    {{if .Supplier.SUNotes}}
-    <div class="detail-section">
-        <h3>Notes</h3>
-        <p style="white-space:pre-wrap; word-break:break-word;">{{.Supplier.SUNotes}}</p>
     </div>
-    {{end}}
 </div>
 {{end}}

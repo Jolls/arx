@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -92,14 +93,86 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	recentPOs := h.recentSupplierPOs(r.Context(), id, 5)
+	topParts := h.topSupplierParts(r.Context(), id, 5)
+
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "supplier_detail.html", map[string]any{
 		"Supplier": s, "PrimaryAtt": primaryAtt,
+		"RecentPOs": recentPOs, "TopParts": topParts,
 		"ActiveTab": "suppliers", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
+}
+
+// supplierPOSummary is one row in the Supplier dashboard "Recent POs" card (#521).
+type supplierPOSummary struct {
+	Number      string
+	Status      string
+	DateOrdered *time.Time
+	Total       float64
+}
+
+func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limit int) []supplierPOSummary {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p2) number, status, date_ordered, total_cost
+		FROM %s WHERE supplier_id = @p1
+		ORDER BY date_ordered DESC, ID DESC
+	`, h.cfg.POTable()), supplierID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []supplierPOSummary
+	for rows.Next() {
+		var s supplierPOSummary
+		var num, status sql.NullString
+		var d sql.NullTime
+		var total sql.NullFloat64
+		if rows.Scan(&num, &status, &d, &total) != nil {
+			continue
+		}
+		s.Number, s.Status, s.Total = num.String, status.String, total.Float64
+		if d.Valid {
+			s.DateOrdered = &d.Time
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// supplierPartSummary is one row in the Supplier dashboard "Linked Parts" card (#521).
+type supplierPartSummary struct {
+	PNID       int
+	PartNumber string
+	Title      string
+}
+
+func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit int) []supplierPartSummary {
+	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p2) pn.id, pn.part_number, pn.title
+		FROM %s sp JOIN %s pn ON sp.part_id = pn.id
+		WHERE sp.supplier_id = @p1
+		ORDER BY pn.part_number
+	`, sp, pn), supplierID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []supplierPartSummary
+	for rows.Next() {
+		var s supplierPartSummary
+		var num, title sql.NullString
+		if rows.Scan(&s.PNID, &num, &title) != nil {
+			continue
+		}
+		s.PartNumber, s.Title = num.String, title.String
+		out = append(out, s)
+	}
+	return out
 }
 
 func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
