@@ -150,14 +150,16 @@ function escHtml(s) {
 // One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
 const ROW_BUILDERS = {
     '/api/parts/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
-        <td><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}</td>
-        <td>${escHtml(r.rev)}</td>
-        <td>${escHtml(r.title)}</td>
-        <td>${escHtml(r.detail)}</td>
-        <td>${escHtml(r.reqBy)}</td>
-        <td>${r.date || 'N/A'}</td>
-        <td>${escHtml(r.cat)}</td>
-        <td>${r.modified || 'N/A'}</td>
+        <td data-col="col-pn"><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}</td>
+        <td data-col="col-rev">${escHtml(r.rev)}</td>
+        <td data-col="col-title">${escHtml(r.title)}</td>
+        <td data-col="col-detail">${escHtml(r.detail)}</td>
+        <td data-col="col-reqby">${escHtml(r.reqBy)}</td>
+        <td data-col="col-date">${r.date || 'N/A'}</td>
+        <td data-col="col-cat">${escHtml(r.cat)}</td>
+        <td data-col="col-modified">${r.modified || 'N/A'}</td>
+        <td data-col="col-attach" class="text-end">${r.attach}</td>
+        <td data-col="col-polines" class="text-end">${r.poLines}</td>
     </tr>`,
 
     '/api/suppliers/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
@@ -211,7 +213,7 @@ const ROW_BUILDERS = {
 
 // Per-column text for filter matching — column order must match the thead.
 const CELL_TEXT = {
-    '/api/parts/rows':     r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified],
+    '/api/parts/rows':     r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified, String(r.attach), String(r.poLines)],
     '/api/suppliers/rows': r => [r.name, r.active ? 'active' : 'inactive', r.country, String(r.links), String(r.pos), r.contact, r.code],
     '/api/contacts/rows':  r => [r.supplier, r.name, r.email, r.country, r.state, r.city, r.phone, r.web, r.modified, r.notes, r.active ? 'yes' : 'no'],
     '/api/pos/rows':       r => [r.num, r.status, r.supplier, r.ordered, r.closed, r.orderer, String(r.cost)],
@@ -490,8 +492,8 @@ function exportCSV() {
     const configs = {
         '/api/parts/rows': {
             filename: 'parts.csv',
-            headers: ['Part Number','Revision','Title','Detail','Requested By','Date','Category','Modified','Active'],
-            row: r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified, r.active ? 'true' : 'false'],
+            headers: ['Part Number','Revision','Title','Detail','Requested By','Date','Category','Modified','Attachments','PO Lines','Active'],
+            row: r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified, r.attach, r.poLines, r.active ? 'true' : 'false'],
         },
         '/api/pos/rows': {
             filename: 'purchase-orders.csv',
@@ -531,3 +533,62 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('show-rfqs')?.addEventListener('change', () => applyFilters(true));
     document.getElementById('show-inactive')?.addEventListener('change', () => applyFilters(true));
 });
+
+// --- Column visibility toggle (#386) ---
+// Dropdowns use data-col-table="tableId"; checkboxes use data-toggle-col="key".
+// Hidden state persisted to localStorage as arx.cols.<tableId>.
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('[data-col-table]').forEach(function (container) {
+    var tableId = container.dataset.colTable
+    var storageKey = 'arx.cols.' + tableId
+    var table = document.getElementById(tableId)
+    if (!table) return
+
+    var stored = localStorage.getItem(storageKey)
+    var hidden = stored ? JSON.parse(stored) : []
+
+    function applyState() {
+      table.querySelectorAll('[data-col]').forEach(function (el) {
+        el.classList.remove('col-hidden')
+      })
+      hidden.forEach(function (key) {
+        table.querySelectorAll('[data-col="' + key + '"]').forEach(function (el) {
+          el.classList.add('col-hidden')
+        })
+      })
+      container.querySelectorAll('input[data-toggle-col]').forEach(function (cb) {
+        cb.checked = hidden.indexOf(cb.dataset.toggleCol) === -1
+      })
+    }
+
+    container.querySelectorAll('input[data-toggle-col]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var key = cb.dataset.toggleCol
+        if (cb.checked) {
+          hidden = hidden.filter(function (k) { return k !== key })
+        } else {
+          if (hidden.indexOf(key) === -1) hidden.push(key)
+        }
+        localStorage.setItem(storageKey, JSON.stringify(hidden))
+        applyState()
+      })
+    })
+
+    var resetBtn = container.querySelector('[data-col-reset]')
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function (e) {
+        e.preventDefault()
+        hidden = []
+        localStorage.removeItem(storageKey)
+        applyState()
+      })
+    }
+
+    // Exposed so pages whose rows render asynchronously (e.g. the shared
+    // API-driven table) can re-apply hidden columns after each render.
+    window.__trColState = window.__trColState || {}
+    window.__trColState[tableId] = applyState
+
+    applyState()
+  })
+})
