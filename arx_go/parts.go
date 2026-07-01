@@ -1310,7 +1310,6 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
-		"Suppliers": h.fetchSupplierOptions(r),
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -1327,7 +1326,6 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "part_pricing_form.html", map[string]any{
 		"Part": p, "Price": models.Price{}, "IsNew": true,
-		"Suppliers": h.fetchSupplierOptions(r),
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -1403,11 +1401,14 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 	var isActive sql.NullBool
 	var effectiveDate sql.NullTime
 	var supplierID sql.NullInt64
+	var supplierName sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, price_ea, price_pack, pack_size, is_active, effective_date, supplier_id
-		FROM %s WHERE id = @p1 AND part_id = @p2
-	`, h.cfg.PriceTable()), priceID, partID).Scan(
-		&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID,
+		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
+		FROM %s p
+		LEFT JOIN %s s ON p.supplier_id = s.id
+		WHERE p.id = @p1 AND p.part_id = @p2
+	`, h.cfg.PriceTable(), h.cfg.CompanyTable()), priceID, partID).Scan(
+		&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID, &supplierName,
 	)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Price not found")
@@ -1434,9 +1435,9 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		v := int(supplierID.Int64)
 		price.SupplierID = &v
 	}
+	price.SupplierName = supplierName.String
 	h.render(w, r, "part_pricing_form.html", map[string]any{
 		"Part": p, "Price": price, "IsNew": false,
-		"Suppliers": h.fetchSupplierOptions(r),
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,

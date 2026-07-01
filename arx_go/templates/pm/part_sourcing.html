@@ -87,20 +87,12 @@
         <form method="post" action="/part/{{.Part.PNID}}/suppliers/{{.EditingLink.ID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
-                <label class="form-label">Supplier *</label>
-                {{if .Suppliers}}
-                <select name="supplier_id" class="form-select" required>
-                    <option value="">-- Select --</option>
-                    {{range .Suppliers}}
-                    <option value="{{.ID}}" {{if eq .ID $.EditingLink.SupplierID}}selected{{end}}>{{.Name}}</option>
-                    {{end}}
-                </select>
-                {{else}}
-                <span class="text-muted" style="font-size:0.9em;">
-                    No suppliers found. Edit a company and enable <em>Supplier</em>.
-                </span>
-                <input type="hidden" name="supplier_id" value="">
-                {{end}}
+                <label for="edit_supplier_name" class="form-label">Supplier *</label>
+                <div style="position:relative; flex:1;">
+                    <input type="text" id="edit_supplier_name" class="form-control"
+                           value="{{.EditingLink.SupplierName}}" placeholder="Required — type to search…" autocomplete="off">
+                    <input type="hidden" id="edit_supplier_id" name="supplier_id" value="{{.EditingLink.SupplierID}}">
+                </div>
             </div>
             <div class="detail-row">
                 <label class="form-label">Supplier PN</label>
@@ -151,21 +143,15 @@
     <details class="mt-4">
         <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Supplier</summary>
         <div class="detail-section mt-2">
-            {{if not .Suppliers}}
-            <p class="text-muted mb-2" style="font-size:0.9em;">
-                No suppliers found. Edit a company and enable <em>Supplier</em> first.
-            </p>
-            {{end}}
-            <form method="post" action="/part/{{.Part.PNID}}/suppliers">
+            <form id="add-supplier-form" method="post" action="/part/{{.Part.PNID}}/suppliers">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
-                    <label class="form-label">Supplier *</label>
-                    <select name="supplier_id" class="form-select" required {{if not .Suppliers}}disabled{{end}}>
-                        <option value="">-- Select --</option>
-                        {{range .Suppliers}}
-                        <option value="{{.ID}}">{{.Name}}</option>
-                        {{end}}
-                    </select>
+                    <label for="add_supplier_name" class="form-label">Supplier *</label>
+                    <div style="position:relative; flex:1;">
+                        <input type="text" id="add_supplier_name" class="form-control"
+                               placeholder="Required — type to search…" autocomplete="off">
+                        <input type="hidden" id="add_supplier_id" name="supplier_id">
+                    </div>
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Supplier PN</label>
@@ -202,7 +188,7 @@
                     </select>
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary" {{if not .Suppliers}}disabled{{end}}>
+                    <button type="submit" class="btn btn-primary">
                         Add Supplier
                     </button>
                 </div>
@@ -211,4 +197,31 @@
     </details>
     {{end}}
 </div>
+
+<script src="/static/pm/supplier-typeahead.js?v={{.AppVersion}}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    function requireSupplier(form, nameEl, idEl) {
+        if (!form || !nameEl) return;
+        setupSupplierTypeahead(nameEl, idEl, { supplierOnly: true });
+        form.addEventListener('submit', function(e) {
+            if (!idEl.value) {
+                e.preventDefault();
+                nameEl.classList.add('is-invalid');
+                nameEl.focus();
+            }
+        });
+    }
+    requireSupplier(
+        document.getElementById('edit_supplier_name')?.closest('form'),
+        document.getElementById('edit_supplier_name'),
+        document.getElementById('edit_supplier_id')
+    );
+    requireSupplier(
+        document.getElementById('add-supplier-form'),
+        document.getElementById('add_supplier_name'),
+        document.getElementById('add_supplier_id')
+    );
+});
+</script>
 {{end}}

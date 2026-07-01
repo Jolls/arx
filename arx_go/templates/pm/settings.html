@@ -180,15 +180,13 @@
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Default Receiver</strong>
             {{if .Suppliers}}
-            <select name="po_default_receiver_id"
-                    class="form-select" style="font-size:0.9em; min-width:260px; width:auto;">
-                <option value="0">— none —</option>
-                {{range .Suppliers}}
-                <option value="{{.ID}}" {{if eq .ID $.PODefaultReceiverID}}selected{{end}}>
-                    {{.Name}} ({{.ID}})
-                </option>
-                {{end}}
-            </select>
+            <div style="position:relative; min-width:260px;">
+                <input type="text" id="po_default_receiver_name" class="form-control"
+                       style="font-size:0.9em;" value="{{.PODefaultReceiverName}}"
+                       placeholder="Type to search…" autocomplete="off">
+                <input type="hidden" name="po_default_receiver_id" id="po_default_receiver_id"
+                       value="{{.PODefaultReceiverID}}">
+            </div>
             {{else}}
             <input type="number" name="po_default_receiver_id" value="{{.PODefaultReceiverID}}"
                    placeholder="Supplier ID"
@@ -196,28 +194,27 @@
             {{end}}
         </div>
     </div>
+    <script src="/static/pm/supplier-typeahead.js?v={{.AppVersion}}"></script>
     <script>
     // Scope the Default Contact dropdown to the selected Default Receiver's contacts.
     (function() {
-        const recSel = document.querySelector('select[name="po_default_receiver_id"]');
+        const recNameEl = document.getElementById('po_default_receiver_name');
+        const recIdEl = document.getElementById('po_default_receiver_id');
         const conSel = document.querySelector('select[name="po_default_contact_id"]');
-        if (!recSel || !conSel) return;
-        const currentContact = '{{.PODefaultContactID}}';
-        recSel.addEventListener('change', function() {
-            conSel.innerHTML = '';
-            conSel.add(new Option('— none —', '0'));
-            const rid = this.value;
-            if (!rid || rid === '0') return;
-            fetch('/api/suppliers/' + encodeURIComponent(rid) + '/contacts')
-                .then(r => r.json())
-                .then(function(contacts) {
-                    (contacts || []).forEach(function(c) {
-                        const opt = new Option(c.name + ' (' + c.id + ')', c.id);
-                        if (String(c.id) === currentContact) opt.selected = true;
-                        conSel.add(opt);
-                    });
-                })
-                .catch(function() {});
+        if (!recNameEl || !recIdEl || !conSel) return;
+        setupSupplierTypeahead(recNameEl, recIdEl, {
+            onSelect: function(s) {
+                conSel.innerHTML = '';
+                conSel.add(new Option('— none —', '0'));
+                fetch('/api/suppliers/' + encodeURIComponent(s.id) + '/contacts')
+                    .then(r => r.json())
+                    .then(function(contacts) {
+                        (contacts || []).forEach(function(c) {
+                            conSel.add(new Option(c.name + ' (' + c.id + ')', c.id));
+                        });
+                    })
+                    .catch(function() {});
+            }
         });
     })();
     </script>

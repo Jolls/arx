@@ -30,7 +30,6 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		"Part":             p,
 		"Links":            links,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
-		"Suppliers":        h.fetchSuppliersOnly(r),
 		"Units":            units,
 		"ActiveTab": "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -116,7 +115,6 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		"Links":            links,
 		"EditingLink":      &sp,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
-		"Suppliers":        h.fetchSuppliersOnly(r),
 		"Units":            units,
 		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -261,29 +259,6 @@ func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) ma
 	return out
 }
 
-// fetchSuppliersOnly returns active companies flagged as suppliers, for dropdowns.
-func (h *Handler) fetchSuppliersOnly(r *http.Request) []supplierOption {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, name FROM %s
-		WHERE is_supplier = 1 AND is_active = 1
-		ORDER BY name
-	`, h.cfg.CompanyTable()))
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var list []supplierOption
-	for rows.Next() {
-		var s supplierOption
-		var name sql.NullString
-		if rows.Scan(&s.ID, &name) == nil {
-			s.Name = name.String
-			list = append(list, s)
-		}
-	}
-	return list
-}
-
 func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request, partID, errMsg string) {
 	p, backURL, backLabel, ok := h.partPageBase(w, r, partID, "suppliers")
 	if !ok {
@@ -295,7 +270,6 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 		"Part":             p,
 		"Links":            links,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, partID),
-		"Suppliers":        h.fetchSuppliersOnly(r),
 		"Units":            units,
 		"Error":            errMsg,
 		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",

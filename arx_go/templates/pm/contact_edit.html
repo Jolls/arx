@@ -25,16 +25,13 @@
                        value="{{.Contact.CNName}}">
             </div>
             <div class="detail-row">
-                <label for="CNSUID" class="form-label">Supplier</label>
-                <select id="CNSUID" name="CNSUID" class="form-select">
-                    <option value="">-- None --</option>
-                    {{range .Suppliers}}
-                    <option value="{{.ID}}"
-                        {{if and $.Contact.CNSUID (eq (derefInt $.Contact.CNSUID) .ID)}}selected{{end}}>
-                        {{.Name}}
-                    </option>
-                    {{end}}
-                </select>
+                <label for="supplier_name" class="form-label">Supplier</label>
+                <div style="position:relative; flex:1;">
+                    <input type="text" id="supplier_name" class="form-control"
+                           value="{{.Contact.SupplierName}}" placeholder="Type to search…" autocomplete="off">
+                    <input type="hidden" id="CNSUID" name="CNSUID"
+                           value="{{if .Contact.CNSUID}}{{derefInt .Contact.CNSUID}}{{end}}">
+                </div>
             </div>
             <div class="detail-row">
                 <label for="CNEmail" class="form-label">Email</label>
@@ -123,4 +120,14 @@
         </div>
     </form>
 </div>
+
+<script src="/static/pm/supplier-typeahead.js?v={{.AppVersion}}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    setupSupplierTypeahead(
+        document.getElementById('supplier_name'),
+        document.getElementById('CNSUID')
+    );
+});
+</script>
 {{end}}

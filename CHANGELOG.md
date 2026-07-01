@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.61] - 2026-06-30 
+- Supplier fields on Add/Edit Price, Add/Edit Contact, Add/Edit Supplier Sourcing, and the Settings default receiver now use search-as-you-type instead of a plain dropdown ([#528](https://github.com/Jolls/arx-legacy/issues/528))
+- Add Price now defaults Effective Date to today ([#528](https://github.com/Jolls/arx-legacy/issues/528))
+
 ## [0.5.60] - 2026-06-30 
 - Part Release Status now always has a value: new parts default to "Under Review", the blank option is gone, and the column is enforced `NOT NULL` in the database ([#542](https://github.com/Jolls/arx-legacy/issues/542))
 

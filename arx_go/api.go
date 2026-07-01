@@ -17,11 +17,15 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []any{})
 		return
 	}
+	supplierFilter := ""
+	if r.URL.Query().Get("supplier_only") == "1" {
+		supplierFilter = " AND su.is_supplier = 1"
+	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, cn.city
 		FROM %s su
 		LEFT JOIN %s cn ON su.default_contact = cn.id
-		WHERE su.name LIKE @p1 AND su.is_active = 1
+		WHERE su.name LIKE @p1 AND su.is_active = 1`+supplierFilter+`
 		ORDER BY su.name
 		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
 	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), "%"+q+"%")

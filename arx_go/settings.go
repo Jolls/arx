@@ -73,9 +73,16 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var suppliers []supplierOption
 	var users []map[string]any
 	var usersError string
+	var receiverName string
 	if h.db != nil {
 		contacts = h.fetchContactOptions(r, h.cfg.PODefaults.ReceiverID)
 		suppliers = h.fetchSupplierOptions(r)
+		for _, s := range suppliers {
+			if s.ID == h.cfg.PODefaults.ReceiverID {
+				receiverName = s.Name
+				break
+			}
+		}
 		var err error
 		users, err = h.listUsers(r.Context())
 		if err != nil {
@@ -84,30 +91,31 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	}
 
 	data := map[string]any{
-		"Connected":            h.db != nil,
-		"DBServer":             h.cfg.DBServer,
-		"DBName":               h.cfg.DBName,
-		"TestDBName":           h.cfg.TestDBName,
-		"ActiveDBName":         h.cfg.ActiveDBName(),
-		"DBUser":               h.cfg.DBUser,
-		"DocControlRoot":       h.cfg.DocControlRoot,
-		"POFolderRoot":         h.cfg.POFolderRoot,
-		"SupplierFilesRoot":    h.cfg.SupplierFilesRoot,
-		"ImageRoot":            h.cfg.ImageRoot,
-		"TestMode":             h.cfg.TestMode,
-		"DebugMode":            h.cfg.DebugMode,
-		"PODefaultContactID":   h.cfg.PODefaults.ContactID,
-		"PODefaultReceiverID":  h.cfg.PODefaults.ReceiverID,
-		"AttachmentCategories": h.appConfigGetOr(r.Context(), "attachment_categories", ""),
-		"PartCategories":       h.loadCategories(r.Context()),
-		"Contacts":             contacts,
-		"Suppliers":            suppliers,
-		"Users":                users,
-		"UsersError":           usersError,
-		"CurrentUser":          h.currentUser(r),
-		"ReleaseNotes":         h.releaseNotes,
-		"ActiveTab":            "settings",
-		"CsrfToken":            h.csrfToken(w, r),
+		"Connected":             h.db != nil,
+		"DBServer":              h.cfg.DBServer,
+		"DBName":                h.cfg.DBName,
+		"TestDBName":            h.cfg.TestDBName,
+		"ActiveDBName":          h.cfg.ActiveDBName(),
+		"DBUser":                h.cfg.DBUser,
+		"DocControlRoot":        h.cfg.DocControlRoot,
+		"POFolderRoot":          h.cfg.POFolderRoot,
+		"SupplierFilesRoot":     h.cfg.SupplierFilesRoot,
+		"ImageRoot":             h.cfg.ImageRoot,
+		"TestMode":              h.cfg.TestMode,
+		"DebugMode":             h.cfg.DebugMode,
+		"PODefaultContactID":    h.cfg.PODefaults.ContactID,
+		"PODefaultReceiverID":   h.cfg.PODefaults.ReceiverID,
+		"PODefaultReceiverName": receiverName,
+		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
+		"PartCategories":        h.loadCategories(r.Context()),
+		"Contacts":              contacts,
+		"Suppliers":             suppliers,
+		"Users":                 users,
+		"UsersError":            usersError,
+		"CurrentUser":           h.currentUser(r),
+		"ReleaseNotes":          h.releaseNotes,
+		"ActiveTab":             "settings",
+		"CsrfToken":             h.csrfToken(w, r),
 	}
 	for k, v := range extra {
 		data[k] = v
