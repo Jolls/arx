@@ -18,6 +18,31 @@ The `FILFileName` column in `FIL` (and the equivalent field in `company_attachme
 
 ---
 
+## Imported attachment naming convention
+
+When a file is imported via the **Browse** button on a part's Attachments tab, it
+is placed into `DOC_CONTROL_ROOT` and renamed. A **Copy / Move** toggle beside the
+Browse button controls the source file: *Copy* (default) leaves it in place;
+*Move* deletes it after the import succeeds. The generated name is:
+
+```
+<PartNumber> <Rev> <Title> <Category>.<ext>
+```
+
+- Space-separated. Blank (or whitespace-only) parts are skipped so separators
+  never double up. The part number is always present; rev, title, and category
+  are optional.
+- Title is truncated to 20 characters (`titleMaxLen` in `arx_go/attachments.go`).
+- Filesystem-illegal characters (`<>:"/\|?*` and control chars) are replaced with
+  `-`, and the result is always a bare filename, so it stays inside
+  `DOC_CONTROL_ROOT`.
+- Stored in `FILFileName` as `LOCAL:<name>` (no subfolder).
+- If a file with the generated name already exists, the copy is rejected and the
+  user is offered a **Link to existing file** action, which creates the
+  attachment row pointing at the existing file without copying.
+
+---
+
 ## PO folder convention
 
 When a new PO is created, the app auto-creates a folder in `PO_FOLDER_ROOT` named:

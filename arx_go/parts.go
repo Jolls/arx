@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1050,7 +1051,13 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	h.renderPartAttachments(w, r, chi.URLParam(r, "id"), nil)
+}
+
+// renderPartAttachments loads a part's attachments and renders the attachments
+// page. extra is merged into the template data (used to surface errors or an
+// import-collision prompt on the POST path).
+func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, id string, extra map[string]any) {
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "attachments")
 	if !ok {
 		return
@@ -1092,14 +1099,19 @@ func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	cats := splitCSV(h.appConfigGetOr(r.Context(), "attachment_categories", ""))
-	h.render(w, r, "part_attachments.html", map[string]any{
+	data := map[string]any{
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken":            h.csrfToken(w, r),
 		"AttachmentCategories": cats,
+		"DocControlConfigured": h.cfg.DocControlRoot != "",
 		"TestMode":             h.cfg.TestMode,
-	})
+	}
+	for k, v := range extra {
+		data[k] = v
+	}
+	h.render(w, r, "part_attachments.html", data)
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
@@ -1110,12 +1122,67 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 			oID = n
 		}
 	}
+	rev, category := fv(r, "FILPNRev"), fv(r, "category")
+	fileName := fv(r, "FILFileName")
+
+	// moveSrc, when non-empty, is a source file to delete after a successful
+	// import (Move mode: copy into Doc Control, then remove the original).
+	var moveSrc string
+
+	// Import flow: a browsed source file is copied into DOC_CONTROL_ROOT under a
+	// generated name; fileName becomes LOCAL:<name>.
+	if src := fv(r, "source_path"); src != "" {
+		if h.cfg.DocControlRoot == "" {
+			h.renderPartAttachments(w, r, id, map[string]any{
+				"Error": "DOC_CONTROL_ROOT is not configured; cannot import files."})
+			return
+		}
+		p, err := h.fetchPartBasic(r.Context(), id)
+		if err != nil {
+			h.renderError(w, r, "Error loading part: "+err.Error())
+			return
+		}
+		move := fv(r, "move_source") == "1"
+		name := buildAttachmentFileName(p.PartNumber, rev, p.Title, category, filepath.Ext(src))
+		// link_existing=1 skips the copy and links to a file already present.
+		if fv(r, "link_existing") != "1" {
+			existed, err := copyIntoDocControl(h.cfg.DocControlRoot, name, src)
+			if err != nil {
+				h.renderPartAttachments(w, r, id, map[string]any{
+					"Error": "Error copying file: " + err.Error()})
+				return
+			}
+			if existed {
+				h.renderPartAttachments(w, r, id, map[string]any{
+					"ImportCollision": map[string]string{
+						"Name": name, "SourcePath": src,
+						"Category": category, "Rev": rev, "OrderID": fv(r, "order_id"),
+						"Move": fv(r, "move_source"),
+					}})
+				return
+			}
+		}
+		fileName = "LOCAL:" + name
+		if move {
+			moveSrc = src
+		}
+	}
+
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 		h.cfg.AttachmentsTable(),
-	), id, fv(r, "FILFileName"), fv(r, "FILPNRev"), fv(r, "category"), oID); err != nil {
+	), id, fileName, rev, category, oID); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
+	}
+	// Move mode: remove the source now that the attachment is saved. The row
+	// already exists, so a failure here is non-fatal — surface it as a warning.
+	if moveSrc != "" {
+		if err := os.Remove(moveSrc); err != nil {
+			h.renderPartAttachments(w, r, id, map[string]any{
+				"Error": "Attachment saved, but the source file could not be removed: " + err.Error()})
+			return
+		}
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
 }

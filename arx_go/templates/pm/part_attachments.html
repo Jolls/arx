@@ -10,6 +10,24 @@
 
     {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
+    {{if .ImportCollision}}
+    <div class="alert alert-warning">
+        <p class="mb-2">A file named <strong>{{.ImportCollision.Name}}</strong> already exists in
+            Doc Control. The file was <em>not</em> copied.</p>
+        <form method="post" action="/part/{{.Part.PNID}}/attachments" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="source_path" value="{{.ImportCollision.SourcePath}}">
+            <input type="hidden" name="category" value="{{.ImportCollision.Category}}">
+            <input type="hidden" name="FILPNRev" value="{{.ImportCollision.Rev}}">
+            <input type="hidden" name="order_id" value="{{.ImportCollision.OrderID}}">
+            {{if .ImportCollision.Move}}<input type="hidden" name="move_source" value="1">{{end}}
+            <input type="hidden" name="link_existing" value="1">
+            <button type="submit" class="btn btn-sm btn-warning">Link to existing file</button>
+        </form>
+        <a href="/part/{{.Part.PNID}}/attachments" class="btn btn-sm btn-secondary">Cancel</a>
+    </div>
+    {{end}}
+
     {{if .Attachments}}
     <div class="table-wrapper">
         <table class="table table-bordered table-hover table-sm">
@@ -115,14 +133,34 @@
         <div class="detail-section mt-2">
             <form method="post" action="/part/{{.Part.PNID}}/attachments">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="source_path" id="source_path" value="">
                 <div class="detail-row">
                     <label class="form-label">File / URL *</label>
-                    <input type="text" name="FILFileName" class="form-control"
+                    <input type="text" name="FILFileName" id="FILFileName" class="form-control"
                            placeholder="https://... or LOCAL:relative\path\to\file.pdf or LOCAL:folder\" required>
                 </div>
                 <div class="detail-row">
+                    <label class="form-label">Import file</label>
+                    <div class="d-flex flex-column gap-1">
+                        <div class="d-flex align-items-center gap-2">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="browseAttachment(this)"
+                                    {{if not .DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>Browse…</button>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" role="switch"
+                                       id="move_source" name="move_source" value="1" onchange="updateBrowsePreview()">
+                                <label class="form-check-label" for="move_source"><span id="move_mode_label">Copy</span></label>
+                            </div>
+                            <span id="browse-file-name" class="text-muted font-monospace" style="font-size:0.9em;"></span>
+                            <a href="#" id="browse-clear" onclick="clearBrowse(event)" style="display:none;">clear</a>
+                        </div>
+                        <div id="browse-note" class="form-text" style="display:none;">
+                            Will be <span id="browse-verb">copied</span> to Doc Control as <code id="browse-preview"></code>
+                        </div>
+                    </div>
+                </div>
+                <div class="detail-row">
                     <label class="form-label">Rev</label>
-                    <input type="text" name="FILPNRev" class="form-control" style="max-width:100px;">
+                    <input type="text" name="FILPNRev" id="FILPNRev" class="form-control" style="max-width:100px;">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Category</label>
@@ -141,6 +179,76 @@
 </div>
 
 <script>
+// Live preview of the imported filename. MUST mirror buildAttachmentFileName in
+// arx_go/attachments.go (order, separator, blank-skip, 20-char title truncation,
+// illegal-char sanitisation) — keep the two in sync. Deduplication tracked in #558.
+var ATT_PART_NUMBER = {{.Part.PartNumber}};
+var ATT_PART_TITLE = {{.Part.Title}};
+var ATT_TITLE_MAX = 20;
+
+function attSanitizePart(s) {
+    return s.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, '-');
+}
+function attTruncate(s, n) {
+    var r = Array.from(s);
+    return r.length <= n ? s : r.slice(0, n).join('');
+}
+function buildAttachmentName() {
+    var src = document.getElementById('source_path').value;
+    if (!src) { return ''; }
+    var base = src.split(/[\\/]/).pop();
+    var dot = base.lastIndexOf('.');
+    var ext = dot > -1 ? base.slice(dot) : '';
+    var rev = document.getElementById('FILPNRev').value;
+    var title = attTruncate(ATT_PART_TITLE.trim(), ATT_TITLE_MAX);
+    var cat = document.getElementById('add_category').value;
+    var parts = [ATT_PART_NUMBER, rev, title, cat]
+        .map(attSanitizePart)
+        .filter(function (p) { return p !== ''; });
+    return parts.join(' ') + ext;
+}
+function updateBrowsePreview() {
+    var moved = document.getElementById('move_source').checked;
+    var lbl = document.getElementById('move_mode_label');
+    if (lbl) { lbl.textContent = moved ? 'Move' : 'Copy'; }
+    var verb = document.getElementById('browse-verb');
+    if (verb) { verb.textContent = moved ? 'moved' : 'copied'; }
+    var el = document.getElementById('browse-preview');
+    if (el) { el.textContent = buildAttachmentName(); }
+}
+function browseAttachment(btn) {
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Browsing…';
+    fetch('/api/browse-file')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.path) { return; }
+            document.getElementById('source_path').value = data.path;
+            var base = data.path.split(/[\\/]/).pop();
+            document.getElementById('browse-file-name').textContent = base;
+            document.getElementById('browse-note').style.display = '';
+            document.getElementById('browse-clear').style.display = '';
+            var f = document.getElementById('FILFileName');
+            f.value = base;
+            f.readOnly = true;
+            updateBrowsePreview();
+        })
+        .finally(function () {
+            btn.disabled = false;
+            btn.textContent = orig;
+        });
+}
+function clearBrowse(e) {
+    e.preventDefault();
+    document.getElementById('source_path').value = '';
+    document.getElementById('browse-file-name').textContent = '';
+    document.getElementById('browse-note').style.display = 'none';
+    document.getElementById('browse-clear').style.display = 'none';
+    var f = document.getElementById('FILFileName');
+    f.value = '';
+    f.readOnly = false;
+}
 function notesSelChange(sel, inputId) {
     var input = document.getElementById(inputId);
     if (sel.value === '__custom__') {
@@ -148,6 +256,7 @@ function notesSelChange(sel, inputId) {
     } else {
         input.style.display = 'none'; input.value = sel.value;
     }
+    updateBrowsePreview();
 }
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('select[data-notes-sel]').forEach(function(sel) {
@@ -155,6 +264,10 @@ document.addEventListener('DOMContentLoaded', function() {
         var input = document.getElementById(inputId);
         if (!input) return;
         if (sel.value && sel.value !== '__custom__') input.value = sel.value;
+    });
+    ['FILPNRev', 'add_category'].forEach(function(fid) {
+        var el = document.getElementById(fid);
+        if (el) el.addEventListener('input', updateBrowsePreview);
     });
 });
 </script>
