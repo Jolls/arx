@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.59] - 2026-06-30 
+- Renamed the part "Add Supplier Link" control to "Add Supplier" ([#531](https://github.com/Jolls/arx-legacy/issues/531))
+- Removed the redundant "Active" and "Has BOM" checkboxes from the part form; a part's active state now derives from its Release Status (Deprecated = inactive) and BOM visibility is governed by the part type ([#532](https://github.com/Jolls/arx-legacy/issues/532))
+- Removed the unused "User Account" field from the contact form and detail page ([#534](https://github.com/Jolls/arx-legacy/issues/534))
+
 ## [0.5.58] - 2026-06-30 
 - New Price History tab on the part detail page: an SVG chart of unit cost over time, one point per purchase-order line plus any price-list entries, with hover tooltips showing PO number, supplier, date, and cost ([#284](https://github.com/Jolls/arx-legacy/issues/284))
 

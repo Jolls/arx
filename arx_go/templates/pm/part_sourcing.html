@@ -149,7 +149,7 @@
     {{/* ── Add form ──────────────────────────────────────────── */}}
     {{if not .EditingLink}}
     <details class="mt-4">
-        <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Supplier Link</summary>
+        <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Supplier</summary>
         <div class="detail-section mt-2">
             {{if not .Suppliers}}
             <p class="text-muted mb-2" style="font-size:0.9em;">
@@ -203,7 +203,7 @@
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary" {{if not .Suppliers}}disabled{{end}}>
-                        Add Supplier Link
+                        Add Supplier
                     </button>
                 </div>
             </form>

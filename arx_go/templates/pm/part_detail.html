@@ -30,11 +30,6 @@
             <div class="part-status-value">{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</div>
         </div>
         <div class="part-status-cell">
-            <div class="part-status-label" data-bs-toggle="tooltip" title="Whether this part is currently active in the database">Active</div>
-            {{if .Part.Active}}<span class="badge bg-success">Yes</span>
-            {{else}}<span class="badge bg-danger">No</span>{{end}}
-        </div>
-        <div class="part-status-cell">
             <div class="part-status-label">Last Modified</div>
             <div class="part-status-value">{{formatDate .Part.PNDateModified}}</div>
         </div>
@@ -84,11 +79,6 @@
                 {{else if eq .Part.ReleaseStatus "D"}}<span class="badge bg-danger">Deprecated</span>
                 {{else}}<span class="badge">{{.Part.ReleaseStatus}}</span>{{end}}
             </span>
-        </div>
-        <div class="detail-row">
-            <strong>Active:</strong>
-            <span>{{if .Part.Active}}<span class="badge bg-success">Active</span>
-            {{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span>
         </div>
         <div class="detail-row"><strong>Created Date:</strong>   <span>{{formatDate .Part.PNDate}}</span></div>
         <div class="detail-row"><strong>Last Modified:</strong>  <span>{{formatDate .Part.PNDateModified}}</span></div>

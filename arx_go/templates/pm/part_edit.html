@@ -80,22 +80,6 @@
                     <option value="D"{{if eq .Part.ReleaseStatus "D"}} selected{{end}}>Deprecated</option>
                 </select>
             </div>
-            <div class="detail-row">
-                <label class="form-label">Active</label>
-                <div class="form-checkbox-row">
-                    <input type="checkbox" id="active" name="active" value="1"
-                           {{if .Part.Active}}checked{{end}}>
-                    <label for="active">Part is active</label>
-                </div>
-            </div>
-            <div class="detail-row">
-                <label class="form-label">Has BOM</label>
-                <div class="form-checkbox-row">
-                    <input type="checkbox" id="has_bom" name="has_bom" value="1"
-                           {{if .Part.HasBOM}}checked{{end}}>
-                    <label for="has_bom">Part has a Bill of Materials</label>
-                </div>
-            </div>
         </div>
 
         <div class="detail-section">
