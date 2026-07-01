@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.66] - 2026-07-01 
+- Add a Browse button to part attachments that copies (or moves, via a toggle) the picked file into Doc Control, renaming it `<Part> <Rev> <Title> <Category>.<ext>`; offers to link to an existing file on name collision ([#547](https://github.com/Jolls/arx-legacy/issues/547))
+
 ## [0.5.65] - 2026-07-01 
 - Duplicate a part, including its BOM, from the part detail view ([#548](https://github.com/Jolls/arx-legacy/issues/548))
 - BOM edits now keep the part's `has_bom` flag in sync (previously never maintained) ([#548](https://github.com/Jolls/arx-legacy/issues/548))

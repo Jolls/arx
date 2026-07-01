@@ -17,9 +17,9 @@ attachment row. This removes the need to manually stage a file and hand-type a
 | Question | Decision |
 |---|---|
 | Target folder | `DOC_CONTROL_ROOT` root — no subfolder. Stored as `LOCAL:<name>`. |
-| Naming convention | `<PartNumber>_<Category>_<Rev>.<ext>` |
-| Blank Category/Rev | Skip blanks and collapse the separators (no empty `_`). |
-| Move vs copy | **Copy** — leave the source file in place. |
+| Naming convention | `<PartNumber> <Rev> <Title> <Category>.<ext>` (space-separated); title truncated to 20 chars. |
+| Blank Rev/Title/Category | Skip blanks and collapse the separators (no doubled spaces). |
+| Move vs copy | **Copy / Move toggle** beside the Browse button, default **Copy** (leave source). Move deletes the source after a successful import (including the link-to-existing path). |
 | Name collision | **Reject the copy**, then offer to link the attachment row to the file already present. |
 | Link-to-existing behavior | Create the attachment row (Category/Rev/Sort from the form) pointing at `LOCAL:<name>`; skip the copy only. |
 
@@ -56,24 +56,24 @@ timeout, or error. Add a `BrowseFile()` convenience wrapper with the same
 ### 3. Filename helper — pure & unit-tested
 
 ```go
-// buildAttachmentFileName joins the non-empty parts with "_" and appends ext.
+// buildAttachmentFileName joins the non-empty parts with " " and appends ext.
 // Each part is sanitised of filesystem-illegal characters; blanks are skipped
-// so separators never double up. ext includes the leading dot, taken from the
-// source file.
-func buildAttachmentFileName(partNumber, category, rev, ext string) string
+// so separators never double up. Title is truncated to titleMaxLen (20). ext
+// includes the leading dot, taken from the source file.
+func buildAttachmentFileName(partNumber, rev, title, category, ext string) string
 ```
 
-- Parts order: `partNumber`, `category`, `rev`.
+- Parts order: `partNumber`, `rev`, `title`, `category`.
 - Sanitise each part against `<>:"/\|?*` and path separators (replace with `-`),
-  trim surrounding whitespace. `partNumber` is always present; category/rev may
-  be empty and are dropped.
+  trim surrounding whitespace. `partNumber` is always present; rev/title/category
+  may be empty and are dropped. Title is truncated to 20 runes.
 - Result is a **bare base name** (no directory component), guaranteeing it cannot
   escape `DOC_CONTROL_ROOT`.
 
 Examples:
-- `("1234-567", "Drawing", "B", ".pdf")` → `1234-567_Drawing_B.pdf`
-- `("1234-567", "Drawing", "", ".pdf")` → `1234-567_Drawing.pdf`
-- `("1234-567", "", "", ".pdf")` → `1234-567.pdf`
+- `("1234-567", "B", "Widget Bracket", "Drawing", ".pdf")` → `1234-567 B Widget Bracket Drawing.pdf`
+- `("1234-567", "", "Widget", "Drawing", ".pdf")` → `1234-567 Widget Drawing.pdf`
+- `("1234-567", "", "", "", ".pdf")` → `1234-567.pdf`
 
 ### 4. Copy helper
 
@@ -96,8 +96,11 @@ Below the existing File/URL row, add:
 
 - A **Browse…** button + read-only display of the picked file's basename, backed
   by a hidden `source_path` input (empty by default).
-- A helper note that previews the target name:
-  *"Will be copied to Doc Control as `<PartNumber>_<Category>_<Rev>.<ext>`."*
+- A **live preview** note: *"Will be saved to Doc Control as `<name>`."* The name
+  is computed client-side by a JS mirror of `buildAttachmentFileName` (same order,
+  separator, blank-skip, 20-char title truncation, illegal-char sanitisation) and
+  recomputed as the Rev/Category fields change. The JS mirror is marked as
+  coupled to the Go function and must be kept in sync.
 - A **clear** link that resets `source_path` and the display back to manual entry.
 - If `DOC_CONTROL_ROOT` is unconfigured, the Browse button is disabled with a
   hint (parallels the Settings gating).
@@ -118,7 +121,7 @@ if source_path == "":
     return
 
 # import flow
-name = buildAttachmentFileName(part.PartNumber, category, rev, ext(source_path))
+name = buildAttachmentFileName(part.PartNumber, rev, part.Title, category, ext(source_path))
 
 if link_existing == "1":
     insert row with FILFileName = "LOCAL:" + name   # skip copy

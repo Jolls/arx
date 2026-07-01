@@ -122,6 +122,7 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Post("/settings/categories", h.SettingsCategoriesSave)
 	r.Get("/whats-new", h.WhatsNew)
 	r.Get("/api/browse-folder", h.APIBrowseFolder)
+	r.Get("/api/browse-file", h.APIBrowseFile)
 
 	// All other routes require a live database connection.
 	r.Group(func(r chi.Router) {
