@@ -253,6 +253,26 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		rollupSignificant = math.Abs(rollupDeltaPct) >= 5.0
 	}
 
+	var recentPOs []partPOSummary
+	var recentTxns []partTxnSummary
+	if p.ShowOrders() {
+		recentPOs = h.recentPartPOs(r.Context(), id, 5)
+	}
+	if p.ShowInventory() {
+		recentTxns = h.recentPartTxns(r.Context(), id, 5)
+	}
+
+	var priceJSON template.JS
+	var hasPriceData bool
+	if p.ShowPricing() {
+		pts := h.partPricePoints(r.Context(), id)
+		if len(pts) > 0 {
+			data, _ := json.Marshal(pts)
+			priceJSON = template.JS(data)
+			hasPriceData = true
+		}
+	}
+
 	h.render(w, r, "part_detail.html", map[string]any{
 		"Part": p, "PrimaryAtt": primaryAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
@@ -261,6 +281,10 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		"RollupDelta":       rollupDelta,
 		"RollupDeltaPct":    rollupDeltaPct,
 		"RollupSignificant": rollupSignificant,
+		"RecentPOs":         recentPOs,
+		"RecentTxns":        recentTxns,
+		"PriceDataJSON":     priceJSON,
+		"HasPriceData":      hasPriceData,
 	})
 }
 
@@ -1138,67 +1162,132 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// PartPriceHistory renders the Price History tab: a unit-cost-over-time chart
-// sourced from this part's PO lines (one point per line) plus any active
-// price-list entries (#284). Points are emitted as JSON for the SVG renderer in
-// static/pm/price_history.js.
-func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "price-history")
-	if !ok {
-		return
-	}
+// partPOSummary is one row in the Part dashboard "Recent POs" card (#521).
+type partPOSummary struct {
+	Number       string
+	SupplierName string
+	Status       string
+	DateOrdered  *time.Time
+	Qty          float64
+	UnitCost     float64
+}
 
-	type pricePoint struct {
-		Date     string  `json:"date"` // YYYY-MM-DD
-		Cost     float64 `json:"cost"`
-		PO       string  `json:"po"`
-		Supplier string  `json:"supplier"`
-		Source   string  `json:"source"` // "po" | "price"
+// recentPartPOs returns the most recent PO lines for a part, newest first,
+// capped at limit. Returns nil on error so the caller can omit the card.
+func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) []partPOSummary {
+	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p2) po.number, po.supplier_name, po.status, po.date_ordered,
+		       pol.qty, pol.unit_cost
+		FROM %s pol
+		JOIN %s po ON pol.po_id = po.ID
+		WHERE pol.part_id = @p1
+		ORDER BY po.date_ordered DESC, po.ID DESC
+	`, pol, po), partID, limit)
+	if err != nil {
+		return nil
 	}
+	defer rows.Close()
+	var out []partPOSummary
+	for rows.Next() {
+		var s partPOSummary
+		var num, sup, status sql.NullString
+		var d sql.NullTime
+		var qty, cost sql.NullFloat64
+		if rows.Scan(&num, &sup, &status, &d, &qty, &cost) != nil {
+			continue
+		}
+		s.Number, s.SupplierName, s.Status = num.String, sup.String, status.String
+		s.Qty, s.UnitCost = qty.Float64, cost.Float64
+		if d.Valid {
+			s.DateOrdered = &d.Time
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// partTxnSummary is one row in the Part dashboard "Inventory" card (#521).
+type partTxnSummary struct {
+	Type string
+	Qty  float64
+	Date string
+}
+
+// recentPartTxns returns the most recent inventory transactions for a part,
+// newest first, capped at limit. Returns nil on error.
+func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) []partTxnSummary {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p2) txn_type, qty, txn_date
+		FROM %s WHERE part_id = @p1 ORDER BY txn_date DESC, id DESC
+	`, h.cfg.InventoryTxnTable()), partID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []partTxnSummary
+	for rows.Next() {
+		var s partTxnSummary
+		var d sql.NullTime
+		var qty sql.NullFloat64
+		if rows.Scan(&s.Type, &qty, &d) != nil {
+			continue
+		}
+		s.Qty = qty.Float64
+		if d.Valid {
+			s.Date = d.Time.Format("2006-01-02")
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// pricePoint is one unit-cost-over-time sample for the price-history chart (#284),
+// shared by the Price History tab and the Part dashboard trend card (#521).
+type pricePoint struct {
+	Date     string  `json:"date"` // YYYY-MM-DD
+	Cost     float64 `json:"cost"`
+	PO       string  `json:"po"`
+	Supplier string  `json:"supplier"`
+	Source   string  `json:"source"` // "po" | "price"
+}
+
+// partPricePoints assembles the unit-cost-over-time samples for a part from its
+// PO lines and active price-list entries, chronological within each source.
+// Shared by PartPriceHistory and PartDetail (#521).
+func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoint {
 	var points []pricePoint
 
-	// One point per PO line that has an order date.
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+	if rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT po.number, po.supplier_name, po.date_ordered, pol.unit_cost
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE pol.part_id = @p1 AND po.date_ordered IS NOT NULL
 		ORDER BY po.date_ordered
-	`, pol, po), id)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving price history: "+err.Error())
-		return
-	}
-	for rows.Next() {
-		var num, sup sql.NullString
-		var d sql.NullTime
-		var cost float64
-		if err := rows.Scan(&num, &sup, &d, &cost); err != nil {
-			rows.Close()
-			h.renderError(w, r, "Error reading price history: "+err.Error())
-			return
+	`, pol, po), partID); err == nil {
+		for rows.Next() {
+			var num, sup sql.NullString
+			var d sql.NullTime
+			var cost float64
+			if rows.Scan(&num, &sup, &d, &cost) == nil && d.Valid {
+				points = append(points, pricePoint{
+					Date: d.Time.Format("2006-01-02"), Cost: cost,
+					PO: num.String, Supplier: sup.String, Source: "po",
+				})
+			}
 		}
-		if !d.Valid {
-			continue
-		}
-		points = append(points, pricePoint{
-			Date: d.Time.Format("2006-01-02"), Cost: cost,
-			PO: num.String, Supplier: sup.String, Source: "po",
-		})
+		rows.Close()
 	}
-	rows.Close()
 
-	// Incorporate active price-list entries if any are populated.
 	pr, comp := h.cfg.PriceTable(), h.cfg.CompanyTable()
-	if prRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+	if prRows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT c.name, p.effective_date, p.price_ea
 		FROM %s p
 		LEFT JOIN %s c ON p.supplier_id = c.id
 		WHERE p.part_id = @p1 AND p.is_active = 1 AND p.effective_date IS NOT NULL
 		ORDER BY p.effective_date
-	`, pr, comp), id); err == nil {
+	`, pr, comp), partID); err == nil {
 		for prRows.Next() {
 			var sup sql.NullString
 			var d sql.NullTime
@@ -1212,6 +1301,21 @@ func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		prRows.Close()
 	}
+	return points
+}
+
+// PartPriceHistory renders the Price History tab: a unit-cost-over-time chart
+// sourced from this part's PO lines (one point per line) plus any active
+// price-list entries (#284). Points are emitted as JSON for the SVG renderer in
+// static/pm/price_history.js.
+func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "price-history")
+	if !ok {
+		return
+	}
+
+	points := h.partPricePoints(r.Context(), id)
 
 	data, _ := json.Marshal(points)
 	h.render(w, r, "part_price_history.html", map[string]any{

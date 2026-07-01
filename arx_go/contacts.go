@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -96,10 +97,49 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.CNID), c.CNName)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
+	var siblings []siblingContact
+	if c.CNSUID != nil {
+		siblings = h.siblingContacts(r.Context(), *c.CNSUID, c.CNID)
+	}
 	h.render(w, r, "contact_detail.html", map[string]any{
 		"Contact": c, "ActiveTab": "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"Siblings": siblings,
 	})
+}
+
+// siblingContact is one row in the Contact dashboard "Related" card (#521).
+type siblingContact struct {
+	CNID   int
+	CNName string
+}
+
+// siblingContacts returns other active contacts at the same supplier, excluding
+// the current contact. Returns nil when there is no supplier or on error.
+func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContactID int) []siblingContact {
+	if supplierID <= 0 {
+		return nil
+	}
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT id, display_name FROM %s
+		WHERE company_id = @p1 AND id <> @p2 AND is_active = 1
+		ORDER BY display_name
+	`, h.cfg.ContactTable()), supplierID, excludeContactID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []siblingContact
+	for rows.Next() {
+		var s siblingContact
+		var name sql.NullString
+		if rows.Scan(&s.CNID, &name) != nil {
+			continue
+		}
+		s.CNName = name.String
+		out = append(out, s)
+	}
+	return out
 }
 
 func (h *Handler) ContactsNew(w http.ResponseWriter, r *http.Request) {

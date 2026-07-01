@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.62] - 2026-07-01 
+- Redesign Part, Supplier, and Contact detail views as 2-wide dashboard grids summarizing sibling sub-tabs ([#521](https://github.com/Jolls/arx-legacy/issues/521))
+
 ## [0.5.61] - 2026-06-30 
 - Supplier fields on Add/Edit Price, Add/Edit Contact, Add/Edit Supplier Sourcing, and the Settings default receiver now use search-as-you-type instead of a plain dropdown ([#528](https://github.com/Jolls/arx-legacy/issues/528))
 - Add Price now defaults Effective Date to today ([#528](https://github.com/Jolls/arx-legacy/issues/528))

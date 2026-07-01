@@ -57,66 +57,166 @@
         </div>
     </div>
 
-    {{/* ── Basic info ─────────────────────────────────────────── */}}
-    <div class="detail-section">
-        <h3>Basic Information</h3>
-        <div class="detail-row"><strong>Part Number:</strong><span>{{.Part.PartNumber}}</span></div>
-        <div class="detail-row"><strong>Title:</strong>      <span>{{.Part.Title}}</span></div>
-        <div class="detail-row"><strong>Category:</strong>   <span>{{.Part.Category}}</span></div>
-        <div class="detail-row"><strong>Revision:</strong>   <span>{{.Part.Revision}}</span></div>
-        <div class="detail-row"><strong>Detail:</strong>     <span>{{.Part.Detail}}</span></div>
-        <div class="detail-row"><strong>Unit:</strong>       <span>{{if .Part.UnitAbbr}}{{.Part.UnitAbbr}}{{else}}—{{end}}</span></div>
-    </div>
+    {{/* ── Dashboard grid (#521) ─────────────────────────────── */}}
+    <div class="row row-cols-1 row-cols-md-2 g-3">
 
-    {{/* ── Status & dates ─────────────────────────────────────── */}}
-    <div class="detail-section">
-        <h3>Status &amp; Dates</h3>
-        <div class="detail-row">
-            <strong>Status:</strong>
-            <span>
-                {{if eq .Part.ReleaseStatus "U"}}<span class="badge bg-info text-dark">Under Review</span>
-                {{else if eq .Part.ReleaseStatus "A"}}<span class="badge bg-success">Active</span>
-                {{else if eq .Part.ReleaseStatus "D"}}<span class="badge bg-danger">Deprecated</span>
-                {{else}}<span class="badge">{{.Part.ReleaseStatus}}</span>{{end}}
-            </span>
+        {{/* Pricing snapshot — data already on .Part */}}
+        {{if .Part.ShowPricing}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Pricing</span>
+                    <a href="/part/{{.Part.PNID}}/pricing" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Current Cost:</strong><span>${{printf "%.4f" .Part.PNCurrentCost}}</span></div>
+                    {{if .Part.PNLastRollupAt}}
+                    <div class="detail-row"><strong>Last Rollup:</strong><span>${{printf "%.4f" .Part.PNLastRollupCost}}</span></div>
+                    <div class="detail-row"><strong>Rollup vs Price &Delta;:</strong>
+                        <span class="{{if .RollupSignificant}}badge bg-warning text-dark{{end}}">
+                            {{if gt .RollupDelta 0.0}}+{{end}}${{printf "%.4f" .RollupDelta}} ({{if gt .RollupDeltaPct 0.0}}+{{end}}{{printf "%.1f" .RollupDeltaPct}}%)
+                        </span>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
         </div>
-        <div class="detail-row"><strong>Created Date:</strong>   <span>{{formatDate .Part.PNDate}}</span></div>
-        <div class="detail-row"><strong>Last Modified:</strong>  <span>{{formatDate .Part.PNDateModified}}</span></div>
-    </div>
+        {{end}}
 
-    {{/* ── Pricing & quantities ────────────────────────────────── */}}
-    <div class="detail-section">
-        <h3>Pricing &amp; Quantities</h3>
+        {{/* Inventory — stock on hand + last few moves */}}
         {{if .Part.ShowInventory}}
-        <div class="detail-row"><strong>Stock on hand:</strong>      <span>{{printf "%.2f" .Part.StockOnHand}} <a href="/part/{{.Part.PNID}}/transactions" class="small ms-1">Transactions</a></span></div>
-        {{end}}
-        <div class="detail-row"><strong data-bs-toggle="tooltip" title="Manually entered cost; may differ from BOM roll-up">Current Cost:</strong>       <span>${{printf "%.8f" .Part.PNCurrentCost}}</span></div>
-        <div class="detail-row"><strong data-bs-toggle="tooltip" title="Cost calculated from last BOM cost roll-up">Last Rollup Cost:</strong>   <span>{{if .Part.PNLastRollupAt}}${{printf "%.4f" .Part.PNLastRollupCost}} <span class="text-muted" style="font-size:0.85em;">{{.Part.PNLastRollupAt.Format "2006-01-02 15:04"}}</span>{{else}}<span class="muted">Never run</span>{{end}}</span></div>
-        {{if .Part.PNLastRollupAt}}
-        <div class="detail-row"><strong data-bs-toggle="tooltip" title="Difference between rollup cost and the purchase price (preferred supplier's cheapest active price, else current cost)">Rollup vs Price &Delta;:</strong>
-            <span class="{{if .RollupSignificant}}badge bg-warning text-dark{{end}}">
-                {{if gt .RollupDelta 0.0}}+{{end}}${{printf "%.4f" .RollupDelta}} ({{if gt .RollupDeltaPct 0.0}}+{{end}}{{printf "%.1f" .RollupDeltaPct}}%)
-            </span>
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Inventory</span>
+                    <a href="/part/{{.Part.PNID}}/transactions" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Stock on hand:</strong><span>{{printf "%.2f" .Part.StockOnHand}}</span></div>
+                    {{if .RecentTxns}}
+                    <table class="table table-sm mb-0 mt-2">
+                        <thead><tr><th>Date</th><th>Type</th><th class="text-end">Qty</th></tr></thead>
+                        <tbody>
+                        {{range .RecentTxns}}
+                            <tr><td>{{.Date}}</td><td>{{.Type}}</td><td class="text-end">{{printf "%.2f" .Qty}}</td></tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                    {{else}}<p class="text-muted mb-0 mt-2">No transactions yet.</p>{{end}}
+                </div>
+            </div>
         </div>
         {{end}}
-    </div>
 
-    {{/* ── Notes ───────────────────────────────────────────────── */}}
-    {{if .Part.PNNotes}}
-    <div class="detail-section">
-        <h3>Notes</h3>
-        <p style="white-space:pre-wrap; word-break:break-word;">{{.Part.PNNotes}}</p>
-    </div>
-    {{end}}
-
-    {{/* ── Additional fields ──────────────────────────────────── */}}
-    <div class="detail-section">
-        <h3>Additional Fields</h3>
-        <div class="detail-row"><strong>Requested By:</strong><span>{{.Part.PNReqBy}}</span></div>
-        {{range .Part.UserFields}}
-        <div class="detail-row"><strong>{{.Label}}:</strong><span>{{.Value}}</span></div>
+        {{/* Recent POs */}}
+        {{if and .Part.ShowOrders .RecentPOs}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Recent POs</span>
+                    <a href="/part/{{.Part.PNID}}/orders" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Date</th><th>PO</th><th>Supplier</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th>Status</th></tr></thead>
+                        <tbody>
+                        {{range .RecentPOs}}
+                            <tr>
+                                <td>{{if .DateOrdered}}{{formatDate .DateOrdered}}{{else}}—{{end}}</td>
+                                <td><a href="/po/{{.Number}}">{{.Number}}</a></td>
+                                <td class="text-truncate" style="max-width:10rem;">{{.SupplierName}}</td>
+                                <td class="text-end">{{printf "%.0f" .Qty}}</td>
+                                <td class="text-end">${{printf "%.2f" .UnitCost}}</td>
+                                <td>{{template "po_status_badge" .Status}}</td>
+                            </tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
         {{end}}
+
+        {{/* Price trend — reuses window.renderPriceHistory */}}
+        {{if .HasPriceData}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Price Trend</span>
+                    <a href="/part/{{.Part.PNID}}/price-history" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    <div id="dash-price-chart" class="position-relative"></div>
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Reference — basic info + additional fields */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Reference</div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Part Number:</strong><span>{{.Part.PartNumber}}</span></div>
+                    <div class="detail-row"><strong>Title:</strong><span>{{.Part.Title}}</span></div>
+                    <div class="detail-row"><strong>Category:</strong><span>{{.Part.Category}}</span></div>
+                    <div class="detail-row"><strong>Revision:</strong><span>{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>Detail:</strong><span>{{.Part.Detail}}</span></div>
+                    <div class="detail-row"><strong>Unit:</strong><span>{{if .Part.UnitAbbr}}{{.Part.UnitAbbr}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>Requested By:</strong><span>{{.Part.PNReqBy}}</span></div>
+                    {{range .Part.UserFields}}
+                    <div class="detail-row"><strong>{{.Label}}:</strong><span>{{.Value}}</span></div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        {{/* Attachments — primary attachment pointer */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Attachments</span>
+                    <a href="/part/{{.Part.PNID}}/attachments" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    {{if .PrimaryAtt}}
+                        {{$f := .PrimaryAtt.FILFileName}}{{$n := .PrimaryAtt.Category}}
+                        <div class="detail-row"><strong>Primary:</strong>
+                        <span>
+                        {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{attachLabel $f $n}}</a>
+                        {{else if isLocalDir $f}}<a href="{{localDirURL $f}}">&#128193; {{attachLabel $f $n}}</a>
+                        {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{localFileURL $f}}" target="_blank">{{attachLabel $f $n}}</a>{{else}}<a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{attachLabel $f $n}}</a>{{end}}
+                        {{else}}{{$f}}{{end}}
+                        </span></div>
+                    {{else}}<p class="text-muted mb-0">No primary attachment set.</p>{{end}}
+                </div>
+            </div>
+        </div>
+
+        {{/* Notes — full width */}}
+        {{if .Part.PNNotes}}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Notes</div>
+                <div class="card-body"><p class="mb-0" style="white-space:pre-wrap; word-break:break-word;">{{.Part.PNNotes}}</p></div>
+            </div>
+        </div>
+        {{end}}
+
     </div>
+
+    {{if .HasPriceData}}
+    <script>window.PRICE_HISTORY_DASH = {{.PriceDataJSON}};</script>
+    <script src="/static/pm/price_history.js?v={{.AppVersion}}"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        var el = document.getElementById('dash-price-chart');
+        if (el && window.PRICE_HISTORY_DASH && window.renderPriceHistory) {
+          window.renderPriceHistory(el, window.PRICE_HISTORY_DASH);
+        }
+      });
+    </script>
+    {{end}}
 
     {{end}}{{/* end if .Error */}}
 </div>
