@@ -10,52 +10,77 @@
 </div>
 <div class="content">
 
-    <div class="detail-section">
-        <h3>Basic Information</h3>
-        <div class="detail-row"><strong>Name:</strong>         <span>{{.Contact.CNName}}</span></div>
-        <div class="detail-row">
-            <strong>Supplier:</strong>
-            <span>
-                {{if .Contact.CNSUID}}
-                    <a href="/supplier/{{derefInt .Contact.CNSUID}}">{{.Contact.SupplierName}}</a>
-                {{else}}None{{end}}
-            </span>
+    <div class="row row-cols-1 row-cols-md-2 g-3">
+
+        {{/* Basic info */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Contact</div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Name:</strong><span>{{.Contact.CNName}}</span></div>
+                    <div class="detail-row"><strong>Supplier:</strong>
+                        <span>{{if .Contact.CNSUID}}<a href="/supplier/{{derefInt .Contact.CNSUID}}">{{.Contact.SupplierName}}</a>{{else}}None{{end}}</span></div>
+                    <div class="detail-row"><strong>Email:</strong><span>{{.Contact.CNEmail}}</span></div>
+                    <div class="detail-row"><strong>Web:</strong><span>{{.Contact.CNWeb}}</span></div>
+                    <div class="detail-row"><strong>Status:</strong>
+                        <span>{{if .Contact.CNActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span></div>
+                    <div class="detail-row"><strong>Last Modified:</strong><span>{{formatDate .Contact.CNDateModified}}</span></div>
+                </div>
+            </div>
         </div>
-        <div class="detail-row"><strong>Email:</strong>        <span>{{.Contact.CNEmail}}</span></div>
-        <div class="detail-row"><strong>Web:</strong>          <span>{{.Contact.CNWeb}}</span></div>
-    </div>
 
-    <div class="detail-section">
-        <h3>Status &amp; Dates</h3>
-        <div class="detail-row">
-            <strong>Active:</strong>
-            <span>{{if .Contact.CNActive}}<span class="badge bg-success">Active</span>
-            {{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span>
+        {{/* Contact details */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Contact Details</div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Phone 1:</strong><span>{{.Contact.CNPhone1}}</span></div>
+                    <div class="detail-row"><strong>Phone 2:</strong><span>{{.Contact.CNPhone2}}</span></div>
+                    <div class="detail-row"><strong>Fax:</strong><span>{{.Contact.CNFAX}}</span></div>
+                </div>
+            </div>
         </div>
-        <div class="detail-row"><strong>Last Modified:</strong> <span>{{formatDate .Contact.CNDateModified}}</span></div>
-    </div>
 
-    <div class="detail-section">
-        <h3>Contact Details</h3>
-        <div class="detail-row"><strong>Phone 1:</strong> <span>{{.Contact.CNPhone1}}</span></div>
-        <div class="detail-row"><strong>Phone 2:</strong> <span>{{.Contact.CNPhone2}}</span></div>
-        <div class="detail-row"><strong>Fax:</strong>     <span>{{.Contact.CNFAX}}</span></div>
-    </div>
+        {{/* Address */}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Address</div>
+                <div class="card-body">
+                    <div class="detail-row"><strong>Street:</strong><span>{{.Contact.CNAddress}}</span></div>
+                    <div class="detail-row"><strong>City:</strong><span>{{.Contact.CNCity}}</span></div>
+                    <div class="detail-row"><strong>State:</strong><span>{{.Contact.CNState}}</span></div>
+                    <div class="detail-row"><strong>Zip:</strong><span>{{.Contact.CNZipcode}}</span></div>
+                    <div class="detail-row"><strong>Country:</strong><span>{{.Contact.CNCountry}}</span></div>
+                </div>
+            </div>
+        </div>
 
-    <div class="detail-section">
-        <h3>Address</h3>
-        <div class="detail-row"><strong>Street:</strong>  <span>{{.Contact.CNAddress}}</span></div>
-        <div class="detail-row"><strong>City:</strong>    <span>{{.Contact.CNCity}}</span></div>
-        <div class="detail-row"><strong>State:</strong>   <span>{{.Contact.CNState}}</span></div>
-        <div class="detail-row"><strong>Zip:</strong>     <span>{{.Contact.CNZipcode}}</span></div>
-        <div class="detail-row"><strong>Country:</strong> <span>{{.Contact.CNCountry}}</span></div>
-    </div>
+        {{/* Related — other contacts at the same supplier */}}
+        {{if .Siblings}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Other Contacts at {{.Contact.SupplierName}}</div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                    {{range .Siblings}}
+                        <li><a href="/contact/{{.CNID}}">{{.CNName}}</a></li>
+                    {{end}}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {{end}}
 
-    {{if .Contact.CNNotes}}
-    <div class="detail-section">
-        <h3>Notes</h3>
-        <p style="white-space:pre-wrap; word-break:break-word;">{{.Contact.CNNotes}}</p>
+        {{/* Notes — full width */}}
+        {{if .Contact.CNNotes}}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Notes</div>
+                <div class="card-body"><p class="mb-0" style="white-space:pre-wrap; word-break:break-word;">{{.Contact.CNNotes}}</p></div>
+            </div>
+        </div>
+        {{end}}
+
     </div>
-    {{end}}
 </div>
 {{end}}
