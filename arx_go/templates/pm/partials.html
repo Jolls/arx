@@ -23,6 +23,7 @@
 <div class="sub-tabs">
     <a href="/supplier/{{.Supplier.ID}}"       class="sub-tab{{if eq .ActiveSubTab "details"}} active{{end}}">Details</a>
     <a href="/supplier/{{.Supplier.ID}}/parts"       class="sub-tab{{if eq .ActiveSubTab "parts"}} active{{end}}">Linked Parts</a>
+    <a href="/supplier/{{.Supplier.ID}}/pos"         class="sub-tab{{if eq .ActiveSubTab "pos"}} active{{end}}">Order History</a>
     <a href="/supplier/{{.Supplier.ID}}/attachments" class="sub-tab{{if eq .ActiveSubTab "attachments"}} active{{end}}">Attachments</a>
     <a href="/supplier/{{.Supplier.ID}}/folder"      class="sub-tab{{if eq .ActiveSubTab "folder"}} active{{end}}">Folder</a>
     <a href="/supplier/{{.Supplier.ID}}/edit"        class="sub-tab sub-tab-edit{{if eq .ActiveSubTab "edit"}} active{{end}}">Edit</a>

@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 - Add `.gitattributes` to make line-ending handling explicit (LF for source/docs, CRLF for Windows scripts) and stop editing tools from flipping endings
+- Add an Order History sub-tab to the vendor detail page, listing all POs placed with that vendor ([#566](https://github.com/Jolls/arx-legacy/issues/566))
+- Fix a nil-pointer panic on `/settings` when the DB auto-connect fails on startup
 
 ## [0.5.66] - 2026-07-01 
 - Add a Browse button to part attachments that copies (or moves, via a toggle) the picked file into Doc Control, renaming it `<Part> <Rev> <Title> <Category>.<ext>`; offers to link to an existing file on name collision ([#547](https://github.com/Jolls/arx-legacy/issues/547))
