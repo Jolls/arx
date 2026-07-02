@@ -776,17 +776,18 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/po/"+num+"?suggest_links=1", http.StatusFound)
 }
 
-// ── POAddSupplierLinks — POST /po/{id}/add-supplier-links ────────────────────
+// ── POAddSuggestions — POST /po/{id}/add-suggestions ──────────────────────────
 
-func (h *Handler) POAddSupplierLinks(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 	num := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
 	supplierID := r.FormValue("supplier_id")
-	count, _ := strconv.Atoi(r.FormValue("count"))
-	for i := 0; i < count; i++ {
+
+	linksCount, _ := strconv.Atoi(r.FormValue("links_count"))
+	for i := 0; i < linksCount; i++ {
 		if r.FormValue(fmt.Sprintf("add_%d", i)) != "1" {
 			continue
 		}
@@ -807,22 +808,11 @@ func (h *Handler) POAddSupplierLinks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, "/po/"+num, http.StatusFound)
-}
 
-// ── POAddPrices — POST /po/{id}/add-prices ───────────────────────────────────
-
-func (h *Handler) POAddPrices(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
-	if err := r.ParseForm(); err != nil {
-		h.renderError(w, r, "Error parsing form: "+err.Error())
-		return
-	}
-	supplierID := r.FormValue("supplier_id")
 	today := time.Now().Format("2006-01-02")
-	count, _ := strconv.Atoi(r.FormValue("count"))
 	pr := h.cfg.PriceTable()
-	for i := 0; i < count; i++ {
+	pricesCount, _ := strconv.Atoi(r.FormValue("prices_count"))
+	for i := 0; i < pricesCount; i++ {
 		if r.FormValue(fmt.Sprintf("add_price_%d", i)) != "1" {
 			continue
 		}
@@ -848,6 +838,7 @@ func (h *Handler) POAddPrices(w http.ResponseWriter, r *http.Request) {
 		}
 		h.ensureDefaultSupplier(r.Context(), partID, supplierID)
 	}
+
 	http.Redirect(w, r, "/po/"+num, http.StatusFound)
 }
 

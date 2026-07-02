@@ -8,14 +8,16 @@
 <div class="content">
     {{template "po_tabs" .}}
 
-    {{/* ── Suggest supplier links ──────────────────────────── */}}
-    {{if .SuggestLinks}}
-    <div class="alert alert-warning" id="suggest-links-banner">
-        <strong>New vendor PN(s) — add to supplier catalog?</strong>
-        <form method="POST" action="/po/{{.PO.Number}}/add-supplier-links" class="mt-2">
+    {{/* ── Suggest supplier catalog / pricing additions ──────── */}}
+    {{if or .SuggestLinks .SuggestPrices}}
+    <div class="alert alert-warning" id="suggest-banner">
+        <form method="POST" action="/po/{{.PO.Number}}/add-suggestions" class="mt-2">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="supplier_id" value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
-            <input type="hidden" name="count" value="{{len .SuggestLinks}}">
+            <input type="hidden" name="links_count" value="{{len .SuggestLinks}}">
+            <input type="hidden" name="prices_count" value="{{len .SuggestPrices}}">
+            {{if .SuggestLinks}}
+            <strong>New vendor PN(s) — add to supplier catalog?</strong>
             {{range .SuggestLinks}}
             <label class="suggest-links-row">
                 <input type="checkbox" name="add_{{.Index}}" value="1" checked>
@@ -24,22 +26,9 @@
                 <span>{{.PartNumber}} &mdash; <code>{{.VendorPN}}</code></span>
             </label>
             {{end}}
-            <div class="mt-2 d-flex gap-2 align-items-center">
-                <button type="submit" class="btn btn-primary btn-sm">Save to catalog</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('suggest-links-banner').remove()">Dismiss</button>
-            </div>
-        </form>
-    </div>
-    {{end}}
-
-    {{/* ── Suggest pricing ────────────────────────────────────── */}}
-    {{if .SuggestPrices}}
-    <div class="alert alert-warning" id="suggest-prices-banner">
-        <strong>New unit cost(s) — add to part pricing?</strong>
-        <form method="POST" action="/po/{{.PO.Number}}/add-prices" class="mt-2">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <input type="hidden" name="supplier_id" value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
-            <input type="hidden" name="count" value="{{len .SuggestPrices}}">
+            {{end}}
+            {{if .SuggestPrices}}
+            <strong class="{{if .SuggestLinks}}d-block mt-3{{end}}">New unit cost(s) — add to part pricing?</strong>
             {{range .SuggestPrices}}
             <label class="suggest-links-row">
                 <input type="checkbox" name="add_price_{{.Index}}" value="1" checked>
@@ -48,9 +37,10 @@
                 <span>{{.PartNumber}} &mdash; <code>{{printf "%.4f" .Cost}}</code> ea</span>
             </label>
             {{end}}
+            {{end}}
             <div class="mt-2 d-flex gap-2 align-items-center">
-                <button type="submit" class="btn btn-primary btn-sm">Save to pricing</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('suggest-prices-banner').remove()">Dismiss</button>
+                <button type="submit" class="btn btn-primary btn-sm">Save suggestions</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('suggest-banner').remove()">Dismiss</button>
             </div>
         </form>
     </div>
