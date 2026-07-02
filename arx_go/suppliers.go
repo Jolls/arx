@@ -444,6 +444,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var attachments []models.SupplierAttachment
+	nextOrderID := 1
 	for rows.Next() {
 		var a models.SupplierAttachment
 		var notes sql.NullString
@@ -456,6 +457,9 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		if sortOrder.Valid {
 			v := int(sortOrder.Int64)
 			a.SortOrder = &v
+			if v+1 > nextOrderID {
+				nextOrderID = v + 1
+			}
 		}
 		attachments = append(attachments, a)
 	}
@@ -480,6 +484,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		"ActiveTab":   "suppliers", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"NextOrderID": nextOrderID,
 	})
 }
 
