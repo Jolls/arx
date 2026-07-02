@@ -14,8 +14,8 @@
         <form method="POST" action="/po/{{.PO.Number}}/add-suggestions" class="mt-2">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="supplier_id" value="{{if .PO.SupplierID}}{{derefInt .PO.SupplierID}}{{end}}">
-            <input type="hidden" name="links_count" value="{{len .SuggestLinks}}">
-            <input type="hidden" name="prices_count" value="{{len .SuggestPrices}}">
+            <input type="hidden" name="links_count" value="{{if .SuggestLinks}}{{len .SuggestLinks}}{{else}}0{{end}}">
+            <input type="hidden" name="prices_count" value="{{if .SuggestPrices}}{{len .SuggestPrices}}{{else}}0{{end}}">
             {{if .SuggestLinks}}
             <strong>New vendor PN(s) — add to supplier catalog?</strong>
             {{range .SuggestLinks}}
