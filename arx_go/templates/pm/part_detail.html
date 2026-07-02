@@ -189,6 +189,15 @@
                         {{else}}{{$f}}{{end}}
                         </span></div>
                     {{else}}<p class="text-muted mb-0">No primary attachment set.</p>{{end}}
+                    {{range .TopAtts}}
+                        {{$f := .FILFileName}}{{$n := .Category}}
+                        <div class="detail-row"><span>
+                        {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{attachLabel $f $n}}</a>
+                        {{else if isLocalDir $f}}<a href="{{localDirURL $f}}">&#128193; {{attachLabel $f $n}}</a>
+                        {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{localFileURL $f}}" target="_blank">{{attachLabel $f $n}}</a>{{else}}<a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{attachLabel $f $n}}</a>{{end}}
+                        {{else}}{{$f}}{{end}}
+                        </span></div>
+                    {{end}}
                 </div>
             </div>
         </div>
