@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.73] - 2026-07-02 
+- Fix a template panic ("error calling len") that crashed the PO detail page after saving when a PO produced only one kind of post-save suggestion (new vendor PN or new price, but not both)
+
 ## [0.5.72] - 2026-07-02 
 - Replace `SQL/_test.sql` (prod-clone) with `SQL/seed_test_data.sql`: a documented, fixed-ID synthetic reference dataset covering every PO/RFQ/test-record lifecycle state for ArxDev ([#545](https://github.com/Jolls/arx-legacy/issues/545))
 
