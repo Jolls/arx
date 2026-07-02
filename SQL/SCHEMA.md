@@ -9,7 +9,7 @@ All new tables use snake_case. Do not extend the legacy prefix style for new wor
 ### Tables
 - Singular noun: `purchase_order`, not `purchase_orders`
 - All lowercase snake_case: `company_attachment`, `inventory_transaction`
-- New tables must exist in both prod and `ArxDev` (re-run `SQL/_test.sql` to populate)
+- New tables must exist in both prod and `ArxDev` (add DDL to `SQL/<table>.sql` and a seed block to `SQL/seed_test_data.sql`, then re-run it)
 
 ### Columns
 - All lowercase snake_case
@@ -92,9 +92,46 @@ identical in both databases — prod vs test is a database-level distinction, no
 `cfg.*Table()` helpers return bare names (`part`, `company`, etc.) regardless of test mode.
 Never hardcode a table name in Go — always call the helper.
 
+## Reference test data
+
+`SQL/seed_test_data.sql` wipes all row data in `ArxDev` and loads a small, fixed, synthetic
+dataset (issue #545) — not a prod clone. Every reference record has a pinned ID so manual
+verification steps, `/verify`, and integration tests can refer to them directly instead of
+re-discovering suitable data each session. Re-run the script any time to reset ArxDev to this
+known state; identities are reseeded above each range afterward so ad hoc rows created during
+testing never collide with the reference set.
+
+| ID range | Table | What's there |
+|---|---|---|
+| 1001-1099 | `company` | 4 companies: supplier, supplier+manufacturer, receiver/ship-to, manufacturer-only; both suppliers have a `default_contact` |
+| 2001-2099 | `contact` | Sibling contacts at the same supplier (2001 fully populated: address/website/notes), one per other supplier incl. the receiver company (2005), plus a soft-deleted (`is_active=0`) contact |
+| 3001-3099 | `part` | One part per category that matters (RAW, BUY, MFG, ASM, OPS, FORM) plus release-status coverage — an `A`ctive set, one `U`nder-review (3008), one `D`eprecated + inactive (3009); FORM parts 3010 (carries form 6001) and 3011 (spare, for new-form creation) |
+| 3901-3999 | `bom` | Assembly 3005 built from 3002 + 3003, plus an OPS labor line (3006) so the cost rollup includes value-add (#465); 3904 lists unit-under-test 3004 under FORM part 3010 (NewRecord PN picker) |
+| 4001-4099 | `supplier_part` | Sourcing links, incl. one (4002) with an `mfg_part_id`, a purchase unit (REEL) ≠ the part's base unit, and `min_increment`/`lead_time` |
+| 4101-4199 | `mfg_part` | One active MPN plus a soft-deleted one (exercises the filtered unique index) |
+| 4201-4299 | `price` | Active + superseded (history) price rows |
+| 5001-5099 | `purchase_order` | One PO per status (`draft`/`open`/`partially_received`/`closed`/`cancelled`), a resolved RFQ group (5006/5007→awarded 5008), and an in-flight `rfq` group (5010/5011); financials on the open/closed POs; 5002/5003 carry full supplier/receiver address + contact snapshot blocks for PO print |
+| 5501-5599 | `po_line` | Line items across the above POs, incl. a partial receipt and RFQ-quote lines carrying `lead_time_days` |
+| 5801-5899 | `purchase_order_history` | Status + approval events on PO 5002 |
+| 5901-5999 | `inventory_transaction` | Receipt/issue/adjustment/count ledger driving `part.stock_on_hand` for part 3007 |
+| 6001-6099 | `form` | One locked, released test form (FORM part 3010, unit-under-test 3004) |
+| 6101-6199 | `test_definition` | A heading, range-checked data steps, an archived/retired step (6104, still rendered on the historical records that recorded it), and feature steps 6105-6108: `pf_type` filled/comment, `format`, `default_result`, `List:`/`query:` spec_nom pickers, a `{6102}` cross-step token, and a `hide_formula` (6103 is also updated post-insert so `test_definition_history` has a timeline row) |
+| 6201-6299 | `form_events` | Release (`locked`) audit event for the form |
+| 7001-7099 | `test_record` | WIP / Complete / Approved records against the form, a soft-deleted one, and 7005 — locked pre-#251 style (completed event, no snapshots) so the backfill bulk action appears |
+| 7101-7199 | `test_result` | Materialized rows (headings included) for each record x step, incl. a FAIL result on 7005 |
+| 7201-7299 | `record_events` | `completed` events on the locked records; 7003 has a full lock → unlock → re-lock history (its two snapshots differ, driving the diff view); 7005's completed event has no snapshots (backfillable) |
+| 7301-7399 | `record_event_results` | Frozen result rows for the `completed` snapshots — 7003's two snapshots differ in one value |
+| 8001-8099 | `users` | `admin`/`admin` (PO + record approver) and `tester`/`tester` (no approvals) — working bcrypt hashes, ArxDev only |
+| 1-17 | `unit` | Reference list of units of measure |
+| (identity) | `app_config`, `named_queries` | App config: schema version, attachment categories, and the `spec_nom` auto-fill query library |
+
+No `part_attachment` / `company_attachment` rows are seeded (would require real files/URLs).
+`logs` and `release_notes` are cleared and left empty. `test_definition_history` gets one
+trigger-written row (the seed updates step 6103 after insert to exercise the history timeline).
+
 ## Triggers
 
-Trigger DDL lives in `SQL/triggers.sql`. ArxDev equivalents are recreated by `SQL/_test.sql` under the same names (no `_Test` suffix — ArxDev uses bare table names).
+Trigger DDL lives in `SQL/triggers.sql`. These fire identically in ArxDev, since ArxDev shares the exact same schema (bare table names, no `_Test` suffix) — only row data differs, seeded by `SQL/seed_test_data.sql`.
 
 | Trigger | Table | Effect |
 |---------|-------|--------|
@@ -129,7 +166,7 @@ Key facts per table: primary key, trigger side-effects, and column semantics tha
 | `bom` | `id` | BOM / parts list. Links a parent part to child parts. `parent_part_id` → `part.id` (parent assembly). `component_part_id` → `part.id` (component part). `line_number` = user-assigned line item number. `qty` = quantity required. (Renamed from `PL` in db-table-rename commit 2; Go struct fields still use old `PL`-prefixed names.) |
 | `company` | `id` | Suppliers, manufacturers, vendors. `is_supplier`/`is_manufacturer` flags distinguish roles. `default_contact` → `contact.id`. `SUNumOfLNKs`, `SUNumOfPOs` are denormalized counts maintained by DB triggers — do not update them in code. |
 | `contact` | `id` | Contacts, linked to companies. `company_id` → `company.id`. `user_account_link` = Windows/network account for internal users. `is_active = 0` = inactive. (Renamed from `CN` in db-table-rename commit 1; Go struct fields still use old `CN`-prefixed names.) |
-| `purchase_order` | `id` | Purchase orders (renamed from `PO` in db-table-rename commit 4). `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative and follows the lifecycle `draft` → `open` → `sent` → `partially_received` → `closed` (plus `cancelled`). `rfq` (issue #270) is a Request-for-Quotation state. RFQ quotes (one `purchase_order` per supplier) share `rfq_group_id` (anchored to the originating quote's own `id`; NULL for ordinary POs). Awarding (`RFQConvert`) **duplicates** the winning quote into a new PO at the bare base number (status `draft`, `rfq_group_id` NULL) and closes out the group — awarded quote → `closed`, the rest → `cancelled` — retaining every RFQ row and its history. A quote can also be declined individually (`rfq` → `cancelled`). The approval gate is bypassed while in `rfq`. **Numbering:** an RFQ group draws one `PO_Number_Seq` value; quotes are stored as `<base>R<n>` (e.g. `1050R1`, `1050R2`) and the awarded PO is created at bare `<base>` — so one PO number is consumed per RFQ regardless of supplier count (`number` is VARCHAR; nothing parses it as an int except `TRY_CAST` in `_test.sql`, which safely ignores the `R`-suffixed rows). The PO list hides RFQ-group rows behind a "Show RFQs" toggle. Status changes only via `POST /po/{id}/status`, which logs to `PO_status_history`; create/update handlers do not write `status`. `is_active` is a convenience bit kept in sync by the app (`draft/open/sent/partially_received → 1`, `closed/cancelled → 0`) — do not set it directly. `approval_status` (`not_submitted`/`pending`/`approved`/`rejected`, issue #267) gates sending/printing: a PO can only reach `sent` or be printed once `approved`; editing an approved/pending PO resets it to `not_submitted`. Run `SQL/migrations/migrate_po_status_lifecycle.sql`, then `migrate_po_approval.sql`, then `migrate_po_rfq.sql` to migrate existing databases. |
+| `purchase_order` | `id` | Purchase orders (renamed from `PO` in db-table-rename commit 4). `supplier_id` = who PO goes to; `receiver_id` = bill/ship-to (both FK to `company.id`). PO number from sequence: `SELECT NEXT VALUE FOR dbo.PO_Number_Seq`. Writes fire `trg_PO_company_count`. `date_printed` is set automatically via `POST /po/{id}/mark-printed` — do not set it in create/update handlers. `status` (VARCHAR 20, NOT NULL) is authoritative and follows the lifecycle `draft` → `open` → `sent` → `partially_received` → `closed` (plus `cancelled`). `rfq` (issue #270) is a Request-for-Quotation state. RFQ quotes (one `purchase_order` per supplier) share `rfq_group_id` (anchored to the originating quote's own `id`; NULL for ordinary POs). Awarding (`RFQConvert`) **duplicates** the winning quote into a new PO at the bare base number (status `draft`, `rfq_group_id` NULL) and closes out the group — awarded quote → `closed`, the rest → `cancelled` — retaining every RFQ row and its history. A quote can also be declined individually (`rfq` → `cancelled`). The approval gate is bypassed while in `rfq`. **Numbering:** an RFQ group draws one `PO_Number_Seq` value; quotes are stored as `<base>R<n>` (e.g. `1050R1`, `1050R2`) and the awarded PO is created at bare `<base>` — so one PO number is consumed per RFQ regardless of supplier count (`number` is VARCHAR; nothing parses it as an int except `TRY_CAST` in `SQL/seed_test_data.sql`'s `PO_Number_Seq` restart, which safely ignores the `R`-suffixed rows). The PO list hides RFQ-group rows behind a "Show RFQs" toggle. Status changes only via `POST /po/{id}/status`, which logs to `PO_status_history`; create/update handlers do not write `status`. `is_active` is a convenience bit kept in sync by the app (`draft/open/sent/partially_received → 1`, `closed/cancelled → 0`) — do not set it directly. `approval_status` (`not_submitted`/`pending`/`approved`/`rejected`, issue #267) gates sending/printing: a PO can only reach `sent` or be printed once `approved`; editing an approved/pending PO resets it to `not_submitted`. Run `SQL/migrations/migrate_po_status_lifecycle.sql`, then `migrate_po_approval.sql`, then `migrate_po_rfq.sql` to migrate existing databases. |
 | `purchase_order_history` | `id` | Append-only PO activity log (issues #271 + #267; renamed from `PO_history` in db-table-rename commit 4). `po_id` → `purchase_order.id`. `event_type`: `status` (lifecycle transition: `from_status`→`to_status`, `from_status` NULL on creation) or `approval` (`action`: `submitted`\|`approved`\|`rejected`\|`reset`, with optional `note`). `changed_by` = app user username/login handle (written by the Go handler, not a trigger; consistent with `record_events.username` and `test_definition_history.changed_by`). |
 | `po_line` | `id` | PO line items → `purchase_order.id` via `po_id`; `part_id` → `part.id`. `part_number_snapshot`/`revision_snapshot` denormalize the part at order time. `lead_time_days` (issue #270) = supplier's quoted lead time, captured per line on the RFQ comparison grid; NULL = not quoted. `received_qty`/`date_received` (issue #269) = cumulative qty received on the line and the date of the most recent receipt; each receipt also posts an `inventory_transaction` row (`txn_type='receipt'`). Writes fire `trg_POL_part_count`. (Renamed from `POL` in db-table-rename commit 5; Go struct fields still use old `POL`-prefixed names.) |
 | `inventory_transaction` | `id` | Append-only stock-movement ledger (issues #272/#274). `part_id` → `part.id`. `txn_type`: `receipt`\|`issue`\|`adjustment`\|`count`. `qty` is **signed** (+ adds, − removes) so on-hand = `SUM(qty)`; `part.stock_on_hand` caches that sum (app-maintained). `username` = app login handle. `po_line_id` → `po_line.id` for receipts (#269), else NULL. `reference`/`note` = PO number / reason / comment. |

@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.72] - 2026-07-02 
+- Replace `SQL/_test.sql` (prod-clone) with `SQL/seed_test_data.sql`: a documented, fixed-ID synthetic reference dataset covering every PO/RFQ/test-record lifecycle state for ArxDev ([#545](https://github.com/Jolls/arx-legacy/issues/545))
+
 ## [0.5.71] - 2026-07-02 
 - Merge the two post-save PO suggestion banners (supplier links and pricing) into one banner so submitting or dismissing it no longer discards the other suggestion ([#567](https://github.com/Jolls/arx-legacy/issues/567))
 

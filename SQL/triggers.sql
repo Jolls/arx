@@ -12,7 +12,8 @@
 -- The recalibration block at the bottom corrects any counts that drifted before
 -- triggers were installed; safe to re-run at any time if drift is suspected.
 --
--- _Test table equivalents are created by _test.sql.
+-- These same triggers apply in ArxDev (identical schema, bare table names); the seed
+-- script SQL/seed_test_data.sql assumes they already exist and lets them fire on its INSERTs.
 
 -- supplier_part → company.SUNumOfLNKs
 CREATE OR ALTER TRIGGER dbo.trg_supplier_part_company_count

@@ -16,7 +16,9 @@ CREATE TABLE form (
   revision      INT          NOT NULL CONSTRAINT DF_form_revision DEFAULT 0 -- number of times this form has been released (locked). 0 = never released ("Draft"); bumped on every unlock->lock transition (#260).
 );
 
--- Migration (run once on live DB; _test.sql SELECT * INTO picks it up automatically):
+-- Migration (run once on live DB; also add the new column to the matching
+-- INSERT in SQL/seed_test_data.sql — it inserts explicit column lists, so new
+-- columns are NOT picked up automatically the way the old _test.sql clone was):
 -- ALTER TABLE form ADD record_types VARCHAR(500) NULL;
 -- ALTER TABLE form ADD instrument_types VARCHAR(500) NULL;
 -- form.revision / test_record.form_revision (#260): see migrations/migrate_form_revision.sql
@@ -87,7 +89,9 @@ CREATE TABLE test_record (
   form_revision          INT                                                                  -- Snapshot of form.revision at record creation. NULL for pre-#260 records.
 );
 
--- Migration (run once on live DB; _test.sql SELECT * INTO picks it up automatically):
+-- Migration (run once on live DB; also add the new column to the matching
+-- INSERT in SQL/seed_test_data.sql — it inserts explicit column lists, so new
+-- columns are NOT picked up automatically the way the old _test.sql clone was):
 -- ALTER TABLE test_record ADD instrument_type VARCHAR(100) NULL;
 
 
