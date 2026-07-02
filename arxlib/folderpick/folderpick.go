@@ -5,17 +5,20 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
 // BrowseFolderContext opens a folder picker; ctx controls cancellation and timeout.
 // Returns an empty string on cancel, timeout, or error.
 func BrowseFolderContext(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
+	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 		`Add-Type -AssemblyName System.Windows.Forms; `+
 			`$d = New-Object System.Windows.Forms.FolderBrowserDialog; `+
 			`$d.Description = 'Select folder'; `+
-			`if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath } else { '' }`).Output()
+			`if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath } else { '' }`)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
@@ -33,11 +36,13 @@ func BrowseFolder() string {
 // timeout. Returns the selected absolute path, or an empty string on cancel,
 // timeout, or error.
 func BrowseFileContext(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
+	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 		`Add-Type -AssemblyName System.Windows.Forms; `+
 			`$d = New-Object System.Windows.Forms.OpenFileDialog; `+
 			`$d.Title = 'Select file'; `+
-			`if ($d.ShowDialog() -eq 'OK') { $d.FileName } else { '' }`).Output()
+			`if ($d.ShowDialog() -eq 'OK') { $d.FileName } else { '' }`)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
