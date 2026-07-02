@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 - Add `.gitattributes` to make line-ending handling explicit (LF for source/docs, CRLF for Windows scripts) and stop editing tools from flipping endings
+- Add a "View all" link from a vendor's Recent POs card to the POs list filtered to that vendor ([#566](https://github.com/Jolls/arx-legacy/issues/566))
 
 ## [0.5.66] - 2026-07-01 
 - Add a Browse button to part attachments that copies (or moves, via a toggle) the picked file into Doc Control, renaming it `<Part> <Rev> <Title> <Category>.<ext>`; offers to link to an existing file on name collision ([#547](https://github.com/Jolls/arx-legacy/issues/547))
