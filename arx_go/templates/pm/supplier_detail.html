@@ -83,7 +83,7 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Recent POs</span>
-                    <a href="/pos?f2={{.Supplier.Name | urlquery}}" class="small">View all &rarr;</a>
+                    <a href="/supplier/{{.Supplier.ID}}/pos" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
                     <table class="table table-sm mb-0">

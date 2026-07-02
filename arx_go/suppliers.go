@@ -115,12 +115,20 @@ type supplierPOSummary struct {
 	Total       float64
 }
 
+// recentSupplierPOs returns up to limit POs for supplierID, most recent first.
+// limit <= 0 means unlimited (used by the Order History sub-tab).
 func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limit int) []supplierPOSummary {
+	top := ""
+	args := []any{supplierID}
+	if limit > 0 {
+		top = "TOP (@p2) "
+		args = append(args, limit)
+	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p2) number, status, date_ordered, total_cost
+		SELECT %snumber, status, date_ordered, total_cost
 		FROM %s WHERE supplier_id = @p1
 		ORDER BY date_ordered DESC, ID DESC
-	`, h.cfg.POTable()), supplierID, limit)
+	`, top, h.cfg.POTable()), args...)
 	if err != nil {
 		return nil
 	}
@@ -393,6 +401,25 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "supplier_parts.html", map[string]any{
 		"Supplier": s, "Links": links,
 		"ActiveTab": "suppliers", "ActiveSubTab": "parts",
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+	})
+}
+
+func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	s, ok := h.fetchSupplier(w, r, id)
+	if !ok {
+		return
+	}
+
+	orders := h.recentSupplierPOs(r.Context(), id, 0)
+
+	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
+	sess := h.session(r)
+	backURL, backLabel := navBack(sess)
+	h.render(w, r, "supplier_pos.html", map[string]any{
+		"Supplier": s, "Orders": orders,
+		"ActiveTab": "suppliers", "ActiveSubTab": "pos",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
 }

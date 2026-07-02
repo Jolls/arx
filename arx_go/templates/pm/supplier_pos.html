@@ -1,0 +1,39 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/suppliers">Vendors</a></li>
+        <li class="breadcrumb-item active">{{.Supplier.Name}}</li>
+    </ol>
+</nav>
+<div class="content">
+    {{template "supplier_tabs" .}}
+
+    {{if .Orders}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th style="width:100px;">Date Ordered</th>
+                    <th style="width:80px;">PO #</th>
+                    <th style="width:100px; text-align:right;">Total</th>
+                    <th style="width:100px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Orders}}
+                <tr>
+                    <td>{{if .DateOrdered}}{{formatDate .DateOrdered}}{{else}}—{{end}}</td>
+                    <td><a href="/po/{{.Number}}" class="part-number-link">{{.Number}}</a></td>
+                    <td style="text-align:right;">${{printf "%.2f" .Total}}</td>
+                    <td>{{template "po_status_badge" .Status}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Orders}} order{{if ne (len .Orders) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No purchase order history found for this vendor.</p>
+    {{end}}
+</div>
+{{end}}
