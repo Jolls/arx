@@ -1072,6 +1072,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	}
 	defer rows.Close()
 	var atts []models.Attachment
+	nextOrderID := 1
 	for rows.Next() {
 		var att models.Attachment
 		var fname, fnotes, frev sql.NullString
@@ -1086,6 +1087,9 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		if orderID.Valid {
 			v := int(orderID.Int64)
 			att.OrderID = &v
+			if v+1 > nextOrderID {
+				nextOrderID = v + 1
+			}
 		}
 		atts = append(atts, att)
 	}
@@ -1107,6 +1111,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		"AttachmentCategories": cats,
 		"DocControlConfigured": h.cfg.DocControlRoot != "",
 		"TestMode":             h.cfg.TestMode,
+		"NextOrderID":          nextOrderID,
 	}
 	for k, v := range extra {
 		data[k] = v
