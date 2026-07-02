@@ -357,6 +357,7 @@ function addNewLine() {
     tbody.appendChild(clone);
     const row = tbody.lastElementChild;
     setupPartAutocomplete(row.querySelector('[name$="[POLPNPartNumber]"]'), row);
+    setupPartAutocomplete(row.querySelector('[name$="[POLDesc]"]'), row, 'desc');
     row.querySelector('[name$="[POLPNPartNumber]"]')?.focus();
     recalcTotal();
 }
@@ -492,14 +493,15 @@ function setupSupplierTypeahead(inputEl, idHiddenEl, contactSelectEl) {
     function close() { dd?.remove(); dd = null; results = []; activeIdx = -1; }
 }
 
-function setupPartAutocomplete(input, row) {
+function setupPartAutocomplete(input, row, searchBy) {
+    searchBy = searchBy || 'pn';
     let dd = null, activeIdx = -1, timer = null, results = [];
     input.addEventListener('input', function() {
         clearTimeout(timer);
         const q = this.value.trim();
         if (q.length < 2) { close(); return; }
         timer = setTimeout(() => {
-            fetch('/api/parts/search?q=' + encodeURIComponent(q))
+            fetch('/api/parts/search?q=' + encodeURIComponent(q) + '&by=' + searchBy)
                 .then(r => r.json()).then(show);
         }, 280);
     });
@@ -520,7 +522,7 @@ function setupPartAutocomplete(input, row) {
         parts.forEach(p => {
             const item = document.createElement('div');
             item.className = 'search-dropdown-item';
-            item.innerHTML = '<strong>' + escHtml(p.part_number) + '</strong>' + (p.title ? ' &mdash; ' + escHtml(p.title) : '');
+            item.innerHTML = '<strong>' + escHtml(p.part_number) + '</strong>' + (p.title ? ' <span class="search-dropdown-desc">' + escHtml(p.title) + '</span>' : '');
             item.addEventListener('mousedown', e => { e.preventDefault(); select(p); });
             dd.appendChild(item);
         });
@@ -530,13 +532,14 @@ function setupPartAutocomplete(input, row) {
         Array.from(dd.children).forEach((el, i) => el.classList.toggle('active', i === activeIdx));
     }
     function select(p) {
-        input.value = p.part_number;
+        const pnInput     = row.querySelector('[name$="[POLPNPartNumber]"]');
         const revInput    = row.querySelector('[name$="[POLRev]"]');
         const descInput   = row.querySelector('[name$="[POLDesc]"]');
         const idInput     = row.querySelector('[name$="[POLPNID]"]');
         const vendorInput = row.querySelector('[name$="[VendorPN]"]');
+        if (pnInput)   pnInput.value   = p.part_number;
+        if (descInput) descInput.value = p.title || '';
         if (revInput  && !revInput.value)  revInput.value  = p.revision || '';
-        if (descInput && !descInput.value) descInput.value = p.title || '';
         if (idInput) idInput.value = p.pnid;
         const suppID = document.getElementById('supplier_id')?.value;
         if (vendorInput && suppID) {
@@ -585,6 +588,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#line-items-tbody tr').forEach(row => {
         const partInput = row.querySelector('[name$="[POLPNPartNumber]"]');
         if (partInput) setupPartAutocomplete(partInput, row);
+        const descInput = row.querySelector('[name$="[POLDesc]"]');
+        if (descInput) setupPartAutocomplete(descInput, row, 'desc');
     });
 });
 </script>

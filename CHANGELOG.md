@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.73] - 2026-07-02 
+- Add a description autocomplete to the PO add-item form so parts can be searched by description as well as part number ([#580](https://github.com/Jolls/arx-legacy/issues/580))
+- Fix the new BOM line quantity field to hint "0" instead of "1", matching the value actually saved when left blank ([#578](https://github.com/Jolls/arx-legacy/issues/578))
+
 ## [0.5.72] - 2026-07-02 
 - Replace `SQL/_test.sql` (prod-clone) with `SQL/seed_test_data.sql`: a documented, fixed-ID synthetic reference dataset covering every PO/RFQ/test-record lifecycle state for ArxDev ([#545](https://github.com/Jolls/arx-legacy/issues/545))
 
