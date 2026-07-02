@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+- Add a view-only "Available named queries" reference to the form definition editor so authors can see which named queries exist and what parameters they take ([#564](https://github.com/Jolls/arx-legacy/issues/564))
 - Add `.gitattributes` to make line-ending handling explicit (LF for source/docs, CRLF for Windows scripts) and stop editing tools from flipping endings
 - Add an Order History sub-tab to the vendor detail page, listing all POs placed with that vendor ([#566](https://github.com/Jolls/arx-legacy/issues/566))
 - Fix a nil-pointer panic on `/settings` when the DB auto-connect fails on startup

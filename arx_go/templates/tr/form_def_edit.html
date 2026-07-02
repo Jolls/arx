@@ -57,6 +57,29 @@
   </div>
 </details>
 
+<details class="mb-3 small text-muted">
+  <summary class="user-select-none" style="cursor:pointer">Available named queries</summary>
+  <div class="mt-2 ps-2">
+    {{if .NamedQueries}}
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Name</th><th>Params</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        {{range .NamedQueries}}
+        <tr>
+          <td><code>query:{{.Name}}</code></td>
+          <td>{{if .Params}}<code>{{.Params}}</code>{{else}}&mdash;{{end}}</td>
+          <td>{{.ResultType}}</td>
+          <td>{{.Description}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <div class="text-muted fst-italic">No named queries defined.</div>
+    {{end}}
+  </div>
+</details>
+
 <form id="steps-form" method="POST" action="/forms/{{.Form.ID}}/def/edit">
   <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
   <input type="hidden" id="step_order" name="step_order">
