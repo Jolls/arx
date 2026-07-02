@@ -234,6 +234,34 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var topAtts []models.Attachment
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
+		`SELECT TOP 5 id, file_name, category, part_revision, sort_order FROM %s
+		 WHERE part_id = @p1 AND is_active = 1 AND id != @p2
+		 ORDER BY sort_order, id`,
+		h.cfg.AttachmentsTable()), p.PNID, p.PNFILIDPrimary)
+	if err == nil {
+		for rows.Next() {
+			var att models.Attachment
+			var fname, fnotes, frev sql.NullString
+			var sortOrder sql.NullInt64
+			if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev, &sortOrder); err == nil {
+				att.FILFileName = fname.String
+				att.Category = fnotes.String
+				att.FILPNRev = frev.String
+				if sortOrder.Valid {
+					v := int(sortOrder.Int64)
+					att.OrderID = &v
+				}
+				topAtts = append(topAtts, att)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("[part] top attachments for part %d: %v", p.PNID, err)
+		}
+		rows.Close()
+	}
+
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
 	h.applyCategoryTabs(r.Context(), &p)
 	sess := h.session(r)
@@ -281,7 +309,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "part_detail.html", map[string]any{
-		"Part": p, "PrimaryAtt": primaryAtt,
+		"Part": p, "PrimaryAtt": primaryAtt, "TopAtts": topAtts,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode":          h.cfg.TestMode,

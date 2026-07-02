@@ -181,14 +181,36 @@
                 <div class="card-body">
                     {{if .PrimaryAtt}}
                         {{$f := .PrimaryAtt.FILFileName}}{{$n := .PrimaryAtt.Category}}
-                        <div class="detail-row"><strong>Primary:</strong>
-                        <span>
-                        {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{attachLabel $f $n}}</a>
-                        {{else if isLocalDir $f}}<a href="{{localDirURL $f}}">&#128193; {{attachLabel $f $n}}</a>
-                        {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{localFileURL $f}}" target="_blank">{{attachLabel $f $n}}</a>{{else}}<a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{attachLabel $f $n}}</a>{{end}}
+                        <div class="detail-row"><strong>
+                        {{if isHTTPURL $f}}<i class="bi bi-link-45deg"></i>
+                        {{else if isLocalDir $f}}<i class="bi bi-folder2-open"></i>
+                        {{else if isLocalFile $f}}<i class="bi {{fileIcon $f}}"></i>
+                        {{else}}<i class="bi bi-file-earmark"></i>{{end}}
+                        Primary</strong>
+                        <span class="text-break">
+                        {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{$f}}</a>
+                        {{else if isLocalDir $f}}<a href="{{localDirURL $f}}">&#128193; {{$f}}</a>
+                        {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{localFileURL $f}}" target="_blank">{{fileBaseName $f}}</a>{{else}}<a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{fileBaseName $f}}</a>{{end}}
                         {{else}}{{$f}}{{end}}
+                        {{if $n}} <span class="text-muted small">({{$n}})</span>{{end}}
                         </span></div>
                     {{else}}<p class="text-muted mb-0">No primary attachment set.</p>{{end}}
+                    {{range .TopAtts}}
+                        {{$f := .FILFileName}}{{$n := .Category}}
+                        <div class="detail-row"><strong>
+                        {{if isHTTPURL $f}}<i class="bi bi-link-45deg"></i>
+                        {{else if isLocalDir $f}}<i class="bi bi-folder2-open"></i>
+                        {{else if isLocalFile $f}}<i class="bi {{fileIcon $f}}"></i>
+                        {{else}}<i class="bi bi-file-earmark"></i>{{end}}
+                        {{if .OrderID}}{{derefInt .OrderID}}{{end}}</strong>
+                        <span class="text-break">
+                        {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{$f}}</a>
+                        {{else if isLocalDir $f}}<a href="{{localDirURL $f}}">&#128193; {{$f}}</a>
+                        {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{localFileURL $f}}" target="_blank">{{fileBaseName $f}}</a>{{else}}<a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{fileBaseName $f}}</a>{{end}}
+                        {{else}}{{$f}}{{end}}
+                        {{if $n}} <span class="text-muted small">({{$n}})</span>{{end}}
+                        </span></div>
+                    {{end}}
                 </div>
             </div>
         </div>
