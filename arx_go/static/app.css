@@ -206,6 +206,7 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 .search-dropdown-item:last-child { border-bottom: none; }
 .search-dropdown-item:hover, .search-dropdown-item.active { background: #cfe2ff; }
 .search-dropdown-item strong { color: var(--accent-1); font-weight: 600; }
+.search-dropdown-desc { color: #6c757d; }
 
 .suggest-links-row {
     display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer;

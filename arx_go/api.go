@@ -104,12 +104,16 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []any{})
 		return
 	}
+	where := "part_number LIKE @p1"
+	if r.URL.Query().Get("by") == "desc" {
+		where = "title LIKE @p1 OR detail LIKE @p1"
+	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail FROM %s
-		WHERE part_number LIKE @p1
+		WHERE %s
 		ORDER BY part_number
 		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY
-	`, h.cfg.PartsTable()), "%"+q+"%")
+	`, h.cfg.PartsTable(), where), "%"+q+"%")
 	if err != nil {
 		writeJSON(w, []any{})
 		return

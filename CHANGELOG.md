@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.74] - 2026-07-02 
+- Add a description autocomplete to the PO add-item form so parts can be searched by description as well as part number ([#580](https://github.com/Jolls/arx-legacy/issues/580))
+- Fix the new BOM line quantity field to hint "0" instead of "1", matching the value actually saved when left blank ([#578](https://github.com/Jolls/arx-legacy/issues/578))
+
 ## [0.5.73] - 2026-07-02 
 - Fix a template panic ("error calling len") that crashed the PO detail page after saving when a PO produced only one kind of post-save suggestion (new vendor PN or new price, but not both)
 
