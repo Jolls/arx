@@ -236,7 +236,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 
 	var topAtts []models.Attachment
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT TOP 5 id, file_name, category, part_revision FROM %s
+		`SELECT TOP 5 id, file_name, category, part_revision, sort_order FROM %s
 		 WHERE part_id = @p1 AND is_active = 1 AND id != @p2
 		 ORDER BY sort_order, id`,
 		h.cfg.AttachmentsTable()), p.PNID, p.PNFILIDPrimary)
@@ -244,10 +244,15 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var att models.Attachment
 			var fname, fnotes, frev sql.NullString
-			if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev); err == nil {
+			var sortOrder sql.NullInt64
+			if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev, &sortOrder); err == nil {
 				att.FILFileName = fname.String
 				att.Category = fnotes.String
 				att.FILPNRev = frev.String
+				if sortOrder.Valid {
+					v := int(sortOrder.Int64)
+					att.OrderID = &v
+				}
 				topAtts = append(topAtts, att)
 			}
 		}
