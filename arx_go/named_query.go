@@ -28,6 +28,35 @@ func isSafeQuery(q string) bool {
 	return !unsafeKeywordRE.MatchString(trimmed)
 }
 
+// NamedQueryInfo is display metadata for one named query (no SQL body — view-only reference).
+type NamedQueryInfo struct {
+	Name        string
+	Description string
+	Params      string
+	ResultType  string
+}
+
+// listNamedQueries returns active named queries ordered by name, for the def-editor reference.
+func (h *Handler) listNamedQueries(ctx context.Context) ([]NamedQueryInfo, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(
+		`SELECT name, COALESCE(description,''), COALESCE(params,''), result_type
+		 FROM %s WHERE active = 1 ORDER BY name`, h.cfg.NamedQueriesTable()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []NamedQueryInfo
+	for rows.Next() {
+		var q NamedQueryInfo
+		if err := rows.Scan(&q.Name, &q.Description, &q.Params, &q.ResultType); err != nil {
+			continue
+		}
+		out = append(out, q)
+	}
+	return out, rows.Err()
+}
+
 // parseQuerySpec parses "query:name(@param1=value1,@param2=value2)".
 // The caller is responsible for resolving {id} tokens in specNom before calling this.
 // Returns the query name and a map of param name â†' value.

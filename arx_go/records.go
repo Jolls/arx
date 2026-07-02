@@ -679,13 +679,19 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	namedQueries, err := h.listNamedQueries(r.Context())
+	if err != nil {
+		log.Printf("warning: could not load named queries for def editor: %v", err)
+	}
+
 	h.renderTR(w, r, "form_def_edit.html", map[string]any{
-		"Form":        form,
-		"Steps":       steps,
-		"HasArchived": hasArchived,
-		"CSRFToken":   h.csrfToken(w, r),
-		"ActiveTab":   "records",
-		"TestMode":    h.cfg.TestMode,
+		"Form":         form,
+		"Steps":        steps,
+		"HasArchived":  hasArchived,
+		"NamedQueries": namedQueries,
+		"CSRFToken":    h.csrfToken(w, r),
+		"ActiveTab":    "records",
+		"TestMode":     h.cfg.TestMode,
 	})
 }
 
