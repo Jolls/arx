@@ -3,13 +3,22 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.5.71] - 2026-07-02 
+- Merge the two post-save PO suggestion banners (supplier links and pricing) into one banner so submitting or dismissing it no longer discards the other suggestion ([#567](https://github.com/Jolls/arx-legacy/issues/567))
+
+## [0.5.70] - 2026-07-01 
+- Show the primary attachment plus up to 5 more (by order) on the Part Details view, instead of just the primary ([#562](https://github.com/Jolls/arx-legacy/issues/562))
+
+## [0.5.69] - 2026-07-01 
 - Add a view-only "Available named queries" reference to the form definition editor so authors can see which named queries exist and what parameters they take ([#564](https://github.com/Jolls/arx-legacy/issues/564))
-- Add `.gitattributes` to make line-ending handling explicit (LF for source/docs, CRLF for Windows scripts) and stop editing tools from flipping endings
+
+## [0.5.68] - 2026-07-01 
+- Auto-fill the Order Number field with the next available value when adding a part or supplier attachment ([#565](https://github.com/Jolls/arx-legacy/issues/565))
+
+## [0.5.67] - 2026-07-01 
 - Add an Order History sub-tab to the vendor detail page, listing all POs placed with that vendor ([#566](https://github.com/Jolls/arx-legacy/issues/566))
 - Fix a nil-pointer panic on `/settings` when the DB auto-connect fails on startup
-- Auto-fill the Order Number field with the next available value when adding a part or supplier attachment ([#565](https://github.com/Jolls/arx-legacy/issues/565))
-- Show the primary attachment plus up to 5 more (by order) on the Part Details view, instead of just the primary ([#562](https://github.com/Jolls/arx-legacy/issues/562))
+- Add `.gitattributes` to make line-ending handling explicit (LF for source/docs, CRLF for Windows scripts) and stop editing tools from flipping endings
 
 ## [0.5.66] - 2026-07-01 
 - Add a Browse button to part attachments that copies (or moves, via a toggle) the picked file into Doc Control, renaming it `<Part> <Rev> <Title> <Category>.<ext>`; offers to link to an existing file on name collision ([#547](https://github.com/Jolls/arx-legacy/issues/547))
