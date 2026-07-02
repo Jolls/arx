@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Add an Order History sub-tab to the vendor detail page, listing all POs placed with that vendor ([#566](https://github.com/Jolls/arx-legacy/issues/566))
 - Fix a nil-pointer panic on `/settings` when the DB auto-connect fails on startup
 - Auto-fill the Order Number field with the next available value when adding a part or supplier attachment ([#565](https://github.com/Jolls/arx-legacy/issues/565))
+- Show the primary attachment plus up to 5 more (by order) on the Part Details view, instead of just the primary ([#562](https://github.com/Jolls/arx-legacy/issues/562))
 
 ## [0.5.66] - 2026-07-01 
 - Add a Browse button to part attachments that copies (or moves, via a toggle) the picked file into Doc Control, renaming it `<Part> <Rev> <Title> <Category>.<ext>`; offers to link to an existing file on name collision ([#547](https://github.com/Jolls/arx-legacy/issues/547))
