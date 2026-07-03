@@ -90,41 +90,44 @@ BEGIN TRY
         (17, 'SPOOL', 'Spool',       'package');
     SET IDENTITY_INSERT dbo.unit OFF;
 
-    INSERT INTO dbo.app_config (setting_key, setting_value) VALUES
-        ('schema_version', '3'),
-        ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo');
+    -- updated_at is pinned to a fixed sentinel (not GETDATE()) so an integration test can
+    -- assert these rows go untouched by unrelated code paths — see
+    -- TestIntegration_UpdatedAtSentinel in integration_test.go.
+    INSERT INTO dbo.app_config (setting_key, setting_value, updated_at) VALUES
+        ('schema_version', '3', '2020-01-01T00:00:00'),
+        ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo', '2020-01-01T00:00:00');
 
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/NamedQueries.sql;
     -- keep the two in sync. Identity-assigned (looked up by unique `name`, not by id).
-    INSERT INTO dbo.named_queries (name, description, sql, params, result_type, created_at) VALUES
+    INSERT INTO dbo.named_queries (name, description, sql, params, result_type, created_at, updated_at) VALUES
         ('fil_category_for_pn', 'Attachment categories for a given part number',
          'SELECT category FROM part_attachment WHERE part_id = (SELECT id FROM part WHERE part_number = @pn) AND is_active = 1',
-         'pn', 'list', GETDATE()),
+         'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('parts_matching', 'Part numbers matching a LIKE pattern (caller supplies wildcards)',
          'SELECT part_number FROM part WHERE part_number LIKE @pattern AND is_active = 1 ORDER BY part_number DESC',
-         'pattern', 'list', GETDATE()),
+         'pattern', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('pos_for_pn', 'PO numbers where a line item part number prefix matches (active = not soft-deleted)',
          'SELECT purchase_order.number FROM po_line LEFT JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE is_active = 1 AND po_line.part_number_snapshot LIKE @pn + ''%'' ORDER BY po_line.po_id DESC',
-         'pn', 'list', GETDATE()),
+         'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('bom_pn_by_item', 'Part number at a specific BOM item position for a given parent assembly PN',
          'SELECT p.part_number, p.title FROM bom JOIN part p ON bom.component_part_id = p.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
-         'pn, item', 'list', GETDATE()),
+         'pn, item', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('pn_primary_attachment', 'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
          'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part p ON f.part_id = p.id WHERE p.part_number = @pn AND f.is_active = 1 ORDER BY CASE WHEN p.primary_attachment_id > 0 AND f.id = p.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
-         'pn', 'single', GETDATE()),
+         'pn', 'single', GETDATE(), '2020-01-01T00:00:00'),
         ('form_primary_attachment', 'Primary attachment for the form''s own part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
          'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part p ON f.part_id = p.id WHERE p.id = @pnid AND f.is_active = 1 ORDER BY CASE WHEN p.primary_attachment_id > 0 AND f.id = p.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
-         'pnid', 'single', GETDATE()),
+         'pnid', 'single', GETDATE(), '2020-01-01T00:00:00'),
         ('recent_serial_numbers_for_form', 'Most recent 20 serial numbers tested against a given form (active records only, newest first). Use a literal form_id to reference a different form than the current one.',
          'SELECT TOP 20 serial_number FROM test_record WHERE form_id = @form_id AND is_active = 1 ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC',
-         'form_id', 'list', GETDATE()),
+         'form_id', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
          'SELECT MAX(TRY_CAST(r.result AS INT)) FROM test_result r JOIN test_record tr ON r.record_id = tr.id WHERE r.test_id = @test_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
-         'test_id, record_date', 'single', GETDATE()),
+         'test_id, record_date', 'single', GETDATE(), '2020-01-01T00:00:00'),
         ('vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
          'SELECT po_line.vendor_part_number, po_line.description FROM po_line JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE purchase_order.status NOT IN (''rfq'', ''cancelled'') AND po_line.part_number_snapshot LIKE ''%'' + @pn + ''%'' ORDER BY po_line.po_id DESC',
-         'pn', 'list', GETDATE());
+         'pn', 'list', GETDATE(), '2020-01-01T00:00:00');
 
     -- ============================================================
     -- 3. Users
@@ -133,9 +136,9 @@ BEGIN TRY
     --   admin / admin   (can approve POs and test records)
     --   tester / tester (no approval rights)
     SET IDENTITY_INSERT dbo.users ON;
-    INSERT INTO dbo.users (id, username, display_name, password_hash, is_active, can_approve_po, can_approve_records) VALUES
-        (8001, 'admin',  'Admin User',  '$2a$10$0mUf8G9KxL6jGVWpUJZnaO40arOpPIqW09xqPyiyqnrBCR/VxffQe', 1, 1, 1),
-        (8002, 'tester', 'Test User',   '$2a$10$B29vUdQg85rwb53HIcltUuhdIb17PrSSVF32tJNJ/TQ1JyHvVYer2', 1, 0, 0);
+    INSERT INTO dbo.users (id, username, display_name, password_hash, is_active, can_approve_po, can_approve_records, updated_at) VALUES
+        (8001, 'admin',  'Admin User',  '$2a$10$0mUf8G9KxL6jGVWpUJZnaO40arOpPIqW09xqPyiyqnrBCR/VxffQe', 1, 1, 1, '2020-01-01T00:00:00'),
+        (8002, 'tester', 'Test User',   '$2a$10$B29vUdQg85rwb53HIcltUuhdIb17PrSSVF32tJNJ/TQ1JyHvVYer2', 1, 0, 0, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.users OFF;
 
     -- ============================================================
@@ -153,12 +156,12 @@ BEGIN TRY
     -- 5. Contacts
     -- ============================================================
     SET IDENTITY_INSERT dbo.contact ON;
-    INSERT INTO dbo.contact (id, display_name, email, phone_1, is_active, company_id) VALUES
-        (2001, 'John Doe',    'john.doe@acmefasteners.test',       '555-0101', 1, 1001),
-        (2002, 'Jane Smith',  'jane.smith@acmefasteners.test',     '555-0102', 1, 1001),
-        (2003, 'Bob Lee',     'bob.lee@precisionmachining.test',   '555-0201', 1, 1002),
-        (2004, 'Sam Retired', 'sam.retired@acmefasteners.test',    '555-0103', 0, 1001), -- soft-deleted contact
-        (2005, 'Pat Dock',    'receiving@globaldistribution.test', '555-0301', 1, 1003); -- receiver company contact
+    INSERT INTO dbo.contact (id, display_name, email, phone_1, is_active, company_id, updated_at) VALUES
+        (2001, 'John Doe',    'john.doe@acmefasteners.test',       '555-0101', 1, 1001, '2020-01-01T00:00:00'),
+        (2002, 'Jane Smith',  'jane.smith@acmefasteners.test',     '555-0102', 1, 1001, '2020-01-01T00:00:00'),
+        (2003, 'Bob Lee',     'bob.lee@precisionmachining.test',   '555-0201', 1, 1002, '2020-01-01T00:00:00'),
+        (2004, 'Sam Retired', 'sam.retired@acmefasteners.test',    '555-0103', 0, 1001, '2020-01-01T00:00:00'), -- soft-deleted contact
+        (2005, 'Pat Dock',    'receiving@globaldistribution.test', '555-0301', 1, 1003, '2020-01-01T00:00:00'); -- receiver company contact
     SET IDENTITY_INSERT dbo.contact OFF;
 
     -- Fully populated contact so the detail card renders every field (address, website, notes, ...).
@@ -353,51 +356,57 @@ BEGIN TRY
     -- recorded a result for it — exercises stepVisibleOnRecord / the #487 frozen-row model.
     -- 6105-6108 exercise the non-default step features: pf_type filled/comment, format,
     -- List:/query: spec_nom pickers, {id} cross-step tokens, default_result, and hide_formula.
+    -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
+    -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
     SET IDENTITY_INSERT dbo.test_definition ON;
-    INSERT INTO dbo.test_definition (id, form_id, revision, type, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, instrument_types, archived, format, default_result, hide_formula) VALUES
-        (6101, 6001, 1, 1, 'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    NULL,            0, NULL,   NULL,  NULL),
-        (6102, 6001, 1, 0, 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL),
-        (6103, 6001, 1, 0, 'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '250', 'range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL),
-        (6104, 6001, 1, 0, 'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 'ModelA,ModelB', 1, NULL,   NULL,  NULL), -- archived/retired step
-        (6105, 6001, 1, 0, 'Firmware Version',      'Record installed version', NULL, NULL, NULL, NULL, 'filled', NULL, 0, NULL,   'v2.1',NULL),
-        (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, 0, NULL, NULL, NULL),
-        (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, 0, NULL, NULL, NULL),
-        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, 0, '0.00', NULL, '{record.type}!=Re-Test'); -- only shown on Re-Test records
+    INSERT INTO dbo.test_definition (id, form_id, revision, type, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, instrument_types, archived, format, default_result, hide_formula, updated_at) VALUES
+        (6101, 6001, 1, 1, 'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    NULL,            0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
+        (6102, 6001, 1, 0, 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
+        (6103, 6001, 1, 0, 'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '250', 'range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
+        (6104, 6001, 1, 0, 'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 'ModelA,ModelB', 1, NULL,   NULL,  NULL, '2020-01-01T00:00:00'), -- archived/retired step
+        (6105, 6001, 1, 0, 'Firmware Version',      'Record installed version', NULL, NULL, NULL, NULL, 'filled', NULL, 0, NULL,   'v2.1',NULL, '2020-01-01T00:00:00'),
+        (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00'),
+        (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00'),
+        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, 0, '0.00', NULL, '{record.type}!=Re-Test', '2020-01-01T00:00:00'); -- only shown on Re-Test records
     SET IDENTITY_INSERT dbo.test_definition OFF;
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
     -- trg_test_definition_history snapshots the old row into test_definition_history.
     UPDATE dbo.test_definition SET spec_max = '200' WHERE id = 6103;
 
+    -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
+    -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
     SET IDENTITY_INSERT dbo.test_record ON;
-    INSERT INTO dbo.test_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision) VALUES
-        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1), -- WIP
-        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1), -- Complete
-        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1), -- Approved (locked twice — see events)
-        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1), -- soft-deleted
-        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1); -- Complete, pre-#251 style (backfillable)
+    INSERT INTO dbo.test_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, updated_at) VALUES
+        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, '2020-01-01T00:00:00'), -- WIP
+        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'), -- Complete
+        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00'), -- Approved (locked twice — see events)
+        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, '2020-01-01T00:00:00'), -- soft-deleted
+        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'); -- Complete, pre-#251 style (backfillable)
     SET IDENTITY_INSERT dbo.test_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what
     -- materializeRecordSteps produces for post-#487 records. Grouped by record.
+    -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
+    -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
     SET IDENTITY_INSERT dbo.test_result ON;
-    INSERT INTO dbo.test_result (id, record_id, test_id, pass_fail, result, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, type) VALUES
-        (7101, 7001, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1),
-        (7102, 7001, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0),
-        (7103, 7001, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0),
-        (7104, 7001, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0),
-        (7105, 7002, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1),
-        (7106, 7002, 6102, 1,    '5.01', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0),
-        (7107, 7002, 6103, 1,    '150',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0),
-        (7108, 7002, 6104, 1,    '250',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0),
-        (7109, 7003, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1),
-        (7110, 7003, 6102, 1,    '4.98', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0),
-        (7111, 7003, 6103, 1,    '180',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0),
-        (7112, 7003, 6104, 1,    '310',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0), -- corrected 300→310 on re-lock; see events
-        (7113, 7005, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1),
-        (7114, 7005, 6102, 1,    '5.10', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0),
-        (7115, 7005, 6103, 0,    '210',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0), -- FAIL row
-        (7116, 7005, 6104, 1,    '150',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0);
+    INSERT INTO dbo.test_result (id, record_id, test_id, pass_fail, result, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, type, updated_at) VALUES
+        (7101, 7001, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7102, 7001, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7103, 7001, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7104, 7001, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7105, 7002, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7106, 7002, 6102, 1,    '5.01', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7107, 7002, 6103, 1,    '150',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7108, 7002, 6104, 1,    '250',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7109, 7003, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7110, 7003, 6102, 1,    '4.98', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7111, 7003, 6103, 1,    '180',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7112, 7003, 6104, 1,    '310',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'), -- corrected 300→310 on re-lock; see events
+        (7113, 7005, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7114, 7005, 6102, 1,    '5.10', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7115, 7005, 6103, 0,    '210',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'), -- FAIL row
+        (7116, 7005, 6104, 1,    '150',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.test_result OFF;
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).

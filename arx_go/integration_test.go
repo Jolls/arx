@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -283,4 +284,71 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	eq("type", run(url.Values{"status": {"all"}, "type": {"Re-Test"}}), []string{"102", "103"})
 	eq("daterange", run(url.Values{"status": {"all"}, "from": {"2026-02-01"}, "to": {"2026-03-31"}}),
 		[]string{"102", "103"})
+}
+
+// TestIntegration_UpdatedAtSentinel guards against handler bugs that touch (or cascade an
+// update onto) rows other than the one intended: seed_test_data.sql pins updated_at on every
+// seeded row in these tables to a fixed sentinel instead of GETDATE(), so any drift here means
+// something wrote to a row this test suite never asked to change.
+func TestIntegration_UpdatedAtSentinel(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const sentinel = "2020-01-01T00:00:00"
+
+	checks := []struct {
+		table string
+		idCol string
+		ids   []int
+	}{
+		{h.cfg.ContactTable(), "id", []int{2001, 2002, 2003, 2004, 2005}},
+		{h.cfg.UsersTable(), "id", []int{8001, 8002}},
+		{h.cfg.StepsTable(), "id", []int{6101, 6102, 6103, 6104, 6105, 6106, 6107, 6108}},
+		{h.cfg.RecordsTable(), "id", []int{7001, 7002, 7003, 7004, 7005}},
+		{h.cfg.ResultsTable(), "id", []int{
+			7101, 7102, 7103, 7104, 7105, 7106, 7107, 7108,
+			7109, 7110, 7111, 7112, 7113, 7114, 7115, 7116,
+		}},
+	}
+
+	for _, c := range checks {
+		for _, id := range c.ids {
+			var got sql.NullTime
+			err := h.DB().QueryRowContext(ctx,
+				fmt.Sprintf(`SELECT updated_at FROM %s WHERE %s=@p1`, c.table, c.idCol), id,
+			).Scan(&got)
+			if err != nil {
+				t.Fatalf("SELECT updated_at FROM %s WHERE %s=%d: %v", c.table, c.idCol, id, err)
+			}
+			if !got.Valid || got.Time.Format("2006-01-02T15:04:05") != sentinel {
+				t.Errorf("%s id %d: updated_at = %v, want sentinel %s (row was touched by something, "+
+					"or ArxDev needs SQL/seed_test_data.sql re-run)",
+					c.table, id, got, sentinel)
+			}
+		}
+	}
+
+	// app_config and named_queries key off setting_key/name, not id.
+	var appConfigUpdated sql.NullTime
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT updated_at FROM %s WHERE setting_key=@p1`, h.cfg.AppConfigTable()), "schema_version",
+	).Scan(&appConfigUpdated); err != nil {
+		t.Fatalf("SELECT updated_at FROM app_config: %v", err)
+	}
+	if !appConfigUpdated.Valid || appConfigUpdated.Time.Format("2006-01-02T15:04:05") != sentinel {
+		t.Errorf("app_config schema_version: updated_at = %v, want sentinel %s (or ArxDev needs reseeding)",
+			appConfigUpdated, sentinel)
+	}
+
+	var namedQueryUpdated sql.NullTime
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT updated_at FROM %s WHERE name=@p1`, h.cfg.NamedQueriesTable()), "fil_category_for_pn",
+	).Scan(&namedQueryUpdated); err != nil {
+		t.Fatalf("SELECT updated_at FROM named_queries: %v", err)
+	}
+	if !namedQueryUpdated.Valid || namedQueryUpdated.Time.Format("2006-01-02T15:04:05") != sentinel {
+		t.Errorf("named_queries fil_category_for_pn: updated_at = %v, want sentinel %s (or ArxDev needs reseeding)",
+			namedQueryUpdated, sentinel)
+	}
 }
