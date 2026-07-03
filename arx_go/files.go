@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"arx/arxlib/urlutil"
 )
 
 type DirEntry struct {
@@ -78,7 +80,8 @@ func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.ToLower(filepath.Ext(path)) == ".pdf" {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".pdf" || urlutil.IsImage(path) {
 		w.Header().Set("Content-Disposition", "inline")
 	} else {
 		w.Header().Set("Content-Disposition",

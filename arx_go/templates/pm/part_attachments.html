@@ -58,6 +58,11 @@
                         {{else if isLocalFile $f}}
                             {{if isPDF $f}}
                                 <a href="{{localFileURL $f}}" target="_blank" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
+                            {{else if isImage (fileBaseName $f)}}
+                                <span class="img-hover-wrap" data-src="{{localFileURL $f}}">
+                                    <a href="{{localFileURL $f}}" target="_blank" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
+                                    <span class="img-hover-preview"><img alt="preview"></span>
+                                </span>
                             {{else}}
                                 <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
                             {{end}}
@@ -141,6 +146,10 @@
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <input type="hidden" name="source_path" id="source_path" value="">
                 <div class="detail-row">
+                    <label class="form-label">Category</label>
+                    {{template "category_select" (categoryCtx .AttachmentCategories "" "add_category")}}
+                </div>
+                <div class="detail-row">
                     <label class="form-label">File / URL *</label>
                     <input type="text" name="FILFileName" id="FILFileName" class="form-control"
                            placeholder="https://... or LOCAL:relative\path\to\file.pdf or LOCAL:folder\" required>
@@ -151,6 +160,8 @@
                         <div class="d-flex align-items-center gap-2">
                             <button type="button" class="btn btn-sm btn-secondary" onclick="browseAttachment(this)"
                                     {{if not .DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>Browse…</button>
+                            <button type="button" id="paste-clipboard-btn" class="btn btn-sm btn-secondary" disabled
+                                    onclick="pasteAttachmentFromClipboard(this)">Grab from clipboard</button>
                             <div class="form-check form-switch mb-0">
                                 <input class="form-check-input" type="checkbox" role="switch"
                                        id="move_source" name="move_source" value="1" onchange="updateBrowsePreview()">
@@ -162,6 +173,7 @@
                         <div id="browse-note" class="form-text" style="display:none;">
                             Will be <span id="browse-verb">copied</span> to Doc Control as <code id="browse-preview"></code>
                         </div>
+                        <div id="paste-error" class="form-text text-danger" style="display:none;"></div>
                     </div>
                 </div>
                 <div class="detail-row">
@@ -169,12 +181,8 @@
                     <input type="text" name="FILPNRev" id="FILPNRev" class="form-control" style="max-width:100px;">
                 </div>
                 <div class="detail-row">
-                    <label class="form-label">Category</label>
-                    {{template "category_select" (categoryCtx .AttachmentCategories "" "add_category")}}
-                </div>
-                <div class="detail-row">
                     <label class="form-label">Sort Order</label>
-                    <input type="number" name="order_id" class="form-control" style="max-width:100px;" value="{{.NextOrderID}}">
+                    <input type="number" name="order_id" id="order_id" class="form-control" style="max-width:100px;" value="{{.NextOrderID}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Comment</label>
@@ -267,6 +275,12 @@ function notesSelChange(sel, inputId) {
         input.style.display = 'none'; input.value = sel.value;
     }
     updateBrowsePreview();
+    if (inputId === 'add_category') { updatePasteButtonState(); }
+}
+function updatePasteButtonState() {
+    var btn = document.getElementById('paste-clipboard-btn');
+    var input = document.getElementById('add_category');
+    if (btn && input) { btn.disabled = input.value !== 'Photo'; }
 }
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('select[data-notes-sel]').forEach(function(sel) {
@@ -279,6 +293,12 @@ document.addEventListener('DOMContentLoaded', function() {
         var el = document.getElementById(fid);
         if (el) el.addEventListener('input', updateBrowsePreview);
     });
+    updatePasteButtonState();
 });
 </script>
+<script>
+var PASTE_ATTACHMENT_PART_ID = {{.Part.PNID}};
+var PASTE_ATTACHMENT_CSRF_TOKEN = {{.CSRFToken}};
+</script>
+<script src="/static/pm/paste_attachment.js?v={{.AppVersion}}"></script>
 {{end}}

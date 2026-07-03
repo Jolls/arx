@@ -91,6 +91,49 @@ func copyIntoDocControl(root, name, src string) (existed bool, err error) {
 	return false, nil
 }
 
+// writeIntoDocControl writes data to <root>/<name> without overwriting.
+// If the target already exists it returns (true, nil) and does not write.
+// A write failure leaves no orphan target behind.
+func writeIntoDocControl(root, name string, data []byte) (existed bool, err error) {
+	target := filepath.Join(root, name)
+	dst, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			return true, nil
+		}
+		return false, err
+	}
+
+	_, writeErr := dst.Write(data)
+	closeErr := dst.Close()
+	if writeErr != nil || closeErr != nil {
+		os.Remove(target)
+		if writeErr != nil {
+			return false, writeErr
+		}
+		return false, closeErr
+	}
+	return false, nil
+}
+
+// writeIntoDocControlUnique calls writeIntoDocControl, retrying with " (2)",
+// " (3)", ... appended before ext on collision. name must already include ext.
+func writeIntoDocControlUnique(root, name, ext string, data []byte) (finalName string, err error) {
+	base := strings.TrimSuffix(name, ext)
+	candidate := name
+	for attempt := 1; attempt <= 20; attempt++ {
+		existed, err := writeIntoDocControl(root, candidate, data)
+		if err != nil {
+			return "", err
+		}
+		if !existed {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s (%d)%s", base, attempt+1, ext)
+	}
+	return "", fmt.Errorf("could not find a unique name for %q after 20 attempts", name)
+}
+
 // softDeleteAttachment sets is_active=0 on an attachment row.
 // ownerCol/ownerID add an ownership filter when non-empty/non-zero.
 func (h *Handler) softDeleteAttachment(ctx context.Context, table, idCol string, id int, ownerCol string, ownerID int) error {

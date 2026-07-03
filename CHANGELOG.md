@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.80] - 2026-07-03 
+- Add clipboard-paste image attachments for parts (category "Photo"), with a thumbnail grid on the part detail page and hover-preview on the attachments list ([#587](https://github.com/Jolls/arx-legacy/issues/587))
+
 ## [0.5.79] - 2026-07-03 
 - Add a free-text comment field to part attachments, shown as a list column and editable via Add/Edit ([#585](https://github.com/Jolls/arx-legacy/issues/585))
 

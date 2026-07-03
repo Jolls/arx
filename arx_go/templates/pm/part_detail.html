@@ -79,18 +79,24 @@
             </div>
         </div>
 
-        {{/* Price trend — reuses window.renderPriceHistory */}}
-        {{if .Part.ShowPricing}}
+        {{/* Photos — thumbnail grid of image attachments */}}
+        {{if .PhotoAtts}}
         <div class="col">
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>Price Trend</span>
-                    <a href="/part/{{.Part.PNID}}/price-history" class="small">View all &rarr;</a>
+                    <span>Photos</span>
+                    <a href="/part/{{.Part.PNID}}/attachments" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
-                    {{if .HasPriceData}}
-                    <div id="dash-price-chart" class="position-relative"></div>
-                    {{else}}<p class="text-muted mb-0">No price history yet.</p>{{end}}
+                    <div class="row {{if eq (len .PhotoAtts) 1}}row-cols-1{{else}}row-cols-2 row-cols-lg-3{{end}} g-2 photo-thumb-grid">
+                        {{range .PhotoAtts}}
+                        <div class="col">
+                            <a href="{{localFileURL .FILFileName}}" target="_blank" class="d-block photo-thumb-link" title="{{fileBaseName .FILFileName}}">
+                                <img src="{{localFileURL .FILFileName}}" class="photo-thumb-img" alt="{{fileBaseName .FILFileName}}" loading="lazy">
+                            </a>
+                        </div>
+                        {{end}}
+                    </div>
                 </div>
             </div>
         </div>
@@ -139,6 +145,23 @@
                         </tbody>
                     </table>
                     {{else}}<p class="text-muted mb-0 mt-2">No transactions yet.</p>{{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Price trend — reuses window.renderPriceHistory */}}
+        {{if .Part.ShowPricing}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Price Trend</span>
+                    <a href="/part/{{.Part.PNID}}/price-history" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    {{if .HasPriceData}}
+                    <div id="dash-price-chart" class="position-relative"></div>
+                    {{else}}<p class="text-muted mb-0">No price history yet.</p>{{end}}
                 </div>
             </div>
         </div>

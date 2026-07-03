@@ -2,9 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -186,6 +189,86 @@ func (h *Handler) APIBrowseFolder(w http.ResponseWriter, r *http.Request) {
 // selected absolute path as JSON. Used by the attachment Browse button.
 func (h *Handler) APIBrowseFile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"path": folderpick.BrowseFileContext(r.Context())})
+}
+
+var pasteImageExts = map[string]string{
+	"image/png":  ".png",
+	"image/jpeg": ".jpg",
+	"image/webp": ".webp",
+	"image/gif":  ".gif",
+}
+
+// APIPartPasteAttachment saves a clipboard-pasted image as a new part_attachment
+// row with category "Photo". POST /api/part/{id}/paste-attachment.
+func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if h.cfg.DocControlRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "DOC_CONTROL_ROOT is not configured; cannot save pasted images.")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<20) // 8MB cap
+	var body struct {
+		ImageData string `json:"image_data"`
+		Rev       string `json:"rev"`
+		OrderID   string `json:"order_id"`
+		Comment   string `json:"comment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		return
+	}
+
+	commaIdx := strings.Index(body.ImageData, ",")
+	if commaIdx < 0 || !strings.HasPrefix(body.ImageData, "data:") {
+		writeJSONError(w, http.StatusBadRequest, "image_data must be a data: URL")
+		return
+	}
+	header := body.ImageData[len("data:"):commaIdx]
+	mime := strings.TrimSuffix(header, ";base64")
+	ext, ok := pasteImageExts[mime]
+	if !ok {
+		writeJSONError(w, http.StatusBadRequest, "Unsupported image type: "+mime)
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(body.ImageData[commaIdx+1:])
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid base64 image data: "+err.Error())
+		return
+	}
+
+	p, err := h.fetchPartBasic(r.Context(), id)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "Error loading part: "+err.Error())
+		return
+	}
+
+	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Title, "Photo", ext)
+	finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
+		return
+	}
+
+	var oID any
+	if n, err := strconv.Atoi(body.OrderID); err == nil {
+		oID = n
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
+		h.cfg.AttachmentsTable(),
+	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error adding attachment: "+err.Error())
+		return
+	}
+
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
