@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/arxlib/urlutil"
 )
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
@@ -262,6 +263,37 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		rows.Close()
 	}
 
+	var photoAtts []models.Attachment
+	photoRows, err := h.queryContext(r.Context(), fmt.Sprintf(
+		`SELECT id, file_name, category, part_revision, sort_order FROM %s
+		 WHERE part_id = @p1 AND is_active = 1
+		 ORDER BY sort_order, id`,
+		h.cfg.AttachmentsTable()), p.PNID)
+	if err == nil {
+		for photoRows.Next() {
+			var att models.Attachment
+			var fname, fnotes, frev sql.NullString
+			var sortOrder sql.NullInt64
+			if err := photoRows.Scan(&att.FILID, &fname, &fnotes, &frev, &sortOrder); err == nil {
+				att.FILFileName = fname.String
+				att.Category = fnotes.String
+				att.FILPNRev = frev.String
+				if sortOrder.Valid {
+					v := int(sortOrder.Int64)
+					att.OrderID = &v
+				}
+				if urlutil.IsLocalFile(att.FILFileName) && !urlutil.IsLocalDir(att.FILFileName) &&
+					urlutil.IsImage(urlutil.FileBaseName(att.FILFileName)) {
+					photoAtts = append(photoAtts, att)
+				}
+			}
+		}
+		if err := photoRows.Err(); err != nil {
+			log.Printf("[part] photo attachments for part %d: %v", p.PNID, err)
+		}
+		photoRows.Close()
+	}
+
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
 	h.applyCategoryTabs(r.Context(), &p)
 	sess := h.session(r)
@@ -309,7 +341,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "part_detail.html", map[string]any{
-		"Part": p, "PrimaryAtt": primaryAtt, "TopAtts": topAtts,
+		"Part": p, "PrimaryAtt": primaryAtt, "TopAtts": topAtts, "PhotoAtts": photoAtts,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode":          h.cfg.TestMode,

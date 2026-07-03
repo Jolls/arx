@@ -70,6 +70,13 @@ func IsPDF(filename string) bool {
 	return strings.ToLower(filepath.Ext(filename)) == ".pdf"
 }
 
+var imageExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
+
+// IsImage reports whether filename has a displayable image extension (case-insensitive).
+func IsImage(filename string) bool {
+	return imageExts[strings.ToLower(filepath.Ext(filename))]
+}
+
 // SafePathSegments splits rawPath on "/" and cleans each segment with
 // filepath.Base to block directory traversal. Empty segments are dropped.
 // Use this before joining with a root directory when serving user-supplied paths.

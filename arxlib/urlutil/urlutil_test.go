@@ -142,6 +142,27 @@ func TestIsPDF(t *testing.T) {
 	}
 }
 
+func TestIsImage(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"photo.png", true},
+		{"PHOTO.PNG", true},
+		{"photo.jpg", true},
+		{"photo.jpeg", true},
+		{"photo.gif", true},
+		{"photo.webp", true},
+		{"doc.pdf", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := IsImage(c.input); got != c.want {
+			t.Errorf("IsImage(%q) = %v, want %v", c.input, got, c.want)
+		}
+	}
+}
+
 func TestSafePathSegments(t *testing.T) {
 	cases := []struct {
 		input string

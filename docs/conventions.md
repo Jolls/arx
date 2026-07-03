@@ -43,6 +43,23 @@ Browse button controls the source file: *Copy* (default) leaves it in place;
 
 ---
 
+## Pasted-image attachment naming convention
+
+The **Grab from clipboard** button on a part's Add Attachment form (enabled only
+when Category = "Photo") uploads clipboard image bytes directly, without a
+source file path. It uses the same naming convention as an imported file
+(`<PartNumber> <Rev> <Title> Photo.<ext>`, via `buildAttachmentFileName`), but
+since there is no user-typed title to dedupe on, repeated pastes for the same
+part/rev auto-append `" (2)"`, `" (3)"`, ... before the extension instead of
+surfacing the import collision prompt.
+
+`arxlib/urlutil.IsImage` (extensions: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`,
+case-insensitive) is the canonical check for whether an attachment is a
+displayable image — used to filter the part detail page's Photos thumbnail
+grid and to show a hover-preview popup on the Attachments list page.
+
+---
+
 ## PO folder convention
 
 When a new PO is created, the app auto-creates a folder in `PO_FOLDER_ROOT` named:

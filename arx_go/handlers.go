@@ -323,6 +323,7 @@ func pmTemplateFuncs() template.FuncMap {
 		"fileBaseName":   urlutil.FileBaseName,
 		"attachLabel":    attachLabel,
 		"isPDF":          urlutil.IsPDF,
+		"isImage":        urlutil.IsImage,
 		"deref":          func(f *float64) float64 { if f == nil { return 0 }; return *f },
 		"derefInt":       func(i *int) int { if i == nil { return 0 }; return *i },
 		"packSizeStr":    func(f *float64) string { if f == nil { return "—" }; return fmt.Sprintf("%g", *f) },

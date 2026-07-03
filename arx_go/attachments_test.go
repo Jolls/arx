@@ -76,3 +76,44 @@ func TestCopyIntoDocControl(t *testing.T) {
 		t.Fatal("missing-source copy left an orphan target file")
 	}
 }
+
+func TestWriteIntoDocControl(t *testing.T) {
+	root := t.TempDir()
+
+	existed, err := writeIntoDocControl(root, "photo.png", []byte("data1"))
+	if err != nil || existed {
+		t.Fatalf("first write: existed=%v err=%v, want existed=false err=nil", existed, err)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, "photo.png"))
+	if string(got) != "data1" {
+		t.Fatalf("file contents = %q, want %q", got, "data1")
+	}
+
+	existed, err = writeIntoDocControl(root, "photo.png", []byte("data2"))
+	if err != nil || !existed {
+		t.Fatalf("collision write: existed=%v err=%v, want existed=true err=nil", existed, err)
+	}
+	got, _ = os.ReadFile(filepath.Join(root, "photo.png"))
+	if string(got) != "data1" {
+		t.Fatalf("collision write must not overwrite; got %q", got)
+	}
+}
+
+func TestWriteIntoDocControlUnique(t *testing.T) {
+	root := t.TempDir()
+
+	name, err := writeIntoDocControlUnique(root, "part Photo.png", ".png", []byte("a"))
+	if err != nil || name != "part Photo.png" {
+		t.Fatalf("first paste: name=%q err=%v, want %q, nil", name, err, "part Photo.png")
+	}
+
+	name, err = writeIntoDocControlUnique(root, "part Photo.png", ".png", []byte("b"))
+	if err != nil || name != "part Photo (2).png" {
+		t.Fatalf("second paste: name=%q err=%v, want %q, nil", name, err, "part Photo (2).png")
+	}
+
+	name, err = writeIntoDocControlUnique(root, "part Photo.png", ".png", []byte("c"))
+	if err != nil || name != "part Photo (3).png" {
+		t.Fatalf("third paste: name=%q err=%v, want %q, nil", name, err, "part Photo (3).png")
+	}
+}
