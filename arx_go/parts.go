@@ -654,14 +654,12 @@ func bomLeafCost(childHasBOM bool, lastRollupCost float64, preferredPrice sql.Nu
 	return 0, "missing"
 }
 
-func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
-	if !ok {
-		return
-	}
+// fetchBOMItems runs the direct-children BOM query for partID, shared by the
+// read-only BOM view (PartBOM) and its lazy-loaded children endpoint
+// (APIPartBOMChildren).
+func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BOMItem, float64, error) {
 	pl, pn, prc := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.title, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
@@ -673,10 +671,9 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
 		ORDER BY pl.line_number
-	`, prc, pl, pl, pn), id)
+	`, prc, pl, pl, pn), partID)
 	if err != nil {
-		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
-		return
+		return nil, 0, err
 	}
 	defer rows.Close()
 	var items []models.BOMItem
@@ -691,8 +688,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 			&partNumber, &title, &revision, &category,
 			&currentCost, &lastRollupCost, &preferredPrice, &childHasBOM,
 			&attachCount, &poLineCount); err != nil {
-			h.renderError(w, r, "Error reading BOM: "+err.Error())
-			return
+			return nil, 0, err
 		}
 		item.PartNumber = partNumber.String
 		item.Title = title.String
@@ -708,6 +704,20 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		item.LineExtCost = item.LineUnitCost * item.PLQty
 		bomTotal += item.LineExtCost
 		items = append(items, item)
+	}
+	return items, bomTotal, nil
+}
+
+func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
+	if !ok {
+		return
+	}
+	items, bomTotal, err := h.fetchBOMItems(r.Context(), id)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
+		return
 	}
 	h.render(w, r, "part_bom.html", map[string]any{
 		"Part": p, "BOMItems": items, "BOMTotal": bomTotal,

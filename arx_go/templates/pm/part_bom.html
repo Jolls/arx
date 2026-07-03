@@ -9,7 +9,9 @@
     {{template "part_tabs" .}}
 
     {{if .BOMItems}}
-    <div class="d-flex justify-content-end mb-2" data-col-table="bom-table">
+    <div class="d-flex justify-content-end gap-2 mb-2" data-col-table="bom-table">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="expandAllBOM()">Expand All</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="collapseAllBOM()">Collapse All</button>
         <div class="dropdown">
             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 Columns
@@ -50,8 +52,11 @@
             </thead>
             <tbody>
                 {{range .BOMItems}}
-                <tr>
-                    <td data-col="col-item">{{.PLItem}}</td>
+                <tr data-item="{{.PLItem}}">
+                    <td data-col="col-item">
+                        {{if .ChildHasBOM}}<button type="button" class="bom-expand-toggle" data-part-id="{{.PLPartID}}" data-item="{{.PLItem}}" aria-expanded="false" onclick="toggleBOMRow(this)">&#9656;</button>{{end}}
+                        {{.PLItem}}
+                    </td>
                     <td data-col="col-pn"><a href="/part/{{.PLPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
                     <td data-col="col-title">{{.Title}}</td>
                     <td data-col="col-rev">{{.Revision}}</td>
@@ -79,7 +84,7 @@
                     <td data-col="col-title"></td>
                     <td data-col="col-rev"></td>
                     <td data-col="col-cat"></td>
-                    <td data-col="col-qty" class="text-end"><strong>Total</strong></td>
+                    <td data-col="col-qty" class="text-end"><strong data-bs-toggle="tooltip" title="Direct components only. Expanded sub-assembly rows are informational — their cost is already rolled into the parent's Ext Cost above.">Total</strong></td>
                     <td data-col="col-unit-cost"></td>
                     <td data-col="col-ext-cost" class="text-end"><strong>${{printf "%.4f" .BOMTotal}}</strong></td>
                     <td data-col="col-source"></td>

@@ -300,6 +300,14 @@ input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; c
 /* Column visibility toggle (#386) */
 .col-hidden { display: none; }
 
+/* BOM expand/collapse (#579) */
+.bom-expand-toggle {
+    background: none; border: none; padding: 0; margin-right: 4px;
+    cursor: pointer; font-size: 0.7em; color: #6c757d; line-height: 1;
+}
+.bom-expand-toggle:hover { color: var(--accent-1); }
+.bom-sub-row td:first-child { padding-left: calc(8px + 1em * var(--bom-depth, 1)); }
+
 /* Records list select column (#502): shown only when the table carries
    .show-select (status = WIP, or Complete + backfill-eligible). Kept separate
    from .col-hidden, which is reserved for the user's manual Columns toggle. */
