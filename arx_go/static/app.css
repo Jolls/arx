@@ -27,6 +27,7 @@ body {
     border-bottom: 2px solid var(--header-border);
 }
 .app-header--testmode { background: #b45309; border-bottom-color: #f59e0b; }
+.app-header-icon { width: 20px; height: 20px; margin-right: 8px; }
 
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .header-app-link { color: #e0e0e0; font-size: 0.8em; font-weight: 400; letter-spacing: 0; text-decoration: none; opacity: 0.55; transition: opacity 0.2s; }
