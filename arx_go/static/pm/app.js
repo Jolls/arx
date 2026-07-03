@@ -592,3 +592,136 @@ document.addEventListener('DOMContentLoaded', function () {
     applyState()
   })
 })
+
+// --- BOM expand/collapse (#579) ---
+// Assembly BOM rows with a sub-BOM get a caret toggle that lazily fetches and
+// inserts the child part's own BOM lines directly after the row, indented and
+// numbered "{parentItem}.{childIndex}". The same toggle applies recursively to
+// any inserted row whose ChildHasBOM is true, so nesting depth is unbounded.
+
+function bomSourceBadge(source) {
+    var badges = {
+        rollup: '<span class="badge bg-info text-dark">Rollup</span>',
+        price: '<span class="badge bg-success">Price</span>',
+        labor: '<span class="badge bg-primary">Labor</span>',
+        current_cost: '<span class="badge bg-secondary">Cost</span>',
+        missing: '<span class="badge bg-warning text-dark">Missing</span>',
+    }
+    return badges[source] || ''
+}
+
+// Mirrors the server's `{{printf "%.5g" .PLQty}}` formatting.
+function formatBOMQty(v) {
+    if (v == null) return ''
+    var s = Number(v).toPrecision(5)
+    if (s.indexOf('e') === -1 && s.indexOf('.') !== -1) {
+        s = s.replace(/0+$/, '').replace(/\.$/, '')
+    }
+    return s
+}
+
+function formatBOMCost(v) {
+    return v ? '$' + v.toFixed(4) : ''
+}
+
+function buildBOMSubRow(item, num) {
+    var depth = (num.match(/\./g) || []).length
+    var tr = document.createElement('tr')
+    tr.className = 'bom-sub-row'
+    tr.dataset.item = num
+    var toggle = item.ChildHasBOM
+        ? '<button type="button" class="bom-expand-toggle" data-part-id="' + item.PLPartID + '" data-item="' + num + '" aria-expanded="false" onclick="toggleBOMRow(this)">&#9656;</button> '
+        : ''
+    tr.innerHTML =
+        '<td data-col="col-item" style="--bom-depth:' + depth + '">' + toggle + num + '</td>' +
+        '<td data-col="col-pn"><a href="/part/' + item.PLPartID + '" class="part-number-link">' + escHtml(item.PartNumber) + '</a></td>' +
+        '<td data-col="col-title">' + escHtml(item.Title) + '</td>' +
+        '<td data-col="col-rev">' + escHtml(item.Revision) + '</td>' +
+        '<td data-col="col-cat">' + escHtml(item.Category) + '</td>' +
+        '<td data-col="col-qty" class="text-end">' + formatBOMQty(item.PLQty) + '</td>' +
+        '<td data-col="col-unit-cost" class="text-end">' + formatBOMCost(item.LineUnitCost) + '</td>' +
+        '<td data-col="col-ext-cost" class="text-end">' + formatBOMCost(item.LineExtCost) + '</td>' +
+        '<td data-col="col-source">' + bomSourceBadge(item.CostSource) + '</td>' +
+        '<td data-col="col-attach" class="text-end">' + item.AttachCount + '</td>' +
+        '<td data-col="col-polines" class="text-end">' + item.POLineCount + '</td>'
+    return tr
+}
+
+function insertBOMChildren(parentTr, parentNum, children) {
+    var insertAfter = parentTr
+    children.forEach(function (child, i) {
+        var row = buildBOMSubRow(child, parentNum + '.' + (i + 1))
+        insertAfter.insertAdjacentElement('afterend', row)
+        insertAfter = row
+    })
+    if (window.__trColState && window.__trColState['bom-table']) window.__trColState['bom-table']()
+}
+
+// Resolves true on success, false on failure (never rejects) — leaves the
+// toggle in its original collapsed state on failure so the user can retry,
+// and so expandAllBOM's loop below can detect and stop on failure instead of
+// retrying the same row forever.
+function expandBOMRow(btn) {
+    var tr = btn.closest('tr')
+    var itemNum = tr.dataset.item
+    return fetch('/api/part/' + btn.dataset.partId + '/bom-children')
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status)
+            return r.json()
+        })
+        .then(function (children) {
+            insertBOMChildren(tr, itemNum, children || [])
+            btn.setAttribute('aria-expanded', 'true')
+            btn.innerHTML = '&#9662;'
+            return true
+        })
+        .catch(function (err) {
+            console.error('Failed to load BOM children:', err)
+            return false
+        })
+}
+
+function collapseBOMRow(btn) {
+    var tr = btn.closest('tr')
+    var table = tr.closest('table')
+    var prefix = tr.dataset.item + '.'
+    table.querySelectorAll('tbody tr[data-item]').forEach(function (row) {
+        if (row.dataset.item.indexOf(prefix) === 0) row.remove()
+    })
+    btn.setAttribute('aria-expanded', 'false')
+    btn.innerHTML = '&#9656;'
+}
+
+function toggleBOMRow(btn) {
+    if (btn.getAttribute('aria-expanded') === 'true') {
+        collapseBOMRow(btn)
+    } else {
+        expandBOMRow(btn)
+    }
+}
+
+async function expandAllBOM() {
+    var table = document.getElementById('bom-table')
+    if (!table) return
+    var MAX_LEVELS = 25 // guards against a circular BOM reference hanging the browser
+    var toggles, level = 0
+    while ((toggles = Array.from(table.querySelectorAll('.bom-expand-toggle[aria-expanded="false"]'))).length) {
+        if (++level > MAX_LEVELS) {
+            console.error('Expand All: stopped after ' + MAX_LEVELS + ' levels — check for a circular BOM reference.')
+            return
+        }
+        for (var i = 0; i < toggles.length; i++) {
+            if (!(await expandBOMRow(toggles[i]))) return
+        }
+    }
+}
+
+function collapseAllBOM() {
+    var table = document.getElementById('bom-table')
+    if (!table) return
+    table.querySelectorAll('.bom-sub-row').forEach(function (row) { row.remove() })
+    table.querySelectorAll('.bom-expand-toggle[aria-expanded="true"]').forEach(function (btn) {
+        btn.setAttribute('aria-expanded', 'false')
+        btn.innerHTML = '&#9656;'
+    })
+}

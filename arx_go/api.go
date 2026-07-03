@@ -164,6 +164,18 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"supplier_pn": pn.String})
 }
 
+// APIPartBOMChildren returns a part's direct BOM lines as JSON, used to
+// lazily expand a sub-assembly row in the BOM view without a page reload.
+func (h *Handler) APIPartBOMChildren(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	items, _, err := h.fetchBOMItems(r.Context(), id)
+	if err != nil {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, items)
+}
+
 // APIBrowseFolder opens a native Windows folder-picker dialog and returns
 // the selected path as JSON. Used by the Settings page browse buttons.
 func (h *Handler) APIBrowseFolder(w http.ResponseWriter, r *http.Request) {

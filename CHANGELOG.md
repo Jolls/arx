@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.75] - 2026-07-02 
+- Add Expand All / Collapse All to assembly BOMs so sub-assembly BOM lines can be viewed nested inline, indented and sub-numbered ([#579](https://github.com/Jolls/arx-legacy/issues/579))
+
 ## [0.5.74] - 2026-07-02 
 - Add a description autocomplete to the PO add-item form so parts can be searched by description as well as part number ([#580](https://github.com/Jolls/arx-legacy/issues/580))
 - Fix the new BOM line quantity field to hint "0" instead of "1", matching the value actually saved when left blank ([#578](https://github.com/Jolls/arx-legacy/issues/578))

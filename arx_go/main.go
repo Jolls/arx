@@ -251,6 +251,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/api/parts/search", h.APIPartSearch)
 		r.Get("/api/supplier-part", h.APISupplierPN)
 		r.Get("/api/part/{id}/local-attachments", h.APIPartLocalAttachments)
+		r.Get("/api/part/{id}/bom-children", h.APIPartBOMChildren)
 		r.Get("/api/parts/rows", h.PartsRows)
 		r.Get("/api/suppliers/rows", h.SuppliersRows)
 		r.Get("/api/contacts/rows", h.ContactsRows)

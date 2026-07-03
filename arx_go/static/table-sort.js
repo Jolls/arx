@@ -1,6 +1,7 @@
 // Shared client-side column sort for server-rendered tables.
 // Headers wire up via onclick="sortTable(this)" (PM and TR templates).
 function sortTable(th) {
+    if (typeof collapseAllBOM === 'function') collapseAllBOM();
     var tr = th.closest('tr');
     var table = th.closest('table');
     var tbody = table.querySelector('tbody');
