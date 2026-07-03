@@ -60,6 +60,40 @@ grid and to show a hover-preview popup on the Attachments list page.
 
 ---
 
+## Test-record image naming convention
+
+A test-record step whose `pf_type = "attach"` shows a **Grab from clipboard**
+button on its result cell (record edit page). Pasting an image writes it to
+disk and returns its filename; the filename is stored as the step's plain
+`test_result.result` value (no `LOCAL:` prefix — this is not a
+`part_attachment`/`company_attachment` row, just a filename string) and
+persisted on **Save**, alongside the rest of the record's edits.
+
+Folder and filename:
+
+```
+IMAGE_ROOT\<form part_number>\SN<Serial>_rID<recordID>_tID<testID>_YYYYMMDD_HHMMSS.<ext>
+```
+
+- Served via `GET /images/*` (`arx_go/trfiles.go`) from `IMAGE_ROOT`.
+- Folder is namespaced by the **form's** part number (unlike the flat
+  `DOC_CONTROL_ROOT` used for part attachments); the folder is created if it
+  doesn't exist yet.
+- The filename keeps the legacy VBA field order (`SN`/`rID`/`tID`) but drops
+  all dashes, using underscores as the only separator — including in the
+  trailing write-time timestamp — so literal dashes never visually blend with
+  `sanitizeFileNamePart`'s dash-for-illegal-char substitution.
+- The timestamp is what makes repeat pastes on the same step unique; there is
+  no `" (2)"`-style auto-suffix like the part-attachment Photo flow.
+- **Legacy files** written by the old VBA app use the dashed shape
+  `SN-..._rID-..._tID-...` and are not migrated — `imageResult()` in
+  `render_tr.go` recognizes both the old dashed and new no-dash shapes, so
+  both keep rendering.
+- The old VBA convention gated picture-paste on a step's `parameter` field
+  starting with `"Screenshot/File"`; the Go app instead uses the dedicated
+  `pf_type = "attach"` value (see `SQL/migrations/migrate_screenshot_file_to_attach.sql`
+  for migrating existing forms off the legacy convention).
+
 ## PO folder convention
 
 When a new PO is created, the app auto-creates a folder in `PO_FOLDER_ROOT` named:

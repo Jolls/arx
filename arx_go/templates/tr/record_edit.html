@@ -83,7 +83,26 @@
         <td>{{.EffectiveParameter}}</td>
         <td class="small text-muted">{{.EffectiveSpec}}</td>
         <td>
-          {{if $opts}}
+          {{if eq .Step.PFType "attach"}}
+          <input type="hidden" name="result_{{$sid}}" value="{{$cur}}"
+                 data-pf-type="{{.Step.PFType}}" data-pf-target="pf-{{$sid}}">
+          <div class="d-flex align-items-center gap-2" data-attach-cell
+               data-record-id="{{$.Record.ID}}" data-test-id="{{$sid}}"
+               data-result-input="result_{{$sid}}" data-part-number="{{$.Form.PartNumber}}">
+            <button type="button" class="btn btn-sm btn-secondary" data-attach-btn
+                    {{if not $.ImageRootConfigured}}disabled title="IMAGE_ROOT is not configured"{{end}}>
+              <i class="bi bi-clipboard-plus"></i> Grab from clipboard
+            </button>
+            <span class="small text-danger d-none" data-attach-error></span>
+            <span class="img-hover-wrap{{if not $cur}} d-none{{end}}" data-attach-preview
+                  data-src="{{if $cur}}{{imageURL $.Form.PartNumber $cur}}{{end}}">
+              <a href="{{if $cur}}{{imageURL $.Form.PartNumber $cur}}{{end}}" target="_blank" data-attach-link>
+                <i class="bi bi-image"></i> View
+              </a>
+              <span class="img-hover-preview"><img alt="preview"></span>
+            </span>
+          </div>
+          {{else if $opts}}
           <select class="form-select form-select-sm"
                   name="result_{{$sid}}"
                   data-spec-min="{{.Step.SpecMin}}"
@@ -284,4 +303,8 @@ const _hideCommentsEl = document.querySelector('#edit-form [name="comments"]');
 if (_hideCommentsEl) _hideCommentsEl.addEventListener('input', applyHideFormulas);
 applyHideFormulas();
 </script>
+<script>
+var PASTE_RESULT_CSRF_TOKEN = {{.CSRFToken}};
+</script>
+<script src="/static/tr/paste_result_image.js?v={{.AppVersion}}"></script>
 {{end}}

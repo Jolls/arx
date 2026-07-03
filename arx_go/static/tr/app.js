@@ -117,7 +117,7 @@ var MISSING = '<span class="badge bg-warning text-dark">MISSING</span>'
 
 function pfBadge(val, min, max, pfType) {
   var v = (val || '').trim()
-  if (pfType === 'filled') {
+  if (pfType === 'filled' || pfType === 'attach') {
     return v ? '<span class="badge bg-success">PASS</span>' : MISSING
   }
   if (pfType === 'comment') {

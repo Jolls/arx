@@ -282,6 +282,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/records/{id}/print", h.RecordPrint)
 		r.Get("/records/{id}/edit", h.EditRecord)
 		r.Post("/records/{id}/edit", h.SaveResults)
+		r.Post("/api/record/{id}/step/{tid}/paste-image", h.APIRecordPasteResultImage)
 		r.Post("/records/{id}/resync", h.ResyncRecord)
 		r.Post("/records/{id}/lock", h.LockRecord)
 		r.Post("/records/{id}/approve", h.ApproveRecord)

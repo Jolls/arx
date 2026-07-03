@@ -249,6 +249,7 @@ type EventSnapshot struct {
 // Returns nil if the result cannot be evaluated (empty, non-numeric, no bounds).
 // pf_type values:
 //   "filled" — PASS if non-empty, nil (MISSING) if blank
+//   "attach" — PASS if non-empty (an image has been pasted), nil (MISSING) if blank
 //   "range"  — numeric range check against spec_min / spec_max (default)
 func ComputePassFail(value string, step *TestStep) *bool {
 	if step == nil {
@@ -260,7 +261,7 @@ func ComputePassFail(value string, step *TestStep) *bool {
 	case "comment":
 		t := true
 		return &t
-	case "filled":
+	case "filled", "attach":
 		if val == "" {
 			return nil
 		}
@@ -306,9 +307,9 @@ func (r ResultRow) CalcPF() string {
 		return "PASS"
 	}
 
-	// Show MISSING for filled type with no value, or range type with bounds but no value
+	// Show MISSING for filled/attach type with no value, or range type with bounds but no value
 	if val == "" {
-		if pfType == "filled" {
+		if pfType == "filled" || pfType == "attach" {
 			return "MISSING"
 		}
 		if r.Step.SpecMin != "" || r.Step.SpecMax != "" {

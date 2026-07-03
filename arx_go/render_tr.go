@@ -133,10 +133,14 @@ func trFormatDate(t *time.Time) string {
 	return t.Format("2006-01-02")
 }
 
-// imageResult returns true for VBA image filenames: SN-..._rID-..._tID-...
+// imageResult returns true for a result value that is a test-record image
+// filename: either the legacy dashed VBA shape (SN-..._rID-..._tID-...) or
+// the new no-dash shape written by the Go paste feature (SN..._rID..._tID...).
+// Legacy values may lack a file extension (ServeImage auto-appends ".PNG"),
+// so this stays pattern-based rather than checking urlutil.IsImage.
 func imageResult(val string) bool {
 	upper := strings.ToUpper(val)
-	return strings.HasPrefix(upper, "SN-") &&
-		strings.Contains(upper, "_RID-") &&
-		strings.Contains(upper, "_TID-")
+	return strings.HasPrefix(upper, "SN") &&
+		strings.Contains(upper, "_RID") &&
+		strings.Contains(upper, "_TID")
 }

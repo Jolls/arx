@@ -1612,12 +1612,13 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderTR(w, r, "record_edit.html", map[string]any{
-		"Form":      form,
-		"Record":    record,
-		"Rows":      resultRows,
-		"CSRFToken": h.csrfToken(w, r),
-		"ActiveTab": "records",
-		"TestMode":  h.cfg.TestMode,
+		"Form":                form,
+		"Record":              record,
+		"Rows":                resultRows,
+		"CSRFToken":           h.csrfToken(w, r),
+		"ActiveTab":           "records",
+		"TestMode":            h.cfg.TestMode,
+		"ImageRootConfigured": h.cfg.ImageRoot != "",
 	})
 }
 

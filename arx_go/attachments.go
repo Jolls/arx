@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // illegalFileNameChars are characters not permitted in a Windows filename.
@@ -33,6 +34,18 @@ func buildAttachmentFileName(partNumber, rev, title, category, ext string) strin
 		}
 	}
 	return strings.Join(parts, " ") + ext
+}
+
+// buildResultImageName produces the base filename for a pasted test-record
+// result image: "SN<serial>_rID<recordID>_tID<testID>_<timestamp><ext>".
+// Keeps the legacy SN/rID/tID field order but drops the dashes VBA used
+// between labels and values, so the write-time timestamp (the only source of
+// uniqueness — repeat pastes are not de-duped/suffixed) doesn't visually blend
+// with sanitizeFileNamePart's dash-for-illegal-char substitution.
+func buildResultImageName(serial string, recordID, testID int, ext string) string {
+	serial = sanitizeFileNamePart(serial)
+	timestamp := time.Now().Format("20060102_150405")
+	return fmt.Sprintf("SN%s_rID%d_tID%d_%s%s", serial, recordID, testID, timestamp, ext)
 }
 
 // truncateRunes returns s truncated to at most n runes.

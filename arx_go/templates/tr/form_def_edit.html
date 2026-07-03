@@ -58,6 +58,23 @@
 </details>
 
 <details class="mb-3 small text-muted">
+  <summary class="user-select-none" style="cursor:pointer">Field reference</summary>
+  <div class="mt-2 ps-2" style="line-height:1.8">
+    <div class="fw-semibold mb-1">Type</div>
+    <code>0</code> Data (normal result row) &nbsp;&bull;&nbsp;
+    <code>1</code>/<code>2</code>/<code>3</code> Heading1/Heading2/Heading3 (section header, no result recorded)
+    <div class="fw-semibold mt-2 mb-1">pf_type (pass/fail behavior)</div>
+    <code>range</code> (default/blank) &mdash; numeric pass/fail against spec_min/spec_max &nbsp;&bull;&nbsp;
+    <code>filled</code> &mdash; PASS once non-empty, MISSING if blank &nbsp;&bull;&nbsp;
+    <code>comment</code> &mdash; always PASS, free-text row &nbsp;&bull;&nbsp;
+    <code>attach</code> &mdash; PASS once an image has been pasted, MISSING if blank; shows a "Grab from clipboard" button on this step
+    <div class="fw-semibold mt-2 mb-1">spec_nom special prefixes</div>
+    <code>List:opt1;opt2</code> dropdown picker &nbsp;&bull;&nbsp;
+    <code>query:name(...)</code> named-query auto-fill (see "Available named queries" below)
+  </div>
+</details>
+
+<details class="mb-3 small text-muted">
   <summary class="user-select-none" style="cursor:pointer">Available named queries</summary>
   <div class="mt-2 ps-2">
     {{if .NamedQueries}}
@@ -205,6 +222,7 @@
               <option value="range"{{if eq .PFType "range"}} selected{{end}}>range</option>
               <option value="filled"{{if eq .PFType "filled"}} selected{{end}}>filled</option>
               <option value="comment"{{if eq .PFType "comment"}} selected{{end}}>comment</option>
+              <option value="attach"{{if eq .PFType "attach"}} selected{{end}}>attach</option>
             </select>
           </td>
           <td><input type="text" class="form-control form-control-sm font-mono" name="default_result_{{.ID}}" value="{{.DefaultResult}}" data-original="{{.DefaultResult}}"></td>
@@ -268,6 +286,7 @@
         <option value="" selected></option>
         <option value="range">range</option>
         <option value="filled">filled</option>
+        <option value="attach">attach</option>
       </select>
     </td>
     <td><input type="text" class="form-control form-control-sm font-mono" name="new_row[IDX][default_result]"></td>
