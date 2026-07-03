@@ -122,10 +122,11 @@ testing never collide with the reference set.
 | 7201-7299 | `record_events` | `completed` events on the locked records; 7003 has a full lock → unlock → re-lock history (its two snapshots differ, driving the diff view); 7005's completed event has no snapshots (backfillable) |
 | 7301-7399 | `record_event_results` | Frozen result rows for the `completed` snapshots — 7003's two snapshots differ in one value |
 | 8001-8099 | `users` | `admin`/`admin` (PO + record approver) and `tester`/`tester` (no approvals) — working bcrypt hashes, ArxDev only |
+| 8101-8199 | `part_attachment` | URL-only attachments (no real files needed): 8101 on part 3002 with a `comment` (#585), 8102 on part 3004 with none |
 | 1-17 | `unit` | Reference list of units of measure |
 | (identity) | `app_config`, `named_queries` | App config: schema version, attachment categories, and the `spec_nom` auto-fill query library |
 
-No `part_attachment` / `company_attachment` rows are seeded (would require real files/URLs).
+No `company_attachment` rows are seeded (would require real files/URLs on companies too).
 `logs` and `release_notes` are cleared and left empty. `test_definition_history` gets one
 trigger-written row (the seed updates step 6103 after insert to exercise the history timeline).
 
