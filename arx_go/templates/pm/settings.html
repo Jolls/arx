@@ -28,6 +28,9 @@
         <a href="#configuration" class="sub-tab" data-tab="configuration">Configuration</a>
         {{end}}
         {{if and .Connected .CurrentUser}}
+        <a href="#named-queries" class="sub-tab" data-tab="named-queries">Named Queries</a>
+        {{end}}
+        {{if and .Connected .CurrentUser}}
         <a href="#users" class="sub-tab" data-tab="users">Users</a>
         {{end}}
         {{if .ReleaseNotes}}
@@ -348,6 +351,122 @@
     </div><!-- /tab-configuration -->
     {{end}}
 
+    <!-- ── Named Queries tab ────────────────────────────────────────────── -->
+    {{if and .Connected .CurrentUser}}
+    <div class="settings-tab-panel" id="tab-named-queries">
+    <div class="detail-section">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <h3 class="mb-0">Named Queries</h3>
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="nq-show-inactive"
+                       onchange="applyNamedQueryFilter()">
+                <label class="form-check-label" for="nq-show-inactive">Show inactive</label>
+            </div>
+        </div>
+        <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
+            Parameterized <code>SELECT</code> queries used for <code>spec_nom</code> auto-fill in test record
+            forms, referenced as <code>query:name(@param=value)</code>. Queries must be a plain SELECT.
+            Each row is saved individually with its own <strong>Save</strong> button — editing a row does
+            nothing until you save that row. Use <strong>Test</strong> to run a query with sample parameters
+            and build a ready-to-paste <code>spec_nom</code> before saving.
+        </p>
+        {{if .NamedQueriesError}}
+        <div class="alert alert-danger" role="alert">{{.NamedQueriesError}}</div>
+        {{end}}
+        <input type="hidden" id="nq-csrf" value="{{.CsrfToken}}">
+        <table class="table table-bordered table-sm align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th style="padding:4px 8px;">Name</th>
+                    <th style="padding:4px 8px;">Description</th>
+                    <th style="padding:4px 8px;">SQL</th>
+                    <th style="padding:4px 8px;">Params</th>
+                    <th style="padding:4px 8px;">Result</th>
+                    <th class="text-center" style="padding:4px 8px;">Active</th>
+                    <th class="text-center" style="padding:4px 8px;">Updated</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="nq-rows">
+                {{range .NamedQueries}}
+                <tr class="nq-row">
+                    <td style="padding:2px 8px;">
+                        <input type="hidden" data-f="id" value="{{.ID}}">
+                        <input class="form-control form-control-sm font-monospace" data-f="name" value="{{.Name}}" style="min-width:150px;">
+                    </td>
+                    <td style="padding:2px 8px;"><input class="form-control form-control-sm" data-f="description" value="{{.Description}}" style="min-width:160px;"></td>
+                    <td style="padding:2px 8px;"><textarea class="form-control form-control-sm font-monospace" data-f="sql" rows="2" style="min-width:280px;">{{.SQL}}</textarea></td>
+                    <td style="padding:2px 8px;"><input class="form-control form-control-sm font-monospace" data-f="params" value="{{.Params}}" style="width:110px;"></td>
+                    <td style="padding:2px 8px;">
+                        <select class="form-select form-select-sm" data-f="result_type" style="width:90px;">
+                            <option value="list" {{if eq .ResultType "list"}}selected{{end}}>list</option>
+                            <option value="single" {{if eq .ResultType "single"}}selected{{end}}>single</option>
+                            <option value="multi" {{if eq .ResultType "multi"}}selected{{end}}>multi</option>
+                        </select>
+                    </td>
+                    <td class="text-center"><input type="checkbox" data-f="active" {{if .Active}}checked{{end}}></td>
+                    <td class="text-center text-muted nq-updated" style="font-size:0.8em; white-space:nowrap;">{{.Updated}}</td>
+                    <td class="text-nowrap text-center">
+                        <div class="d-flex gap-1 justify-content-center">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="saveNamedQueryRow(this)" title="Save this query">Save</button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="testNamedQuery(this)" title="Test run">Test</button>
+                        </div>
+                        <div class="nq-status" style="font-size:0.78em; margin-top:2px;"></div>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        <template id="nq-row-tmpl">
+            <tr class="nq-row">
+                <td style="padding:2px 8px;">
+                    <input type="hidden" data-f="id" value="">
+                    <input class="form-control form-control-sm font-monospace" data-f="name" style="min-width:150px;">
+                </td>
+                <td style="padding:2px 8px;"><input class="form-control form-control-sm" data-f="description" style="min-width:160px;"></td>
+                <td style="padding:2px 8px;"><textarea class="form-control form-control-sm font-monospace" data-f="sql" rows="2" style="min-width:280px;"></textarea></td>
+                <td style="padding:2px 8px;"><input class="form-control form-control-sm font-monospace" data-f="params" style="width:110px;"></td>
+                <td style="padding:2px 8px;">
+                    <select class="form-select form-select-sm" data-f="result_type" style="width:90px;">
+                        <option value="list" selected>list</option>
+                        <option value="single">single</option>
+                        <option value="multi">multi</option>
+                    </select>
+                </td>
+                <td class="text-center"><input type="checkbox" data-f="active" checked></td>
+                <td class="text-center text-muted nq-updated" style="font-size:0.8em; white-space:nowrap;"></td>
+                <td class="text-nowrap text-center">
+                    <div class="d-flex gap-1 justify-content-center">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="saveNamedQueryRow(this)" title="Save this query">Save</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="testNamedQuery(this)" title="Test run">Test</button>
+                        <button type="button" class="btn btn-secondary btn-sm nq-discard" onclick="discardNamedQueryRow(this)" title="Discard this unsaved row (nothing is deleted)">&times;</button>
+                    </div>
+                    <div class="nq-status" style="font-size:0.78em; margin-top:2px;"></div>
+                </td>
+            </tr>
+        </template>
+        <div class="mt-2">
+            <button type="button" class="btn btn-secondary" onclick="addNamedQueryRow()">+ Add Named Query</button>
+        </div>
+
+        <!-- Shared Test Drive panel — populated by the Test button on any row -->
+        <div id="nq-test-panel" class="mt-4 p-3 border rounded" style="display:none; background:#f8f9fa;">
+            <h4 class="mb-2" style="font-size:0.95em;">Test Drive: <span id="nq-test-name" class="font-monospace"></span></h4>
+            <div id="nq-test-params" class="d-flex flex-wrap gap-2 mb-2"></div>
+            <div class="d-flex gap-2 mb-2">
+                <button type="button" class="btn btn-primary btn-sm" onclick="runNamedQueryTest()">Run</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="buildSpecNom()">Build spec_nom</button>
+            </div>
+            <div id="nq-test-spec" class="mb-2" style="display:none;">
+                <label class="text-muted d-block mb-1" style="font-size:0.82em;">spec_nom (copy into a form definition):</label>
+                <input type="text" id="nq-test-spec-value" class="form-control form-control-sm font-monospace" readonly onclick="this.select()">
+            </div>
+            <div id="nq-test-result"></div>
+        </div>
+    </div>
+    </div><!-- /tab-named-queries -->
+    {{end}}
+
     <!-- ── Users tab ────────────────────────────────────────────────────── -->
     {{if and .Connected .CurrentUser}}
     <div class="settings-tab-panel" id="tab-users">
@@ -512,6 +631,198 @@ function numberCats(form) {
     form.querySelector('input[name=cat_count]').value = n;
 }
 
+// ── Named Queries editor ──────────────────────────────────────────────────
+function addNamedQueryRow() {
+    var t = document.getElementById('nq-row-tmpl');
+    document.getElementById('nq-rows').appendChild(t.content.cloneNode(true));
+}
+
+// Discard is client-side only: removes the row from the current view without
+// any server call, so nothing is deleted. Reloading restores saved queries.
+function discardNamedQueryRow(btn) {
+    btn.closest('tr').remove();
+}
+
+// Show-inactive switch: unchecked hides inactive rows (active only), checked
+// shows all. Matches the Show inactive toggle used on the parts/suppliers lists.
+function applyNamedQueryFilter() {
+    var sw = document.getElementById('nq-show-inactive');
+    var show = sw ? sw.checked : true;
+    document.querySelectorAll('#nq-rows tr.nq-row').forEach(function (row) {
+        if (!row.querySelector('[data-f=active]').checked) {
+            row.style.display = show ? '' : 'none';
+        }
+    });
+}
+
+function nqCsrf() {
+    var el = document.getElementById('nq-csrf');
+    return el ? el.value : '';
+}
+
+function nqSetStatus(row, msg, kind) {
+    var el = row.querySelector('.nq-status');
+    if (!el) { return; }
+    el.textContent = msg;
+    el.className = 'nq-status ' + (kind === 'error' ? 'text-danger' : kind === 'ok' ? 'text-success' : 'text-muted');
+}
+
+function saveNamedQueryRow(btn) {
+    var row = btn.closest('tr');
+    var idEl = row.querySelector('[data-f=id]');
+    var name = row.querySelector('[data-f=name]').value.trim();
+    var sql = row.querySelector('[data-f=sql]').value.trim();
+    if (!name) { nqSetStatus(row, 'Name required', 'error'); return; }
+    if (!sql) { nqSetStatus(row, 'SQL required', 'error'); return; }
+
+    var body = new URLSearchParams();
+    body.append('csrf_token', nqCsrf());
+    body.append('id', idEl.value || '');
+    body.append('name', name);
+    body.append('description', row.querySelector('[data-f=description]').value);
+    body.append('sql', sql);
+    body.append('params', row.querySelector('[data-f=params]').value);
+    body.append('result_type', row.querySelector('[data-f=result_type]').value);
+    body.append('active', row.querySelector('[data-f=active]').checked ? '1' : '0');
+
+    btn.disabled = true;
+    nqSetStatus(row, 'Saving…', 'muted');
+    fetch('/settings/named-queries/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+    .then(function (res) {
+        if (!res.ok) { nqSetStatus(row, res.body.error || 'Save failed', 'error'); return; }
+        idEl.value = res.body.id;
+        var upd = row.querySelector('.nq-updated');
+        if (upd) { upd.textContent = res.body.updated || ''; }
+        var disc = row.querySelector('.nq-discard');
+        if (disc) { disc.remove(); } // row is now in the DB — no longer discardable
+        nqSetStatus(row, '✓ Saved', 'ok');
+    })
+    .catch(function (e) { nqSetStatus(row, String(e), 'error'); })
+    .finally(function () { btn.disabled = false; });
+}
+
+var nqTestRow = null;
+
+function nqParamNames(params) {
+    if (!params) { return []; }
+    return params.split(',').map(function (s) {
+        return s.trim().replace(/^@/, '');
+    }).filter(function (s) { return s.length > 0; });
+}
+
+function nqCollectParams() {
+    var out = [];
+    document.querySelectorAll('#nq-test-params .nq-test-param').forEach(function (inp) {
+        out.push({ name: inp.getAttribute('data-param'), value: inp.value });
+    });
+    return out;
+}
+
+function nqEscape(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function testNamedQuery(btn) {
+    nqTestRow = btn.closest('tr');
+    var name = nqTestRow.querySelector('[data-f=name]').value.trim();
+    var params = nqTestRow.querySelector('[data-f=params]').value.trim();
+
+    document.getElementById('nq-test-name').textContent = name || '(unnamed)';
+    var box = document.getElementById('nq-test-params');
+    box.innerHTML = '';
+    nqParamNames(params).forEach(function (p) {
+        var wrap = document.createElement('div');
+        var lbl = document.createElement('label');
+        lbl.className = 'text-muted d-block mb-1';
+        lbl.style.fontSize = '0.82em';
+        lbl.textContent = '@' + p;
+        var inp = document.createElement('input');
+        inp.className = 'form-control form-control-sm font-monospace nq-test-param';
+        inp.setAttribute('data-param', p);
+        inp.style.width = '150px';
+        wrap.appendChild(lbl);
+        wrap.appendChild(inp);
+        box.appendChild(wrap);
+    });
+    if (!box.children.length) {
+        box.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No parameters.</span>';
+    }
+    document.getElementById('nq-test-result').innerHTML = '';
+    document.getElementById('nq-test-spec').style.display = 'none';
+    var panel = document.getElementById('nq-test-panel');
+    panel.style.display = '';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function runNamedQueryTest() {
+    if (!nqTestRow) { return; }
+    var sql = nqTestRow.querySelector('[data-f=sql]').value.trim();
+    var resultType = nqTestRow.querySelector('[data-f=result_type]').value;
+    var out = document.getElementById('nq-test-result');
+    if (!sql) { out.innerHTML = '<div class="text-danger" style="font-size:0.85em;">No SQL to test.</div>'; return; }
+
+    var body = new URLSearchParams();
+    body.append('csrf_token', nqCsrf());
+    body.append('sql', sql);
+    body.append('result_type', resultType);
+    nqCollectParams().forEach(function (p) {
+        body.append('param_name', p.name);
+        body.append('param_value', p.value);
+    });
+
+    out.innerHTML = '<span class="text-muted" style="font-size:0.85em;">Running…</span>';
+    fetch('/settings/named-queries/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+    .then(function (res) {
+        if (!res.ok) {
+            out.innerHTML = '<div class="text-danger" style="font-size:0.85em;">' + nqEscape(res.body.error || 'Query failed') + '</div>';
+            return;
+        }
+        var rows = res.body.rows || [];
+        if (!rows.length) {
+            out.innerHTML = '<div class="text-muted" style="font-size:0.85em;">No rows returned.</div>';
+            return;
+        }
+        var html = '<div class="text-muted mb-1" style="font-size:0.8em;">' + rows.length + ' row(s) — result_type: ' + nqEscape(res.body.result_type) + '</div>';
+        html += '<table class="table table-sm table-bordered mb-0" style="font-size:0.82em;"><thead><tr><th>Value</th><th>Label</th></tr></thead><tbody>';
+        rows.forEach(function (row) {
+            html += '<tr><td class="font-monospace">' + nqEscape(row.value) + '</td><td>' + nqEscape(row.label) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        out.innerHTML = html;
+    })
+    .catch(function (e) {
+        out.innerHTML = '<div class="text-danger" style="font-size:0.85em;">' + nqEscape(String(e)) + '</div>';
+    });
+}
+
+function buildSpecNom() {
+    if (!nqTestRow) { return; }
+    var name = nqTestRow.querySelector('[data-f=name]').value.trim();
+    if (!name) {
+        document.getElementById('nq-test-result').innerHTML = '<div class="text-danger" style="font-size:0.85em;">Enter a query name first.</div>';
+        return;
+    }
+    var params = nqCollectParams();
+    var spec = 'query:' + name;
+    if (params.length) {
+        spec += '(' + params.map(function (p) { return '@' + p.name + '=' + p.value; }).join(',') + ')';
+    }
+    document.getElementById('nq-test-spec-value').value = spec;
+    document.getElementById('nq-test-spec').style.display = '';
+}
+
 function browseFolder(inputId) {
     var btn = event.target;
     btn.disabled = true;
@@ -533,5 +844,8 @@ function promptPw(btn) {
     btn.closest('form').querySelector('.new-pw-field').value = pw;
     return true;
 }
+
+// Apply the Named Queries active-only filter on load (switch defaults to off).
+if (document.getElementById('nq-show-inactive')) { applyNamedQueryFilter(); }
 </script>
 {{end}}

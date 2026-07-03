@@ -74,6 +74,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var users []map[string]any
 	var usersError string
 	var receiverName string
+	var namedQueries []NamedQueryRow
+	var namedQueriesError string
 	if h.db != nil {
 		contacts = h.fetchContactOptions(r, h.cfg.PODefaults.ReceiverID)
 		suppliers = h.fetchSupplierOptions(r)
@@ -87,6 +89,10 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		users, err = h.listUsers(r.Context())
 		if err != nil {
 			usersError = "could not load users: " + err.Error()
+		}
+		namedQueries, err = h.loadNamedQueriesFull(r.Context())
+		if err != nil {
+			namedQueriesError = "could not load named queries: " + err.Error()
 		}
 	}
 
@@ -108,6 +114,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PODefaultReceiverName": receiverName,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"PartCategories":        h.loadCategories(r.Context()),
+		"NamedQueries":          namedQueries,
+		"NamedQueriesError":     namedQueriesError,
 		"Contacts":              contacts,
 		"Suppliers":             suppliers,
 		"Users":                 users,
