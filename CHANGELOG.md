@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.78] - 2026-07-03 
+- Add per-tab icons to the Parts/Vendors/POs/Contacts/Records nav bar, with a distinct icon for the active tab
+
 ## [0.5.77] - 2026-07-02 
 - Add the Arx icon to the upper-left header bar ([#586](https://github.com/Jolls/arx-legacy/issues/586))
 

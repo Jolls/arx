@@ -46,6 +46,10 @@ body {
 .tab:last-child { border-right: none; }
 .tab:hover  { background: #f0f0f0; text-decoration: none; color: #444; }
 .tab.active { background: var(--accent-1); color: #fff; }
+.tab-icon { width: 40px; height: 40px; vertical-align: -12px; margin-right: 6px; }
+.tab-icon-active { display: none; }
+.tab.active .tab-icon-default { display: none; }
+.tab.active .tab-icon-active { display: inline; }
 
 /* --- Sortable column headers (PM: tr.table-dark; TR: thead.table-dark) */
 tr.table-dark th.sortable,

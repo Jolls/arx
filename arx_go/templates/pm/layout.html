@@ -25,11 +25,11 @@
         </div>
     </div>
     <nav class="tabs">
-        <a href="/"          class="tab{{if or (eq .ActiveTab "parts") (eq .ActiveTab "")}} active{{end}}">Parts</a>
-        <a href="/suppliers" class="tab{{if eq .ActiveTab "suppliers"}} active{{end}}">Vendors</a>
-        <a href="/pos"       class="tab{{if eq .ActiveTab "pos"}} active{{end}}">POs</a>
-        <a href="/contacts"  class="tab{{if eq .ActiveTab "contacts"}} active{{end}}">Contacts</a>
-        <a href="/records"   class="tab{{if eq .ActiveTab "records"}} active{{end}}">Records</a>
+        <a href="/"          class="tab{{if or (eq .ActiveTab "parts") (eq .ActiveTab "")}} active{{end}}"><img src="/static/pm/icons/parts.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/pm/icons/parts-inv.svg" alt="" class="tab-icon tab-icon-active">Parts</a>
+        <a href="/suppliers" class="tab{{if eq .ActiveTab "suppliers"}} active{{end}}"><img src="/static/pm/icons/vendors.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/pm/icons/vendors-inv.svg" alt="" class="tab-icon tab-icon-active">Vendors</a>
+        <a href="/pos"       class="tab{{if eq .ActiveTab "pos"}} active{{end}}"><img src="/static/pm/icons/pos.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/pm/icons/pos-inv.svg" alt="" class="tab-icon tab-icon-active">POs</a>
+        <a href="/contacts"  class="tab{{if eq .ActiveTab "contacts"}} active{{end}}"><img src="/static/pm/icons/contacts.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/pm/icons/contacts-inv.svg" alt="" class="tab-icon tab-icon-active">Contacts</a>
+        <a href="/records"   class="tab{{if eq .ActiveTab "records"}} active{{end}}"><img src="/static/pm/icons/records.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/pm/icons/records-inv.svg" alt="" class="tab-icon tab-icon-active">Records</a>
     </nav>
     {{if .SchemaMismatch}}
     <div class="alert alert-warning rounded-0 mb-0 py-2 px-4" role="alert">
