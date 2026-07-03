@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.79] - 2026-07-03 
+- Add a free-text comment field to part attachments, shown as a list column and editable via Add/Edit ([#585](https://github.com/Jolls/arx-legacy/issues/585))
+
 ## [0.5.78] - 2026-07-03 
 - Add per-tab icons to the Parts/Vendors/POs/Contacts/Records nav bar, with a distinct icon for the active tab
 

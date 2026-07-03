@@ -1101,7 +1101,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, file_name, category, part_revision, sort_order
+		SELECT id, file_name, category, part_revision, sort_order, comment
 		FROM %s WHERE part_id = @p1 AND is_active = 1 ORDER BY sort_order, id
 	`, h.cfg.AttachmentsTable()), id)
 	if err != nil {
@@ -1113,15 +1113,16 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	nextOrderID := 1
 	for rows.Next() {
 		var att models.Attachment
-		var fname, fnotes, frev sql.NullString
+		var fname, fnotes, frev, fcomment sql.NullString
 		var orderID sql.NullInt64
-		if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev, &orderID); err != nil {
+		if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev, &orderID, &fcomment); err != nil {
 			h.renderError(w, r, "Error reading attachments: "+err.Error())
 			return
 		}
 		att.FILFileName = fname.String
 		att.Category = fnotes.String
 		att.FILPNRev = frev.String
+		att.Comment = fcomment.String
 		if orderID.Valid {
 			v := int(orderID.Int64)
 			att.OrderID = &v
@@ -1166,6 +1167,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rev, category := fv(r, "FILPNRev"), fv(r, "category")
+	comment := fv(r, "comment")
 	fileName := fv(r, "FILFileName")
 
 	// moveSrc, when non-empty, is a source file to delete after a successful
@@ -1212,9 +1214,9 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order) VALUES (@p1,@p2,@p3,@p4,@p5)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
 		h.cfg.AttachmentsTable(),
-	), id, fileName, rev, category, oID); err != nil {
+	), id, fileName, rev, category, oID, comment); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
@@ -1240,9 +1242,9 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	attIDInt, _ := strconv.Atoi(attID)
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3 WHERE id=@p4`,
+		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4 WHERE id=@p5`,
 		h.cfg.AttachmentsTable(),
-	), fv(r, "FILPNRev"), fv(r, "category"), oID, attIDInt); err != nil {
+	), fv(r, "FILPNRev"), fv(r, "category"), oID, fv(r, "comment"), attIDInt); err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
 		return
 	}

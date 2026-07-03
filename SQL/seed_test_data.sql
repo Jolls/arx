@@ -15,12 +15,13 @@
 --   4101-4199  mfg_part                7201-7299  record_events
 --   4201-4299  price                   7301-7399  record_event_results
 --   5001-5099  purchase_order          8001-8099  users
---   5501-5599  po_line                 1-17       unit (natural identity)
---   5801-5899  purchase_order_history  (identity) app_config, named_queries
---   5901-5999  inventory_transaction
+--   5501-5599  po_line                 8101-8199  part_attachment
+--   5801-5899  purchase_order_history  1-17       unit (natural identity)
+--   5901-5999  inventory_transaction   (identity) app_config, named_queries
 --
--- No part_attachment / company_attachment rows are seeded (would require real files/URLs);
--- those tables are cleared and left empty, along with logs and release_notes.
+-- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
+-- one with a comment, one without. company_attachment is NOT seeded (would require real
+-- files/URLs on companies too) and is cleared and left empty, along with logs and release_notes.
 -- test_definition_history gets one row written by trg_test_definition_history (the seed
 -- updates step 6103 after insert precisely to exercise the definition-history timeline).
 --
@@ -201,6 +202,16 @@ BEGIN TRY
         detail = '18-8 stainless, black oxide', notes = 'Reference part with all detail fields set.',
         requested_by = 'Admin User', user_field_1 = 'RoHS', user_field_2 = 'Bin A-12'
     WHERE id = 3002;
+
+    -- ============================================================
+    -- 6b. Part attachments — URL attachments only (no real files needed).
+    -- 8101 carries a comment (#585); 8102 has none, to exercise both list states.
+    -- ============================================================
+    SET IDENTITY_INSERT dbo.part_attachment ON;
+    INSERT INTO dbo.part_attachment (id, part_id, file_name, category, part_revision, sort_order, comment) VALUES
+        (8101, 3002, 'https://example.com/datasheets/m3x8-shcs.pdf', 'Datasheet', 'A', 1, 'Confirmed torque spec with vendor 2026-06-01'),
+        (8102, 3004, 'https://example.com/drawings/widget-housing.pdf', 'Drawing', 'B', 1, NULL);
+    SET IDENTITY_INSERT dbo.part_attachment OFF;
 
     -- ============================================================
     -- 7. BOM (3005 Widget Assembly = 3002 + 3003 + OPS labor 3006 + sub-assembly 3012)
@@ -445,6 +456,7 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.record_events',            RESEED, 7299);
     DBCC CHECKIDENT ('dbo.record_event_results',     RESEED, 7399);
     DBCC CHECKIDENT ('dbo.users',                    RESEED, 8099);
+    DBCC CHECKIDENT ('dbo.part_attachment',          RESEED, 8199);
     DBCC CHECKIDENT ('dbo.named_queries',            RESEED, 99);
 
     -- PO_Number_Seq: restart well above the highest fixed PO base number (5010).

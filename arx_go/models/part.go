@@ -178,4 +178,5 @@ type Attachment struct {
 	FILPNRev    string
 	Category    string
 	OrderID     *int
+	Comment     string
 }

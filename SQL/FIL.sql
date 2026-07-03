@@ -22,5 +22,6 @@ CREATE TABLE part_attachment (
   category       VARCHAR(500),   -- Attachment category (e.g. Datasheet, Drawing). Options managed via app_config 'attachment_categories'. (Live length 500, inherited from the former FILNotes column.)
   part_revision  VARCHAR(10),    -- Part revision this file is associated with.
   sort_order     INT            CONSTRAINT DF_part_attachment_sort_order DEFAULT 1,  -- Display sort order.
-  is_active      BIT NOT NULL  CONSTRAINT DF_part_attachment_is_active  DEFAULT 1
+  is_active      BIT NOT NULL  CONSTRAINT DF_part_attachment_is_active  DEFAULT 1,
+  comment        VARCHAR(500)    -- Free-text note about this attachment (#585).
 );
