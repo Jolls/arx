@@ -10,10 +10,12 @@ import (
 	"strings"
 )
 
-// unsafeKeywordRE matches DML/DDL keywords at word boundaries and semicolons.
+// unsafeKeywordRE matches DML/DDL/admin keywords at word boundaries and
+// semicolons. INTO blocks SELECT ... INTO (a table-creating write that would
+// otherwise slip past a SELECT-prefixed query); WAITFOR blocks a trivial DoS.
 // Word boundaries avoid false positives on column names that contain keyword
 // substrings (e.g. created_at, updated_at, alternate).
-var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE)\b|;`)
+var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE|INTO|MERGE|GRANT|REVOKE|DENY|WAITFOR|DBCC|BACKUP|RESTORE|SHUTDOWN)\b|;`)
 
 // isSafeQuery rejects anything that isn't a plain SELECT.
 // Defense-in-depth only — the real control is DB-level: the app DB user
@@ -127,8 +129,19 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 		return QueryResult{}, fmt.Errorf("named query lookup: %w", err)
 	}
 
-	if !isSafeQuery(storedSQL) {
-		return QueryResult{}, fmt.Errorf("named query %q failed safety check", name)
+	result, err := h.execQuery(ctx, storedSQL, resultType, params)
+	if err != nil {
+		return QueryResult{}, fmt.Errorf("named query %q: %w", name, err)
+	}
+	return result, nil
+}
+
+// execQuery runs an ad-hoc parameterized SELECT and scans it into a QueryResult.
+// It enforces isSafeQuery first. resultType == "single" truncates to the first row.
+// Column handling matches runNamedQuery: 1 col = value+label, 2+ cols = value,label.
+func (h *Handler) execQuery(ctx context.Context, sqlText, resultType string, params map[string]string) (QueryResult, error) {
+	if !isSafeQuery(sqlText) {
+		return QueryResult{}, fmt.Errorf("query must be a plain SELECT statement")
 	}
 
 	args := make([]any, 0, len(params))
@@ -136,15 +149,15 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 		args = append(args, sql.Named(k, v))
 	}
 
-	rows, err := h.queryContext(ctx, storedSQL, args...)
+	rows, err := h.queryContext(ctx, sqlText, args...)
 	if err != nil {
-		return QueryResult{}, fmt.Errorf("named query %q execution: %w", name, err)
+		return QueryResult{}, fmt.Errorf("execution: %w", err)
 	}
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		return QueryResult{}, fmt.Errorf("named query %q columns: %w", name, err)
+		return QueryResult{}, fmt.Errorf("columns: %w", err)
 	}
 	multiCol := len(cols) >= 2
 

@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.76] - 2026-07-02 
+- Add a Named Queries editor in Settings to create, edit, and deactivate `spec_nom` named queries without raw SQL, saved per row, with a per-row test-drive that runs the query and builds a copy-ready `spec_nom` string ([#573](https://github.com/Jolls/arx-legacy/issues/573))
+
 ## [0.5.75] - 2026-07-02 
 - Add Expand All / Collapse All to assembly BOMs so sub-assembly BOM lines can be viewed nested inline, indented and sub-numbered ([#579](https://github.com/Jolls/arx-legacy/issues/579))
 

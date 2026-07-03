@@ -128,6 +128,12 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(h.RequireAuth)
 
+		// Named Queries editor (Settings → Named Queries tab). Behind auth because
+		// these routes execute/persist SQL and require a live DB connection.
+		// Saving is per-row (one query at a time), not a bulk table submit.
+		r.Post("/settings/named-queries/save", h.SettingsNamedQueryRowSave)
+		r.Post("/settings/named-queries/test", h.SettingsNamedQueryTest)
+
 		// User management (Settings → Users tab)
 		r.Post("/settings/users", h.SettingsUsersCreate)
 		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)

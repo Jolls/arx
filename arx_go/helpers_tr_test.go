@@ -47,6 +47,12 @@ func TestIsSafeQuery(t *testing.T) {
 		{"SELECT alternate FROM parts", true},
 		// EXECUTE is still blocked
 		{"SELECT EXECUTE sp_something", false},
+		// SELECT-prefixed writes / admin / DoS must be rejected
+		{"SELECT * INTO junk FROM parts", false},   // table-creating write
+		{"SELECT 1 WAITFOR DELAY '00:00:10'", false}, // DoS
+		{"SELECT * FROM parts MERGE x", false},
+		{"SELECT 1; GRANT SELECT TO app", false},
+		{"SELECT 1 DBCC CHECKDB", false},
 	}
 	for _, c := range cases {
 		if got := isSafeQuery(c.query); got != c.want {
