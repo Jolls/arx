@@ -105,8 +105,8 @@ testing never collide with the reference set.
 |---|---|---|
 | 1001-1099 | `company` | 4 companies: supplier, supplier+manufacturer, receiver/ship-to, manufacturer-only; both suppliers have a `default_contact` |
 | 2001-2099 | `contact` | Sibling contacts at the same supplier (2001 fully populated: address/website/notes), one per other supplier incl. the receiver company (2005), plus a soft-deleted (`is_active=0`) contact |
-| 3001-3099 | `part` | One part per category that matters (RAW, BUY, MFG, ASM, OPS, FORM) plus release-status coverage — an `A`ctive set, one `U`nder-review (3008), one `D`eprecated + inactive (3009); FORM parts 3010 (carries form 6001) and 3011 (spare, for new-form creation) |
-| 3901-3999 | `bom` | Assembly 3005 built from 3002 + 3003, plus an OPS labor line (3006) so the cost rollup includes value-add (#465); 3904 lists unit-under-test 3004 under FORM part 3010 (NewRecord PN picker) |
+| 3001-3099 | `part` | One part per category that matters (RAW, BUY, MFG, ASM, OPS, FORM) plus release-status coverage — an `A`ctive set, one `U`nder-review (3008), one `D`eprecated + inactive (3009); FORM parts 3010 (carries form 6001) and 3011 (spare, for new-form creation); ASM sub-assembly 3012 nested inside 3005's BOM, with its own `last_rollup_cost` (#579) |
+| 3901-3999 | `bom` | Assembly 3005 built from 3002 + 3003, plus an OPS labor line (3006) so the cost rollup includes value-add (#465), plus sub-assembly 3012 as a 4th line so the BOM view's expand/collapse toggle and "Rollup" cost-source badge have something to exercise (#579); 3012 has its own BOM (3001 + 3007); 3904 lists unit-under-test 3004 under FORM part 3010 (NewRecord PN picker) |
 | 4001-4099 | `supplier_part` | Sourcing links, incl. one (4002) with an `mfg_part_id`, a purchase unit (REEL) ≠ the part's base unit, and `min_increment`/`lead_time` |
 | 4101-4199 | `mfg_part` | One active MPN plus a soft-deleted one (exercises the filtered unique index) |
 | 4201-4299 | `price` | Active + superseded (history) price rows |

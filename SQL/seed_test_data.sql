@@ -188,7 +188,12 @@ BEGIN TRY
         -- FORM-category parts: FormsList and the new-form part picker filter on category='FORM',
         -- so test form 6001 must hang off one. 3011 is a spare with no form attached (new-form target).
         (3010, 'FORM-1001','FORM',1, 'A', 'Widget Housing Test Form',   'A', 1, 1,  0,      NULL, NULL, NULL),
-        (3011, 'FORM-1002','FORM',0, 'A', 'Spare Test Form Part',       'A', 1, 1,  0,      NULL, NULL, NULL);
+        (3011, 'FORM-1002','FORM',0, 'A', 'Spare Test Form Part',       'A', 1, 1,  0,      NULL, NULL, NULL),
+        -- Sub-assembly nested inside 3005's BOM (#579): exercises the BOM expand/collapse
+        -- toggle and the "rollup" cost-source badge, neither of which any other seeded
+        -- assembly-of-assemblies line reaches. last_rollup_cost matches the sum of its own
+        -- BOM lines below (2*2.50 + 1*4.10 = 9.10) as if the rollup engine had just run.
+        (3012, 'ASM-1002', 'ASM', 1, 'A', 'Widget Sub-Assembly',        'A', 1, 1,  0,      NULL, 9.10,  GETDATE());
     SET IDENTITY_INSERT dbo.part OFF;
 
     -- Fully populated part so the detail card and edit round-trip show detail/notes/user fields.
@@ -198,16 +203,21 @@ BEGIN TRY
     WHERE id = 3002;
 
     -- ============================================================
-    -- 7. BOM (3005 Widget Assembly = 3002 + 3003 + OPS labor 3006)
+    -- 7. BOM (3005 Widget Assembly = 3002 + 3003 + OPS labor 3006 + sub-assembly 3012)
     -- ============================================================
     -- Line 3 is an OPS labor line (#465): component 3006's current_cost is an hourly rate
     -- and qty is hours, so the cost rollup includes value-add, not just material.
+    -- Line 4 nests sub-assembly 3012 (#579): its own BOM (3001 + 3007) makes 3005's item 4
+    -- expandable, and its cost source badges as "Rollup" using 3012.last_rollup_cost.
     SET IDENTITY_INSERT dbo.bom ON;
     INSERT INTO dbo.bom (id, parent_part_id, component_part_id, line_number, qty) VALUES
         (3901, 3005, 3002, 1, 2),
         (3902, 3005, 3003, 2, 4),
         (3903, 3005, 3006, 3, 0.5), -- 0.5 hr assembler labor
-        (3904, 3010, 3004, 1, 1);   -- FORM part's BOM lists the testable unit → NewRecord PN picker
+        (3904, 3010, 3004, 1, 1),   -- FORM part's BOM lists the testable unit → NewRecord PN picker
+        (3905, 3012, 3001, 1, 2),   -- sub-assembly 3012's own BOM: 2x Aluminum Stock
+        (3906, 3012, 3007, 2, 1),   -- + 1x Stainless Steel Bar Stock
+        (3907, 3005, 3012, 4, 1);   -- 3005 nests 3012 as a sub-assembly component
     SET IDENTITY_INSERT dbo.bom OFF;
 
     -- ============================================================
