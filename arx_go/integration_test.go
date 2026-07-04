@@ -79,6 +79,14 @@ func assert302(t *testing.T, label string, rec *httptest.ResponseRecorder) {
 	}
 }
 
+// assertStatus fails the test if the recorder's status doesn't match want, printing the body.
+func assertStatus(t *testing.T, label string, rec *httptest.ResponseRecorder, want int) {
+	t.Helper()
+	if rec.Code != want {
+		t.Fatalf("%s: got status %d, want %d. body: %s", label, rec.Code, want, rec.Body.String())
+	}
+}
+
 // TestIntegration_PartLifecycle exercises the full part + attachment round-trip
 // against the ArxDev database:
 //
@@ -284,6 +292,185 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	eq("type", run(url.Values{"status": {"all"}, "type": {"Re-Test"}}), []string{"102", "103"})
 	eq("daterange", run(url.Values{"status": {"all"}, "from": {"2026-02-01"}, "to": {"2026-03-31"}}),
 		[]string{"102", "103"})
+}
+
+// TestIntegration_AttachStepPassFail exercises the pf_type = "attach" pass/fail
+// evaluation (#587) through the real SaveResults DB round-trip — no image file
+// is ever written; a plain string standing in for a filename is posted as the
+// result value, matching how the paste-image endpoint hands off to Save
+// (it only writes a filename into the result_<testID> form field).
+func TestIntegration_AttachStepPassFail(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
+				h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.StepsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	}()
+
+	var testID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type, parameter, pf_type)
+		 OUTPUT INSERTED.id VALUES (@p1, 0, 'Screenshot/File Panel Photo', 'attach')`,
+		h.cfg.StepsTable()), formID,
+	).Scan(&testID); err != nil {
+		t.Fatalf("seed test_definition: %v", err)
+	}
+
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()),
+		strconv.Itoa(testID), formID); err != nil {
+		t.Fatalf("set form test_order: %v", err)
+	}
+
+	var recordID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587', '', '', @p2, '', 0, 1)`, h.cfg.RecordsTable()),
+		formID, strconv.Itoa(testID),
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed test_record: %v", err)
+	}
+
+	// ── Post a stand-in filename (no disk write) and confirm PASS ──────────────
+	fakeFilename := "SN123_rID" + strconv.Itoa(recordID) + "_tID" + strconv.Itoa(testID) + "_20260101_000000.png"
+	rec := httptest.NewRecorder()
+	h.SaveResults(rec, withID(postForm(fmt.Sprintf("/records/%d/edit", recordID), url.Values{
+		fmt.Sprintf("result_%d", testID): {fakeFilename},
+	}), recordID))
+	assertStatus(t, "SaveResults (attach, filled)", rec, http.StatusSeeOther)
+
+	var result string
+	var passFail sql.NullBool
+	err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND test_id=@p2`,
+		h.cfg.ResultsTable()), recordID, testID,
+	).Scan(&result, &passFail)
+	if err != nil {
+		t.Fatalf("SELECT result/pass_fail after filled save: %v", err)
+	}
+	if result != fakeFilename {
+		t.Errorf("result = %q, want %q", result, fakeFilename)
+	}
+	if !passFail.Valid || !passFail.Bool {
+		t.Errorf("pass_fail after filled attach result = %v, want true (PASS)", passFail)
+	}
+
+	// ── Clear it and confirm MISSING (pass_fail NULL) ──────────────────────────
+	rec = httptest.NewRecorder()
+	h.SaveResults(rec, withID(postForm(fmt.Sprintf("/records/%d/edit", recordID), url.Values{
+		fmt.Sprintf("result_%d", testID): {""},
+	}), recordID))
+	assertStatus(t, "SaveResults (attach, cleared)", rec, http.StatusSeeOther)
+
+	err = h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND test_id=@p2`,
+		h.cfg.ResultsTable()), recordID, testID,
+	).Scan(&result, &passFail)
+	if err != nil {
+		t.Fatalf("SELECT result/pass_fail after clearing: %v", err)
+	}
+	if result != "" {
+		t.Errorf("result after clearing = %q, want empty", result)
+	}
+	if passFail.Valid {
+		t.Errorf("pass_fail after clearing attach result = %v, want NULL (MISSING)", passFail)
+	}
+}
+
+// TestIntegration_PasteResultImageGuards exercises APIRecordPasteResultImage's
+// DB-backed guard clauses (record not found, record locked) — both return
+// before the handler ever touches the filesystem (no MkdirAll/write call is
+// reached), so this test never writes an image file to disk.
+func TestIntegration_PasteResultImageGuards(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	h.cfg.ImageRoot = t.TempDir() // non-empty so the ImageRoot-configured check passes; never written to
+
+	// 1x1 transparent PNG, base64-encoded — small valid image_data payload.
+	const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+	postPasteImage := func(recordID, testID int) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/record/%d/step/%d/paste-image", recordID, testID),
+			strings.NewReader(fmt.Sprintf(`{"image_data":%q}`, tinyPNG)))
+		req.Header.Set("Content-Type", "application/json")
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", strconv.Itoa(recordID))
+		rctx.URLParams.Add("tid", strconv.Itoa(testID))
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.APIRecordPasteResultImage(rec, req)
+		return rec
+	}
+
+	// ── Not found ───────────────────────────────────────────────────────────
+	rec := postPasteImage(999999999, 1)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("paste-image on missing record: status = %d, want %d. body: %s",
+			rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+
+	// ── Locked record ───────────────────────────────────────────────────────
+	// APIRecordPasteResultImage INNER JOINs to part via form.part_number_id, so
+	// (unlike some other seeds in this file) a real part row is required here.
+	var partID int
+	partNumber := "ITEST-587-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+	}()
+
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	}()
+
+	var recordID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, serial_number, serial_number_pn, serial_number_pn_desc, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587-LOCKED', '', '', 1, 1)`, h.cfg.RecordsTable()), formID,
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed locked test_record: %v", err)
+	}
+
+	rec = postPasteImage(recordID, 1)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("paste-image on locked record: status = %d, want %d. body: %s",
+			rec.Code, http.StatusConflict, rec.Body.String())
+	}
 }
 
 // TestIntegration_UpdatedAtSentinel guards against handler bugs that touch (or cascade an

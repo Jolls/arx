@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -198,6 +200,39 @@ var pasteImageExts = map[string]string{
 	"image/gif":  ".gif",
 }
 
+// decodePastedImage parses a "data:<mime>;base64,<data>" URL (as produced by
+// FileReader.readAsDataURL in the clipboard-paste JS) into a file extension
+// and the raw decoded bytes.
+func decodePastedImage(dataURL string) (ext string, data []byte, err error) {
+	commaIdx := strings.Index(dataURL, ",")
+	if commaIdx < 0 || !strings.HasPrefix(dataURL, "data:") {
+		return "", nil, fmt.Errorf("image_data must be a data: URL")
+	}
+	header := dataURL[len("data:"):commaIdx]
+	mime := strings.TrimSuffix(header, ";base64")
+	ext, ok := pasteImageExts[mime]
+	if !ok {
+		return "", nil, fmt.Errorf("Unsupported image type: %s", mime)
+	}
+	data, err = base64.StdEncoding.DecodeString(dataURL[commaIdx+1:])
+	if err != nil {
+		return "", nil, fmt.Errorf("Invalid base64 image data: %w", err)
+	}
+	return ext, data, nil
+}
+
+// decodeJSONBody applies the paste-image size cap and decodes the JSON
+// request body into dst, writing a 400 response and returning false on
+// failure. Shared by every clipboard-paste endpoint.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<20) // 8MB cap
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		return false
+	}
+	return true
+}
+
 // APIPartPasteAttachment saves a clipboard-pasted image as a new part_attachment
 // row with category "Photo". POST /api/part/{id}/paste-attachment.
 func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request) {
@@ -207,33 +242,19 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 8<<20) // 8MB cap
 	var body struct {
 		ImageData string `json:"image_data"`
 		Rev       string `json:"rev"`
 		OrderID   string `json:"order_id"`
 		Comment   string `json:"comment"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+	if !decodeJSONBody(w, r, &body) {
 		return
 	}
 
-	commaIdx := strings.Index(body.ImageData, ",")
-	if commaIdx < 0 || !strings.HasPrefix(body.ImageData, "data:") {
-		writeJSONError(w, http.StatusBadRequest, "image_data must be a data: URL")
-		return
-	}
-	header := body.ImageData[len("data:"):commaIdx]
-	mime := strings.TrimSuffix(header, ";base64")
-	ext, ok := pasteImageExts[mime]
-	if !ok {
-		writeJSONError(w, http.StatusBadRequest, "Unsupported image type: "+mime)
-		return
-	}
-	data, err := base64.StdEncoding.DecodeString(body.ImageData[commaIdx+1:])
+	ext, data, err := decodePastedImage(body.ImageData)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid base64 image data: "+err.Error())
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -263,6 +284,92 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// APIRecordPasteResultImage saves a clipboard-pasted image to disk for a
+// test-record result step (pf_type = "attach") and returns its filename.
+// It does not touch test_result — the caller drops the returned filename into
+// the step's result input, and the existing SaveResults handler persists it
+// along with the rest of the record's edits.
+// POST /api/record/{id}/step/{tid}/paste-image.
+func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Request) {
+	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid record id")
+		return
+	}
+	testID, err := strconv.Atoi(chi.URLParam(r, "tid"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid test id")
+		return
+	}
+	if h.cfg.ImageRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "IMAGE_ROOT is not configured; cannot save pasted images.")
+		return
+	}
+
+	// Check the record before doing any decode work, so a locked/missing record
+	// is rejected cheaply rather than after paying for the base64 decode.
+	var serial, partNumber string
+	var locked bool
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT r.serial_number, r.is_locked, pn.part_number
+		FROM %s r
+		JOIN %s f ON r.form_id = f.id
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE r.id = @p1`,
+		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()), recordID).
+		Scan(&serial, &locked, &partNumber)
+	if err == sql.ErrNoRows {
+		writeJSONError(w, http.StatusNotFound, "Record not found")
+		return
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error loading record: "+err.Error())
+		return
+	}
+	if locked {
+		writeJSONError(w, http.StatusConflict, "Record is locked")
+		return
+	}
+
+	var body struct {
+		ImageData string `json:"image_data"`
+	}
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	ext, data, err := decodePastedImage(body.ImageData)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// sanitizeFileNamePart here must match the folder name the "imageURL" and
+	// "sanitizedPartNumber" template funcs build for display (render_tr.go), so
+	// both sides of the write/read path use the same folder.
+	dir := filepath.Join(h.cfg.ImageRoot, sanitizeFileNamePart(partNumber))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error creating image folder: "+err.Error())
+		return
+	}
+
+	name := buildResultImageName(serial, recordID, testID, ext)
+	existed, err := writeIntoDocControl(dir, name, data)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
+		return
+	}
+	if existed {
+		// buildResultImageName's uniqueness comes from a 1-second-resolution
+		// timestamp; on the rare collision (e.g. a double-click), fail loudly
+		// instead of silently keeping the old file but reporting success.
+		writeJSONError(w, http.StatusConflict, "A file with this name was just created; please try again.")
+		return
+	}
+
+	writeJSON(w, map[string]any{"ok": true, "filename": name})
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {

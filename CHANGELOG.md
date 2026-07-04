@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.81] - 2026-07-03 
+- Add clipboard-paste image attachments for test-record result steps (new `pf_type = "attach"`), reusing the parts paste pattern ([#587](https://github.com/Jolls/arx-legacy/issues/587))
+
 ## [0.5.80] - 2026-07-03 
 - Add clipboard-paste image attachments for parts (category "Photo"), with a thumbnail grid on the part detail page and hover-preview on the attachments list ([#587](https://github.com/Jolls/arx-legacy/issues/587))
 

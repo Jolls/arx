@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 )
 
@@ -28,6 +29,20 @@ func TestBuildAttachmentFileName(t *testing.T) {
 			t.Errorf("buildAttachmentFileName(%q,%q,%q,%q,%q) = %q, want %q",
 				c.partNumber, c.rev, c.title, c.category, c.ext, got, c.want)
 		}
+	}
+}
+
+func TestBuildResultImageName(t *testing.T) {
+	re := regexp.MustCompile(`^SN123_rID45_tID6_\d{8}_\d{6}\.png$`)
+	got := buildResultImageName("123", 45, 6, ".png")
+	if !re.MatchString(got) {
+		t.Errorf("buildResultImageName(...) = %q, want to match %s", got, re.String())
+	}
+
+	// illegal filesystem characters in the serial are sanitized
+	got = buildResultImageName("AB/CD", 1, 2, ".jpg")
+	if !regexp.MustCompile(`^SNAB-CD_rID1_tID2_\d{8}_\d{6}\.jpg$`).MatchString(got) {
+		t.Errorf("buildResultImageName with illegal serial chars = %q, want sanitized", got)
 	}
 }
 

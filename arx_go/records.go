@@ -1190,7 +1190,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
-		if row.Level == 0 && imageResult(row.EffectiveValue()) {
+		if row.Level == 0 && isImageRow(row) {
 			imageRows = append(imageRows, row)
 		}
 	}
@@ -1299,7 +1299,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
-		if row.Level == 0 && imageResult(row.EffectiveValue()) {
+		if row.Level == 0 && isImageRow(row) {
 			imageRows = append(imageRows, row)
 		}
 	}
@@ -1612,12 +1612,13 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderTR(w, r, "record_edit.html", map[string]any{
-		"Form":      form,
-		"Record":    record,
-		"Rows":      resultRows,
-		"CSRFToken": h.csrfToken(w, r),
-		"ActiveTab": "records",
-		"TestMode":  h.cfg.TestMode,
+		"Form":                form,
+		"Record":              record,
+		"Rows":                resultRows,
+		"CSRFToken":           h.csrfToken(w, r),
+		"ActiveTab":           "records",
+		"TestMode":            h.cfg.TestMode,
+		"ImageRootConfigured": h.cfg.ImageRoot != "",
 	})
 }
 
