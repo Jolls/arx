@@ -86,6 +86,11 @@
         <form method="post" action="/supplier/{{.Supplier.ID}}/attachments/{{.EditingAtt.SupplierAttachmentID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
+                <label class="form-label">Replace File / URL</label>
+                <input type="text" name="file_path" class="form-control"
+                       placeholder="leave blank to keep current file">
+            </div>
+            <div class="detail-row">
                 <label class="form-label">Notes</label>
                 <input type="text" name="notes" class="form-control" value="{{.EditingAtt.Notes}}">
             </div>

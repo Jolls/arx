@@ -1164,8 +1164,17 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		}
 		atts = append(atts, att)
 	}
+	// Fall back to the ImportCollision's AttID when there's no ?edit= query
+	// param, so an edit-triggered collision keeps showing the same row's
+	// Edit form instead of it disappearing from this direct (non-redirect) render.
+	editID := r.URL.Query().Get("edit")
+	if editID == "" {
+		if ic, ok := extra["ImportCollision"].(map[string]string); ok {
+			editID = ic["AttID"]
+		}
+	}
 	var editingAtt *models.Attachment
-	if editID := r.URL.Query().Get("edit"); editID != "" {
+	if editID != "" {
 		for i := range atts {
 			if fmt.Sprintf("%d", atts[i].FILID) == editID {
 				editingAtt = &atts[i]
@@ -1200,62 +1209,28 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	rev, category := fv(r, "FILPNRev"), fv(r, "category")
 	comment := fv(r, "comment")
-	fileName := fv(r, "FILFileName")
 
-	// moveSrc, when non-empty, is a source file to delete after a successful
-	// import (Move mode: copy into Doc Control, then remove the original).
-	var moveSrc string
-
-	// Import flow: a browsed source file is copied into DOC_CONTROL_ROOT under a
-	// generated name; fileName becomes LOCAL:<name>.
-	if src := fv(r, "source_path"); src != "" {
-		if h.cfg.DocControlRoot == "" {
-			h.renderPartAttachments(w, r, id, map[string]any{
-				"Error": "DOC_CONTROL_ROOT is not configured; cannot import files."})
-			return
-		}
-		p, err := h.fetchPartBasic(r.Context(), id)
-		if err != nil {
-			h.renderError(w, r, "Error loading part: "+err.Error())
-			return
-		}
-		move := fv(r, "move_source") == "1"
-		name := buildAttachmentFileName(p.PartNumber, rev, p.Title, category, filepath.Ext(src))
-		// link_existing=1 skips the copy and links to a file already present.
-		if fv(r, "link_existing") != "1" {
-			existed, err := copyIntoDocControl(h.cfg.DocControlRoot, name, src)
-			if err != nil {
-				h.renderPartAttachments(w, r, id, map[string]any{
-					"Error": "Error copying file: " + err.Error()})
-				return
-			}
-			if existed {
-				h.renderPartAttachments(w, r, id, map[string]any{
-					"ImportCollision": map[string]string{
-						"Name": name, "SourcePath": src,
-						"Category": category, "Rev": rev, "OrderID": fv(r, "order_id"),
-						"Move": fv(r, "move_source"),
-					}})
-				return
-			}
-		}
-		fileName = "LOCAL:" + name
-		if move {
-			moveSrc = src
-		}
+	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, "")
+	if in.ErrMsg != "" {
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": in.ErrMsg})
+		return
+	}
+	if in.Collision != nil {
+		h.renderPartAttachments(w, r, id, map[string]any{"ImportCollision": in.Collision})
+		return
 	}
 
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
 		h.cfg.AttachmentsTable(),
-	), id, fileName, rev, category, oID, comment); err != nil {
+	), id, in.FileName, rev, category, oID, comment); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
 	// Move mode: remove the source now that the attachment is saved. The row
 	// already exists, so a failure here is non-fatal — surface it as a warning.
-	if moveSrc != "" {
-		if err := os.Remove(moveSrc); err != nil {
+	if in.MoveSrc != "" {
+		if err := os.Remove(in.MoveSrc); err != nil {
 			h.renderPartAttachments(w, r, id, map[string]any{
 				"Error": "Attachment saved, but the source file could not be removed: " + err.Error()})
 			return
@@ -1266,19 +1241,75 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	id, attID := chi.URLParam(r, "id"), chi.URLParam(r, "attID")
+	attIDInt, _ := strconv.Atoi(attID)
 	var oID any
 	if v := fv(r, "order_id"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			oID = n
 		}
 	}
-	attIDInt, _ := strconv.Atoi(attID)
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4 WHERE id=@p5`,
-		h.cfg.AttachmentsTable(),
-	), fv(r, "FILPNRev"), fv(r, "category"), oID, fv(r, "comment"), attIDInt); err != nil {
+	rev, category := fv(r, "FILPNRev"), fv(r, "category")
+	comment := fv(r, "comment")
+
+	var oldFileNameNS sql.NullString
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT file_name FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(),
+	), attIDInt, id).Scan(&oldFileNameNS); err != nil {
+		h.renderError(w, r, "Error loading attachment: "+err.Error())
+		return
+	}
+	oldFileName := oldFileNameNS.String
+	var replaceName string
+	if urlutil.IsLocalFile(oldFileName) {
+		replaceName = oldFileName[len("LOCAL:"):]
+	}
+
+	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, replaceName)
+	if in.ErrMsg != "" {
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": in.ErrMsg})
+		return
+	}
+	if in.Collision != nil {
+		in.Collision["AttID"] = attID
+		h.renderPartAttachments(w, r, id, map[string]any{"ImportCollision": in.Collision})
+		return
+	}
+
+	fileChanged := in.FileName != "" && in.FileName != oldFileName
+	var err error
+	if fileChanged {
+		_, err = h.execContext(r.Context(), fmt.Sprintf(
+			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, file_name=@p5 WHERE id=@p6`,
+			h.cfg.AttachmentsTable(),
+		), rev, category, oID, comment, in.FileName, attIDInt)
+	} else {
+		_, err = h.execContext(r.Context(), fmt.Sprintf(
+			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4 WHERE id=@p5`,
+			h.cfg.AttachmentsTable(),
+		), rev, category, oID, comment, attIDInt)
+	}
+	if err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
 		return
+	}
+
+	// Move-mode cleanup runs whenever a source was browsed and moved, whether
+	// or not the stored file_name changed (an identical-name replace via
+	// replaceLocalFile still consumed the browsed source and needs it removed).
+	if in.MoveSrc != "" {
+		if err := os.Remove(in.MoveSrc); err != nil {
+			h.renderPartAttachments(w, r, id, map[string]any{
+				"Error": "Attachment updated, but the source file could not be removed: " + err.Error()})
+			return
+		}
+	}
+	if fileChanged && replaceName != "" {
+		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
+			attIDInt, oldFileName, h.cfg.DocControlRoot, replaceName); err != nil {
+			h.renderPartAttachments(w, r, id, map[string]any{
+				"Error": "Attachment updated, but the old file could not be removed: " + err.Error()})
+			return
+		}
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
 }
