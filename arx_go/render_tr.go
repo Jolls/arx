@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -79,8 +80,14 @@ func trTemplateFuncs() template.FuncMap {
 		"isPDF":        urlutil.IsPDF,
 		"imageResult":  imageResult,
 		"imageURL": func(partNumber, val string) string {
-			return "/images/" + partNumber + "/" + val
+			// sanitizeFileNamePart must match the folder name APIRecordPasteResultImage
+			// writes to, or the link 404s for any part number with an illegal filename char.
+			return "/images/" + sanitizeFileNamePart(partNumber) + "/" + val
 		},
+		// sanitizedPartNumber exposes the same folder-name sanitization to JS via a
+		// data attribute, so client-side image URL building (paste_result_image.js)
+		// matches the write path without needing a round-trip through the server.
+		"sanitizedPartNumber": sanitizeFileNamePart,
 		"pfBadge": func(res *models.TestResult) template.HTML {
 			if res == nil {
 				return `<span class="badge bg-secondary">—</span>`
@@ -133,14 +140,36 @@ func trFormatDate(t *time.Time) string {
 	return t.Format("2006-01-02")
 }
 
+// imageResultRe matches a test-record image filename: either the legacy
+// dashed VBA shape (SN-..._rID-4..._tID-5...) or the new no-dash shape written
+// by the Go paste feature (SN..._rID45_tID6...). "-?\d+" after RID/TID
+// requires a digit run right after the token (with an optional dash before
+// it), so free text that merely contains the substrings "_RID"/"_TID" without
+// being followed by digits (e.g. "SNAPSHOT_RIDGE_TIDY") does not match.
+var imageResultRe = regexp.MustCompile(`(?i)^SN[A-Z0-9-]*_RID-?\d+.*_TID-?\d+`)
+
 // imageResult returns true for a result value that is a test-record image
-// filename: either the legacy dashed VBA shape (SN-..._rID-..._tID-...) or
-// the new no-dash shape written by the Go paste feature (SN..._rID..._tID...).
-// Legacy values may lack a file extension (ServeImage auto-appends ".PNG"),
-// so this stays pattern-based rather than checking urlutil.IsImage.
+// filename (see imageResultRe). Legacy values may lack a file extension
+// (ServeImage auto-appends ".PNG"), so this stays pattern-based rather than
+// checking urlutil.IsImage.
 func imageResult(val string) bool {
-	upper := strings.ToUpper(val)
-	return strings.HasPrefix(upper, "SN") &&
-		strings.Contains(upper, "_RID") &&
-		strings.Contains(upper, "_TID")
+	return imageResultRe.MatchString(val)
+}
+
+// isImageRow returns true for a Level-0 result row that holds a pasted
+// image: either a pf_type="attach" step with a recorded value (the
+// authoritative signal on the edit page), or a value matching the legacy/new
+// image filename shape via imageResult (for rows whose test_definition
+// predates the #587 migration to pf_type="attach"). Checking both keeps the
+// Screenshots gallery (records.go's ImageRows) consistent with what
+// record_edit.html shows as an image step.
+func isImageRow(row models.ResultRow) bool {
+	val := row.EffectiveValue()
+	if val == "" {
+		return false
+	}
+	if row.Step != nil && row.Step.PFType == "attach" {
+		return true
+	}
+	return imageResult(val)
 }

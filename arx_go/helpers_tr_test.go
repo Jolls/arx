@@ -230,7 +230,7 @@ func TestImageResult(t *testing.T) {
 		{"", false},
 		{"SN123_rID45_tID6_20260703_143022.png", true}, // new no-dash shape (#587)
 		{"SN123_rID45_20260703_143022.png", false},     // missing _tID
-
+		{"SNAPSHOT_RIDGE_TIDY", false},                 // free text containing bare "_RID"/"_TID" substrings, but no digits after them
 	}
 	for _, c := range cases {
 		if got := imageResult(c.val); got != c.want {

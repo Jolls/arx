@@ -1190,7 +1190,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
-		if row.Level == 0 && imageResult(row.EffectiveValue()) {
+		if row.Level == 0 && isImageRow(row) {
 			imageRows = append(imageRows, row)
 		}
 	}
@@ -1299,7 +1299,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
-		if row.Level == 0 && imageResult(row.EffectiveValue()) {
+		if row.Level == 0 && isImageRow(row) {
 			imageRows = append(imageRows, row)
 		}
 	}

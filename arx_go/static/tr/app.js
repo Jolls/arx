@@ -630,15 +630,19 @@ document.addEventListener('DOMContentLoaded', function () {
   table.querySelectorAll('input[name*="spec_nom"]').forEach(lintSpecNom)
 })
 
-// Lazy-load image previews on first hover — avoids fetching every image on page load.
-document.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('.img-hover-wrap').forEach(function (wrap) {
-    var loaded = false
-    wrap.addEventListener('mouseenter', function () {
-      if (loaded) return
-      var img = wrap.querySelector('.img-hover-preview img')
-      img.src = wrap.dataset.src
-      loaded = true
-    })
+// Lazy-load an image preview on first hover — avoids fetching every image on
+// page load. Shared with paste_result_image.js, which calls this for preview
+// elements created/updated after the initial page load.
+function wireImgHoverPreview(wrap) {
+  var loaded = false
+  wrap.addEventListener('mouseenter', function () {
+    if (loaded) return
+    var img = wrap.querySelector('.img-hover-preview img')
+    if (img) img.src = wrap.dataset.src
+    loaded = true
   })
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.img-hover-wrap').forEach(wireImgHoverPreview)
 })

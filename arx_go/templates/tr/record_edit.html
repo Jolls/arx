@@ -88,7 +88,7 @@
                  data-pf-type="{{.Step.PFType}}" data-pf-target="pf-{{$sid}}">
           <div class="d-flex align-items-center gap-2" data-attach-cell
                data-record-id="{{$.Record.ID}}" data-test-id="{{$sid}}"
-               data-result-input="result_{{$sid}}" data-part-number="{{$.Form.PartNumber}}">
+               data-result-input="result_{{$sid}}" data-part-number="{{sanitizedPartNumber $.Form.PartNumber}}">
             <button type="button" class="btn btn-sm btn-secondary" data-attach-btn
                     {{if not $.ImageRootConfigured}}disabled title="IMAGE_ROOT is not configured"{{end}}>
               <i class="bi bi-clipboard-plus"></i> Grab from clipboard
@@ -208,7 +208,14 @@ function restoreDraft(draft) {
   Object.entries(draft).forEach(([name, val]) => {
     if (name.startsWith('_')) return;
     const el = document.querySelector('#edit-form [name="' + name + '"]');
-    if (el) el.value = val;
+    if (!el) return;
+    el.value = val;
+    // Attach steps: the hidden result input is a sibling of [data-attach-cell]
+    // (not an ancestor/descendant), so look it up via the shared parent <td>.
+    // applyPastedResultImage (paste_result_image.js) also refreshes the visible
+    // preview/link, which a plain el.value assignment does not.
+    const attachCell = el.parentElement && el.parentElement.querySelector('[data-attach-cell]');
+    if (attachCell) applyPastedResultImage(attachCell, val);
   });
   // Re-trigger P/F evaluation on inputs that have pf data attrs
   document.querySelectorAll('#edit-form input[data-pf-target]').forEach(el => {
@@ -306,5 +313,6 @@ applyHideFormulas();
 <script>
 var PASTE_RESULT_CSRF_TOKEN = {{.CSRFToken}};
 </script>
+<script src="/static/clipboard_paste.js?v={{.AppVersion}}"></script>
 <script src="/static/tr/paste_result_image.js?v={{.AppVersion}}"></script>
 {{end}}
