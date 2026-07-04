@@ -97,6 +97,9 @@ func TestFileBaseName(t *testing.T) {
 		{"foo\\bar\\baz.pdf", "baz.pdf"},
 		{"foo/bar/baz.pdf", "baz.pdf"},
 		{"baz.pdf", "baz.pdf"},
+		{"LOCAL:baz.pdf", "baz.pdf"},          // no subdir — prefix stripped
+		{"LOCAL:foo\\baz.pdf", "baz.pdf"},     // subdir + prefix
+		{"local:baz.pdf", "baz.pdf"},          // case-insensitive prefix
 	}
 	for _, c := range cases {
 		if got := FileBaseName(c.input); got != c.want {

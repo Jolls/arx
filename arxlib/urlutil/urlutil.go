@@ -87,8 +87,10 @@ func LocalDirURL(val, urlPrefix string) string {
 }
 
 // FileBaseName returns the base file name from a path, handling both / and \.
+// A leading LOCAL: prefix is stripped first so a doc-control file without a
+// subdirectory (e.g. "LOCAL:spec.pdf") yields "spec.pdf", not "LOCAL:spec.pdf".
 func FileBaseName(val string) string {
-	clean := strings.ReplaceAll(val, "\\", "/")
+	clean := strings.ReplaceAll(StripLocalPrefix(val), "\\", "/")
 	return filepath.Base(clean)
 }
 
