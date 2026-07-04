@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.84] - 2026-07-04 
+- Add a Utilities section under Settings with read-only data-integrity diagnostics: dead attachment links, orphaned part pointers, soft-deleted primary attachments, and PO is_active drift ([#601](https://github.com/Jolls/arx-legacy/issues/601))
+
 ## [0.5.83] - 2026-07-04 
 - Auto-detect attachment link types on input and render absolute/UNC paths as a copy-path control; keep `LOCAL:` internal-only (hidden from all views) ([#599](https://github.com/Jolls/arx-legacy/issues/599))
 
