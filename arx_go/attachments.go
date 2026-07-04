@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,6 +146,111 @@ func writeIntoDocControlUnique(root, name, ext string, data []byte) (finalName s
 		candidate = fmt.Sprintf("%s (%d)%s", base, attempt+1, ext)
 	}
 	return "", fmt.Errorf("could not find a unique name for %q after 20 attempts", name)
+}
+
+// attachmentFileInput carries the outcome of resolveAttachmentFileInput: the
+// file_name value to store, an optional source file to remove afterward
+// (Move mode), or a reason (error / import collision) the caller must
+// surface to the user instead of saving.
+type attachmentFileInput struct {
+	FileName  string
+	MoveSrc   string
+	Collision map[string]string
+	ErrMsg    string
+}
+
+// resolveAttachmentFileInput inspects the form for either a manual FILFileName
+// value or a browse-import source_path, shared by PartAttachmentCreate and
+// PartAttachmentUpdate. replaceName, when non-empty, is the current LOCAL:
+// file (already stripped of its prefix) that this same row is replacing; if
+// the newly generated name matches it exactly, replaceLocalFile is used
+// instead of copyIntoDocControl so the row's own file is swapped in place
+// rather than reported as a false collision against itself. replaceName is
+// always empty for Create, so this branch never affects that path.
+func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Request, partID, rev, category, comment, replaceName string) attachmentFileInput {
+	fileName := fv(r, "FILFileName")
+	src := fv(r, "source_path")
+	if src == "" {
+		return attachmentFileInput{FileName: fileName}
+	}
+	if h.cfg.DocControlRoot == "" {
+		return attachmentFileInput{ErrMsg: "DOC_CONTROL_ROOT is not configured; cannot import files."}
+	}
+	p, err := h.fetchPartBasic(ctx, partID)
+	if err != nil {
+		return attachmentFileInput{ErrMsg: "Error loading part: " + err.Error()}
+	}
+	move := fv(r, "move_source") == "1"
+	name := buildAttachmentFileName(p.PartNumber, rev, p.Title, category, filepath.Ext(src))
+	if fv(r, "link_existing") != "1" {
+		if replaceName != "" && strings.EqualFold(name, replaceName) {
+			if err := replaceLocalFile(h.cfg.DocControlRoot, name, src); err != nil {
+				return attachmentFileInput{ErrMsg: "Error replacing file: " + err.Error()}
+			}
+		} else {
+			existed, err := copyIntoDocControl(h.cfg.DocControlRoot, name, src)
+			if err != nil {
+				return attachmentFileInput{ErrMsg: "Error copying file: " + err.Error()}
+			}
+			if existed {
+				return attachmentFileInput{Collision: map[string]string{
+					"Name": name, "SourcePath": src,
+					"Category": category, "Rev": rev, "OrderID": fv(r, "order_id"),
+					"Move": fv(r, "move_source"), "Comment": comment,
+				}}
+			}
+		}
+	}
+	result := attachmentFileInput{FileName: "LOCAL:" + name}
+	if move {
+		result.MoveSrc = src
+	}
+	return result
+}
+
+// replaceLocalFile copies src into root under name, keeping name intact even
+// if the copy fails: it copies to a temporary sibling file first and only
+// removes the existing file and swaps the temp file into place once the copy
+// has fully succeeded, so a mid-copy failure never leaves name missing.
+func replaceLocalFile(root, name, src string) error {
+	tmpName := name + ".tmp_replace"
+	existed, err := copyIntoDocControl(root, tmpName, src)
+	if err != nil {
+		return err
+	}
+	if existed {
+		return fmt.Errorf("a temporary file %q already exists; please try again", tmpName)
+	}
+	tmpPath := filepath.Join(root, tmpName)
+	target := filepath.Join(root, name)
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, target); err != nil {
+		return err
+	}
+	return nil
+}
+
+// deleteAttachmentFileIfUnshared removes root/<strippedName> unless another
+// active row in table still has fullFileName (e.g. via the "Link to existing
+// file" import flow), in which case the file is left in place for that row.
+// A file that's already gone is treated as success, not an error.
+func (h *Handler) deleteAttachmentFileIfUnshared(ctx context.Context, table, idCol, fileCol string, excludeID any, fullFileName, root, strippedName string) error {
+	var count int
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE %s=@p1 AND is_active=1 AND %s<>@p2`, table, fileCol, idCol,
+	), fullFileName, excludeID).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	if err := os.Remove(filepath.Join(root, strippedName)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // softDeleteAttachment sets is_active=0 on an attachment row.

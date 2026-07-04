@@ -14,17 +14,21 @@
     <div class="alert alert-warning">
         <p class="mb-2">A file named <strong>{{.ImportCollision.Name}}</strong> already exists in
             Doc Control. The file was <em>not</em> copied.</p>
-        <form method="post" action="/part/{{.Part.PNID}}/attachments" class="d-inline">
+        <form method="post"
+              action="{{if .ImportCollision.AttID}}/part/{{.Part.PNID}}/attachments/{{.ImportCollision.AttID}}{{else}}/part/{{.Part.PNID}}/attachments{{end}}"
+              class="d-inline">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="source_path" value="{{.ImportCollision.SourcePath}}">
             <input type="hidden" name="category" value="{{.ImportCollision.Category}}">
             <input type="hidden" name="FILPNRev" value="{{.ImportCollision.Rev}}">
             <input type="hidden" name="order_id" value="{{.ImportCollision.OrderID}}">
+            <input type="hidden" name="comment" value="{{.ImportCollision.Comment}}">
             {{if .ImportCollision.Move}}<input type="hidden" name="move_source" value="1">{{end}}
             <input type="hidden" name="link_existing" value="1">
             <button type="submit" class="btn btn-sm btn-warning">Link to existing file</button>
         </form>
-        <a href="/part/{{.Part.PNID}}/attachments" class="btn btn-sm btn-secondary">Cancel</a>
+        <a href="/part/{{.Part.PNID}}/attachments{{if .ImportCollision.AttID}}?edit={{.ImportCollision.AttID}}#edit-form{{end}}"
+           class="btn btn-sm btn-secondary">Cancel</a>
     </div>
     {{end}}
 
@@ -112,9 +116,10 @@
         <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{.EditingAtt.FILFileName}}</p>
         <form method="post" action="/part/{{.Part.PNID}}/attachments/{{.EditingAtt.FILID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="source_path" id="edit_source_path" value="">
             <div class="detail-row">
                 <label class="form-label">Rev</label>
-                <input type="text" name="FILPNRev" class="form-control" style="max-width:100px;"
+                <input type="text" name="FILPNRev" id="edit_FILPNRev" class="form-control" style="max-width:100px;"
                        value="{{.EditingAtt.FILPNRev}}">
             </div>
             <div class="detail-row">
@@ -122,13 +127,40 @@
                 {{template "category_select" (categoryCtx .AttachmentCategories .EditingAtt.Category "edit_category")}}
             </div>
             <div class="detail-row">
+                <label class="form-label">Replace File / URL</label>
+                <input type="text" name="FILFileName" id="edit_FILFileName" class="form-control"
+                       placeholder="leave blank to keep current file">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Import file</label>
+                <div class="d-flex flex-column gap-1">
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="browseAttachment(this, 'edit')"
+                                {{if not $.DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>Browse…</button>
+                        <button type="button" id="edit_paste-clipboard-btn" class="btn btn-sm btn-secondary" disabled
+                                onclick="pasteAttachmentFromClipboard(this, 'edit', {{.EditingAtt.FILID}})">Grab from clipboard</button>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" role="switch"
+                                   id="edit_move_source" name="move_source" value="1" onchange="updateBrowsePreview('edit')">
+                            <label class="form-check-label" for="edit_move_source"><span id="edit_move_mode_label">Copy</span></label>
+                        </div>
+                        <span id="edit_browse-file-name" class="text-muted font-monospace" style="font-size:0.9em;"></span>
+                        <a href="#" id="edit_browse-clear" onclick="clearBrowse(event, 'edit')" style="display:none;">clear</a>
+                    </div>
+                    <div id="edit_browse-note" class="form-text" style="display:none;">
+                        Will be <span id="edit_browse-verb">copied</span> to Doc Control as <code id="edit_browse-preview"></code>
+                    </div>
+                    <div id="edit_paste-error" class="form-text text-danger" style="display:none;"></div>
+                </div>
+            </div>
+            <div class="detail-row">
                 <label class="form-label">Sort Order</label>
-                <input type="number" name="order_id" class="form-control" style="max-width:100px;"
+                <input type="number" name="order_id" id="edit_order_id" class="form-control" style="max-width:100px;"
                        value="{{if .EditingAtt.OrderID}}{{derefInt .EditingAtt.OrderID}}{{end}}">
             </div>
             <div class="detail-row">
                 <label class="form-label">Comment</label>
-                <textarea name="comment" class="form-control">{{.EditingAtt.Comment}}</textarea>
+                <textarea name="comment" id="edit_comment" class="form-control">{{.EditingAtt.Comment}}</textarea>
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -186,7 +218,7 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Comment</label>
-                    <textarea name="comment" class="form-control"></textarea>
+                    <textarea name="comment" id="add_comment" class="form-control"></textarea>
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Add Attachment</button>
@@ -211,30 +243,43 @@ function attTruncate(s, n) {
     var r = Array.from(s);
     return r.length <= n ? s : r.slice(0, n).join('');
 }
-function buildAttachmentName() {
-    var src = document.getElementById('source_path').value;
+// attId maps a logical field name to the DOM id used by the given form.
+// The Add form's ids predate this feature and aren't uniformly prefixed
+// (only category/comment already followed an "add_" convention); the Edit
+// form's ids are all "edit_"-prefixed so both forms can coexist on the page.
+function attId(mode, name) {
+    if (mode === 'edit') { return 'edit_' + name; }
+    if (name === 'category') { return 'add_category'; }
+    if (name === 'comment') { return 'add_comment'; }
+    return name;
+}
+function buildAttachmentName(mode) {
+    mode = mode || 'add';
+    var src = document.getElementById(attId(mode, 'source_path')).value;
     if (!src) { return ''; }
     var base = src.split(/[\\/]/).pop();
     var dot = base.lastIndexOf('.');
     var ext = dot > -1 ? base.slice(dot) : '';
-    var rev = document.getElementById('FILPNRev').value;
+    var rev = document.getElementById(attId(mode, 'FILPNRev')).value;
     var title = attTruncate(ATT_PART_TITLE.trim(), ATT_TITLE_MAX);
-    var cat = document.getElementById('add_category').value;
+    var cat = document.getElementById(attId(mode, 'category')).value;
     var parts = [ATT_PART_NUMBER, rev, title, cat]
         .map(attSanitizePart)
         .filter(function (p) { return p !== ''; });
     return parts.join(' ') + ext;
 }
-function updateBrowsePreview() {
-    var moved = document.getElementById('move_source').checked;
-    var lbl = document.getElementById('move_mode_label');
+function updateBrowsePreview(mode) {
+    mode = mode || 'add';
+    var moved = document.getElementById(attId(mode, 'move_source')).checked;
+    var lbl = document.getElementById(attId(mode, 'move_mode_label'));
     if (lbl) { lbl.textContent = moved ? 'Move' : 'Copy'; }
-    var verb = document.getElementById('browse-verb');
+    var verb = document.getElementById(attId(mode, 'browse-verb'));
     if (verb) { verb.textContent = moved ? 'moved' : 'copied'; }
-    var el = document.getElementById('browse-preview');
-    if (el) { el.textContent = buildAttachmentName(); }
+    var el = document.getElementById(attId(mode, 'browse-preview'));
+    if (el) { el.textContent = buildAttachmentName(mode); }
 }
-function browseAttachment(btn) {
+function browseAttachment(btn, mode) {
+    mode = mode || 'add';
     var orig = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Browsing…';
@@ -242,28 +287,29 @@ function browseAttachment(btn) {
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (!data.path) { return; }
-            document.getElementById('source_path').value = data.path;
+            document.getElementById(attId(mode, 'source_path')).value = data.path;
             var base = data.path.split(/[\\/]/).pop();
-            document.getElementById('browse-file-name').textContent = base;
-            document.getElementById('browse-note').style.display = '';
-            document.getElementById('browse-clear').style.display = '';
-            var f = document.getElementById('FILFileName');
+            document.getElementById(attId(mode, 'browse-file-name')).textContent = base;
+            document.getElementById(attId(mode, 'browse-note')).style.display = '';
+            document.getElementById(attId(mode, 'browse-clear')).style.display = '';
+            var f = document.getElementById(attId(mode, 'FILFileName'));
             f.value = base;
             f.readOnly = true;
-            updateBrowsePreview();
+            updateBrowsePreview(mode);
         })
         .finally(function () {
             btn.disabled = false;
             btn.textContent = orig;
         });
 }
-function clearBrowse(e) {
+function clearBrowse(e, mode) {
     e.preventDefault();
-    document.getElementById('source_path').value = '';
-    document.getElementById('browse-file-name').textContent = '';
-    document.getElementById('browse-note').style.display = 'none';
-    document.getElementById('browse-clear').style.display = 'none';
-    var f = document.getElementById('FILFileName');
+    mode = mode || 'add';
+    document.getElementById(attId(mode, 'source_path')).value = '';
+    document.getElementById(attId(mode, 'browse-file-name')).textContent = '';
+    document.getElementById(attId(mode, 'browse-note')).style.display = 'none';
+    document.getElementById(attId(mode, 'browse-clear')).style.display = 'none';
+    var f = document.getElementById(attId(mode, 'FILFileName'));
     f.value = '';
     f.readOnly = false;
 }
@@ -274,12 +320,14 @@ function notesSelChange(sel, inputId) {
     } else {
         input.style.display = 'none'; input.value = sel.value;
     }
-    updateBrowsePreview();
-    if (inputId === 'add_category') { updatePasteButtonState(); }
+    var mode = inputId === 'edit_category' ? 'edit' : 'add';
+    updateBrowsePreview(mode);
+    updatePasteButtonState(mode);
 }
-function updatePasteButtonState() {
-    var btn = document.getElementById('paste-clipboard-btn');
-    var input = document.getElementById('add_category');
+function updatePasteButtonState(mode) {
+    mode = mode || 'add';
+    var btn = document.getElementById(attId(mode, 'paste-clipboard-btn'));
+    var input = document.getElementById(attId(mode, 'category'));
     if (btn && input) { btn.disabled = input.value !== 'Photo'; }
 }
 document.addEventListener('DOMContentLoaded', function() {
@@ -291,9 +339,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     ['FILPNRev', 'add_category'].forEach(function(fid) {
         var el = document.getElementById(fid);
-        if (el) el.addEventListener('input', updateBrowsePreview);
+        if (el) el.addEventListener('input', function() { updateBrowsePreview('add'); });
     });
-    updatePasteButtonState();
+    ['edit_FILPNRev', 'edit_category'].forEach(function(fid) {
+        var el = document.getElementById(fid);
+        if (el) el.addEventListener('input', function() { updateBrowsePreview('edit'); });
+    });
+    updatePasteButtonState('add');
+    updatePasteButtonState('edit');
 });
 </script>
 <script>

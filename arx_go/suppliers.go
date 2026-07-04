@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/arxlib/urlutil"
 )
 
 func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
@@ -535,6 +536,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	attID := chi.URLParam(r, "attID")
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
+	newFilePath := strings.TrimSpace(r.FormValue("file_path"))
 
 	var sortOrderVal any
 	if sortOrderStr != "" {
@@ -543,13 +545,38 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET notes=@p1, sort_order=@p2
-		WHERE supplier_attachment_id=@p3 AND supplier_id=@p4
-	`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, attID, id)
+	var oldFilePath string
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT file_path FROM %s WHERE supplier_attachment_id=@p1 AND supplier_id=@p2`, h.cfg.CompanyAttachmentsTable(),
+	), attID, id).Scan(&oldFilePath); err != nil {
+		h.renderError(w, r, "Error loading attachment: "+err.Error())
+		return
+	}
+
+	fileChanged := newFilePath != "" && newFilePath != oldFilePath
+	var err error
+	if fileChanged {
+		_, err = h.execContext(r.Context(), fmt.Sprintf(`
+			UPDATE %s SET notes=@p1, sort_order=@p2, file_path=@p3
+			WHERE supplier_attachment_id=@p4 AND supplier_id=@p5
+		`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, newFilePath, attID, id)
+	} else {
+		_, err = h.execContext(r.Context(), fmt.Sprintf(`
+			UPDATE %s SET notes=@p1, sort_order=@p2
+			WHERE supplier_attachment_id=@p3 AND supplier_id=@p4
+		`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, attID, id)
+	}
 	if err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
 		return
+	}
+
+	if fileChanged && urlutil.IsLocalFile(oldFilePath) {
+		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
+			attID, oldFilePath, h.cfg.DocControlRoot, oldFilePath[len("LOCAL:"):]); err != nil {
+			h.renderError(w, r, "Attachment updated, but the old file could not be removed: "+err.Error())
+			return
+		}
 	}
 	http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
 }

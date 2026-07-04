@@ -1,19 +1,23 @@
-// Clipboard-paste image attachments (Add Attachment form, part_attachments.html).
-// Uses the shared readImageFromClipboard/postImageDataURL helpers in
-// static/clipboard_paste.js.
+// Clipboard-paste image attachments (Add/Edit Attachment forms,
+// part_attachments.html). Uses the shared readImageFromClipboard/
+// postImageDataURL helpers in static/clipboard_paste.js, and the attId(mode,
+// name) id-mapping helper defined inline in part_attachments.html.
 
-function uploadPastedImage(blob) {
-    var btn = document.getElementById('paste-clipboard-btn');
-    var errEl = document.getElementById('paste-error');
+function uploadPastedImage(blob, mode, attID) {
+    mode = mode || 'add';
+    var btn = document.getElementById(attId(mode, 'paste-clipboard-btn'));
+    var errEl = document.getElementById(attId(mode, 'paste-error'));
     if (errEl) { errEl.style.display = 'none'; }
-    var url = '/api/part/' + PASTE_ATTACHMENT_PART_ID + '/paste-attachment?csrf_token=' + encodeURIComponent(PASTE_ATTACHMENT_CSRF_TOKEN);
+    var url = mode === 'edit'
+        ? '/api/part/' + PASTE_ATTACHMENT_PART_ID + '/attachments/' + attID + '/paste-attachment?csrf_token=' + encodeURIComponent(PASTE_ATTACHMENT_CSRF_TOKEN)
+        : '/api/part/' + PASTE_ATTACHMENT_PART_ID + '/paste-attachment?csrf_token=' + encodeURIComponent(PASTE_ATTACHMENT_CSRF_TOKEN);
     if (btn) { btn.disabled = true; }
     postImageDataURL(url, blob, function (dataURL) {
         return {
             image_data: dataURL,
-            rev: (document.getElementById('FILPNRev') || {}).value || '',
-            order_id: (document.getElementById('order_id') || {}).value || '',
-            comment: (document.querySelector('textarea[name="comment"]') || {}).value || ''
+            rev: (document.getElementById(attId(mode, 'FILPNRev')) || {}).value || '',
+            order_id: (document.getElementById(attId(mode, 'order_id')) || {}).value || '',
+            comment: (document.getElementById(attId(mode, 'comment')) || {}).value || ''
         };
     }, function () {
         location.reload();
@@ -23,10 +27,11 @@ function uploadPastedImage(blob) {
     });
 }
 
-function pasteAttachmentFromClipboard(btn) {
-    var errEl = document.getElementById('paste-error');
+function pasteAttachmentFromClipboard(btn, mode, attID) {
+    mode = mode || 'add';
+    var errEl = document.getElementById(attId(mode, 'paste-error'));
     if (errEl) { errEl.style.display = 'none'; }
-    readImageFromClipboard(uploadPastedImage, function (msg) {
+    readImageFromClipboard(function (blob) { uploadPastedImage(blob, mode, attID); }, function (msg) {
         if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
     });
 }

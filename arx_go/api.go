@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arxlib/folderpick"
+	"arx/arxlib/urlutil"
 )
 
 func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +282,86 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error adding attachment: "+err.Error())
 		return
+	}
+
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// APIPartPasteAttachmentReplace saves a clipboard-pasted image as the new
+// file for an existing part_attachment row, replacing its current file.
+// POST /api/part/{id}/attachments/{attID}/paste-attachment.
+func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	attID, err := strconv.Atoi(chi.URLParam(r, "attID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid attachment id")
+		return
+	}
+	if h.cfg.DocControlRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "DOC_CONTROL_ROOT is not configured; cannot save pasted images.")
+		return
+	}
+
+	var oldFileNameNS sql.NullString
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT file_name FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(),
+	), attID, id).Scan(&oldFileNameNS); err != nil {
+		if err == sql.ErrNoRows {
+			writeJSONError(w, http.StatusNotFound, "Attachment not found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "Error loading attachment: "+err.Error())
+		return
+	}
+	oldFileName := oldFileNameNS.String
+
+	var body struct {
+		ImageData string `json:"image_data"`
+		Rev       string `json:"rev"`
+		OrderID   string `json:"order_id"`
+		Comment   string `json:"comment"`
+	}
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	ext, data, err := decodePastedImage(body.ImageData)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	p, err := h.fetchPartBasic(r.Context(), id)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "Error loading part: "+err.Error())
+		return
+	}
+
+	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Title, "Photo", ext)
+	finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
+		return
+	}
+
+	var oID any
+	if n, err := strconv.Atoi(body.OrderID); err == nil {
+		oID = n
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, file_name=@p5 WHERE id=@p6`,
+		h.cfg.AttachmentsTable(),
+	), body.Rev, "Photo", oID, body.Comment, "LOCAL:"+finalName, attID); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error updating attachment: "+err.Error())
+		return
+	}
+
+	if urlutil.IsLocalFile(oldFileName) {
+		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
+			attID, oldFileName, h.cfg.DocControlRoot, oldFileName[len("LOCAL:"):]); err != nil {
+			writeJSON(w, map[string]any{"ok": true, "warning": "Attachment updated, but the old file could not be removed: " + err.Error()})
+			return
+		}
 	}
 
 	writeJSON(w, map[string]any{"ok": true})
