@@ -118,6 +118,7 @@
                         {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{attachLabel $f $n}}</a>
                         {{else if isLocalDir $f}}<a href="{{supplierLocalDirURL $f}}">&#128193; {{attachLabel $f $n}}</a>
                         {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{supplierLocalFileURL $f}}" target="_blank">{{attachLabel $f $n}}</a>{{else}}<a href="{{supplierLocalFileURL $f}}" download="{{fileBaseName $f}}">{{attachLabel $f $n}}</a>{{end}}
+                        {{else if isAbsPath $f}}{{template "abspath_link" $f}}
                         {{else}}{{$f}}{{end}}
                         </span></div>
                     {{else}}<p class="text-muted mb-0">No default attachment.</p>{{end}}

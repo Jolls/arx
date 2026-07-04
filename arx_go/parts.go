@@ -1261,7 +1261,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	oldFileName := oldFileNameNS.String
 	var replaceName string
 	if urlutil.IsLocalFile(oldFileName) {
-		replaceName = oldFileName[len("LOCAL:"):]
+		replaceName = urlutil.StripLocalPrefix(oldFileName)
 	}
 
 	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, replaceName)

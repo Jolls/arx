@@ -48,6 +48,8 @@
                     {{else}}
                         <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
                     {{end}}
+                {{else if isAbsPath $f}}
+                    <span class="part-status-value">{{template "abspath_link" $f}}</span>
                 {{else}}
                     <span class="part-status-value">{{$f}}</span>
                 {{end}}
@@ -218,6 +220,7 @@
                         {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{$f}}</a>
                         {{else if isLocalDir $f}}<a href="{{localDirURL $f}}">&#128193; {{$f}}</a>
                         {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{localFileURL $f}}" target="_blank">{{fileBaseName $f}}</a>{{else}}<a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{fileBaseName $f}}</a>{{end}}
+                        {{else if isAbsPath $f}}{{template "abspath_link" $f}}
                         {{else}}{{$f}}{{end}}
                         {{if $n}} <span class="text-muted small">({{$n}})</span>{{end}}
                         </span></div>
@@ -234,6 +237,7 @@
                         {{if isHTTPURL $f}}<a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{$f}}</a>
                         {{else if isLocalDir $f}}<a href="{{localDirURL $f}}">&#128193; {{$f}}</a>
                         {{else if isLocalFile $f}}{{if isPDF $f}}<a href="{{localFileURL $f}}" target="_blank">{{fileBaseName $f}}</a>{{else}}<a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{fileBaseName $f}}</a>{{end}}
+                        {{else if isAbsPath $f}}{{template "abspath_link" $f}}
                         {{else}}{{$f}}{{end}}
                         {{if $n}} <span class="text-muted small">({{$n}})</span>{{end}}
                         </span></div>
