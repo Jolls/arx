@@ -144,6 +144,9 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)
 
+		// Data diagnostics (Settings → Utilities)
+		r.Get("/settings/utilities", h.UtilitiesReport)
+
 		// Local file serving (Parts Master)
 		r.Get("/local/*", h.ServeLocalFile)
 		r.Get("/local-dir/*", h.ServeLocalDir)

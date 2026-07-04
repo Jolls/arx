@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="content">
+    <h2 class="mb-1" style="color:#333;">Utilities</h2>
+    <p class="text-muted mb-4" style="font-size:0.85em;">Read-only data-integrity diagnostics. Nothing on this page modifies data.</p>
+
+    <a href="/settings" class="btn btn-sm btn-secondary mb-4"><i class="bi bi-arrow-left"></i> Back to Settings</a>
+
+    {{if .Errors}}
+    <div class="alert alert-danger" role="alert">
+        <strong>Some checks could not run:</strong>
+        <ul class="mb-0">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{range .Checks}}
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>{{.Title}}</span>
+            {{if gt .Count 0}}
+            <span class="badge bg-danger">{{.Count}}</span>
+            {{else}}
+            <span class="badge bg-success">0</span>
+            {{end}}
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-2" style="font-size:0.85em;">{{.Desc}}</p>
+            {{if .Rows}}
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Item</th><th>Problem</th></tr></thead>
+                    <tbody>
+                    {{range .Rows}}
+                        <tr>
+                            <td>{{if .URL}}<a href="{{.URL}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</td>
+                            <td>{{.Detail}}</td>
+                        </tr>
+                    {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <p class="text-success mb-0" style="font-size:0.9em;">No issues found.</p>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+</div>
+{{end}}
