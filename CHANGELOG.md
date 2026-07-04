@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.82] - 2026-07-03 
+- Add show/hide inactive toggle to the contacts list, defaulting to hidden, matching other list pages ([#596](https://github.com/Jolls/arx-legacy/issues/596))
+
 ## [0.5.81] - 2026-07-03 
 - Add clipboard-paste image attachments for test-record result steps (new `pf_type = "attach"`), reusing the parts paste pattern ([#587](https://github.com/Jolls/arx-legacy/issues/587))
 
