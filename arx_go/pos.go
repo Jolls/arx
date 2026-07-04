@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/arxlib/urlutil"
 )
 
 // ── ContactSummary is used for supplier/receiver contact dropdowns ──────────
@@ -2443,10 +2444,10 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 // localFilePath resolves a LOCAL: FILFileName value to an absolute path.
 // Returns ("", false) when root is empty, the value isn't LOCAL:, or it is a directory reference.
 func localFilePath(root, filename string) (string, bool) {
-	if root == "" || !strings.HasPrefix(strings.ToUpper(filename), "LOCAL:") {
+	if root == "" || !urlutil.IsLocalFile(filename) {
 		return "", false
 	}
-	rel := strings.ReplaceAll(filename[6:], "\\", "/")
+	rel := strings.ReplaceAll(urlutil.StripLocalPrefix(filename), "\\", "/")
 	rel = strings.TrimPrefix(rel, "/")
 	if rel == "" || strings.HasSuffix(rel, "/") {
 		return "", false

@@ -496,6 +496,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
 		return
 	}
+	filePath = urlutil.NormalizeLink(filePath)
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
 
@@ -536,7 +537,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	attID := chi.URLParam(r, "attID")
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
-	newFilePath := strings.TrimSpace(r.FormValue("file_path"))
+	newFilePath := urlutil.NormalizeLink(strings.TrimSpace(r.FormValue("file_path")))
 
 	var sortOrderVal any
 	if sortOrderStr != "" {
@@ -573,7 +574,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 
 	if fileChanged && urlutil.IsLocalFile(oldFilePath) {
 		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
-			attID, oldFilePath, h.cfg.DocControlRoot, oldFilePath[len("LOCAL:"):]); err != nil {
+			attID, oldFilePath, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(oldFilePath)); err != nil {
 			h.renderError(w, r, "Attachment updated, but the old file could not be removed: "+err.Error())
 			return
 		}

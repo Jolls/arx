@@ -1,3 +1,13 @@
+{{define "abspath_link"}}
+<span class="d-inline-flex align-items-center gap-1">
+    <span class="font-monospace text-truncate" style="font-size:0.9em; max-width:280px;" title="{{.}}">{{fileBaseName .}}</span>
+    <button type="button" class="btn btn-sm btn-secondary py-0 px-1" title="Copy path: {{.}}"
+            data-path="{{.}}" onclick="navigator.clipboard.writeText(this.getAttribute('data-path'))">
+        <i class="bi bi-clipboard"></i>
+    </button>
+</span>
+{{end}}
+
 {{define "category_select"}}
 <div style="display:flex; flex-direction:column; gap:6px; flex:1;">
     <select class="form-select" data-notes-sel="{{.InputID}}"

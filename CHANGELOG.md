@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.83] - 2026-07-04 
+- Auto-detect attachment link types on input and render absolute/UNC paths as a copy-path control; keep `LOCAL:` internal-only (hidden from all views) ([#599](https://github.com/Jolls/arx-legacy/issues/599))
+
 ## [0.5.82] - 2026-07-03 
 - Add show/hide inactive toggle to the contacts list, defaulting to hidden, matching other list pages ([#596](https://github.com/Jolls/arx-legacy/issues/596))
 

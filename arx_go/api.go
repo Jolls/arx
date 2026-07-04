@@ -358,7 +358,7 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 
 	if urlutil.IsLocalFile(oldFileName) {
 		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
-			attID, oldFileName, h.cfg.DocControlRoot, oldFileName[len("LOCAL:"):]); err != nil {
+			attID, oldFileName, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(oldFileName)); err != nil {
 			writeJSON(w, map[string]any{"ok": true, "warning": "Attachment updated, but the old file could not be removed: " + err.Error()})
 			return
 		}

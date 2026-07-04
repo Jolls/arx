@@ -32,13 +32,15 @@
                         {{if isHTTPURL $f}}
                             <a href="{{$f}}" target="_blank" rel="noopener noreferrer" title="{{$f}}">{{$f}}</a>
                         {{else if isLocalDir $f}}
-                            <a href="{{supplierLocalDirURL $f}}" title="Open folder">&#128193; {{$f | printf "%s"}}</a>
+                            <a href="{{supplierLocalDirURL $f}}" title="Open folder">&#128193; {{displayLink $f}}</a>
                         {{else if isLocalFile $f}}
                             {{if isPDF $f}}
                                 <a href="{{supplierLocalFileURL $f}}" target="_blank" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
                             {{else}}
                                 <a href="{{supplierLocalFileURL $f}}" download="{{fileBaseName $f}}" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
                             {{end}}
+                        {{else if isAbsPath $f}}
+                            {{template "abspath_link" $f}}
                         {{else}}
                             <span class="font-monospace" style="font-size:0.9em;" title="{{$f}}">{{$f}}</span>
                         {{end}}
@@ -82,7 +84,7 @@
     {{if .EditingAtt}}
     <div id="edit-form" class="detail-section mt-4">
         <h3>Edit Attachment</h3>
-        <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{.EditingAtt.FilePath}}</p>
+        <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{displayLink .EditingAtt.FilePath}}</p>
         <form method="post" action="/supplier/{{.Supplier.ID}}/attachments/{{.EditingAtt.SupplierAttachmentID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">

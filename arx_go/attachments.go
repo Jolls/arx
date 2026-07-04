@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"arx/arxlib/urlutil"
 )
 
 // illegalFileNameChars are characters not permitted in a Windows filename.
@@ -171,7 +173,7 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 	fileName := fv(r, "FILFileName")
 	src := fv(r, "source_path")
 	if src == "" {
-		return attachmentFileInput{FileName: fileName}
+		return attachmentFileInput{FileName: urlutil.NormalizeLink(fileName)}
 	}
 	if h.cfg.DocControlRoot == "" {
 		return attachmentFileInput{ErrMsg: "DOC_CONTROL_ROOT is not configured; cannot import files."}

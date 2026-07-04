@@ -97,6 +97,9 @@ func TestFileBaseName(t *testing.T) {
 		{"foo\\bar\\baz.pdf", "baz.pdf"},
 		{"foo/bar/baz.pdf", "baz.pdf"},
 		{"baz.pdf", "baz.pdf"},
+		{"LOCAL:baz.pdf", "baz.pdf"},          // no subdir — prefix stripped
+		{"LOCAL:foo\\baz.pdf", "baz.pdf"},     // subdir + prefix
+		{"local:baz.pdf", "baz.pdf"},          // case-insensitive prefix
 	}
 	for _, c := range cases {
 		if got := FileBaseName(c.input); got != c.want {
@@ -181,6 +184,67 @@ func TestSafePathSegments(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("SafePathSegments(%q) = %v, want %v", c.input, got, c.want)
+		}
+	}
+}
+
+func TestIsAbsPath(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"\\\\srv\\share\\a.pdf", true}, // UNC
+		{"C:\\x\\a.pdf", true},          // drive backslash
+		{"z:/x/a.pdf", true},            // drive forward slash, lowercase
+		{"file:///c:/a.pdf", true},      // file:// URL
+		{"LOCAL:foo\\bar.pdf", false},
+		{"https://example.com", false},
+		{"spec.pdf", false},
+		{"C:", false}, // too short
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := IsAbsPath(c.input); got != c.want {
+			t.Errorf("IsAbsPath(%q) = %v, want %v", c.input, got, c.want)
+		}
+	}
+}
+
+func TestStripLocalPrefix(t *testing.T) {
+	cases := []struct {
+		input, want string
+	}{
+		{"LOCAL:foo\\bar.pdf", "foo\\bar.pdf"},
+		{"local:foo/bar.pdf", "foo/bar.pdf"}, // case-insensitive
+		{"https://example.com", "https://example.com"},
+		{"spec.pdf", "spec.pdf"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := StripLocalPrefix(c.input); got != c.want {
+			t.Errorf("StripLocalPrefix(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+func TestNormalizeLink(t *testing.T) {
+	cases := []struct {
+		input, want string
+	}{
+		{"https://example.com", "https://example.com"},
+		{"  https://example.com  ", "https://example.com"}, // trimmed
+		{"", ""},
+		{"local:Eng\\a.pdf", "LOCAL:Eng\\a.pdf"}, // lowercase prefix uppercased
+		{"LOCAL:Eng\\", "LOCAL:Eng\\"},           // trailing backslash (dir) preserved
+		{"spec.pdf", "LOCAL:spec.pdf"},           // bare token → LOCAL:
+		{"Engineering\\spec.pdf", "LOCAL:Engineering\\spec.pdf"},
+		{"\\\\srv\\share\\a.pdf", "\\\\srv\\share\\a.pdf"}, // UNC verbatim
+		{"C:\\x\\a.pdf", "C:\\x\\a.pdf"},                   // drive verbatim
+		{"file:///c:/a.pdf", "file:///c:/a.pdf"},           // file:// verbatim
+	}
+	for _, c := range cases {
+		if got := NormalizeLink(c.input); got != c.want {
+			t.Errorf("NormalizeLink(%q) = %q, want %q", c.input, got, c.want)
 		}
 	}
 }
