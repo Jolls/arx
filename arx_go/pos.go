@@ -507,10 +507,11 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
 		  receiver_country, receiver_phone, receiver_fax,
 		  tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
-		  date_requested, date_closed, date_modified, total_cost)
+		  date_requested, date_closed, date_modified, total_cost,
+		  supplier_contact_id, receiver_contact_id)
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,
 		        @p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,@p27,
-		        @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37);
+		        @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38,@p39);
 		SELECT CAST(SCOPE_IDENTITY() AS INT)
 	`, h.cfg.POTable()),
 		newNumber, newStatus, statusIsActive(newStatus), fv(r, "orderer"), fv(r, "account_id"),
@@ -524,6 +525,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "notes"), fv(r, "internal_notes"),
 		parseFormDate(fv(r, "date_ordered")), parseFormDate(fv(r, "date_requested")), parseFormDate(fv(r, "date_closed")),
 		now, 0.0,
+		nullableInt(fv(r, "supplier_contact_id")), nullableInt(fv(r, "receiver_contact_id")),
 	).Scan(&newID); err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
 		return
@@ -742,7 +744,8 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		  tax1=@p25, shipping_cost=@p26, misc_cost=@p27,
 		  notes=@p28, internal_notes=@p29,
 		  date_ordered=@p30, date_requested=@p31, date_closed=@p32, date_printed=@p33,
-		  date_modified=@p34, total_cost=@p35
+		  date_modified=@p34, total_cost=@p35,
+		  supplier_contact_id=@p37, receiver_contact_id=@p38
 		WHERE number=@p36
 	`, h.cfg.POTable()),
 		fv(r, "orderer"), fv(r, "account_id"),
@@ -756,6 +759,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "notes"), fv(r, "internal_notes"),
 		parseFormDate(fv(r, "date_ordered")), parseFormDate(fv(r, "date_requested")), parseFormDate(fv(r, "date_closed")), parseFormDate(fv(r, "date_printed")),
 		time.Now(), totalCost, num,
+		nullableInt(fv(r, "supplier_contact_id")), nullableInt(fv(r, "receiver_contact_id")),
 	); err != nil {
 		h.renderError(w, r, "Error saving PO: "+err.Error())
 		return
@@ -1697,6 +1701,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 	var (
 		isActive                                        sql.NullBool
 		supplierID, receiverID, rfqGroupID              sql.NullInt64
+		supContactID, recContactID                      sql.NullInt64
 		number, orderer, accountID, status, approvalStatus sql.NullString
 		supName, supContact, supEmail                   sql.NullString
 		supAddr, supCity, supState, supZip, supCountry  sql.NullString
@@ -1718,7 +1723,8 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		       receiver_phone, receiver_fax,
 		       tax1, shipping_cost, misc_cost, total_cost,
 		       notes, internal_notes, rfq_group_id,
-		       date_ordered, date_requested, date_closed, date_printed, date_modified
+		       date_ordered, date_requested, date_closed, date_printed, date_modified,
+		       supplier_contact_id, receiver_contact_id
 		FROM %s WHERE number = @p1
 	`, h.cfg.POTable()), num).Scan(
 		&po.ID, &number, &status, &approvalStatus, &isActive, &orderer, &accountID,
@@ -1729,6 +1735,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 		&tax1, &shipping, &misc, &totalCost,
 		&notes, &internalNotes, &rfqGroupID,
 		&dateOrdered, &dateRequested, &dateClosed, &datePrinted, &dateMod,
+		&supContactID, &recContactID,
 	)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
@@ -1773,6 +1780,14 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 	if receiverID.Valid {
 		v := int(receiverID.Int64)
 		po.ReceiverID = &v
+	}
+	if supContactID.Valid {
+		v := int(supContactID.Int64)
+		po.SupplierContactID = &v
+	}
+	if recContactID.Valid {
+		v := int(recContactID.Int64)
+		po.ReceiverContactID = &v
 	}
 	if rfqGroupID.Valid {
 		v := int(rfqGroupID.Int64)
@@ -1998,6 +2013,7 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 	// Blank supplier-specific fields; keep ship-to, notes and quantities.
 	source.Number = ""
 	source.SupplierID = nil
+	source.SupplierContactID = nil
 	source.SupplierName, source.SupplierContact, source.SupplierEmail = "", "", ""
 	source.SupplierAddress, source.SupplierCity, source.SupplierState = "", "", ""
 	source.SupplierZipcode, source.SupplierCountry = "", ""
@@ -2335,7 +2351,8 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
 		  receiver_country, receiver_phone, receiver_fax,
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
-		  date_ordered, date_requested, date_closed, date_printed, date_modified)
+		  date_ordered, date_requested, date_closed, date_printed, date_modified,
+		  supplier_contact_id, receiver_contact_id)
 		SELECT @p1, 'draft', 1, 'not_submitted', NULL,
 		  orderer, account_id,
 		  supplier_id, supplier_name, supplier_contact, supplier_email,
@@ -2345,7 +2362,8 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
 		  receiver_country, receiver_phone, receiver_fax,
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
-		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, @p2
+		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, @p2,
+		  supplier_contact_id, receiver_contact_id
 		FROM %s WHERE id=@p3;
 		SELECT CAST(SCOPE_IDENTITY() AS INT)
 	`, h.cfg.POTable(), h.cfg.POTable()), base, now, poID).Scan(&newID); err != nil {

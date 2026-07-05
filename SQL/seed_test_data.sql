@@ -283,20 +283,20 @@ BEGIN TRY
     -- (5002 approved/open, 5003 partially received) so PO detail/print render full
     -- vendor and ship-to address blocks instead of blanks.
     UPDATE dbo.purchase_order SET
-        supplier_contact = 'Bob Lee',   supplier_address = '200 Machining Way', supplier_city = 'Springfield',
+        supplier_contact = 'Bob Lee',   supplier_contact_id = 2003, supplier_address = '200 Machining Way', supplier_city = 'Springfield',
         supplier_state   = 'OH',        supplier_zipcode = '45501',             supplier_country = 'USA',
         supplier_phone_number = '555-0201', supplier_email = 'bob.lee@precisionmachining.test',
-        receiver_contact = 'Pat Dock',  receiver_address = '9 Warehouse Rd',    receiver_city = 'Columbus',
+        receiver_contact = 'Pat Dock',  receiver_contact_id = 2005, receiver_address = '9 Warehouse Rd',    receiver_city = 'Columbus',
         receiver_state   = 'OH',        receiver_zipcode = '43004',             receiver_country = 'USA',
         receiver_phone   = '555-0301',  receiver_email   = 'receiving@globaldistribution.test',
         orderer = 'Admin User', account_id = 'ACCT-100', date_requested = '2026-05-15',
         internal_notes = 'Internal-only note: rush job for line 2.', misc_cost = 5.00
     WHERE id = 5002;
     UPDATE dbo.purchase_order SET
-        supplier_contact = 'John Doe',  supplier_address = '100 Fastener Blvd', supplier_city = 'Dayton',
+        supplier_contact = 'John Doe',  supplier_contact_id = 2001, supplier_address = '100 Fastener Blvd', supplier_city = 'Dayton',
         supplier_state   = 'OH',        supplier_zipcode = '45400',             supplier_country = 'USA',
         supplier_phone_number = '555-0101', supplier_email = 'john.doe@acmefasteners.test',
-        receiver_contact = 'Pat Dock',  receiver_address = '9 Warehouse Rd',    receiver_city = 'Columbus',
+        receiver_contact = 'Pat Dock',  receiver_contact_id = 2005, receiver_address = '9 Warehouse Rd',    receiver_city = 'Columbus',
         receiver_state   = 'OH',        receiver_zipcode = '43004',             receiver_country = 'USA',
         orderer = 'Admin User', account_id = 'ACCT-100'
     WHERE id = 5003;

@@ -148,7 +148,7 @@
                 <span>{{if .PO.SupplierID}}<a href="/supplier/{{derefInt .PO.SupplierID}}">{{.PO.SupplierName}}</a>
                 {{else}}{{.PO.SupplierName}}{{end}}</span>
             </div>
-            <div class="detail-row"><strong>Contact:</strong>   <span>{{.PO.SupplierContact}}</span></div>
+            <div class="detail-row"><strong>Contact:</strong>   <span>{{if .PO.SupplierContactID}}<a href="/contact/{{derefInt .PO.SupplierContactID}}">{{.PO.SupplierContact}}</a>{{else}}{{.PO.SupplierContact}}{{end}}</span></div>
             <div class="detail-row">
                 <strong>Address:</strong>
                 <span>{{.PO.SupplierAddress}}<br>
@@ -167,7 +167,7 @@
                 <span>{{if .PO.ReceiverID}}<a href="/supplier/{{derefInt .PO.ReceiverID}}">{{.PO.ReceiverName}}</a>
                 {{else}}{{.PO.ReceiverName}}{{end}}</span>
             </div>
-            <div class="detail-row"><strong>Contact:</strong>   <span>{{.PO.ReceiverContact}}</span></div>
+            <div class="detail-row"><strong>Contact:</strong>   <span>{{if .PO.ReceiverContactID}}<a href="/contact/{{derefInt .PO.ReceiverContactID}}">{{.PO.ReceiverContact}}</a>{{else}}{{.PO.ReceiverContact}}{{end}}</span></div>
             <div class="detail-row">
                 <strong>Address:</strong>
                 <span>{{.PO.ReceiverAddress}}<br>

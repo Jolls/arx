@@ -45,6 +45,28 @@
             </div>
         </div>
 
+        {{/* Other contacts at this vendor */}}
+        {{if .OtherContacts}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Other Contacts</div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                        {{range .OtherContacts}}
+                            <tr>
+                                <td><a href="/contact/{{.CNID}}">{{.CNName}}</a></td>
+                                <td class="text-truncate" style="max-width:14rem;">{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
+                                <td>{{if .Phone}}{{.Phone}}{{else}}—{{end}}</td>
+                            </tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {{end}}
+
         {{/* Statistics */}}
         <div class="col">
             <div class="card h-100">
