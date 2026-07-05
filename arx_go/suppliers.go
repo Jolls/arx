@@ -97,12 +97,21 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 	recentPOs := h.recentSupplierPOs(r.Context(), id, 5)
 	topParts := h.topSupplierParts(r.Context(), id, 5)
 
+	// Active contacts for this vendor, excluding the default (shown in its own card).
+	var otherContacts []ContactSummary
+	for _, c := range h.contactsForSupplier(r, s.ID) {
+		if s.DefaultContact != nil && c.CNID == *s.DefaultContact {
+			continue
+		}
+		otherContacts = append(otherContacts, c)
+	}
+
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "supplier_detail.html", map[string]any{
 		"Supplier": s, "PrimaryAtt": primaryAtt,
-		"RecentPOs": recentPOs, "TopParts": topParts,
+		"RecentPOs": recentPOs, "TopParts": topParts, "OtherContacts": otherContacts,
 		"ActiveTab": "suppliers", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})

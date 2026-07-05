@@ -18,6 +18,7 @@ type PurchaseOrder struct {
 	SupplierID          *int
 	SupplierName        string
 	SupplierContact     string
+	SupplierContactID   *int
 	SupplierEmail       string
 	SupplierAddress     string
 	SupplierCity        string
@@ -29,6 +30,7 @@ type PurchaseOrder struct {
 	ReceiverID          *int
 	ReceiverName        string
 	ReceiverContact     string
+	ReceiverContactID   *int
 	ReceiverEmail       string
 	ReceiverAddress     string
 	ReceiverCity        string

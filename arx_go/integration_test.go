@@ -539,3 +539,35 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 			namedQueryUpdated, sentinel)
 	}
 }
+
+// TestIntegration_ContactPOs verifies the contact→PO lookup (#597) against the
+// pinned seed rows: contact 2001 (John Doe) is the supplier contact on PO 5003;
+// contact 2005 (Pat Dock) is the receiver contact on both 5002 and 5003. Guards
+// the role CASE and the supplier_contact_id OR receiver_contact_id predicate.
+// Read-only — no cleanup.
+func TestIntegration_ContactPOs(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Supplier-linked contact: exactly PO 5003, role "Supplier".
+	sup := h.contactPOs(ctx, 2001)
+	if len(sup) != 1 {
+		t.Fatalf("contactPOs(2001): got %d rows, want 1 (ArxDev may need reseeding): %+v", len(sup), sup)
+	}
+	if sup[0].Number != "5003" || sup[0].Role != "Supplier" {
+		t.Errorf("contactPOs(2001)[0]: got {Number:%q Role:%q}, want {5003 Supplier}", sup[0].Number, sup[0].Role)
+	}
+
+	// Receiver-linked contact: POs 5002 then 5003 (date_ordered DESC), both "Receiver".
+	rec := h.contactPOs(ctx, 2005)
+	if len(rec) != 2 {
+		t.Fatalf("contactPOs(2005): got %d rows, want 2 (ArxDev may need reseeding): %+v", len(rec), rec)
+	}
+	wantNums := []string{"5002", "5003"}
+	for i, p := range rec {
+		if p.Number != wantNums[i] || p.Role != "Receiver" {
+			t.Errorf("contactPOs(2005)[%d]: got {Number:%q Role:%q}, want {%s Receiver}", i, p.Number, p.Role, wantNums[i])
+		}
+	}
+}

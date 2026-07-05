@@ -105,7 +105,54 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 		"Contact": c, "ActiveTab": "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 		"Siblings": siblings,
+		"POs":      h.contactPOs(r.Context(), c.CNID),
 	})
+}
+
+// contactPO is one row in the Contact dashboard "Purchase Orders" card (#597).
+type contactPO struct {
+	Number       string
+	Status       string
+	Role         string // "Supplier" or "Receiver" — how this contact is linked to the PO
+	Counterparty string // supplier name snapshot, for context
+	DateOrdered  *time.Time
+	Total        float64
+}
+
+// contactPOs returns the POs a contact is linked to via supplier_contact_id or
+// receiver_contact_id, most recent first. Returns nil when none or on error.
+func (h *Handler) contactPOs(ctx context.Context, contactID int) []contactPO {
+	if contactID <= 0 {
+		return nil
+	}
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT number,
+		       CASE WHEN supplier_contact_id = @p1 THEN 'Supplier' ELSE 'Receiver' END AS role,
+		       supplier_name, status, date_ordered, total_cost
+		FROM %s
+		WHERE supplier_contact_id = @p1 OR receiver_contact_id = @p1
+		ORDER BY date_ordered DESC, ID DESC
+	`, h.cfg.POTable()), contactID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []contactPO
+	for rows.Next() {
+		var p contactPO
+		var num, role, counterparty, status sql.NullString
+		var d sql.NullTime
+		var total sql.NullFloat64
+		if rows.Scan(&num, &role, &counterparty, &status, &d, &total) != nil {
+			continue
+		}
+		p.Number, p.Role, p.Counterparty, p.Status, p.Total = num.String, role.String, counterparty.String, status.String, total.Float64
+		if d.Valid {
+			p.DateOrdered = &d.Time
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // siblingContact is one row in the Contact dashboard "Related" card (#521).

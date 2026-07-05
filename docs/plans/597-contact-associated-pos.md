@@ -74,30 +74,35 @@ Add `SupplierContactID *int` and `ReceiverContactID *int` (next to the existing
   and the receiver equivalent.
 - Server-rendered options (lines ~77, ~132): add `data-cnid="{{.CNID}}"`.
 - `fillContactFields` (~line 395): when an option is chosen, set
-  `document.getElementById(prefix+'_contact_id').value = opt.dataset.cnid || ''`;
-  when cleared to "-- Select --" (early-return branch), clear the hidden id.
+  `document.getElementById(prefix+'_contact_id').value = opt.dataset.cnid || ''`.
+  Note the current guard `if (!opt?.value) return;` fires when "-- Select --" is
+  chosen, so **clear** the hidden `*_contact_id` before that early return, otherwise
+  a stale id lingers after the user blanks the contact.
 - `refreshContacts` JS (~line 481): add `opt.dataset.cnid = c.id` (the
   `/api/suppliers/{id}/contacts` endpoint already returns `id` — `api.go:64`).
 
 ### 5. Contact detail — `arx_go/contacts.go` + `templates/pm/contact_detail.html`
 
-- New helper `contactPOs(ctx, contactID)` (model on the `siblingContacts` pattern,
-  ~line 119) returning a small struct per PO: `POID, Number, Role ("Supplier"/"Receiver"),
-  CounterpartyName (supplier_name), Status, DateOrdered, TotalCost`.
+- New helper `contactPOs(ctx, contactID)` modeled directly on the existing
+  `recentSupplierPOs` helper (`suppliers.go:121`, issue #521) — same scan/NullXxx
+  pattern. Returns a struct per PO: `Number, Status, Role ("Supplier"/"Receiver"),
+  CounterpartyName (supplier_name), DateOrdered *time.Time, Total float64`
+  (mirror `supplierPOSummary` plus `Role`/`CounterpartyName`).
   Query:
   ```sql
-  SELECT id, number,
+  SELECT number,
          CASE WHEN supplier_contact_id=@p1 THEN 'Supplier' ELSE 'Receiver' END AS role,
          supplier_name, status, date_ordered, total_cost
   FROM <POTable> WHERE supplier_contact_id=@p1 OR receiver_contact_id=@p1
-  ORDER BY date_ordered DESC, id DESC
+  ORDER BY date_ordered DESC, ID DESC
   ```
   Wire the result into `ContactDetail`'s render map as `"POs"`.
 - `contact_detail.html`: add a "Purchase Orders" card (same `{{if .POs}}` +
-  Bootstrap `card` pattern as the Siblings card). A `table table-sm` listing
-  PO number (link to `/po/{{.POID}}`), status (badge), role, date, total. Use
-  existing template helpers (`formatDate`, currency helper if one exists — check
-  `handlers.go` funcmap) for formatting.
+  Bootstrap `card` pattern as the Siblings card), modeled on `supplier_pos.html`'s
+  table. A `table table-sm` listing PO number (link to `/po/{{.Number}}` — routes
+  are keyed on PO number, **not** id), status via the existing `po_status_badge`
+  template, role, date via `formatDate`, and total via `${{printf "%.2f" .Total}}`
+  (the funcmap has no currency helper; `supplier_pos.html` uses this same inline form).
 
 ### 6. CHANGELOG.md
 

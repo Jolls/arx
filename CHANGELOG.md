@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.85] - 2026-07-05 
+- Show a contact's associated purchase orders on the contact detail page, linking POs to contacts via new nullable FK columns while keeping the printed name snapshot ([#597](https://github.com/Jolls/arx-legacy/issues/597))
+- Link the supplier/receiver contact on the PO detail page to its contact record when the PO carries a contact id ([#597](https://github.com/Jolls/arx-legacy/issues/597))
+- Add an "Other Contacts" card to the vendor detail page listing the vendor's non-default contacts
+
 ## [0.5.84] - 2026-07-04 
 - Add a Utilities section under Settings with read-only data-integrity diagnostics: dead attachment links, orphaned part pointers, soft-deleted primary attachments, and PO is_active drift ([#601](https://github.com/Jolls/arx-legacy/issues/601))
 

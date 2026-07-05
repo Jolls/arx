@@ -74,13 +74,15 @@
                             onchange="fillContactFields(this,'supplier')">
                         <option value="">-- Select --</option>
                         {{range .SupplierContacts}}
-                        <option value="{{.CNName}}"
+                        <option value="{{.CNName}}" data-cnid="{{.CNID}}"
                                 data-address="{{.Address}}" data-city="{{.City}}" data-state="{{.State}}"
                                 data-zipcode="{{.Zipcode}}" data-country="{{.Country}}"
                                 data-phone="{{.Phone}}" data-fax="{{.Fax}}" data-email="{{.Email}}"
                                 {{if eq $.PO.SupplierContact .CNName}}selected{{end}}>{{.CNName}}</option>
                         {{end}}
                     </select>
+                    <input type="hidden" id="supplier_contact_id" name="supplier_contact_id"
+                           value="{{if .PO.SupplierContactID}}{{derefInt .PO.SupplierContactID}}{{end}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Email</label>
@@ -133,13 +135,15 @@
                             onchange="fillContactFields(this,'receiver')">
                         <option value="">-- Select --</option>
                         {{range .ReceiverContacts}}
-                        <option value="{{.CNName}}"
+                        <option value="{{.CNName}}" data-cnid="{{.CNID}}"
                                 data-address="{{.Address}}" data-city="{{.City}}" data-state="{{.State}}"
                                 data-zipcode="{{.Zipcode}}" data-country="{{.Country}}"
                                 data-phone="{{.Phone}}" data-fax="{{.Fax}}" data-email="{{.Email}}"
                                 {{if eq $.PO.ReceiverContact .CNName}}selected{{end}}>{{.CNName}}</option>
                         {{end}}
                     </select>
+                    <input type="hidden" id="receiver_contact_id" name="receiver_contact_id"
+                           value="{{if .PO.ReceiverContactID}}{{derefInt .PO.ReceiverContactID}}{{end}}">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Email</label>
@@ -394,7 +398,9 @@ function removeExistingLine(btn, polid) {
 
 function fillContactFields(select, prefix) {
     const opt = select.options[select.selectedIndex];
-    if (!opt?.value) return;
+    const idEl = document.getElementById(prefix + '_contact_id');
+    if (!opt?.value) { if (idEl) idEl.value = ''; return; }
+    if (idEl) idEl.value = opt.dataset.cnid || '';
     const map = prefix === 'supplier'
         ? {address:'supplier_address', city:'supplier_city', state:'supplier_state',
            zipcode:'supplier_zipcode', country:'supplier_country',
@@ -479,12 +485,14 @@ function setupSupplierTypeahead(inputEl, idHiddenEl, contactSelectEl) {
         if (contactSelectEl) refreshContacts(s.id, contactSelectEl);
     }
     function refreshContacts(supplierId, sel) {
+        const idEl = document.getElementById(sel.id + '_id');
+        if (idEl) idEl.value = '';
         fetch('/api/suppliers/' + supplierId + '/contacts').then(r => r.json()).then(contacts => {
             sel.innerHTML = '<option value="">-- Select --</option>';
             contacts.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.name; opt.textContent = c.name;
-                Object.assign(opt.dataset, {address:c.address, city:c.city, state:c.state,
+                Object.assign(opt.dataset, {cnid:c.id, address:c.address, city:c.city, state:c.state,
                     zipcode:c.zipcode, country:c.country, phone:c.phone, fax:c.fax, email:c.email});
                 sel.appendChild(opt);
             });

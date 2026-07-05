@@ -71,6 +71,41 @@
         </div>
         {{end}}
 
+        {{/* Purchase Orders — full width (#597) */}}
+        {{if .POs}}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Purchase Orders</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:100px;">PO #</th>
+                                <th style="width:100px;">Status</th>
+                                <th style="width:90px;">Role</th>
+                                <th>Supplier</th>
+                                <th style="width:110px;">Date Ordered</th>
+                                <th style="width:110px; text-align:right;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {{range .POs}}
+                            <tr>
+                                <td><a href="/po/{{.Number}}" class="part-number-link">{{.Number}}</a></td>
+                                <td>{{template "po_status_badge" .Status}}</td>
+                                <td>{{.Role}}</td>
+                                <td>{{.Counterparty}}</td>
+                                <td>{{if .DateOrdered}}{{formatDate .DateOrdered}}{{else}}—{{end}}</td>
+                                <td style="text-align:right;">${{printf "%.2f" .Total}}</td>
+                            </tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {{end}}
+
         {{/* Notes — full width */}}
         {{if .Contact.CNNotes}}
         <div class="col-12">

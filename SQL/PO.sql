@@ -23,6 +23,7 @@ CREATE TABLE purchase_order (
   supplier_id           INT            NOT NULL,        -- FK to company.id.
   supplier_name         VARCHAR(127),                   -- Denormalized supplier name at time of order.
   supplier_contact      VARCHAR(127),
+  supplier_contact_id   INT,                            -- FK to contact.id. NULL for legacy POs or when no contact chosen; name snapshot above is authoritative for print (#597).
   supplier_address      VARCHAR(255),
   supplier_city         VARCHAR(64),
   supplier_state        VARCHAR(64),
@@ -36,6 +37,7 @@ CREATE TABLE purchase_order (
   receiver_id           INT,                            -- FK to company.id (bill & ship to). Nullable — not all POs have a separate ship-to.
   receiver_name         VARCHAR(255),
   receiver_contact      VARCHAR(127),
+  receiver_contact_id   INT,                            -- FK to contact.id. NULL for legacy POs or when no contact chosen; name snapshot above is authoritative for print (#597).
   receiver_address      VARCHAR(255),
   receiver_city         VARCHAR(64),
   receiver_state        VARCHAR(64),
@@ -71,6 +73,8 @@ CREATE TABLE purchase_order (
 
 ALTER TABLE dbo.purchase_order ADD CONSTRAINT FK_purchase_order_company  FOREIGN KEY (supplier_id) REFERENCES dbo.company (id);
 ALTER TABLE dbo.purchase_order ADD CONSTRAINT FK_purchase_order_receiver FOREIGN KEY (receiver_id) REFERENCES dbo.company (id);
+ALTER TABLE dbo.purchase_order ADD CONSTRAINT FK_purchase_order_supplier_contact FOREIGN KEY (supplier_contact_id) REFERENCES dbo.contact (id);
+ALTER TABLE dbo.purchase_order ADD CONSTRAINT FK_purchase_order_receiver_contact FOREIGN KEY (receiver_contact_id) REFERENCES dbo.contact (id);
 
 -- purchase_order_history: append-only activity log for a PO (issues #271 + #267).
 -- (Renamed from PO_history in db-table-rename commit 4.)
