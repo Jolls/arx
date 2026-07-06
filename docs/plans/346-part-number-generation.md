@@ -1,139 +1,132 @@
-# #346 — Auto-suggest new part number (configurable numbering pattern)
+# #346 — Suggest next available base number
 
 ## Context
 
-Issue #346 asks for a way to generate a new PN with a fresh "base number" when
-creating a part, instead of the user having to know/guess the next available
-number by hand. Today `PartsCreate` (`arx_go/parts.go:407`) only requires
-`part_number` be non-empty — there is no generation logic anywhere, and
-`PartDuplicate` (`arx_go/parts.go:388`) explicitly blanks the field with a
-comment telling the user to type a new one.
+Issue #346 asks for a way to know the next available "base number" when
+creating a part, instead of the user having to know/guess it by hand. Today
+`PartsCreate` (`arx_go/parts.go:407`) only requires `part_number` be
+non-empty — there is no generation logic anywhere, and `PartDuplicate`
+(`arx_go/parts.go:388`) explicitly blanks the field with a comment telling the
+user to type a new one.
 
 This shop's current convention is a 3-segment numeric pattern:
 `xxx-yyyyy-zz` — a numeric category prefix, an incrementing base number, and a
 trailing config/dash number (aerospace-style "dash number" for
-variant/configuration, distinct from `revision` which already has its own
-column). The user wants the *generation logic* built as a configurable pattern
-rather than hardcoded to this one shop's style, so a different numbering
-convention can be configured later without a code rewrite — mirroring how
-`part_categories` is already a JSON blob in `app_config` edited via Settings
-rather than a hardcoded list.
+variant/configuration, distinct from `revision`). The "base number" (`yyyyy`)
+is the piece users struggle to pick by hand.
 
-Common real-world PN conventions this pattern engine should be able to express
-(informs the segment model below, not all built as UI presets):
-- **Dumb/sequential**: meaningless incrementing number only (no prefix/suffix).
-- **Significant/intelligent**: a leading code segment encodes category/family/material.
-- **Base + dash number**: MIL-STD-100 style — same base design, `-01`/`-02` etc.
-  for interchangeable variants, kept separate from revision (design change
-  history within a dash number). This matches the shop's `zz` segment.
-- Fixed-width, zero-padded numeric segments joined by a separator (dash, dot,
-  or none) are the near-universal formatting choice across all of the above.
+**Scope cut from the original plan:** this no longer renders a full part
+number (no category-code mapping, no fixed segments, no auto-fill of the
+`part_number` field). It only isolates and suggests the base-number segment
+as informational text — the user still types/edits the full `part_number`
+themselves. This avoids ever clobbering a manually-entered value and keeps
+the config surface small.
 
-The engine below models exactly these building blocks: literal/category/sequence
-segments, fixed widths, zero-padding, and a configurable separator — enough to
-express the shop's current format and the common alternatives above, without
-speculative extras (no date-encoding, checksum digits, etc. — not requested).
+The base-number *segment position* stays configurable (separator, which
+segment index it is, zero-pad width) so a shop with a different segment
+layout doesn't need a code change — mirroring how `part_categories` is
+already a JSON blob in `app_config` edited via Settings.
+
+Two generation modes, since shops mix "smart" manually-assigned numbers
+(e.g. `00305` = M3x0.5 screw) with a plain sequential range:
+- **`max_plus_one`** — next number is `max(existing) + 1`.
+- **`next_open_after`** — smallest unused integer `>= floor` (gap-filling,
+  so numbers freed up by deleted/renumbered parts below the "smart" range
+  get reused, and the smart-number range below `floor` is never touched).
 
 ## Design
 
 ### 1. Config storage — `app_config` key `part_numbering`
 
 New JSON blob, loaded/saved the same way `part_categories` is
-(`h.loadCategories`, Settings handler) — no new table.
+(`h.loadCategories` / `SettingsCategoriesSave` in `arx_go/categories.go`) —
+no new table.
 
 ```json
 {
-  "segments": [
-    { "kind": "category", "width": 3 },
-    { "kind": "sequence", "width": 5, "scope": "global" },
-    { "kind": "fixed",    "value": "01" }
-  ],
   "separator": "-",
-  "categoryCodes": { "ASM": "010", "BUY": "020", "DWG": "030", "DOC": "040",
-                      "FORM": "050", "MFG": "060", "OPS": "070", "RAW": "080",
-                      "SVC": "090", "TOOL": "100" }
+  "segmentIndex": 1,
+  "width": 5,
+  "mode": "max_plus_one",
+  "floor": 0
 }
 ```
 
-- `kind: "category"` → looks up the part's category code in `categoryCodes`,
-  zero-pads/truncates to `width`.
-- `kind: "sequence"` → the incrementing base number. `scope: "global"` scans
-  all existing part numbers; `scope: "category"` scans only numbers sharing
-  this part's category segment. (Shop's current style uses `global`.)
-- `kind: "fixed"` → literal text, e.g. the default `"01"` dash/config number.
-- `separator` joins segments (empty string supported for no separator).
+- `separator` splits existing `part_number` values into segments.
+- `segmentIndex` (0-based) is which segment holds the base number.
+- `width` is the zero-pad width used to render the suggestion.
+- `mode` is `"max_plus_one"` or `"next_open_after"`.
+- `floor` is only used by `"next_open_after"` — the minimum number to
+  consider part of the sequential range (numbers below it are assumed to be
+  "smart"/manually-assigned and are left alone, not filled into).
 
-A `DefaultPartNumbering()` in `models/part.go` returns the shop's exact current
-pattern above, so behavior is identical out of the box — no migration needed
-before the feature is configured.
+`DefaultBaseNumberConfig()` in `arx_go/models/part.go` returns the shop's
+current shape (`separator: "-"`, `segmentIndex: 1`, `width: 5`,
+`mode: "max_plus_one"`) so behavior is sane out of the box with no config.
 
 ### 2. Generation logic — new `arx_go/partnumber.go`
 
 ```go
-type NumberSegment struct {
-    Kind     string // "category" | "sequence" | "fixed"
-    Width    int
-    Scope    string // "global" | "category" (sequence only)
-    Value    string // fixed only
-}
-type NumberingPattern struct {
-    Segments      []NumberSegment
-    Separator     string
-    CategoryCodes map[string]string
-}
-
-func (h *Handler) loadNumberingPattern(ctx context.Context) (NumberingPattern, error)
-func (h *Handler) nextPartNumber(ctx context.Context, category string) (string, error)
+func (h *Handler) loadBaseNumberConfig(ctx context.Context) models.BaseNumberConfig
+func (h *Handler) nextBaseNumber(ctx context.Context) (string, error)
 ```
 
-`nextPartNumber`:
-1. Build a regex from the pattern's segment widths/separator to parse existing
-   `part_number` values (`SELECT part_number FROM part WHERE part_number LIKE ...`
-   filtered by category prefix when scope is `"category"`, else unfiltered).
-2. For the `sequence` segment, take the max parsed value across matches, +1,
-   zero-pad to `width`. (Base case / no matches → `1`.)
-3. Render all segments in order joined by `separator`.
-4. This is a *suggestion*, not a reservation — the existing DB `UQ_part_number_part_number`
-   constraint plus the current "Part Number is required" validation still catch
-   collisions at save time (two users racing for the same number is already
-   possible today; unchanged behavior).
+`nextBaseNumber`:
+1. `SELECT part_number FROM part` (no filtering — global scan only; no
+   per-category scoping in this simplified version).
+2. Split each value on `Separator`, take the segment at `SegmentIndex`,
+   `strconv.Atoi` it; skip values that don't parse or don't have enough
+   segments (malformed/legacy part numbers are silently ignored, not errors).
+3. Depending on `Mode`:
+   - `max_plus_one`: track the max parsed value; result is `max + 1` (or `1`
+     if nothing parsed).
+   - `next_open_after`: collect parsed values into a set; walk integers
+     starting at `Floor` and return the first one not in the set.
+4. Zero-pad the result to `Width` and return as a string.
+5. This is a *suggestion only* — the existing DB unique constraint and
+   "Part Number is required" validation still catch collisions at save time,
+   same as today.
 
-### 3. Wire into the New Part form
+### 3. Surface it in the New Part form
 
-- New route `GET /parts/next-number?category=ASM` → `h.nextPartNumber`,
-  returns the suggested string as plain text/JSON.
-- `part_edit.html`: small JS `change` handler on the category `<select>` that
-  fetches the suggestion and fills the `part_number` input *only when it's
-  currently empty* (so it never clobbers a manually-typed number, and doesn't
-  fire on `PartDuplicate`'s pre-filled-but-blanked field unexpectedly — same
-  empty-check covers that case for free).
-- Field stays a normal editable text input; user can override before saving.
+- New route `GET /parts/next-number` → `h.PartsNextNumber`, returns the
+  suggestion as JSON (`{"suggestion": "00312"}`).
+- `part_edit.html`: on the new-part form only, a small fetch-on-load shows
+  helper text next to the `part_number` field, e.g. "Next available base
+  number: 00312". **No auto-fill** — the user still types the full part
+  number by hand, so there's no risk of clobbering input or interacting
+  awkwardly with `PartDuplicate`'s pre-blanked field.
 
 ### 4. Settings UI
 
-Add a "Part Numbering" section to Settings (near the existing Categories
-editor) to configure `segments`, `separator`, and `categoryCodes` — same
-save/load pattern as `part_categories`. Kept minimal: a small form, not a
-drag-and-drop builder.
+Add a "Part Numbering" section to Settings (near the existing Part
+Categories editor) with fields for `separator`, `segmentIndex`, `width`,
+`mode` (select: "Max + 1" / "Next open after N"), and `floor` (only
+meaningful/shown for `next_open_after`, but keep the form simple — no
+show/hide JS complexity required, just always show the field). Same
+save/load pattern as `SettingsCategoriesSave`.
 
 ## Files touched
 
-- `arx_go/models/part.go` — `NumberingPattern`/`NumberSegment` types + `DefaultPartNumbering()`.
-- `arx_go/partnumber.go` (new) — `loadNumberingPattern`, `nextPartNumber`, regex parse/render helpers.
-- `arx_go/parts.go` — new `PartsNextNumber` handler; route registration alongside other `/parts/*` routes.
-- `arx_go/templates/pm/part_edit.html` — JS fetch-and-fill on category change.
-- `arx_go/templates/pm/settings*.html` (wherever categories are edited) — new numbering-pattern section.
-- `arx_go/settings.go` (or wherever `part_categories` is saved) — load/save `part_numbering` key.
+- `arx_go/models/part.go` — `BaseNumberConfig` type + `DefaultBaseNumberConfig()`.
+- `arx_go/partnumber.go` (new) — `loadBaseNumberConfig`, `nextBaseNumber`.
+- `arx_go/parts.go` — new `PartsNextNumber` handler.
+- `arx_go/main.go` — route registration: `GET /parts/next-number`.
+- `arx_go/templates/pm/part_edit.html` — fetch-on-load helper text (new-part only).
+- `arx_go/templates/pm/settings.html` — new "Part Numbering" section.
+- `arx_go/settings.go` (or `categories.go`-style dedicated file) — `SettingsPartNumberingSave` handler; `settingsData` gains the loaded config.
+- `arx_go/main.go` — route registration: `POST /settings/part-numbering`.
 
 ## Verification
 
 - `go build`, `go vet`, `go test ./...` (arx_go + arxlib).
 - Manual (user, since app can't be run by the agent per CLAUDE.md): open
-  `/parts/new`, pick a category, confirm the part number field auto-fills with
-  the next number in `xxx-yyyyy-zz` form; change category and confirm the
-  category segment updates; manually type a number and confirm the JS doesn't
-  overwrite it; save and confirm no collision with existing data.
-- Suggest (not written yet, pending user agreement per CLAUDE.md test policy):
-  a unit test for `nextPartNumber`'s max-parsing/increment logic given a fake
-  set of existing part numbers, since off-by-one or regex-width bugs there
-  would silently generate colliding or malformed numbers.
+  `/parts/new`, confirm helper text shows a sane next base number; create a
+  few parts and confirm the suggestion advances; in Settings, change mode to
+  "next open after N" with a floor, confirm the suggestion fills a gap
+  instead of just incrementing past the max.
+- Suggest (not written yet, pending user agreement per CLAUDE.md test
+  policy): a unit test for `nextBaseNumber` covering both modes (max+1 with
+  gaps below floor untouched; next_open_after filling a gap) given a fake
+  set of existing part numbers — off-by-one bugs here would silently suggest
+  a colliding or wrong number.

@@ -28,6 +28,7 @@
                 <label for="part_number" class="form-label">Part Number *</label>
                 <input type="text" id="part_number" name="part_number" class="form-control" required
                        value="{{.Part.PartNumber}}">
+                {{if .IsNew}}<div id="next-base-number-hint" class="form-text"></div>{{end}}
             </div>
             <div class="detail-row">
                 <label for="revision" class="form-label">Revision</label>
@@ -113,4 +114,20 @@
         </div>
     </form>
 </div>
+{{if .IsNew}}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const hint = document.getElementById('next-base-number-hint');
+    if (!hint) return;
+    fetch('/api/parts/next-number')
+        .then(r => r.json())
+        .then(data => {
+            if (data.suggestion) {
+                hint.textContent = 'Next available base number: ' + data.suggestion;
+            }
+        })
+        .catch(() => {});
+});
+</script>
+{{end}}
 {{end}}
