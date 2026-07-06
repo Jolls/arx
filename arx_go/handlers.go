@@ -28,6 +28,7 @@ type Handler struct {
 	tmplFS         ioFS.FS
 	schemaMismatch string
 	releaseNotes   string
+	companyLogo    string
 }
 
 func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
@@ -96,6 +97,19 @@ func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 		return
 	}
 	h.schemaMismatch = arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg.AppConfigTable())
+}
+
+// loadCompanyLogo caches the company logo data URI from app_config on the Handler
+// so the hot render path stays DB-free. Safe to call when db is nil.
+func (h *Handler) loadCompanyLogo(ctx context.Context) {
+	h.companyLogo = h.appConfigGetOr(ctx, "company_logo", "")
+}
+
+// companyLogoURL returns the cached company logo as a template.URL. html/template's
+// URL-context filter defangs any src/href value whose scheme isn't http(s)/mailto,
+// which would otherwise strip our data: URI; template.URL marks it as pre-vetted.
+func (h *Handler) companyLogoURL() template.URL {
+	return template.URL(h.companyLogo)
 }
 
 // appConfigGet reads a single key from app_config.
@@ -180,6 +194,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["TestRecordsURL"] = h.cfg.TestRecordsURL
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
+		m["CompanyLogo"] = h.companyLogoURL()
 	}
 	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/pm/layout.html",

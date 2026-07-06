@@ -2,8 +2,10 @@ package main
 
 import (
 	"archive/zip"
+	"encoding/base64"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -113,6 +115,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PODefaultReceiverID":   h.cfg.PODefaults.ReceiverID,
 		"PODefaultReceiverName": receiverName,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
+		"CompanyLogo":           h.companyLogoURL(),
 		"PartCategories":        h.loadCategories(r.Context()),
 		"NamedQueries":          namedQueries,
 		"NamedQueriesError":     namedQueriesError,
@@ -154,6 +157,56 @@ func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *htt
 		if err := h.appConfigSet(r.Context(), "attachment_categories", cats); err != nil {
 			log.Printf("warning: could not save attachment_categories: %v", err)
 		}
+	}
+	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+// SettingsCompanyLogoSave stores an uploaded logo as a base64 data URI in
+// app_config. It has its own endpoint so this partial form can't blank the
+// path/PO-default fields that SettingsSave writes from the main settings form.
+func (h *Handler) SettingsCompanyLogoSave(w http.ResponseWriter, r *http.Request) {
+	if h.db == nil {
+		http.Redirect(w, r, "/settings", http.StatusFound)
+		return
+	}
+	settingsError := func(msg string) {
+		h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{"Error": msg}))
+	}
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		settingsError("Logo upload failed: " + err.Error())
+		return
+	}
+	file, _, err := r.FormFile("company_logo")
+	if err != nil {
+		settingsError("Logo upload failed: " + err.Error())
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		settingsError("Logo upload failed: " + err.Error())
+		return
+	}
+	mime := http.DetectContentType(data)
+	if _, ok := pasteImageExts[mime]; !ok {
+		settingsError("Unsupported image type: " + mime)
+		return
+	}
+	dataURI := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+	if err := h.appConfigSet(r.Context(), "company_logo", dataURI); err != nil {
+		log.Printf("warning: could not save company_logo: %v", err)
+	}
+	h.companyLogo = dataURI
+	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+// SettingsCompanyLogoRemove clears the stored company logo.
+func (h *Handler) SettingsCompanyLogoRemove(w http.ResponseWriter, r *http.Request) {
+	if h.db != nil {
+		if err := h.appConfigSet(r.Context(), "company_logo", ""); err != nil {
+			log.Printf("warning: could not clear company_logo: %v", err)
+		}
+		h.companyLogo = ""
 	}
 	http.Redirect(w, r, "/settings", http.StatusFound)
 }
@@ -235,6 +288,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 				h.cfg.DBPassword = password
 			}
 			h.CheckSchemaVersion(r.Context())
+			h.loadCompanyLogo(r.Context())
 			if oldDB != nil {
 				oldDB.Close()
 			}

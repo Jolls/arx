@@ -326,6 +326,7 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 
 func (h *Handler) renderLogin(w http.ResponseWriter, r *http.Request, data map[string]any) {
 	data["CSRFToken"] = h.csrfToken(w, r)
+	data["CompanyLogo"] = h.companyLogoURL()
 	tmpl, err := template.New("").ParseFS(h.tmplFS, "templates/pm/login.html")
 	if err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)

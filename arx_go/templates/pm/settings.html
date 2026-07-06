@@ -275,6 +275,32 @@
     </div>
 
     <div class="detail-section mt-4">
+        <h3>Company Logo</h3>
+        <form method="post" action="/settings/company-logo" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+            <div class="detail-row">
+                <label class="form-label" for="company_logo">Company Logo</label>
+                <div style="flex:1;">
+                    <input type="file" id="company_logo" name="company_logo" accept="image/*" class="form-control">
+                    <p class="text-muted" style="margin:4px 0 0; font-size:0.82em;">Shown in the app header, the login page, and on printed POs.</p>
+                </div>
+            </div>
+            <div class="form-actions mt-2">
+                <button type="submit" class="btn btn-primary">Upload Logo</button>
+            </div>
+        </form>
+        {{if .CompanyLogo}}
+        <div class="mt-2">
+            <img src="{{.CompanyLogo}}" alt="" style="max-height:60px; display:block;">
+            <form method="post" action="/settings/company-logo/remove" class="mt-2">
+                <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+                <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+            </form>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="detail-section mt-4">
         <h3>Part Categories</h3>
         <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
             Categories shown in the part Category dropdown, and which subtabs each one exposes.

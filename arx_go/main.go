@@ -44,6 +44,7 @@ func onReady() {
 
 	h = New(database, cfg, templatesFS, releaseNotesData)
 	h.CheckSchemaVersion(context.Background())
+	h.loadCompanyLogo(context.Background())
 
 	if cfg.DebugMode {
 		openDebugConsole()
@@ -120,6 +121,8 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Post("/settings", h.SettingsSave)
 	r.Post("/settings/attachment-categories", h.SettingsAttachmentCategoriesSave)
 	r.Post("/settings/categories", h.SettingsCategoriesSave)
+	r.Post("/settings/company-logo", h.SettingsCompanyLogoSave)
+	r.Post("/settings/company-logo/remove", h.SettingsCompanyLogoRemove)
 	r.Get("/whats-new", h.WhatsNew)
 	r.Get("/api/browse-folder", h.APIBrowseFolder)
 	r.Get("/api/browse-file", h.APIBrowseFile)

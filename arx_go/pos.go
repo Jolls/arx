@@ -942,6 +942,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"SupplierCode": supplierCode, "TestMode": h.cfg.TestMode,
 		"POFolderPath": folderPath, "IsRFQ": po.Status == "rfq",
+		"CompanyLogo": h.companyLogoURL(),
 	})
 }
 
