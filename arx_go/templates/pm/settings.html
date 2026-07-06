@@ -361,6 +361,52 @@
     </div>
 
     <div class="detail-section mt-4">
+        <h3>Part Numbering</h3>
+        <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
+            Controls the "next available base number" suggestion shown when creating a new part.
+            The base number is the segment at Segment Index (0-based) after splitting the part
+            number on Separator.
+        </p>
+        <form method="post" action="/settings/part-numbering">
+            <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+            <div class="detail-row">
+                <label for="pn_separator" class="form-label">Separator</label>
+                <input type="text" id="pn_separator" name="separator" class="form-control" style="width:80px;"
+                       value="{{.PartNumbering.Separator}}">
+            </div>
+            <div class="detail-row">
+                <label for="pn_segment_index" class="form-label">Segment Index</label>
+                <input type="number" id="pn_segment_index" name="segment_index" class="form-control" style="width:80px;" min="0"
+                       value="{{.PartNumbering.SegmentIndex}}">
+            </div>
+            <div class="detail-row">
+                <label for="pn_width" class="form-label">Zero-Pad Width</label>
+                <input type="number" id="pn_width" name="width" class="form-control" style="width:80px;" min="1"
+                       value="{{.PartNumbering.Width}}">
+            </div>
+            <div class="detail-row">
+                <label for="pn_mode" class="form-label">Suggestion Mode</label>
+                <select id="pn_mode" name="mode" class="form-select" style="width:220px;">
+                    <option value="max_plus_one" {{if eq .PartNumbering.Mode "max_plus_one"}}selected{{end}}>Max + 1</option>
+                    <option value="next_open_after" {{if eq .PartNumbering.Mode "next_open_after"}}selected{{end}}>Next open after N</option>
+                </select>
+            </div>
+            <div class="detail-row">
+                <label for="pn_floor" class="form-label" data-bs-toggle="tooltip"
+                       title="Only used by 'Next open after N'. Numbers below this are assumed to be manually-assigned and are left alone.">Floor (N)</label>
+                <input type="number" id="pn_floor" name="floor" class="form-control" style="width:80px;" min="0"
+                       value="{{.PartNumbering.Floor}}">
+            </div>
+            <div class="form-actions mt-2">
+                <button type="submit" class="btn btn-primary">Save Part Numbering</button>
+            </div>
+        </form>
+        {{if .PartNumberingPreview}}
+        <p class="mt-2 mb-0"><strong>Next available base number:</strong> {{.PartNumberingPreview}}</p>
+        {{end}}
+    </div>
+
+    <div class="detail-section mt-4">
         <h3>Data Backup</h3>
         <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
             Downloads a ZIP archive containing one CSV file per table.

@@ -78,6 +78,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var receiverName string
 	var namedQueries []NamedQueryRow
 	var namedQueriesError string
+	var partNumberingPreview string
 	if h.db != nil {
 		contacts = h.fetchContactOptions(r, h.cfg.PODefaults.ReceiverID)
 		suppliers = h.fetchSupplierOptions(r)
@@ -96,6 +97,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		if err != nil {
 			namedQueriesError = "could not load named queries: " + err.Error()
 		}
+		partNumberingPreview, _ = h.nextBaseNumber(r.Context())
 	}
 
 	data := map[string]any{
@@ -117,6 +119,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"CompanyLogo":           h.companyLogoURL(),
 		"PartCategories":        h.loadCategories(r.Context()),
+		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
+		"PartNumberingPreview":  partNumberingPreview,
 		"NamedQueries":          namedQueries,
 		"NamedQueriesError":     namedQueriesError,
 		"Contacts":              contacts,

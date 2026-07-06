@@ -102,6 +102,26 @@ func TabsForCategory(cats []Category, code string) CategoryTabs {
 	return DefaultCategoryTabs
 }
 
+// BaseNumberConfig configures how the next-available "base number" is
+// suggested for a new part number. Stored as JSON in app_config (key
+// part_numbering); when nothing is saved, DefaultBaseNumberConfig is used.
+// It parses existing part_number values by splitting on Separator and
+// reading the segment at SegmentIndex (0-based) as an integer.
+type BaseNumberConfig struct {
+	Separator    string `json:"separator"`
+	SegmentIndex int    `json:"segmentIndex"`
+	Width        int    `json:"width"`
+	Mode         string `json:"mode"` // "max_plus_one" | "next_open_after"
+	Floor        int    `json:"floor"`
+}
+
+// DefaultBaseNumberConfig reproduces this shop's current xxx-yyyyy-zz
+// convention: the base number is the second dash-separated segment,
+// zero-padded to 5 digits, suggested as max(existing)+1.
+func DefaultBaseNumberConfig() BaseNumberConfig {
+	return BaseNumberConfig{Separator: "-", SegmentIndex: 1, Width: 5, Mode: "max_plus_one"}
+}
+
 // ShowBOM reports whether the BOM subtab applies: the part already has a BOM
 // (data), OR its category authors BOMs and should allow entry even when empty
 // (e.g. ASM). The OR keeps the tab live for an assembly before any lines exist.
