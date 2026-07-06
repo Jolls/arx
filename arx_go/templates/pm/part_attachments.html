@@ -42,8 +42,6 @@
                     <th>File / URL</th>
                     <th>Category</th>
                     <th>Comment</th>
-                    <th class="text-center" style="width:70px;">Default</th>
-                    <th style="width:50px;"></th>
                     <th style="width:50px;"></th>
                 </tr>
             </thead>
@@ -55,6 +53,7 @@
                     <td class="text-center text-muted">{{if .OrderID}}{{derefInt .OrderID}}{{end}}</td>
                     <td>{{.FILPNRev}}</td>
                     <td class="text-truncate" style="max-width:340px;">
+                        {{if $isPrimary}}<span style="color:#f5a623; font-size:1.1em;" title="Primary attachment">&#9733;</span> {{end}}
                         {{if isHTTPURL $f}}
                             <a href="{{$f}}" target="_blank" rel="noopener noreferrer" title="{{$f}}">{{$f}}</a>
                         {{else if isLocalDir $f}}
@@ -79,27 +78,30 @@
                     <td>{{.Category}}</td>
                     <td class="text-truncate" style="max-width:200px;">{{.Comment}}</td>
                     <td class="text-center">
-                        {{if $isPrimary}}
-                            <span style="color:#f5a623; font-size:1.1em;" title="Primary attachment">&#9733;</span>
-                        {{else}}
-                            <form method="post" action="/part/{{$.Part.PNID}}/primary_attachment" class="m-0">
-                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                                <input type="hidden" name="filid" value="{{.FILID}}">
-                                <button type="submit" class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em;">Set</button>
-                            </form>
-                        {{end}}
-                    </td>
-                    <td class="text-center">
-                        <a href="/part/{{$.Part.PNID}}/attachments?edit={{.FILID}}#edit-form"
-                           class="btn btn-secondary text-decoration-none" style="padding:2px 8px; font-size:0.8em;">Edit</a>
-                    </td>
-                    <td class="text-center">
-                        <form method="post" action="/part/{{$.Part.PNID}}/attachments/{{.FILID}}/delete"
-                              class="m-0" onsubmit="return confirm('Remove this attachment?')">
-                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <button type="submit" class="btn btn-secondary text-danger"
-                                    style="padding:2px 8px; font-size:0.8em;">Delete</button>
-                        </form>
+                        <div class="dropdown">
+                            {{template "kebab_toggle"}}
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                {{if not $isPrimary}}
+                                <li>
+                                    <form method="post" action="/part/{{$.Part.PNID}}/primary_attachment" class="m-0">
+                                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                        <input type="hidden" name="filid" value="{{.FILID}}">
+                                        <button type="submit" class="dropdown-item">Set as default</button>
+                                    </form>
+                                </li>
+                                {{end}}
+                                <li><a class="dropdown-item" href="/part/{{$.Part.PNID}}/attachments?edit={{.FILID}}#edit-form">Edit</a></li>
+                                <li><a class="dropdown-item" href="/attachments/where-used?file={{$f | urlquery}}">Where used</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form method="post" action="/part/{{$.Part.PNID}}/attachments/{{.FILID}}/delete"
+                                          class="m-0" onsubmit="return confirm('Remove this attachment?')">
+                                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                        <button type="submit" class="dropdown-item text-danger">Delete</button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
                     </td>
                 </tr>
                 {{end}}

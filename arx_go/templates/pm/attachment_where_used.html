@@ -1,0 +1,59 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">Where used</li>
+    </ol>
+</nav>
+<div class="content">
+    <h3 class="mb-2">Where used</h3>
+    <p class="font-monospace" style="font-size:0.9em; word-break:break-all;">
+        {{$f := .FileLink}}
+        {{if isHTTPURL $f}}
+            <a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{$f}}</a>
+        {{else if isLocalDir $f}}
+            <a href="{{localDirURL $f}}" title="Open folder">&#128193; {{fileBaseName $f}}</a>
+        {{else if isLocalFile $f}}
+            <a href="{{localFileURL $f}}" target="_blank" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
+        {{else}}
+            {{$f}}
+        {{end}}
+    </p>
+
+    {{if .Usages}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th style="width:100px;">Type</th>
+                    <th>Linked from</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Usages}}
+                <tr>
+                    <td>
+                        {{if eq .Kind "part"}}
+                            <span class="badge bg-primary">Part</span>
+                        {{else}}
+                            <span class="badge bg-secondary">Vendor</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if eq .Kind "part"}}
+                            <a href="/part/{{.OwnerID}}/attachments">{{.Code}} &mdash; {{.Label}}</a>
+                        {{else}}
+                            <a href="/supplier/{{.OwnerID}}/attachments">{{.Label}}</a>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">Linked in {{len .Usages}} place{{if ne (len .Usages) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">This file link is not attached anywhere.</p>
+    {{end}}
+</div>
+{{end}}
