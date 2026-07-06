@@ -17,6 +17,7 @@
 </head>
 <body>
 <div class="login-card">
+    {{if .CompanyLogo}}<div style="text-align:center; margin-bottom:16px;"><img src="{{.CompanyLogo}}" alt="" style="max-height:64px;"></div>{{end}}
     <div class="login-title">Arx{{if .TestMode}} — TEST MODE{{end}}</div>
     <div class="login-sub">
         {{if .Bootstrap}}Create your admin account to get started.{{else}}Sign in to continue.{{end}}
