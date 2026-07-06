@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.88] - 2026-07-06 
+- Suggest the next available part base number on the New Part form, configurable in Settings (separator, segment position, zero-pad width, max+1 or gap-filling mode) ([#346](https://github.com/Jolls/arx-legacy/issues/346))
+
 ## [0.5.87] - 2026-07-05 
 - Add company logo to the UI header, login page, and PO PDFs, uploadable in Settings ([#538](https://github.com/Jolls/arx-legacy/issues/538))
 
