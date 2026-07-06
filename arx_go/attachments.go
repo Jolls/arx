@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -277,4 +278,55 @@ func (h *Handler) setPrimaryAttachment(ctx context.Context, table, idCol, primar
 		`UPDATE %s SET %s=@p1 WHERE %s=@p2`, table, primaryCol, idCol,
 	), attachmentID, parentID)
 	return err
+}
+
+// attachmentUsage is one row/owner in the "where used" results for a file link.
+type attachmentUsage struct {
+	Kind    string // "part" or "supplier"
+	OwnerID int
+	Code    string // part number (empty for suppliers)
+	Label   string // part title or supplier name
+}
+
+// AttachmentWhereUsed shows every part and supplier that links the given file
+// (exact stored-string match — see docs/plans/557-attachment-where-used.md for
+// the LOCAL: root-ambiguity caveat between DocControlRoot and SupplierFilesRoot).
+func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
+	file := strings.TrimSpace(r.URL.Query().Get("file"))
+	if file == "" {
+		h.renderError(w, r, "No file link specified.")
+		return
+	}
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT 'part' AS kind, p.id, p.part_number, p.title
+		FROM %s fa JOIN %s p ON p.id = fa.part_id
+		WHERE fa.is_active = 1 AND fa.file_name = @p1
+		UNION ALL
+		SELECT 'supplier' AS kind, c.id, '', c.name
+		FROM %s ca JOIN %s c ON c.id = ca.supplier_id
+		WHERE ca.is_active = 1 AND ca.file_path = @p1
+		ORDER BY 1, 4
+	`, h.cfg.AttachmentsTable(), h.cfg.PartsTable(),
+		h.cfg.CompanyAttachmentsTable(), h.cfg.CompanyTable()), file)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
+		return
+	}
+	defer rows.Close()
+	var usages []attachmentUsage
+	for rows.Next() {
+		var u attachmentUsage
+		var code, label sql.NullString
+		if err := rows.Scan(&u.Kind, &u.OwnerID, &code, &label); err != nil {
+			h.renderError(w, r, "Error reading where-used: "+err.Error())
+			return
+		}
+		u.Code = code.String
+		u.Label = label.String
+		usages = append(usages, u)
+	}
+	h.render(w, r, "attachment_where_used.html", map[string]any{
+		"FileLink": file, "Usages": usages,
+		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
+	})
 }

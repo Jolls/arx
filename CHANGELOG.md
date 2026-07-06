@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.86] - 2026-07-05 
+- Add a "where used" view showing every part and vendor that links a given file ([#557](https://github.com/Jolls/arx-legacy/issues/557))
+- Collapse the part/vendor attachment row actions (Set default, Edit, Where used, Delete) into a single kebab menu ([#606](https://github.com/Jolls/arx-legacy/issues/606))
+
 ## [0.5.85] - 2026-07-05 
 - Show a contact's associated purchase orders on the contact detail page, linking POs to contacts via new nullable FK columns while keeping the printed name snapshot ([#597](https://github.com/Jolls/arx-legacy/issues/597))
 - Link the supplier/receiver contact on the PO detail page to its contact record when the PO carries a contact id ([#597](https://github.com/Jolls/arx-legacy/issues/597))
