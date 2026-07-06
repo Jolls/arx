@@ -1,3 +1,63 @@
+Arx v0.5.88 — July 2026
+========================
+
+NEW FEATURES
+
+  Part Numbering — Next Available Number Suggestion
+  The New Part form now suggests the next available base number as you
+  type, based on rules you set in Settings (separator, segment position,
+  zero-padding, and whether to fill gaps in the sequence or always jump
+  to max+1).
+
+  Company Logo
+  Upload your company logo in Settings and it appears in the app header,
+  the login page, and on printed PO PDFs.
+
+  Attachments — "Where Used" and Faster Actions
+  See every part and vendor linked to a given file from a new "Where
+  used" view. The per-attachment actions (Set default, Edit, Where used,
+  Delete) are now grouped into a single menu instead of a row of buttons.
+  Attachments also support a free-text comment, and part/test-record
+  photos can be added by pasting directly from the clipboard.
+
+  Contacts Linked to Purchase Orders
+  A contact's detail page now lists every PO tied to that contact, and a
+  PO's supplier/receiver contact links back to their contact record. The
+  vendor detail page also gained an "Other Contacts" card for
+  non-default contacts, and the contacts list has a show/hide inactive
+  toggle.
+
+  Settings — Utilities and Named Queries
+  A new Utilities section under Settings runs read-only data-integrity
+  checks: dead attachment links, orphaned part pointers, soft-deleted
+  primary attachments, and PO status drift. A new Named Queries editor
+  lets you build and test-drive `spec_nom` queries without writing SQL.
+
+  Attachments — Smarter Link Handling
+  Pasting a file path now auto-detects whether it's a URL, absolute
+  path, or UNC path, and shows a copy-path control for local paths.
+  Internal `LOCAL:` links are now hidden from all views.
+
+  BOM and Purchasing Improvements
+  Assembly BOMs support Expand All / Collapse All to view nested
+  sub-assemblies inline. The PO add-item form now searches by
+  description as well as part number. The two post-save PO suggestion
+  banners (new vendor part number, new price) are merged into one so
+  dismissing one no longer discards the other.
+
+  Small Touches
+  Per-tab icons on the main nav bar, the Arx icon in the header, an
+  auto-filled Order Number when adding attachments, and more of the
+  Part Details page's attachments shown at a glance.
+
+BUG FIXES
+
+  Fixed a crash on the PO detail page after saving when only one kind
+  of post-save suggestion (new vendor part number or new price) applied.
+  Fixed a crash on Settings when the database auto-connect fails on
+  startup. Fixed the new BOM line quantity field showing the wrong
+  default hint.
+
 Arx v0.5.66 — July 2026
 ========================
 
