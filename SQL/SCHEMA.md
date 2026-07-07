@@ -140,7 +140,7 @@ Trigger DDL lives in `SQL/triggers.sql`. These fire identically in ArxDev, since
 | `trg_PO_company_count` | `purchase_order` | Recalculates `company.SUNumOfPOs` after any INSERT/UPDATE/DELETE |
 | `trg_FIL_part_count` | `part_attachment` | Recalculates `part.attachment_count` (active rows only) after any INSERT/UPDATE/DELETE |
 | `trg_POL_part_count` | `po_line` | Recalculates `part.po_line_count` after any INSERT/UPDATE/DELETE |
-| `trg_test_definition_history` | `test_definition` | Snapshots old row values into `test_definition_history` AFTER UPDATE (audit trail). |
+| `trg_test_definition_history` | `test_definition` | Snapshots old row values into `test_definition_history` AFTER UPDATE (audit trail). Defined in `SQL/triggers.sql` alongside the count-maintenance triggers. |
 
 > **Dropped trigger:** `trg_Tests_history` was a legacy AFTER UPDATE trigger on `test_definition` created when the table was named `Tests`. It referenced the old column `applicable_instrs` (since renamed to `instrument_types`), silently rolling back every UPDATE once the rename was applied. It was dropped in v0.4.1 and superseded by `trg_test_definition_history`.
 

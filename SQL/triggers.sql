@@ -1,12 +1,14 @@
--- Triggers that maintain denormalized counts on company and part.
+-- Triggers that maintain denormalized counts on company and part, plus the
+-- test_definition audit-history trigger.
 --   company.SUNumOfLNKs            — active supplier_part rows for a supplier
 --   company.SUNumOfPOs             — purchase_order rows for a supplier
 --   part.attachment_count          — active part_attachment rows for a part
 --   part.po_line_count             — po_line line-item rows for a part
+--   test_definition_history        — snapshot of test_definition rows on UPDATE
 --
--- Each trigger recomputes a full COUNT(*) from live data (not increment/decrement),
+-- The count triggers recompute a full COUNT(*) from live data (not increment/decrement),
 -- so any drift is self-correcting on the next write to an affected row.
--- These columns are display-only; they are never used in WHERE clauses or business logic.
+-- Those columns are display-only; they are never used in WHERE clauses or business logic.
 --
 -- Run once to install. Safe to re-run (CREATE OR ALTER).
 -- The recalibration block at the bottom corrects any counts that drifted before
@@ -103,4 +105,33 @@ UPDATE p
 SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.part_id = p.id AND f.is_active = 1),
        p.po_line_count   = (SELECT COUNT(*) FROM dbo.po_line pol WHERE pol.part_id = p.id)
 FROM   dbo.part p;
+GO
+
+-- test_definition → test_definition_history
+-- Snapshot old values into test_definition_history on every test_definition UPDATE.
+-- Uses DELETED pseudo-table which contains pre-update row values.
+-- Set-based: handles bulk updates (multiple rows changed at once) correctly.
+IF OBJECT_ID('dbo.trg_test_definition_history', 'TR') IS NOT NULL DROP TRIGGER trg_test_definition_history;
+GO
+CREATE TRIGGER dbo.trg_test_definition_history
+ON dbo.test_definition
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.test_definition_history
+      (test_id, changed_at, changed_by,
+       type, parameter, specification, spec_units,
+       spec_min, spec_max, spec_nom, default_result,
+       hide_formula, pf_type,
+       instrument_types, format, comment, category, sheet_name)
+    SELECT
+      id, GETDATE(),
+      COALESCE(NULLIF(REPLACE(CONVERT(VARCHAR(128), CONTEXT_INFO()), CHAR(0), ''), ''), SYSTEM_USER),
+      type, parameter, specification, spec_units,
+      spec_min, spec_max, spec_nom, default_result,
+      hide_formula, pf_type,
+      instrument_types, format, comment, category, sheet_name
+    FROM DELETED;
+END
 GO
