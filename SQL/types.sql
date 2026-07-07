@@ -1,5 +1,5 @@
 -- part_types: Superseded — this table was never created in the live database.
--- Capabilities (BOM, etc.) are now encoded as BIT columns directly on part (e.g. has_bom).
+-- Capabilities (BOM, etc.) are now encoded as BIT columns directly on part where needed.
 -- Category labels are stored in part.category with a CHECK constraint. See part_number.sql.
 
 IF OBJECT_ID('dbo.part_types', 'U') IS NOT NULL DROP TABLE part_types;

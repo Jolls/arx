@@ -5,7 +5,6 @@
 --   Constrained by CK_part_number_category — see CHECK constraint below.
 --   OPS = an operation/labor line (e.g. Assembler, Test Engineer); current_cost holds the hourly rate,
 --   added to an assembly's BOM with qty = hours so the rollup includes value-add (#465).
--- has_bom: 1 if this part has a Bill of Materials. Drives BOM tab visibility. Decoupled from category.
 -- release_status: U = Under Review, A = Active (Released), D = Deprecated (Obsolete).
 -- attachment_count and po_line_count are denormalized counts maintained by DB triggers — do not update them in code.
 -- po_line_count: trg_POL_part_count fires on po_line INSERT/UPDATE/DELETE (see SQL/triggers.sql).
@@ -17,6 +16,9 @@
 --   Auto-set to the first supplier a price is added for; NULL only when the part has no suppliers.
 -- NOTE: Go struct fields still use the old PN-prefixed names (e.g. Part.PNID, .PNReqBy);
 --       only the DB columns were renamed. See SQL/schema.md.
+-- has_bom column dropped (#555) — BOM presence is computed on demand via EXISTS(bom) instead
+-- of a denormalized flag. Drop migration tracked in #540 (not yet added to SQL/migrations/,
+-- since existing binaries still SELECT the column by name).
 
 IF OBJECT_ID('dbo.part', 'U') IS NOT NULL DROP TABLE part;
 
@@ -25,7 +27,6 @@ CREATE TABLE part (
   part_number         VARCHAR(255)     NOT NULL CONSTRAINT UQ_part_number_part_number UNIQUE,  -- live DB is nullable (pre-existing); NOT NULL is the intent.
   category            VARCHAR(10)      CONSTRAINT DF_part_number_category         DEFAULT 'BUY'
                                        CONSTRAINT CK_part_number_category         CHECK (category IN ('', 'ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'OPS', 'RAW', 'SVC', 'TOOL')),  -- '' permitted for legacy/uncategorized rows (matches live).
-  has_bom             BIT              CONSTRAINT DF_part_number_has_bom          DEFAULT 0,
   revision            VARCHAR(10)      CONSTRAINT DF_part_number_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
   title               VARCHAR(255)     CONSTRAINT DF_part_number_title            DEFAULT '',
   detail              VARCHAR(255)     CONSTRAINT DF_part_number_detail           DEFAULT '',

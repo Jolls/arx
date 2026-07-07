@@ -179,25 +179,25 @@ BEGIN TRY
     -- 6. Parts
     -- ============================================================
     SET IDENTITY_INSERT dbo.part ON;
-    INSERT INTO dbo.part (id, part_number, category, has_bom, revision, title, release_status, is_active, unit_id, current_cost, default_supplier_id, last_rollup_cost, last_rollup_at) VALUES
-        (3001, 'RAW-1001', 'RAW', 0, 'A', 'Aluminum Stock 6061',        'A', 1, 6,  2.50,   1001, NULL, NULL),
-        (3002, 'BUY-1001', 'BUY', 0, 'A', 'M3x8 SHCS',                  'A', 1, 1,  0.05,   1002, NULL, NULL),
-        (3003, 'BUY-1002', 'BUY', 0, 'A', 'O-Ring 2-014',               'A', 1, 1,  0.12,   1001, NULL, NULL),
-        (3004, 'MFG-1001', 'MFG', 0, 'B', 'Widget Housing',             'A', 1, 1,  0,      NULL, NULL, NULL),
-        (3005, 'ASM-1001', 'ASM', 1, 'A', 'Widget Assembly',            'A', 1, 1,  0,      1002, 4.30, GETDATE()),
-        (3006, 'OPS-1001', 'OPS', 0, '',  'Assembler Labor',            'A', 1, 1,  35.00,  NULL, NULL, NULL),
-        (3007, 'RAW-1002', 'RAW', 0, 'A', 'Stainless Steel Bar Stock',  'A', 1, 6,  4.10,   1001, NULL, NULL),
-        (3008, 'BUY-1003', 'BUY', 0, '-', 'Prototype Bracket',          'U', 1, 1,  0,      NULL, NULL, NULL), -- Under Review
-        (3009, 'BUY-1004', 'BUY', 0, 'A', 'Obsolete Retaining Clip',    'D', 0, 1,  0.08,   NULL, NULL, NULL), -- Deprecated + inactive
+    INSERT INTO dbo.part (id, part_number, category, revision, title, release_status, is_active, unit_id, current_cost, default_supplier_id, last_rollup_cost, last_rollup_at) VALUES
+        (3001, 'RAW-1001', 'RAW', 'A', 'Aluminum Stock 6061',        'A', 1, 6,  2.50,   1001, NULL, NULL),
+        (3002, 'BUY-1001', 'BUY', 'A', 'M3x8 SHCS',                  'A', 1, 1,  0.05,   1002, NULL, NULL),
+        (3003, 'BUY-1002', 'BUY', 'A', 'O-Ring 2-014',               'A', 1, 1,  0.12,   1001, NULL, NULL),
+        (3004, 'MFG-1001', 'MFG', 'B', 'Widget Housing',             'A', 1, 1,  0,      NULL, NULL, NULL),
+        (3005, 'ASM-1001', 'ASM', 'A', 'Widget Assembly',            'A', 1, 1,  0,      1002, 4.30, GETDATE()),
+        (3006, 'OPS-1001', 'OPS', '',  'Assembler Labor',            'A', 1, 1,  35.00,  NULL, NULL, NULL),
+        (3007, 'RAW-1002', 'RAW', 'A', 'Stainless Steel Bar Stock',  'A', 1, 6,  4.10,   1001, NULL, NULL),
+        (3008, 'BUY-1003', 'BUY', '-', 'Prototype Bracket',          'U', 1, 1,  0,      NULL, NULL, NULL), -- Under Review
+        (3009, 'BUY-1004', 'BUY', 'A', 'Obsolete Retaining Clip',    'D', 0, 1,  0.08,   NULL, NULL, NULL), -- Deprecated + inactive
         -- FORM-category parts: FormsList and the new-form part picker filter on category='FORM',
         -- so test form 6001 must hang off one. 3011 is a spare with no form attached (new-form target).
-        (3010, 'FORM-1001','FORM',1, 'A', 'Widget Housing Test Form',   'A', 1, 1,  0,      NULL, NULL, NULL),
-        (3011, 'FORM-1002','FORM',0, 'A', 'Spare Test Form Part',       'A', 1, 1,  0,      NULL, NULL, NULL),
+        (3010, 'FORM-1001','FORM', 'A', 'Widget Housing Test Form',   'A', 1, 1,  0,      NULL, NULL, NULL),
+        (3011, 'FORM-1002','FORM', 'A', 'Spare Test Form Part',       'A', 1, 1,  0,      NULL, NULL, NULL),
         -- Sub-assembly nested inside 3005's BOM (#579): exercises the BOM expand/collapse
         -- toggle and the "rollup" cost-source badge, neither of which any other seeded
         -- assembly-of-assemblies line reaches. last_rollup_cost matches the sum of its own
         -- BOM lines below (2*2.50 + 1*4.10 = 9.10) as if the rollup engine had just run.
-        (3012, 'ASM-1002', 'ASM', 1, 'A', 'Widget Sub-Assembly',        'A', 1, 1,  0,      NULL, 9.10,  GETDATE());
+        (3012, 'ASM-1002', 'ASM', 'A', 'Widget Sub-Assembly',        'A', 1, 1,  0,      NULL, 9.10,  GETDATE());
     SET IDENTITY_INSERT dbo.part OFF;
 
     -- Fully populated part so the detail card and edit round-trip show detail/notes/user fields.

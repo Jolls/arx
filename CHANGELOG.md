@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.96] - 2026-07-06 
+- Drop the redundant `has_bom` column; compute BOM presence on demand instead of maintaining a denormalized flag ([#555](https://github.com/Jolls/arx-legacy/issues/555))
+
 ## [0.5.95] - 2026-07-06 
 - Reduce redundant SQL round trips on part detail and parts pages by consolidating attachment queries and caching part categories ([#618](https://github.com/Jolls/arx-legacy/issues/618))
 
