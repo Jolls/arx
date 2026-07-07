@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1001,6 +1002,11 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 
 // ── BOM cost rollup ──────────────────────────────────────────────────────────
 
+// hasOwnBOMExpr is the "does this part have its own BOM" EXISTS check shared by
+// rollupCost and aggregateLeafQty — both walk the same bom table shape to decide
+// whether to recurse into a sub-assembly or treat a component as a leaf.
+const hasOwnBOMExpr = "CAST(CASE WHEN EXISTS(SELECT 1 FROM %[1]s c WHERE c.parent_part_id = %[2]s) THEN 1 ELSE 0 END AS BIT)"
+
 type rollupResult struct {
 	cost  float64
 	cycle bool
@@ -1020,15 +1026,16 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	defer delete(visited, pnid)
 
 	pl, pn, pr := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
+	hasBOM := fmt.Sprintf(hasOwnBOMExpr, pl, "pn.id")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, pn.current_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
 		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
+		       %s
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
-	`, pr, pl, pl, pn), pnid)
+	`, pr, hasBOM, pl, pn), pnid)
 	if err != nil {
 		return rollupResult{}, err
 	}
@@ -1118,6 +1125,269 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	}
 	committed = true
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/bom", id), http.StatusSeeOther)
+}
+
+// ── Cost to build N (qty-break-aware) ───────────────────────────────────────
+
+// priceTier is one active price row for a part+supplier, used for tier selection.
+type priceTier struct {
+	PriceEA  float64
+	PackSize float64
+}
+
+// pickTier selects the tier with the largest PackSize <= qty. Returns ok=false
+// if qty is below every tier's PackSize (or there are no tiers at all).
+func pickTier(tiers []priceTier, qty float64) (unitPrice, packSize float64, ok bool) {
+	found := false
+	for _, t := range tiers {
+		if t.PackSize <= qty && (!found || t.PackSize > packSize) {
+			unitPrice, packSize, found = t.PriceEA, t.PackSize, true
+		}
+	}
+	return unitPrice, packSize, found
+}
+
+type buildCostLine struct {
+	PNID       int
+	PartNumber string
+	Title      string
+	QtyNeeded  float64
+	PackSize   float64
+	UnitPrice  float64
+	ExtCost    float64
+	Source     string // "price" | "missing"
+}
+
+type buildCostResult struct {
+	Lines []buildCostLine
+	Total float64
+	Cycle bool
+}
+
+// aggregateLeafQty walks the BOM tree from pnid, multiplying qty by parentQty at
+// each level, and sums extended quantity into leaves (parts with no BOM) by pnid.
+// visited is path-scoped for cycle detection, matching rollupCost.
+func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty float64, visited map[int]bool, leaves map[int]float64) (bool, error) {
+	if visited[pnid] {
+		return true, nil
+	}
+	visited[pnid] = true
+	defer delete(visited, pnid)
+
+	pl := h.cfg.BOMTable()
+	hasBOM := fmt.Sprintf(hasOwnBOMExpr, pl, "pl.component_part_id")
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT pl.component_part_id, pl.qty, %s
+		FROM %s pl
+		WHERE pl.parent_part_id = @p1
+	`, hasBOM, pl), pnid)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	var hasCycle bool
+	for rows.Next() {
+		var childID int
+		var qty float64
+		var childHasBOM sql.NullBool
+		if err := rows.Scan(&childID, &qty, &childHasBOM); err != nil {
+			return false, err
+		}
+		extQty := qty * parentQty
+		if childHasBOM.Bool {
+			cycle, err := h.aggregateLeafQty(ctx, childID, extQty, visited, leaves)
+			if err != nil {
+				return false, err
+			}
+			if cycle {
+				// A cycle anywhere in the tree makes the whole walk's result
+				// discardable (buildCost returns Cycle:true without using
+				// leaves), so stop issuing further queries for the rest of
+				// this node's siblings instead of walking the remaining tree
+				// for nothing.
+				hasCycle = true
+				break
+			}
+		} else {
+			leaves[childID] += extQty
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return hasCycle, nil
+}
+
+// buildCost computes the consolidated cost to build qty units of pnid: it
+// aggregates each leaf part's total demand across every occurrence in the tree
+// (Pass 1), then prices each leaf once at its aggregated qty using the largest
+// qualifying pack_size tier for the part's default supplier (Pass 2). Leaves
+// below every tier's pack_size are reported as "missing" — no current_cost
+// fallback, no extrapolation.
+type buildCostPartInfo struct {
+	PartNumber        string
+	Title             string
+	DefaultSupplierID sql.NullInt64
+}
+
+// fetchPartInfoByID batches a part_number/title/default_supplier_id lookup for
+// every id in ids into a single query, keyed by id. Used by buildCost's Pass 2
+// so pricing N leaves costs O(1) round trips instead of O(N).
+func (h *Handler) fetchPartInfoByID(ctx context.Context, ids []int) (map[int]buildCostPartInfo, error) {
+	out := map[int]buildCostPartInfo{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders, args := sqlInClause(ids)
+	rows, err := h.queryContext(ctx, fmt.Sprintf(
+		`SELECT id, part_number, title, default_supplier_id FROM %s WHERE id IN (%s)`,
+		h.cfg.PartsTable(), placeholders), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		var partNumber, title sql.NullString
+		var info buildCostPartInfo
+		if err := rows.Scan(&id, &partNumber, &title, &info.DefaultSupplierID); err != nil {
+			return nil, err
+		}
+		info.PartNumber, info.Title = partNumber.String, title.String
+		out[id] = info
+	}
+	return out, rows.Err()
+}
+
+// partSupplierKey identifies one part+supplier pairing, used to key batched
+// price-tier lookups in buildCost's Pass 2.
+type partSupplierKey struct {
+	PartID     int
+	SupplierID int
+}
+
+// fetchPriceTiersByPart batches active price rows for every id in ids into a
+// single query, keyed by (part_id, supplier_id) so buildCost's Pass 2 can look
+// up just the tiers for each leaf's own default supplier.
+func (h *Handler) fetchPriceTiersByPart(ctx context.Context, ids []int) (map[partSupplierKey][]priceTier, error) {
+	out := map[partSupplierKey][]priceTier{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders, args := sqlInClause(ids)
+	rows, err := h.queryContext(ctx, fmt.Sprintf(
+		`SELECT part_id, supplier_id, price_ea, pack_size FROM %s WHERE is_active = 1 AND part_id IN (%s)`,
+		h.cfg.PriceTable(), placeholders), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key partSupplierKey
+		var t priceTier
+		if err := rows.Scan(&key.PartID, &key.SupplierID, &t.PriceEA, &t.PackSize); err != nil {
+			return nil, err
+		}
+		out[key] = append(out[key], t)
+	}
+	return out, rows.Err()
+}
+
+// sqlInClause builds a "@p1,@p2,..." placeholder list and matching args slice
+// for a dynamic-length IN (...) clause.
+func sqlInClause(ids []int) (string, []any) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("@p%d", i+1)
+		args[i] = id
+	}
+	return strings.Join(placeholders, ","), args
+}
+
+func (h *Handler) buildCost(ctx context.Context, pnid int, qty float64) (buildCostResult, error) {
+	leaves := map[int]float64{}
+	hasCycle, err := h.aggregateLeafQty(ctx, pnid, qty, map[int]bool{}, leaves)
+	if err != nil {
+		return buildCostResult{}, err
+	}
+	if hasCycle {
+		return buildCostResult{Cycle: true}, nil
+	}
+
+	ids := make([]int, 0, len(leaves))
+	for id := range leaves {
+		ids = append(ids, id)
+	}
+	partInfo, err := h.fetchPartInfoByID(ctx, ids)
+	if err != nil {
+		return buildCostResult{}, err
+	}
+	priceTiers, err := h.fetchPriceTiersByPart(ctx, ids)
+	if err != nil {
+		return buildCostResult{}, err
+	}
+
+	var result buildCostResult
+	for childID, totalQty := range leaves {
+		info := partInfo[childID]
+		line := buildCostLine{
+			PNID: childID, PartNumber: info.PartNumber, Title: info.Title,
+			QtyNeeded: totalQty, Source: "missing",
+		}
+
+		if info.DefaultSupplierID.Valid {
+			tiers := priceTiers[partSupplierKey{PartID: childID, SupplierID: int(info.DefaultSupplierID.Int64)}]
+			if unitPrice, packSize, ok := pickTier(tiers, totalQty); ok {
+				line.UnitPrice = unitPrice
+				line.PackSize = packSize
+				line.ExtCost = unitPrice * totalQty
+				line.Source = "price"
+			}
+		}
+
+		result.Total += line.ExtCost
+		result.Lines = append(result.Lines, line)
+	}
+	sort.Slice(result.Lines, func(i, j int) bool {
+		return result.Lines[i].PartNumber < result.Lines[j].PartNumber
+	})
+	return result, nil
+}
+
+// ── PartBuildCost — GET /part/{id}/build-cost?qty=N ─────────────────────────
+
+func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
+	if !ok {
+		return
+	}
+	pnid, err := strconv.Atoi(id)
+	if err != nil {
+		h.renderError(w, r, "Invalid part ID")
+		return
+	}
+	qty, err := strconv.ParseFloat(r.URL.Query().Get("qty"), 64)
+	if err != nil || qty <= 0 {
+		h.renderError(w, r, "Invalid build quantity")
+		return
+	}
+	res, err := h.buildCost(r.Context(), pnid, qty)
+	if err != nil {
+		h.renderError(w, r, "Error computing build cost: "+err.Error())
+		return
+	}
+	if res.Cycle {
+		h.renderError(w, r, "BOM contains a cycle — fix the BOM before calculating build cost.")
+		return
+	}
+	h.render(w, r, "part_build_cost.html", map[string]any{
+		"Part": p, "BuildQty": qty, "Lines": res.Lines, "Total": res.Total,
+		"ActiveTab": "parts", "ActiveSubTab": "bom",
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+	})
 }
 
 func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {

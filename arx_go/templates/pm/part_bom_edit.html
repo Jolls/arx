@@ -67,6 +67,16 @@
         </form>
         <p class="table-footer-note">Recursively rolls up child costs from leaves — each sub-assembly is fully recomputed. Parts appearing multiple times in the tree are computed once and reused.</p>
     </div>
+
+    <div class="detail-section" style="margin-top:1.5rem;">
+        <h3>Cost to Build</h3>
+        <form method="GET" action="/part/{{.Part.PNID}}/build-cost" class="d-flex align-items-center gap-2" style="margin-top:0.5rem;" onsubmit="runBuildCost(this)">
+            <label for="build-qty" class="mb-0">Qty:</label>
+            <input type="number" step="any" min="0" id="build-qty" name="qty" value="1" class="form-control form-control-sm" style="width:100px;">
+            <button type="submit" class="btn btn-secondary">Calculate</button>
+        </form>
+        <p class="table-footer-note">Consolidates every leaf part's demand across the whole tree (shared parts summed once) and prices each at the qty-break tier that applies. Read-only — does not change Last Rollup above.</p>
+    </div>
 </div>
 
 <template id="new-row-tpl">
@@ -182,10 +192,18 @@ function setupPartTypeahead(input, row) {
 }
 
 function runRollup(form) {
+    showSpinner(form, 'Running…');
+}
+
+function runBuildCost(form) {
+    showSpinner(form, 'Calculating…');
+}
+
+function showSpinner(form, label) {
     const btn = form.querySelector('button[type="submit"]');
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Running…';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> ' + label;
     }
 }
 

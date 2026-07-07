@@ -1,0 +1,84 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</li>
+    </ol>
+</nav>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    <div class="d-flex justify-content-between align-items-center">
+        <h3 class="mb-0">Cost to Build {{printf "%g" .BuildQty}} &times; {{.Part.PartNumber}}</h3>
+        {{if .Lines}}
+        <button id="copy-build-cost" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-clipboard"></i> Copy for Excel
+        </button>
+        {{end}}
+    </div>
+    <p class="table-footer-note">Each part's demand is summed once across every occurrence in the tree, then priced at the qty-break tier that applies. Read-only — does not change Last Rollup.</p>
+
+    {{if .Lines}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm" id="build-cost-table">
+            <thead class="table-dark">
+                <tr>
+                    <th>Part Number</th>
+                    <th>Title</th>
+                    <th style="text-align:right;">Qty Needed</th>
+                    <th style="text-align:right;">Tier (pack)</th>
+                    <th style="text-align:right;">Unit Price</th>
+                    <th style="text-align:right;">Ext Cost</th>
+                    <th>Source</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Lines}}
+                <tr>
+                    <td><a href="/part/{{.PNID}}" class="part-number-link">{{.PartNumber}}</a></td>
+                    <td>{{.Title}}</td>
+                    <td style="text-align:right;">{{printf "%.5g" .QtyNeeded}}</td>
+                    <td style="text-align:right;">{{if eq .Source "price"}}{{printf "%.5g" .PackSize}}{{end}}</td>
+                    <td style="text-align:right;">{{if eq .Source "price"}}${{printf "%.4f" .UnitPrice}}{{end}}</td>
+                    <td style="text-align:right;">{{if eq .Source "price"}}${{printf "%.4f" .ExtCost}}{{end}}</td>
+                    <td data-source="{{.Source}}">
+                        {{if eq .Source "price"}}<span class="badge bg-success">Price</span>
+                        {{else}}<span class="badge bg-warning text-dark">Missing</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="5" style="text-align:right;"><strong>Grand Total</strong></td>
+                    <td style="text-align:right;"><strong>${{printf "%.4f" .Total}}</strong></td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Lines}} unique part{{if ne (len .Lines) 1}}s{{end}} — parts marked Missing need an active price row for the default supplier before they can be included.</p>
+    {{else}}
+    <p class="no-results">No BOM data found for this part.</p>
+    {{end}}
+
+    <div style="margin-top:1rem;">
+        <a href="/part/{{.Part.PNID}}/bom/edit" class="btn btn-secondary">Back to BOM</a>
+    </div>
+</div>
+
+{{if .Lines}}
+<script>
+(function() {
+  // Shared helper in static/table-sort.js
+  copyTableTSV('build-cost-table', 'copy-build-cost',
+    ['Part Number', 'Title', 'Qty Needed', 'Tier (pack)', 'Unit Price', 'Ext Cost', 'Source'],
+    function(tr, cells, i) {
+      if (i === 6) return cells[6].getAttribute('data-source') === 'price' ? 'Price' : 'Missing';
+      return cells[i].textContent.trim();
+    });
+})();
+</script>
+{{end}}
+{{end}}

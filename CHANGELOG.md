@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.89] - 2026-07-06 
+- Add qty-break-aware "Cost to Build" calculator on the BOM edit page: consolidates each leaf part's demand across every occurrence in the tree and prices it at the matching quantity-break tier ([#466](https://github.com/Jolls/arx-legacy/issues/466))
+
 ## [0.5.88] - 2026-07-06 
 - Suggest the next available part base number on the New Part form, configurable in Settings (separator, segment position, zero-pad width, max+1 or gap-filling mode) ([#346](https://github.com/Jolls/arx-legacy/issues/346))
 

@@ -114,35 +114,13 @@
     if (countEl) countEl.textContent = count;
   }
 
-  // Copy (visible rows only)
-  var btn = document.getElementById('copy-report');
-  btn.addEventListener('click', function() {
-    var lines = ['Serial Number\tPart Number\tRecord Date\tResult Date\tResult\tP/F\tComment'];
-    var tbody = document.querySelector('#report-table tbody');
-    if (tbody) {
-      tbody.querySelectorAll('tr').forEach(function(tr) {
-        if (tr.style.display === 'none') return;
-        var cells = tr.querySelectorAll('td');
-        var pf = cells[5] ? (cells[5].getAttribute('data-pf') || '') : '';
-        lines.push([
-          cells[0] ? cells[0].textContent.trim() : '',
-          cells[1] ? cells[1].textContent.trim() : '',
-          cells[2] ? cells[2].textContent.trim() : '',
-          cells[3] ? cells[3].textContent.trim() : '',
-          cells[4] ? cells[4].textContent.trim() : '',
-          pf,
-          cells[6] ? cells[6].textContent.trim() : ''
-        ].join('\t'));
-      });
-    }
-    navigator.clipboard.writeText(lines.join('\n')).then(function() {
-      btn.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
-      setTimeout(function() { btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy for Excel'; }, 2000);
-    }).catch(function() {
-      btn.textContent = 'Copy failed';
-      setTimeout(function() { btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy for Excel'; }, 2000);
+  // Copy (visible rows only) — shared helper in static/table-sort.js
+  copyTableTSV('report-table', 'copy-report',
+    ['Serial Number', 'Part Number', 'Record Date', 'Result Date', 'Result', 'P/F', 'Comment'],
+    function(tr, cells, i) {
+      if (i === 5) return cells[5] ? (cells[5].getAttribute('data-pf') || '') : '';
+      return cells[i] ? cells[i].textContent.trim() : '';
     });
-  });
 })();
 </script>
 {{end}}
