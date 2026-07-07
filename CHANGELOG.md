@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.95] - 2026-07-06 
+- Reduce redundant SQL round trips on part detail and parts pages by consolidating attachment queries and caching part categories ([#618](https://github.com/Jolls/arx-legacy/issues/618))
+
 ## [0.5.94] - 2026-07-06 
 - Cache the logged-in session user server-side (with TTL + invalidation on permission/active-status changes) instead of re-querying it from the DB on every request ([#620](https://github.com/Jolls/arx-legacy/issues/620))
 

@@ -13,24 +13,27 @@ import (
 // partCategoriesKey is the app_config key holding the part-category list as JSON.
 const partCategoriesKey = "part_categories"
 
-// loadCategories returns the configured part categories, falling back to the
-// built-in defaults when nothing is saved or the saved JSON is unreadable.
-func (h *Handler) loadCategories(ctx context.Context) []models.Category {
+// loadPartCategories caches the configured part categories on the Handler so the
+// hot render path stays DB-free, falling back to the built-in defaults when
+// nothing is saved or the saved JSON is unreadable. Safe to call when db is nil.
+func (h *Handler) loadPartCategories(ctx context.Context) {
 	raw := h.appConfigGetOr(ctx, partCategoriesKey, "")
 	if raw == "" {
-		return models.DefaultCategories()
+		h.partCategories = models.DefaultCategories()
+		return
 	}
 	var cats []models.Category
 	if err := json.Unmarshal([]byte(raw), &cats); err != nil || len(cats) == 0 {
-		return models.DefaultCategories()
+		h.partCategories = models.DefaultCategories()
+		return
 	}
-	return cats
+	h.partCategories = cats
 }
 
 // applyCategoryTabs resolves p.Category against the configured categories and
 // sets p.Tabs, which the part_tabs partial uses to show/hide subtabs.
 func (h *Handler) applyCategoryTabs(ctx context.Context, p *models.Part) {
-	p.Tabs = models.TabsForCategory(h.loadCategories(ctx), p.Category)
+	p.Tabs = models.TabsForCategory(h.partCategories, p.Category)
 }
 
 // SettingsCategoriesSave persists the part-category editor table to app_config.
@@ -66,5 +69,6 @@ func (h *Handler) SettingsCategoriesSave(w http.ResponseWriter, r *http.Request)
 		h.renderError(w, r, "Could not save categories: "+err.Error())
 		return
 	}
+	h.loadPartCategories(r.Context())
 	http.Redirect(w, r, "/settings", http.StatusFound)
 }

@@ -118,7 +118,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PODefaultReceiverName": receiverName,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"CompanyLogo":           h.companyLogoURL(),
-		"PartCategories":        h.loadCategories(r.Context()),
+		"PartCategories":        h.partCategories,
 		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
 		"PartNumberingPreview":  partNumberingPreview,
 		"NamedQueries":          namedQueries,
@@ -293,6 +293,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			}
 			h.CheckSchemaVersion(r.Context())
 			h.loadCompanyLogo(r.Context())
+			h.loadPartCategories(r.Context())
 			if oldDB != nil {
 				oldDB.Close()
 			}

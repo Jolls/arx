@@ -18,6 +18,7 @@ import (
 
 	"github.com/gorilla/sessions"
 
+	"arx/arx_go/models"
 	arxbase "arx/arxlib/config"
 	"arx/arxlib/urlutil"
 )
@@ -30,6 +31,7 @@ type Handler struct {
 	schemaMismatch string
 	releaseNotes   string
 	companyLogo    string
+	partCategories []models.Category
 
 	routeMu    sync.Mutex
 	routeStats map[int]*routeAccumulator
