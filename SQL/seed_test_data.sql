@@ -98,7 +98,7 @@ BEGIN TRY
         ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo', '2020-01-01T00:00:00');
 
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
-    -- config, not throwaway test data — the canonical set lives in SQL/NamedQueries.sql;
+    -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
     -- keep the two in sync. Identity-assigned (looked up by unique `name`, not by id).
     INSERT INTO dbo.named_queries (name, description, sql, params, result_type, created_at, updated_at) VALUES
         ('fil_category_for_pn', 'Attachment categories for a given part number',

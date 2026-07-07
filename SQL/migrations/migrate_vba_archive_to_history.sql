@@ -158,7 +158,7 @@ SELECT COUNT(*) AS migrated_rows FROM test_definition_history WHERE changed_by =
 -- ============================================================================
 -- TODO: Run this section once the timeline UI has been used against prod data
 --       and the migrated history looks correct. Also drop backup tables and
---       update CLAUDE.md and SQL/TestRecords.sql to remove archive_id/revision
+--       update CLAUDE.md and SQL/test_definition.sql to remove archive_id/revision
 --       references after column drops are done.
 -- ============================================================================
 
