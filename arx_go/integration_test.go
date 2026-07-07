@@ -42,6 +42,7 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 	}
 
 	h := New(database, cfg, templatesFS, nil)
+	h.loadPartCategories(context.Background())
 
 	cleanup := func() {
 		database.Close()
@@ -930,6 +931,10 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		id     int // 0 = no {id} route param
 	}{
 		{"parts list", h.PartsList, "/", 0},
+		// "part detail" passes the literal chi pattern "/part/{id}" as the request URL,
+		// so r.URL.Path never equals "/part/3005" and PartDetail's BOM-redirect guard
+		// is intentionally skipped. This profiles the full non-BOM render path — a real
+		// request for 3005 (which has a BOM) would redirect after 2 queries instead.
 		{"part detail", h.PartDetail, "/part/{id}", seedPartID},
 		{"part BOM", h.PartBOM, "/part/{id}/bom", seedPartID},
 		{"part build-cost", h.PartBuildCost, "/part/{id}/build-cost", seedPartID},

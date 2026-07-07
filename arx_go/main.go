@@ -45,6 +45,7 @@ func onReady() {
 	h = New(database, cfg, templatesFS, releaseNotesData)
 	h.CheckSchemaVersion(context.Background())
 	h.loadCompanyLogo(context.Background())
+	h.loadPartCategories(context.Background())
 
 	if cfg.DebugMode {
 		openDebugConsole()
