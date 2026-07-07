@@ -32,8 +32,8 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	var filIDPrimary sql.NullInt64
 	var stockOnHand sql.NullFloat64
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, title, category, has_bom, primary_attachment_id, stock_on_hand FROM %s WHERE id = @p1`,
-		h.cfg.PartsTable(),
+		`SELECT id, part_number, title, category, `+hasOwnBOMExpr+`, primary_attachment_id, stock_on_hand FROM %s p WHERE id = @p1`,
+		h.cfg.BOMTable(), "p.id", h.cfg.PartsTable(),
 	), id).Scan(&p.PNID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand)
 	p.PartNumber = partNumber.String
 	p.Title = title.String
@@ -154,15 +154,15 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail, category, has_bom,
+		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr+`,
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
 		       unit_id, stock_on_hand,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s WHERE id = @p1
-	`, h.cfg.PartsTable()), id).Scan(
+		FROM %s p WHERE id = @p1
+	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
@@ -433,21 +433,12 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/part/%d", newID), http.StatusFound)
 }
 
-// copyBOM clones every BOM line from srcID onto dstID and marks the new part as
-// having a BOM. Used by the duplicate-part flow (#548).
+// copyBOM clones every BOM line from srcID onto dstID. Used by the duplicate-part flow (#548).
 func (h *Handler) copyBOM(ctx context.Context, srcID, dstID int) error {
-	res, err := h.execContext(ctx, fmt.Sprintf(`
+	_, err := h.execContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (parent_part_id, component_part_id, line_number, qty)
 		SELECT @p1, component_part_id, line_number, qty FROM %s WHERE parent_part_id = @p2
 	`, h.cfg.BOMTable(), h.cfg.BOMTable()), dstID, srcID)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return nil // source had no BOM lines
-	}
-	_, err = h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET has_bom = 1 WHERE id = @p1`, h.cfg.PartsTable()), dstID)
 	return err
 }
 
@@ -601,13 +592,13 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		currentCost                                   sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail, category, has_bom,
+		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr+`,
 		       release_status, is_active, requested_by, notes,
 		       unit_id, current_cost,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s WHERE id = @p1
-	`, h.cfg.PartsTable()), id).Scan(
+		FROM %s p WHERE id = @p1
+	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&unitID, &currentCost,
@@ -956,16 +947,6 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error inserting BOM row: "+err.Error())
 			return
 		}
-	}
-
-	// Keep has_bom in sync with whether any BOM lines remain — flips to 1 when the
-	// first line is added and back to 0 when the last is deleted (#548).
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET has_bom = CASE WHEN EXISTS (SELECT 1 FROM %s WHERE parent_part_id=@p1) THEN 1 ELSE 0 END
-		WHERE id=@p1
-	`, pn, pl), parentID); err != nil {
-		h.renderError(w, r, "Error updating BOM flag: "+err.Error())
-		return
 	}
 
 	if err := tx.Commit(); err != nil {
