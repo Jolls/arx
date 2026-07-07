@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.93] - 2026-07-06 
+- Show a browser-tab favicon matching the active Parts Master tab, and update the Test Records favicon to the current icon design ([#621](https://github.com/Jolls/arx-legacy/issues/621))
+
 ## [0.5.92] - 2026-07-06 
 - Add per-request SQL round-trip count and timing to debug logs, with a per-route running summary and a curated route-profiling integration test ([#613](https://github.com/Jolls/arx-legacy/issues/613))
 
