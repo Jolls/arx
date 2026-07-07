@@ -33,6 +33,9 @@ type Handler struct {
 
 	routeMu    sync.Mutex
 	routeStats map[int]*routeAccumulator
+
+	userMu    sync.RWMutex
+	userCache map[int]*userCacheEntry
 }
 
 func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
@@ -40,6 +43,7 @@ func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *
 	return &Handler{
 		db: db, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
 		routeStats: make(map[int]*routeAccumulator),
+		userCache:  make(map[int]*userCacheEntry),
 	}
 }
 
@@ -51,6 +55,10 @@ func (h *Handler) logSQL(query string, args ...any) {
 }
 
 const slowQueryThreshold = 100 * time.Millisecond
+
+// userCacheTTL bounds staleness for cached session users not covered by an
+// explicit invalidation call (e.g. a direct DB edit outside the toggle handlers).
+const userCacheTTL = 60 * time.Second
 
 // sqlStats accumulates per-request SQL round-trip count and total DB time.
 // One goroutine handles a request and its queries run sequentially, so no lock.
