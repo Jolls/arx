@@ -68,6 +68,7 @@ func fv(r *http.Request, key string) string { return strings.TrimSpace(r.FormVal
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "index.html", map[string]any{
 		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
+		"Categories": h.loadCategories(r.Context()),
 	})
 }
 
@@ -1781,11 +1782,12 @@ func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) 
 // pricePoint is one unit-cost-over-time sample for the price-history chart (#284),
 // shared by the Price History tab and the Part dashboard trend card (#521).
 type pricePoint struct {
-	Date     string  `json:"date"` // YYYY-MM-DD
-	Cost     float64 `json:"cost"`
-	PO       string  `json:"po"`
-	Supplier string  `json:"supplier"`
-	Source   string  `json:"source"` // "po" | "price"
+	Date     string   `json:"date"` // YYYY-MM-DD
+	Cost     float64  `json:"cost"`
+	PO       string   `json:"po"`
+	Supplier string   `json:"supplier"`
+	Source   string   `json:"source"`            // "po" | "price"
+	PackSize *float64 `json:"packSize,omitempty"` // qty-break tier, "price" source only (#612)
 }
 
 // partPricePoints assembles the unit-cost-over-time samples for a part from its
@@ -1818,7 +1820,7 @@ func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoi
 
 	pr, comp := h.cfg.PriceTable(), h.cfg.CompanyTable()
 	if prRows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT c.name, p.effective_date, p.price_ea
+		SELECT c.name, p.effective_date, p.price_ea, p.pack_size
 		FROM %s p
 		LEFT JOIN %s c ON p.supplier_id = c.id
 		WHERE p.part_id = @p1 AND p.is_active = 1 AND p.effective_date IS NOT NULL
@@ -1827,12 +1829,16 @@ func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoi
 		for prRows.Next() {
 			var sup sql.NullString
 			var d sql.NullTime
-			var ea sql.NullFloat64
-			if prRows.Scan(&sup, &d, &ea) == nil && d.Valid && ea.Valid {
-				points = append(points, pricePoint{
+			var ea, packSize sql.NullFloat64
+			if prRows.Scan(&sup, &d, &ea, &packSize) == nil && d.Valid && ea.Valid {
+				pt := pricePoint{
 					Date: d.Time.Format("2006-01-02"), Cost: ea.Float64,
 					PO: "", Supplier: sup.String, Source: "price",
-				})
+				}
+				if packSize.Valid {
+					pt.PackSize = &packSize.Float64
+				}
+				points = append(points, pt)
 			}
 		}
 		prRows.Close()

@@ -48,9 +48,8 @@
             <div class="detail-row">
                 <label for="category" class="form-label">Category</label>
                 <select id="category" name="category" class="form-select">
-                    {{range .Categories}}
-                    <option value="{{.Code}}" {{if or (eq $.Part.Category .Code) (and (eq $.Part.Category "") (eq .Code "BUY"))}}selected{{end}}>{{.Code}} — {{.Label}}</option>
-                    {{end}}
+                    {{$sel := .Part.Category}}{{if eq $sel ""}}{{$sel = "BUY"}}{{end}}
+                    {{template "part_category_options" (partCategoryCtx .Categories $sel)}}
                 </select>
             </div>
             <div class="detail-row">

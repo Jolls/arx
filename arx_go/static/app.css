@@ -343,14 +343,10 @@ input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; c
 .ph-svg { overflow: visible; }
 .ph-line { fill: none; stroke: #0d6efd; stroke-width: 1.5; }
 .ph-point { stroke: #fff; stroke-width: 1; cursor: pointer; }
-.ph-point-po { fill: #0d6efd; }
-.ph-point-price { fill: #fd7e14; }
 .ph-axis { stroke: #adb5bd; stroke-width: 1; }
 .ph-grid { stroke: #e9ecef; stroke-width: 1; }
 .ph-label { fill: #6c757d; font-size: 11px; }
 .ph-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
-.ph-swatch-po { background: #0d6efd; }
-.ph-swatch-price { background: #fd7e14; }
 .ph-tooltip {
     position: absolute; display: none; pointer-events: none; z-index: 10;
     background: rgba(33, 37, 41, .95); color: #fff; padding: 6px 8px;

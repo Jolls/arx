@@ -9,14 +9,7 @@
     {{template "part_tabs" .}}
 
     {{if .HasData}}
-    <div class="d-flex align-items-center gap-3 mb-2">
-        <span class="d-inline-flex align-items-center gap-1 small text-muted">
-            <span class="ph-swatch ph-swatch-po"></span> Purchase orders
-        </span>
-        <span class="d-inline-flex align-items-center gap-1 small text-muted">
-            <span class="ph-swatch ph-swatch-price"></span> Price list
-        </span>
-    </div>
+    <div id="price-history-legend" class="d-flex flex-wrap align-items-center gap-3 mb-2"></div>
     <div id="price-history-chart" class="position-relative"></div>
     <script>window.PRICE_HISTORY = {{.PriceDataJSON}};</script>
     <script src="/static/pm/price_history.js?v={{.AppVersion}}"></script>
