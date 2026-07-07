@@ -1,6 +1,6 @@
 -- company: Supplier, manufacturer, and vendor records.
 -- A company can be a supplier (is_supplier=1), a manufacturer (is_manufacturer=1), or both.
--- default_contact FKs to CN.CNID (the primary contact for this company).
+-- default_contact FKs to contact.id (the primary contact for this company).
 -- SUNumOfLNKs and SUNumOfPOs are denormalized counts kept in sync by database triggers
 -- (dbo.trg_supplier_part_company_count, dbo.trg_PO_company_count — see SQL/triggers.sql).
 
@@ -19,9 +19,9 @@ CREATE TABLE company (
   SUNumOfLNKs       INT            CONSTRAINT DF_company_SUNumOfLNKs DEFAULT 0, -- Denormalized count of supplier_part rows for this company.
   SUNumOfPOs        INT            CONSTRAINT DF_company_SUNumOfPOs  DEFAULT 0, -- Denormalized count of PO rows for this company.
   SUSupplierCode    VARCHAR(12),
-  default_contact        INT            NULL,              -- FK to CN.CNID. NULL = no contact assigned.
+  default_contact        INT            NULL,              -- FK to contact.id. NULL = no contact assigned.
   primary_attachment_id  INT            NULL               -- FK to company_attachment.supplier_attachment_id.
 );
 
-ALTER TABLE dbo.company ADD CONSTRAINT FK_company_default_contact    FOREIGN KEY (default_contact)        REFERENCES dbo.CN (CNID);
+ALTER TABLE dbo.company ADD CONSTRAINT FK_company_default_contact    FOREIGN KEY (default_contact)        REFERENCES dbo.contact (id);
 ALTER TABLE dbo.company ADD CONSTRAINT FK_company_primary_attachment FOREIGN KEY (primary_attachment_id) REFERENCES dbo.company_attachment (supplier_attachment_id);
