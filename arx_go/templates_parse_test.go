@@ -21,7 +21,7 @@ func TestPMTemplatesParse(t *testing.T) {
 			continue
 		}
 		if _, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(templatesFS,
-			"templates/pm/layout.html",
+			"templates/shared/layout.html",
 			"templates/pm/partials.html",
 			page,
 		); err != nil {
@@ -49,7 +49,7 @@ func TestTRTemplatesParse(t *testing.T) {
 			continue
 		}
 		if _, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(templatesFS,
-			"templates/tr/layout.html", page,
+			"templates/shared/layout.html", page,
 		); err != nil {
 			t.Errorf("parse %s: %v", base, err)
 		}
