@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.92] - 2026-07-06 
+- Add per-request SQL round-trip count and timing to debug logs, plus a curated route-profiling integration test ([#613](https://github.com/Jolls/arx-legacy/issues/613))
+
 ## [0.5.91] - 2026-07-06 
 - Deduplicate the shared PM/TR page layout into one template ([#614](https://github.com/Jolls/arx-legacy/issues/614))
 
