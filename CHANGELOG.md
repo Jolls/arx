@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.91] - 2026-07-06 
+- Deduplicate the shared PM/TR page layout into one template ([#614](https://github.com/Jolls/arx-legacy/issues/614))
+
 ## [0.5.90] - 2026-07-06 
 - Make the parts list "Type" filter a dropdown of configured categories instead of free text ([#611](https://github.com/Jolls/arx-legacy/issues/611))
 - Split the price-history chart's price-list points into one series per pack-size tier so qty breaks no longer blend into a single trend line ([#612](https://github.com/Jolls/arx-legacy/issues/612))

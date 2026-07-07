@@ -195,9 +195,11 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
+		m["Title"] = "Arx Parts Master"
+		m["Favicon"] = "/static/pm/favicon.png"
 	}
 	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/pm/layout.html",
+		"templates/shared/layout.html",
 		"templates/pm/partials.html",
 		"templates/pm/"+page,
 	)

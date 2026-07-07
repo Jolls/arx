@@ -22,9 +22,12 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
+		m["Title"] = "Arx: Test Records"
+		m["Favicon"] = "/static/tr/favicon.png"
+		m["ExtraScript"] = "/static/tr/app.js"
 	}
 	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/tr/layout.html",
+		"templates/shared/layout.html",
 		"templates/tr/"+page,
 	)
 	if err != nil {
