@@ -48,3 +48,40 @@ func TestBOMLeafCost(t *testing.T) {
 		}
 	}
 }
+
+func TestPickTier(t *testing.T) {
+	tiers := []priceTier{
+		{PriceEA: 0.10, PackSize: 1},
+		{PriceEA: 0.05, PackSize: 100},
+		{PriceEA: 0.03, PackSize: 1000},
+	}
+	cases := []struct {
+		name      string
+		tiers     []priceTier
+		qty       float64
+		wantPrice float64
+		wantPack  float64
+		wantOK    bool
+	}{
+		{"below every tier", tiers, 0.5, 0, 0, false},
+		{"exact match on smallest tier", tiers, 1, 0.10, 1, true},
+		{"between tiers picks lower tier", tiers, 50, 0.10, 1, true},
+		{"exact match on middle tier", tiers, 100, 0.05, 100, true},
+		{"between middle and top picks middle", tiers, 500, 0.05, 100, true},
+		{"exact match on top tier", tiers, 1000, 0.03, 1000, true},
+		{"above every tier picks largest", tiers, 5000, 0.03, 1000, true},
+		{"no tiers at all", nil, 100, 0, 0, false},
+		{"unordered input still finds largest qualifying", []priceTier{
+			{PriceEA: 0.03, PackSize: 1000},
+			{PriceEA: 0.10, PackSize: 1},
+			{PriceEA: 0.05, PackSize: 100},
+		}, 500, 0.05, 100, true},
+	}
+	for _, c := range cases {
+		gotPrice, gotPack, gotOK := pickTier(c.tiers, c.qty)
+		if gotOK != c.wantOK || (gotOK && (gotPrice != c.wantPrice || gotPack != c.wantPack)) {
+			t.Errorf("%s: pickTier(qty=%v) = (%.4f, %.4f, %v), want (%.4f, %.4f, %v)",
+				c.name, c.qty, gotPrice, gotPack, gotOK, c.wantPrice, c.wantPack, c.wantOK)
+		}
+	}
+}

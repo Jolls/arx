@@ -223,6 +223,9 @@ BEGIN TRY
     -- and qty is hours, so the cost rollup includes value-add, not just material.
     -- Line 4 nests sub-assembly 3012 (#579): its own BOM (3001 + 3007) makes 3005's item 4
     -- expandable, and its cost source badges as "Rollup" using 3012.last_rollup_cost.
+    -- Line 3908 (#466): 3012 also directly consumes 3002 (the same screw 3005 uses at line
+    -- 3901), so the qty-break build-cost calculation must consolidate the screw's demand
+    -- across both occurrences before picking a price tier — see price rows 4204/4205 below.
     SET IDENTITY_INSERT dbo.bom ON;
     INSERT INTO dbo.bom (id, parent_part_id, component_part_id, line_number, qty) VALUES
         (3901, 3005, 3002, 1, 2),
@@ -231,7 +234,8 @@ BEGIN TRY
         (3904, 3010, 3004, 1, 1),   -- FORM part's BOM lists the testable unit → NewRecord PN picker
         (3905, 3012, 3001, 1, 2),   -- sub-assembly 3012's own BOM: 2x Aluminum Stock
         (3906, 3012, 3007, 2, 1),   -- + 1x Stainless Steel Bar Stock
-        (3907, 3005, 3012, 4, 1);   -- 3005 nests 3012 as a sub-assembly component
+        (3907, 3005, 3012, 4, 1),   -- 3005 nests 3012 as a sub-assembly component
+        (3908, 3012, 3002, 3, 3);   -- 3012 also directly uses 3x screw 3002 (shared leaf, #466)
     SET IDENTITY_INSERT dbo.bom OFF;
 
     -- ============================================================
@@ -252,11 +256,16 @@ BEGIN TRY
         (4003, 1001, 3003, NULL, NULL, 'ACME-OR2014',  'O-Ring 2-014',            NULL,  NULL,        1);
     SET IDENTITY_INSERT dbo.supplier_part OFF;
 
+    -- 4204/4205 (#466): additional active qty-break tiers on 3002, alongside 4203, so the
+    -- build-cost calculation has 3 tiers (1 / 100 / 1000) to select between. See bom line
+    -- 3908 above for the shared-leaf scenario these tiers are meant to exercise.
     SET IDENTITY_INSERT dbo.price ON;
     INSERT INTO dbo.price (id, part_id, supplier_id, price_ea, price_pack, pack_size, is_active, effective_date) VALUES
-        (4201, 3001, 1001, 2.50, 25.00, 10, 1, '2026-01-15'),
-        (4202, 3002, 1002, 0.06, 6.00,  100, 0, '2025-06-01'), -- superseded price (history)
-        (4203, 3002, 1002, 0.05, 5.00,  100, 1, '2026-02-01'); -- active price
+        (4201, 3001, 1001, 2.50, 25.00, 10,   1, '2026-01-15'),
+        (4202, 3002, 1002, 0.06, 6.00,  100,  0, '2025-06-01'), -- superseded price (history)
+        (4203, 3002, 1002, 0.05, 5.00,  100,  1, '2026-02-01'), -- active price
+        (4204, 3002, 1002, 0.10, 0.10,  1,    1, '2026-02-01'), -- qty-break tier: singles
+        (4205, 3002, 1002, 0.03, 30.00, 1000, 1, '2026-02-01'); -- qty-break tier: 1000-pack
     SET IDENTITY_INSERT dbo.price OFF;
 
     -- ============================================================

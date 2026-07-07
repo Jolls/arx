@@ -116,9 +116,6 @@
 {{else}}
 <a href="/" class="btn btn-sm btn-secondary"><i class="bi bi-arrow-left"></i> Back to Parts List</a>
 {{end}}
-{{if and (eq .ActiveSubTab "bom") .BOMItems}}
-<a href="/part/{{.Part.PNID}}/bom/export.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
-{{end}}
 </div>
 
 {{$id := .Part.PNID}}

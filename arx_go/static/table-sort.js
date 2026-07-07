@@ -22,3 +22,35 @@ function sortTable(th) {
     rows.forEach(function(row) { tbody.appendChild(row); });
     if (window.__trRepaginate) window.__trRepaginate();
 }
+
+// Shared "copy a server-rendered table to the clipboard as TSV" helper (PM and TR
+// templates) — pastes cleanly into Excel. header is the array of column names;
+// cellFn(cells, i), if given, overrides the default per-cell text extraction
+// (e.g. to read a data-* attribute instead of textContent, or skip filtered rows).
+function copyTableTSV(tableId, btnId, header, cellFn) {
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    var defaultLabel = btn.innerHTML;
+    btn.addEventListener('click', function() {
+        var lines = [header.join('\t')];
+        var tbody = document.querySelector('#' + tableId + ' tbody');
+        if (tbody) {
+            tbody.querySelectorAll('tr').forEach(function(tr) {
+                if (tr.style.display === 'none') return;
+                var cells = tr.querySelectorAll('td');
+                var out = [];
+                for (var i = 0; i < header.length; i++) {
+                    out.push(cellFn ? cellFn(tr, cells, i) : (cells[i] ? cells[i].textContent.trim() : ''));
+                }
+                lines.push(out.join('\t'));
+            });
+        }
+        navigator.clipboard.writeText(lines.join('\n')).then(function() {
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
+            setTimeout(function() { btn.innerHTML = defaultLabel; }, 2000);
+        }).catch(function() {
+            btn.textContent = 'Copy failed';
+            setTimeout(function() { btn.innerHTML = defaultLabel; }, 2000);
+        });
+    });
+}

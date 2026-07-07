@@ -41,7 +41,7 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 		t.Fatalf("db.Connect: %v", err)
 	}
 
-	h := New(database, cfg, nil, nil)
+	h := New(database, cfg, templatesFS, nil)
 
 	cleanup := func() {
 		database.Close()
@@ -568,6 +568,345 @@ func TestIntegration_ContactPOs(t *testing.T) {
 	for i, p := range rec {
 		if p.Number != wantNums[i] || p.Role != "Receiver" {
 			t.Errorf("contactPOs(2005)[%d]: got {Number:%q Role:%q}, want {%s Receiver}", i, p.Number, p.Role, wantNums[i])
+		}
+	}
+}
+
+// TestIntegration_BuildCostConsolidation verifies the #466 qty-break build-cost
+// calculation against the pinned seed BOM: part 3005 (Widget Assembly) uses screw
+// 3002 directly (bom line 3901, qty 2) AND nests sub-assembly 3012 (bom line 3907,
+// qty 1), which itself also directly uses screw 3002 (bom line 3908, qty 3). At a
+// build qty of 300, the screw's two occurrences extend to 600 and 900 respectively
+// — each individually below the 1000-pack tier (price rows 4203/4205) — but their
+// consolidated demand of 1500 crosses into it. This is the entire point of
+// aggregating before pricing: a per-occurrence rollup would never reach that tier.
+// Read-only — buildCost does not write to the DB, so no cleanup.
+func TestIntegration_BuildCostConsolidation(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	res, err := h.buildCost(ctx, 3005, 300)
+	if err != nil {
+		t.Fatalf("buildCost(3005, 300): %v", err)
+	}
+	if res.Cycle {
+		t.Fatal("buildCost(3005, 300): unexpected cycle")
+	}
+
+	byPN := map[string]buildCostLine{}
+	for _, l := range res.Lines {
+		byPN[l.PartNumber] = l
+	}
+
+	screw, ok := byPN["BUY-1001"]
+	if !ok {
+		t.Fatalf("buildCost(3005, 300): no consolidated line for BUY-1001 (ArxDev may need reseeding): %+v", res.Lines)
+	}
+	if screw.QtyNeeded != 1500 {
+		t.Errorf("BUY-1001 QtyNeeded = %v, want 1500 (600 direct + 900 via sub-assembly 3012)", screw.QtyNeeded)
+	}
+	if screw.Source != "price" || screw.PackSize != 1000 || screw.UnitPrice != 0.03 {
+		t.Errorf("BUY-1001 tier = {Source:%q PackSize:%v UnitPrice:%v}, want {price 1000 0.03} — consolidated qty 1500 should cross into the 1000-pack tier",
+			screw.Source, screw.PackSize, screw.UnitPrice)
+	}
+	if screw.ExtCost != 45 {
+		t.Errorf("BUY-1001 ExtCost = %v, want 45 (1500 * 0.03)", screw.ExtCost)
+	}
+
+	raw, ok := byPN["RAW-1001"]
+	if !ok {
+		t.Fatalf("buildCost(3005, 300): no consolidated line for RAW-1001: %+v", res.Lines)
+	}
+	if raw.QtyNeeded != 600 || raw.Source != "price" || raw.PackSize != 10 || raw.UnitPrice != 2.50 {
+		t.Errorf("RAW-1001 = {Qty:%v Source:%q Pack:%v Price:%v}, want {600 price 10 2.50}",
+			raw.QtyNeeded, raw.Source, raw.PackSize, raw.UnitPrice)
+	}
+
+	// OPS labor (3006) has no default supplier, so it's always "missing" in this
+	// mode — no current_cost fallback (decision 6b in the design plan).
+	labor, ok := byPN["OPS-1001"]
+	if !ok {
+		t.Fatalf("buildCost(3005, 300): no consolidated line for OPS-1001: %+v", res.Lines)
+	}
+	if labor.Source != "missing" {
+		t.Errorf("OPS-1001 Source = %q, want \"missing\" (no default supplier, no price fallback)", labor.Source)
+	}
+}
+
+// TestIntegration_BuildCostBelowAllTiers exercises the "below every tier" fallback
+// (decision #3 in the design plan) against the real seeded price rows, not just the
+// pure pickTier unit test — proving aggregateLeafQty + buildCost actually wire the
+// tier lookup correctly end to end. At a build qty of 0.001, screw 3002's
+// consolidated demand (0.005) falls below its smallest tier (pack_size 1), and
+// RAW-1001's demand (0.002) falls below its only tier (pack_size 10) — both must
+// report "missing", not extrapolate or fall back to current_cost.
+// Read-only — no cleanup.
+func TestIntegration_BuildCostBelowAllTiers(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	res, err := h.buildCost(ctx, 3005, 0.001)
+	if err != nil {
+		t.Fatalf("buildCost(3005, 0.001): %v", err)
+	}
+	if res.Cycle {
+		t.Fatal("buildCost(3005, 0.001): unexpected cycle")
+	}
+
+	byPN := map[string]buildCostLine{}
+	for _, l := range res.Lines {
+		byPN[l.PartNumber] = l
+	}
+
+	for _, pn := range []string{"BUY-1001", "RAW-1001"} {
+		line, ok := byPN[pn]
+		if !ok {
+			t.Fatalf("buildCost(3005, 0.001): no consolidated line for %s (ArxDev may need reseeding): %+v", pn, res.Lines)
+		}
+		if line.Source != "missing" {
+			t.Errorf("%s Source = %q, want \"missing\" (aggregated qty %v is below every tier's pack_size)", pn, line.Source, line.QtyNeeded)
+		}
+		if line.ExtCost != 0 {
+			t.Errorf("%s ExtCost = %v, want 0 for a missing line", pn, line.ExtCost)
+		}
+	}
+}
+
+// TestIntegration_BuildCostCycleDetection creates a throwaway two-part cycle
+// (A's BOM contains B, B's BOM contains A) — a scenario the static seed data
+// deliberately doesn't have — and verifies aggregateLeafQty's path-scoped
+// cycle detection actually trips instead of recursing forever.
+func TestIntegration_BuildCostCycleDetection(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	pn := h.cfg.PartsTable()
+	pl := h.cfg.BOMTable()
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	var idA, idB int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number) OUTPUT INSERTED.id VALUES (@p1)`, pn),
+		"ITEST-CYCLE-A-"+suffix).Scan(&idA); err != nil {
+		t.Fatalf("seed part A: %v", err)
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number) OUTPUT INSERTED.id VALUES (@p1)`, pn),
+		"ITEST-CYCLE-B-"+suffix).Scan(&idB); err != nil {
+		t.Fatalf("seed part B: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id IN (@p1,@p2)`, pl), idA, idB)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id IN (@p1,@p2)`, pn), idA, idB)
+	}()
+
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (parent_part_id, component_part_id, qty) VALUES (@p1,@p2,1)`, pl), idA, idB); err != nil {
+		t.Fatalf("seed bom A->B: %v", err)
+	}
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (parent_part_id, component_part_id, qty) VALUES (@p1,@p2,1)`, pl), idB, idA); err != nil {
+		t.Fatalf("seed bom B->A: %v", err)
+	}
+
+	res, err := h.buildCost(ctx, idA, 10)
+	if err != nil {
+		t.Fatalf("buildCost(cycle): %v", err)
+	}
+	if !res.Cycle {
+		t.Error("buildCost(cycle): Cycle = false, want true for a self-referencing BOM")
+	}
+}
+
+// TestIntegration_PartBuildCostHandler exercises the full HTTP handler (route
+// param + query-string parsing + template render), not just the buildCost
+// function directly — guarding against a wiring bug (e.g. wrong query key,
+// template referencing a renamed field) that a function-level test can't catch.
+// Uses the same pinned qty=300 scenario as TestIntegration_BuildCostConsolidation.
+// Read-only — no cleanup.
+func TestIntegration_PartBuildCostHandler(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	get := func(qty string) (int, string) {
+		req := withID(httptest.NewRequest(http.MethodGet, "/part/3005/build-cost?qty="+qty, nil), 3005)
+		rec := httptest.NewRecorder()
+		h.PartBuildCost(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+
+	code, body := get("300")
+	if code != http.StatusOK {
+		t.Fatalf("PartBuildCost(qty=300): status %d, want 200", code)
+	}
+	for _, want := range []string{"BUY-1001", "1500", "0.0300", "45.0000", "RAW-1001", "600", "1545.0000", "Missing"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PartBuildCost(qty=300): body missing %q", want)
+		}
+	}
+
+	for _, badQty := range []string{"0", "-5", "abc", ""} {
+		_, body := get(badQty)
+		if !strings.Contains(body, "Invalid build quantity") {
+			t.Errorf("PartBuildCost(qty=%q): expected \"Invalid build quantity\" error, got body: %s", badQty, body)
+		}
+	}
+}
+
+// TestIntegration_BuildCostTierShiftsWithQty verifies a *different* qty picks a
+// *different* tier for the same shared screw (3002): at qty=1, its consolidated
+// demand is 2+3=5 (well below the 100 tier used at qty=300 in
+// TestIntegration_BuildCostConsolidation), so it must price at the 1-unit tier
+// (price row 4204, $0.10) instead. Guards against a tier rule that happens to
+// work for one qty but is actually hardcoded or off-by-one.
+// Read-only — no cleanup.
+func TestIntegration_BuildCostTierShiftsWithQty(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	res, err := h.buildCost(ctx, 3005, 1)
+	if err != nil {
+		t.Fatalf("buildCost(3005, 1): %v", err)
+	}
+	var screw *buildCostLine
+	for i := range res.Lines {
+		if res.Lines[i].PartNumber == "BUY-1001" {
+			screw = &res.Lines[i]
+		}
+	}
+	if screw == nil {
+		t.Fatalf("buildCost(3005, 1): no consolidated line for BUY-1001 (ArxDev may need reseeding): %+v", res.Lines)
+	}
+	if screw.QtyNeeded != 5 {
+		t.Errorf("BUY-1001 QtyNeeded at qty=1 = %v, want 5 (2 direct + 3 via sub-assembly 3012)", screw.QtyNeeded)
+	}
+	if screw.Source != "price" || screw.PackSize != 1 || screw.UnitPrice != 0.10 {
+		t.Errorf("BUY-1001 tier at qty=1 = {Source:%q PackSize:%v UnitPrice:%v}, want {price 1 0.10} — qty 5 should pick the 1-unit tier, not the 100 or 1000 tier used at higher build qtys",
+			screw.Source, screw.PackSize, screw.UnitPrice)
+	}
+}
+
+// TestIntegration_BuildCostDoesNotWriteRollup guards the read-only design decision
+// (#7 in the design plan): running the qty-break build cost must never touch
+// part.last_rollup_cost / last_rollup_at, since those columns feed the BOM tab,
+// CSV export, and cost reporting under a qty=1 assumption. Runs buildCost at a
+// qty (300) that would produce a very different number if it were mistakenly
+// written back, then asserts the columns are byte-for-byte unchanged.
+func TestIntegration_BuildCostDoesNotWriteRollup(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	pn := h.cfg.PartsTable()
+
+	readRollup := func(id int) (sql.NullFloat64, sql.NullTime) {
+		var cost sql.NullFloat64
+		var at sql.NullTime
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id=@p1`, pn), id).Scan(&cost, &at); err != nil {
+			t.Fatalf("read last_rollup_cost for part %d: %v", id, err)
+		}
+		return cost, at
+	}
+
+	// Check both the root (3005) and the nested sub-assembly (3012) it touches —
+	// a naive "write back to every visited assembly" bug (copy-pasted from
+	// rollupCost/PartRollupCost) would hit both.
+	beforeCost5, beforeAt5 := readRollup(3005)
+	beforeCost12, beforeAt12 := readRollup(3012)
+
+	if _, err := h.buildCost(ctx, 3005, 300); err != nil {
+		t.Fatalf("buildCost(3005, 300): %v", err)
+	}
+
+	afterCost5, afterAt5 := readRollup(3005)
+	afterCost12, afterAt12 := readRollup(3012)
+
+	if beforeCost5 != afterCost5 || beforeAt5 != afterAt5 {
+		t.Errorf("part 3005 last_rollup_cost/at changed: before {%v %v}, after {%v %v} — buildCost must be read-only",
+			beforeCost5, beforeAt5, afterCost5, afterAt5)
+	}
+	if beforeCost12 != afterCost12 || beforeAt12 != afterAt12 {
+		t.Errorf("part 3012 last_rollup_cost/at changed: before {%v %v}, after {%v %v} — buildCost must be read-only",
+			beforeCost12, beforeAt12, afterCost12, afterAt12)
+	}
+}
+
+// TestIntegration_BuildCostNonAssemblyPart verifies calling build-cost on a part
+// with no BOM (a leaf, e.g. the screw 3002 itself) returns zero consolidated
+// lines rather than erroring — and that the handler renders the same
+// "No BOM data found" message the BOM tab uses for the same case.
+func TestIntegration_BuildCostNonAssemblyPart(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	res, err := h.buildCost(ctx, 3002, 10)
+	if err != nil {
+		t.Fatalf("buildCost(3002, 10): %v", err)
+	}
+	if len(res.Lines) != 0 {
+		t.Errorf("buildCost(3002, 10): got %d lines, want 0 (3002 has no BOM)", len(res.Lines))
+	}
+
+	req := withID(httptest.NewRequest(http.MethodGet, "/part/3002/build-cost?qty=10", nil), 3002)
+	rec := httptest.NewRecorder()
+	h.PartBuildCost(rec, req)
+	if !strings.Contains(rec.Body.String(), "No BOM data found") {
+		t.Error("PartBuildCost(3002): expected \"No BOM data found\" message for a non-assembly part")
+	}
+}
+
+// TestIntegration_BuildCostUIWiring is a lightweight content check on the two
+// pieces of this feature a server-side Go test cannot otherwise observe: the
+// spinner hookup and the clipboard-copy button. It doesn't prove the browser
+// actually shows a spinner or writes to the OS clipboard (that needs a human /
+// browser automation — see #514's resolution, which deliberately chose not to
+// stand up browser automation for this project) — it only guards against the
+// markup/script wiring silently breaking (e.g. a renamed function, a missing
+// button id) between here and the next manual check.
+func TestIntegration_BuildCostUIWiring(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	// BOM edit page: the qty form must call runBuildCost(this) on submit (spinner).
+	editReq := withID(httptest.NewRequest(http.MethodGet, "/part/3005/bom/edit", nil), 3005)
+	editRec := httptest.NewRecorder()
+	h.PartBOMEdit(editRec, editReq)
+	editBody := editRec.Body.String()
+	for _, want := range []string{"Cost to Build", `onsubmit="runBuildCost(this)"`, "function runBuildCost"} {
+		if !strings.Contains(editBody, want) {
+			t.Errorf("PartBOMEdit: body missing %q", want)
+		}
+	}
+
+	// BOM tab: Export CSV must live in the Expand/Collapse/Columns button row, not
+	// the top back-button row (moved there because it exports this table).
+	bomReq := withID(httptest.NewRequest(http.MethodGet, "/part/3005/bom", nil), 3005)
+	bomRec := httptest.NewRecorder()
+	h.PartBOM(bomRec, bomReq)
+	bomBody := bomRec.Body.String()
+	exportIdx := strings.Index(bomBody, "Export CSV")
+	expandIdx := strings.Index(bomBody, "Expand All")
+	backIdx := strings.Index(bomBody, "Back to")
+	if exportIdx == -1 || expandIdx == -1 || backIdx == -1 {
+		t.Fatalf("PartBOM: missing expected markers (export=%d expand=%d back=%d)", exportIdx, expandIdx, backIdx)
+	}
+	if !(backIdx < exportIdx && exportIdx < expandIdx) {
+		t.Errorf("PartBOM: expected order Back(%d) < Export CSV(%d) < Expand All(%d) — Export CSV should sit in the table button row, after Back and before Expand All",
+			backIdx, exportIdx, expandIdx)
+	}
+
+	// Build-cost results page: the copy button + TSV script must be present.
+	costReq := withID(httptest.NewRequest(http.MethodGet, "/part/3005/build-cost?qty=300", nil), 3005)
+	costRec := httptest.NewRecorder()
+	h.PartBuildCost(costRec, costReq)
+	costBody := costRec.Body.String()
+	for _, want := range []string{`id="copy-build-cost"`, "Copy for Excel", "copyTableTSV("} {
+		if !strings.Contains(costBody, want) {
+			t.Errorf("PartBuildCost: body missing %q", want)
 		}
 	}
 }
