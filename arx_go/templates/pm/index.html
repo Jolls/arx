@@ -55,7 +55,12 @@
                     <th data-col="col-detail"><input type="text" placeholder=""></th>
                     <th data-col="col-reqby"><input type="text" placeholder=""></th>
                     <th data-col="col-date" data-filter-type="date"></th>
-                    <th data-col="col-cat"><input type="text" placeholder=""></th>
+                    <th data-col="col-cat">
+                        <select class="form-select form-select-sm">
+                            <option value="">All</option>
+                            {{template "part_category_options" (partCategoryCtx .Categories "")}}
+                        </select>
+                    </th>
                     <th data-col="col-modified" data-filter-type="date"></th>
                     <th data-col="col-attach"><input type="text" placeholder=""></th>
                     <th data-col="col-polines"><input type="text" placeholder=""></th>

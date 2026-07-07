@@ -1,12 +1,17 @@
 /* =============================================================
    Arx — Price History chart (#284)
    Dependency-free SVG: unit cost (Y) over PO/price-list date (X),
-   one point per record, hover tooltip. Renders window.PRICE_HISTORY
-   into #price-history-chart, or call renderPriceHistory(el, points).
+   one series for POs plus one series per price-list pack-size tier
+   (#612), hover tooltip. Renders window.PRICE_HISTORY into
+   #price-history-chart, or call renderPriceHistory(el, points).
    ============================================================= */
 
 (function () {
     const NS = 'http://www.w3.org/2000/svg';
+
+    // PO series is always blue; price-list tiers cycle through the rest.
+    const PO_COLOR = '#0d6efd';
+    const TIER_COLORS = ['#fd7e14', '#20c997', '#6f42c1', '#d63384', '#6c757d', '#0dcaf0'];
 
     function svgEl(name, attrs) {
         const e = document.createElementNS(NS, name);
@@ -20,6 +25,51 @@
         return d.innerHTML;
     }
 
+    function packSizeStr(n) {
+        return Number.isFinite(n) ? String(n) : '—';
+    }
+
+    // Groups points into one PO series plus one series per distinct
+    // price-list pack size, in ascending pack-size order.
+    function buildSeries(pts) {
+        const series = [];
+        const poPts = [];
+        const tierMap = new Map(); // packSize -> points
+        pts.forEach(p => {
+            if (p.source !== 'price') { poPts.push(p); return; }
+            const key = Number.isFinite(p.packSize) ? p.packSize : 1;
+            if (!tierMap.has(key)) tierMap.set(key, []);
+            tierMap.get(key).push(p);
+        });
+        if (poPts.length) series.push({ label: 'Purchase orders', color: PO_COLOR, points: poPts });
+
+        Array.from(tierMap.keys()).sort((a, b) => a - b).forEach((packSize, i) => {
+            series.push({
+                label: 'Price list — pack ' + packSizeStr(packSize),
+                color: TIER_COLORS[i % TIER_COLORS.length],
+                points: tierMap.get(packSize),
+                packSize,
+            });
+        });
+        return series;
+    }
+
+    function renderLegend(container, series) {
+        const legend = document.getElementById(container.id + '-legend');
+        if (!legend) return;
+        legend.innerHTML = '';
+        series.forEach(s => {
+            const item = document.createElement('span');
+            item.className = 'd-inline-flex align-items-center gap-1 small text-muted';
+            const swatch = document.createElement('span');
+            swatch.className = 'ph-swatch';
+            swatch.style.background = s.color;
+            item.appendChild(swatch);
+            item.appendChild(document.createTextNode(s.label));
+            legend.appendChild(item);
+        });
+    }
+
     function renderPriceHistory(container, points) {
         container.innerHTML = '';
         if (!points || !points.length) return;
@@ -30,6 +80,9 @@
             .filter(p => !isNaN(p.t))
             .sort((a, b) => a.t - b.t);
         if (!pts.length) return;
+
+        const series = buildSeries(pts);
+        renderLegend(container, series);
 
         const W = 820, H = 360, padL = 60, padR = 20, padT = 20, padB = 44;
         const plotW = W - padL - padR, plotH = H - padT - padB;
@@ -83,34 +136,39 @@
         svg.appendChild(svgEl('line', { class: 'ph-axis', x1: padL, y1: padT, x2: padL, y2: H - padB }));
         svg.appendChild(svgEl('line', { class: 'ph-axis', x1: padL, y1: H - padB, x2: W - padR, y2: H - padB }));
 
-        // Trend line through all points in date order.
-        svg.appendChild(svgEl('polyline', {
-            class: 'ph-line',
-            points: pts.map(p => `${xOf(p.t)},${yOf(p.cost)}`).join(' '),
-        }));
+        // One trend line per series, each in its own color.
+        series.forEach(s => {
+            svg.appendChild(svgEl('polyline', {
+                class: 'ph-line',
+                style: `stroke:${s.color}`,
+                points: s.points.map(p => `${xOf(p.t)},${yOf(p.cost)}`).join(' '),
+            }));
+        });
 
         // Tooltip element lives in the (position-relative) container.
         const tip = document.createElement('div');
         tip.className = 'ph-tooltip';
         container.appendChild(tip);
 
-        // Points (drawn last so they sit above the line and catch hover).
-        pts.forEach(p => {
-            const cir = svgEl('circle', {
-                class: 'ph-point ' + (p.source === 'price' ? 'ph-point-price' : 'ph-point-po'),
-                cx: xOf(p.t), cy: yOf(p.cost), r: 4,
+        // Points (drawn last so they sit above the lines and catch hover).
+        series.forEach(s => {
+            s.points.forEach(p => {
+                const cir = svgEl('circle', {
+                    class: 'ph-point', style: `fill:${s.color}`,
+                    cx: xOf(p.t), cy: yOf(p.cost), r: 4,
+                });
+                cir.addEventListener('mouseenter', () => {
+                    const head = p.source === 'price' ? s.label : ('PO #' + (p.po || '—'));
+                    tip.innerHTML = `<strong>${esc(head)}</strong><br>${esc(p.supplier || '')}` +
+                        `<br>${esc(p.date)} &bull; $${Number(p.cost).toFixed(2)}`;
+                    tip.style.display = 'block';
+                    const rect = svg.getBoundingClientRect();
+                    tip.style.left = (rect.width * xOf(p.t) / W) + 'px';
+                    tip.style.top = (rect.height * yOf(p.cost) / H) + 'px';
+                });
+                cir.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+                svg.appendChild(cir);
             });
-            cir.addEventListener('mouseenter', () => {
-                const head = p.source === 'price' ? 'Price list' : ('PO #' + (p.po || '—'));
-                tip.innerHTML = `<strong>${esc(head)}</strong><br>${esc(p.supplier || '')}` +
-                    `<br>${esc(p.date)} &bull; $${Number(p.cost).toFixed(2)}`;
-                tip.style.display = 'block';
-                const rect = svg.getBoundingClientRect();
-                tip.style.left = (rect.width * xOf(p.t) / W) + 'px';
-                tip.style.top = (rect.height * yOf(p.cost) / H) + 'px';
-            });
-            cir.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
-            svg.appendChild(cir);
         });
 
         container.insertBefore(svg, tip);

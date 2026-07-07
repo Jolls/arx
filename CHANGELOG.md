@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.90] - 2026-07-06 
+- Make the parts list "Type" filter a dropdown of configured categories instead of free text ([#611](https://github.com/Jolls/arx-legacy/issues/611))
+- Split the price-history chart's price-list points into one series per pack-size tier so qty breaks no longer blend into a single trend line ([#612](https://github.com/Jolls/arx-legacy/issues/612))
+
 ## [0.5.89] - 2026-07-06 
 - Add qty-break-aware "Cost to Build" calculator on the BOM edit page: consolidates each leaf part's demand across every occurrence in the tree and prices it at the matching quantity-break tier ([#466](https://github.com/Jolls/arx-legacy/issues/466))
 

@@ -14,6 +14,14 @@
 </button>
 {{end}}
 
+{{/* part_category_options — renders <option> tags for the part.category dropdown.
+     Pipeline: {Categories, Selected} — build with partCategoryCtx. */}}
+{{define "part_category_options"}}
+{{range .Categories}}
+<option value="{{.Code}}"{{if eq $.Selected .Code}} selected{{end}}>{{.Code}} — {{.Label}}</option>
+{{end}}
+{{end}}
+
 {{define "category_select"}}
 <div style="display:flex; flex-direction:column; gap:6px; flex:1;">
     <select class="form-select" data-notes-sel="{{.InputID}}"

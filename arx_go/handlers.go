@@ -347,6 +347,9 @@ func pmTemplateFuncs() template.FuncMap {
 		"categoryCtx": func(opts []string, current, inputID string) map[string]any {
 			return map[string]any{"Opts": opts, "Current": current, "InputID": inputID}
 		},
+		"partCategoryCtx": func(cats any, selected string) map[string]any {
+			return map[string]any{"Categories": cats, "Selected": selected}
+		},
 		"inList": func(list []string, val string) bool {
 			for _, s := range list {
 				if s == val {
