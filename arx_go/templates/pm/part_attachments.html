@@ -233,20 +233,12 @@
 </div>
 
 <script>
-// Live preview of the imported filename. MUST mirror buildAttachmentFileName in
-// arx_go/attachments.go (order, separator, blank-skip, 20-char title truncation,
-// illegal-char sanitisation) — keep the two in sync. Deduplication tracked in #558.
-var ATT_PART_NUMBER = {{.Part.PartNumber}};
-var ATT_PART_TITLE = {{.Part.Title}};
-var ATT_TITLE_MAX = 20;
+// Live preview of the imported filename. Fetched from the server so it always
+// matches buildAttachmentFileName in arx_go/attachments.go exactly (#558).
+var ATT_PART_ID = {{.Part.PNID}};
+var attPreviewDebounce = {};
+var attPreviewRequestSeq = {};
 
-function attSanitizePart(s) {
-    return s.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, '-');
-}
-function attTruncate(s, n) {
-    var r = Array.from(s);
-    return r.length <= n ? s : r.slice(0, n).join('');
-}
 // attId maps a logical field name to the DOM id used by the given form.
 // The Add form's ids predate this feature and aren't uniformly prefixed
 // (only category/comment already followed an "add_" convention); the Edit
@@ -257,21 +249,6 @@ function attId(mode, name) {
     if (name === 'comment') { return 'add_comment'; }
     return name;
 }
-function buildAttachmentName(mode) {
-    mode = mode || 'add';
-    var src = document.getElementById(attId(mode, 'source_path')).value;
-    if (!src) { return ''; }
-    var base = src.split(/[\\/]/).pop();
-    var dot = base.lastIndexOf('.');
-    var ext = dot > -1 ? base.slice(dot) : '';
-    var rev = document.getElementById(attId(mode, 'FILPNRev')).value;
-    var title = attTruncate(ATT_PART_TITLE.trim(), ATT_TITLE_MAX);
-    var cat = document.getElementById(attId(mode, 'category')).value;
-    var parts = [ATT_PART_NUMBER, rev, title, cat]
-        .map(attSanitizePart)
-        .filter(function (p) { return p !== ''; });
-    return parts.join(' ') + ext;
-}
 function updateBrowsePreview(mode) {
     mode = mode || 'add';
     var moved = document.getElementById(attId(mode, 'move_source')).checked;
@@ -280,7 +257,25 @@ function updateBrowsePreview(mode) {
     var verb = document.getElementById(attId(mode, 'browse-verb'));
     if (verb) { verb.textContent = moved ? 'moved' : 'copied'; }
     var el = document.getElementById(attId(mode, 'browse-preview'));
-    if (el) { el.textContent = buildAttachmentName(mode); }
+    if (!el) { return; }
+    var src = document.getElementById(attId(mode, 'source_path')).value;
+    if (!src) { el.textContent = ''; return; }
+    var base = src.split(/[\\/]/).pop();
+    var dot = base.lastIndexOf('.');
+    var ext = dot > -1 ? base.slice(dot) : '';
+    var rev = document.getElementById(attId(mode, 'FILPNRev')).value;
+    var cat = document.getElementById(attId(mode, 'category')).value;
+    clearTimeout(attPreviewDebounce[mode]);
+    var seq = (attPreviewRequestSeq[mode] || 0) + 1;
+    attPreviewRequestSeq[mode] = seq;
+    attPreviewDebounce[mode] = setTimeout(function () {
+        var qs = new URLSearchParams({rev: rev, category: cat, ext: ext});
+        fetch('/api/part/' + ATT_PART_ID + '/attachment-name?' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (attPreviewRequestSeq[mode] === seq) { el.textContent = data.name || ''; }
+            });
+    }, 250);
 }
 function browseAttachment(btn, mode) {
     mode = mode || 'add';

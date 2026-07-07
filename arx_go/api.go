@@ -234,6 +234,21 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
+// APIPartAttachmentName — GET /api/part/{id}/attachment-name?rev=&category=&ext=
+// Returns the filename buildAttachmentFileName would produce, so the Browse
+// live preview in part_attachments.html matches the saved name exactly (#558).
+func (h *Handler) APIPartAttachmentName(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, err := h.fetchPartBasic(r.Context(), id)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "Error loading part: "+err.Error())
+		return
+	}
+	q := r.URL.Query()
+	name := buildAttachmentFileName(p.PartNumber, q.Get("rev"), p.Title, q.Get("category"), q.Get("ext"))
+	writeJSON(w, map[string]any{"name": name})
+}
+
 // APIPartPasteAttachment saves a clipboard-pasted image as a new part_attachment
 // row with category "Photo". POST /api/part/{id}/paste-attachment.
 func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request) {
