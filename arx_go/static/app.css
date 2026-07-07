@@ -82,7 +82,7 @@ thead.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opac
 .sub-tab-edit          { margin-left: auto; }
 
 /* --- Tables -------------------------------------------------- */
-.table-wrapper { overflow-x: auto; contain: layout style; }
+.table-wrapper { overflow-x: auto; }
 
 table[data-rows-url] { table-layout: fixed; }
 table[data-rows-url] td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

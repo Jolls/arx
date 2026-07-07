@@ -27,8 +27,9 @@ const titleMaxLen = 20
 // result is always a bare base name (no directory component), so it cannot
 // escape the target folder.
 //
-// NOTE: this convention is mirrored in JS for the live preview in
-// templates/pm/part_attachments.html — keep both in sync. Deduplication: #558.
+// This is the sole implementation of the naming convention; the Browse live
+// preview in templates/pm/part_attachments.html calls it via
+// GET /api/part/{id}/attachment-name rather than duplicating the rule (#558).
 func buildAttachmentFileName(partNumber, rev, title, category, ext string) string {
 	title = truncateRunes(strings.TrimSpace(title), titleMaxLen)
 	var parts []string

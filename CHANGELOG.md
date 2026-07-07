@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.97] - 2026-07-07 
+- Deduplicate the attachment filename convention: the Browse live preview now fetches the name from a server endpoint instead of mirroring the naming rule in JS ([#558](https://github.com/Jolls/arx-legacy/issues/558))
+- Fix the row-action kebab menu getting clipped for rows near the bottom of a table
+
 ## [0.5.96] - 2026-07-06 
 - Drop the redundant `has_bom` column; compute BOM presence on demand instead of maintaining a denormalized flag ([#555](https://github.com/Jolls/arx-legacy/issues/555))
 

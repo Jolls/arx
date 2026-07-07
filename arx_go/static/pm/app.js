@@ -516,6 +516,18 @@ function exportCSV() {
     URL.revokeObjectURL(a.href);
 }
 
+// Dropdown menus (e.g. row-action kebabs) default to Popper's 'absolute'
+// strategy, which is clipped by any scrollable ancestor — .table-wrapper's
+// overflow-x:auto clips rows near the bottom of a table. 'fixed' strategy
+// positions relative to the viewport instead, escaping that clipping.
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        bootstrap.Dropdown.getOrCreateInstance(el, {
+            popperConfig: defaultConfig => Object.assign({}, defaultConfig, { strategy: 'fixed' }),
+        });
+    });
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     initDateFilters();
     loadListRows();
