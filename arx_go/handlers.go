@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -29,11 +30,17 @@ type Handler struct {
 	schemaMismatch string
 	releaseNotes   string
 	companyLogo    string
+
+	routeMu    sync.Mutex
+	routeStats map[int]*routeAccumulator
 }
 
 func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
-	return &Handler{db: db, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes)}
+	return &Handler{
+		db: db, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
+		routeStats: make(map[int]*routeAccumulator),
+	}
 }
 
 func (h *Handler) logSQL(query string, args ...any) {
@@ -213,20 +220,76 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// fileServingPrefixes are routes that only ever serve static assets or local
+// files from disk — they never touch the DB, so profileRequest skips them
+// entirely instead of logging a guaranteed "0 round trips" line every time.
+var fileServingPrefixes = []string{
+	"/static/", "/local/", "/local-dir/", "/supplier-local/", "/supplier-local-dir/", "/images/",
+}
+
+func isFileServingPath(path string) bool {
+	for _, prefix := range fileServingPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// routeAccumulator sums round trips and timing across the requests that make up
+// one logical page view (the page load plus the background fetch/XHR calls it
+// fires). path is the top-level navigation that started it.
+type routeAccumulator struct {
+	path  string
+	count int
+	total time.Duration
+}
+
+// logRouteSummary folds one request's stats into the calling session's current
+// route accumulator and logs the running total. Modern browsers tag every
+// request with Sec-Fetch-Dest: a real page navigation (typed URL, clicked link)
+// is "document"; a fetch()/XHR call fired by the page's own JS is "empty". Only
+// an explicit "empty" is folded into the current route — anything else,
+// including a missing header (older browsers, non-browser clients), starts a
+// fresh route. The Referer header can't make this distinction: navigating away
+// from a page and that page's own background fetch both carry the same
+// Referer, so matching on it alone never resets and the total grows forever.
+// Skipped for sessions with no logged-in user yet.
+func (h *Handler) logRouteSummary(r *http.Request, count int, total time.Duration) {
+	sess := h.session(r)
+	uid, ok := sess.Values["user_id"].(int)
+	if !ok {
+		return
+	}
+
+	h.routeMu.Lock()
+	defer h.routeMu.Unlock()
+	acc := h.routeStats[uid]
+	if acc == nil || r.Header.Get("Sec-Fetch-Dest") != "empty" {
+		acc = &routeAccumulator{path: r.URL.Path}
+		h.routeStats[uid] = acc
+	}
+	acc.count += count
+	acc.total += total
+	log.Printf("[PERF SUMMARY] %s | %d round trips | %s total",
+		acc.path, acc.count, acc.total.Round(time.Millisecond))
+}
+
 // profileRequest logs per-request SQL round-trip count and DB/total timing when
-// DebugMode is on. See sqlStats/recordRoundTrip.
+// DebugMode is on, plus a running per-route summary. See sqlStats/recordRoundTrip.
 func (h *Handler) profileRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.cfg.DebugMode {
+		if !h.cfg.DebugMode || isFileServingPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
 		st := &sqlStats{}
 		start := time.Now()
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxSQLStatsKey, st)))
+		elapsed := time.Since(start)
 		log.Printf("[PERF] %s %s | %d round trips | %s in DB | %s total",
-			r.Method, r.URL.Path, st.count,
-			st.total.Round(time.Millisecond), time.Since(start).Round(time.Millisecond))
+			r.Method, r.URL.Path, st.count, st.total.Round(time.Millisecond), elapsed.Round(time.Millisecond))
+		h.logRouteSummary(r, st.count, elapsed)
 	})
 }
 
