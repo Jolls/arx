@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -41,6 +42,44 @@ func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 		return nil, nil
 	}
 	return &u, err
+}
+
+// userCacheEntry holds a cached session user with a TTL-based expiry.
+type userCacheEntry struct {
+	user    *User
+	expires time.Time
+}
+
+// cachedUserByID returns the session user from h.userCache when a fresh entry
+// exists, otherwise fetches it via userByID and caches the result. Only
+// successful (non-nil) lookups are cached, so an inactive or deleted user is
+// never cached and is re-checked (and rejected) on every request.
+func (h *Handler) cachedUserByID(ctx context.Context, id int) (*User, error) {
+	h.userMu.RLock()
+	entry, ok := h.userCache[id]
+	h.userMu.RUnlock()
+	if ok && time.Now().Before(entry.expires) {
+		return entry.user, nil
+	}
+
+	u, err := h.userByID(ctx, id)
+	if err != nil || u == nil {
+		return u, err
+	}
+
+	h.userMu.Lock()
+	h.userCache[id] = &userCacheEntry{user: u, expires: time.Now().Add(userCacheTTL)}
+	h.userMu.Unlock()
+	return u, nil
+}
+
+// invalidateUserCache evicts a user's cached entry so the next request
+// re-fetches current fields from the DB. Called after any UPDATE that changes
+// a field cachedUserByID caches (is_active, can_approve_po, can_approve_records).
+func (h *Handler) invalidateUserCache(id int) {
+	h.userMu.Lock()
+	delete(h.userCache, id)
+	h.userMu.Unlock()
 }
 
 func (h *Handler) userByUsername(ctx context.Context, username string) (*User, string, error) {
@@ -79,7 +118,7 @@ func (h *Handler) withUser(r *http.Request) (*http.Request, *User) {
 	if !ok || id <= 0 {
 		return r, nil
 	}
-	u, err := h.userByID(r.Context(), id)
+	u, err := h.cachedUserByID(r.Context(), id)
 	if err != nil || u == nil {
 		return r, nil
 	}
@@ -288,6 +327,7 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
+	h.invalidateUserCache(id)
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
 }
 
@@ -304,6 +344,7 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
+	h.invalidateUserCache(id)
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
 }
 
@@ -320,6 +361,7 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
+	h.invalidateUserCache(id)
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
 }
 

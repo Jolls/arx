@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.94] - 2026-07-06 
+- Cache the logged-in session user server-side (with TTL + invalidation on permission/active-status changes) instead of re-querying it from the DB on every request ([#620](https://github.com/Jolls/arx-legacy/issues/620))
+
 ## [0.5.93] - 2026-07-06 
 - Show a browser-tab favicon matching the active Parts Master tab, and update the Test Records favicon to the current icon design ([#621](https://github.com/Jolls/arx-legacy/issues/621))
 
