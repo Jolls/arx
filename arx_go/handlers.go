@@ -308,6 +308,16 @@ func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
 	}
 }
 
+// pmTabFavicons maps each Parts Master nav tab to its favicon, reusing the
+// same icon shown in the nav bar so the browser tab matches the active section.
+var pmTabFavicons = map[string]string{
+	"parts":     "/static/pm/icons/parts.svg",
+	"suppliers": "/static/pm/icons/vendors.svg",
+	"pos":       "/static/pm/icons/pos.svg",
+	"contacts":  "/static/pm/icons/contacts.svg",
+	"records":   "/static/pm/icons/records.svg",
+}
+
 // render parses layout + partials + the named page template and executes "layout".
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	if m, ok := data.(map[string]any); ok {
@@ -319,6 +329,13 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["CompanyLogo"] = h.companyLogoURL()
 		m["Title"] = "Arx Parts Master"
 		m["Favicon"] = "/static/pm/favicon.png"
+		m["FaviconType"] = "image/png"
+		if tab, _ := m["ActiveTab"].(string); tab != "" {
+			if icon, ok := pmTabFavicons[tab]; ok {
+				m["Favicon"] = icon
+				m["FaviconType"] = "image/svg+xml"
+			}
+		}
 	}
 	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/shared/layout.html",

@@ -23,7 +23,8 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
 		m["Title"] = "Arx: Test Records"
-		m["Favicon"] = "/static/tr/favicon.png"
+		m["Favicon"] = "/static/pm/icons/records.svg"
+		m["FaviconType"] = "image/svg+xml"
 		m["ExtraScript"] = "/static/tr/app.js"
 	}
 	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
