@@ -43,19 +43,61 @@ func (h *Handler) logSQL(query string, args ...any) {
 	log.Printf("[SQL] %s | args=%v", strings.Join(strings.Fields(query), " "), args)
 }
 
+const slowQueryThreshold = 100 * time.Millisecond
+
+// sqlStats accumulates per-request SQL round-trip count and total DB time.
+// One goroutine handles a request and its queries run sequentially, so no lock.
+type sqlStats struct {
+	count int
+	total time.Duration
+}
+
+// recordRoundTrip attributes one DB round trip to the request's sqlStats (if the
+// profiling middleware seeded one) and flags queries slower than the threshold.
+// A no-op when no sqlStats is in ctx (i.e. DebugMode off), which gates all of this.
+func recordRoundTrip(ctx context.Context, query string, elapsed time.Duration) {
+	st, ok := ctx.Value(ctxSQLStatsKey).(*sqlStats)
+	if !ok {
+		return
+	}
+	st.count++
+	st.total += elapsed
+	if elapsed >= slowQueryThreshold {
+		log.Printf("[SLOW SQL] %s | %s", elapsed.Round(time.Millisecond),
+			strings.Join(strings.Fields(query), " "))
+	}
+}
+
+// timeQuery runs call, timing it into recordRoundTrip. Used for the single-value
+// *sql.Row methods, which never return an error to check.
+func timeQuery[T any](ctx context.Context, query string, call func() T) T {
+	start := time.Now()
+	result := call()
+	recordRoundTrip(ctx, query, time.Since(start))
+	return result
+}
+
+// timeQueryErr is timeQuery for the (result, error) DB methods.
+func timeQueryErr[T any](ctx context.Context, query string, call func() (T, error)) (T, error) {
+	start := time.Now()
+	result, err := call()
+	recordRoundTrip(ctx, query, time.Since(start))
+	return result, err
+}
+
 func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	h.logSQL(query, args...)
-	return h.db.QueryContext(ctx, query, args...)
+	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return h.db.QueryContext(ctx, query, args...) })
 }
 
 func (h *Handler) queryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	h.logSQL(query, args...)
-	return h.db.QueryRowContext(ctx, query, args...)
+	return timeQuery(ctx, query, func() *sql.Row { return h.db.QueryRowContext(ctx, query, args...) })
 }
 
 func (h *Handler) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	h.logSQL(query, args...)
-	return h.db.ExecContext(ctx, query, args...)
+	return timeQueryErr(ctx, query, func() (sql.Result, error) { return h.db.ExecContext(ctx, query, args...) })
 }
 
 type txLogger struct {
@@ -65,17 +107,17 @@ type txLogger struct {
 
 func (t *txLogger) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	t.logFn(query, args...)
-	return t.Tx.ExecContext(ctx, query, args...)
+	return timeQueryErr(ctx, query, func() (sql.Result, error) { return t.Tx.ExecContext(ctx, query, args...) })
 }
 
 func (t *txLogger) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	t.logFn(query, args...)
-	return t.Tx.QueryRowContext(ctx, query, args...)
+	return timeQuery(ctx, query, func() *sql.Row { return t.Tx.QueryRowContext(ctx, query, args...) })
 }
 
 func (t *txLogger) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	t.logFn(query, args...)
-	return t.Tx.QueryContext(ctx, query, args...)
+	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return t.Tx.QueryContext(ctx, query, args...) })
 }
 
 func (t *txLogger) Commit() error   { t.logFn("COMMIT"); return t.Tx.Commit() }
@@ -168,6 +210,23 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r2)
+	})
+}
+
+// profileRequest logs per-request SQL round-trip count and DB/total timing when
+// DebugMode is on. See sqlStats/recordRoundTrip.
+func (h *Handler) profileRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.cfg.DebugMode {
+			next.ServeHTTP(w, r)
+			return
+		}
+		st := &sqlStats{}
+		start := time.Now()
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxSQLStatsKey, st)))
+		log.Printf("[PERF] %s %s | %d round trips | %s in DB | %s total",
+			r.Method, r.URL.Path, st.count,
+			st.total.Round(time.Millisecond), time.Since(start).Round(time.Millisecond))
 	})
 }
 

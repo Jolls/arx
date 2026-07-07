@@ -910,3 +910,50 @@ func TestIntegration_BuildCostUIWiring(t *testing.T) {
 		}
 	}
 }
+
+// TestIntegration_RouteRoundTrips profiles a curated set of representative GET pages
+// against ArxDev, logging SQL round-trip count and DB/total timing per route (#613).
+// Calls handlers directly (bypassing buildRouter/RequireAuth/CSRF), so it seeds the
+// sqlStats counter into the request context itself rather than relying on profileRequest.
+func TestIntegration_RouteRoundTrips(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	// Seed IDs from SQL/seed_test_data.sql: 3005 Widget Assembly (has BOM/orders),
+	// 3002 M3x8 SHCS (has price history), company 1001 Acme Fasteners, PO 5002.
+	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID = 3005, 3002, 1001, 5002
+
+	cases := []struct {
+		name   string
+		fn     http.HandlerFunc
+		target string
+		id     int // 0 = no {id} route param
+	}{
+		{"parts list", h.PartsList, "/", 0},
+		{"part detail", h.PartDetail, "/part/{id}", seedPartID},
+		{"part BOM", h.PartBOM, "/part/{id}/bom", seedPartID},
+		{"part build-cost", h.PartBuildCost, "/part/{id}/build-cost", seedPartID},
+		{"part price-history", h.PartPriceHistory, "/part/{id}/price-history", seedPriceHistoryPartID},
+		{"part orders", h.PartOrders, "/part/{id}/orders", seedPartID},
+		{"suppliers list", h.SuppliersList, "/suppliers", 0},
+		{"supplier detail", h.SupplierDetail, "/supplier/{id}", seedSupplierID},
+		{"PO list", h.POList, "/pos", 0},
+		{"PO detail", h.PODetail, "/po/{id}", seedPOID},
+		{"contacts list", h.ContactsList, "/contacts", 0},
+		{"records/forms list", h.FormsList, "/records", 0},
+	}
+
+	for _, c := range cases {
+		st := &sqlStats{}
+		req := httptest.NewRequest(http.MethodGet, c.target, nil)
+		if c.id != 0 {
+			req = withID(req, c.id)
+		}
+		req = req.WithContext(context.WithValue(req.Context(), ctxSQLStatsKey, st))
+		rec := httptest.NewRecorder()
+		start := time.Now()
+		c.fn(rec, req)
+		t.Logf("[PROFILE] %-20s %-28s %3d round trips  %8s  (status %d)",
+			c.name, c.target, st.count, time.Since(start).Round(time.Millisecond), rec.Code)
+	}
+}

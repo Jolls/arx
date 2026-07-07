@@ -18,6 +18,7 @@ import (
 type contextKey int
 
 const ctxUserKey contextKey = 1
+const ctxSQLStatsKey contextKey = 2
 
 // User holds the identity of the logged-in user.
 type User struct {
