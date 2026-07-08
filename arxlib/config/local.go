@@ -17,8 +17,6 @@ type LocalConfig struct {
 	DocControlRoot      string `json:"doc_control_root"`
 	POFolderRoot        string `json:"po_folder_root"`
 	SupplierFilesRoot   string `json:"supplier_files_root"`
-	PODefaultContactID  *int   `json:"po_default_contact_id,omitempty"`
-	PODefaultReceiverID *int   `json:"po_default_receiver_id,omitempty"`
 	ImageRoot           string `json:"image_root"`
 	DebugMode           bool   `json:"debug_mode"`
 	TestMode            *bool  `json:"test_mode,omitempty"`
@@ -68,8 +66,6 @@ func migrateLegacy() *LocalConfig {
 		DocControlRoot      string `json:"doc_control_root"`
 		POFolderRoot        string `json:"po_folder_root"`
 		SupplierFilesRoot   string `json:"supplier_files_root"`
-		PODefaultContactID  *int   `json:"po_default_contact_id,omitempty"`
-		PODefaultReceiverID *int   `json:"po_default_receiver_id,omitempty"`
 		DebugMode           bool   `json:"debug_mode"`
 		TestMode            *bool  `json:"test_mode,omitempty"`
 		TestDBName          string `json:"test_db_name,omitempty"`
@@ -112,8 +108,6 @@ func migrateLegacy() *LocalConfig {
 		DocControlRoot:      pm.DocControlRoot,
 		POFolderRoot:        pm.POFolderRoot,
 		SupplierFilesRoot:   pm.SupplierFilesRoot,
-		PODefaultContactID:  pm.PODefaultContactID,
-		PODefaultReceiverID: pm.PODefaultReceiverID,
 		ImageRoot:           tr.ImageRoot,
 		DebugMode:           pm.DebugMode,
 		TestMode:            pm.TestMode,

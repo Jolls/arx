@@ -135,10 +135,12 @@ BEGIN TRY
     -- Real bcrypt hashes so login works in test mode (ArxDev only — never reuse in prod):
     --   admin / admin   (can approve POs and test records)
     --   tester / tester (no approval rights)
+    -- admin carries per-user PO defaults (receiver 1003 Global Distribution + its
+    -- contact 2005 Pat Dock); tester has none (NULL = new POs start blank) — issue #463.
     SET IDENTITY_INSERT dbo.users ON;
-    INSERT INTO dbo.users (id, username, display_name, password_hash, is_active, can_approve_po, can_approve_records, updated_at) VALUES
-        (8001, 'admin',  'Admin User',  '$2a$10$0mUf8G9KxL6jGVWpUJZnaO40arOpPIqW09xqPyiyqnrBCR/VxffQe', 1, 1, 1, '2020-01-01T00:00:00'),
-        (8002, 'tester', 'Test User',   '$2a$10$B29vUdQg85rwb53HIcltUuhdIb17PrSSVF32tJNJ/TQ1JyHvVYer2', 1, 0, 0, '2020-01-01T00:00:00');
+    INSERT INTO dbo.users (id, username, display_name, password_hash, is_active, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id, updated_at) VALUES
+        (8001, 'admin',  'Admin User',  '$2a$10$0mUf8G9KxL6jGVWpUJZnaO40arOpPIqW09xqPyiyqnrBCR/VxffQe', 1, 1, 1, 2005, 1003, '2020-01-01T00:00:00'),
+        (8002, 'tester', 'Test User',   '$2a$10$B29vUdQg85rwb53HIcltUuhdIb17PrSSVF32tJNJ/TQ1JyHvVYer2', 1, 0, 0, NULL, NULL, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.users OFF;
 
     -- ============================================================

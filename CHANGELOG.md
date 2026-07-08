@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.101] - 2026-07-07 
+- PO defaults are now per-user: buyers set their own default receiver/contact on a new Settings → My Preferences tab; the machine-level global PO defaults have been removed ([#463](https://github.com/Jolls/arx-legacy/issues/463))
+
 ## [0.5.100] - 2026-07-07 
 - Force a re-login when Test Mode is toggled so writes are always attributed to a real user in the now-active database ([#631](https://github.com/Jolls/arx-legacy/issues/631))
 

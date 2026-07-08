@@ -33,6 +33,9 @@
         {{if and .Connected .CurrentUser}}
         <a href="#users" class="sub-tab" data-tab="users">Users</a>
         {{end}}
+        {{if and .Connected .CurrentUser}}
+        <a href="#preferences" class="sub-tab" data-tab="preferences">My Preferences</a>
+        {{end}}
         {{if .ReleaseNotes}}
         <a href="#release-notes" class="sub-tab" data-tab="release-notes">Release Notes</a>
         {{end}}
@@ -155,72 +158,6 @@
             </div>
         </div>
     </div>
-
-    <!-- ── PO Defaults ───────────────────────────────────────────────── -->
-    <div class="detail-section mt-4">
-        <h3>PO Defaults</h3>
-        <p class="text-muted" style="font-size:0.85em; margin:4px 0 14px;">
-            Saved to <code>config/local.json</code>. Connect to the database to see contact names.
-        </p>
-        <div class="detail-row align-items-center" style="padding:6px 0;">
-            <strong style="min-width:160px;">Default Contact</strong>
-            {{if .Contacts}}
-            <select name="po_default_contact_id"
-                    class="form-select" style="font-size:0.9em; min-width:260px; width:auto;">
-                <option value="0">— none —</option>
-                {{range .Contacts}}
-                <option value="{{.ID}}" {{if eq .ID $.PODefaultContactID}}selected{{end}}>
-                    {{.Name}} ({{.ID}})
-                </option>
-                {{end}}
-            </select>
-            {{else}}
-            <input type="number" name="po_default_contact_id" value="{{.PODefaultContactID}}"
-                   placeholder="Contact ID"
-                   class="form-control" style="width:120px;">
-            {{end}}
-        </div>
-        <div class="detail-row align-items-center" style="padding:6px 0;">
-            <strong style="min-width:160px;">Default Receiver</strong>
-            {{if .Suppliers}}
-            <div style="position:relative; min-width:260px;">
-                <input type="text" id="po_default_receiver_name" class="form-control"
-                       style="font-size:0.9em;" value="{{.PODefaultReceiverName}}"
-                       placeholder="Type to search…" autocomplete="off">
-                <input type="hidden" name="po_default_receiver_id" id="po_default_receiver_id"
-                       value="{{.PODefaultReceiverID}}">
-            </div>
-            {{else}}
-            <input type="number" name="po_default_receiver_id" value="{{.PODefaultReceiverID}}"
-                   placeholder="Supplier ID"
-                   class="form-control" style="width:120px;">
-            {{end}}
-        </div>
-    </div>
-    <script src="/static/pm/supplier-typeahead.js?v={{.AppVersion}}"></script>
-    <script>
-    // Scope the Default Contact dropdown to the selected Default Receiver's contacts.
-    (function() {
-        const recNameEl = document.getElementById('po_default_receiver_name');
-        const recIdEl = document.getElementById('po_default_receiver_id');
-        const conSel = document.querySelector('select[name="po_default_contact_id"]');
-        if (!recNameEl || !recIdEl || !conSel) return;
-        setupSupplierTypeahead(recNameEl, recIdEl, {
-            onSelect: function(s) {
-                conSel.innerHTML = '';
-                conSel.add(new Option('— none —', '0'));
-                fetch('/api/suppliers/' + encodeURIComponent(s.id) + '/contacts')
-                    .then(r => r.json())
-                    .then(function(contacts) {
-                        (contacts || []).forEach(function(c) {
-                            conSel.add(new Option(c.name + ' (' + c.id + ')', c.id));
-                        });
-                    })
-                    .catch(function() {});
-            }
-        });
-    })();
-    </script>
 
     <!-- ── Developer ────────────────────────────────────────────────── -->
     <div class="settings-card mt-4">
@@ -641,6 +578,85 @@
     </div>
 
     </div><!-- /tab-users -->
+    {{end}}
+
+    <!-- ── My Preferences tab ───────────────────────────────────────────── -->
+    {{if and .Connected .CurrentUser}}
+    <div class="settings-tab-panel" id="tab-preferences">
+    <form method="post" action="/settings/preferences">
+        <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+        <div class="detail-section">
+            <h3>PO Defaults</h3>
+            <p class="text-muted" style="font-size:0.85em; margin:4px 0 14px;">
+                Your personal defaults for new purchase orders. When set, they pre-fill the
+                receiver and contact on new POs/RFQs. Leave a field blank to pick manually each time.
+            </p>
+            <div class="detail-row align-items-center" style="padding:6px 0;">
+                <strong style="min-width:160px;">Default Receiver</strong>
+                {{if .POSuppliers}}
+                <div style="position:relative; min-width:260px;">
+                    <input type="text" id="po_default_receiver_name" class="form-control"
+                           style="font-size:0.9em;" value="{{.PODefaultReceiverName}}"
+                           placeholder="Type to search…" autocomplete="off">
+                    <input type="hidden" name="po_default_receiver_id" id="po_default_receiver_id"
+                           value="{{.PODefaultReceiverID}}">
+                </div>
+                {{else}}
+                <input type="number" name="po_default_receiver_id" value="{{.PODefaultReceiverID}}"
+                       placeholder="Supplier ID"
+                       class="form-control" style="width:120px;">
+                {{end}}
+            </div>
+            <div class="detail-row align-items-center" style="padding:6px 0;">
+                <strong style="min-width:160px;">Default Contact</strong>
+                {{if .POContacts}}
+                <select name="po_default_contact_id"
+                        class="form-select" style="font-size:0.9em; min-width:260px; width:auto;">
+                    <option value="0">— none —</option>
+                    {{range .POContacts}}
+                    <option value="{{.ID}}" {{if eq .ID $.PODefaultContactID}}selected{{end}}>
+                        {{.Name}} ({{.ID}})
+                    </option>
+                    {{end}}
+                </select>
+                {{else}}
+                <input type="number" name="po_default_contact_id" value="{{.PODefaultContactID}}"
+                       placeholder="Contact ID"
+                       class="form-control" style="width:120px;">
+                {{end}}
+            </div>
+        </div>
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary" style="padding:10px 32px; font-size:0.95em;">
+                Save Preferences
+            </button>
+        </div>
+    </form>
+    <script src="/static/pm/supplier-typeahead.js?v={{.AppVersion}}"></script>
+    <script>
+    // Scope the Default Contact dropdown to the selected Default Receiver's contacts.
+    (function() {
+        const recNameEl = document.getElementById('po_default_receiver_name');
+        const recIdEl = document.getElementById('po_default_receiver_id');
+        const conSel = document.querySelector('#tab-preferences select[name="po_default_contact_id"]');
+        if (!recNameEl || !recIdEl || !conSel) return;
+        setupSupplierTypeahead(recNameEl, recIdEl, {
+            onSelect: function(s) {
+                conSel.innerHTML = '';
+                conSel.add(new Option('— none —', '0'));
+                fetch('/api/suppliers/' + encodeURIComponent(s.id) + '/contacts')
+                    .then(r => r.json())
+                    .then(function(contacts) {
+                        (contacts || []).forEach(function(c) {
+                            conSel.add(new Option(c.name + ' (' + c.id + ')', c.id));
+                        });
+                    })
+                    .catch(function() {});
+            }
+        });
+    })();
+    </script>
+    </div><!-- /tab-preferences -->
     {{end}}
 
     <!-- ── Release Notes tab ────────────────────────────────────────────── -->

@@ -72,21 +72,27 @@ func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 }
 
 func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map[string]any) map[string]any {
-	var contacts []contactOption
-	var suppliers []supplierOption
 	var users []map[string]any
 	var usersError string
-	var receiverName string
 	var namedQueries []NamedQueryRow
 	var namedQueriesError string
 	var partNumberingPreview string
+	// Per-user PO defaults for the My Preferences tab (issue #463).
+	var poContacts []contactOption
+	var poSuppliers []supplierOption
+	var poReceiverName string
+	var poContactID, poReceiverID int
 	if h.db != nil {
-		contacts = h.fetchContactOptions(r, h.cfg.PODefaults.ReceiverID)
-		suppliers = h.fetchSupplierOptions(r)
-		for _, s := range suppliers {
-			if s.ID == h.cfg.PODefaults.ReceiverID {
-				receiverName = s.Name
-				break
+		if u := h.currentUser(r); u != nil {
+			poContactID = u.DefaultPOContactID
+			poReceiverID = u.DefaultPOReceiverID
+			poContacts = h.fetchContactOptions(r, poReceiverID)
+			poSuppliers = h.fetchSupplierOptions(r)
+			for _, s := range poSuppliers {
+				if s.ID == poReceiverID {
+					poReceiverName = s.Name
+					break
+				}
 			}
 		}
 		var err error
@@ -114,9 +120,11 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"ImageRoot":             h.cfg.ImageRoot,
 		"TestMode":              h.cfg.TestMode,
 		"DebugMode":             h.cfg.DebugMode,
-		"PODefaultContactID":    h.cfg.PODefaults.ContactID,
-		"PODefaultReceiverID":   h.cfg.PODefaults.ReceiverID,
-		"PODefaultReceiverName": receiverName,
+		"PODefaultContactID":    poContactID,
+		"PODefaultReceiverID":   poReceiverID,
+		"PODefaultReceiverName": poReceiverName,
+		"POContacts":            poContacts,
+		"POSuppliers":           poSuppliers,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"CompanyLogo":           h.companyLogoURL(),
 		"PartCategories":        h.partCategories,
@@ -124,8 +132,6 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PartNumberingPreview":  partNumberingPreview,
 		"NamedQueries":          namedQueries,
 		"NamedQueriesError":     namedQueriesError,
-		"Contacts":              contacts,
-		"Suppliers":             suppliers,
 		"Users":                 users,
 		"UsersError":            usersError,
 		"CurrentUser":           h.currentUser(r),
@@ -155,7 +161,7 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 
 // SettingsAttachmentCategoriesSave persists the attachment-category list to
 // app_config. It has its own endpoint so this partial form can't blank the
-// path/PO-default fields that SettingsSave writes from the main settings form.
+// path fields that SettingsSave writes from the main settings form.
 func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *http.Request) {
 	if h.db != nil {
 		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")
@@ -168,7 +174,7 @@ func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *htt
 
 // SettingsCompanyLogoSave stores an uploaded logo as a base64 data URI in
 // app_config. It has its own endpoint so this partial form can't blank the
-// path/PO-default fields that SettingsSave writes from the main settings form.
+// path fields that SettingsSave writes from the main settings form.
 func (h *Handler) SettingsCompanyLogoSave(w http.ResponseWriter, r *http.Request) {
 	if h.db == nil {
 		http.Redirect(w, r, "/settings", http.StatusFound)
@@ -227,8 +233,6 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	poRoot := strings.TrimSpace(r.FormValue("po_folder_root"))
 	supplierFilesRoot := strings.TrimSpace(r.FormValue("supplier_files_root"))
 	imageRoot := strings.TrimSpace(r.FormValue("image_root"))
-	contactID, _ := strconv.Atoi(r.FormValue("po_default_contact_id"))
-	receiverID, _ := strconv.Atoi(r.FormValue("po_default_receiver_id"))
 
 	local, _ := arxbase.LoadLocal()
 	if local == nil {
@@ -267,11 +271,6 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	h.cfg.ImageRoot = imageRoot
 	h.cfg.DebugMode = debugMode
 	h.cfg.TestMode = testMode
-
-	local.PODefaultContactID = &contactID
-	local.PODefaultReceiverID = &receiverID
-	h.cfg.PODefaults.ContactID = contactID
-	h.cfg.PODefaults.ReceiverID = receiverID
 
 	// Use new password if provided, otherwise reconnect with saved password.
 	// This lets test-mode toggles take effect immediately without re-entering credentials.
@@ -336,6 +335,42 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
 		"Success": "Settings saved. Enter your database password to connect.",
 	}))
+}
+
+// SettingsPreferencesSave persists the logged-in user's per-user PO defaults
+// (Settings → My Preferences tab, issue #463). It has its own endpoint so this
+// partial form can't blank the fields the main settings form writes.
+func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request) {
+	u := h.currentUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	contactID, _ := strconv.Atoi(r.FormValue("po_default_contact_id"))
+	receiverID, _ := strconv.Atoi(r.FormValue("po_default_receiver_id"))
+
+	// Store 0 as NULL so an unset default leaves new POs' receiver/contact blank.
+	var contactArg, receiverArg any
+	if contactID > 0 {
+		contactArg = contactID
+	}
+	if receiverID > 0 {
+		receiverArg = receiverID
+	}
+
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET default_po_contact_id = @p1, default_po_receiver_id = @p2 WHERE id = @p3`,
+		h.cfg.UsersTable()), contactArg, receiverArg, u.ID); err != nil {
+		h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
+			"Error": "Could not save preferences: " + err.Error(),
+		}))
+		return
+	}
+
+	// User rows are cached (auth.go); drop the stale entry so the redirect below
+	// re-reads the new defaults (currentUser is resolved once per request).
+	h.invalidateUserCache(u.ID)
+	http.Redirect(w, r, "/settings#preferences", http.StatusSeeOther)
 }
 
 func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
