@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.98] - 2026-07-08 
+- arx: removed the SYSTEM_USER fallback from trg_test_definition_history now that all instances run the F1+ binary ([#461](https://github.com/Jolls/arx-legacy/issues/461))
+
 ## [0.5.97] - 2026-07-07 
 - Deduplicate the attachment filename convention: the Browse live preview now fetches the name from a server endpoint instead of mirroring the naming rule in JS ([#558](https://github.com/Jolls/arx-legacy/issues/558))
 - Fix the row-action kebab menu getting clipped for rows near the bottom of a table

@@ -127,7 +127,7 @@ BEGIN
        instrument_types, format, comment, category, sheet_name)
     SELECT
       id, GETDATE(),
-      COALESCE(NULLIF(REPLACE(CONVERT(VARCHAR(128), CONTEXT_INFO()), CHAR(0), ''), ''), SYSTEM_USER),
+      REPLACE(CONVERT(VARCHAR(128), CONTEXT_INFO()), CHAR(0), ''),
       type, parameter, specification, spec_units,
       spec_min, spec_max, spec_nom, default_result,
       hide_formula, pf_type,
