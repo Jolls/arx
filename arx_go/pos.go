@@ -175,6 +175,11 @@ type polRow struct {
 	PNID       string
 }
 
+func (row polRow) isBlank() bool {
+	return row.Item == "" && row.PartNumber == "" && row.Rev == "" && row.Desc == "" &&
+		row.VendorPN == "" && row.Qty == "" && row.Cost == "" && row.PNID == ""
+}
+
 func extractPolRows(form url.Values, prefix string) map[string]polRow {
 	rows := map[string]polRow{}
 	for key, vals := range form {
@@ -564,7 +569,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	newRows := extractPolRows(r.Form, "new_pol")
 	var lineTotal float64
 	for _, row := range newRows {
-		if row.PartNumber == "" && row.Desc == "" {
+		if row.isBlank() {
 			continue
 		}
 		item, qty, cost, pnid := polRowToArgs(row)
@@ -703,7 +708,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	newRows := extractPolRows(r.Form, "new_pol")
 	if len(newRows) > 0 {
 		for _, row := range newRows {
-			if row.PartNumber == "" && row.Desc == "" {
+			if row.isBlank() {
 				continue
 			}
 			item, qty, cost, pnid := polRowToArgs(row)

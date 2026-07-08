@@ -990,3 +990,73 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 			c.name, c.target, st.count, time.Since(start).Round(time.Millisecond), rec.Code)
 	}
 }
+
+// seedThrowawayPO creates its own PO via POCreate rather than reusing a shared
+// seeded row, and returns its id, its (purely numeric) number, and a cleanup
+// that hard-deletes it plus its child rows. POFolderRoot is blanked for the
+// call so POCreate's createPOFolder no-ops instead of touching real disk.
+func seedThrowawayPO(t *testing.T, h *Handler, ctx context.Context) (id int, number string, cleanup func()) {
+	t.Helper()
+
+	savedRoot := h.cfg.POFolderRoot
+	h.cfg.POFolderRoot = ""
+	defer func() { h.cfg.POFolderRoot = savedRoot }()
+
+	rec := httptest.NewRecorder()
+	h.POCreate(rec, postForm("/pos", url.Values{
+		"supplier_id": {"1001"}, // seeded supplier Acme Fasteners
+	}))
+	loc := rec.Header().Get("Location")
+	number = strings.TrimSuffix(strings.TrimPrefix(loc, "/po/"), "?suggest_links=1")
+	if number == "" || number == loc {
+		t.Fatalf("could not parse PO number from Location %q", loc)
+	}
+
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg.POTable()), number,
+	).Scan(&id); err != nil {
+		t.Fatalf("look up created PO id: %v", err)
+	}
+
+	cleanup = func() {
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POLineTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POHistoryTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg.POTable()), id)
+	}
+	return id, number, cleanup
+}
+
+// TestIntegration_POUpdate_BlankNewLineNotSaved guards against a whitespace-only
+// new PO line getting inserted: extractPolRows trims each field, so a row where
+// every field is just spaces must still collapse to blank and be skipped, the
+// same as a row with no input at all (#639).
+func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
+	defer poCleanup()
+
+	before := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), poID))
+
+	numID, err := strconv.Atoi(poNumber)
+	if err != nil {
+		t.Fatalf("PO number %q is not numeric: %v", poNumber, err)
+	}
+	rec := httptest.NewRecorder()
+	h.POUpdate(rec, withID(postForm("/po/{id}", url.Values{
+		"supplier_id":                 {"1001"},
+		"new_pol[0][POLPNPartNumber]": {"   "},
+		"new_pol[0][POLDesc]":         {"   "},
+		"new_pol[0][VendorPN]":        {"   "},
+		"new_pol[0][POLQty]":          {"   "},
+		"new_pol[0][POLCost]":         {"   "},
+	}), numID))
+	assert302(t, "POUpdate blank line", rec)
+
+	after := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), poID))
+	if after != before {
+		t.Errorf("po_line count for PO %d changed from %d to %d; whitespace-only new line should not be saved", poID, before, after)
+	}
+}
