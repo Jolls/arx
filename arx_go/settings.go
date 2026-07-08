@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -253,6 +254,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 
 	debugMode := r.FormValue("debug_mode") == "1"
 	testMode := r.FormValue("test_mode") == "1"
+	testModeChanged := testMode != h.cfg.TestMode
 	local.DocControlRoot = docRoot
 	local.POFolderRoot = poRoot
 	local.SupplierFilesRoot = supplierFilesRoot
@@ -279,6 +281,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var connErr string
+	dbSwapped := false
 	if connectWith != "" {
 		dsn := h.cfg.BuildDSN(connectWith)
 		newDB, err := arxdb.Connect(dsn)
@@ -287,6 +290,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		} else {
 			oldDB := h.db
 			h.db = newDB
+			dbSwapped = true
 			if password != "" {
 				local.DBPassword = password
 				h.cfg.DBPassword = password
@@ -308,6 +312,19 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
 			"Error": "Connection failed: " + connErr,
 		}))
+		return
+	}
+
+	if testModeChanged && dbSwapped {
+		// Auth is per-database: each DB has its own users table, so the
+		// current session does not identify a real user in the database we
+		// just switched to. Clear it and force a re-login so writes are
+		// attributed to a valid user in the now-active DB (#631).
+		sess := h.session(r)
+		delete(sess.Values, "user_id")
+		sess.Save(r, w)
+		msg := "Test Mode switched the active database to " + h.cfg.ActiveDBName() + ". Please sign in again."
+		http.Redirect(w, r, "/login?notice="+url.QueryEscape(msg), http.StatusSeeOther)
 		return
 	}
 

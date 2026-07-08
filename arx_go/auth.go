@@ -146,6 +146,7 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 	h.renderLogin(w, r, map[string]any{
 		"Bootstrap":       n == 0,
 		"Error":           r.URL.Query().Get("error"),
+		"Notice":          r.URL.Query().Get("notice"),
 		"TestMode":        h.cfg.TestMode,
 		"AppVersion":      h.cfg.Version,
 		"DefaultUsername": os.Getenv("USERNAME"),

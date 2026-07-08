@@ -687,8 +687,8 @@
 
 function confirmTestModeToggle(cb) {
     var msg = cb.checked
-        ? "Switching TO test mode will reconnect to the test database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
-        : "Switching OUT of test mode will reconnect to the production database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
+        ? "Switching TO test mode will reconnect to the test database.\n\nYou will be signed out and must log in again against that database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?"
+        : "Switching OUT of test mode will reconnect to the production database.\n\nYou will be signed out and must log in again against that database.\n\nClose all other open tabs before saving to prevent data corruption.\n\nProceed?";
     if (!confirm(msg)) cb.checked = !cb.checked;
 }
 
