@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.102] - 2026-07-08 
+- Retired the legacy "None" sentinel part used as an Excel-era PO line spacer/comment workaround; migrated ~4993 po_line rows to use a null part_id (already supported) instead ([#561](https://github.com/Jolls/arx-legacy/issues/561))
+
 ## [0.5.101] - 2026-07-07 
 - PO defaults are now per-user: buyers set their own default receiver/contact on a new Settings → My Preferences tab; the machine-level global PO defaults have been removed ([#463](https://github.com/Jolls/arx-legacy/issues/463))
 
