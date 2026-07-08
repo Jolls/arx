@@ -26,13 +26,6 @@ type Config struct {
 	TestRecordsURL    string
 	PartsMasterURL    string
 	ImageRoot         string // used by Test Records; stored/displayed here so settings save round-trips it
-	PODefaults        PODefaults
-}
-
-// PODefaults holds the default contact and receiver IDs for new purchase orders.
-type PODefaults struct {
-	ContactID  int
-	ReceiverID int
 }
 
 // Load reads configuration from .env files, environment variables, and
@@ -103,12 +96,6 @@ func Load(version string) *Config {
 		}
 		if local.ImageRoot != "" {
 			cfg.ImageRoot = local.ImageRoot
-		}
-		if local.PODefaultContactID != nil {
-			cfg.PODefaults.ContactID = *local.PODefaultContactID
-		}
-		if local.PODefaultReceiverID != nil {
-			cfg.PODefaults.ReceiverID = *local.PODefaultReceiverID
 		}
 		if local.DebugMode {
 			cfg.DebugMode = true

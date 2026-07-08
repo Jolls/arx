@@ -541,6 +541,34 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 	}
 }
 
+// TestIntegration_UserPODefaults verifies userByID scans the per-user PO defaults
+// columns (#463): admin (8001) is seeded with receiver 1003 + contact 2005; tester
+// (8002) has none (NULL → 0). Guards the new SELECT/scan and the seed alignment.
+// Read-only — no cleanup.
+func TestIntegration_UserPODefaults(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin, err := h.userByID(ctx, 8001)
+	if err != nil || admin == nil {
+		t.Fatalf("userByID(8001): %v", err)
+	}
+	if admin.DefaultPOReceiverID != 1003 || admin.DefaultPOContactID != 2005 {
+		t.Errorf("admin PO defaults = receiver %d / contact %d, want 1003 / 2005 (ArxDev may need reseeding)",
+			admin.DefaultPOReceiverID, admin.DefaultPOContactID)
+	}
+
+	tester, err := h.userByID(ctx, 8002)
+	if err != nil || tester == nil {
+		t.Fatalf("userByID(8002): %v", err)
+	}
+	if tester.DefaultPOReceiverID != 0 || tester.DefaultPOContactID != 0 {
+		t.Errorf("tester PO defaults = receiver %d / contact %d, want 0 / 0 (NULL columns)",
+			tester.DefaultPOReceiverID, tester.DefaultPOContactID)
+	}
+}
+
 // TestIntegration_ContactPOs verifies the contact→PO lookup (#597) against the
 // pinned seed rows: contact 2001 (John Doe) is the supplier contact on PO 5003;
 // contact 2005 (Pat Dock) is the receiver contact on both 5002 and 5003. Guards

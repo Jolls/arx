@@ -370,11 +370,17 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────
 
-// applyPODefaults populates a new PO/RFQ with the configured default contact and
-// default receiver organization (Settings → PO defaults), returning the contact
-// dropdown lists for the edit form.
+// applyPODefaults populates a new PO/RFQ with the logged-in user's default
+// receiver/contact (Profile → PO defaults, issue #463), returning the contact
+// dropdown lists for the edit form. When the user has no default contact, the
+// receiver company's own default_contact is used as a fallback.
 func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (supplierContacts, receiverContacts []ContactSummary) {
-	if rid := h.cfg.PODefaults.ReceiverID; rid > 0 {
+	var receiverID, contactID int
+	if u := h.currentUser(r); u != nil {
+		receiverID = u.DefaultPOReceiverID
+		contactID = u.DefaultPOContactID
+	}
+	if rid := receiverID; rid > 0 {
 		var rName sql.NullString
 		var rDefaultContact sql.NullInt64
 		h.queryRowContext(r.Context(), fmt.Sprintf(
@@ -385,9 +391,9 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 		po.ReceiverID = &v
 		receiverContacts = h.contactsForSupplier(r, rid)
 
-		// Pick the receiver contact: the configured PO default contact wins;
+		// Pick the receiver contact: the resolved PO default contact wins;
 		// otherwise fall back to the receiver company's own default_contact.
-		wantContact := h.cfg.PODefaults.ContactID
+		wantContact := contactID
 		if wantContact <= 0 && rDefaultContact.Valid {
 			wantContact = int(rDefaultContact.Int64)
 		}

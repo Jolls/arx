@@ -8,6 +8,8 @@ CREATE TABLE dbo.users (
     is_active     BIT           NOT NULL DEFAULT 1,
     can_approve_po BIT          NOT NULL DEFAULT 0,  -- may approve/reject POs (issue #267)
     can_approve_records BIT     NOT NULL DEFAULT 0,  -- may approve/unlock approved test records (issue #249)
+    default_po_contact_id  INT   NULL,               -- per-user default PO receiver contact (issue #463)
+    default_po_receiver_id INT   NULL,               -- per-user default PO receiver company (issue #463)
     created_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     updated_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     CONSTRAINT UQ_users_username UNIQUE (username)

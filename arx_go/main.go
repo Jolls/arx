@@ -147,6 +147,9 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/settings/users/{userID}/toggle-approve", h.SettingsUsersToggleApprove)
 		r.Post("/settings/users/{userID}/toggle-approve-records", h.SettingsUsersToggleApproveRecords)
 
+		// Per-user preferences (Settings → My Preferences tab; PO defaults — issue #463)
+		r.Post("/settings/preferences", h.SettingsPreferencesSave)
+
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)
 
