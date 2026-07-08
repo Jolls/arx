@@ -2,10 +2,9 @@
 -- Populated automatically by trg_test_definition_history (AFTER UPDATE trigger on Tests; see SQL/triggers.sql).
 -- Each row is a snapshot of the old values captured at the moment of update.
 --
--- User identity: changed_by reads the app user from CONTEXT_INFO() when set (Go app calls
--- SET CONTEXT_INFO before each UPDATE), otherwise falls back to SYSTEM_USER (the shared DB
--- login). CONTEXT_INFO is a 128-byte VARBINARY padded with 0x00; null bytes are stripped.
--- Old binaries that don't SET CONTEXT_INFO will record SYSTEM_USER on rollback.
+-- User identity: changed_by reads the app user from CONTEXT_INFO() (the Go app calls
+-- SET CONTEXT_INFO before each UPDATE). CONTEXT_INFO is a 128-byte VARBINARY padded with
+-- 0x00; null bytes are stripped.
 
 IF OBJECT_ID('dbo.test_definition_history', 'U') IS NOT NULL DROP TABLE test_definition_history;
 
@@ -13,7 +12,7 @@ CREATE TABLE test_definition_history (
   id            INT          PRIMARY KEY IDENTITY,
   test_id       INT          NOT NULL,              -- FK to test_definition.id
   changed_at    DATETIME     NOT NULL DEFAULT GETDATE(),
-  changed_by    VARCHAR(128) NOT NULL DEFAULT SYSTEM_USER, -- set by trigger via CONTEXT_INFO(); falls back to SYSTEM_USER
+  changed_by    VARCHAR(128) NOT NULL DEFAULT SYSTEM_USER, -- set by trigger via CONTEXT_INFO()
   -- snapshot of values before the update
   type          INT,
   parameter     VARCHAR(255),
