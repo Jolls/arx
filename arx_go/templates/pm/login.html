@@ -23,6 +23,12 @@
         {{if .Bootstrap}}Create your admin account to get started.{{else}}Sign in to continue.{{end}}
     </div>
 
+    {{if .Notice}}
+    <div class="alert alert-info" role="alert">
+        {{.Notice}}
+    </div>
+    {{end}}
+
     {{if .Error}}
     <div class="alert alert-danger" role="alert">
         {{.Error}}

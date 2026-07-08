@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.100] - 2026-07-07 
+- Force a re-login when Test Mode is toggled so writes are always attributed to a real user in the now-active database ([#631](https://github.com/Jolls/arx-legacy/issues/631))
+
 ## [0.5.99] - 2026-07-07 
 - arx: audited and backfilled pre-auth changed_by/username values in test_definition_history, form_events, and record_events ([#630](https://github.com/Jolls/arx-legacy/issues/630))
 
