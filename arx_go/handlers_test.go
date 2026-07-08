@@ -93,6 +93,25 @@ func TestPolRowToArgs(t *testing.T) {
 	}
 }
 
+func TestPolRowIsBlank(t *testing.T) {
+	cases := []struct {
+		name string
+		row  polRow
+		want bool
+	}{
+		{"all empty", polRow{}, true},
+		{"only vendor PN", polRow{VendorPN: "V-123"}, false},
+		{"only qty", polRow{Qty: "5"}, false},
+		{"only part number", polRow{PartNumber: "PN-001"}, false},
+		{"only desc", polRow{Desc: "Widget"}, false},
+	}
+	for _, c := range cases {
+		if got := c.row.isBlank(); got != c.want {
+			t.Errorf("%s: isBlank() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestExtractPolRows(t *testing.T) {
 	form := url.Values{
 		"pol[1][POLItem]":         {"1"},

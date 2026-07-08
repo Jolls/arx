@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.103] - 2026-07-08 
+- Fixed PO line items with only a vendor part number (or only qty/cost/rev) entered being silently dropped instead of saved ([#639](https://github.com/Jolls/arx-legacy/issues/639))
+
 ## [0.5.102] - 2026-07-08 
 - Retired the legacy "None" sentinel part used as an Excel-era PO line spacer/comment workaround; migrated ~4993 po_line rows to use a null part_id (already supported) instead ([#561](https://github.com/Jolls/arx-legacy/issues/561))
 
