@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.99] - 2026-07-07 
+- arx: audited and backfilled pre-auth changed_by/username values in test_definition_history, form_events, and record_events ([#630](https://github.com/Jolls/arx-legacy/issues/630))
+
 ## [0.5.98] - 2026-07-08 
 - arx: removed the SYSTEM_USER fallback from trg_test_definition_history now that all instances run the F1+ binary ([#461](https://github.com/Jolls/arx-legacy/issues/461))
 
