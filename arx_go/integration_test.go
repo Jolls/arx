@@ -990,3 +990,32 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 			c.name, c.target, st.count, time.Since(start).Round(time.Millisecond), rec.Code)
 	}
 }
+
+// TestIntegration_POUpdate_BlankNewLineNotSaved guards against a whitespace-only
+// new PO line getting inserted: extractPolRows trims each field, so a row where
+// every field is just spaces must still collapse to blank and be skipped, the
+// same as a row with no input at all (#639).
+func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const seedPOID = 5002 // seeded PO 5002, see TestIntegration_RouteRoundTrips
+
+	before := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), seedPOID))
+
+	rec := httptest.NewRecorder()
+	h.POUpdate(rec, withID(postForm("/po/{id}", url.Values{
+		"new_pol[0][POLPNPartNumber]": {"   "},
+		"new_pol[0][POLDesc]":         {"   "},
+		"new_pol[0][VendorPN]":        {"   "},
+		"new_pol[0][POLQty]":          {"   "},
+		"new_pol[0][POLCost]":         {"   "},
+	}), seedPOID))
+	assert302(t, "POUpdate blank line", rec)
+
+	after := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), seedPOID))
+	if after != before {
+		t.Errorf("po_line count for PO %d changed from %d to %d; whitespace-only new line should not be saved", seedPOID, before, after)
+	}
+}
