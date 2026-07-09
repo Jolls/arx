@@ -70,3 +70,9 @@ go test -tags integration ./arx_go/...
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for schema conventions, branching rules, and architecture decisions.
+
+---
+
+## License
+
+Copyright (C) 2026 Jolls. Licensed under the GNU Affero General Public License v3.0 — see [`LICENSE`](LICENSE).
