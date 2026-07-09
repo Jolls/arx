@@ -101,6 +101,10 @@ re-discovering suitable data each session. Re-run the script any time to reset A
 known state; identities are reseeded above each range afterward so ad hoc rows created during
 testing never collide with the reference set.
 
+The `app_config.company_logo` value is seeded separately, via `SQL/seed_company_logo.sql` —
+run it after `seed_test_data.sql` (which clears `app_config` on every run). It's split out
+because the value is a large base64 data URI that would swamp `seed_test_data.sql`'s diff.
+
 | ID range | Table | What's there |
 |---|---|---|
 | 1001-1099 | `company` | 4 companies: supplier, supplier+manufacturer, receiver/ship-to, manufacturer-only; both suppliers have a `default_contact` |
