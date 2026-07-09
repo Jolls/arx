@@ -23,13 +23,13 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
 		m["Title"] = "Arx: Test Records"
-		m["Favicon"] = "/static/pm/icons/records.svg"
+		m["Favicon"] = "/static/shared/icons/records.svg"
 		m["FaviconType"] = "image/svg+xml"
-		m["ExtraScript"] = "/static/tr/app.js"
+		m["ExtraScript"] = "/static/records/app.js"
 	}
 	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/shared/layout.html",
-		"templates/tr/"+page,
+		"templates/records/"+page,
 	)
 	if err != nil {
 		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)
@@ -43,7 +43,7 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 // renderPrintTR renders a standalone TR print template (no layout wrapper).
 func (h *Handler) renderPrintTR(w http.ResponseWriter, page string, data any) {
 	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/tr/"+page,
+		"templates/records/"+page,
 	)
 	if err != nil {
 		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)

@@ -1,6 +1,6 @@
 // Shared clipboard-image-paste helpers, used by both the parts attachment paste
-// flow (static/pm/paste_attachment.js) and the test-record result paste flow
-// (static/tr/paste_result_image.js).
+// flow (static/parts/paste_attachment.js) and the test-record result paste flow
+// (static/records/paste_result_image.js).
 
 // readImageFromClipboard reads the system clipboard and calls onBlob with the
 // first image found, or onError(message) if there's no image / access fails.

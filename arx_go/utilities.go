@@ -47,7 +47,7 @@ func (h *Handler) UtilitiesReport(w http.ResponseWriter, r *http.Request) {
 	add(h.checkSoftDeletedAttachmentPointers(ctx))
 	add(h.checkPOActiveDrift(ctx))
 
-	h.render(w, r, "utilities.html", map[string]any{
+	h.render(w, r, "settings/utilities.html", map[string]any{
 		"ActiveTab": "settings",
 		"TestMode":  h.cfg.TestMode,
 		"Checks":    checks,

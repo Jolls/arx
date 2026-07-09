@@ -262,7 +262,7 @@ func parseFormFloat(s string) interface{} {
 // ── POList — GET /pos ────────────────────────────────────────────────────────
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "pos.html", map[string]any{
+	h.render(w, r, "pos/pos.html", map[string]any{
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
 	})
 }
@@ -370,7 +370,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 			tplData["CSRFToken"] = h.csrfToken(w, r)
 		}
 	}
-	h.render(w, r, "po_detail.html", tplData)
+	h.render(w, r, "pos/po_detail.html", tplData)
 }
 
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────
@@ -429,7 +429,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 		po.Orderer = u.DisplayName
 	}
 	supplierContacts, receiverContacts := h.applyPODefaults(r, &po)
-	h.render(w, r, "po_edit.html", map[string]any{
+	h.render(w, r, "pos/po_edit.html", map[string]any{
 		"PO": po, "POItems": nil, "IsNew": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
@@ -630,7 +630,7 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "po_edit.html", map[string]any{
+	h.render(w, r, "pos/po_edit.html", map[string]any{
 		"PO": po, "POItems": items, "IsNew": false,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
@@ -885,7 +885,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 	if source.ReceiverID != nil {
 		recID = *source.ReceiverID
 	}
-	h.render(w, r, "po_edit.html", map[string]any{
+	h.render(w, r, "pos/po_edit.html", map[string]any{
 		"PO": source, "POItems": nil, "DuplicateItems": sourceItems,
 		"IsNew": true, "IsDuplicate": true, "DuplicateFrom": num,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
@@ -906,7 +906,7 @@ func (h *Handler) PONote(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "po_note.html", map[string]any{
+	h.render(w, r, "pos/po_note.html", map[string]any{
 		"PO": po, "ActiveTab": "pos", "ActiveSubTab": "note",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
@@ -949,7 +949,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderPrint(w, "po_print.html", map[string]any{
+	h.renderPrint(w, "pos/po_print.html", map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"SupplierCode": supplierCode, "TestMode": h.cfg.TestMode,
 		"POFolderPath": folderPath, "IsRFQ": po.Status == "rfq",
@@ -1087,7 +1087,7 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "local_dir.html", map[string]any{
+	h.render(w, r, "shared/local_dir.html", map[string]any{
 		"PO":        &po,
 		"DirName":   dirName,
 		"FullPath":  path,
@@ -2000,7 +2000,7 @@ func (h *Handler) RFQNew(w http.ResponseWriter, r *http.Request) {
 		po.Orderer = u.DisplayName
 	}
 	supplierContacts, receiverContacts := h.applyPODefaults(r, &po)
-	h.render(w, r, "po_edit.html", map[string]any{
+	h.render(w, r, "pos/po_edit.html", map[string]any{
 		"PO": po, "POItems": nil, "IsNew": true, "IsRFQ": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
@@ -2045,7 +2045,7 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 	source.SupplierPhoneNumber, source.SupplierFaxNumber = "", ""
 	source.TotalCost = nil
 
-	h.render(w, r, "po_edit.html", map[string]any{
+	h.render(w, r, "pos/po_edit.html", map[string]any{
 		"PO": source, "POItems": nil, "DuplicateItems": items,
 		"IsNew": true, "IsRFQ": true, "RFQGroupID": group, "RFQAddFrom": num,
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
@@ -2221,7 +2221,7 @@ func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, r, "rfq_compare.html", map[string]any{
+	h.render(w, r, "pos/rfq_compare.html", map[string]any{
 		"Group": group, "Suppliers": suppliers, "Rows": orderedRows,
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
 		"CSRFToken": h.csrfToken(w, r),

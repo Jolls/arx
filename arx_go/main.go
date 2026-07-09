@@ -111,7 +111,7 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Use(h.profileRequest)
 	r.Use(h.RequireCsrfOnPost)
 
-	// Static assets: PM under /static/pm/, TR under /static/tr/.
+	// Static assets under /static/<tab>/, plus /static/shared/ for cross-tab assets (icons, nav CSS/JS).
 	subStatic, _ := fs.Sub(staticFS, "static")
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(subStatic))))
 

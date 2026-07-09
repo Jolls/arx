@@ -10,6 +10,7 @@ import (
 	ioFS "io/fs"
 	"log"
 	"net/http"
+	"path"
 	"reflect"
 	"strconv"
 	"strings"
@@ -307,13 +308,13 @@ func (h *Handler) profileRequest(next http.Handler) http.Handler {
 // Used for print views that ship their own full HTML document.
 func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
 	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/pm/"+page,
+		"templates/"+page,
 	)
 	if err != nil {
 		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := tmpl.ExecuteTemplate(w, page, data); err != nil {
+	if err := tmpl.ExecuteTemplate(w, path.Base(page), data); err != nil {
 		http.Error(w, "template execute error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -321,11 +322,11 @@ func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
 // pmTabFavicons maps each Parts Master nav tab to its favicon, reusing the
 // same icon shown in the nav bar so the browser tab matches the active section.
 var pmTabFavicons = map[string]string{
-	"parts":     "/static/pm/icons/parts.svg",
-	"suppliers": "/static/pm/icons/vendors.svg",
-	"pos":       "/static/pm/icons/pos.svg",
-	"contacts":  "/static/pm/icons/contacts.svg",
-	"records":   "/static/pm/icons/records.svg",
+	"parts":     "/static/shared/icons/parts.svg",
+	"suppliers": "/static/shared/icons/vendors.svg",
+	"pos":       "/static/shared/icons/pos.svg",
+	"contacts":  "/static/shared/icons/contacts.svg",
+	"records":   "/static/shared/icons/records.svg",
 }
 
 // render parses layout + partials + the named page template and executes "layout".
@@ -338,7 +339,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
 		m["Title"] = "Arx Parts Master"
-		m["Favicon"] = "/static/pm/favicon.png"
+		m["Favicon"] = "/static/shared/favicon.png"
 		m["FaviconType"] = "image/png"
 		if tab, _ := m["ActiveTab"].(string); tab != "" {
 			if icon, ok := pmTabFavicons[tab]; ok {
@@ -349,8 +350,8 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 	}
 	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/shared/layout.html",
-		"templates/pm/partials.html",
-		"templates/pm/"+page,
+		"templates/shared/partials.html",
+		"templates/"+page,
 	)
 	if err != nil {
 		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)
@@ -363,13 +364,13 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 
 func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
-	h.render(w, r, "not_found.html", map[string]any{
+	h.render(w, r, "shared/not_found.html", map[string]any{
 		"ActiveTab": "", "TestMode": h.cfg.TestMode,
 	})
 }
 
 func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, msg string) {
-	h.render(w, r, "error.html", map[string]any{
+	h.render(w, r, "shared/error.html", map[string]any{
 		"Error":    msg,
 		"TestMode": h.cfg.TestMode,
 	})

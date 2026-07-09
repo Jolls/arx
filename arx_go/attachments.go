@@ -28,7 +28,7 @@ const titleMaxLen = 20
 // escape the target folder.
 //
 // This is the sole implementation of the naming convention; the Browse live
-// preview in templates/pm/part_attachments.html calls it via
+// preview in templates/parts/part_attachments.html calls it via
 // GET /api/part/{id}/attachment-name rather than duplicating the rule (#558).
 func buildAttachmentFileName(partNumber, rev, title, category, ext string) string {
 	title = truncateRunes(strings.TrimSpace(title), titleMaxLen)
@@ -326,7 +326,7 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 		u.Label = label.String
 		usages = append(usages, u)
 	}
-	h.render(w, r, "attachment_where_used.html", map[string]any{
+	h.render(w, r, "parts/attachment_where_used.html", map[string]any{
 		"FileLink": file, "Usages": usages,
 		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
 	})

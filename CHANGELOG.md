@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.105] - 2026-07-09 
+- Reorganized templates/ and static/ into tab-based subfolders (parts, suppliers, pos, contacts, settings, records, shared), replacing the leftover pm/tr split from the old separate-apps era
+
 ## [0.5.104] - 2026-07-09 
 - Vendor PN on a PO line now links to the linked part's primary attachment ([#642](https://github.com/Jolls/arx-legacy/issues/642))
 - Renamed "Supplier Code" to "Folder Stub" with a tooltip clarifying it names the supplier's attachment/PO folders, and validated it against filesystem-breaking characters on save ([#638](https://github.com/Jolls/arx-legacy/issues/638))
