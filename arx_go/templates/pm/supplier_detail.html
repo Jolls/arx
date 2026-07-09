@@ -16,7 +16,7 @@
                 <div class="card-header">Supplier</div>
                 <div class="card-body">
                     <div class="detail-row"><strong>Name:</strong><span>{{.Supplier.Name}}</span></div>
-                    <div class="detail-row"><strong>Code:</strong><span>{{.Supplier.SUSupplierCode}}</span></div>
+                    <div class="detail-row"><strong data-bs-toggle="tooltip" title="Short code used to name this supplier's attachment and PO folders">Folder Stub:</strong><span>{{.Supplier.SUSupplierCode}}</span></div>
                     <div class="detail-row"><strong>Status:</strong>
                         <span>{{if .Supplier.IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span></div>
                     <div class="detail-row"><strong>Roles:</strong>

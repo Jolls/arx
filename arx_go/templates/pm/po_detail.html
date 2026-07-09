@@ -225,7 +225,22 @@
                         </td>
                         <td>{{.POLRev}}</td>
                         <td>{{.POLDesc}}</td>
-                        <td>{{.VendorPN}}</td>
+                        <td>
+                            {{if .PrimaryAtt}}
+                                {{$f := .PrimaryAtt.FILFileName}}
+                                {{if isHTTPURL $f}}
+                                    <a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{.VendorPN}}</a>
+                                {{else if isLocalDir $f}}
+                                    <a href="{{localDirURL $f}}">{{.VendorPN}}</a>
+                                {{else if isLocalFile $f}}
+                                    {{if isPDF $f}}
+                                        <a href="{{localFileURL $f}}" target="_blank">{{.VendorPN}}</a>
+                                    {{else}}
+                                        <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}">{{.VendorPN}}</a>
+                                    {{end}}
+                                {{else}}{{.VendorPN}}{{end}}
+                            {{else}}{{.VendorPN}}{{end}}
+                        </td>
                         <td class="text-end">{{printf "%.2f" .POLQty}}</td>
                         <td class="text-end">
                             <span {{if ge .ReceivedQty .POLQty}}class="badge bg-success"{{end}}>{{printf "%.2f" .ReceivedQty}} / {{printf "%.2f" .POLQty}}</span>

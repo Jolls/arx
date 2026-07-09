@@ -19,6 +19,23 @@ import (
 	"arx/arxlib/urlutil"
 )
 
+// validateFolderStub ensures SUSupplierCode is safe to use as a single filesystem
+// path component (see renderSupplierFolder / createPOFolder) — it must not contain
+// path separators, "." / "..", or other characters that break folder names on
+// Windows, macOS, or Linux.
+func validateFolderStub(code string) error {
+	if code == "" {
+		return nil
+	}
+	if code == "." || code == ".." {
+		return fmt.Errorf(`folder stub cannot be "." or ".."`)
+	}
+	if strings.ContainsAny(code, "/\\:*?\"<>|") {
+		return fmt.Errorf(`folder stub cannot contain / \ : * ? " < > |`)
+	}
+	return nil
+}
+
 func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers.html", map[string]any{
 		"ActiveTab": "suppliers", "TestMode": h.cfg.TestMode,
@@ -211,6 +228,14 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if err := validateFolderStub(fv(r, "SUSupplierCode")); err != nil {
+		h.render(w, r, "supplier_edit.html", map[string]any{
+			"Supplier": supplierFromForm(r), "IsNew": true, "Error": err.Error(),
+			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		})
+		return
+	}
 	var newID int
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified)
@@ -266,6 +291,15 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error": "Supplier name is required",
+			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		})
+		return
+	}
+	if err := validateFolderStub(fv(r, "SUSupplierCode")); err != nil {
+		h.render(w, r, "supplier_edit.html", map[string]any{
+			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
+			"Error": err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})

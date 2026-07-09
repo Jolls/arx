@@ -105,7 +105,7 @@ table[data-rows-url="/api/suppliers/rows"] col:nth-child(3) { width: 10%; } /* C
 table[data-rows-url="/api/suppliers/rows"] col:nth-child(4) { width:  9%; } /* # Linked Parts */
 table[data-rows-url="/api/suppliers/rows"] col:nth-child(5) { width:  6%; } /* # POs */
 table[data-rows-url="/api/suppliers/rows"] col:nth-child(6) { width: 15%; } /* Default Contact */
-table[data-rows-url="/api/suppliers/rows"] col:nth-child(7) { width:  9%; } /* Supplier Code */
+table[data-rows-url="/api/suppliers/rows"] col:nth-child(7) { width:  9%; } /* Folder Stub */
 
 /* POs — elastic: col 3 Vendor */
 table[data-rows-url="/api/pos/rows"] col:nth-child(1) { width: 10%; } /* PO Number */
