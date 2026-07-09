@@ -14,7 +14,7 @@ import (
 )
 
 func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "contacts.html", map[string]any{
+	h.render(w, r, "contacts/contacts.html", map[string]any{
 		"ActiveTab": "contacts", "TestMode": h.cfg.TestMode,
 	})
 }
@@ -101,7 +101,7 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 	if c.CNSUID != nil {
 		siblings = h.siblingContacts(r.Context(), *c.CNSUID, c.CNID)
 	}
-	h.render(w, r, "contact_detail.html", map[string]any{
+	h.render(w, r, "contacts/contact_detail.html", map[string]any{
 		"Contact": c, "ActiveTab": "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 		"Siblings": siblings,
@@ -190,7 +190,7 @@ func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContac
 }
 
 func (h *Handler) ContactsNew(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "contact_edit.html", map[string]any{
+	h.render(w, r, "contacts/contact_edit.html", map[string]any{
 		"Contact": models.Contact{}, "IsNew": true,
 		"ActiveTab": "contacts",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -200,7 +200,7 @@ func (h *Handler) ContactsNew(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 	name := fv(r, "CNName")
 	if name == "" {
-		h.render(w, r, "contact_edit.html", map[string]any{
+		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": true,
 			"Error": "Contact name is required", "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -223,7 +223,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "CNNotes"), time.Now(),
 	).Scan(&newID)
 	if err != nil {
-		h.render(w, r, "contact_edit.html", map[string]any{
+		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": true,
 			"Error": "Error creating contact: " + err.Error(), "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -242,7 +242,7 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.CNID), c.CNName)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "contact_edit.html", map[string]any{
+	h.render(w, r, "contacts/contact_edit.html", map[string]any{
 		"Contact": c, "IsNew": false,
 		"ActiveTab": "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -254,7 +254,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	name := fv(r, "CNName")
 	if name == "" {
-		h.render(w, r, "contact_edit.html", map[string]any{
+		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": false,
 			"Error": "Contact name is required", "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -276,7 +276,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "CNNotes"), time.Now(), id,
 	)
 	if err != nil {
-		h.render(w, r, "contact_edit.html", map[string]any{
+		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": false,
 			"Error": "Error saving contact: " + err.Error(), "ActiveTab": "contacts",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,

@@ -26,7 +26,7 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, r, "part_sourcing.html", map[string]any{
+	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":             p,
 		"Links":            links,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
@@ -110,7 +110,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, r, "part_sourcing.html", map[string]any{
+	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":             p,
 		"Links":            links,
 		"EditingLink":      &sp,
@@ -266,7 +266,7 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	}
 	links, _ := h.fetchSupplierLinks(r, partID)
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, r, "part_sourcing.html", map[string]any{
+	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":             p,
 		"Links":            links,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, partID),

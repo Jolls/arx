@@ -66,7 +66,7 @@ func fv(r *http.Request, key string) string { return strings.TrimSpace(r.FormVal
 // ── PartsList — GET / ───────────────────────────────────────────────────────
 
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "index.html", map[string]any{
+	h.render(w, r, "parts/index.html", map[string]any{
 		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
 		"Categories": h.partCategories,
 	})
@@ -317,7 +317,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.render(w, r, "part_detail.html", map[string]any{
+	h.render(w, r, "parts/part_detail.html", map[string]any{
 		"Part": p, "PrimaryAtt": primaryAtt, "TopAtts": topAtts, "PhotoAtts": photoAtts,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -340,7 +340,7 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 		p.PNReqBy = u.DisplayName
 	}
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, r, "part_edit.html", map[string]any{
+	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": p, "IsNew": true,
 		"Units": units, "Categories": h.partCategories,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -370,7 +370,7 @@ func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
 	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT COUNT(*) FROM %s WHERE parent_part_id=@p1`, h.cfg.BOMTable()), src.PNID).Scan(&bomLines)
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, r, "part_edit.html", map[string]any{
+	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": src, "IsNew": true, "IsDuplicate": true,
 		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.PNID, "SourceHasBOM": bomLines > 0,
 		"Units": units, "Categories": h.partCategories,
@@ -385,7 +385,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	partNumber := fv(r, "part_number")
 	if partNumber == "" {
 		units, _ := h.fetchUnits(r.Context())
-		h.render(w, r, "part_edit.html", dupContext(r, map[string]any{
+		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Part Number is required",
 			"Units": units, "Categories": h.partCategories,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -415,7 +415,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	).Scan(&newID)
 	if err != nil {
 		units, _ := h.fetchUnits(r.Context())
-		h.render(w, r, "part_edit.html", dupContext(r, map[string]any{
+		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Error creating part: " + err.Error(),
 			"Units": units, "Categories": h.partCategories,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -471,7 +471,7 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	h.applyCategoryTabs(r.Context(), &full) // resolve tabs for the part_tabs partial
 	units, _ := h.fetchUnits(r.Context())
-	h.render(w, r, "part_edit.html", map[string]any{
+	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": full, "IsNew": false,
 		"Units": units, "Categories": h.partCategories,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -491,7 +491,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
 		pf := partFromForm(r)
 		h.applyCategoryTabs(r.Context(), &pf)
-		h.render(w, r, "part_edit.html", map[string]any{
+		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Part Number is required",
 			"Categories": h.partCategories,
 			"ActiveTab":  "parts", "ActiveSubTab": "edit",
@@ -523,7 +523,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		units, _ := h.fetchUnits(r.Context())
 		pf := partFromForm(r)
 		h.applyCategoryTabs(r.Context(), &pf)
-		h.render(w, r, "part_edit.html", map[string]any{
+		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Error saving part: " + err.Error(),
 			"Units": units, "Categories": h.partCategories,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
@@ -719,7 +719,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
-	h.render(w, r, "part_bom.html", map[string]any{
+	h.render(w, r, "parts/part_bom.html", map[string]any{
 		"Part": p, "BOMItems": items, "BOMTotal": bomTotal,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -761,7 +761,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		item.Category = category.String
 		items = append(items, item)
 	}
-	h.render(w, r, "part_where_used.html", map[string]any{
+	h.render(w, r, "parts/part_where_used.html", map[string]any{
 		"Part": p, "WhereUsedItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "where-used",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -854,7 +854,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	if lastRollupAt.Valid {
 		p.PNLastRollupAt = &lastRollupAt.Time
 	}
-	h.render(w, r, "part_bom_edit.html", map[string]any{
+	h.render(w, r, "parts/part_bom_edit.html", map[string]any{
 		"Part": p, "BOMItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -1340,7 +1340,7 @@ func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "BOM contains a cycle — fix the BOM before calculating build cost.")
 		return
 	}
-	h.render(w, r, "part_build_cost.html", map[string]any{
+	h.render(w, r, "parts/part_build_cost.html", map[string]any{
 		"Part": p, "BuildQty": qty, "Lines": res.Lines, "Total": res.Total,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -1423,7 +1423,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	for k, v := range extra {
 		data[k] = v
 	}
-	h.render(w, r, "part_attachments.html", data)
+	h.render(w, r, "parts/part_attachments.html", data)
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
@@ -1648,7 +1648,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	h.render(w, r, "part_orders.html", map[string]any{
+	h.render(w, r, "parts/part_orders.html", map[string]any{
 		"Part": p, "OrderItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "orders",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -1805,7 +1805,7 @@ func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoi
 // PartPriceHistory renders the Price History tab: a unit-cost-over-time chart
 // sourced from this part's PO lines (one point per line) plus any active
 // price-list entries (#284). Points are emitted as JSON for the SVG renderer in
-// static/pm/price_history.js.
+// static/parts/price_history.js.
 func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "price-history")
@@ -1816,7 +1816,7 @@ func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
 	points := h.partPricePoints(r.Context(), id)
 
 	data, _ := json.Marshal(points)
-	h.render(w, r, "part_price_history.html", map[string]any{
+	h.render(w, r, "parts/part_price_history.html", map[string]any{
 		"Part": p, "PriceDataJSON": template.JS(data), "HasData": len(points) > 0,
 		"ActiveTab": "parts", "ActiveSubTab": "price-history",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -1910,7 +1910,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 		groups[i].AllInactive = allInactive
 		groups[i].IsPreferred = defSup.Valid && groups[i].SupplierID == int(defSup.Int64)
 	}
-	h.render(w, r, "part_pricing.html", map[string]any{
+	h.render(w, r, "parts/part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -1926,7 +1926,7 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.render(w, r, "part_pricing_form.html", map[string]any{
+	h.render(w, r, "parts/part_pricing_form.html", map[string]any{
 		"Part": p, "Price": models.Price{}, "IsNew": true,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -2038,7 +2038,7 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		price.SupplierID = &v
 	}
 	price.SupplierName = supplierName.String
-	h.render(w, r, "part_pricing_form.html", map[string]any{
+	h.render(w, r, "parts/part_pricing_form.html", map[string]any{
 		"Part": p, "Price": price, "IsNew": false,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,

@@ -99,7 +99,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 	txns := ledgerWithBalances(asc)
 
-	h.render(w, r, "part_transactions.html", map[string]any{
+	h.render(w, r, "parts/part_transactions.html", map[string]any{
 		"Part": p, "Txns": txns, "Today": time.Now().Format("2006-01-02"),
 		"ActiveTab": "parts", "ActiveSubTab": "transactions",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,

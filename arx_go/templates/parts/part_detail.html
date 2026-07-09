@@ -260,7 +260,7 @@
 
     {{if .HasPriceData}}
     <script>window.PRICE_HISTORY_DASH = {{.PriceDataJSON}};</script>
-    <script src="/static/pm/price_history.js?v={{.AppVersion}}"></script>
+    <script src="/static/parts/price_history.js?v={{.AppVersion}}"></script>
     <script>
       document.addEventListener('DOMContentLoaded', function () {
         var el = document.getElementById('dash-price-chart');

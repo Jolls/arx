@@ -146,7 +146,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 }
 
 func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "whats_new.html", map[string]any{
+	h.render(w, r, "settings/whats_new.html", map[string]any{
 		"ReleaseNotes": h.releaseNotes,
 		"ActiveTab":    "settings",
 	})
@@ -156,7 +156,7 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	if h.db != nil {
 		r, _ = h.withUser(r)
 	}
-	h.render(w, r, "settings.html", h.settingsData(w, r, nil))
+	h.render(w, r, "settings/settings.html", h.settingsData(w, r, nil))
 }
 
 // SettingsAttachmentCategoriesSave persists the attachment-category list to
@@ -181,7 +181,7 @@ func (h *Handler) SettingsCompanyLogoSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 	settingsError := func(msg string) {
-		h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{"Error": msg}))
+		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{"Error": msg}))
 	}
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		settingsError("Logo upload failed: " + err.Error())
@@ -308,7 +308,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if connErr != "" {
-		h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
+		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
 			"Error": "Connection failed: " + connErr,
 		}))
 		return
@@ -332,7 +332,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
+	h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
 		"Success": "Settings saved. Enter your database password to connect.",
 	}))
 }
@@ -361,7 +361,7 @@ func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET default_po_contact_id = @p1, default_po_receiver_id = @p2 WHERE id = @p3`,
 		h.cfg.UsersTable()), contactArg, receiverArg, u.ID); err != nil {
-		h.render(w, r, "settings.html", h.settingsData(w, r, map[string]any{
+		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
 			"Error": "Could not save preferences: " + err.Error(),
 		}))
 		return

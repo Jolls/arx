@@ -222,7 +222,7 @@ func (h *Handler) ServeSupplierDir(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, entry)
 	}
 
-	h.render(w, r, "local_dir.html", map[string]any{
+	h.render(w, r, "shared/local_dir.html", map[string]any{
 		"DirName":   dirName,
 		"FullPath":  path,
 		"ParentURL": parentURL,
@@ -327,7 +327,7 @@ func (h *Handler) ServeLocalDir(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, entry)
 	}
 
-	h.render(w, r, "local_dir.html", map[string]any{
+	h.render(w, r, "shared/local_dir.html", map[string]any{
 		"DirName":   dirName,
 		"FullPath":  path,
 		"ParentURL": parentURL,

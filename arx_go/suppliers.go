@@ -37,7 +37,7 @@ func validateFolderStub(code string) error {
 }
 
 func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "suppliers.html", map[string]any{
+	h.render(w, r, "suppliers/suppliers.html", map[string]any{
 		"ActiveTab": "suppliers", "TestMode": h.cfg.TestMode,
 	})
 }
@@ -126,7 +126,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "supplier_detail.html", map[string]any{
+	h.render(w, r, "suppliers/supplier_detail.html", map[string]any{
 		"Supplier": s, "PrimaryAtt": primaryAtt,
 		"RecentPOs": recentPOs, "TopParts": topParts, "OtherContacts": otherContacts,
 		"ActiveTab": "suppliers", "ActiveSubTab": "details",
@@ -211,7 +211,7 @@ func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit
 }
 
 func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "supplier_edit.html", map[string]any{
+	h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 		"Supplier": models.Supplier{}, "IsNew": true, "Contacts": nil,
 		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -221,7 +221,7 @@ func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 	name := fv(r, "name")
 	if name == "" {
-		h.render(w, r, "supplier_edit.html", map[string]any{
+		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": "Supplier name is required",
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -229,7 +229,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := validateFolderStub(fv(r, "SUSupplierCode")); err != nil {
-		h.render(w, r, "supplier_edit.html", map[string]any{
+		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -250,7 +250,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "SUNotes"), time.Now(),
 	).Scan(&newID)
 	if err != nil {
-		h.render(w, r, "supplier_edit.html", map[string]any{
+		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Contacts": nil,
 			"Error": "Error creating supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -271,7 +271,7 @@ func (h *Handler) SupplierEdit(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "supplier_edit.html", map[string]any{
+	h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 		"Supplier": s, "IsNew": false, "Contacts": contacts,
 		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -288,7 +288,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	contacts := h.contactsForSupplier(r, idInt)
 	if name == "" {
-		h.render(w, r, "supplier_edit.html", map[string]any{
+		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error": "Supplier name is required",
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -297,7 +297,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := validateFolderStub(fv(r, "SUSupplierCode")); err != nil {
-		h.render(w, r, "supplier_edit.html", map[string]any{
+		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error": err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -319,7 +319,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "SUNotes"), time.Now(), id,
 	)
 	if err != nil {
-		h.render(w, r, "supplier_edit.html", map[string]any{
+		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error": "Error saving supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -442,7 +442,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "supplier_parts.html", map[string]any{
+	h.render(w, r, "suppliers/supplier_parts.html", map[string]any{
 		"Supplier": s, "Links": links,
 		"ActiveTab": "suppliers", "ActiveSubTab": "parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -461,7 +461,7 @@ func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "supplier_pos.html", map[string]any{
+	h.render(w, r, "suppliers/supplier_pos.html", map[string]any{
 		"Supplier": s, "Orders": orders,
 		"ActiveTab": "suppliers", "ActiveSubTab": "pos",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
@@ -521,7 +521,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "supplier_attachments.html", map[string]any{
+	h.render(w, r, "suppliers/supplier_attachments.html", map[string]any{
 		"Supplier":    s,
 		"Attachments": attachments,
 		"EditingAtt":  editingAtt,
@@ -791,7 +791,7 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "local_dir.html", map[string]any{
+	h.render(w, r, "shared/local_dir.html", map[string]any{
 		"Supplier":  &s,
 		"DirName":   dirName,
 		"FullPath":  path,

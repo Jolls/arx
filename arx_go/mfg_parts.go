@@ -32,7 +32,7 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, r, "mfg_parts.html", map[string]any{
+	h.render(w, r, "parts/mfg_parts.html", map[string]any{
 		"Part":          p,
 		"MfgParts":      mfgParts,
 		"Manufacturers": manufacturers,
@@ -108,7 +108,7 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, r, "mfg_parts.html", map[string]any{
+	h.render(w, r, "parts/mfg_parts.html", map[string]any{
 		"Part":           p,
 		"MfgParts":       mfgParts,
 		"EditingMfgPart": &mp,
@@ -229,7 +229,7 @@ func (h *Handler) renderMfgPartsWithError(w http.ResponseWriter, r *http.Request
 	}
 	mfgParts, _ := h.fetchMfgParts(r, partID)
 	manufacturers, _ := h.fetchManufacturers(r)
-	h.render(w, r, "mfg_parts.html", map[string]any{
+	h.render(w, r, "parts/mfg_parts.html", map[string]any{
 		"Part":          p,
 		"MfgParts":      mfgParts,
 		"Manufacturers": manufacturers,
