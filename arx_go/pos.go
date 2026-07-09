@@ -1836,16 +1836,19 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 }
 
 func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num string) []models.PurchaseOrderLine {
-	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	pol, po, parts, fil := h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PartsTable(), h.cfg.AttachmentsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
 		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id, pol.lead_time_days,
-		       pol.received_qty, pol.date_received
+		       pol.received_qty, pol.date_received,
+		       fil.id, fil.file_name, fil.category
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
+		LEFT JOIN %s p ON pol.part_id = p.id
+		LEFT JOIN %s fil ON p.primary_attachment_id = fil.id
 		WHERE po.number = @p1
 		ORDER BY pol.line_number
-	`, pol, po), num)
+	`, pol, po, parts, fil), num)
 	if err != nil {
 		return nil
 	}
@@ -1856,9 +1859,12 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 		var partNumber, rev, desc, vendorPN sql.NullString
 		var polpnid, leadTime sql.NullInt64
 		var dateReceived sql.NullTime
+		var filID sql.NullInt64
+		var filFileName, filCategory sql.NullString
 		if err := rows.Scan(&item.POLID, &item.POLItem, &partNumber, &rev, &desc,
 			&item.POLQty, &item.POLCost, &vendorPN, &polpnid, &leadTime,
-			&item.ReceivedQty, &dateReceived); err == nil {
+			&item.ReceivedQty, &dateReceived,
+			&filID, &filFileName, &filCategory); err == nil {
 			item.POLPNPartNumber = partNumber.String
 			item.POLRev = rev.String
 			item.POLDesc = desc.String
@@ -1874,6 +1880,13 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 			if dateReceived.Valid {
 				t := dateReceived.Time
 				item.DateReceived = &t
+			}
+			if filID.Valid {
+				item.PrimaryAtt = &models.Attachment{
+					FILID:       int(filID.Int64),
+					FILFileName: filFileName.String,
+					Category:    filCategory.String,
+				}
 			}
 			items = append(items, item)
 		}
