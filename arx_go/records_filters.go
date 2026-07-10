@@ -82,6 +82,24 @@ func (f recordFilters) whereClauses(startArg int) (string, []any) {
 		args = append(args, f.Type)
 		n++
 	}
+
+	dateClause, dateArgs := f.dateRangeClauses(n)
+	sb.WriteString(dateClause)
+	args = append(args, dateArgs...)
+
+	return sb.String(), args
+}
+
+// dateRangeClauses builds just the From/To record_date WHERE fragments (no
+// status/type clauses), for callers that only want the date-range portion of
+// recordFilters — e.g. a report scoped by a different set of base predicates.
+// Placeholders are numbered starting at startArg; see whereClauses for the
+// same startArg convention.
+func (f recordFilters) dateRangeClauses(startArg int) (string, []any) {
+	var sb strings.Builder
+	var args []any
+	n := startArg
+
 	if !f.From.IsZero() {
 		fmt.Fprintf(&sb, " AND record_date >= @p%d", n)
 		args = append(args, f.From)
