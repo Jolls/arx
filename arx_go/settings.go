@@ -17,6 +17,52 @@ import (
 	arxdb "arx/arxlib/db"
 )
 
+// landingPreset is one selectable landing-page option (issue #282): a major
+// nav tab, offered in the Settings → My Preferences dropdown alongside a
+// free-form "Custom link…" choice.
+type landingPreset struct {
+	Path  string
+	Label string
+}
+
+var landingPresets = []landingPreset{
+	{"/parts", "Parts"},
+	{"/suppliers", "Vendors"},
+	{"/pos", "POs"},
+	{"/contacts", "Contacts"},
+	{"/records", "Records"},
+	{"/reports", "Reports"},
+}
+
+func isPresetLanding(path string) bool {
+	for _, p := range landingPresets {
+		if p.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// sanitizeLandingRoute reduces a user-pasted link to a safe same-origin
+// relative path (path + query, no scheme/host) so it can be used as a
+// post-login redirect target without opening a redirect to another host.
+// Returns false for empty input or anything that isn't a rooted path.
+func sanitizeLandingRoute(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false
+	}
+	ri := u.RequestURI() // drops scheme/host; e.g. "http://host/?f=1" -> "/?f=1"
+	if !strings.HasPrefix(ri, "/") || strings.HasPrefix(ri, "//") {
+		return "", false
+	}
+	return ri, true
+}
+
 type contactOption struct {
 	ID   int
 	Name string
@@ -83,6 +129,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var poReceiverName string
 	var poContactID, poReceiverID int
 	accentColor := "blue"
+	landingRoutePref := "/"
 	if h.db != nil {
 		if u := h.currentUser(r); u != nil {
 			poContactID = u.DefaultPOContactID
@@ -98,6 +145,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 			if isValidAccentTheme(u.AccentColor) {
 				accentColor = u.AccentColor
 			}
+			landingRoutePref = landingRoute(u)
 		}
 		var err error
 		users, err = h.listUsers(r.Context())
@@ -133,6 +181,9 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"CompanyLogo":           h.companyLogoURL(),
 		"AccentColor":           accentColor,
 		"AccentThemes":          accentThemes,
+		"LandingRoute":          landingRoutePref,
+		"LandingRouteIsCustom":  !isPresetLanding(landingRoutePref),
+		"LandingPresets":        landingPresets,
 		"PartCategories":        h.partCategories,
 		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
 		"PartNumberingPreview":  partNumberingPreview,
@@ -197,6 +248,41 @@ func (h *Handler) SettingsAccentColorSave(w http.ResponseWriter, r *http.Request
 		`UPDATE %s SET accent_color = @p1 WHERE id = @p2`,
 		h.cfg.UsersTable()), color, u.ID); err != nil {
 		log.Printf("warning: could not save accent_color: %v", err)
+	}
+	h.invalidateUserCache(u.ID)
+	http.Redirect(w, r, "/settings#preferences", http.StatusFound)
+}
+
+// SettingsDefaultRouteSave persists the logged-in user's post-login landing
+// page preference (Settings → My Preferences tab, issue #282). The choice is
+// either a preset tab path or a sanitized custom relative path. It has its own
+// endpoint so this partial form can't blank the fields the main settings
+// form writes.
+func (h *Handler) SettingsDefaultRouteSave(w http.ResponseWriter, r *http.Request) {
+	u := h.currentUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	var route string
+	choice := r.FormValue("landing_choice")
+	if choice == "custom" {
+		s, ok := sanitizeLandingRoute(r.FormValue("custom_route"))
+		if !ok {
+			http.Redirect(w, r, "/settings#preferences", http.StatusFound)
+			return
+		}
+		route = s
+	} else if isPresetLanding(choice) {
+		route = choice
+	} else {
+		http.Redirect(w, r, "/settings#preferences", http.StatusFound)
+		return
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET default_route = @p1 WHERE id = @p2`,
+		h.cfg.UsersTable()), route, u.ID); err != nil {
+		log.Printf("warning: could not save default_route: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
 	http.Redirect(w, r, "/settings#preferences", http.StatusFound)
