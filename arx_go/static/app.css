@@ -326,8 +326,8 @@ input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; c
 .bom-sub-row td:first-child { padding-left: calc(8px + 1em * var(--bom-depth, 1)); }
 
 /* Records list select column (#502): shown only when the table carries
-   .show-select (status = WIP, or Complete + backfill-eligible). Kept separate
-   from .col-hidden, which is reserved for the user's manual Columns toggle. */
+   .show-select (status = WIP). Kept separate from .col-hidden, which is
+   reserved for the user's manual Columns toggle. */
 #records-table [data-col="col-select"] { display: none; }
 #records-table.show-select [data-col="col-select"] { display: table-cell; }
 

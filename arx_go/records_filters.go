@@ -57,10 +57,6 @@ func parseRecordFilters(q url.Values) recordFilters {
 // only shows the row-select column and bulk-lock toolbar in this mode.
 func (f recordFilters) StatusWIP() bool { return f.Status == "wip" }
 
-// StatusComplete reports whether the Complete status filter is active. The one-time #251
-// backfill bulk action is offered in this mode.
-func (f recordFilters) StatusComplete() bool { return f.Status == "complete" }
-
 // whereClauses builds the SQL WHERE fragments and positional args implied by the
 // filters. Each fragment begins with " AND " so the caller can concatenate it
 // onto an existing WHERE. Placeholders are numbered starting at startArg; the

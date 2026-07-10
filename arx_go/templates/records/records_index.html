@@ -13,13 +13,6 @@
 </div>
 {{end}}
 
-{{if gt .BackfilledCount 0}}
-<div class="alert alert-success alert-dismissible fade show" role="alert">
-  Captured result history for {{.BackfilledCount}} record(s).
-  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-</div>
-{{end}}
-
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4>{{.Form.PartNumber}} &mdash; {{.Form.Title}}
     <span class="badge bg-secondary ms-2">{{if .Form.Revision}}Rev {{.Form.Revision}}{{else}}Draft{{end}}</span>
@@ -57,14 +50,6 @@
       <i class="bi bi-check2-circle"></i> Lock selected (<span class="selected-count">0</span>)
     </button>
   </form>
-  {{if .BackfillEligible}}
-  <form method="POST" action="/forms/{{.Form.ID}}/records/backfill-history" id="backfill-form" class="d-none">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Capture result history for the selected completed records? This is a one-time migration step.')">
-      <i class="bi bi-clock-history"></i> Capture history (<span class="selected-count">0</span>)
-    </button>
-  </form>
-  {{end}}
 </div>
 
 <table class="table table-bordered table-hover table-sm" id="records-table" data-rows-url="/api/forms/{{.Form.ID}}/records/rows">
@@ -120,26 +105,22 @@
   var table = document.getElementById('records-table');
   if (!table) return;
   var statusSelect = document.getElementById('status-filter');
-  var backfillEligible = {{if .BackfillEligible}}true{{else}}false{{end}};
   var selected = new Set();
 
   var bulkActions = document.getElementById('bulk-actions');
   var lockForm = document.getElementById('bulk-lock-form');
-  var backfillForm = document.getElementById('backfill-form');
 
-  // 'lock' in the WIP view, 'backfill' in the Complete view for eligible reviewers,
-  // otherwise no bulk action is available and the select column stays hidden.
+  // 'lock' in the WIP view; otherwise no bulk action is available and the select column
+  // stays hidden.
   function currentMode() {
     if (!statusSelect) return null;
     if (statusSelect.value === 'wip') return 'lock';
-    if (statusSelect.value === 'complete' && backfillEligible) return 'backfill';
     return null;
   }
 
   function updateBulkActions() {
     var mode = currentMode();
     if (lockForm) lockForm.classList.toggle('d-none', mode !== 'lock');
-    if (backfillForm) backfillForm.classList.toggle('d-none', mode !== 'backfill');
     document.querySelectorAll('.selected-count').forEach(function (el) { el.textContent = selected.size; });
     if (bulkActions) bulkActions.classList.toggle('d-none', !mode || selected.size === 0);
   }
@@ -187,7 +168,7 @@
     }
   });
 
-  [lockForm, backfillForm].forEach(function (form) {
+  [lockForm].forEach(function (form) {
     if (!form) return;
     form.addEventListener('submit', function () {
       form.querySelectorAll('input[name="record_ids[]"]').forEach(function (el) { el.remove(); });

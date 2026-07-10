@@ -246,17 +246,6 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lockedCount, _ := strconv.Atoi(r.URL.Query().Get("locked"))
-	backfilledCount, _ := strconv.Atoi(r.URL.Query().Get("backfilled"))
-
-	// Backfill eligibility (#251): offered to TR reviewers when the form still has
-	// completed records needing the one-time history-capture migration. The TR-specific
-	// script shows the select column + bulk toolbar based on this plus the client-side
-	// status filter (the row set itself comes from the API below).
-	canApprove := false
-	if u := h.currentUser(r); u != nil {
-		canApprove = u.CanApproveRecords
-	}
-	backfillEligible := canApprove && h.formHasBackfillableRecords(r.Context(), formID)
 
 	// Distinct Type (comments) values for this form, to populate the filter datalist.
 	var typeOptions []string
@@ -275,14 +264,12 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderTR(w, r, "records_index.html", map[string]any{
-		"Form":             form,
-		"TypeOptions":      typeOptions,
-		"LockedCount":      lockedCount,
-		"BackfilledCount":  backfilledCount,
-		"BackfillEligible": backfillEligible,
-		"CSRFToken":        h.csrfToken(w, r),
-		"ActiveTab":        "records",
-		"TestMode":         h.cfg.TestMode,
+		"Form":        form,
+		"TypeOptions": typeOptions,
+		"LockedCount": lockedCount,
+		"CSRFToken":   h.csrfToken(w, r),
+		"ActiveTab":   "records",
+		"TestMode":    h.cfg.TestMode,
 	})
 }
 
