@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.109] - 2026-07-10 
+- Added a Spend Analysis subtab under Reports — total spend by supplier and by part over This Month/This Quarter/YTD/custom date ranges, with CSV export ([#283](https://github.com/Jolls/arx-legacy/issues/283))
+
 ## [0.5.108] - 2026-07-10 
 - Added a Reports tab with a KPI dashboard — open POs, POs received this month, and a recent-activity feed ([#282](https://github.com/Jolls/arx-legacy/issues/282))
 - Made the home/landing page a per-user preference (any tab or a custom filtered link); the app root now redirects there and the parts list moved to `/parts` ([#282](https://github.com/Jolls/arx-legacy/issues/282))

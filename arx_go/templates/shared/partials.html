@@ -38,6 +38,14 @@
 </div>
 {{end}}
 
+{{define "reports_tabs"}}
+{{/* No "Back to" link here (unlike supplier_tabs/po_tabs) — Reports has no parent list page. */}}
+<div class="sub-tabs">
+    <a href="/reports"       class="sub-tab{{if eq .ActiveSubTab "dashboard"}} active{{end}}">Dashboard</a>
+    <a href="/reports/spend" class="sub-tab{{if eq .ActiveSubTab "spend"}} active{{end}}">Spend Analysis</a>
+</div>
+{{end}}
+
 {{define "supplier_tabs"}}
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>
