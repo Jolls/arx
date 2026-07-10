@@ -127,6 +127,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"POSuppliers":           poSuppliers,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"CompanyLogo":           h.companyLogoURL(),
+		"AccentColor":           h.accentColor,
+		"AccentThemes":          accentThemes,
 		"PartCategories":        h.partCategories,
 		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
 		"PartNumberingPreview":  partNumberingPreview,
@@ -167,6 +169,22 @@ func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *htt
 		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")
 		if err := h.appConfigSet(r.Context(), "attachment_categories", cats); err != nil {
 			log.Printf("warning: could not save attachment_categories: %v", err)
+		}
+	}
+	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+// SettingsAccentColorSave persists the chosen accent color theme to app_config.
+// It has its own endpoint so this partial form can't blank the path fields
+// that SettingsSave writes from the main settings form.
+func (h *Handler) SettingsAccentColorSave(w http.ResponseWriter, r *http.Request) {
+	if h.db != nil {
+		color := r.FormValue("accent_color")
+		if isValidAccentTheme(color) {
+			if err := h.appConfigSet(r.Context(), "accent_color", color); err != nil {
+				log.Printf("warning: could not save accent_color: %v", err)
+			}
+			h.accentColor = color
 		}
 	}
 	http.Redirect(w, r, "/settings", http.StatusFound)
@@ -296,6 +314,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			}
 			h.CheckSchemaVersion(r.Context())
 			h.loadCompanyLogo(r.Context())
+			h.loadAccentColor(r.Context())
 			h.loadPartCategories(r.Context())
 			if oldDB != nil {
 				oldDB.Close()

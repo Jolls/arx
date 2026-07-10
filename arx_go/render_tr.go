@@ -22,6 +22,7 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
+		m["AccentThemeClass"] = h.accentThemeClass()
 		m["Title"] = "Arx: Test Records"
 		m["Favicon"] = "/static/shared/icons/records.svg"
 		m["FaviconType"] = "image/svg+xml"

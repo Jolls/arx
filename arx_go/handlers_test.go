@@ -22,6 +22,27 @@ func TestFormatDate(t *testing.T) {
 	}
 }
 
+func TestAccentThemeClass(t *testing.T) {
+	cases := []struct {
+		accentColor string
+		want        string
+	}{
+		{"blue", "theme-blue"},
+		{"indigo", "theme-indigo"},
+		{"teal", "theme-teal"},
+		{"green", "theme-green"},
+		{"slate", "theme-slate"},
+		{"", "theme-blue"},
+		{"not-a-real-theme", "theme-blue"},
+	}
+	for _, c := range cases {
+		h := &Handler{accentColor: c.accentColor}
+		if got := h.accentThemeClass(); got != c.want {
+			t.Errorf("accentThemeClass() with accentColor=%q = %q, want %q", c.accentColor, got, c.want)
+		}
+	}
+}
+
 func TestFormatFileSize(t *testing.T) {
 	cases := []struct {
 		input int64

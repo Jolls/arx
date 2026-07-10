@@ -32,6 +32,7 @@ type Handler struct {
 	schemaMismatch string
 	releaseNotes   string
 	companyLogo    string
+	accentColor    string
 	partCategories []models.Category
 
 	routeMu    sync.Mutex
@@ -179,6 +180,46 @@ func (h *Handler) loadCompanyLogo(ctx context.Context) {
 // which would otherwise strip our data: URI; template.URL marks it as pre-vetted.
 func (h *Handler) companyLogoURL() template.URL {
 	return template.URL(h.companyLogo)
+}
+
+// accentTheme is one preset accent color option offered in Settings (#537).
+type accentTheme struct {
+	Key   string // stored app_config value and the "theme-<key>" body class in app.css
+	Label string // shown in the UI
+}
+
+// accentThemes are the preset accent color options offered in Settings, in
+// display order.
+var accentThemes = []accentTheme{
+	{"blue", "Blue"},
+	{"indigo", "Indigo"},
+	{"teal", "Teal"},
+	{"green", "Green"},
+	{"slate", "Slate"},
+}
+
+func isValidAccentTheme(key string) bool {
+	for _, t := range accentThemes {
+		if t.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// loadAccentColor caches the accent color theme from app_config on the Handler
+// so the hot render path stays DB-free. Safe to call when db is nil.
+func (h *Handler) loadAccentColor(ctx context.Context) {
+	h.accentColor = h.appConfigGetOr(ctx, "accent_color", "blue")
+}
+
+// accentThemeClass returns the "theme-<name>" body class for the cached accent
+// color, falling back to "theme-blue" for an empty or unrecognized value.
+func (h *Handler) accentThemeClass() string {
+	if !isValidAccentTheme(h.accentColor) {
+		return "theme-blue"
+	}
+	return "theme-" + h.accentColor
 }
 
 // appConfigGet reads a single key from app_config.
@@ -347,6 +388,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
+		m["AccentThemeClass"] = h.accentThemeClass()
 		m["Title"] = "Arx Parts Master"
 		m["Favicon"] = "/static/shared/favicon.png"
 		m["FaviconType"] = "image/png"
