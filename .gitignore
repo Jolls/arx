@@ -10,3 +10,4 @@ arx_go/config/local*.json
 arx_go/Arx.exe
 .claude/
 docs/plans/412-unprivate-repo-scrub.md
+docs/security-review-*.local.md
