@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.107] - 2026-07-09 
+- Added preset accent color themes (blue/indigo/teal/green/slate) in Settings, so primary-colored elements no longer blend into the app header ([#537](https://github.com/Jolls/arx-legacy/issues/537))
+
 ## [0.5.106] - 2026-07-09 
 - security: replaced the hardcoded `"change-me-in-production"` session secret with an auto-generated random key persisted to `local.json`, and hardened the session cookie (`HttpOnly`, `SameSite=Lax`); regression of [#352](https://github.com/Jolls/arx-legacy/issues/352) reintroduced in the two-app merge ([#648](https://github.com/Jolls/arx-legacy/issues/648))
 
