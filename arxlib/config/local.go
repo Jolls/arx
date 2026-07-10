@@ -14,6 +14,7 @@ type LocalConfig struct {
 	DBName              string `json:"db_name"`
 	DBUser              string `json:"db_user"`
 	DBPassword          string `json:"db_password"`
+	SessionSecret       string `json:"session_secret,omitempty"`
 	DocControlRoot      string `json:"doc_control_root"`
 	POFolderRoot        string `json:"po_folder_root"`
 	SupplierFilesRoot   string `json:"supplier_files_root"`
