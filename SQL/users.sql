@@ -10,6 +10,7 @@ CREATE TABLE dbo.users (
     can_approve_records BIT     NOT NULL DEFAULT 0,  -- may approve/unlock approved test records (issue #249)
     default_po_contact_id  INT   NULL,               -- per-user default PO receiver contact (issue #463)
     default_po_receiver_id INT   NULL,               -- per-user default PO receiver company (issue #463)
+    accent_color  VARCHAR(20)   NULL,                -- per-user UI accent theme key, e.g. 'teal' (issue #537)
     created_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     updated_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     CONSTRAINT UQ_users_username UNIQUE (username)

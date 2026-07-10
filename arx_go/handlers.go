@@ -32,7 +32,6 @@ type Handler struct {
 	schemaMismatch string
 	releaseNotes   string
 	companyLogo    string
-	accentColor    string
 	partCategories []models.Category
 
 	routeMu    sync.Mutex
@@ -207,19 +206,15 @@ func isValidAccentTheme(key string) bool {
 	return false
 }
 
-// loadAccentColor caches the accent color theme from app_config on the Handler
-// so the hot render path stays DB-free. Safe to call when db is nil.
-func (h *Handler) loadAccentColor(ctx context.Context) {
-	h.accentColor = h.appConfigGetOr(ctx, "accent_color", "blue")
-}
-
-// accentThemeClass returns the "theme-<name>" body class for the cached accent
-// color, falling back to "theme-blue" for an empty or unrecognized value.
-func (h *Handler) accentThemeClass() string {
-	if !isValidAccentTheme(h.accentColor) {
+// accentThemeClass returns the "theme-<name>" body class for the logged-in
+// user's accent color preference (issue #537), falling back to "theme-blue"
+// when logged out or the stored value is empty/unrecognized.
+func (h *Handler) accentThemeClass(r *http.Request) string {
+	u := h.currentUser(r)
+	if u == nil || !isValidAccentTheme(u.AccentColor) {
 		return "theme-blue"
 	}
-	return "theme-" + h.accentColor
+	return "theme-" + u.AccentColor
 }
 
 // appConfigGet reads a single key from app_config.
@@ -388,7 +383,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
-		m["AccentThemeClass"] = h.accentThemeClass()
+		m["AccentThemeClass"] = h.accentThemeClass(r)
 		m["Title"] = "Arx Parts Master"
 		m["Favicon"] = "/static/shared/favicon.png"
 		m["FaviconType"] = "image/png"

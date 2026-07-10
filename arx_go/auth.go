@@ -31,6 +31,8 @@ type User struct {
 	// Per-user PO defaults (issue #463); 0 = unset, falls back to global config.
 	DefaultPOContactID  int
 	DefaultPOReceiverID int
+	// Per-user UI accent theme (issue #537); "" = unset, falls back to "blue".
+	AccentColor string
 }
 
 // --- DB helpers ---
@@ -38,15 +40,17 @@ type User struct {
 func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var u User
 	var defContact, defReceiver sql.NullInt64
+	var accentColor sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id FROM %s WHERE id = @p1 AND is_active = 1`,
+		`SELECT id, username, display_name, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id, accent_color FROM %s WHERE id = @p1 AND is_active = 1`,
 		h.cfg.UsersTable()), id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &defContact, &defReceiver)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &defContact, &defReceiver, &accentColor)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	u.DefaultPOContactID = int(defContact.Int64)
 	u.DefaultPOReceiverID = int(defReceiver.Int64)
+	u.AccentColor = accentColor.String
 	return &u, err
 }
 

@@ -45,7 +45,6 @@ func onReady() {
 	h = New(database, cfg, templatesFS, releaseNotesData)
 	h.CheckSchemaVersion(context.Background())
 	h.loadCompanyLogo(context.Background())
-	h.loadAccentColor(context.Background())
 	h.loadPartCategories(context.Background())
 
 	if cfg.DebugMode {
@@ -127,7 +126,6 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Post("/settings/part-numbering", h.SettingsPartNumberingSave)
 	r.Post("/settings/company-logo", h.SettingsCompanyLogoSave)
 	r.Post("/settings/company-logo/remove", h.SettingsCompanyLogoRemove)
-	r.Post("/settings/accent-color", h.SettingsAccentColorSave)
 	r.Get("/whats-new", h.WhatsNew)
 	r.Get("/api/browse-folder", h.APIBrowseFolder)
 	r.Get("/api/browse-file", h.APIBrowseFile)
@@ -151,6 +149,7 @@ func buildRouter(h *Handler) *chi.Mux {
 
 		// Per-user preferences (Settings → My Preferences tab; PO defaults — issue #463)
 		r.Post("/settings/preferences", h.SettingsPreferencesSave)
+		r.Post("/settings/accent-color", h.SettingsAccentColorSave)
 
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)

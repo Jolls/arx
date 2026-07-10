@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"net/http"
 	"net/url"
 	"testing"
 	"time"
@@ -25,20 +27,27 @@ func TestFormatDate(t *testing.T) {
 func TestAccentThemeClass(t *testing.T) {
 	cases := []struct {
 		accentColor string
+		noUser      bool
 		want        string
 	}{
-		{"blue", "theme-blue"},
-		{"indigo", "theme-indigo"},
-		{"teal", "theme-teal"},
-		{"green", "theme-green"},
-		{"slate", "theme-slate"},
-		{"", "theme-blue"},
-		{"not-a-real-theme", "theme-blue"},
+		{accentColor: "blue", want: "theme-blue"},
+		{accentColor: "indigo", want: "theme-indigo"},
+		{accentColor: "teal", want: "theme-teal"},
+		{accentColor: "green", want: "theme-green"},
+		{accentColor: "slate", want: "theme-slate"},
+		{accentColor: "", want: "theme-blue"},
+		{accentColor: "not-a-real-theme", want: "theme-blue"},
+		{noUser: true, want: "theme-blue"},
 	}
+	h := &Handler{}
 	for _, c := range cases {
-		h := &Handler{accentColor: c.accentColor}
-		if got := h.accentThemeClass(); got != c.want {
-			t.Errorf("accentThemeClass() with accentColor=%q = %q, want %q", c.accentColor, got, c.want)
+		req, _ := http.NewRequest("GET", "/", nil)
+		if !c.noUser {
+			ctx := context.WithValue(req.Context(), ctxUserKey, &User{AccentColor: c.accentColor})
+			req = req.WithContext(ctx)
+		}
+		if got := h.accentThemeClass(req); got != c.want {
+			t.Errorf("accentThemeClass() with accentColor=%q noUser=%v = %q, want %q", c.accentColor, c.noUser, got, c.want)
 		}
 	}
 }
