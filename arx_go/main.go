@@ -149,6 +149,7 @@ func buildRouter(h *Handler) *chi.Mux {
 
 		// Per-user preferences (Settings → My Preferences tab; PO defaults — issue #463)
 		r.Post("/settings/preferences", h.SettingsPreferencesSave)
+		r.Post("/settings/accent-color", h.SettingsAccentColorSave)
 
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)

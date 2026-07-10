@@ -4,11 +4,49 @@
 
 /* --- Tokens -------------------------------------------------- */
 :root {
-    --accent-1:      #0d6efd;
-    --accent-2:      #0b5ed7;
-    --header-bg:     #1a1a2e;
-    --header-border: var(--accent-1);
+    --accent-1:  #0d6efd;
+    --accent-2:  #0b5ed7;
+    --header-bg: #1a1a2e;
 }
+
+/* --- Accent color themes (#537) -------------------------------
+   Preset set applied via a class on <body>; "theme-blue" matches the
+   :root defaults above so it needs no overrides of its own. Each preset
+   also re-points the Bootstrap button/badge/text "primary" variant at
+   --accent-1/--accent-2, since Bootstrap's compiled CSS hardcodes those
+   colors rather than referencing a shared variable. --header-bg is a
+   darkened shade of --accent-1, chosen to keep the header's light text
+   readable. */
+body.theme-indigo { --accent-1: #6610f2; --accent-2: #5a0ed5; --header-bg: #241548; }
+body.theme-teal    { --accent-1: #20c997; --accent-2: #1cb185; --header-bg: #0d3329; }
+body.theme-green   { --accent-1: #198754; --accent-2: #157347; --header-bg: #123420; }
+body.theme-slate   { --accent-1: #6c757d; --accent-2: #5c636a; --header-bg: #2b2e33; }
+
+body.theme-indigo .btn-primary,
+body.theme-teal .btn-primary,
+body.theme-green .btn-primary,
+body.theme-slate .btn-primary {
+    --bs-btn-bg: var(--accent-1); --bs-btn-border-color: var(--accent-1);
+    --bs-btn-hover-bg: var(--accent-2); --bs-btn-hover-border-color: var(--accent-2);
+    --bs-btn-active-bg: var(--accent-2); --bs-btn-active-border-color: var(--accent-2);
+    --bs-btn-disabled-bg: var(--accent-1); --bs-btn-disabled-border-color: var(--accent-1);
+}
+body.theme-indigo .bg-primary, body.theme-indigo .badge.bg-primary,
+body.theme-teal .bg-primary, body.theme-teal .badge.bg-primary,
+body.theme-green .bg-primary, body.theme-green .badge.bg-primary,
+body.theme-slate .bg-primary, body.theme-slate .badge.bg-primary { background-color: var(--accent-1) !important; }
+body.theme-indigo .text-primary,
+body.theme-teal .text-primary,
+body.theme-green .text-primary,
+body.theme-slate .text-primary { color: var(--accent-1) !important; }
+
+/* Settings swatches (#537): standalone, not scoped to a themed <body>, so
+   they can preview every preset regardless of the currently active theme. */
+.accent-swatch-blue   { background: #0d6efd; }
+.accent-swatch-indigo { background: #6610f2; }
+.accent-swatch-teal   { background: #20c997; }
+.accent-swatch-green  { background: #198754; }
+.accent-swatch-slate  { background: #6c757d; }
 
 /* --- Reset ---------------------------------------------------- */
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -24,7 +62,7 @@ body {
     height: 36px; background: var(--header-bg); color: #e0e0e0;
     display: flex; align-items: center; padding: 0 16px;
     font-size: 0.85rem; font-weight: 600; letter-spacing: 0.5px;
-    border-bottom: 2px solid var(--header-border);
+    border-bottom: 2px solid var(--accent-1);
 }
 .app-header--testmode { background: #b45309; border-bottom-color: #f59e0b; }
 .app-header-icon { width: 20px; height: 20px; margin-right: 8px; }
@@ -51,6 +89,10 @@ body {
 .tab-icon-active { display: none; }
 .tab.active .tab-icon-default { display: none; }
 .tab.active .tab-icon-active { display: inline; }
+
+/* Table headers (PM: tr.table-dark; TR: thead.table-dark) — tied to the same
+   --header-bg token as .app-header (#537) so they shift together per theme. */
+tr.table-dark, thead.table-dark { --bs-table-bg: var(--header-bg); }
 
 /* --- Sortable column headers (PM: tr.table-dark; TR: thead.table-dark) */
 tr.table-dark th.sortable,

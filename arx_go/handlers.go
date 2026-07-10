@@ -181,6 +181,42 @@ func (h *Handler) companyLogoURL() template.URL {
 	return template.URL(h.companyLogo)
 }
 
+// accentTheme is one preset accent color option offered in Settings (#537).
+type accentTheme struct {
+	Key   string // stored app_config value and the "theme-<key>" body class in app.css
+	Label string // shown in the UI
+}
+
+// accentThemes are the preset accent color options offered in Settings, in
+// display order.
+var accentThemes = []accentTheme{
+	{"blue", "Blue"},
+	{"indigo", "Indigo"},
+	{"teal", "Teal"},
+	{"green", "Green"},
+	{"slate", "Slate"},
+}
+
+func isValidAccentTheme(key string) bool {
+	for _, t := range accentThemes {
+		if t.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// accentThemeClass returns the "theme-<name>" body class for the logged-in
+// user's accent color preference (issue #537), falling back to "theme-blue"
+// when logged out or the stored value is empty/unrecognized.
+func (h *Handler) accentThemeClass(r *http.Request) string {
+	u := h.currentUser(r)
+	if u == nil || !isValidAccentTheme(u.AccentColor) {
+		return "theme-blue"
+	}
+	return "theme-" + u.AccentColor
+}
+
 // appConfigGet reads a single key from app_config.
 func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) {
 	if h.db == nil {
@@ -347,6 +383,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
+		m["AccentThemeClass"] = h.accentThemeClass(r)
 		m["Title"] = "Arx Parts Master"
 		m["Favicon"] = "/static/shared/favicon.png"
 		m["FaviconType"] = "image/png"

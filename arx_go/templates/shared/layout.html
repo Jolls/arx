@@ -10,7 +10,7 @@
     <link rel="icon" type="{{.FaviconType}}" href="{{.Favicon}}">
     <link rel="stylesheet" href="/static/app.css?v={{.AppVersion}}">
 </head>
-<body>
+<body class="{{.AccentThemeClass}}">
     <div class="app-header{{if .TestMode}} app-header--testmode{{end}}">
         <img src="{{.Favicon}}" alt="" class="app-header-icon">
         Arx{{if .TestMode}} &mdash; TEST MODE{{end}}

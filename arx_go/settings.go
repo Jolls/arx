@@ -82,6 +82,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var poSuppliers []supplierOption
 	var poReceiverName string
 	var poContactID, poReceiverID int
+	accentColor := "blue"
 	if h.db != nil {
 		if u := h.currentUser(r); u != nil {
 			poContactID = u.DefaultPOContactID
@@ -93,6 +94,9 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 					poReceiverName = s.Name
 					break
 				}
+			}
+			if isValidAccentTheme(u.AccentColor) {
+				accentColor = u.AccentColor
 			}
 		}
 		var err error
@@ -127,6 +131,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"POSuppliers":           poSuppliers,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
 		"CompanyLogo":           h.companyLogoURL(),
+		"AccentColor":           accentColor,
+		"AccentThemes":          accentThemes,
 		"PartCategories":        h.partCategories,
 		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
 		"PartNumberingPreview":  partNumberingPreview,
@@ -170,6 +176,30 @@ func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *htt
 		}
 	}
 	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+// SettingsAccentColorSave persists the logged-in user's accent color theme
+// preference (Settings → My Preferences tab, issue #537). It has its own
+// endpoint so this partial form can't blank the fields the main settings
+// form writes.
+func (h *Handler) SettingsAccentColorSave(w http.ResponseWriter, r *http.Request) {
+	u := h.currentUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	color := r.FormValue("accent_color")
+	if !isValidAccentTheme(color) {
+		http.Redirect(w, r, "/settings#preferences", http.StatusFound)
+		return
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET accent_color = @p1 WHERE id = @p2`,
+		h.cfg.UsersTable()), color, u.ID); err != nil {
+		log.Printf("warning: could not save accent_color: %v", err)
+	}
+	h.invalidateUserCache(u.ID)
+	http.Redirect(w, r, "/settings#preferences", http.StatusFound)
 }
 
 // SettingsCompanyLogoSave stores an uploaded logo as a base64 data URI in
