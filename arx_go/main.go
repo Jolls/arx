@@ -150,6 +150,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Per-user preferences (Settings → My Preferences tab; PO defaults — issue #463)
 		r.Post("/settings/preferences", h.SettingsPreferencesSave)
 		r.Post("/settings/accent-color", h.SettingsAccentColorSave)
+		r.Post("/settings/default-route", h.SettingsDefaultRouteSave)
 
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)
@@ -166,8 +167,14 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Test Records image serving
 		r.Get("/images/*", h.ServeImage)
 
+		// Reports (issue #282)
+		r.Get("/reports", h.ReportsDashboard)
+
+		// App root: redirect to each user's configured landing page (issue #282).
+		r.Get("/", h.RootRedirect)
+
 		// Parts Master — Parts
-		r.Get("/", h.PartsList)
+		r.Get("/parts", h.PartsList)
 		r.Get("/parts/new", h.PartsNew)
 		r.Get("/parts/export.csv", h.PartsExportCSV)
 		r.Post("/parts", h.PartsCreate)

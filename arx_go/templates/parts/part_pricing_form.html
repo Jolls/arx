@@ -1,7 +1,7 @@
 {{define "content"}}
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="/">Parts</a></li>
+        <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
         <li class="breadcrumb-item"><a href="/part/{{.Part.PNID}}/pricing">{{.Part.PartNumber}}</a></li>
         <li class="breadcrumb-item active">{{if .IsNew}}Add Price{{else}}Edit Price{{end}}</li>
     </ol>

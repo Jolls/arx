@@ -372,6 +372,7 @@ var pmTabFavicons = map[string]string{
 	"pos":       "/static/shared/icons/pos.svg",
 	"contacts":  "/static/shared/icons/contacts.svg",
 	"records":   "/static/shared/icons/records.svg",
+	"reports":   "/static/shared/icons/reports.svg",
 }
 
 // render parses layout + partials + the named page template and executes "layout".

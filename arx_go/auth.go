@@ -33,6 +33,9 @@ type User struct {
 	DefaultPOReceiverID int
 	// Per-user UI accent theme (issue #537); "" = unset, falls back to "blue".
 	AccentColor string
+	// Per-user post-login landing page (issue #282); a same-origin relative path
+	// (e.g. "/", "/pos", "/?f0=as"). "" = unset, falls back to "/".
+	DefaultRoute string
 }
 
 // --- DB helpers ---
@@ -40,17 +43,18 @@ type User struct {
 func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var u User
 	var defContact, defReceiver sql.NullInt64
-	var accentColor sql.NullString
+	var accentColor, defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id, accent_color FROM %s WHERE id = @p1 AND is_active = 1`,
+		`SELECT id, username, display_name, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id, accent_color, default_route FROM %s WHERE id = @p1 AND is_active = 1`,
 		h.cfg.UsersTable()), id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &defContact, &defReceiver, &accentColor)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &defContact, &defReceiver, &accentColor, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	u.DefaultPOContactID = int(defContact.Int64)
 	u.DefaultPOReceiverID = int(defReceiver.Int64)
 	u.AccentColor = accentColor.String
+	u.DefaultRoute = defaultRoute.String
 	return &u, err
 }
 
@@ -95,13 +99,15 @@ func (h *Handler) invalidateUserCache(id int) {
 func (h *Handler) userByUsername(ctx context.Context, username string) (*User, string, error) {
 	var u User
 	var hash string
+	var defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, password_hash FROM %s WHERE username = @p1 AND is_active = 1`,
+		`SELECT id, username, display_name, password_hash, default_route FROM %s WHERE username = @p1 AND is_active = 1`,
 		h.cfg.UsersTable()), username,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &hash)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &hash, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, "", nil
 	}
+	u.DefaultRoute = defaultRoute.String
 	return &u, hash, err
 }
 
@@ -198,7 +204,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		if u != nil {
 			h.saveSessionUser(w, r, u)
 		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, landingRoute(u), http.StatusSeeOther)
 		return
 	}
 
@@ -213,7 +219,25 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.saveSessionUser(w, r, u)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, landingRoute(u), http.StatusSeeOther)
+}
+
+// landingRoute returns the path the app root ("/") redirects each user to,
+// honoring their default_route preference (issue #282). Stored values are
+// same-origin relative paths (sanitized on save); anything unset or unexpected
+// falls back to the parts list. A value whose path is the root itself ("/" or
+// "/?…") would redirect back to the dispatcher and loop, so it also falls back
+// to "/parts". The "//" guard is defense-in-depth against a protocol-relative
+// value.
+func landingRoute(u *User) string {
+	if u != nil {
+		p := u.DefaultRoute
+		if strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") &&
+			p != "/" && !strings.HasPrefix(p, "/?") {
+			return p
+		}
+	}
+	return "/parts"
 }
 
 // POST /logout

@@ -9,7 +9,7 @@ import (
 
 // pmTabDirs are the tab-based template subfolders rendered via render()/renderPrint()
 // (i.e. everything except templates/shared and templates/records).
-var pmTabDirs = []string{"parts", "suppliers", "pos", "contacts", "settings"}
+var pmTabDirs = []string{"parts", "suppliers", "pos", "contacts", "settings", "reports"}
 
 // TestPMTemplatesParse parses every pm page template together with the layout
 // and partials, catching missing/renamed template definitions (e.g. shared

@@ -12,8 +12,7 @@
 </head>
 <body class="{{.AccentThemeClass}}">
     <div class="app-header{{if .TestMode}} app-header--testmode{{end}}">
-        <img src="{{.Favicon}}" alt="" class="app-header-icon">
-        Arx{{if .TestMode}} &mdash; TEST MODE{{end}}
+        <a href="/" class="app-header-home" title="Home"><img src="{{.Favicon}}" alt="" class="app-header-icon">Arx</a>{{if .TestMode}} &mdash; TEST MODE{{end}}
         <div class="header-actions">
             {{if .CompanyLogo}}<img src="{{.CompanyLogo}}" alt="" class="company-logo">{{end}}
             {{if .CurrentUser}}<a href="/settings#preferences" style="font-size:0.8em; color:rgba(255,255,255,0.75); margin-right:4px; text-decoration:none;" title="My Preferences">{{.CurrentUser.DisplayName}}</a>
@@ -26,11 +25,12 @@
         </div>
     </div>
     <nav class="tabs">
-        <a href="/"          class="tab{{if or (eq .ActiveTab "parts") (eq .ActiveTab "")}} active{{end}}"><img src="/static/shared/icons/parts.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/parts-inv.svg" alt="" class="tab-icon tab-icon-active">Parts</a>
+        <a href="/parts"     class="tab{{if or (eq .ActiveTab "parts") (eq .ActiveTab "")}} active{{end}}"><img src="/static/shared/icons/parts.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/parts-inv.svg" alt="" class="tab-icon tab-icon-active">Parts</a>
         <a href="/suppliers" class="tab{{if eq .ActiveTab "suppliers"}} active{{end}}"><img src="/static/shared/icons/vendors.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/vendors-inv.svg" alt="" class="tab-icon tab-icon-active">Vendors</a>
         <a href="/pos"       class="tab{{if eq .ActiveTab "pos"}} active{{end}}"><img src="/static/shared/icons/pos.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/pos-inv.svg" alt="" class="tab-icon tab-icon-active">POs</a>
         <a href="/contacts"  class="tab{{if eq .ActiveTab "contacts"}} active{{end}}"><img src="/static/shared/icons/contacts.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/contacts-inv.svg" alt="" class="tab-icon tab-icon-active">Contacts</a>
         <a href="/records"   class="tab{{if eq .ActiveTab "records"}} active{{end}}"><img src="/static/shared/icons/records.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/records-inv.svg" alt="" class="tab-icon tab-icon-active">Records</a>
+        <a href="/reports"   class="tab{{if eq .ActiveTab "reports"}} active{{end}}"><img src="/static/shared/icons/reports.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/reports-inv.svg" alt="" class="tab-icon tab-icon-active">Reports</a>
     </nav>
     {{if .SchemaMismatch}}
     <div class="alert alert-warning rounded-0 mb-0 py-2 px-4" role="alert">

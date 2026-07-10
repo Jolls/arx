@@ -63,7 +63,14 @@ func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTa
 
 func fv(r *http.Request, key string) string { return strings.TrimSpace(r.FormValue(key)) }
 
-// ── PartsList — GET / ───────────────────────────────────────────────────────
+// ── PartsList — GET /parts ──────────────────────────────────────────────────
+
+// RootRedirect is the app root ("/"): it sends each user to their configured
+// landing page (issue #282), defaulting to the parts list. The parts list
+// itself is served at "/parts".
+func (h *Handler) RootRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, landingRoute(h.currentUser(r)), http.StatusSeeOther)
+}
 
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/index.html", map[string]any{

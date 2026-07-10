@@ -958,7 +958,7 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		target string
 		id     int // 0 = no {id} route param
 	}{
-		{"parts list", h.PartsList, "/", 0},
+		{"parts list", h.PartsList, "/parts", 0},
 		// "part detail" passes the literal chi pattern "/part/{id}" as the request URL,
 		// so r.URL.Path never equals "/part/3005" and PartDetail's BOM-redirect guard
 		// is intentionally skipped. This profiles the full non-BOM render path — a real

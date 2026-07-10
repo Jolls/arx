@@ -65,7 +65,8 @@ body {
     border-bottom: 2px solid var(--accent-1);
 }
 .app-header--testmode { background: #b45309; border-bottom-color: #f59e0b; }
-.app-header-icon { width: 20px; height: 20px; margin-right: 8px; }
+.app-header-home { display: inline-flex; align-items: center; color: inherit; }
+.app-header-icon { width: 20px; height: 20px; margin-right: 8px; background: #fff; padding: 2px; border-radius: 4px; box-sizing: content-box; }
 
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .company-logo { max-height: 24px; width: auto; background: #fff; padding: 2px 6px; border-radius: 4px; }
