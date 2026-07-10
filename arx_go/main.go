@@ -169,6 +169,9 @@ func buildRouter(h *Handler) *chi.Mux {
 
 		// Reports (issue #282)
 		r.Get("/reports", h.ReportsDashboard)
+		r.Get("/reports/spend", h.ReportsSpend)
+		r.Get("/reports/spend/export-suppliers.csv", h.ReportsSpendBySupplierExportCSV)
+		r.Get("/reports/spend/export-parts.csv", h.ReportsSpendByPartExportCSV)
 
 		// App root: redirect to each user's configured landing page (issue #282).
 		r.Get("/", h.RootRedirect)
