@@ -43,6 +43,15 @@ type Handler struct {
 
 func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
+	// Harden the session/CSRF cookie: HttpOnly blocks JS access, SameSite=Lax
+	// blunts cross-site POSTs. Secure is left off because the app is served over
+	// plain HTTP on localhost. (#648)
+	store.Options = &sessions.Options{
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400 * 30,
+	}
 	return &Handler{
 		db: db, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
 		routeStats: make(map[int]*routeAccumulator),

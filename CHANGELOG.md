@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.106] - 2026-07-09 
+- security: replaced the hardcoded `"change-me-in-production"` session secret with an auto-generated random key persisted to `local.json`, and hardened the session cookie (`HttpOnly`, `SameSite=Lax`); regression of [#352](https://github.com/Jolls/arx-legacy/issues/352) reintroduced in the two-app merge ([#648](https://github.com/Jolls/arx-legacy/issues/648))
+
 ## [0.5.105] - 2026-07-09 
 - Reorganized templates/ and static/ into tab-based subfolders (parts, suppliers, pos, contacts, settings, records, shared), replacing the leftover pm/tr split from the old separate-apps era
 

@@ -2,7 +2,9 @@ package config
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/url"
@@ -47,7 +49,6 @@ func Load(version string) *Config {
 			DBName:         os.Getenv("DB_NAME"),
 			TestDBName:     GetEnv("TEST_DB_NAME", "ArxDev"),
 			DBUser:         os.Getenv("DB_USER"),
-			SessionSecret:  GetEnv("SESSION_SECRET", "change-me-in-production"),
 			DocControlRoot: os.Getenv("DOC_CONTROL_ROOT"),
 			TestMode:       os.Getenv("TEST_MODE") == "true",
 			DebugMode:      os.Getenv("DEBUG_MODE") == "true",
@@ -74,7 +75,10 @@ func Load(version string) *Config {
 	}
 
 	// Apply local.json overrides (local values always win over .env).
-	if local, err := LoadLocal(); err == nil && local != nil {
+	// local is nil only when local.json exists but is unreadable/corrupt; a
+	// missing file yields an empty (non-nil) config.
+	local, _ := LoadLocal()
+	if local != nil {
 		if local.DBServer != "" {
 			cfg.DBServer = local.DBServer
 		}
@@ -108,7 +112,49 @@ func Load(version string) *Config {
 		}
 	}
 
+	// Resolve the session secret used to sign session/CSRF cookies. Precedence:
+	// explicit SESSION_SECRET env, then the persisted local secret, else generate
+	// a strong random one and persist it. Never fall back to a shared constant —
+	// a known key lets anyone forge a valid session cookie (#648; regression of
+	// #352, lost in the two-app merge).
+	cfg.SessionSecret = resolveSessionSecret(local)
+
 	return cfg
+}
+
+// resolveSessionSecret returns the session-signing key, generating and persisting
+// a random one to local.json when neither the environment nor local.json supplies
+// it. It only writes when local.json was readable (local != nil), so a corrupt
+// file is never clobbered — in that case an ephemeral per-process key is used.
+func resolveSessionSecret(local *LocalConfig) string {
+	if env := os.Getenv("SESSION_SECRET"); env != "" {
+		return env
+	}
+	if local != nil && local.SessionSecret != "" {
+		return local.SessionSecret
+	}
+
+	secret := randomSecret()
+	if local != nil {
+		local.SessionSecret = secret
+		if err := SaveLocal(local); err != nil {
+			log.Printf("warning: could not persist generated session secret: %v", err)
+		}
+	} else {
+		log.Println("warning: local.json unreadable; using an ephemeral session secret (sessions will not survive a restart)")
+	}
+	return secret
+}
+
+// randomSecret returns 32 bytes of crypto/rand entropy, base64url-encoded.
+// A crypto/rand failure is unrecoverable for a secure default, so it panics
+// (fail closed) rather than returning a weak or empty key.
+func randomSecret() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand unavailable: " + err.Error())
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 // Table name helpers — TEST_MODE swaps the whole DB via the DSN (see Base.ActiveDBName).
