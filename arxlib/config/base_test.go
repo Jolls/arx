@@ -51,6 +51,33 @@ func TestBuildDSN_DatabaseSwap(t *testing.T) {
 	}
 }
 
+func TestBuildDSN_Postgres(t *testing.T) {
+	b := Base{
+		Engine:     "postgres",
+		DBServer:   "pghost:5432",
+		DBName:     "ArxProd",
+		TestDBName: "ArxDev",
+		DBUser:     "arx",
+	}
+
+	prod := b.BuildDSN("secret")
+	if !strings.HasPrefix(prod, "postgres://") {
+		t.Errorf("postgres DSN should use the postgres:// scheme: %s", prod)
+	}
+	if !strings.Contains(prod, "arx:secret@pghost:5432") {
+		t.Errorf("postgres DSN missing user/host: %s", prod)
+	}
+	if !strings.Contains(prod, "/ArxProd") || strings.Contains(prod, "ArxDev") {
+		t.Errorf("prod DSN should target ArxProd: %s", prod)
+	}
+
+	b.TestMode = true
+	dev := b.BuildDSN("secret")
+	if !strings.Contains(dev, "/ArxDev") || strings.Contains(dev, "ArxProd") {
+		t.Errorf("test DSN should target ArxDev: %s", dev)
+	}
+}
+
 func TestConnectionSummary(t *testing.T) {
 	b := Base{DBServer: "myserver", DBName: "ArxProd", TestDBName: "ArxDev"}
 

@@ -1,6 +1,10 @@
 package db
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
 
 // Dialect encapsulates the SQL constructs that differ between database engines.
 // During the SQL Server -> Postgres migration (issue #625) a single SQL Server
@@ -76,3 +80,66 @@ func (sqlServerDialect) InsertSelectReturningID(table, columnList, selectBody st
 
 func (sqlServerDialect) TopClause(ph string) string { return "TOP (" + ph + ") " }
 func (sqlServerDialect) LimitClause(string) string  { return "" }
+
+// pgPlaceholder matches the @pN parameter markers the app emits (go-mssqldb's
+// numbering convention) so the Postgres dialect can rewrite them to $N.
+var pgPlaceholder = regexp.MustCompile(`@p(\d+)`)
+
+type postgresDialect struct{}
+
+// NewPostgresDialect returns the Postgres dialect (issue #625, Phase 2). It is
+// the counterpart to NewSQLServerDialect: the same Handler call sites route
+// through these helpers, which emit Postgres-native SQL.
+func NewPostgresDialect() Dialect { return postgresDialect{} }
+
+func (postgresDialect) Name() string { return "postgres" }
+
+// Rewrite applies the two Tier-1 textual transforms for Postgres: @pN -> $N
+// placeholders and GETDATE() -> CURRENT_TIMESTAMP. Both are also applied to the
+// SQL produced by the Tier-2 helpers below (every query passes through here in
+// the Handler wrappers), so those helpers may keep emitting @pN/GETDATE().
+func (postgresDialect) Rewrite(query string) string {
+	query = strings.ReplaceAll(query, "GETDATE()", "CURRENT_TIMESTAMP")
+	return pgPlaceholder.ReplaceAllString(query, "$$${1}")
+}
+
+// TryCastInt is Postgres's TRY_CAST(expr AS INT) equivalent: Postgres CAST
+// raises on a non-numeric value, so guard with a digits-only regex and return
+// NULL when it would not parse. Matches TRY_CAST's NULL-on-failure semantics for
+// the serial-number ordering use. (A value exceeding INTEGER range would still
+// raise, as it also does under a 32-bit SQL Server INT; serial numbers stay well
+// inside that range.)
+func (postgresDialect) TryCastInt(expr string) string {
+	return fmt.Sprintf("CASE WHEN %s ~ '^[0-9]+$' THEN CAST(%s AS INTEGER) END", expr, expr)
+}
+
+// MonthStartExpr returns the first day of the current month as a date, matching
+// the SQL Server DATEFROMPARTS form used in the received-this-month comparison.
+func (postgresDialect) MonthStartExpr() string {
+	return "date_trunc('month', CURRENT_DATE)::date"
+}
+
+func (postgresDialect) UpsertAppConfig(table string) string {
+	return "INSERT INTO " + table + " (setting_key, setting_value) VALUES (@p1, @p2)\n" +
+		"ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP"
+}
+
+// InsertReturningID uses RETURNING id, which works on Postgres regardless of
+// triggers, so the hasTrigger branch the SQL Server form needs is unnecessary.
+func (postgresDialect) InsertReturningID(table, columnList, valuesList string, _ bool) string {
+	return fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s) RETURNING id",
+		table, columnList, valuesList)
+}
+
+func (postgresDialect) InsertSelectReturningID(table, columnList, selectBody string, _ bool) string {
+	return fmt.Sprintf(
+		"INSERT INTO %s (%s)\n%s\nRETURNING id",
+		table, columnList, selectBody)
+}
+
+// Postgres paginates with LIMIT (no TOP clause), so TopClause is empty and
+// LimitClause carries the row cap. The leading space lets it append directly
+// after an ORDER BY clause with no separator in the query template.
+func (postgresDialect) TopClause(string) string      { return "" }
+func (postgresDialect) LimitClause(ph string) string { return " LIMIT " + ph }
