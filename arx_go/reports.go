@@ -64,8 +64,8 @@ func (h *Handler) dashboardOpenPOCount(ctx context.Context) (int, error) {
 func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error) {
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(DISTINCT po_id) FROM %s WHERE date_received >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)`,
-		h.cfg.POLineTable()),
+		`SELECT COUNT(DISTINCT po_id) FROM %s WHERE date_received >= %s`,
+		h.cfg.POLineTable(), h.dialect.MonthStartExpr()),
 	).Scan(&n)
 	return n, err
 }
