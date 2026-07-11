@@ -1167,3 +1167,67 @@ func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
 		t.Errorf("po_line count for PO %d changed from %d to %d; whitespace-only new line should not be saved", poID, before, after)
 	}
 }
+
+// TestIntegration_DashboardStaleWIPRecords verifies the Reports dashboard's
+// Stale WIP Records card (#658, RPT-7) against the pinned seed data: record
+// 7001 is unlocked (WIP) with created_at pinned to 2026-06-01, well past
+// staleWIPThresholdDays, so it must be returned; the other seeded records are
+// all locked and must not appear. Read-only — no cleanup.
+func TestIntegration_DashboardStaleWIPRecords(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	items, err := h.dashboardStaleWIPRecords(ctx, 10)
+	if err != nil {
+		t.Fatalf("dashboardStaleWIPRecords: %v", err)
+	}
+
+	var found *dashboardStaleWIPItem
+	for i := range items {
+		if items[i].RecordID == 7001 {
+			found = &items[i]
+		}
+		if items[i].RecordID != 7001 && items[i].RecordID >= 7001 && items[i].RecordID <= 7009 {
+			t.Errorf("dashboardStaleWIPRecords: seeded locked record %d should not appear as stale WIP", items[i].RecordID)
+		}
+	}
+	if found == nil {
+		t.Fatalf("dashboardStaleWIPRecords: seed record 7001 not found (ArxDev may need reseeding): %+v", items)
+	}
+	if found.PartNumber != "FORM-1001" {
+		t.Errorf("dashboardStaleWIPRecords: record 7001 PartNumber = %q, want FORM-1001 (the form's part, matching dashboardTopFailureModes/dashboardLowestYieldForms convention)", found.PartNumber)
+	}
+	if found.AgeDays < staleWIPThresholdDays {
+		t.Errorf("dashboardStaleWIPRecords: record 7001 AgeDays = %d, want >= %d", found.AgeDays, staleWIPThresholdDays)
+	}
+}
+
+// TestIntegration_DashboardPendingApprovalPOs verifies the Reports dashboard's
+// POs Pending Approval card (#658, RPT-7) against the pinned seed data: PO
+// 5009 sits in approval_status='pending' with a 'submitted' history event
+// dated 2026-06-20, so it must be returned with a non-zero age. Read-only —
+// no cleanup.
+func TestIntegration_DashboardPendingApprovalPOs(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	items, err := h.dashboardPendingApprovalPOs(ctx, 10)
+	if err != nil {
+		t.Fatalf("dashboardPendingApprovalPOs: %v", err)
+	}
+
+	var found *dashboardPendingApprovalItem
+	for i := range items {
+		if items[i].Number == "5009" {
+			found = &items[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("dashboardPendingApprovalPOs: seed PO 5009 not found (ArxDev may need reseeding): %+v", items)
+	}
+	if found.AgeDays <= 0 {
+		t.Errorf("dashboardPendingApprovalPOs: PO 5009 AgeDays = %d, want > 0 (submitted 2026-06-20)", found.AgeDays)
+	}
+}

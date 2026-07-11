@@ -67,6 +67,51 @@
         </div>
     </div>
 
+    <div class="row row-cols-1 row-cols-md-2 g-3 mb-3">
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Stale WIP Records</div>
+                <div class="card-body">
+                    {{if .StaleWIPRecords}}
+                    <table class="table table-sm table-hover mb-0">
+                        <tbody>
+                            {{range .StaleWIPRecords}}
+                            <tr>
+                                <td><a href="/records/{{.RecordID}}">{{.PartNumber}}</a></td>
+                                <td class="text-end text-muted" style="white-space:nowrap;">{{.AgeDays}}d</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                    {{else}}
+                    <p class="text-muted mb-0">No stale WIP records.</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">POs Pending Approval</div>
+                <div class="card-body">
+                    {{if .PendingApprovalPOs}}
+                    <table class="table table-sm table-hover mb-0">
+                        <tbody>
+                            {{range .PendingApprovalPOs}}
+                            <tr>
+                                <td><a href="/po/{{.Number}}">PO {{.Number}}</a></td>
+                                <td class="text-end text-muted" style="white-space:nowrap;">{{.AgeDays}}d</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                    {{else}}
+                    <p class="text-muted mb-0">No POs pending approval.</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row row-cols-1 g-3">
         <div class="col">
             <div class="card h-100">
