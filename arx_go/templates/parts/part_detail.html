@@ -136,7 +136,8 @@
                     <a href="/part/{{.Part.PNID}}/transactions" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
-                    <div class="detail-row"><strong>Stock on hand:</strong><span>{{printf "%.2f" .Part.StockOnHand}}</span></div>
+                    <div class="detail-row"><strong>Stock on hand:</strong><span>{{printf "%.2f" .Part.StockOnHand}}{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1">Below Min</span>{{end}}</span></div>
+                    {{if .Part.ReorderMin}}<div class="detail-row"><strong>Reorder minimum:</strong><span>{{printf "%g" (deref .Part.ReorderMin)}}</span></div>{{end}}
                     {{if .RecentTxns}}
                     <table class="table table-sm mb-0 mt-2">
                         <thead><tr><th>Date</th><th>Type</th><th class="text-end">Qty</th></tr></thead>

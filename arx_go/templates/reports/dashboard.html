@@ -112,6 +112,32 @@
         </div>
     </div>
 
+    <div class="row row-cols-1 g-3 mb-3">
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Below Reorder Point</div>
+                <div class="card-body">
+                    {{if .BelowReorderParts}}
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Part</th><th class="text-end">On hand</th><th class="text-end">Min</th></tr></thead>
+                        <tbody>
+                            {{range .BelowReorderParts}}
+                            <tr>
+                                <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
+                                <td class="text-end text-danger" style="white-space:nowrap;">{{printf "%g" .StockOnHand}}</td>
+                                <td class="text-end text-muted" style="white-space:nowrap;">{{printf "%g" .ReorderMin}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                    {{else}}
+                    <p class="text-muted mb-0">No parts below reorder point.</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row row-cols-1 g-3">
         <div class="col">
             <div class="card h-100">

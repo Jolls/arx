@@ -21,6 +21,7 @@ type Part struct {
 	PNDateModified   *time.Time
 	PNFILIDPrimary   int
 	StockOnHand      float64
+	ReorderMin       *float64 // reorder point (#273); nil = none set, never flagged below-min
 	PNCurrentCost    float64
 	PNLastRollupCost float64
 	PNLastRollupAt   *time.Time
@@ -135,6 +136,12 @@ func (p Part) ShowPricing() bool   { return p.Tabs.Pricing }
 func (p Part) ShowMfgParts() bool  { return p.Tabs.MfgParts }
 func (p Part) ShowSuppliers() bool { return p.Tabs.Suppliers }
 func (p Part) ShowInventory() bool { return p.Tabs.Inventory }
+
+// BelowReorder reports whether on-hand stock has dropped below the part's reorder
+// point (#273). False when no reorder point is set (ReorderMin == nil).
+func (p Part) BelowReorder() bool {
+	return p.ReorderMin != nil && p.StockOnHand < *p.ReorderMin
+}
 
 // UserFieldsForEdit returns all 10 PNUser fields for the edit form (including empty ones).
 func (p Part) UserFieldsForEdit() []struct{ Name, Label, Value string } {
