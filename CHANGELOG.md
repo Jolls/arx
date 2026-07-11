@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.112] - 2026-07-10 
+- Added Stale WIP Records and POs Pending Approval summary cards to the Reports dashboard ([#658](https://github.com/Jolls/arx-legacy/issues/658))
+
 ## [0.5.111] - 2026-07-10 
 - Added a Failure Modes report per test form — ranks test steps by failure count, with total tested and failure rate, over a selectable date range ([#245](https://github.com/Jolls/arx-legacy/issues/245))
 - Added Top Failing Steps and Lowest Yield Forms summary cards to the Reports dashboard ([#245](https://github.com/Jolls/arx-legacy/issues/245), [#244](https://github.com/Jolls/arx-legacy/issues/244))

@@ -40,6 +40,32 @@ type dashboardYieldItem struct {
 	Passed     int
 }
 
+// dashboardStaleWIPItem is one row in the Reports dashboard's Stale WIP
+// Records summary — a test record left unlocked (in progress) longer than
+// staleWIPThresholdDays (issue #658, RPT-7).
+type dashboardStaleWIPItem struct {
+	RecordID   int
+	FormID     int
+	PartNumber string
+	AgeDays    int
+}
+
+// dashboardPendingApprovalItem is one row in the Reports dashboard's POs
+// Pending Approval summary (issue #658, RPT-7).
+type dashboardPendingApprovalItem struct {
+	Number  string
+	AgeDays int
+}
+
+// staleWIPThresholdDays is the age (in days since creation) past which an
+// unlocked test record is flagged as stale on the Reports dashboard.
+const staleWIPThresholdDays = 14
+
+// ageDays returns the number of whole days between t and now.
+func ageDays(t time.Time) int {
+	return int(time.Since(t).Hours() / 24)
+}
+
 // FPYPct returns the first-pass yield percentage, or 0 if there are no records.
 func (item dashboardYieldItem) FPYPct() float64 {
 	if item.Total == 0 {
@@ -81,12 +107,24 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading dashboard: "+err.Error())
 		return
 	}
+	staleWIPRecords, err := h.dashboardStaleWIPRecords(r.Context(), 5)
+	if err != nil {
+		h.renderError(w, r, "Error loading dashboard: "+err.Error())
+		return
+	}
+	pendingApprovalPOs, err := h.dashboardPendingApprovalPOs(r.Context(), 5)
+	if err != nil {
+		h.renderError(w, r, "Error loading dashboard: "+err.Error())
+		return
+	}
 
 	data["OpenPOCount"] = openPOs
 	data["POsReceivedThisMonth"] = receivedThisMonth
 	data["RecentActivity"] = activity
 	data["TopFailureModes"] = topFailureModes
 	data["LowestYieldForms"] = lowestYieldForms
+	data["StaleWIPRecords"] = staleWIPRecords
+	data["PendingApprovalPOs"] = pendingApprovalPOs
 	h.render(w, r, "reports/dashboard.html", data)
 }
 
@@ -197,6 +235,69 @@ func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]d
 		items = items[:limit]
 	}
 	return items, nil
+}
+
+// dashboardStaleWIPRecords lists unlocked test records older than
+// staleWIPThresholdDays, oldest first, so forgotten/abandoned test runs
+// surface on the Reports dashboard (issue #658, RPT-7).
+func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]dashboardStaleWIPItem, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p1) trec.id, trec.form_id, pn.part_number, trec.created_at
+		FROM %s trec
+		JOIN %s f ON trec.form_id = f.id
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE trec.is_active = 1 AND trec.is_locked = 0
+			AND trec.created_at <= DATEADD(day, -@p2, GETDATE())
+		ORDER BY trec.created_at ASC`,
+		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()), limit, staleWIPThresholdDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []dashboardStaleWIPItem
+	for rows.Next() {
+		var item dashboardStaleWIPItem
+		var createdAt time.Time
+		if err := rows.Scan(&item.RecordID, &item.FormID, &item.PartNumber, &createdAt); err != nil {
+			return nil, err
+		}
+		item.AgeDays = ageDays(createdAt)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// dashboardPendingApprovalPOs lists POs awaiting approval, oldest first, as a
+// bottleneck indicator on the Reports dashboard (issue #658, RPT-7). Age is
+// measured from the most recent 'submitted' approval event on each PO.
+func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([]dashboardPendingApprovalItem, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p1) po.number,
+			(SELECT MAX(h.changed_at) FROM %s h
+			 WHERE h.po_id = po.id AND h.event_type = 'approval' AND h.action = 'submitted') AS submitted_at
+		FROM %s po
+		WHERE po.approval_status = 'pending'
+		ORDER BY submitted_at ASC`,
+		h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []dashboardPendingApprovalItem
+	for rows.Next() {
+		var item dashboardPendingApprovalItem
+		var submittedAt sql.NullTime
+		if err := rows.Scan(&item.Number, &submittedAt); err != nil {
+			return nil, err
+		}
+		if submittedAt.Valid {
+			item.AgeDays = ageDays(submittedAt.Time)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 // dashboardRecentActivity merges the most recently modified parts with the

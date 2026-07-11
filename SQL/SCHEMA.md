@@ -114,14 +114,14 @@ because the value is a large base64 data URI that would swamp `seed_test_data.sq
 | 4001-4099 | `supplier_part` | Sourcing links, incl. one (4002) with an `mfg_part_id`, a purchase unit (REEL) ≠ the part's base unit, and `min_increment`/`lead_time` |
 | 4101-4199 | `mfg_part` | One active MPN plus a soft-deleted one (exercises the filtered unique index) |
 | 4201-4299 | `price` | Active + superseded (history) price rows |
-| 5001-5099 | `purchase_order` | One PO per status (`draft`/`open`/`partially_received`/`closed`/`cancelled`), a resolved RFQ group (5006/5007→awarded 5008), and an in-flight `rfq` group (5010/5011); financials on the open/closed POs; 5002/5003 carry full supplier/receiver address + contact snapshot blocks for PO print |
+| 5001-5099 | `purchase_order` | One PO per status (`draft`/`open`/`partially_received`/`closed`/`cancelled`), a resolved RFQ group (5006/5007→awarded 5008), and an in-flight `rfq` group (5010/5011); financials on the open/closed POs; 5002/5003 carry full supplier/receiver address + contact snapshot blocks for PO print; 5009 sits in `approval_status='pending'` (Reports dashboard POs Pending Approval card, #658) |
 | 5501-5599 | `po_line` | Line items across the above POs, incl. a partial receipt and RFQ-quote lines carrying `lead_time_days` |
-| 5801-5899 | `purchase_order_history` | Status + approval events on PO 5002 |
+| 5801-5899 | `purchase_order_history` | Status + approval events on PO 5002; a `submitted` approval event on PO 5009 (#658) |
 | 5901-5999 | `inventory_transaction` | Receipt/issue/adjustment/count ledger driving `part.stock_on_hand` for part 3007 |
 | 6001-6099 | `form` | One locked, released test form (FORM part 3010, unit-under-test 3004) |
 | 6101-6199 | `test_definition` | A heading, range-checked data steps, an archived/retired step (6104, still rendered on the historical records that recorded it), and feature steps 6105-6108: `pf_type` filled/comment, `format`, `default_result`, `List:`/`query:` spec_nom pickers, a `{6102}` cross-step token, and a `hide_formula` (6103 is also updated post-insert so `test_definition_history` has a timeline row) |
 | 6201-6299 | `form_events` | Release (`locked`) audit event for the form |
-| 7001-7099 | `test_record` | WIP / Complete / Approved records against the form, a soft-deleted one, and 7005 — locked pre-#251 style (completed event, no snapshots) so the backfill bulk action appears |
+| 7001-7099 | `test_record` | WIP / Complete / Approved records against the form, a soft-deleted one, and 7005 — locked pre-#251 style (completed event, no snapshots) so the backfill bulk action appears; 7001 (WIP) has an old `created_at` so it surfaces on the Reports dashboard Stale WIP Records card (#658) |
 | 7101-7199 | `test_result` | Materialized rows (headings included) for each record x step, incl. a FAIL result on 7005 |
 | 7201-7299 | `record_events` | `completed` events on the locked records; 7003 has a full lock → unlock → re-lock history (its two snapshots differ, driving the diff view); 7005's completed event has no snapshots (backfillable) |
 | 7301-7399 | `record_event_results` | Frozen result rows for the `completed` snapshots — 7003's two snapshots differ in one value |
