@@ -395,7 +395,12 @@ BEGIN TRY
         (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'), -- Complete
         (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00'), -- Approved (locked twice — see events)
         (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, '2020-01-01T00:00:00'), -- soft-deleted
-        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'); -- Complete, pre-#251 style (backfillable)
+        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'), -- Complete, pre-#251 style (backfillable)
+        -- 7006-7009 span May and July so the Reports > Yield Summary "Group by month" view (#244) has more than one month to show.
+        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'), -- Complete, all pass
+        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00'), -- Approved, has a FAIL
+        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'), -- Complete, all pass
+        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'); -- Complete, all pass
     SET IDENTITY_INSERT dbo.test_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what
@@ -419,7 +424,23 @@ BEGIN TRY
         (7113, 7005, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7114, 7005, 6102, 1,    '5.10', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7115, 7005, 6103, 0,    '210',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'), -- FAIL row
-        (7116, 7005, 6104, 1,    '150',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
+        (7116, 7005, 6104, 1,    '150',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7117, 7006, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7118, 7006, 6102, 1,    '5.02', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7119, 7006, 6103, 1,    '160',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7120, 7006, 6104, 1,    '200',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7121, 7007, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7122, 7007, 6102, 1,    '4.90', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7123, 7007, 6103, 0,    '220',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'), -- FAIL row
+        (7124, 7007, 6104, 1,    '180',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7125, 7008, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7126, 7008, 6102, 1,    '4.99', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7127, 7008, 6103, 1,    '170',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7128, 7008, 6104, 1,    '220',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7129, 7009, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7130, 7009, 6102, 1,    '5.05', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7131, 7009, 6103, 1,    '190',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7132, 7009, 6104, 1,    '240',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.test_result OFF;
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).
@@ -432,7 +453,11 @@ BEGIN TRY
         (7202, 7002, 'completed', 'tester','2026-06-02', 'Marked complete'),
         (7203, 7005, 'completed', 'tester','2026-06-05', 'Completed before per-lock snapshots existed'),
         (7204, 7003, 'unlocked',  'admin', '2026-06-08', 'Correcting insulation resistance reading'),
-        (7205, 7003, 'completed', 'admin', '2026-06-09', 'Approved after correction');
+        (7205, 7003, 'completed', 'admin', '2026-06-09', 'Approved after correction'),
+        (7206, 7006, 'completed', 'tester','2026-05-15', 'Marked complete'),
+        (7207, 7007, 'completed', 'tester','2026-05-20', 'Marked complete'),
+        (7208, 7008, 'completed', 'tester','2026-07-01', 'Marked complete'),
+        (7209, 7009, 'completed', 'tester','2026-07-05', 'Marked complete');
     SET IDENTITY_INSERT dbo.record_events OFF;
 
     SET IDENTITY_INSERT dbo.record_event_results ON;

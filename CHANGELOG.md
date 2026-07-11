@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.110] - 2026-07-10 
+- Added a Yield Summary view per test form — total/passed/failed record counts and first-pass yield % over a selectable date range, optionally grouped by month ([#244](https://github.com/Jolls/arx-legacy/issues/244))
+
 ## [0.5.109] - 2026-07-10 
 - Added a Spend Analysis subtab under Reports — total spend by supplier and by part over This Month/This Quarter/YTD/custom date ranges, with CSV export ([#283](https://github.com/Jolls/arx-legacy/issues/283))
 

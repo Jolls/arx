@@ -216,6 +216,110 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	}
 }
 
+// TestIntegration_YieldSummary exercises RecordsYieldSummary's actual query
+// (LEFT JOIN + GROUP BY over test_record/test_result, aliased to sidestep the
+// "id" column existing on both tables) against a real ArxDev connection, since
+// TestComputeYieldBuckets only covers the pure Go aggregation, not the SQL.
+func TestIntegration_YieldSummary(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+
+	// test_result.test_id FKs to test_definition.id, so results need a real step to point at.
+	var testID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type) OUTPUT INSERTED.id VALUES (@p1, 0)`, h.cfg.StepsTable()),
+		formID).Scan(&testID); err != nil {
+		t.Fatalf("seed test_definition: %v", err)
+	}
+
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
+			h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	}()
+
+	// Three records: one all-pass, one with a failing result, one with no
+	// results at all (should still count toward Total and Passed per the
+	// "fail only if a step actually failed" rule).
+	type seedRecord struct {
+		date      string
+		passFails []sql.NullBool // one test_result row per entry; nil = no results
+	}
+	seeds := []seedRecord{
+		{"2026-03-01", []sql.NullBool{{Bool: true, Valid: true}, {Bool: true, Valid: true}}},
+		{"2026-03-15", []sql.NullBool{{Bool: true, Valid: true}, {Bool: false, Valid: true}}},
+		{"2026-04-01", nil},
+	}
+	for _, s := range seeds {
+		var recordID int
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (form_id, record_date, serial_number, is_active)
+			 OUTPUT INSERTED.id VALUES (@p1, @p2, '1', 1)`, h.cfg.RecordsTable()),
+			formID, s.date).Scan(&recordID); err != nil {
+			t.Fatalf("seed record: %v", err)
+		}
+		for _, pf := range s.passFails {
+			if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+				`INSERT INTO %s (record_id, test_id, pass_fail) VALUES (@p1, @p2, @p3)`,
+				h.cfg.ResultsTable()), recordID, testID, pf); err != nil {
+				t.Fatalf("seed result: %v", err)
+			}
+		}
+	}
+
+	filters := parseRecordFilters(url.Values{})
+	dateClause, dateArgs := filters.dateRangeClauses(2)
+	args := append([]any{formID}, dateArgs...)
+
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT record_date, MAX(CASE WHEN pass_fail = 0 THEN 1 ELSE 0 END)
+		FROM %s trec
+		LEFT JOIN %s res ON res.record_id = trec.id
+		WHERE form_id = @p1 AND is_active = 1%s
+		GROUP BY trec.id, record_date`,
+		h.cfg.RecordsTable(), h.cfg.ResultsTable(), dateClause), args...)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	defer rows.Close()
+
+	var records []yieldRecord
+	for rows.Next() {
+		var rec yieldRecord
+		var anyFail int
+		if err := rows.Scan(&rec.RecordDate, &anyFail); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		rec.AnyFail = anyFail == 1
+		records = append(records, rec)
+	}
+
+	total, monthly := computeYieldBuckets(records, true)
+	if total.Total != 3 || total.Passed != 2 || total.Failed != 1 {
+		t.Fatalf("total = %+v, want Total=3 Passed=2 Failed=1", total)
+	}
+	if len(monthly) != 2 {
+		t.Fatalf("len(monthly) = %d, want 2 (March + April)", len(monthly))
+	}
+	if monthly[0].Label != "2026-03" || monthly[0].Total != 2 || monthly[0].Passed != 1 || monthly[0].Failed != 1 {
+		t.Fatalf("monthly[0] = %+v, want March bucket Total=2 Passed=1 Failed=1", monthly[0])
+	}
+	if monthly[1].Label != "2026-04" || monthly[1].Total != 1 || monthly[1].Passed != 1 || monthly[1].Failed != 0 {
+		t.Fatalf("monthly[1] = %+v, want April bucket Total=1 Passed=1 Failed=0", monthly[1])
+	}
+}
+
 func TestIntegration_RecordFilters(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
@@ -949,8 +1053,9 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 	defer cleanup()
 
 	// Seed IDs from SQL/seed_test_data.sql: 3005 Widget Assembly (has BOM/orders),
-	// 3002 M3x8 SHCS (has price history), company 1001 Acme Fasteners, PO 5002.
-	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID = 3005, 3002, 1001, 5002
+	// 3002 M3x8 SHCS (has price history), company 1001 Acme Fasteners, PO 5002,
+	// form 6001 (has test records spanning multiple months).
+	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID, seedFormID = 3005, 3002, 1001, 5002, 6001
 
 	cases := []struct {
 		name   string
@@ -974,6 +1079,8 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		{"PO detail", h.PODetail, "/po/{id}", seedPOID},
 		{"contacts list", h.ContactsList, "/contacts", 0},
 		{"records/forms list", h.FormsList, "/records", 0},
+		{"records yield summary", h.RecordsYieldSummary, "/forms/{id}/yield", seedFormID},
+		{"reports yield picker", h.ReportsYieldPicker, "/reports/yield", 0},
 	}
 
 	for _, c := range cases {

@@ -317,6 +317,49 @@ func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "reports/spend.html", data)
 }
 
+// yieldFormOption is one form listed on the Reports > Yield Summary picker (issue #244).
+type yieldFormOption struct {
+	ID         int
+	PartNumber string
+	Title      string
+}
+
+// ReportsYieldPicker is the Reports tab's entry point into the per-form yield
+// summary (arx_go/records_yield.go RecordsYieldSummary) — lists forms to pick
+// from, since the yield page itself is scoped to one form (issue #244).
+func (h *Handler) ReportsYieldPicker(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "yield"}
+	if h.db == nil {
+		h.render(w, r, "reports/yield_picker.html", data)
+		return
+	}
+
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT f.id, pn.part_number, pn.title
+		FROM %s f
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.is_active = 1
+		ORDER BY pn.part_number ASC`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()))
+	if err != nil {
+		h.renderError(w, r, "Error loading forms: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	var forms []yieldFormOption
+	for rows.Next() {
+		var f yieldFormOption
+		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Title); err != nil {
+			continue
+		}
+		forms = append(forms, f)
+	}
+
+	data["Forms"] = forms
+	h.render(w, r, "reports/yield_picker.html", data)
+}
+
 // writeSpendCSV streams a spend-report CSV: header row followed by rows,
 // shared by the supplier and part export handlers below.
 func writeSpendCSV(w http.ResponseWriter, filename string, header []string, rows [][]string) {

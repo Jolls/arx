@@ -1,0 +1,80 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/records">Forms</a></li>
+    <li class="breadcrumb-item"><a href="/forms/{{.Form.ID}}/records">{{.Form.PartNumber}}</a></li>
+    <li class="breadcrumb-item active">Yield Summary</li>
+  </ol>
+</nav>
+
+<h4 class="mb-3">{{.Form.PartNumber}} &mdash; {{.Form.Title}} <span class="text-muted">Yield Summary</span></h4>
+
+<form method="get" action="/forms/{{.Form.ID}}/yield" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+    <div>
+        <label class="form-label mb-0" for="yield-from">From</label>
+        <input type="date" id="yield-from" name="from" class="form-control form-control-sm" value="{{.FromStr}}">
+    </div>
+    <div>
+        <label class="form-label mb-0" for="yield-to">To</label>
+        <input type="date" id="yield-to" name="to" class="form-control form-control-sm" value="{{.ToStr}}">
+    </div>
+    <div class="form-check mb-1">
+        <input type="checkbox" class="form-check-input" id="yield-group" name="group" value="month"{{if .Grouped}} checked{{end}}>
+        <label class="form-check-label" for="yield-group">Group by month</label>
+    </div>
+    <button type="submit" class="btn btn-sm btn-secondary">Apply</button>
+</form>
+
+<div class="row row-cols-2 row-cols-md-4 g-3 mb-3">
+    <div class="col">
+        <div class="card h-100">
+            <div class="card-header">Total Records</div>
+            <div class="card-body"><span class="fs-3 fw-bold">{{.Total.Total}}</span></div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="card h-100">
+            <div class="card-header">Passed</div>
+            <div class="card-body"><span class="fs-3 fw-bold text-success">{{.Total.Passed}}</span></div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="card h-100">
+            <div class="card-header">Failed</div>
+            <div class="card-body"><span class="fs-3 fw-bold text-danger">{{.Total.Failed}}</span></div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="card h-100">
+            <div class="card-header">First-Pass Yield</div>
+            <div class="card-body"><span class="fs-3 fw-bold">{{printf "%.1f" .Total.FPYPct}}%</span></div>
+        </div>
+    </div>
+</div>
+
+{{if .Grouped}}
+<div class="card">
+    <div class="card-header">By Month</div>
+    <div class="card-body">
+        {{if .Monthly}}
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Month</th><th class="text-end">Total</th><th class="text-end">Passed</th><th class="text-end">Failed</th><th class="text-end">FPY%</th></tr></thead>
+            <tbody>
+                {{range .Monthly}}
+                <tr>
+                    <td>{{.Label}}</td>
+                    <td class="text-end">{{.Total}}</td>
+                    <td class="text-end text-success">{{.Passed}}</td>
+                    <td class="text-end text-danger">{{.Failed}}</td>
+                    <td class="text-end">{{printf "%.1f" .FPYPct}}%</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="text-muted mb-0">No records in this date range.</p>
+        {{end}}
+    </div>
+</div>
+{{end}}
+{{end}}
