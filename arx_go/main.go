@@ -171,6 +171,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/reports", h.ReportsDashboard)
 		r.Get("/reports/spend", h.ReportsSpend)
 		r.Get("/reports/yield", h.ReportsYieldPicker)
+		r.Get("/reports/failure-modes", h.ReportsFailureModesPicker)
 		r.Get("/reports/spend/export-suppliers.csv", h.ReportsSpendBySupplierExportCSV)
 		r.Get("/reports/spend/export-parts.csv", h.ReportsSpendByPartExportCSV)
 
@@ -297,6 +298,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/records", h.FormsList)
 		r.Get("/forms/{id}/records", h.RecordsList)
 		r.Get("/forms/{id}/yield", h.RecordsYieldSummary)
+		r.Get("/forms/{id}/failure-modes", h.RecordsFailureModes)
 		r.Get("/api/forms/{id}/records/rows", h.RecordsRows)
 		r.Post("/forms/{id}/records/bulk-lock", h.BulkLockRecords)
 		r.Get("/forms/{id}/records/new", h.NewRecord)

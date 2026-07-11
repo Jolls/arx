@@ -22,6 +22,32 @@ type dashboardActivityItem struct {
 	Timestamp time.Time
 }
 
+// dashboardFailureModeItem is one row in the Reports dashboard's top-failing-
+// steps summary — a single test step on a single form (issue #245).
+type dashboardFailureModeItem struct {
+	FormID       int
+	PartNumber   string
+	Parameter    string
+	FailureCount int
+}
+
+// dashboardYieldItem is one row in the Reports dashboard's lowest-yield
+// summary — a single form's all-time first-pass yield (issue #244).
+type dashboardYieldItem struct {
+	FormID     int
+	PartNumber string
+	Total      int
+	Passed     int
+}
+
+// FPYPct returns the first-pass yield percentage, or 0 if there are no records.
+func (item dashboardYieldItem) FPYPct() float64 {
+	if item.Total == 0 {
+		return 0
+	}
+	return float64(item.Passed) / float64(item.Total) * 100
+}
+
 // ReportsDashboard is the Reports tab landing page (issue #282, RPT-1).
 func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "dashboard"}
@@ -45,10 +71,22 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading dashboard: "+err.Error())
 		return
 	}
+	topFailureModes, err := h.dashboardTopFailureModes(r.Context(), 5)
+	if err != nil {
+		h.renderError(w, r, "Error loading dashboard: "+err.Error())
+		return
+	}
+	lowestYieldForms, err := h.dashboardLowestYieldForms(r.Context(), 5)
+	if err != nil {
+		h.renderError(w, r, "Error loading dashboard: "+err.Error())
+		return
+	}
 
 	data["OpenPOCount"] = openPOs
 	data["POsReceivedThisMonth"] = receivedThisMonth
 	data["RecentActivity"] = activity
+	data["TopFailureModes"] = topFailureModes
+	data["LowestYieldForms"] = lowestYieldForms
 	h.render(w, r, "reports/dashboard.html", data)
 }
 
@@ -71,6 +109,94 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 		h.cfg.POLineTable()),
 	).Scan(&n)
 	return n, err
+}
+
+// dashboardTopFailureModes lists the top failing test steps across all forms,
+// all-time, ranked by failure count descending — a dashboard-level summary of
+// the per-form Failure Modes report (arx_go/records_failure_modes.go, issue
+// #245).
+func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]dashboardFailureModeItem, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p1) f.id, pn.part_number, MAX(res.parameter) AS parameter,
+			SUM(CASE WHEN res.pass_fail = 0 THEN 1 ELSE 0 END) AS failure_count
+		FROM %s res
+		JOIN %s trec ON res.record_id = trec.id
+		JOIN %s f ON trec.form_id = f.id
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE trec.is_active = 1 AND res.pass_fail IS NOT NULL
+		GROUP BY f.id, pn.part_number, res.test_id
+		HAVING SUM(CASE WHEN res.pass_fail = 0 THEN 1 ELSE 0 END) > 0
+		ORDER BY failure_count DESC`,
+		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []dashboardFailureModeItem
+	for rows.Next() {
+		var item dashboardFailureModeItem
+		if err := rows.Scan(&item.FormID, &item.PartNumber, &item.Parameter, &item.FailureCount); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// dashboardLowestYieldForms lists the forms with the lowest all-time
+// first-pass yield, worst first — a dashboard-level summary of the per-form
+// Yield Summary report (arx_go/records_yield.go, issue #244). Forms with no
+// records are excluded. Per-record pass/fail is aggregated in Go since a
+// record's outcome depends on all of its result rows (any failure fails the
+// record), matching computeYieldBuckets in records_yield.go.
+func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]dashboardYieldItem, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT trec.form_id, pn.part_number, MAX(CASE WHEN res.pass_fail = 0 THEN 1 ELSE 0 END)
+		FROM %s trec
+		JOIN %s f ON trec.form_id = f.id
+		JOIN %s pn ON f.part_number_id = pn.id
+		LEFT JOIN %s res ON res.record_id = trec.id
+		WHERE trec.is_active = 1
+		GROUP BY trec.id, trec.form_id, pn.part_number`,
+		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.cfg.ResultsTable()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byForm := make(map[int]*dashboardYieldItem)
+	var order []int
+	for rows.Next() {
+		var formID, anyFail int
+		var partNumber string
+		if err := rows.Scan(&formID, &partNumber, &anyFail); err != nil {
+			return nil, err
+		}
+		item, ok := byForm[formID]
+		if !ok {
+			item = &dashboardYieldItem{FormID: formID, PartNumber: partNumber}
+			byForm[formID] = item
+			order = append(order, formID)
+		}
+		item.Total++
+		if anyFail == 0 {
+			item.Passed++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	items := make([]dashboardYieldItem, 0, len(order))
+	for _, formID := range order {
+		items = append(items, *byForm[formID])
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].FPYPct() < items[j].FPYPct() })
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
 }
 
 // dashboardRecentActivity merges the most recently modified parts with the
@@ -317,11 +443,38 @@ func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "reports/spend.html", data)
 }
 
-// yieldFormOption is one form listed on the Reports > Yield Summary picker (issue #244).
-type yieldFormOption struct {
+// formOption is one form listed on a per-form report picker (e.g. Reports >
+// Yield Summary, issue #244; Reports > Failure Modes, issue #245).
+type formOption struct {
 	ID         int
 	PartNumber string
 	Title      string
+}
+
+// loadActiveFormOptions lists active forms for a per-form report picker,
+// shared by ReportsYieldPicker and ReportsFailureModesPicker.
+func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT f.id, pn.part_number, pn.title
+		FROM %s f
+		JOIN %s pn ON f.part_number_id = pn.id
+		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.is_active = 1
+		ORDER BY pn.part_number ASC`,
+		h.cfg.FormsTable(), h.cfg.PartsTable()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var forms []formOption
+	for rows.Next() {
+		var f formOption
+		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Title); err != nil {
+			continue
+		}
+		forms = append(forms, f)
+	}
+	return forms, rows.Err()
 }
 
 // ReportsYieldPicker is the Reports tab's entry point into the per-form yield
@@ -334,30 +487,35 @@ func (h *Handler) ReportsYieldPicker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, pn.part_number, pn.title
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.is_active = 1
-		ORDER BY pn.part_number ASC`,
-		h.cfg.FormsTable(), h.cfg.PartsTable()))
+	forms, err := h.loadActiveFormOptions(r.Context())
 	if err != nil {
 		h.renderError(w, r, "Error loading forms: "+err.Error())
 		return
 	}
-	defer rows.Close()
-
-	var forms []yieldFormOption
-	for rows.Next() {
-		var f yieldFormOption
-		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Title); err != nil {
-			continue
-		}
-		forms = append(forms, f)
-	}
 
 	data["Forms"] = forms
 	h.render(w, r, "reports/yield_picker.html", data)
+}
+
+// ReportsFailureModesPicker is the Reports tab's entry point into the
+// per-form failure mode report (arx_go/records_failure_modes.go
+// RecordsFailureModes) — lists forms to pick from, since the report itself is
+// scoped to one form (issue #245).
+func (h *Handler) ReportsFailureModesPicker(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "failure-modes"}
+	if h.db == nil {
+		h.render(w, r, "reports/failure_modes_picker.html", data)
+		return
+	}
+
+	forms, err := h.loadActiveFormOptions(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error loading forms: "+err.Error())
+		return
+	}
+
+	data["Forms"] = forms
+	h.render(w, r, "reports/failure_modes_picker.html", data)
 }
 
 // writeSpendCSV streams a spend-report CSV: header row followed by rows,
