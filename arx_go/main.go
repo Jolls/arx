@@ -31,9 +31,11 @@ func onReady() {
 	cfg := arxbase.Load(AppVersion)
 
 	var database *sql.DB
+	var dbDialect arxdb.Dialect
 	if dsn := cfg.DSN(); dsn != "" {
-		if conn, err := arxdb.Connect(dsn); err == nil {
+		if conn, dialect, err := arxdb.Connect(cfg.DBEngine(), dsn); err == nil {
 			database = conn
+			dbDialect = dialect
 			log.Println("arx: auto-connected to database")
 		} else {
 			log.Printf("arx: auto-connect failed (open Settings to reconnect): %v", err)
@@ -42,7 +44,7 @@ func onReady() {
 		log.Println("arx: no database password configured — open Settings to connect")
 	}
 
-	h = New(database, cfg, templatesFS, releaseNotesData)
+	h = New(database, dbDialect, cfg, templatesFS, releaseNotesData)
 	h.CheckSchemaVersion(context.Background())
 	h.loadCompanyLogo(context.Background())
 	h.loadPartCategories(context.Background())

@@ -21,11 +21,13 @@ import (
 
 	"arx/arx_go/models"
 	arxbase "arx/arxlib/config"
+	arxdb "arx/arxlib/db"
 	"arx/arxlib/urlutil"
 )
 
 type Handler struct {
 	db             *sql.DB
+	dialect        arxdb.Dialect
 	cfg            *arxbase.Config
 	store          *sessions.CookieStore
 	tmplFS         ioFS.FS
@@ -41,7 +43,7 @@ type Handler struct {
 	userCache map[int]*userCacheEntry
 }
 
-func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
+func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 	// Harden the session/CSRF cookie: HttpOnly blocks JS access, SameSite=Lax
 	// blunts cross-site POSTs. Secure is left off because the app is served over
@@ -52,8 +54,11 @@ func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400 * 30,
 	}
+	if dialect == nil {
+		dialect = arxdb.NewSQLServerDialect()
+	}
 	return &Handler{
-		db: db, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
+		db: db, dialect: dialect, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
 		routeStats: make(map[int]*routeAccumulator),
 		userCache:  make(map[int]*userCacheEntry),
 	}
@@ -113,36 +118,43 @@ func timeQueryErr[T any](ctx context.Context, query string, call func() (T, erro
 }
 
 func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	query = h.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return h.db.QueryContext(ctx, query, args...) })
 }
 
 func (h *Handler) queryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	query = h.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQuery(ctx, query, func() *sql.Row { return h.db.QueryRowContext(ctx, query, args...) })
 }
 
 func (h *Handler) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	query = h.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQueryErr(ctx, query, func() (sql.Result, error) { return h.db.ExecContext(ctx, query, args...) })
 }
 
 type txLogger struct {
 	*sql.Tx
-	logFn func(string, ...any)
+	logFn   func(string, ...any)
+	rewrite func(string) string
 }
 
 func (t *txLogger) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	query = t.rewrite(query)
 	t.logFn(query, args...)
 	return timeQueryErr(ctx, query, func() (sql.Result, error) { return t.Tx.ExecContext(ctx, query, args...) })
 }
 
 func (t *txLogger) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	query = t.rewrite(query)
 	t.logFn(query, args...)
 	return timeQuery(ctx, query, func() *sql.Row { return t.Tx.QueryRowContext(ctx, query, args...) })
 }
 
 func (t *txLogger) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	query = t.rewrite(query)
 	t.logFn(query, args...)
 	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return t.Tx.QueryContext(ctx, query, args...) })
 }
@@ -155,7 +167,7 @@ func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &txLogger{Tx: tx, logFn: h.logSQL}, nil
+	return &txLogger{Tx: tx, logFn: h.logSQL, rewrite: h.dialect.Rewrite}, nil
 }
 
 // CheckSchemaVersion queries app_config for schema_version and stores a mismatch
@@ -240,12 +252,7 @@ func (h *Handler) appConfigGetOr(ctx context.Context, key, def string) string {
 
 // appConfigSet upserts a key/value pair in app_config.
 func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
-	_, err := h.execContext(ctx, `
-		MERGE INTO `+h.cfg.AppConfigTable()+` AS t
-		USING (SELECT @p1 AS k, @p2 AS v) AS s ON t.setting_key = s.k
-		WHEN MATCHED THEN UPDATE SET t.setting_value = s.v, t.updated_at = GETDATE()
-		WHEN NOT MATCHED THEN INSERT (setting_key, setting_value) VALUES (s.k, s.v);`,
-		key, value)
+	_, err := h.execContext(ctx, h.dialect.UpsertAppConfig(h.cfg.AppConfigTable()), key, value)
 	return err
 }
 
