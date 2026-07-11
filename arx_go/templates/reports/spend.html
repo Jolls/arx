@@ -2,24 +2,7 @@
 <div class="content">
     {{template "reports_tabs" .}}
 
-    <form method="get" action="/reports/spend" class="d-flex flex-wrap align-items-end gap-2 mb-3">
-        <div class="btn-group" role="group">
-            <button type="submit" name="range" value="this_month"   class="btn btn-sm {{if eq .Range.Preset "this_month"}}btn-primary{{else}}btn-secondary{{end}}">This Month</button>
-            <button type="submit" name="range" value="this_quarter" class="btn btn-sm {{if eq .Range.Preset "this_quarter"}}btn-primary{{else}}btn-secondary{{end}}">This Quarter</button>
-            <button type="submit" name="range" value="ytd"          class="btn btn-sm {{if eq .Range.Preset "ytd"}}btn-primary{{else}}btn-secondary{{end}}">Year to Date</button>
-        </div>
-        <div class="d-flex align-items-end gap-1">
-            <div>
-                <label class="form-label mb-0" for="spend-from">From</label>
-                <input type="date" id="spend-from" name="from" class="form-control form-control-sm" value="{{.Range.FromStr}}">
-            </div>
-            <div>
-                <label class="form-label mb-0" for="spend-to">To</label>
-                <input type="date" id="spend-to" name="to" class="form-control form-control-sm" value="{{.Range.ToStr}}">
-            </div>
-            <button type="submit" name="range" value="custom" class="btn btn-sm btn-secondary">Apply</button>
-        </div>
-    </form>
+    {{template "report_date_range_form" .}}
 
     <div class="row row-cols-1 row-cols-lg-2 g-3">
         <div class="col">
