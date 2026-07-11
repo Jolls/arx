@@ -1231,3 +1231,36 @@ func TestIntegration_DashboardPendingApprovalPOs(t *testing.T) {
 		t.Errorf("dashboardPendingApprovalPOs: PO 5009 AgeDays = %d, want > 0 (submitted 2026-06-20)", found.AgeDays)
 	}
 }
+
+// TestIntegration_DashboardBelowReorderParts verifies the Reports dashboard's
+// Below Reorder Point card (#273, INV-2) against the pinned seed data: part 3007
+// has stock_on_hand 16 and reorder_min 25, so it must be returned. Read-only —
+// no cleanup.
+func TestIntegration_DashboardBelowReorderParts(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	items, err := h.dashboardBelowReorderParts(ctx, 50)
+	if err != nil {
+		t.Fatalf("dashboardBelowReorderParts: %v", err)
+	}
+
+	var found *dashboardBelowReorderItem
+	for i := range items {
+		if items[i].PartID == 3007 {
+			found = &items[i]
+		}
+		if items[i].StockOnHand >= items[i].ReorderMin {
+			t.Errorf("dashboardBelowReorderParts: part %d returned with on-hand %g >= min %g",
+				items[i].PartID, items[i].StockOnHand, items[i].ReorderMin)
+		}
+	}
+	if found == nil {
+		t.Fatalf("dashboardBelowReorderParts: seed part 3007 not found (ArxDev may need reseeding): %+v", items)
+	}
+	if found.StockOnHand != 16 || found.ReorderMin != 25 {
+		t.Errorf("dashboardBelowReorderParts: part 3007 = {on-hand %g, min %g}, want {16, 25} (ArxDev may need reseeding)",
+			found.StockOnHand, found.ReorderMin)
+	}
+}

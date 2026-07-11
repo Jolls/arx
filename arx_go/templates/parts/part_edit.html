@@ -70,6 +70,12 @@
                        value="{{if .Part.PNCurrentCost}}{{printf "%g" .Part.PNCurrentCost}}{{end}}">
             </div>
             <div class="detail-row">
+                <label for="reorder_min" class="form-label" data-bs-toggle="tooltip"
+                       title="Reorder point. The part is flagged below-minimum when stock on hand drops below this. Leave blank for no reorder point.">Reorder Minimum</label>
+                <input type="number" id="reorder_min" name="reorder_min" class="form-control" step="any" min="0"
+                       value="{{if .Part.ReorderMin}}{{printf "%g" (deref .Part.ReorderMin)}}{{end}}">
+            </div>
+            <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
                 <input type="text" id="PNReqBy" name="PNReqBy" class="form-control"
                        value="{{.Part.PNReqBy}}">

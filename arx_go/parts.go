@@ -94,11 +94,13 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		Active   bool   `json:"active"`
 		Attach   int    `json:"attach"`
 		POLines  int    `json:"poLines"`
+		BelowMin bool   `json:"belowMin"`
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail,
 		       requested_by, created_date, category, modified_date, is_active,
-		       attachment_count, po_line_count
+		       attachment_count, po_line_count,
+		       CAST(CASE WHEN reorder_min IS NOT NULL AND stock_on_hand < reorder_min THEN 1 ELSE 0 END AS BIT)
 		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
 	if err != nil {
@@ -113,7 +115,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		var date, modified sql.NullTime
 		var active sql.NullBool
 		var attach, poLines sql.NullInt64
-		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines); err != nil {
+		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines, &p.BelowMin); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -157,7 +159,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		active, hasBOM                                sql.NullBool
 		filIDPrimary, filLinks, poLinks               sql.NullInt64
 		currentCost, lastRollupCost                   sql.NullFloat64
-		stockOnHand                                   sql.NullFloat64
+		stockOnHand, reorderMin                        sql.NullFloat64
 		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
@@ -165,7 +167,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
-		       unit_id, stock_on_hand,
+		       unit_id, stock_on_hand, reorder_min,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
@@ -174,7 +176,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
 		&currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
-		&unitID, &stockOnHand,
+		&unitID, &stockOnHand, &reorderMin,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -199,6 +201,10 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	p.PNNotes = notes.String
 	p.PNFILIDPrimary = int(filIDPrimary.Int64)
 	p.StockOnHand = stockOnHand.Float64
+	if reorderMin.Valid {
+		v := reorderMin.Float64
+		p.ReorderMin = &v
+	}
 	p.PNCurrentCost = currentCost.Float64
 	p.PNLastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {
@@ -405,18 +411,18 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_number, revision, title, detail, category,
 		                release_status, is_active, requested_by, notes, created_date, modified_date,
-		                unit_id, current_cost,
+		                unit_id, current_cost, reorder_min,
 		                user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		                user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
 		OUTPUT INSERTED.id
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
-		        @p12,@p13,
-		        @p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23)
+		        @p12,@p13,@p14,
+		        @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24)
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		now, now,
-		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
+		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
 	).Scan(&newID)
@@ -512,15 +518,15 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET
 		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5,
 		  release_status=@p6, is_active=@p7, requested_by=@p8, notes=@p9, modified_date=@p10,
-		  unit_id=@p11, current_cost=@p12,
-		  user_field_1=@p13, user_field_2=@p14, user_field_3=@p15, user_field_4=@p16, user_field_5=@p17,
-		  user_field_6=@p18, user_field_7=@p19, user_field_8=@p20, user_field_9=@p21, user_field_10=@p22
-		WHERE id=@p23
+		  unit_id=@p11, current_cost=@p12, reorder_min=@p13,
+		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
+		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23
+		WHERE id=@p24
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		time.Now(),
-		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")),
+		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
 		id,
@@ -583,6 +589,11 @@ func partFromForm(r *http.Request) models.Part {
 			p.UnitID = &n
 		}
 	}
+	if v := fv(r, "reorder_min"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			p.ReorderMin = &f
+		}
+	}
 	return p
 }
 
@@ -596,19 +607,19 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		user6, user7, user8, user9, user10            sql.NullString
 		active, hasBOM                                sql.NullBool
 		unitID                                        sql.NullInt64
-		currentCost                                   sql.NullFloat64
+		currentCost, reorderMin                       sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr+`,
 		       release_status, is_active, requested_by, notes,
-		       unit_id, current_cost,
+		       unit_id, current_cost, reorder_min,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
 	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
 		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
-		&unitID, &currentCost,
+		&unitID, &currentCost, &reorderMin,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -616,6 +627,10 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		return p, err
 	}
 	p.PNCurrentCost = currentCost.Float64
+	if reorderMin.Valid {
+		v := reorderMin.Float64
+		p.ReorderMin = &v
+	}
 	p.PartNumber = partNumber.String
 	p.Revision = revision.String
 	p.Title = title.String

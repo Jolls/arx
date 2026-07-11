@@ -2,6 +2,31 @@ package models
 
 import "testing"
 
+func TestBelowReorder(t *testing.T) {
+	min := func(v float64) *float64 { return &v }
+	cases := []struct {
+		name       string
+		stock      float64
+		reorderMin *float64
+		want       bool
+	}{
+		{"no reorder point set", 0, nil, false},
+		{"stock above min", 20, min(10), false},
+		{"stock equal to min (boundary)", 10, min(10), false},
+		{"stock below min", 9, min(10), true},
+		{"zero stock, min set", 0, min(5), true},
+		{"zero stock, zero min", 0, min(0), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := Part{StockOnHand: c.stock, ReorderMin: c.reorderMin}
+			if got := p.BelowReorder(); got != c.want {
+				t.Errorf("BelowReorder() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 func TestUserFieldsForEdit(t *testing.T) {
 	p := Part{
 		UserField1: "Alpha", UserField2: "", UserField3: "Gamma",

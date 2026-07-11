@@ -356,6 +356,10 @@ BEGIN TRY
     SET stock_on_hand = (SELECT ISNULL(SUM(qty), 0) FROM dbo.inventory_transaction WHERE part_id = 3007)
     WHERE id = 3007;
 
+    -- Reorder point (issue #273): 3007's on-hand is 16, so reorder_min = 25 leaves it
+    -- below-min (flagged on the parts list/detail + Below Reorder Point dashboard card).
+    UPDATE dbo.part SET reorder_min = 25 WHERE id = 3007;
+
     -- ============================================================
     -- 11. Test records — form, test_definition, test_record, test_result,
     --     record_events, record_event_results

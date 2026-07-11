@@ -150,7 +150,7 @@ function escHtml(s) {
 // One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
 const ROW_BUILDERS = {
     '/api/parts/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
-        <td data-col="col-pn"><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}</td>
+        <td data-col="col-pn"><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum">Below Min</span>' : ''}</td>
         <td data-col="col-rev">${escHtml(r.rev)}</td>
         <td data-col="col-title">${escHtml(r.title)}</td>
         <td data-col="col-detail">${escHtml(r.detail)}</td>

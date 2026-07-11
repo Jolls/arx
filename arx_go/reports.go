@@ -57,6 +57,16 @@ type dashboardPendingApprovalItem struct {
 	AgeDays int
 }
 
+// dashboardBelowReorderItem is one row in the Reports dashboard's Below Reorder
+// Point card — a part whose on-hand stock has fallen below its reorder minimum
+// (issue #273, INV-2).
+type dashboardBelowReorderItem struct {
+	PartID      int
+	PartNumber  string
+	StockOnHand float64
+	ReorderMin  float64
+}
+
 // staleWIPThresholdDays is the age (in days since creation) past which an
 // unlocked test record is flagged as stale on the Reports dashboard.
 const staleWIPThresholdDays = 14
@@ -117,6 +127,11 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading dashboard: "+err.Error())
 		return
 	}
+	belowReorderParts, err := h.dashboardBelowReorderParts(r.Context(), 5)
+	if err != nil {
+		h.renderError(w, r, "Error loading dashboard: "+err.Error())
+		return
+	}
 
 	data["OpenPOCount"] = openPOs
 	data["POsReceivedThisMonth"] = receivedThisMonth
@@ -125,6 +140,7 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 	data["LowestYieldForms"] = lowestYieldForms
 	data["StaleWIPRecords"] = staleWIPRecords
 	data["PendingApprovalPOs"] = pendingApprovalPOs
+	data["BelowReorderParts"] = belowReorderParts
 	h.render(w, r, "reports/dashboard.html", data)
 }
 
@@ -294,6 +310,32 @@ func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([
 		}
 		if submittedAt.Valid {
 			item.AgeDays = ageDays(submittedAt.Time)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// dashboardBelowReorderParts lists parts whose on-hand stock has fallen below
+// their reorder minimum, most-depleted first (issue #273, INV-2). Parts with no
+// reorder point set (reorder_min IS NULL) are excluded.
+func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]dashboardBelowReorderItem, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT TOP (@p1) id, part_number, stock_on_hand, reorder_min
+		FROM %s
+		WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
+		ORDER BY (stock_on_hand - reorder_min) ASC`,
+		h.cfg.PartsTable()), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []dashboardBelowReorderItem
+	for rows.Next() {
+		var item dashboardBelowReorderItem
+		if err := rows.Scan(&item.PartID, &item.PartNumber, &item.StockOnHand, &item.ReorderMin); err != nil {
+			return nil, err
 		}
 		items = append(items, item)
 	}
