@@ -44,8 +44,22 @@ func (b *Base) DBEngine() string {
 	}
 }
 
-// BuildDSN constructs a sqlserver:// DSN from the config fields + a password.
+// BuildDSN constructs a connection string from the config fields + a password,
+// in the scheme the active engine's driver expects.
 func (b *Base) BuildDSN(password string) string {
+	if b.DBEngine() == "postgres" {
+		// pgx/stdlib accepts a postgres:// URL. sslmode=prefer negotiates TLS
+		// when the server offers it and falls back to plaintext otherwise, so
+		// the same DSN works against managed and local Postgres.
+		u := &url.URL{
+			Scheme:   "postgres",
+			User:     url.UserPassword(b.DBUser, password),
+			Host:     b.DBServer,
+			Path:     "/" + b.ActiveDBName(),
+			RawQuery: url.Values{"sslmode": {"prefer"}}.Encode(),
+		}
+		return u.String()
+	}
 	u := &url.URL{
 		Scheme: "sqlserver",
 		User:   url.UserPassword(b.DBUser, password),
