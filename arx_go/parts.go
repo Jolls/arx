@@ -408,17 +408,17 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	var newID int
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (part_number, revision, title, detail, category,
-		                release_status, is_active, requested_by, notes, created_date, modified_date,
-		                unit_id, current_cost, reorder_min,
-		                user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
-		                user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
-		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
-		        @p12,@p13,@p14,
-		        @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24)
-	`, h.cfg.PartsTable()),
+	insertPart := h.dialect.InsertReturningID(h.cfg.PartsTable(),
+		`part_number, revision, title, detail, category,
+		 release_status, is_active, requested_by, notes, created_date, modified_date,
+		 unit_id, current_cost, reorder_min,
+		 user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
+		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
+		 @p12,@p13,@p14,
+		 @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24`,
+		false)
+	err := h.queryRowContext(r.Context(), insertPart,
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		now, now,
@@ -1691,14 +1691,15 @@ type partPOSummary struct {
 // capped at limit. Returns nil on error so the caller can omit the card.
 func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) []partPOSummary {
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p2) po.number, po.supplier_name, po.status, po.date_ordered,
+		SELECT %spo.number, po.supplier_name, po.status, po.date_ordered,
 		       pol.qty, pol.unit_cost
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE pol.part_id = @p1
 		ORDER BY po.date_ordered DESC, po.ID DESC
-	`, pol, po), partID, limit)
+	`+limitClause, top, pol, po), partID, limit)
 	if err != nil {
 		return nil
 	}
@@ -1732,10 +1733,11 @@ type partTxnSummary struct {
 // recentPartTxns returns the most recent inventory transactions for a part,
 // newest first, capped at limit. Returns nil on error.
 func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) []partTxnSummary {
+	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p2) txn_type, qty, txn_date
+		SELECT %stxn_type, qty, txn_date
 		FROM %s WHERE part_id = @p1 ORDER BY txn_date DESC, id DESC
-	`, h.cfg.InventoryTxnTable()), partID, limit)
+	`+limitClause, top, h.cfg.InventoryTxnTable()), partID, limit)
 	if err != nil {
 		return nil
 	}

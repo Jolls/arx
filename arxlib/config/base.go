@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 )
 
 // SessionCookieName is the single gorilla/sessions cookie name shared by all
@@ -16,6 +17,7 @@ type Base struct {
 	Version        string
 	Port           string
 	DBServer       string
+	Engine         string // "sqlserver" (default) | "postgres"
 	DBName         string
 	TestDBName     string // database to use in test mode (default "ArxDev")
 	DBUser         string
@@ -29,6 +31,18 @@ type Base struct {
 // ActiveDBName returns the database the app should connect to: the dev DB in
 // test mode, otherwise the prod DB.
 func (b *Base) ActiveDBName() string { return Pick(b.TestMode, b.TestDBName, b.DBName) }
+
+// DBEngine returns the normalized database engine id, defaulting to
+// "sqlserver". Unknown values fall back to "sqlserver" so a typo cannot
+// silently select an unbuilt backend.
+func (b *Base) DBEngine() string {
+	switch strings.ToLower(b.Engine) {
+	case "postgres":
+		return "postgres"
+	default:
+		return "sqlserver"
+	}
+}
 
 // BuildDSN constructs a sqlserver:// DSN from the config fields + a password.
 func (b *Base) BuildDSN(password string) string {

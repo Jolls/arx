@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.116] - 2026-07-11 
+- Introduced a Dialect abstraction over SQL-Server-specific SQL (pagination, insert-and-get-id, TRY_CAST, DATEFROMPARTS, ISNULL/COALESCE) as groundwork for Postgres/SQLite support; no behavior change on SQL Server ([#625](https://github.com/Jolls/arx-legacy/issues/625))
+
 ## [0.5.115] - 2026-07-10 
 - Added per-part reorder points: a Reorder Minimum field, below-minimum flags on the parts list and part detail, and a Below Reorder Point card on the Reports dashboard ([#273](https://github.com/Jolls/arx-legacy/issues/273))
 

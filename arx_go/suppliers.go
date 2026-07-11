@@ -145,17 +145,17 @@ type supplierPOSummary struct {
 // recentSupplierPOs returns up to limit POs for supplierID, most recent first.
 // limit <= 0 means unlimited (used by the Order History sub-tab).
 func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limit int) []supplierPOSummary {
-	top := ""
+	top, limitClause := "", ""
 	args := []any{supplierID}
 	if limit > 0 {
-		top = "TOP (@p2) "
+		top, limitClause = h.topLimit("@p2")
 		args = append(args, limit)
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %snumber, status, date_ordered, total_cost
 		FROM %s WHERE supplier_id = @p1
 		ORDER BY date_ordered DESC, ID DESC
-	`, top, h.cfg.POTable()), args...)
+	`, top, h.cfg.POTable())+limitClause, args...)
 	if err != nil {
 		return nil
 	}
@@ -187,12 +187,13 @@ type supplierPartSummary struct {
 
 func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit int) []supplierPartSummary {
 	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
+	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p2) pn.id, pn.part_number, pn.title
+		SELECT %spn.id, pn.part_number, pn.title
 		FROM %s sp JOIN %s pn ON sp.part_id = pn.id
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`, sp, pn), supplierID, limit)
+	`+limitClause, top, sp, pn), supplierID, limit)
 	if err != nil {
 		return nil
 	}
@@ -237,11 +238,11 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var newID int
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified)
-		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)
-	`, h.cfg.CompanyTable()),
+	insertSupplier := h.dialect.InsertReturningID(h.cfg.CompanyTable(),
+		`name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8`,
+		false)
+	err := h.queryRowContext(r.Context(), insertSupplier,
 		name, fv(r, "SUSupplierCode"),
 		nullableInt(fv(r, "default_contact")),
 		r.FormValue("is_active") == "1",

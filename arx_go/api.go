@@ -34,7 +34,7 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 		WHERE su.name LIKE @p1 AND su.is_active = 1`+supplierFilter+`
 		ORDER BY su.name
 		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
-	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), "%"+q+"%")
+	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -119,7 +119,7 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		WHERE %s
 		ORDER BY part_number
 		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY
-	`, h.cfg.PartsTable(), where), "%"+q+"%")
+	`, h.cfg.PartsTable(), where), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
 	if err != nil {
 		writeJSON(w, []any{})
 		return

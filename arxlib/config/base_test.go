@@ -63,3 +63,25 @@ func TestConnectionSummary(t *testing.T) {
 		t.Errorf("test summary: got %q", got)
 	}
 }
+
+func TestDBEngineDefaultsToSQLServer(t *testing.T) {
+	b := &Base{}
+	if got := b.DBEngine(); got != "sqlserver" {
+		t.Fatalf("empty engine: got %q, want %q", got, "sqlserver")
+	}
+}
+
+func TestDBEngineNormalizes(t *testing.T) {
+	cases := map[string]string{
+		"postgres":  "postgres",
+		"POSTGRES":  "postgres",
+		"sqlserver": "sqlserver",
+		"nonsense":  "sqlserver",
+	}
+	for in, want := range cases {
+		b := &Base{Engine: in}
+		if got := b.DBEngine(); got != want {
+			t.Errorf("engine %q: got %q, want %q", in, got, want)
+		}
+	}
+}

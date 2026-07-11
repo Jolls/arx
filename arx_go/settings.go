@@ -399,12 +399,13 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	dbSwapped := false
 	if connectWith != "" {
 		dsn := h.cfg.BuildDSN(connectWith)
-		newDB, err := arxdb.Connect(dsn)
+		newDB, newDialect, err := arxdb.Connect(h.cfg.DBEngine(), dsn)
 		if err != nil {
 			connErr = err.Error()
 		} else {
 			oldDB := h.db
 			h.db = newDB
+			h.dialect = newDialect
 			dbSwapped = true
 			if password != "" {
 				local.DBPassword = password

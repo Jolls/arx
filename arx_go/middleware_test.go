@@ -15,7 +15,7 @@ import (
 func testHandler() *Handler {
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
-	return New(nil, cfg, nil, nil)
+	return New(nil, nil, cfg, nil, nil)
 }
 
 // sentinel reports whether the wrapped next-handler was reached.

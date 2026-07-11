@@ -36,12 +36,12 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 	cfg := arxbase.Load("dev")
 	cfg.TestMode = true
 
-	database, err := arxdb.Connect(dsn)
+	database, dialect, err := arxdb.Connect(cfg.DBEngine(), dsn)
 	if err != nil {
 		t.Fatalf("db.Connect: %v", err)
 	}
 
-	h := New(database, cfg, templatesFS, nil)
+	h := New(database, dialect, cfg, templatesFS, nil)
 	h.loadPartCategories(context.Background())
 
 	cleanup := func() {

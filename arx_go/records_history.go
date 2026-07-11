@@ -161,10 +161,12 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 // captures its result snapshot, within the caller's tx. Shared by single + bulk lock.
 func (h *Handler) logCompletionSnapshot(ctx context.Context, tx *txLogger, recordID int, username string) error {
 	var eventID int
-	if err := tx.QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (test_record_id, event_type, username, event_date)
-		 OUTPUT INSERTED.id VALUES (@p1, 'completed', @p2, GETDATE())`,
-		h.cfg.RecordEventsTable()), recordID, username).Scan(&eventID); err != nil {
+	insertEvent := h.dialect.InsertReturningID(h.cfg.RecordEventsTable(),
+		"test_record_id, event_type, username, event_date",
+		"@p1, 'completed', @p2, GETDATE()",
+		false)
+	if err := tx.QueryRowContext(ctx, insertEvent,
+		recordID, username).Scan(&eventID); err != nil {
 		return err
 	}
 	return h.snapshotRecordResults(ctx, tx, eventID, recordID)

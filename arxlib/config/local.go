@@ -10,18 +10,19 @@ const localConfigPath = "config/local.json"
 // LocalConfig holds user-specific overrides saved in config/local.json.
 // This file is gitignored — it is the only place the DB password is persisted on disk.
 type LocalConfig struct {
-	DBServer            string `json:"db_server"`
-	DBName              string `json:"db_name"`
-	DBUser              string `json:"db_user"`
-	DBPassword          string `json:"db_password"`
-	SessionSecret       string `json:"session_secret,omitempty"`
-	DocControlRoot      string `json:"doc_control_root"`
-	POFolderRoot        string `json:"po_folder_root"`
-	SupplierFilesRoot   string `json:"supplier_files_root"`
-	ImageRoot           string `json:"image_root"`
-	DebugMode           bool   `json:"debug_mode"`
-	TestMode            *bool  `json:"test_mode,omitempty"`
-	TestDBName          string `json:"test_db_name,omitempty"`
+	DBServer          string  `json:"db_server"`
+	Engine            *string `json:"engine,omitempty"`
+	DBName            string  `json:"db_name"`
+	DBUser            string  `json:"db_user"`
+	DBPassword        string  `json:"db_password"`
+	SessionSecret     string  `json:"session_secret,omitempty"`
+	DocControlRoot    string  `json:"doc_control_root"`
+	POFolderRoot      string  `json:"po_folder_root"`
+	SupplierFilesRoot string  `json:"supplier_files_root"`
+	ImageRoot         string  `json:"image_root"`
+	DebugMode         bool    `json:"debug_mode"`
+	TestMode          *bool   `json:"test_mode,omitempty"`
+	TestDBName        string  `json:"test_db_name,omitempty"`
 }
 
 // LoadLocal reads config/local.json. On first run after upgrading from the two-app

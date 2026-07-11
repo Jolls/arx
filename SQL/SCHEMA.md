@@ -150,6 +150,13 @@ Trigger DDL lives in `SQL/triggers.sql`. These fire identically in ArxDev, since
 
 These fire for all writers (Go app and VBA). Do not update `SUNumOfLNKs`, `SUNumOfPOs`, `part.attachment_count`, or `part.po_line_count` manually in application code.
 
+> **`OUTPUT INSERTED` vs triggers:** SQL Server blocks the `OUTPUT INSERTED.*`
+> clause on any table that has an `AFTER` trigger. `purchase_order` therefore
+> inserts and retrieves the new id with a batched `INSERT ...; SELECT CAST(SCOPE_IDENTITY() AS INT)`
+> instead (see `arx_go/pos.go`). Any new table that both carries a trigger and
+> needs its generated id back must use the same pattern. The Postgres port
+> (issue #625) folds this quirk into `db.Dialect.InsertReturningID`.
+
 ## DDL file conventions
 
 - One `.sql` file per table, in `SQL/`.

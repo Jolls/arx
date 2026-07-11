@@ -302,8 +302,8 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 		       record_date, comments, is_locked, is_approved, form_revision
 		FROM %s
 		WHERE form_id = @p1 AND is_active = 1
-		ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC`,
-		h.cfg.RecordsTable()), formID)
+		ORDER BY %s DESC, record_date DESC`,
+		h.cfg.RecordsTable(), h.dialect.TryCastInt("serial_number")), formID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -856,14 +856,13 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 		hideFormula := row.Hide
 		var newID int
-		if err2 := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s
-			  (form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
-			   pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
-			   format, comment, created_at, updated_at)
-			OUTPUT INSERTED.id
-			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE(),GETDATE())`,
-			h.cfg.StepsTable()),
+		insertStep := h.dialect.InsertReturningID(h.cfg.StepsTable(),
+			`form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
+			 pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
+			 format, comment, created_at, updated_at`,
+			`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE(),GETDATE()`,
+			false)
+		if err2 := tx.QueryRowContext(r.Context(), insertStep,
 			formID, stepType, row.Parameter, nullOrVal(row.Specification),
 			nullOrVal(row.SpecNom), nullOrVal(row.SpecMin), nullOrVal(row.SpecMax),
 			nullOrVal(row.SpecUnits), nullOrVal(row.PFType), nullOrVal(row.DefaultResult),
@@ -1168,12 +1167,12 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
 		WITH ordered AS (
 			SELECT id,
-			       LAG(id)  OVER (ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC) AS prev_id,
-			       LEAD(id) OVER (ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC) AS next_id
+			       LAG(id)  OVER (ORDER BY %s DESC, record_date DESC) AS prev_id,
+			       LEAD(id) OVER (ORDER BY %s DESC, record_date DESC) AS next_id
 			FROM %s WHERE form_id = @p1 AND is_active = 1
 		)
 		SELECT COALESCE(prev_id, 0), COALESCE(next_id, 0) FROM ordered WHERE id = @p2`,
-		h.cfg.RecordsTable()), record.FormID, recordID).Scan(&prevID, &nextID)
+		h.dialect.TryCastInt("serial_number"), h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable()), record.FormID, recordID).Scan(&prevID, &nextID)
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
@@ -1357,8 +1356,8 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	// atomically under a lock when the user accepts it, closing the concurrent-create race (#369).
 	var nextSN sql.NullInt64
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT COALESCE(MAX(TRY_CAST(serial_number AS INT)) + 1, 1)
-		FROM %s WHERE form_id = @p1`, h.cfg.RecordsTable()), formID).Scan(&nextSN)
+		SELECT COALESCE(MAX(%s) + 1, 1)
+		FROM %s WHERE form_id = @p1`, h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
 
 	nextSNStr := "1"
 	if nextSN.Valid {
@@ -1447,9 +1446,9 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	if isAutoSerial(serialNumber, suggestedSN) {
 		var nextSN int
 		err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-			SELECT COALESCE(MAX(TRY_CAST(serial_number AS INT)), 0) + 1
+			SELECT COALESCE(MAX(%s), 0) + 1
 			FROM %s WITH (UPDLOCK, HOLDLOCK) WHERE form_id = @p1`,
-			h.cfg.RecordsTable()), formID).Scan(&nextSN)
+			h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
 		if err != nil {
 			http.Error(w, "serial number error: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -1458,13 +1457,12 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var newID int
-	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s
-		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
-		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision)
-		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0,@p10)`,
-		h.cfg.RecordsTable()),
+	insertRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
+		`form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
+		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0,@p10`,
+		false)
+	err = tx.QueryRowContext(r.Context(), insertRecord,
 		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
@@ -1806,13 +1804,12 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var newID int
 	// record_date is set to now — a duplicate is a fresh re-test, dated the day it's made.
-	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s
-		  (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
-		   comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision)
-		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),1,0,0,@p9)`,
-		h.cfg.RecordsTable()),
+	insertDupRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
+		`form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
+		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),1,0,0,@p9`,
+		false)
+	err = tx.QueryRowContext(r.Context(), insertDupRecord,
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
 		src.Comments, src.InstrumentType, src.TestOrder, formRevision).Scan(&newID)
 	if err != nil {
@@ -2442,15 +2439,14 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFo
 			continue
 		}
 		var newStepID int
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-			INSERT INTO %s
-			  (form_id, type, parameter, specification, spec_nom, spec_min, spec_max,
-			   spec_units, pf_type, default_result, hide_formula,
-			   category, sheet_name, instrument_types, format, comment,
-			   archive_id, revision)
-			OUTPUT INSERTED.id
-			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18)`,
-			h.cfg.StepsTable()),
+		insertCopiedStep := h.dialect.InsertReturningID(h.cfg.StepsTable(),
+			`form_id, type, parameter, specification, spec_nom, spec_min, spec_max,
+			 spec_units, pf_type, default_result, hide_formula,
+			 category, sheet_name, instrument_types, format, comment,
+			 archive_id, revision`,
+			`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18`,
+			false)
+		if err := tx.QueryRowContext(ctx, insertCopiedStep,
 			newFormID, s.Type, s.Parameter.String, s.Specification.String,
 			s.SpecNom, s.SpecMin, s.SpecMax, s.SpecUnits,
 			s.PFType, s.DefaultResult, s.HideFormula,
@@ -2550,9 +2546,12 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var newID int
-	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-		"INSERT INTO %s (part_number_id, is_active, is_locked, test_order, record_types, instrument_types) OUTPUT INSERTED.id VALUES (@p1, 1, 0, '', @p2, @p3)",
-		h.cfg.FormsTable()), pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
+	insertForm := h.dialect.InsertReturningID(h.cfg.FormsTable(),
+		"part_number_id, is_active, is_locked, test_order, record_types, instrument_types",
+		"@p1, 1, 0, '', @p2, @p3",
+		false)
+	if err := tx.QueryRowContext(r.Context(), insertForm,
+		pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
 		tx.Rollback()
 		http.Error(w, "create error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2658,9 +2657,12 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var newFormID int
-	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-		"INSERT INTO %s (part_number_id, is_active, is_locked, test_order, record_types, instrument_types) OUTPUT INSERTED.id VALUES (@p1, 1, 0, '', @p2, @p3)",
-		h.cfg.FormsTable()), pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {
+	insertDupForm := h.dialect.InsertReturningID(h.cfg.FormsTable(),
+		"part_number_id, is_active, is_locked, test_order, record_types, instrument_types",
+		"@p1, 1, 0, '', @p2, @p3",
+		false)
+	if err := tx.QueryRowContext(r.Context(), insertDupForm,
+		pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {
 		tx.Rollback()
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2761,8 +2763,8 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		FROM %s res
 		JOIN %s trec ON res.record_id = trec.id
 		WHERE res.test_id = @p1 AND trec.form_id = @p2 AND trec.is_active = 1
-		ORDER BY TRY_CAST(trec.serial_number AS INT) DESC, trec.record_date DESC`,
-		h.cfg.ResultsTable(), h.cfg.RecordsTable()), testID, formID)
+		ORDER BY %s DESC, trec.record_date DESC`,
+		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.TryCastInt("trec.serial_number")), testID, formID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return

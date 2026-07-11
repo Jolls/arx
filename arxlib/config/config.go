@@ -46,6 +46,7 @@ func Load(version string) *Config {
 			Version:        version,
 			Port:           GetEnv("PM_PORT", GetEnv("PORT", "4568")),
 			DBServer:       os.Getenv("DB_SERVER"),
+			Engine:         os.Getenv("DB_ENGINE"),
 			DBName:         os.Getenv("DB_NAME"),
 			TestDBName:     GetEnv("TEST_DB_NAME", "ArxDev"),
 			DBUser:         os.Getenv("DB_USER"),
@@ -87,6 +88,9 @@ func Load(version string) *Config {
 		}
 		if local.DBUser != "" {
 			cfg.DBUser = local.DBUser
+		}
+		if local.Engine != nil {
+			cfg.Engine = *local.Engine
 		}
 		cfg.DBPassword = local.DBPassword
 		if local.DocControlRoot != "" {
