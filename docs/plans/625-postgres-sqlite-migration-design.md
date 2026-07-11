@@ -73,7 +73,8 @@ Two inventory items are fixed as **source cleanups** rather than dialect helpers
 ## 3. Schema / DDL
 
 - **Per-engine DDL trees.** Add `SQL/postgres/*.sql` now and `SQL/sqlite/*.sql` in the SQLite phase. The existing `SQL/*.sql` remains the SQL Server set until cutover, then is deleted.
-- **Triggers - the hard part (5 of them).** Full rewrite to row-level PL/pgSQL (`NEW`/`OLD`, `FOR EACH ROW`) for Postgres. The audit trigger's `CONTEXT_INFO()` username recovery maps to a Postgres session GUC: the app sets `SET LOCAL arx.username = ...` per transaction, the trigger reads it via `current_setting()`. **SQLite cannot read session variables inside triggers** - this is a known open piece for the SQLite phase and will likely move audit-actor handling app-side for that engine.
+- **Triggers - the hard part (5 of them).** Do **not** assume a mechanical 1:1 rewrite. The triggers were an Azure/SQL-Server-era default (originally a Claude suggestion for the Azure setup), not a deliberate design choice, so before rewriting anything the trigger phase **starts by reconsulting the implementation owner (Jolls)** on two questions: (1) which of the 5 triggers are actually still needed at all, and (2) whether the survivors should stay triggers or move to something more native to Postgres/SQLite - app-side logic, generated/computed columns, or views - instead of being ported as triggers. Only the triggers that survive that review get rewritten.
+  For any that do stay as triggers: full rewrite to row-level PL/pgSQL (`NEW`/`OLD`, `FOR EACH ROW`) for Postgres. The audit trigger's `CONTEXT_INFO()` username recovery would map to a Postgres session GUC (the app sets `SET LOCAL arx.username = ...` per transaction, the trigger reads it via `current_setting()`). **SQLite cannot read session variables inside triggers** - a known constraint that reinforces the "reconsider triggers vs. app-side" review above, and will likely move audit-actor handling app-side for that engine regardless.
 - **PO-number sequence.** Postgres native sequence (`nextval()`); SQLite counter-table or transactional `MAX()+1`.
 - **SQLite auto-bootstrap.** Embed the SQLite DDL and create the schema on first open when the tables are absent. Postgres provisioning stays manual for now.
 
@@ -100,7 +101,7 @@ Each phase ends at a concrete verification gate. Phases are sequential; nothing 
   `Engine` config + engine-aware DSN + driver selection in `db.Connect`; the `Dialect` interface with a **SQL Server implementation that reproduces today's behavior exactly**; the Tier-1 rewriter wired into the wrappers; the Tier-2 structural categories routed through `dialect.X()` helpers.
   **Gate:** the app still runs on SQL Server and the integration suite is green under the SQL Server dialect - proving the seam is behavior-preserving before any new engine exists.
 - **Phase 2 - Postgres dialect:**
-  Postgres implementation of every helper; `SQL/postgres/*.sql` DDL; the 5 triggers rewritten as PL/pgSQL; the PO-number sequence.
+  Postgres implementation of every helper; `SQL/postgres/*.sql` DDL; the PO-number sequence. **Trigger sub-step starts with a review checkpoint with Jolls** (which triggers are still needed, and triggers vs. native/app-side alternatives - see section 3); only the survivors are rewritten as PL/pgSQL.
   **Gate:** integration suite green against a Postgres ArxDev.
 - **Phase 3 - Cutover and SQL Server removal:**
   (Data migration ArxProd -> Postgres is the external dependency here.) Point config at Postgres, validate, then delete the SQL Server dialect, `go-mssqldb`, and the T-SQL `SQL/*.sql` DDL.
@@ -120,5 +121,5 @@ Named here as dependencies, not built by this plan:
 ## Open questions for review
 
 1. Does Jolls agree with the broader "migrate *off* SQL Server" end state (delete go-mssqldb + T-SQL DDL after cutover), versus the issue comment's original "second/third engine" framing that keeps SQL Server supported?
-2. SQLite audit-actor handling: session GUCs do not exist in SQLite triggers. Is moving audit-actor capture app-side for SQLite acceptable, or should the audit trigger behavior be reconsidered more broadly?
+2. Triggers: confirmed with Jolls that the trigger phase reopens the design rather than porting 1:1 - reviewing which of the 5 are still needed and whether survivors should become native/app-side logic instead of triggers (they were an Azure-era default). SQLite's inability to read session variables in triggers feeds directly into this. Resolved in principle; the actual per-trigger review happens at the start of Phase 2.
 3. Is `pgx/v5/stdlib` the preferred Postgres driver, or is there a house preference (`lib/pq`)?
