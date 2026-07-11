@@ -727,7 +727,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	// so it sees the deletes/inserts above before any other writer can interfere)
 	var lineSum float64
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ISNULL(SUM(pol.qty * pol.unit_cost), 0)
+		SELECT COALESCE(SUM(pol.qty * pol.unit_cost), 0)
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
@@ -2286,7 +2286,7 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 	// Recompute each quote's total (line sum + its own tax/shipping/misc).
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 		UPDATE po
-		SET total_cost = ISNULL(ls.s, 0) + ISNULL(po.tax1, 0) + ISNULL(po.shipping_cost, 0) + ISNULL(po.misc_cost, 0),
+		SET total_cost = COALESCE(ls.s, 0) + COALESCE(po.tax1, 0) + COALESCE(po.shipping_cost, 0) + COALESCE(po.misc_cost, 0),
 		    date_modified = GETDATE()
 		FROM %s po
 		OUTER APPLY (SELECT SUM(pol.qty * pol.unit_cost) AS s FROM %s pol WHERE pol.po_id = po.ID) ls
