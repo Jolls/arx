@@ -76,9 +76,9 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	var items []dashboardActivityItem
 
 	partRows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT TOP (@p1) id, part_number, title, modified_date
-		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC`,
-		h.cfg.PartsTable()), limit)
+		`SELECT %sid, part_number, title, modified_date
+		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC`+h.dialect.LimitClause("@p1"),
+		h.dialect.TopClause("@p1"), h.cfg.PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -102,9 +102,9 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	partRows.Close()
 
 	poRows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT TOP (@p1) h.po_id, po.number, h.event_type, h.to_status, h.action, h.changed_at
-		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC`,
-		h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
+		`SELECT %sh.po_id, po.number, h.event_type, h.to_status, h.action, h.changed_at
+		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC`+h.dialect.LimitClause("@p1"),
+		h.dialect.TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
 	if err != nil {
 		return nil, err
 	}

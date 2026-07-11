@@ -146,16 +146,18 @@ type supplierPOSummary struct {
 // limit <= 0 means unlimited (used by the Order History sub-tab).
 func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limit int) []supplierPOSummary {
 	top := ""
+	limitClause := ""
 	args := []any{supplierID}
 	if limit > 0 {
-		top = "TOP (@p2) "
+		top = h.dialect.TopClause("@p2")
+		limitClause = h.dialect.LimitClause("@p2")
 		args = append(args, limit)
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %snumber, status, date_ordered, total_cost
 		FROM %s WHERE supplier_id = @p1
 		ORDER BY date_ordered DESC, ID DESC
-	`, top, h.cfg.POTable()), args...)
+	`, top, h.cfg.POTable())+limitClause, args...)
 	if err != nil {
 		return nil
 	}
@@ -188,11 +190,11 @@ type supplierPartSummary struct {
 func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit int) []supplierPartSummary {
 	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p2) pn.id, pn.part_number, pn.title
+		SELECT %spn.id, pn.part_number, pn.title
 		FROM %s sp JOIN %s pn ON sp.part_id = pn.id
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`, sp, pn), supplierID, limit)
+	`+h.dialect.LimitClause("@p2"), h.dialect.TopClause("@p2"), sp, pn), supplierID, limit)
 	if err != nil {
 		return nil
 	}
