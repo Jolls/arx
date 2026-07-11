@@ -115,8 +115,10 @@ Named here as dependencies or explicit exclusions, not built by this plan:
 - Schema **auto-bootstrap** provisioning (Postgres stays human-run reference DDL).
 - Settings-UI engine picker beyond the minimum needed to select an engine during the transition.
 
-## Open questions for review
+## Resolved decisions
 
-1. Does Jolls agree with the "migrate *off* SQL Server to Postgres-only" end state (delete go-mssqldb + T-SQL DDL after cutover), versus the issue comment's original "second/third engine" framing that keeps SQL Server supported?
-2. Triggers: confirmed with Jolls that the trigger sub-step reopens the design rather than porting 1:1 - reviewing which of the 5 are still needed and whether survivors should become native/app-side logic instead of triggers (they were an Azure-era default). Resolved in principle; the actual per-trigger review happens at the start of Phase 2.
-3. Is `pgx/v5/stdlib` the preferred Postgres driver, or is there a house preference (`lib/pq`)?
+All prior open questions are settled (confirmed by Jolls, 2026-07-10):
+
+1. **End state - migrate off SQL Server to Postgres only. Confirmed.** go-mssqldb and the T-SQL DDL are removed after cutover; SQL Server is not retained as a supported engine.
+2. **Triggers - reopen the design rather than port 1:1. Confirmed.** The trigger sub-step reviews which of the 5 are still needed and whether survivors should become native Postgres or app-side logic instead of triggers (they were an Azure-era default). The per-trigger review happens at the start of Phase 2.
+3. **Postgres driver - `pgx/v5/stdlib`. Confirmed.**
