@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.114] - 2026-07-10 
+- Moved Test Mode and Debug Mode to Bootstrap toggle switches at the top of the Database Connection section in Settings, and fixed stale Debug Mode label ([#656](https://github.com/Jolls/arx-legacy/issues/656))
+
 ## [0.5.113] - 2026-07-10 
 - Added Supplier On-Time Delivery, PO Cycle Time, and Attachment/Data Quality Gaps reports to the Reports tab ([#659](https://github.com/Jolls/arx-legacy/issues/659))
 
