@@ -38,6 +38,41 @@
 </div>
 {{end}}
 
+{{define "report_date_range_form"}}
+{{/* Shared date-range picker for reports filtered by reportDateRange (arx_go/reports.go). Expects .DateRangeAction (form target URL) and .Range (Preset/FromStr/ToStr). */}}
+<form method="get" action="{{.DateRangeAction}}" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+    <div class="btn-group" role="group">
+        <button type="submit" name="range" value="this_month"   class="btn btn-sm {{if eq .Range.Preset "this_month"}}btn-primary{{else}}btn-secondary{{end}}">This Month</button>
+        <button type="submit" name="range" value="this_quarter" class="btn btn-sm {{if eq .Range.Preset "this_quarter"}}btn-primary{{else}}btn-secondary{{end}}">This Quarter</button>
+        <button type="submit" name="range" value="ytd"          class="btn btn-sm {{if eq .Range.Preset "ytd"}}btn-primary{{else}}btn-secondary{{end}}">Year to Date</button>
+    </div>
+    <div class="d-flex align-items-end gap-1">
+        <div>
+            <label class="form-label mb-0" for="report-date-from">From</label>
+            <input type="date" id="report-date-from" name="from" class="form-control form-control-sm" value="{{.Range.FromStr}}">
+        </div>
+        <div>
+            <label class="form-label mb-0" for="report-date-to">To</label>
+            <input type="date" id="report-date-to" name="to" class="form-control form-control-sm" value="{{.Range.ToStr}}">
+        </div>
+        <button type="submit" name="range" value="custom" class="btn btn-sm btn-secondary">Apply</button>
+    </div>
+</form>
+{{end}}
+
+{{define "reports_tabs"}}
+{{/* No "Back to" link here (unlike supplier_tabs/po_tabs) — Reports has no parent list page. */}}
+<div class="sub-tabs">
+    <a href="/reports"       class="sub-tab{{if eq .ActiveSubTab "dashboard"}} active{{end}}">Dashboard</a>
+    <a href="/reports/spend" class="sub-tab{{if eq .ActiveSubTab "spend"}} active{{end}}">Spend Analysis</a>
+    <a href="/reports/yield" class="sub-tab{{if eq .ActiveSubTab "yield"}} active{{end}}">Yield Summary</a>
+    <a href="/reports/failure-modes" class="sub-tab{{if eq .ActiveSubTab "failure-modes"}} active{{end}}">Failure Modes</a>
+    <a href="/reports/on-time" class="sub-tab{{if eq .ActiveSubTab "on-time"}} active{{end}}">On-Time Delivery</a>
+    <a href="/reports/cycle-time" class="sub-tab{{if eq .ActiveSubTab "cycle-time"}} active{{end}}">PO Cycle Time</a>
+    <a href="/reports/data-quality" class="sub-tab{{if eq .ActiveSubTab "data-quality"}} active{{end}}">Data Quality Gaps</a>
+</div>
+{{end}}
+
 {{define "supplier_tabs"}}
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>

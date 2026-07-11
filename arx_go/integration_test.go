@@ -216,6 +216,110 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	}
 }
 
+// TestIntegration_YieldSummary exercises RecordsYieldSummary's actual query
+// (LEFT JOIN + GROUP BY over test_record/test_result, aliased to sidestep the
+// "id" column existing on both tables) against a real ArxDev connection, since
+// TestComputeYieldBuckets only covers the pure Go aggregation, not the SQL.
+func TestIntegration_YieldSummary(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+
+	// test_result.test_id FKs to test_definition.id, so results need a real step to point at.
+	var testID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type) OUTPUT INSERTED.id VALUES (@p1, 0)`, h.cfg.StepsTable()),
+		formID).Scan(&testID); err != nil {
+		t.Fatalf("seed test_definition: %v", err)
+	}
+
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
+			h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	}()
+
+	// Three records: one all-pass, one with a failing result, one with no
+	// results at all (should still count toward Total and Passed per the
+	// "fail only if a step actually failed" rule).
+	type seedRecord struct {
+		date      string
+		passFails []sql.NullBool // one test_result row per entry; nil = no results
+	}
+	seeds := []seedRecord{
+		{"2026-03-01", []sql.NullBool{{Bool: true, Valid: true}, {Bool: true, Valid: true}}},
+		{"2026-03-15", []sql.NullBool{{Bool: true, Valid: true}, {Bool: false, Valid: true}}},
+		{"2026-04-01", nil},
+	}
+	for _, s := range seeds {
+		var recordID int
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (form_id, record_date, serial_number, is_active)
+			 OUTPUT INSERTED.id VALUES (@p1, @p2, '1', 1)`, h.cfg.RecordsTable()),
+			formID, s.date).Scan(&recordID); err != nil {
+			t.Fatalf("seed record: %v", err)
+		}
+		for _, pf := range s.passFails {
+			if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+				`INSERT INTO %s (record_id, test_id, pass_fail) VALUES (@p1, @p2, @p3)`,
+				h.cfg.ResultsTable()), recordID, testID, pf); err != nil {
+				t.Fatalf("seed result: %v", err)
+			}
+		}
+	}
+
+	filters := parseRecordFilters(url.Values{})
+	dateClause, dateArgs := filters.dateRangeClauses(2)
+	args := append([]any{formID}, dateArgs...)
+
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT record_date, MAX(CASE WHEN pass_fail = 0 THEN 1 ELSE 0 END)
+		FROM %s trec
+		LEFT JOIN %s res ON res.record_id = trec.id
+		WHERE form_id = @p1 AND is_active = 1%s
+		GROUP BY trec.id, record_date`,
+		h.cfg.RecordsTable(), h.cfg.ResultsTable(), dateClause), args...)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	defer rows.Close()
+
+	var records []yieldRecord
+	for rows.Next() {
+		var rec yieldRecord
+		var anyFail int
+		if err := rows.Scan(&rec.RecordDate, &anyFail); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		rec.AnyFail = anyFail == 1
+		records = append(records, rec)
+	}
+
+	total, monthly := computeYieldBuckets(records, true)
+	if total.Total != 3 || total.Passed != 2 || total.Failed != 1 {
+		t.Fatalf("total = %+v, want Total=3 Passed=2 Failed=1", total)
+	}
+	if len(monthly) != 2 {
+		t.Fatalf("len(monthly) = %d, want 2 (March + April)", len(monthly))
+	}
+	if monthly[0].Label != "2026-03" || monthly[0].Total != 2 || monthly[0].Passed != 1 || monthly[0].Failed != 1 {
+		t.Fatalf("monthly[0] = %+v, want March bucket Total=2 Passed=1 Failed=1", monthly[0])
+	}
+	if monthly[1].Label != "2026-04" || monthly[1].Total != 1 || monthly[1].Passed != 1 || monthly[1].Failed != 0 {
+		t.Fatalf("monthly[1] = %+v, want April bucket Total=1 Passed=1 Failed=0", monthly[1])
+	}
+}
+
 func TestIntegration_RecordFilters(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
@@ -949,8 +1053,9 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 	defer cleanup()
 
 	// Seed IDs from SQL/seed_test_data.sql: 3005 Widget Assembly (has BOM/orders),
-	// 3002 M3x8 SHCS (has price history), company 1001 Acme Fasteners, PO 5002.
-	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID = 3005, 3002, 1001, 5002
+	// 3002 M3x8 SHCS (has price history), company 1001 Acme Fasteners, PO 5002,
+	// form 6001 (has test records spanning multiple months).
+	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID, seedFormID = 3005, 3002, 1001, 5002, 6001
 
 	cases := []struct {
 		name   string
@@ -974,6 +1079,8 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		{"PO detail", h.PODetail, "/po/{id}", seedPOID},
 		{"contacts list", h.ContactsList, "/contacts", 0},
 		{"records/forms list", h.FormsList, "/records", 0},
+		{"records yield summary", h.RecordsYieldSummary, "/forms/{id}/yield", seedFormID},
+		{"reports yield picker", h.ReportsYieldPicker, "/reports/yield", 0},
 	}
 
 	for _, c := range cases {
@@ -1058,5 +1165,102 @@ func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
 	after := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), poID))
 	if after != before {
 		t.Errorf("po_line count for PO %d changed from %d to %d; whitespace-only new line should not be saved", poID, before, after)
+	}
+}
+
+// TestIntegration_DashboardStaleWIPRecords verifies the Reports dashboard's
+// Stale WIP Records card (#658, RPT-7) against the pinned seed data: record
+// 7001 is unlocked (WIP) with created_at pinned to 2026-06-01, well past
+// staleWIPThresholdDays, so it must be returned; the other seeded records are
+// all locked and must not appear. Read-only — no cleanup.
+func TestIntegration_DashboardStaleWIPRecords(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	items, err := h.dashboardStaleWIPRecords(ctx, 10)
+	if err != nil {
+		t.Fatalf("dashboardStaleWIPRecords: %v", err)
+	}
+
+	var found *dashboardStaleWIPItem
+	for i := range items {
+		if items[i].RecordID == 7001 {
+			found = &items[i]
+		}
+		if items[i].RecordID != 7001 && items[i].RecordID >= 7001 && items[i].RecordID <= 7009 {
+			t.Errorf("dashboardStaleWIPRecords: seeded locked record %d should not appear as stale WIP", items[i].RecordID)
+		}
+	}
+	if found == nil {
+		t.Fatalf("dashboardStaleWIPRecords: seed record 7001 not found (ArxDev may need reseeding): %+v", items)
+	}
+	if found.PartNumber != "FORM-1001" {
+		t.Errorf("dashboardStaleWIPRecords: record 7001 PartNumber = %q, want FORM-1001 (the form's part, matching dashboardTopFailureModes/dashboardLowestYieldForms convention)", found.PartNumber)
+	}
+	if found.AgeDays < staleWIPThresholdDays {
+		t.Errorf("dashboardStaleWIPRecords: record 7001 AgeDays = %d, want >= %d", found.AgeDays, staleWIPThresholdDays)
+	}
+}
+
+// TestIntegration_DashboardPendingApprovalPOs verifies the Reports dashboard's
+// POs Pending Approval card (#658, RPT-7) against the pinned seed data: PO
+// 5009 sits in approval_status='pending' with a 'submitted' history event
+// dated 2026-06-20, so it must be returned with a non-zero age. Read-only —
+// no cleanup.
+func TestIntegration_DashboardPendingApprovalPOs(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	items, err := h.dashboardPendingApprovalPOs(ctx, 10)
+	if err != nil {
+		t.Fatalf("dashboardPendingApprovalPOs: %v", err)
+	}
+
+	var found *dashboardPendingApprovalItem
+	for i := range items {
+		if items[i].Number == "5009" {
+			found = &items[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("dashboardPendingApprovalPOs: seed PO 5009 not found (ArxDev may need reseeding): %+v", items)
+	}
+	if found.AgeDays <= 0 {
+		t.Errorf("dashboardPendingApprovalPOs: PO 5009 AgeDays = %d, want > 0 (submitted 2026-06-20)", found.AgeDays)
+	}
+}
+
+// TestIntegration_DashboardBelowReorderParts verifies the Reports dashboard's
+// Below Reorder Point card (#273, INV-2) against the pinned seed data: part 3007
+// has stock_on_hand 16 and reorder_min 25, so it must be returned. Read-only —
+// no cleanup.
+func TestIntegration_DashboardBelowReorderParts(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	items, err := h.dashboardBelowReorderParts(ctx, 50)
+	if err != nil {
+		t.Fatalf("dashboardBelowReorderParts: %v", err)
+	}
+
+	var found *dashboardBelowReorderItem
+	for i := range items {
+		if items[i].PartID == 3007 {
+			found = &items[i]
+		}
+		if items[i].StockOnHand >= items[i].ReorderMin {
+			t.Errorf("dashboardBelowReorderParts: part %d returned with on-hand %g >= min %g",
+				items[i].PartID, items[i].StockOnHand, items[i].ReorderMin)
+		}
+	}
+	if found == nil {
+		t.Fatalf("dashboardBelowReorderParts: seed part 3007 not found (ArxDev may need reseeding): %+v", items)
+	}
+	if found.StockOnHand != 16 || found.ReorderMin != 25 {
+		t.Errorf("dashboardBelowReorderParts: part 3007 = {on-hand %g, min %g}, want {16, 25} (ArxDev may need reseeding)",
+			found.StockOnHand, found.ReorderMin)
 	}
 }

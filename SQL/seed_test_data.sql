@@ -288,6 +288,7 @@ BEGIN TRY
         (5006, '5006R1',1001, 'Acme Fasteners',         1003, 'Global Distribution', NULL,         NULL,         NULL, NULL, NULL,   'cancelled',          'not_submitted', 0, 5006, 'Reference RFQ quote - declined'),
         (5007, '5006R2',1002, 'Precision Machining Co', 1003, 'Global Distribution', NULL,         NULL,         NULL, NULL, NULL,   'closed',             'not_submitted', 0, 5006, 'Reference RFQ quote - awarded'),
         (5008, '5006',  1002, 'Precision Machining Co', 1003, 'Global Distribution', '2026-06-01', NULL,         NULL, NULL, 24.00,  'draft',              'not_submitted', 1, NULL, 'Reference PO - result of awarding RFQ group 5006'),
+        (5009, '5009',  1002, 'Precision Machining Co', 1003, 'Global Distribution', NULL,         NULL,         NULL, NULL, 60.00,  'draft',              'pending',       1, NULL, 'Reference PO pending approval'),
         (5010, '5010R1',1001, 'Acme Fasteners',         1003, 'Global Distribution', NULL,         NULL,         NULL, NULL, 27.50,  'rfq',                'not_submitted', 1, 5010, 'Reference in-flight RFQ quote - Acme'),
         (5011, '5010R2',1002, 'Precision Machining Co', 1003, 'Global Distribution', NULL,         NULL,         NULL, NULL, 24.00,  'rfq',                'not_submitted', 1, 5010, 'Reference in-flight RFQ quote - Precision');
     SET IDENTITY_INSERT dbo.purchase_order OFF;
@@ -328,12 +329,16 @@ BEGIN TRY
         (5512, 5011, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.048, 'PMC-M3X8',    21,   0,  NULL);
     SET IDENTITY_INSERT dbo.po_line OFF;
 
+    -- 5805 (PO 5009's submission) is dated well before "today" so the reference pending PO
+    -- shows a non-trivial age on the Reports dashboard's POs Pending Approval card (issue
+    -- #658, RPT-7).
     SET IDENTITY_INSERT dbo.purchase_order_history ON;
     INSERT INTO dbo.purchase_order_history (id, po_id, event_type, from_status, to_status, action, note, changed_by, changed_at) VALUES
         (5801, 5002, 'status',   NULL,     'draft', NULL,         NULL,                     'admin', '2026-04-28'),
         (5802, 5002, 'approval', NULL,     NULL,    'submitted',  NULL,                     'tester','2026-04-29'),
         (5803, 5002, 'approval', NULL,     NULL,    'approved',   'Looks good',             'admin', '2026-04-30'),
-        (5804, 5002, 'status',   'draft',  'open',  NULL,         NULL,                     'admin', '2026-05-01');
+        (5804, 5002, 'status',   'draft',  'open',  NULL,         NULL,                     'admin', '2026-05-01'),
+        (5805, 5009, 'approval', NULL,     NULL,    'submitted',  NULL,                     'tester','2026-06-20');
     SET IDENTITY_INSERT dbo.purchase_order_history OFF;
 
     -- ============================================================
@@ -350,6 +355,10 @@ BEGIN TRY
     UPDATE dbo.part
     SET stock_on_hand = (SELECT ISNULL(SUM(qty), 0) FROM dbo.inventory_transaction WHERE part_id = 3007)
     WHERE id = 3007;
+
+    -- Reorder point (issue #273): 3007's on-hand is 16, so reorder_min = 25 leaves it
+    -- below-min (flagged on the parts list/detail + Below Reorder Point dashboard card).
+    UPDATE dbo.part SET reorder_min = 25 WHERE id = 3007;
 
     -- ============================================================
     -- 11. Test records — form, test_definition, test_record, test_result,
@@ -389,13 +398,22 @@ BEGIN TRY
 
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
     -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
+    -- 7001's created_at is pinned well outside staleWIPThresholdDays (14 days) so it
+    -- surfaces on the Reports dashboard's Stale WIP Records card (issue #658, RPT-7);
+    -- the rest just mirror record_date, since the app sets created_at at record-creation
+    -- time and none of them need to look stale (all are locked except 7001).
     SET IDENTITY_INSERT dbo.test_record ON;
-    INSERT INTO dbo.test_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, updated_at) VALUES
-        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, '2020-01-01T00:00:00'), -- WIP
-        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'), -- Complete
-        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00'), -- Approved (locked twice — see events)
-        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, '2020-01-01T00:00:00'), -- soft-deleted
-        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00'); -- Complete, pre-#251 style (backfillable)
+    INSERT INTO dbo.test_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, updated_at, created_at) VALUES
+        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
+        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
+        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
+        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, '2020-01-01T00:00:00', '2026-06-04T00:00:00'), -- soft-deleted
+        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-06-05T00:00:00'), -- Complete, pre-#251 style (backfillable)
+        -- 7006-7009 span May and July so the Reports > Yield Summary "Group by month" view (#244) has more than one month to show.
+        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-05-15T00:00:00'), -- Complete, all pass
+        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00', '2026-05-20T00:00:00'), -- Approved, has a FAIL
+        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-07-01T00:00:00'), -- Complete, all pass
+        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-07-05T00:00:00'); -- Complete, all pass
     SET IDENTITY_INSERT dbo.test_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what
@@ -419,7 +437,23 @@ BEGIN TRY
         (7113, 7005, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7114, 7005, 6102, 1,    '5.10', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7115, 7005, 6103, 0,    '210',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'), -- FAIL row
-        (7116, 7005, 6104, 1,    '150',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
+        (7116, 7005, 6104, 1,    '150',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7117, 7006, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7118, 7006, 6102, 1,    '5.02', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7119, 7006, 6103, 1,    '160',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7120, 7006, 6104, 1,    '200',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7121, 7007, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7122, 7007, 6102, 1,    '4.90', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7123, 7007, 6103, 0,    '220',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'), -- FAIL row
+        (7124, 7007, 6104, 1,    '180',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7125, 7008, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7126, 7008, 6102, 1,    '4.99', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7127, 7008, 6103, 1,    '170',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7128, 7008, 6104, 1,    '220',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7129, 7009, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7130, 7009, 6102, 1,    '5.05', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7131, 7009, 6103, 1,    '190',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7132, 7009, 6104, 1,    '240',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.test_result OFF;
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).
@@ -432,7 +466,11 @@ BEGIN TRY
         (7202, 7002, 'completed', 'tester','2026-06-02', 'Marked complete'),
         (7203, 7005, 'completed', 'tester','2026-06-05', 'Completed before per-lock snapshots existed'),
         (7204, 7003, 'unlocked',  'admin', '2026-06-08', 'Correcting insulation resistance reading'),
-        (7205, 7003, 'completed', 'admin', '2026-06-09', 'Approved after correction');
+        (7205, 7003, 'completed', 'admin', '2026-06-09', 'Approved after correction'),
+        (7206, 7006, 'completed', 'tester','2026-05-15', 'Marked complete'),
+        (7207, 7007, 'completed', 'tester','2026-05-20', 'Marked complete'),
+        (7208, 7008, 'completed', 'tester','2026-07-01', 'Marked complete'),
+        (7209, 7009, 'completed', 'tester','2026-07-05', 'Marked complete');
     SET IDENTITY_INSERT dbo.record_events OFF;
 
     SET IDENTITY_INSERT dbo.record_event_results ON;

@@ -55,7 +55,8 @@ CREATE TABLE part (
   price_id            INT              CONSTRAINT DF_part_number_price_id         DEFAULT 0,    -- FK to price table; FK constraint deferred — see #213.
   default_supplier_id INT              NULL,                                             -- Preferred supplier for cost rollup (#465); FK to company.id, deferred like price_id.
   unit_id             INT              NULL,                                             -- FK to unit.unit_id. Base/inventory unit for this part (EA, mL, kg, …).
-  stock_on_hand       DECIMAL(16,8)    NOT NULL CONSTRAINT DF_part_number_stock_on_hand DEFAULT 0 -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
+  stock_on_hand       DECIMAL(16,8)    NOT NULL CONSTRAINT DF_part_number_stock_on_hand DEFAULT 0, -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
+  reorder_min         DECIMAL(16,8)    NULL                                             -- Reorder point (issue #273): flag the part when stock_on_hand < reorder_min. NULL = no reorder point set (never flagged).
 );
 
 ALTER TABLE dbo.part ADD CONSTRAINT FK_part_number_unit FOREIGN KEY (unit_id) REFERENCES dbo.unit (unit_id);

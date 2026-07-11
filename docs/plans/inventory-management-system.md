@@ -93,12 +93,13 @@ gains an Inventory checkbox.
 
 ---
 
-## Stage 3 — Reorder Points  (closes #273 INV-2)  ← needs Stage 1
+## Stage 3 — Reorder Points  (closes #273 INV-2)  ← ✓ DONE
 
-- **Schema:** `PN.reorder_min`, `PN.reorder_max DECIMAL(16,8) NULL`.
+- **Schema:** `PN.reorder_min DECIMAL(16,8) NULL`. (No `reorder_max` — not used by any acceptance
+  criterion; would only matter for the draft-PO generator, which is deferred, see below.)
 - Edit fields on `part_edit.html`; below-min indicator (`stock_on_hand < reorder_min`) on parts list +
-  detail; a below-reorder report, surfaced as a dashboard widget when **RPT-1 (#282)** lands.
-- Optional: one-click generate **draft** PO for below-min parts (preferred supplier via `supplier_part`).
+  detail; a below-reorder report, surfaced as a dashboard widget (RPT-1 / #282 already shipped).
+- One-click generate **draft** PO for below-min parts — split out to #664, milestoned Far Future.
 - **Tests:** below-min boundary.
 
 ---

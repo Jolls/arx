@@ -60,6 +60,27 @@
         </h3>
 
         <div class="detail-row align-items-center" style="padding:6px 0;">
+            <strong style="min-width:160px;">Test Mode</strong>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" name="test_mode" value="1" id="test_mode_toggle" {{if .TestMode}}checked{{end}}
+                       onchange="confirmTestModeToggle(this)">
+                <label class="form-check-label" for="test_mode_toggle" style="cursor:pointer;">
+                    Connect to <code>{{.TestDBName}}</code> instead of <code>{{.DBName}}</code> <span class="fw-semibold" style="color:#c0392b;">(writes go to test data)</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="detail-row align-items-center" style="padding:6px 0;">
+            <strong style="min-width:160px;">Debug Mode</strong>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" name="debug_mode" value="1" id="debug_mode_toggle" {{if .DebugMode}}checked{{end}}>
+                <label class="form-check-label" for="debug_mode_toggle" style="cursor:pointer;">
+                    Log SQL queries to the terminal
+                </label>
+            </div>
+        </div>
+
+        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">DB Server</strong>
             <input type="text" name="db_server" value="{{.DBServer}}"
                    placeholder="yourserver.database.windows.net"
@@ -156,22 +177,6 @@
                         onclick="browseFolder('image_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
             </div>
-        </div>
-    </div>
-
-    <!-- ── Developer ────────────────────────────────────────────────── -->
-    <div class="settings-card mt-4">
-        <div class="settings-card-header">Developer</div>
-        <div class="settings-card-body">
-            <label class="d-flex align-items-center gap-2 mb-2" style="cursor:pointer;">
-                <input type="checkbox" name="test_mode" value="1" {{if .TestMode}}checked{{end}}
-                       onchange="confirmTestModeToggle(this)">
-                Test mode — connect to <code>{{.TestDBName}}</code> instead of <code>{{.DBName}}</code> <span class="fw-semibold" style="color:#c0392b;">(writes go to test data)</span>
-            </label>
-            <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
-                <input type="checkbox" name="debug_mode" value="1" {{if .DebugMode}}checked{{end}}>
-                Debug mode — reserved for future use
-            </label>
         </div>
     </div>
 

@@ -171,6 +171,21 @@ func buildRouter(h *Handler) *chi.Mux {
 
 		// Reports (issue #282)
 		r.Get("/reports", h.ReportsDashboard)
+		r.Get("/reports/spend", h.ReportsSpend)
+		r.Get("/reports/yield", h.ReportsYieldPicker)
+		r.Get("/reports/failure-modes", h.ReportsFailureModesPicker)
+		r.Get("/reports/spend/export-suppliers.csv", h.ReportsSpendBySupplierExportCSV)
+		r.Get("/reports/spend/export-parts.csv", h.ReportsSpendByPartExportCSV)
+
+		// Supplier performance and data quality reports (issue #659, RPT-8)
+		r.Get("/reports/on-time", h.ReportsOnTime)
+		r.Get("/reports/on-time/export.csv", h.ReportsOnTimeExportCSV)
+		r.Get("/reports/cycle-time", h.ReportsCycleTime)
+		r.Get("/reports/cycle-time/export.csv", h.ReportsCycleTimeExportCSV)
+		r.Get("/reports/data-quality", h.ReportsDataQuality)
+		r.Get("/reports/data-quality/export-no-attachments.csv", h.ReportsDataQualityNoAttachmentsExportCSV)
+		r.Get("/reports/data-quality/export-missing-supplier.csv", h.ReportsDataQualityMissingSupplierExportCSV)
+		r.Get("/reports/data-quality/export-stale-rollup.csv", h.ReportsDataQualityStaleRollupExportCSV)
 
 		// App root: redirect to each user's configured landing page (issue #282).
 		r.Get("/", h.RootRedirect)
@@ -294,6 +309,8 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Test Records — Forms and Records
 		r.Get("/records", h.FormsList)
 		r.Get("/forms/{id}/records", h.RecordsList)
+		r.Get("/forms/{id}/yield", h.RecordsYieldSummary)
+		r.Get("/forms/{id}/failure-modes", h.RecordsFailureModes)
 		r.Get("/api/forms/{id}/records/rows", h.RecordsRows)
 		r.Post("/forms/{id}/records/bulk-lock", h.BulkLockRecords)
 		r.Get("/forms/{id}/records/new", h.NewRecord)

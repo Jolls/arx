@@ -3,6 +3,28 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.115] - 2026-07-10 
+- Added per-part reorder points: a Reorder Minimum field, below-minimum flags on the parts list and part detail, and a Below Reorder Point card on the Reports dashboard ([#273](https://github.com/Jolls/arx-legacy/issues/273))
+
+## [0.5.114] - 2026-07-10 
+- Moved Test Mode and Debug Mode to Bootstrap toggle switches at the top of the Database Connection section in Settings, and fixed stale Debug Mode label ([#656](https://github.com/Jolls/arx-legacy/issues/656))
+
+## [0.5.113] - 2026-07-10 
+- Added Supplier On-Time Delivery, PO Cycle Time, and Attachment/Data Quality Gaps reports to the Reports tab ([#659](https://github.com/Jolls/arx-legacy/issues/659))
+
+## [0.5.112] - 2026-07-10 
+- Added Stale WIP Records and POs Pending Approval summary cards to the Reports dashboard ([#658](https://github.com/Jolls/arx-legacy/issues/658))
+
+## [0.5.111] - 2026-07-10 
+- Added a Failure Modes report per test form — ranks test steps by failure count, with total tested and failure rate, over a selectable date range ([#245](https://github.com/Jolls/arx-legacy/issues/245))
+- Added Top Failing Steps and Lowest Yield Forms summary cards to the Reports dashboard ([#245](https://github.com/Jolls/arx-legacy/issues/245), [#244](https://github.com/Jolls/arx-legacy/issues/244))
+
+## [0.5.110] - 2026-07-10 
+- Added a Yield Summary view per test form — total/passed/failed record counts and first-pass yield % over a selectable date range, optionally grouped by month ([#244](https://github.com/Jolls/arx-legacy/issues/244))
+
+## [0.5.109] - 2026-07-10 
+- Added a Spend Analysis subtab under Reports — total spend by supplier and by part over This Month/This Quarter/YTD/custom date ranges, with CSV export ([#283](https://github.com/Jolls/arx-legacy/issues/283))
+
 ## [0.5.108] - 2026-07-10 
 - Added a Reports tab with a KPI dashboard — open POs, POs received this month, and a recent-activity feed ([#282](https://github.com/Jolls/arx-legacy/issues/282))
 - Made the home/landing page a per-user preference (any tab or a custom filtered link); the app root now redirects there and the parts list moved to `/parts` ([#282](https://github.com/Jolls/arx-legacy/issues/282))
