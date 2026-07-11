@@ -93,6 +93,8 @@ Two inventory items are fixed as **source cleanups** rather than dialect helpers
 
 Each phase ends at a concrete verification gate. Phases are sequential; nothing in a later phase is needed to prove an earlier one.
 
+**PR boundaries:** each phase is one PR, and the gates are the merge points. Phases 0 and 1 ship together (see [docs/plans/625-postgres-migration-plan-phase0-1.md](./625-postgres-migration-plan-phase0-1.md)). The app runs on SQL Server unchanged through the end of Phase 2 (`sqlserver` stays the default engine), so Phases 0-2 are all behavior-preserving merges. Phase 2 is the safe stopping point: both engines work, SQL Server is still the default, and nothing is deleted - the project can sit here indefinitely if you want to stop short of cutover. Phase 3 is the only irreversible merge and is gated on the external ArxProd -> Postgres data migration; do not merge it until that migration exists and has run.
+
 - **Phase 0 - Prep cleanups** (behavior-preserving, still 100% on SQL Server):
   `ISNULL` -> `COALESCE`; LIKE-wildcard concat moved into Go parameters; funnel both pagination idioms through a single (SQL Server) pagination helper; document the `SCOPE_IDENTITY` trigger gotcha in `SQL/schema.md`.
   **Gate:** `go test ./...` green; no behavior change on ArxProd/ArxDev.
