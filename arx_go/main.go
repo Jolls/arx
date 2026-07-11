@@ -175,6 +175,16 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/reports/spend/export-suppliers.csv", h.ReportsSpendBySupplierExportCSV)
 		r.Get("/reports/spend/export-parts.csv", h.ReportsSpendByPartExportCSV)
 
+		// Supplier performance and data quality reports (issue #659, RPT-8)
+		r.Get("/reports/on-time", h.ReportsOnTime)
+		r.Get("/reports/on-time/export.csv", h.ReportsOnTimeExportCSV)
+		r.Get("/reports/cycle-time", h.ReportsCycleTime)
+		r.Get("/reports/cycle-time/export.csv", h.ReportsCycleTimeExportCSV)
+		r.Get("/reports/data-quality", h.ReportsDataQuality)
+		r.Get("/reports/data-quality/export-no-attachments.csv", h.ReportsDataQualityNoAttachmentsExportCSV)
+		r.Get("/reports/data-quality/export-missing-supplier.csv", h.ReportsDataQualityMissingSupplierExportCSV)
+		r.Get("/reports/data-quality/export-stale-rollup.csv", h.ReportsDataQualityStaleRollupExportCSV)
+
 		// App root: redirect to each user's configured landing page (issue #282).
 		r.Get("/", h.RootRedirect)
 

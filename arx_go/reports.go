@@ -371,11 +371,12 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 
 const spendDateLayout = "2006-01-02"
 
-// spendDateRange is the resolved date-range selection for the Spend Analysis
-// report. From/To follow the same inclusive-day convention as recordFilters
-// (records_filters.go): zero value means no bound, and an inclusive To is
-// applied in SQL via DATEADD(day, 1, ...).
-type spendDateRange struct {
+// reportDateRange is the resolved date-range selection shared by all
+// date-range-filterable reports (Spend Analysis #283, On-Time Delivery and
+// PO Cycle Time #659/RPT-8). From/To follow the same inclusive-day convention
+// as recordFilters (records_filters.go): zero value means no bound, and an
+// inclusive To is applied in SQL via DATEADD(day, 1, ...).
+type reportDateRange struct {
 	Preset  string // "this_month" | "this_quarter" | "ytd" | "custom"
 	From    time.Time
 	To      time.Time
@@ -387,10 +388,10 @@ type spendDateRange struct {
 // concrete date bounds relative to now. Missing/unrecognized presets default
 // to "this_month". Unparseable custom dates are dropped (no bound), not
 // silently replaced with the default preset's bounds.
-func resolveSpendDateRange(q url.Values, now time.Time) spendDateRange {
+func resolveSpendDateRange(q url.Values, now time.Time) reportDateRange {
 	preset := q.Get("range")
 
-	var rng spendDateRange
+	var rng reportDateRange
 	switch preset {
 	case "this_quarter":
 		rng.Preset = "this_quarter"
@@ -427,21 +428,22 @@ func resolveSpendDateRange(q url.Values, now time.Time) spendDateRange {
 	return rng
 }
 
-// spendWhereClause builds the date-range WHERE fragment (starting with " AND")
-// and its args for filtering purchase_order.date_ordered, following the same
-// conditional-bound pattern as recordFilters.whereClauses.
-func (rng spendDateRange) whereClause(startArg int) (string, []any) {
+// whereClause builds the date-range WHERE fragment (starting with " AND") and
+// its args for filtering the given column expression (e.g. "po.date_ordered",
+// "poh.changed_at"), following the same conditional-bound pattern as
+// recordFilters.whereClauses.
+func (rng reportDateRange) whereClause(column string, startArg int) (string, []any) {
 	var sb strings.Builder
 	var args []any
 	n := startArg
 
 	if !rng.From.IsZero() {
-		fmt.Fprintf(&sb, " AND po.date_ordered >= @p%d", n)
+		fmt.Fprintf(&sb, " AND %s >= @p%d", column, n)
 		args = append(args, rng.From)
 		n++
 	}
 	if !rng.To.IsZero() {
-		fmt.Fprintf(&sb, " AND po.date_ordered < DATEADD(day, 1, @p%d)", n)
+		fmt.Fprintf(&sb, " AND %s < DATEADD(day, 1, @p%d)", column, n)
 		args = append(args, rng.To)
 		n++
 	}
@@ -461,8 +463,8 @@ type spendPartRow struct {
 
 // querySpendBySupplier totals PO line spend (qty * unit_cost) by supplier
 // name over the given date range, sorted by total spend descending.
-func (h *Handler) querySpendBySupplier(ctx context.Context, rng spendDateRange) ([]spendSupplierRow, error) {
-	where, args := rng.whereClause(1)
+func (h *Handler) querySpendBySupplier(ctx context.Context, rng reportDateRange) ([]spendSupplierRow, error) {
+	where, args := rng.whereClause("po.date_ordered", 1)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT po.supplier_name, ISNULL(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
 		FROM %s pol
@@ -492,8 +494,8 @@ func (h *Handler) querySpendBySupplier(ctx context.Context, rng spendDateRange) 
 // given date range, sorted by total spend descending. Lines with no linked
 // part_id (freeform PO lines) are grouped by their part_number_snapshot
 // text so their spend stays accounted for.
-func (h *Handler) querySpendByPart(ctx context.Context, rng spendDateRange) ([]spendPartRow, error) {
-	where, args := rng.whereClause(1)
+func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]spendPartRow, error) {
+	where, args := rng.whereClause("po.date_ordered", 1)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pol.part_number_snapshot, p.title, ISNULL(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
 		FROM %s pol
@@ -523,7 +525,7 @@ func (h *Handler) querySpendByPart(ctx context.Context, rng spendDateRange) ([]s
 // ReportsSpend is the Spend Analysis report page — GET /reports/spend.
 func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "spend", "Range": rng}
+	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "spend", "Range": rng, "DateRangeAction": "/reports/spend"}
 	if h.db == nil {
 		h.render(w, r, "reports/spend.html", data)
 		return
@@ -542,6 +544,339 @@ func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
 	data["BySupplier"] = bySupplier
 	data["ByPart"] = byPart
 	h.render(w, r, "reports/spend.html", data)
+}
+
+// ── Supplier On-Time Delivery (issue #659, RPT-8) ───────────────────────────
+
+// onTimeSupplierRow is one supplier's on-time delivery aggregate. Only
+// po_line rows with both a quoted lead_time_days and a date_received are
+// evaluated; lines with no quote or not yet received are excluded, not
+// counted late.
+type onTimeSupplierRow struct {
+	SupplierName string
+	TotalLines   int
+	OnTimeLines  int
+	OnTimePct    float64 // OnTimeLines/TotalLines*100; TotalLines is always > 0 for a returned row
+	AvgDaysLate  float64 // signed: positive = late, negative = early
+}
+
+// queryOnTimeDelivery ranks suppliers by on-time delivery performance over
+// the given date range (filtered on purchase_order.date_ordered), worst
+// on-time % first since this is a watchlist/exception report.
+func (h *Handler) queryOnTimeDelivery(ctx context.Context, rng reportDateRange) ([]onTimeSupplierRow, error) {
+	where, args := rng.whereClause("po.date_ordered", 1)
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT
+			po.supplier_name,
+			COUNT(*) AS total_lines,
+			SUM(CASE WHEN pol.date_received <= DATEADD(day, pol.lead_time_days, po.date_ordered) THEN 1 ELSE 0 END) AS on_time_lines,
+			AVG(CAST(DATEDIFF(day, DATEADD(day, pol.lead_time_days, po.date_ordered), pol.date_received) AS FLOAT)) AS avg_days_late
+		FROM %s pol
+		JOIN %s po ON pol.po_id = po.id
+		WHERE pol.lead_time_days IS NOT NULL
+		  AND pol.date_received IS NOT NULL
+		  AND po.date_ordered IS NOT NULL%s
+		GROUP BY po.supplier_name
+	`, h.cfg.POLineTable(), h.cfg.POTable(), where), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []onTimeSupplierRow
+	for rows.Next() {
+		var supplierName sql.NullString
+		var row onTimeSupplierRow
+		var avgDaysLate sql.NullFloat64
+		if err := rows.Scan(&supplierName, &row.TotalLines, &row.OnTimeLines, &avgDaysLate); err != nil {
+			return nil, err
+		}
+		row.SupplierName = supplierName.String
+		row.AvgDaysLate = avgDaysLate.Float64
+		// TotalLines is a COUNT(*) under GROUP BY, so it's always >= 1 here.
+		row.OnTimePct = float64(row.OnTimeLines) / float64(row.TotalLines) * 100
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].OnTimePct != result[j].OnTimePct {
+			return result[i].OnTimePct < result[j].OnTimePct
+		}
+		return result[i].SupplierName < result[j].SupplierName
+	})
+	return result, nil
+}
+
+// ReportsOnTime is the Supplier On-Time Delivery report page — GET /reports/on-time.
+func (h *Handler) ReportsOnTime(w http.ResponseWriter, r *http.Request) {
+	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "on-time", "Range": rng, "DateRangeAction": "/reports/on-time"}
+	if h.db == nil {
+		h.render(w, r, "reports/on_time.html", data)
+		return
+	}
+
+	rows, err := h.queryOnTimeDelivery(r.Context(), rng)
+	if err != nil {
+		h.renderError(w, r, "Error loading on-time delivery: "+err.Error())
+		return
+	}
+	data["Rows"] = rows
+	h.render(w, r, "reports/on_time.html", data)
+}
+
+// ReportsOnTimeExportCSV streams the Supplier On-Time Delivery table as CSV
+// — GET /reports/on-time/export.csv.
+func (h *Handler) ReportsOnTimeExportCSV(w http.ResponseWriter, r *http.Request) {
+	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rows, err := h.queryOnTimeDelivery(r.Context(), rng)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var csvRows [][]string
+	for _, row := range rows {
+		csvRows = append(csvRows, []string{
+			row.SupplierName,
+			fmt.Sprintf("%d", row.TotalLines),
+			fmt.Sprintf("%d", row.OnTimeLines),
+			fmt.Sprintf("%.1f", row.OnTimePct),
+			fmt.Sprintf("%.1f", row.AvgDaysLate),
+		})
+	}
+	writeSpendCSV(w, "on_time_delivery.csv", []string{"Supplier", "Total Lines", "On-Time Lines", "On-Time %", "Avg Days Late"}, csvRows)
+}
+
+// ── PO Cycle Time (issue #659, RPT-8) ───────────────────────────────────────
+
+// cycleTimeStageRow is one lifecycle stage's average dwell time. Only
+// transitions with a recorded exit (a later purchase_order_history row for
+// the same po_id) are averaged — POs still sitting in a stage are excluded
+// (open-ended, no end date to measure).
+type cycleTimeStageRow struct {
+	Stage   string
+	POCount int
+	AvgDays float64
+}
+
+// queryPOCycleTime computes the average time POs spend in each lifecycle
+// stage, filtered on the stage-entry date (entered_at) over the given date
+// range. The date filter is applied in the outer query, after LEAD() has
+// paired each stage's entered_at with its exited_at over each PO's full,
+// unfiltered history — filtering inside the CTE would prune rows out of a
+// PO's history before pairing, silently mis-pairing stages near the window
+// boundary (issue #659 review). Results are ordered by natural PO lifecycle
+// progression (not alphabetical or by avg_days) via the CASE expression
+// below; GROUP BY already omits any stage absent from the data.
+func (h *Handler) queryPOCycleTime(ctx context.Context, rng reportDateRange) ([]cycleTimeStageRow, error) {
+	where, args := rng.whereClause("entered_at", 1)
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		WITH stage_durations AS (
+			SELECT
+				poh.po_id,
+				poh.to_status AS stage,
+				poh.changed_at AS entered_at,
+				LEAD(poh.changed_at) OVER (PARTITION BY poh.po_id ORDER BY poh.changed_at, poh.id) AS exited_at
+			FROM %s poh
+			WHERE poh.event_type = 'status'
+			  AND poh.to_status IN ('draft','open','sent','partially_received','closed')
+		)
+		SELECT
+			stage,
+			COUNT(*) AS po_count,
+			AVG(CAST(DATEDIFF(hour, entered_at, exited_at) AS FLOAT) / 24.0) AS avg_days
+		FROM stage_durations
+		WHERE exited_at IS NOT NULL%s
+		GROUP BY stage
+		ORDER BY CASE stage
+			WHEN 'draft' THEN 1
+			WHEN 'open' THEN 2
+			WHEN 'sent' THEN 3
+			WHEN 'partially_received' THEN 4
+			WHEN 'closed' THEN 5
+		END
+	`, h.cfg.POHistoryTable(), where), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []cycleTimeStageRow
+	for rows.Next() {
+		var row cycleTimeStageRow
+		if err := rows.Scan(&row.Stage, &row.POCount, &row.AvgDays); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+// ReportsCycleTime is the PO Cycle Time report page — GET /reports/cycle-time.
+func (h *Handler) ReportsCycleTime(w http.ResponseWriter, r *http.Request) {
+	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "cycle-time", "Range": rng, "DateRangeAction": "/reports/cycle-time"}
+	if h.db == nil {
+		h.render(w, r, "reports/cycle_time.html", data)
+		return
+	}
+
+	rows, err := h.queryPOCycleTime(r.Context(), rng)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO cycle time: "+err.Error())
+		return
+	}
+	data["Rows"] = rows
+	h.render(w, r, "reports/cycle_time.html", data)
+}
+
+// ReportsCycleTimeExportCSV streams the PO Cycle Time table as CSV — GET
+// /reports/cycle-time/export.csv.
+func (h *Handler) ReportsCycleTimeExportCSV(w http.ResponseWriter, r *http.Request) {
+	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rows, err := h.queryPOCycleTime(r.Context(), rng)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var csvRows [][]string
+	for _, row := range rows {
+		csvRows = append(csvRows, []string{row.Stage, fmt.Sprintf("%d", row.POCount), fmt.Sprintf("%.1f", row.AvgDays)})
+	}
+	writeSpendCSV(w, "po_cycle_time.csv", []string{"Stage", "PO Count", "Avg Days"}, csvRows)
+}
+
+// ── Attachment / Data Quality Gaps (issue #659, RPT-8) ──────────────────────
+
+// dataQualityPartRow is one part flagged by the Attachment / Data Quality
+// Gaps report — shared shape for all three gap checks (Category is
+// redundant/unused for the missing-default-supplier check, which is already
+// scoped to BUY only).
+type dataQualityPartRow struct {
+	PartNumber string
+	Title      string
+	Category   string
+}
+
+func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]dataQualityPartRow, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT p.part_number, p.title, p.category
+		FROM %s p
+		WHERE p.is_active = 1 AND %s
+		ORDER BY p.part_number ASC
+	`, h.cfg.PartsTable(), where))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []dataQualityPartRow
+	for rows.Next() {
+		var partNumber, title, category sql.NullString
+		if err := rows.Scan(&partNumber, &title, &category); err != nil {
+			return nil, err
+		}
+		result = append(result, dataQualityPartRow{PartNumber: partNumber.String, Title: title.String, Category: category.String})
+	}
+	return result, rows.Err()
+}
+
+// queryPartsNoAttachments lists active BUY/ASM/DWG parts with no attachments
+// (part.attachment_count is a trigger-maintained denormalized column, so it's
+// selected directly rather than re-COUNTing part_attachment).
+func (h *Handler) queryPartsNoAttachments(ctx context.Context) ([]dataQualityPartRow, error) {
+	return h.queryDataQualityParts(ctx, "p.category IN ('BUY','ASM','DWG') AND p.attachment_count = 0")
+}
+
+// queryPartsMissingDefaultSupplier lists active BUY parts with no default
+// supplier set. Scoped to BUY only — ASM/DWG parts are typically manufactured
+// in-house and don't need a direct purchasing default supplier.
+func (h *Handler) queryPartsMissingDefaultSupplier(ctx context.Context) ([]dataQualityPartRow, error) {
+	return h.queryDataQualityParts(ctx, "p.category = 'BUY' AND p.default_supplier_id IS NULL")
+}
+
+// queryPartsStaleRollup lists active parts with no cost rollup ever computed.
+// NULL-only, no age threshold — the codebase has no existing staleness-by-age
+// convention to anchor an arbitrary number on, and "never rolled up" is the
+// unambiguous reading of "missing." Not scoped to BUY/ASM/DWG since any
+// active part can carry a rollup cost.
+func (h *Handler) queryPartsStaleRollup(ctx context.Context) ([]dataQualityPartRow, error) {
+	return h.queryDataQualityParts(ctx, "(p.last_rollup_cost IS NULL OR p.last_rollup_at IS NULL)")
+}
+
+// ReportsDataQuality is the Attachment / Data Quality Gaps report page — GET
+// /reports/data-quality. Point-in-time snapshot; no date range.
+func (h *Handler) ReportsDataQuality(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "data-quality"}
+	if h.db == nil {
+		h.render(w, r, "reports/data_quality.html", data)
+		return
+	}
+
+	ctx := r.Context()
+	noAttach, err := h.queryPartsNoAttachments(ctx)
+	if err != nil {
+		h.renderError(w, r, "Error loading parts missing attachments: "+err.Error())
+		return
+	}
+	noSupplier, err := h.queryPartsMissingDefaultSupplier(ctx)
+	if err != nil {
+		h.renderError(w, r, "Error loading parts missing default supplier: "+err.Error())
+		return
+	}
+	staleRollup, err := h.queryPartsStaleRollup(ctx)
+	if err != nil {
+		h.renderError(w, r, "Error loading parts with no/stale cost rollup: "+err.Error())
+		return
+	}
+	data["NoAttachments"] = noAttach
+	data["MissingDefaultSupplier"] = noSupplier
+	data["StaleRollup"] = staleRollup
+	h.render(w, r, "reports/data_quality.html", data)
+}
+
+func dataQualityCSVRows(rows []dataQualityPartRow) [][]string {
+	var csvRows [][]string
+	for _, row := range rows {
+		csvRows = append(csvRows, []string{row.PartNumber, row.Title, row.Category})
+	}
+	return csvRows
+}
+
+// ReportsDataQualityNoAttachmentsExportCSV streams the missing-attachments
+// table as CSV — GET /reports/data-quality/export-no-attachments.csv.
+func (h *Handler) ReportsDataQualityNoAttachmentsExportCSV(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queryPartsNoAttachments(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeSpendCSV(w, "data_quality_no_attachments.csv", []string{"Part Number", "Title", "Category"}, dataQualityCSVRows(rows))
+}
+
+// ReportsDataQualityMissingSupplierExportCSV streams the missing-default-
+// supplier table as CSV — GET /reports/data-quality/export-missing-supplier.csv.
+func (h *Handler) ReportsDataQualityMissingSupplierExportCSV(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queryPartsMissingDefaultSupplier(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeSpendCSV(w, "data_quality_missing_supplier.csv", []string{"Part Number", "Title", "Category"}, dataQualityCSVRows(rows))
+}
+
+// ReportsDataQualityStaleRollupExportCSV streams the no/stale-rollup table as
+// CSV — GET /reports/data-quality/export-stale-rollup.csv.
+func (h *Handler) ReportsDataQualityStaleRollupExportCSV(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queryPartsStaleRollup(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeSpendCSV(w, "data_quality_stale_rollup.csv", []string{"Part Number", "Title", "Category"}, dataQualityCSVRows(rows))
 }
 
 // formOption is one form listed on a per-form report picker (e.g. Reports >
