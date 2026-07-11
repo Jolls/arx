@@ -119,9 +119,11 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	} else {
-		err := h.queryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (name, description, sql, params, result_type, active, created_at, updated_at)
-			 OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)`, tbl),
+		insertQuery := h.dialect.InsertReturningID(tbl,
+			"name, description, sql, params, result_type, active, created_at, updated_at",
+			"@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
+			false)
+		err := h.queryRowContext(ctx, insertQuery,
 			name, description, sqlText, params, resultType, active, now, now).Scan(&id)
 		if err != nil {
 			writeErr(http.StatusBadRequest, namedQuerySaveError(name, err))

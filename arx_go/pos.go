@@ -509,22 +509,22 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		newStatus = "rfq"
 	}
 	var newID int
-	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (number, status, is_active, orderer, account_id,
-		  supplier_id, supplier_name, supplier_contact, supplier_email,
-		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
-		  supplier_country, supplier_phone_number, supplier_fax_number,
-		  receiver_id, receiver_name, receiver_contact, receiver_email,
-		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
-		  receiver_country, receiver_phone, receiver_fax,
-		  tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
-		  date_requested, date_closed, date_modified, total_cost,
-		  supplier_contact_id, receiver_contact_id)
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,
-		        @p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,@p27,
-		        @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38,@p39);
-		SELECT CAST(SCOPE_IDENTITY() AS INT)
-	`, h.cfg.POTable()),
+	insertPO := h.dialect.InsertReturningID(h.cfg.POTable(),
+		`number, status, is_active, orderer, account_id,
+		 supplier_id, supplier_name, supplier_contact, supplier_email,
+		 supplier_address, supplier_city, supplier_state, supplier_zipcode,
+		 supplier_country, supplier_phone_number, supplier_fax_number,
+		 receiver_id, receiver_name, receiver_contact, receiver_email,
+		 receiver_address, receiver_city, receiver_state, receiver_zipcode,
+		 receiver_country, receiver_phone, receiver_fax,
+		 tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
+		 date_requested, date_closed, date_modified, total_cost,
+		 supplier_contact_id, receiver_contact_id`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,
+		 @p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,@p27,
+		 @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38,@p39`,
+		true)
+	if err := tx.QueryRowContext(r.Context(), insertPO,
 		newNumber, newStatus, statusIsActive(newStatus), fv(r, "orderer"), fv(r, "account_id"),
 		nullableInt(fv(r, "supplier_id")), fv(r, "supplier_name"), fv(r, "supplier_contact"), fv(r, "supplier_email"),
 		fv(r, "supplier_address"), fv(r, "supplier_city"), fv(r, "supplier_state"), fv(r, "supplier_zipcode"),
@@ -2366,8 +2366,8 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 	// Duplicate the winning quote's header into a new real PO: bare base number,
 	// draft, no rfq_group_id (so it always shows on the PO list).
 	var newID int
-	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (number, status, is_active, approval_status, rfq_group_id,
+	insertPO := h.dialect.InsertSelectReturningID(h.cfg.POTable(),
+		`number, status, is_active, approval_status, rfq_group_id,
 		  orderer, account_id,
 		  supplier_id, supplier_name, supplier_contact, supplier_email,
 		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
@@ -2377,8 +2377,8 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  receiver_country, receiver_phone, receiver_fax,
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
 		  date_ordered, date_requested, date_closed, date_printed, date_modified,
-		  supplier_contact_id, receiver_contact_id)
-		SELECT @p1, 'draft', 1, 'not_submitted', NULL,
+		  supplier_contact_id, receiver_contact_id`,
+		fmt.Sprintf(`SELECT @p1, 'draft', 1, 'not_submitted', NULL,
 		  orderer, account_id,
 		  supplier_id, supplier_name, supplier_contact, supplier_email,
 		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
@@ -2389,9 +2389,9 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
 		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, @p2,
 		  supplier_contact_id, receiver_contact_id
-		FROM %s WHERE id=@p3;
-		SELECT CAST(SCOPE_IDENTITY() AS INT)
-	`, h.cfg.POTable(), h.cfg.POTable()), base, now, poID).Scan(&newID); err != nil {
+		FROM %s WHERE id=@p3`, h.cfg.POTable()),
+		true)
+	if err := tx.QueryRowContext(r.Context(), insertPO, base, now, poID).Scan(&newID); err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
 		return
 	}

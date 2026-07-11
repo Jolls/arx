@@ -237,11 +237,11 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var newID int
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified)
-		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)
-	`, h.cfg.CompanyTable()),
+	insertSupplier := h.dialect.InsertReturningID(h.cfg.CompanyTable(),
+		`name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8`,
+		false)
+	err := h.queryRowContext(r.Context(), insertSupplier,
 		name, fv(r, "SUSupplierCode"),
 		nullableInt(fv(r, "default_contact")),
 		r.FormValue("is_active") == "1",

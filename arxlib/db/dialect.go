@@ -13,6 +13,12 @@ type Dialect interface {
 	MonthStartExpr() string
 	UpsertAppConfig(table string) string
 	InsertReturningID(table, columnList, valuesList string, hasTrigger bool) string
+	// InsertSelectReturningID is InsertReturningID's INSERT ... SELECT sibling:
+	// it inserts rows produced by selectBody (a full "SELECT ... FROM ... WHERE ..."
+	// clause, already comma-formatted, using @pN placeholders and any inline
+	// literals) into table's columnList and returns the new integer id to Scan.
+	// hasTrigger selects the SCOPE_IDENTITY batch form, matching InsertReturningID.
+	InsertSelectReturningID(table, columnList, selectBody string, hasTrigger bool) string
 	TopClause(ph string) string
 	LimitClause(ph string) string
 }
@@ -54,6 +60,18 @@ func (sqlServerDialect) InsertReturningID(table, columnList, valuesList string, 
 	return fmt.Sprintf(
 		"INSERT INTO %s (%s) OUTPUT INSERTED.id VALUES (%s)",
 		table, columnList, valuesList)
+}
+
+func (sqlServerDialect) InsertSelectReturningID(table, columnList, selectBody string, hasTrigger bool) string {
+	if hasTrigger {
+		// OUTPUT INSERTED is blocked on trigger tables; SCOPE_IDENTITY batch form.
+		return fmt.Sprintf(
+			"INSERT INTO %s (%s)\n%s;\nSELECT CAST(SCOPE_IDENTITY() AS INT)",
+			table, columnList, selectBody)
+	}
+	return fmt.Sprintf(
+		"INSERT INTO %s (%s) OUTPUT INSERTED.id\n%s",
+		table, columnList, selectBody)
 }
 
 func (sqlServerDialect) TopClause(ph string) string { return "TOP (" + ph + ") " }

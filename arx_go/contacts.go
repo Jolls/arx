@@ -208,13 +208,13 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var newID int
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (display_name, company_id, email, phone_1, phone_2, fax,
-		                address, city, state, zipcode, country,
-		                website, is_active, notes, updated_at)
-		OUTPUT INSERTED.id
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15)
-	`, h.cfg.ContactTable()),
+	insertContact := h.dialect.InsertReturningID(h.cfg.ContactTable(),
+		`display_name, company_id, email, phone_1, phone_2, fax,
+		 address, city, state, zipcode, country,
+		 website, is_active, notes, updated_at`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15`,
+		false)
+	err := h.queryRowContext(r.Context(), insertContact,
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
 		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
