@@ -1691,6 +1691,7 @@ type partPOSummary struct {
 // capped at limit. Returns nil on error so the caller can omit the card.
 func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) []partPOSummary {
 	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %spo.number, po.supplier_name, po.status, po.date_ordered,
 		       pol.qty, pol.unit_cost
@@ -1698,7 +1699,7 @@ func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) [
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE pol.part_id = @p1
 		ORDER BY po.date_ordered DESC, po.ID DESC
-	`+h.dialect.LimitClause("@p2"), h.dialect.TopClause("@p2"), pol, po), partID, limit)
+	`+limitClause, top, pol, po), partID, limit)
 	if err != nil {
 		return nil
 	}
@@ -1732,10 +1733,11 @@ type partTxnSummary struct {
 // recentPartTxns returns the most recent inventory transactions for a part,
 // newest first, capped at limit. Returns nil on error.
 func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) []partTxnSummary {
+	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %stxn_type, qty, txn_date
 		FROM %s WHERE part_id = @p1 ORDER BY txn_date DESC, id DESC
-	`+h.dialect.LimitClause("@p2"), h.dialect.TopClause("@p2"), h.cfg.InventoryTxnTable()), partID, limit)
+	`+limitClause, top, h.cfg.InventoryTxnTable()), partID, limit)
 	if err != nil {
 		return nil
 	}

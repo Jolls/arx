@@ -117,6 +117,14 @@ func timeQueryErr[T any](ctx context.Context, query string, call func() (T, erro
 	return result, err
 }
 
+// topLimit returns the dialect's TOP and LIMIT clauses for the same
+// parameter placeholder ph, for the common TOP-N pagination pattern used
+// across recent-item queries (recentPartPOs, recentPartTxns, recentSupplierPOs,
+// topSupplierParts).
+func (h *Handler) topLimit(ph string) (top, limit string) {
+	return h.dialect.TopClause(ph), h.dialect.LimitClause(ph)
+}
+
 func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	query = h.dialect.Rewrite(query)
 	h.logSQL(query, args...)

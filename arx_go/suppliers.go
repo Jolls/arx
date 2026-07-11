@@ -145,12 +145,10 @@ type supplierPOSummary struct {
 // recentSupplierPOs returns up to limit POs for supplierID, most recent first.
 // limit <= 0 means unlimited (used by the Order History sub-tab).
 func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limit int) []supplierPOSummary {
-	top := ""
-	limitClause := ""
+	top, limitClause := "", ""
 	args := []any{supplierID}
 	if limit > 0 {
-		top = h.dialect.TopClause("@p2")
-		limitClause = h.dialect.LimitClause("@p2")
+		top, limitClause = h.topLimit("@p2")
 		args = append(args, limit)
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
@@ -189,12 +187,13 @@ type supplierPartSummary struct {
 
 func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit int) []supplierPartSummary {
 	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
+	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %spn.id, pn.part_number, pn.title
 		FROM %s sp JOIN %s pn ON sp.part_id = pn.id
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`+h.dialect.LimitClause("@p2"), h.dialect.TopClause("@p2"), sp, pn), supplierID, limit)
+	`+limitClause, top, sp, pn), supplierID, limit)
 	if err != nil {
 		return nil
 	}
