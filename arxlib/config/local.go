@@ -22,7 +22,11 @@ type LocalConfig struct {
 	ImageRoot         string  `json:"image_root"`
 	DebugMode         bool    `json:"debug_mode"`
 	TestMode          *bool   `json:"test_mode,omitempty"`
+	TestDBServer      string  `json:"test_db_server,omitempty"`
+	TestEngine        string  `json:"test_engine,omitempty"`
 	TestDBName        string  `json:"test_db_name,omitempty"`
+	TestDBUser        string  `json:"test_db_user,omitempty"`
+	TestDBPassword    string  `json:"test_db_password,omitempty"`
 }
 
 // LoadLocal reads config/local.json. On first run after upgrading from the two-app

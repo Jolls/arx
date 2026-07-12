@@ -78,6 +78,66 @@ func TestBuildDSN_Postgres(t *testing.T) {
 	}
 }
 
+func TestBuildDSN_TestProfileSeparateServer(t *testing.T) {
+	// Prod on SQL Server; test profile on a Postgres host with its own creds.
+	b := Base{
+		Engine:         "sqlserver",
+		DBServer:       "sqlhost",
+		DBName:         "ArxProd",
+		DBUser:         "sa",
+		TestEngine:     "postgres",
+		TestDBServer:   "pghost:5432",
+		TestDBName:     "ArxDev",
+		TestDBUser:     "arxdev",
+		TestDBPassword: "devpass",
+	}
+
+	prod := b.BuildDSN("prodpass")
+	if !strings.HasPrefix(prod, "sqlserver://") || !strings.Contains(prod, "sa:prodpass@sqlhost") {
+		t.Errorf("prod DSN should target the SQL Server profile: %s", prod)
+	}
+
+	b.TestMode = true
+	if got := b.DBEngine(); got != "postgres" {
+		t.Errorf("test-mode engine: got %q, want postgres", got)
+	}
+	dev := b.DSN() // uses the stored test password
+	if !strings.HasPrefix(dev, "postgres://") {
+		t.Errorf("test DSN should use the postgres:// scheme: %s", dev)
+	}
+	if !strings.Contains(dev, "arxdev:devpass@pghost:5432") {
+		t.Errorf("test DSN should use the test host/creds: %s", dev)
+	}
+	if !strings.Contains(dev, "/ArxDev") || strings.Contains(dev, "sqlhost") {
+		t.Errorf("test DSN should target the Postgres dev DB only: %s", dev)
+	}
+}
+
+func TestBuildDSN_TestProfileInheritsProd(t *testing.T) {
+	// Only TestDBName set: the historical same-server, name-only swap must still
+	// work — server, engine, user, and password all inherit prod.
+	b := Base{
+		Engine:     "sqlserver",
+		DBServer:   "sqlhost",
+		DBName:     "ArxProd",
+		DBUser:     "sa",
+		DBPassword: "prodpass",
+		TestDBName: "ArxDev",
+		TestMode:   true,
+	}
+
+	dev := b.DSN()
+	if !strings.Contains(dev, "sa:prodpass@sqlhost") {
+		t.Errorf("blank test fields should inherit prod host/creds: %s", dev)
+	}
+	if !strings.Contains(dev, "database=ArxDev") {
+		t.Errorf("test DSN should swap to ArxDev: %s", dev)
+	}
+	if b.DBEngine() != "sqlserver" {
+		t.Errorf("blank TestEngine should inherit prod engine, got %q", b.DBEngine())
+	}
+}
+
 func TestConnectionSummary(t *testing.T) {
 	b := Base{DBServer: "myserver", DBName: "ArxProd", TestDBName: "ArxDev"}
 

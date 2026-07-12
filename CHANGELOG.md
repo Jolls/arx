@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.118] - 2026-07-11 
+- Gave Test Mode a full second connection profile (server, engine, DB name, username, password) so ArxDev can live on a separate Postgres server while ArxProd stays on SQL Server; blank test fields inherit the prod value, and the fields are editable in Settings' new Test Connection section ([#672](https://github.com/Jolls/arx-legacy/issues/672))
+
 ## [0.5.117] - 2026-07-11 
 - Ported the SQL Server triggers to Postgres (denormalized count maintenance and the test_definition audit-history snapshot) and routed the audit user through the Dialect (CONTEXT_INFO on SQL Server, an arx.username session GUC on Postgres); no behavior change on SQL Server ([#670](https://github.com/Jolls/arx-legacy/issues/670))
 

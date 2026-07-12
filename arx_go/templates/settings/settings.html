@@ -93,12 +93,6 @@
                    class="form-control font-monospace" style="width:240px;">
         </div>
         <div class="detail-row align-items-center" style="padding:6px 0;">
-            <strong style="min-width:160px;">Test DB Name</strong>
-            <input type="text" name="test_db_name" value="{{.TestDBName}}"
-                   placeholder="ArxDev"
-                   class="form-control font-monospace" style="width:240px;">
-        </div>
-        <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Username</strong>
             <input type="text" name="db_user" value="{{.DBUser}}"
                    placeholder="dbuser"
@@ -116,6 +110,55 @@
                        style="font-size:0.85em; cursor:pointer; user-select:none;">
                     <input type="checkbox"
                            onchange="document.getElementById('db_password').type=this.checked?'text':'password'">
+                    Show
+                </label>
+            </div>
+        </div>
+
+        <h4 class="mt-4 mb-1" style="font-size:1rem;">Test Connection</h4>
+        <p class="text-muted" style="font-size:0.85em; margin:0 0 10px;">
+            Used only when Test Mode is on. Leave a field blank to inherit the
+            production value &mdash; set these to point Test Mode at a separate
+            server (e.g. a Postgres dev host).
+        </p>
+        <div class="detail-row align-items-center" style="padding:6px 0;">
+            <strong style="min-width:160px;">Engine</strong>
+            <select name="test_engine" class="form-select font-monospace" style="width:240px;">
+                <option value="" {{if not .TestEngine}}selected{{end}}>(inherit &mdash; {{.DBEngine}})</option>
+                <option value="sqlserver" {{if eq .TestEngine "sqlserver"}}selected{{end}}>sqlserver</option>
+                <option value="postgres" {{if eq .TestEngine "postgres"}}selected{{end}}>postgres</option>
+            </select>
+        </div>
+        <div class="detail-row align-items-center" style="padding:6px 0;">
+            <strong style="min-width:160px;">Server</strong>
+            <input type="text" name="test_db_server" value="{{.TestDBServer}}"
+                   placeholder="(inherit prod server)"
+                   class="form-control font-monospace" style="width:360px;">
+        </div>
+        <div class="detail-row align-items-center" style="padding:6px 0;">
+            <strong style="min-width:160px;">Test DB Name</strong>
+            <input type="text" name="test_db_name" value="{{.TestDBName}}"
+                   placeholder="ArxDev"
+                   class="form-control font-monospace" style="width:240px;">
+        </div>
+        <div class="detail-row align-items-center" style="padding:6px 0;">
+            <strong style="min-width:160px;">Username</strong>
+            <input type="text" name="test_db_user" value="{{.TestDBUser}}"
+                   placeholder="(inherit prod user)"
+                   autocomplete="off"
+                   class="form-control font-monospace" style="width:240px;">
+        </div>
+        <div class="detail-row align-items-center" style="padding:6px 0;">
+            <strong style="min-width:160px;">Password</strong>
+            <div class="d-flex align-items-center gap-2">
+                <input type="password" name="test_db_password" id="test_db_password"
+                       placeholder="{{if .TestDBPasswordSet}}Leave blank to keep current{{else}}Blank inherits prod password{{end}}"
+                       autocomplete="off"
+                       class="form-control" style="width:280px;">
+                <label class="d-flex align-items-center gap-1 text-muted"
+                       style="font-size:0.85em; cursor:pointer; user-select:none;">
+                    <input type="checkbox"
+                           onchange="document.getElementById('test_db_password').type=this.checked?'text':'password'">
                     Show
                 </label>
             </div>
