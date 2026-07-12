@@ -365,7 +365,7 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	// run applies a filter's clauses to the form's records and returns matching SNs.
 	run := func(q url.Values) []string {
 		f := parseRecordFilters(q)
-		clauses, fargs := f.whereClauses(2)
+		clauses, fargs := f.whereClauses(h.dialect, 2)
 		query := fmt.Sprintf(
 			`SELECT serial_number FROM %s WHERE form_id = @p1 AND is_active = 1%s
 			 ORDER BY TRY_CAST(serial_number AS INT)`, h.cfg.RecordsTable(), clauses)

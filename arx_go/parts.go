@@ -253,9 +253,9 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	var topAtts, photoAtts []models.Attachment
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
 		`SELECT id, file_name, category, part_revision, sort_order FROM %s
-		 WHERE part_id = @p1 AND is_active = 1
+		 WHERE part_id = @p1 AND is_active = %s
 		 ORDER BY sort_order, id`,
-		h.cfg.AttachmentsTable()), p.PNID)
+		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true)), p.PNID)
 	if err == nil {
 		for rows.Next() {
 			var att models.Attachment
@@ -295,9 +295,9 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	purchasePrice := p.PNCurrentCost
 	var prefPrice sql.NullFloat64
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT MIN(price_ea) FROM %s WHERE part_id=@p1 AND is_active=1
+		`SELECT MIN(price_ea) FROM %s WHERE part_id=@p1 AND is_active=%s
 		 AND supplier_id=(SELECT default_supplier_id FROM %s WHERE id=@p1)`,
-		h.cfg.PriceTable(), h.cfg.PartsTable()), p.PNID).Scan(&prefPrice)
+		h.cfg.PriceTable(), h.dialect.BoolLiteral(true), h.cfg.PartsTable()), p.PNID).Scan(&prefPrice)
 	if prefPrice.Valid && prefPrice.Float64 > 0 {
 		purchasePrice = prefPrice.Float64
 	}
@@ -686,14 +686,14 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 		       pn.part_number, pn.title, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
+		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT),
 		       pn.attachment_count, pn.po_line_count
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
 		ORDER BY pl.line_number
-	`, prc, pl, pl, pn), partID)
+	`, prc, h.dialect.BoolLiteral(true), pl, pl, pn), partID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1009,12 +1009,12 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, pn.current_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
+		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       %s
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
-	`, pr, hasBOM, pl, pn), pnid)
+	`, pr, h.dialect.BoolLiteral(true), hasBOM, pl, pn), pnid)
 	if err != nil {
 		return rollupResult{}, err
 	}
@@ -1256,8 +1256,8 @@ func (h *Handler) fetchPriceTiersByPart(ctx context.Context, ids []int) (map[par
 	}
 	placeholders, args := sqlInClause(ids)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT part_id, supplier_id, price_ea, pack_size FROM %s WHERE is_active = 1 AND part_id IN (%s)`,
-		h.cfg.PriceTable(), placeholders), args...)
+		`SELECT part_id, supplier_id, price_ea, pack_size FROM %s WHERE is_active = %s AND part_id IN (%s)`,
+		h.cfg.PriceTable(), h.dialect.BoolLiteral(true), placeholders), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1383,8 +1383,8 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, file_name, category, part_revision, sort_order, comment
-		FROM %s WHERE part_id = @p1 AND is_active = 1 ORDER BY sort_order, id
-	`, h.cfg.AttachmentsTable()), id)
+		FROM %s WHERE part_id = @p1 AND is_active = %s ORDER BY sort_order, id
+	`, h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true)), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
@@ -1593,8 +1593,8 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT id, file_name FROM %s WHERE part_id = @p1 AND is_active = 1 ORDER BY sort_order, id`,
-		h.cfg.AttachmentsTable()), id)
+		`SELECT id, file_name FROM %s WHERE part_id = @p1 AND is_active = %s ORDER BY sort_order, id`,
+		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true)), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1803,9 +1803,9 @@ func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoi
 		SELECT c.name, p.effective_date, p.price_ea, p.pack_size
 		FROM %s p
 		LEFT JOIN %s c ON p.supplier_id = c.id
-		WHERE p.part_id = @p1 AND p.is_active = 1 AND p.effective_date IS NOT NULL
+		WHERE p.part_id = @p1 AND p.is_active = %s AND p.effective_date IS NOT NULL
 		ORDER BY p.effective_date
-	`, pr, comp), partID); err == nil {
+	`, pr, comp, h.dialect.BoolLiteral(true)), partID); err == nil {
 		for prRows.Next() {
 			var sup sql.NullString
 			var d sql.NullTime
@@ -1997,8 +1997,8 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.execContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)
-	`, h.cfg.PriceTable()),
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
+	`, h.cfg.PriceTable(), h.dialect.BoolLiteral(true)),
 		partID, supplierID,
 		r.FormValue("pack_size"), r.FormValue("price_ea"), r.FormValue("price_pack"),
 		effectiveDate,
@@ -2089,7 +2089,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = 0 WHERE id = @p1 AND part_id = @p2`, pr,
+		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, pr, h.dialect.BoolLiteral(false),
 	), priceID, partID)
 	if err != nil {
 		tx.Rollback()
@@ -2098,8 +2098,8 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)
-	`, pr),
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
+	`, pr, h.dialect.BoolLiteral(true)),
 		partID, supplierID,
 		r.FormValue("pack_size"), r.FormValue("price_ea"), r.FormValue("price_pack"),
 		effectiveDate,
@@ -2125,7 +2125,7 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = 0 WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(),
+		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(), h.dialect.BoolLiteral(false),
 	), priceID, partID)
 	if err != nil {
 		h.renderError(w, r, "Error deactivating price: "+err.Error())
@@ -2138,7 +2138,7 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = 1 WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(),
+		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(), h.dialect.BoolLiteral(true),
 	), priceID, partID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UQ_price") {
@@ -2208,13 +2208,13 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 		SELECT pl.line_number, pl.qty, pn.part_number, pn.title, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = 1 AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
+		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
 		ORDER BY pl.line_number
-	`, prc, pl, pl, pn), id)
+	`, prc, h.dialect.BoolLiteral(true), pl, pl, pn), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

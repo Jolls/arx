@@ -56,8 +56,8 @@ func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, mfg_id, mfg_part_number, description, is_active)
-		VALUES (@p1, @p2, @p3, @p4, 1)
-	`, h.cfg.MfgPartTable()),
+		VALUES (@p1, @p2, @p3, @p4, %s)
+	`, h.cfg.MfgPartTable(), h.dialect.BoolLiteral(true)),
 		id, mfgID, mpn, strings.TrimSpace(r.FormValue("description")),
 	)
 	if err != nil {
@@ -81,8 +81,8 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 	var mpn, desc sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_id, mfg_id, mfg_part_number, description
-		FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = 1
-	`, h.cfg.MfgPartTable()), mid, id).Scan(
+		FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s
+	`, h.cfg.MfgPartTable(), h.dialect.BoolLiteral(true)), mid, id).Scan(
 		&mp.ID, &mp.PartID, &mp.MfgID, &mpn, &desc,
 	)
 	if err == sql.ErrNoRows {
@@ -134,8 +134,8 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET mfg_id=@p1, mfg_part_number=@p2, description=@p3
-		WHERE id=@p4 AND part_id=@p5 AND is_active=1
-	`, h.cfg.MfgPartTable()),
+		WHERE id=@p4 AND part_id=@p5 AND is_active=%s
+	`, h.cfg.MfgPartTable(), h.dialect.BoolLiteral(true)),
 		mfgID, mpn, strings.TrimSpace(r.FormValue("description")), mid, id,
 	)
 	if err != nil {
@@ -152,8 +152,8 @@ func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
 	mid := chi.URLParam(r, "mid")
 
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET is_active=0 WHERE id=@p1 AND part_id=@p2
-	`, h.cfg.MfgPartTable()), mid, id)
+		UPDATE %s SET is_active=%s WHERE id=@p1 AND part_id=@p2
+	`, h.cfg.MfgPartTable(), h.dialect.BoolLiteral(false)), mid, id)
 	if err != nil {
 		h.renderError(w, r, "Error deleting manufacturer part: "+err.Error())
 		return
@@ -168,9 +168,9 @@ func (h *Handler) fetchMfgParts(r *http.Request, partID string) ([]models.MfgPar
 		SELECT mp.id, mp.part_id, mp.mfg_id, mp.mfg_part_number, mp.description, c.name
 		FROM %s mp
 		JOIN %s c ON mp.mfg_id = c.id
-		WHERE mp.part_id = @p1 AND mp.is_active = 1
+		WHERE mp.part_id = @p1 AND mp.is_active = %s
 		ORDER BY c.name, mp.mfg_part_number
-	`, h.cfg.MfgPartTable(), h.cfg.CompanyTable()), partID)
+	`, h.cfg.MfgPartTable(), h.cfg.CompanyTable(), h.dialect.BoolLiteral(true)), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -200,9 +200,9 @@ type manufacturerOption struct {
 func (h *Handler) fetchManufacturers(r *http.Request) ([]manufacturerOption, error) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, name FROM %s
-		WHERE is_manufacturer = 1 AND is_active = 1
+		WHERE is_manufacturer = %s AND is_active = %s
 		ORDER BY name
-	`, h.cfg.CompanyTable()))
+	`, h.cfg.CompanyTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}

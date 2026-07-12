@@ -194,9 +194,9 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 		SELECT f.id, f.part_number_id, f.is_locked, f.revision, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.is_active = 1
+		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
 		ORDER BY pn.part_number ASC`,
-		h.cfg.FormsTable(), h.cfg.PartsTable()))
+		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -251,8 +251,8 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	var typeOptions []string
 	typeRows, terr := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT DISTINCT comments FROM %s
-		WHERE form_id = @p1 AND is_active = 1 AND comments <> ''
-		ORDER BY comments`, h.cfg.RecordsTable()), formID)
+		WHERE form_id = @p1 AND is_active = %s AND comments <> ''
+		ORDER BY comments`, h.cfg.RecordsTable(), h.dialect.BoolLiteral(true)), formID)
 	if terr == nil {
 		defer typeRows.Close()
 		for typeRows.Next() {
@@ -301,9 +301,9 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 		SELECT id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
 		       record_date, comments, is_locked, is_approved, form_revision
 		FROM %s
-		WHERE form_id = @p1 AND is_active = 1
+		WHERE form_id = @p1 AND is_active = %s
 		ORDER BY %s DESC, record_date DESC`,
-		h.cfg.RecordsTable(), h.dialect.TryCastInt("serial_number")), formID)
+		h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.TryCastInt("serial_number")), formID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1179,10 +1179,10 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 			SELECT id,
 			       LAG(id)  OVER (ORDER BY %s DESC, record_date DESC) AS prev_id,
 			       LEAD(id) OVER (ORDER BY %s DESC, record_date DESC) AS next_id
-			FROM %s WHERE form_id = @p1 AND is_active = 1
+			FROM %s WHERE form_id = @p1 AND is_active = %s
 		)
 		SELECT COALESCE(prev_id, 0), COALESCE(next_id, 0) FROM ordered WHERE id = @p2`,
-		h.dialect.TryCastInt("serial_number"), h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable()), record.FormID, recordID).Scan(&prevID, &nextID)
+		h.dialect.TryCastInt("serial_number"), h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true)), record.FormID, recordID).Scan(&prevID, &nextID)
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
@@ -1657,8 +1657,8 @@ func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_approved=1, updated_at=GETDATE() WHERE id=@p1 AND is_locked=1 AND is_approved=0",
-		h.cfg.RecordsTable()), recordID)
+		"UPDATE %s SET is_approved=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s AND is_approved=%s",
+		h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), recordID)
 	if err != nil {
 		http.Error(w, "approve error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1713,8 +1713,8 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=0, is_approved=0, updated_at=GETDATE() WHERE id=@p1 AND is_locked=1",
-		h.cfg.RecordsTable()), recordID)
+		"UPDATE %s SET is_locked=%s, is_approved=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s",
+		h.cfg.RecordsTable(), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(true)), recordID)
 	if err != nil {
 		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1905,8 +1905,8 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=1, revision = revision + 1 WHERE id=@p1 AND is_locked=0",
-		h.cfg.FormsTable()), formID)
+		"UPDATE %s SET is_locked=%s, revision = revision + 1 WHERE id=@p1 AND is_locked=%s",
+		h.cfg.FormsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), formID)
 	if err != nil {
 		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1946,8 +1946,8 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=0 WHERE id=@p1 AND is_locked=1",
-		h.cfg.FormsTable()), formID)
+		"UPDATE %s SET is_locked=%s WHERE id=@p1 AND is_locked=%s",
+		h.cfg.FormsTable(), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(true)), formID)
 	if err != nil {
 		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2360,12 +2360,12 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT id, part_number, title
 		FROM %s
-		WHERE category = 'FORM' AND is_active = 1
+		WHERE category = 'FORM' AND is_active = %s
 		  AND NOT EXISTS (
-		      SELECT 1 FROM %s WHERE part_number_id = %s.id AND is_active = 1
+		      SELECT 1 FROM %s WHERE part_number_id = %s.id AND is_active = %s
 		  )
 		ORDER BY part_number`,
-		h.cfg.PartsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()))
+		h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -2490,8 +2490,8 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT f.id, pn.part_number, pn.title
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.is_active = 1 ORDER BY pn.part_number`,
-		h.cfg.FormsTable(), h.cfg.PartsTable()))
+		WHERE f.is_active = %s ORDER BY pn.part_number`,
+		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2533,8 +2533,8 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	// Verify the PNID is a valid active FORM-category part number.
 	var exists int
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=1",
-		h.cfg.PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
+		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=%s",
+		h.cfg.PartsTable(), h.dialect.BoolLiteral(true)), pnid).Scan(&exists); err != nil || exists == 0 {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
 	}
@@ -2648,8 +2648,8 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	// Verify the PNID is a valid active FORM-category part number.
 	var exists int
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=1",
-		h.cfg.PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
+		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=%s",
+		h.cfg.PartsTable(), h.dialect.BoolLiteral(true)), pnid).Scan(&exists); err != nil || exists == 0 {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
 	}
@@ -2772,9 +2772,9 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		       res.updated_at
 		FROM %s res
 		JOIN %s trec ON res.record_id = trec.id
-		WHERE res.test_id = @p1 AND trec.form_id = @p2 AND trec.is_active = 1
+		WHERE res.test_id = @p1 AND trec.form_id = @p2 AND trec.is_active = %s
 		ORDER BY %s DESC, trec.record_date DESC`,
-		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.TryCastInt("trec.serial_number")), testID, formID)
+		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.TryCastInt("trec.serial_number")), testID, formID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return

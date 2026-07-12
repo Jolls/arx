@@ -172,16 +172,16 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]dashboardFailureModeItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT TOP (@p1) f.id, pn.part_number, MAX(res.parameter) AS parameter,
-			SUM(CASE WHEN res.pass_fail = 0 THEN 1 ELSE 0 END) AS failure_count
+			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count
 		FROM %s res
 		JOIN %s trec ON res.record_id = trec.id
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE trec.is_active = 1 AND res.pass_fail IS NOT NULL
+		WHERE trec.is_active = %s AND res.pass_fail IS NOT NULL
 		GROUP BY f.id, pn.part_number, res.test_id
-		HAVING SUM(CASE WHEN res.pass_fail = 0 THEN 1 ELSE 0 END) > 0
+		HAVING SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) > 0
 		ORDER BY failure_count DESC`,
-		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()), limit)
+		h.dialect.BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -206,14 +206,14 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 // record), matching computeYieldBuckets in records_yield.go.
 func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]dashboardYieldItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT trec.form_id, pn.part_number, MAX(CASE WHEN res.pass_fail = 0 THEN 1 ELSE 0 END)
+		SELECT trec.form_id, pn.part_number, MAX(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END)
 		FROM %s trec
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
 		LEFT JOIN %s res ON res.record_id = trec.id
-		WHERE trec.is_active = 1
+		WHERE trec.is_active = %s
 		GROUP BY trec.id, trec.form_id, pn.part_number`,
-		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.cfg.ResultsTable()))
+		h.dialect.BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.cfg.ResultsTable(), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -262,10 +262,10 @@ func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]da
 		FROM %s trec
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE trec.is_active = 1 AND trec.is_locked = 0
+		WHERE trec.is_active = %s AND trec.is_locked = %s
 			AND trec.created_at <= DATEADD(day, -@p2, GETDATE())
 		ORDER BY trec.created_at ASC`,
-		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()), limit, staleWIPThresholdDays)
+		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit, staleWIPThresholdDays)
 	if err != nil {
 		return nil, err
 	}
@@ -807,9 +807,9 @@ func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]da
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT p.part_number, p.title, p.category
 		FROM %s p
-		WHERE p.is_active = 1 AND %s
+		WHERE p.is_active = %s AND %s
 		ORDER BY p.part_number ASC
-	`, h.cfg.PartsTable(), where))
+	`, h.cfg.PartsTable(), h.dialect.BoolLiteral(true), where))
 	if err != nil {
 		return nil, err
 	}
@@ -936,9 +936,9 @@ func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, erro
 		SELECT f.id, pn.part_number, pn.title
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE pn.category = 'FORM' AND pn.is_active = 1 AND f.is_active = 1
+		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
 		ORDER BY pn.part_number ASC`,
-		h.cfg.FormsTable(), h.cfg.PartsTable()))
+		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}

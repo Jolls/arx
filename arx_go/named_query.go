@@ -42,7 +42,7 @@ type NamedQueryInfo struct {
 func (h *Handler) listNamedQueries(ctx context.Context) ([]NamedQueryInfo, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT name, COALESCE(description,''), COALESCE(params,''), result_type
-		 FROM %s WHERE active = 1 ORDER BY name`, h.cfg.NamedQueriesTable()))
+		 FROM %s WHERE active = %s ORDER BY name`, h.cfg.NamedQueriesTable(), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 
 	var storedSQL, resultType string
 	err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT sql, result_type FROM %s WHERE name = @p1 AND active = 1", h.cfg.NamedQueriesTable()),
+		fmt.Sprintf("SELECT sql, result_type FROM %s WHERE name = @p1 AND active = %s", h.cfg.NamedQueriesTable(), h.dialect.BoolLiteral(true)),
 		name,
 	).Scan(&storedSQL, &resultType)
 	if err == sql.ErrNoRows {

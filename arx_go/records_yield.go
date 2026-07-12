@@ -119,12 +119,12 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 	args := append([]any{formID}, dateArgs...)
 
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT record_date, MAX(CASE WHEN pass_fail = 0 THEN 1 ELSE 0 END)
+		SELECT record_date, MAX(CASE WHEN pass_fail = %s THEN 1 ELSE 0 END)
 		FROM %s trec
 		LEFT JOIN %s res ON res.record_id = trec.id
-		WHERE form_id = @p1 AND is_active = 1%s
+		WHERE form_id = @p1 AND is_active = %s%s
 		GROUP BY trec.id, record_date`,
-		h.cfg.RecordsTable(), h.cfg.ResultsTable(), dateClause), args...)
+		h.dialect.BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.ResultsTable(), h.dialect.BoolLiteral(true), dateClause), args...)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return

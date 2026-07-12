@@ -143,3 +143,47 @@ func TestSetAuditUser(t *testing.T) {
 		t.Errorf("postgres query after Rewrite: got %q", got)
 	}
 }
+
+func TestBoolLiteral(t *testing.T) {
+	// SQL Server BIT columns take integer literals; the output must match the
+	// prior inline 1/0 exactly so the seam is behavior-preserving.
+	ss := NewSQLServerDialect()
+	if got := ss.BoolLiteral(true); got != "1" {
+		t.Errorf("sqlserver BoolLiteral(true): got %q, want %q", got, "1")
+	}
+	if got := ss.BoolLiteral(false); got != "0" {
+		t.Errorf("sqlserver BoolLiteral(false): got %q, want %q", got, "0")
+	}
+
+	// Postgres BOOLEAN columns reject 1/0 and need TRUE/FALSE.
+	pg := NewPostgresDialect()
+	if got := pg.BoolLiteral(true); got != "TRUE" {
+		t.Errorf("postgres BoolLiteral(true): got %q, want %q", got, "TRUE")
+	}
+	if got := pg.BoolLiteral(false); got != "FALSE" {
+		t.Errorf("postgres BoolLiteral(false): got %q, want %q", got, "FALSE")
+	}
+}
+
+func TestToggleBoolExpr(t *testing.T) {
+	// SQL Server keeps the arithmetic `1 - col` idiom byte-for-byte.
+	if got := NewSQLServerDialect().ToggleBoolExpr("is_active"); got != "1 - is_active" {
+		t.Errorf("sqlserver ToggleBoolExpr: got %q, want %q", got, "1 - is_active")
+	}
+	// Postgres flips the boolean with NOT.
+	if got := NewPostgresDialect().ToggleBoolExpr("is_active"); got != "NOT is_active" {
+		t.Errorf("postgres ToggleBoolExpr: got %q, want %q", got, "NOT is_active")
+	}
+}
+
+func TestNextSequenceValueExpr(t *testing.T) {
+	// SQL Server draws from the fixed schema object, byte-for-byte with the prior
+	// inline "NEXT VALUE FOR dbo.PO_Number_Seq".
+	if got := NewSQLServerDialect().NextSequenceValueExpr("po_number_seq"); got != "NEXT VALUE FOR dbo.PO_Number_Seq" {
+		t.Errorf("sqlserver NextSequenceValueExpr: got %q, want %q", got, "NEXT VALUE FOR dbo.PO_Number_Seq")
+	}
+	// Postgres uses nextval() on the bare sequence name.
+	if got := NewPostgresDialect().NextSequenceValueExpr("po_number_seq"); got != "nextval('po_number_seq')" {
+		t.Errorf("postgres NextSequenceValueExpr: got %q, want %q", got, "nextval('po_number_seq')")
+	}
+}

@@ -169,9 +169,9 @@ func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContac
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT id, display_name FROM %s
-		WHERE company_id = @p1 AND id <> @p2 AND is_active = 1
+		WHERE company_id = @p1 AND id <> @p2 AND is_active = %s
 		ORDER BY display_name
-	`, h.cfg.ContactTable()), supplierID, excludeContactID)
+	`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), supplierID, excludeContactID)
 	if err != nil {
 		return nil
 	}

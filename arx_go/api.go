@@ -25,16 +25,16 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	supplierFilter := ""
 	if r.URL.Query().Get("supplier_only") == "1" {
-		supplierFilter = " AND su.is_supplier = 1"
+		supplierFilter = " AND su.is_supplier = " + h.dialect.BoolLiteral(true)
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, cn.city
 		FROM %s su
 		LEFT JOIN %s cn ON su.default_contact = cn.id
-		WHERE su.name LIKE @p1 AND su.is_active = 1`+supplierFilter+`
+		WHERE su.name LIKE @p1 AND su.is_active = %s`+supplierFilter+`
 		ORDER BY su.name
 		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
-	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
+	`, h.cfg.CompanyTable(), h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -64,9 +64,9 @@ func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
 		SELECT id, display_name, address, city, state, zipcode,
 		       country, phone_1, fax, email
 		FROM %s
-		WHERE company_id = @p1 AND is_active = 1
+		WHERE company_id = @p1 AND is_active = %s
 		ORDER BY display_name
-	`, h.cfg.ContactTable()), id)
+	`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), id)
 	if err != nil {
 		writeJSON(w, []any{})
 		return

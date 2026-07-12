@@ -32,6 +32,19 @@ type Dialect interface {
 	// sets a transaction-local session GUC the trigger reads via
 	// current_setting('arx.username').
 	SetAuditUser(username string) (query string, arg any)
+	// BoolLiteral renders a boolean constant for a BIT (SQL Server) / BOOLEAN
+	// (Postgres) column, spliced into WHERE comparisons, SET assignments, INSERT
+	// VALUES and CASE expressions. SQL Server BIT columns take integer literals
+	// (1/0); Postgres BOOLEAN columns reject those and need TRUE/FALSE.
+	BoolLiteral(v bool) string
+	// ToggleBoolExpr renders the expression that flips a boolean column, for
+	// `SET col = <toggle>`. SQL Server uses the arithmetic `1 - col` idiom on a
+	// BIT column; Postgres uses `NOT col` on a BOOLEAN column.
+	ToggleBoolExpr(column string) string
+	// NextSequenceValueExpr draws the next value from a named sequence, used for
+	// the PO-number sequence. SQL Server uses `NEXT VALUE FOR <seq>`; Postgres
+	// uses `nextval('<seq>')`.
+	NextSequenceValueExpr(seqName string) string
 }
 
 type sqlServerDialect struct{}
@@ -90,6 +103,23 @@ func (sqlServerDialect) LimitClause(string) string  { return "" }
 
 func (sqlServerDialect) SetAuditUser(username string) (string, any) {
 	return "SET CONTEXT_INFO @p1", []byte(username)
+}
+
+func (sqlServerDialect) BoolLiteral(v bool) string {
+	if v {
+		return "1"
+	}
+	return "0"
+}
+
+func (sqlServerDialect) ToggleBoolExpr(column string) string { return "1 - " + column }
+
+// NextSequenceValueExpr returns the T-SQL sequence draw. The PO-number sequence
+// is the fixed schema object dbo.PO_Number_Seq, so the returned expression is a
+// verbatim literal (byte-for-byte identical to the prior inline SQL); the
+// logical seqName the caller passes is only meaningful to the Postgres dialect.
+func (sqlServerDialect) NextSequenceValueExpr(string) string {
+	return "NEXT VALUE FOR dbo.PO_Number_Seq"
 }
 
 // pgPlaceholder matches the @pN parameter markers the app emits (go-mssqldb's
@@ -161,4 +191,19 @@ func (postgresDialect) LimitClause(ph string) string { return " LIMIT " + ph }
 // @p1 placeholder is rewritten to $1 by Rewrite in the tx wrapper.
 func (postgresDialect) SetAuditUser(username string) (string, any) {
 	return "SELECT set_config('arx.username', @p1, true)", username
+}
+
+func (postgresDialect) BoolLiteral(v bool) string {
+	if v {
+		return "TRUE"
+	}
+	return "FALSE"
+}
+
+func (postgresDialect) ToggleBoolExpr(column string) string { return "NOT " + column }
+
+// NextSequenceValueExpr returns the Postgres sequence draw for the bare,
+// lowercase sequence name created by SQL/postgres/purchase_order.sql.
+func (postgresDialect) NextSequenceValueExpr(seqName string) string {
+	return fmt.Sprintf("nextval('%s')", seqName)
 }

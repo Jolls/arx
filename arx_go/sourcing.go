@@ -229,9 +229,9 @@ func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) ma
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT supplier_id, price_ea, pack_size, effective_date
 		FROM %s
-		WHERE part_id = @p1 AND is_active = 1
+		WHERE part_id = @p1 AND is_active = %s
 		ORDER BY supplier_id, pack_size
-	`, h.cfg.PriceTable()), partID)
+	`, h.cfg.PriceTable(), h.dialect.BoolLiteral(true)), partID)
 	if err != nil {
 		return nil
 	}

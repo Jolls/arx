@@ -87,7 +87,7 @@ type supplierOption struct {
 // When companyID > 0 it is scoped to that company's contacts (the configured
 // default receiver); companyID == 0 returns all contacts as a fallback.
 func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactOption {
-	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = 1`, h.cfg.ContactTable())
+	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = %s`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true))
 	var args []any
 	if companyID > 0 {
 		q += ` AND company_id = @p1`
@@ -111,8 +111,8 @@ func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactO
 
 func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 	rows, err := h.queryContext(r.Context(),
-		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = 1 ORDER BY name`,
-			h.cfg.CompanyTable()))
+		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = %s ORDER BY name`,
+			h.cfg.CompanyTable(), h.dialect.BoolLiteral(true)))
 	if err != nil {
 		return nil
 	}
@@ -570,16 +570,20 @@ func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string, e
 		return err
 	}
 
+	// Match exclusions case-insensitively: Postgres folds unquoted mixed-case
+	// columns to lowercase, so rows.Columns() casing can differ from the exclude
+	// keys (e.g. password_hash) by engine. Normalizing both keeps the exclusion
+	// robust regardless of which engine's casing convention is in play.
 	excluded := make(map[string]bool, len(excludeCols))
 	for _, c := range excludeCols {
-		excluded[c] = true
+		excluded[strings.ToLower(c)] = true
 	}
 
 	// Build index map of columns to include.
 	include := make([]int, 0, len(cols))
 	filteredCols := make([]string, 0, len(cols))
 	for i, c := range cols {
-		if !excluded[c] {
+		if !excluded[strings.ToLower(c)] {
 			include = append(include, i)
 			filteredCols = append(filteredCols, c)
 		}

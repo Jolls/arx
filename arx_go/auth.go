@@ -45,8 +45,8 @@ func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var defContact, defReceiver sql.NullInt64
 	var accentColor, defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id, accent_color, default_route FROM %s WHERE id = @p1 AND is_active = 1`,
-		h.cfg.UsersTable()), id,
+		`SELECT id, username, display_name, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id, accent_color, default_route FROM %s WHERE id = @p1 AND is_active = %s`,
+		h.cfg.UsersTable(), h.dialect.BoolLiteral(true)), id,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &defContact, &defReceiver, &accentColor, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -101,8 +101,8 @@ func (h *Handler) userByUsername(ctx context.Context, username string) (*User, s
 	var hash string
 	var defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, password_hash, default_route FROM %s WHERE username = @p1 AND is_active = 1`,
-		h.cfg.UsersTable()), username,
+		`SELECT id, username, display_name, password_hash, default_route FROM %s WHERE username = @p1 AND is_active = %s`,
+		h.cfg.UsersTable(), h.dialect.BoolLiteral(true)), username,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &hash, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, "", nil
@@ -114,7 +114,7 @@ func (h *Handler) userByUsername(ctx context.Context, username string) (*User, s
 func (h *Handler) userCount(ctx context.Context) (int, error) {
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE is_active = 1`, h.cfg.UsersTable()),
+		`SELECT COUNT(*) FROM %s WHERE is_active = %s`, h.cfg.UsersTable(), h.dialect.BoolLiteral(true)),
 	).Scan(&n)
 	return n, err
 }
@@ -357,8 +357,8 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = 1 - is_active, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable()), id); err != nil {
+		`UPDATE %s SET is_active = %s, updated_at = GETDATE() WHERE id = @p1`,
+		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("is_active")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -374,8 +374,8 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET can_approve_po = 1 - can_approve_po, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable()), id); err != nil {
+		`UPDATE %s SET can_approve_po = %s, updated_at = GETDATE() WHERE id = @p1`,
+		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("can_approve_po")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -391,8 +391,8 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET can_approve_records = 1 - can_approve_records, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable()), id); err != nil {
+		`UPDATE %s SET can_approve_records = %s, updated_at = GETDATE() WHERE id = @p1`,
+		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("can_approve_records")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}

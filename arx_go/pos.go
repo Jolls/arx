@@ -45,8 +45,8 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, display_name, address, city, state, zipcode,
 		       country, phone_1, fax, email
-		FROM %s WHERE company_id = @p1 AND is_active = 1 ORDER BY display_name
-	`, h.cfg.ContactTable()), supplierID)
+		FROM %s WHERE company_id = @p1 AND is_active = %s ORDER BY display_name
+	`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), supplierID)
 	if err != nil {
 		return nil
 	}
@@ -139,10 +139,10 @@ func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPri
 		    WHERE pr.part_id = pol.part_id
 		      AND pr.supplier_id = po.supplier_id
 		      AND pr.pack_size = 1
-		      AND pr.is_active = 1
+		      AND pr.is_active = %s
 		      AND pr.price_ea = pol.unit_cost
 		  )
-	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PriceTable()), poNum)
+	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PriceTable(), h.dialect.BoolLiteral(true)), poNum)
 	if err != nil {
 		return nil
 	}
@@ -476,7 +476,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		// is correct: a rolled-back PO should not reuse its number.
 		var base string
 		if err := h.queryRowContext(r.Context(),
-			"SELECT CAST(NEXT VALUE FOR dbo.PO_Number_Seq AS VARCHAR)",
+			fmt.Sprintf("SELECT CAST(%s AS VARCHAR)", h.dialect.NextSequenceValueExpr("po_number_seq")),
 		).Scan(&base); err != nil {
 			h.renderError(w, r, "Error getting PO number: "+err.Error())
 			return
@@ -839,16 +839,16 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 		}
 		// Deactivate any existing active price at pack_size=1 for this part+supplier.
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET is_active=0
-			WHERE part_id=@p1 AND supplier_id=@p2 AND pack_size=1 AND is_active=1
-		`, pr), partID, supplierID); err != nil {
+			UPDATE %s SET is_active=%s
+			WHERE part_id=@p1 AND supplier_id=@p2 AND pack_size=1 AND is_active=%s
+		`, pr, h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(true)), partID, supplierID); err != nil {
 			h.renderError(w, r, "Error updating price: "+err.Error())
 			return
 		}
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-			VALUES (@p1, @p2, 1, @p3, @p3, @p4, 1)
-		`, pr), partID, supplierID, cost, today); err != nil {
+			VALUES (@p1, @p2, 1, @p3, @p3, @p4, %s)
+		`, pr, h.dialect.BoolLiteral(true)), partID, supplierID, cost, today); err != nil {
 			h.renderError(w, r, "Error inserting price: "+err.Error())
 			return
 		}
@@ -2426,7 +2426,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET status='closed', is_active=0, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable()),
+		`UPDATE %s SET status='closed', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable(), h.dialect.BoolLiteral(false)),
 		now, poID); err != nil {
 		h.renderError(w, r, "Error closing awarded quote: "+err.Error())
 		return
@@ -2459,7 +2459,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-				`UPDATE %s SET status='cancelled', is_active=0, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable()),
+				`UPDATE %s SET status='cancelled', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable(), h.dialect.BoolLiteral(false)),
 				now, id); err != nil {
 				h.renderError(w, r, "Error declining quote: "+err.Error())
 				return
@@ -2549,8 +2549,8 @@ func (h *Handler) POImportPartFile(w http.ResponseWriter, r *http.Request) {
 
 	var fname sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = 1`,
-		h.cfg.AttachmentsTable()), attID, partID).Scan(&fname); err != nil {
+		`SELECT file_name FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`,
+		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true)), attID, partID).Scan(&fname); err != nil {
 		h.renderError(w, r, "Attachment not found.")
 		return
 	}

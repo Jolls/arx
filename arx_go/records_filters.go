@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	arxdb "arx/arxlib/db"
 )
 
 // recordFilters holds the parsed, validated filter selections from the
@@ -61,18 +63,18 @@ func (f recordFilters) StatusWIP() bool { return f.Status == "wip" }
 // filters. Each fragment begins with " AND " so the caller can concatenate it
 // onto an existing WHERE. Placeholders are numbered starting at startArg; the
 // caller is responsible for @p1..@p(startArg-1) (formID is @p1, so pass 2).
-func (f recordFilters) whereClauses(startArg int) (string, []any) {
+func (f recordFilters) whereClauses(d arxdb.Dialect, startArg int) (string, []any) {
 	var sb strings.Builder
 	var args []any
 	n := startArg
 
 	switch f.Status {
 	case "wip":
-		sb.WriteString(" AND is_locked = 0")
+		sb.WriteString(" AND is_locked = " + d.BoolLiteral(false))
 	case "complete":
-		sb.WriteString(" AND is_locked = 1 AND is_approved = 0")
+		sb.WriteString(" AND is_locked = " + d.BoolLiteral(true) + " AND is_approved = " + d.BoolLiteral(false))
 	case "approved":
-		sb.WriteString(" AND is_approved = 1")
+		sb.WriteString(" AND is_approved = " + d.BoolLiteral(true))
 	case "all":
 		// no clause
 	}

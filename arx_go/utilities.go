@@ -124,8 +124,8 @@ func (h *Handler) checkDeadLinks(ctx context.Context) (utilCheck, error) {
 	partQuery := fmt.Sprintf(
 		`SELECT f.file_name, p.id, p.part_number
 		 FROM %s f JOIN %s p ON f.part_id = p.id
-		 WHERE f.is_active = 1`,
-		h.cfg.AttachmentsTable(), h.cfg.PartsTable())
+		 WHERE f.is_active = %s`,
+		h.cfg.AttachmentsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true))
 	if err := scan(partQuery, h.cfg.DocControlRoot, "/part/"); err != nil {
 		return check, err
 	}
@@ -138,8 +138,8 @@ func (h *Handler) checkDeadLinks(ctx context.Context) (utilCheck, error) {
 	compQuery := fmt.Sprintf(
 		`SELECT a.file_path, c.id, c.name
 		 FROM %s a JOIN %s c ON a.supplier_id = c.id
-		 WHERE a.is_active = 1`,
-		h.cfg.CompanyAttachmentsTable(), h.cfg.CompanyTable())
+		 WHERE a.is_active = %s`,
+		h.cfg.CompanyAttachmentsTable(), h.cfg.CompanyTable(), h.dialect.BoolLiteral(true))
 	if err := scan(compQuery, supplierRoot, "/supplier/"); err != nil {
 		return check, err
 	}
@@ -233,8 +233,8 @@ func (h *Handler) checkSoftDeletedAttachmentPointers(ctx context.Context) (utilC
 	partQuery := fmt.Sprintf(
 		`SELECT p.id, p.part_number
 		 FROM %[1]s p JOIN %[2]s f ON f.id = p.primary_attachment_id
-		 WHERE p.primary_attachment_id > 0 AND f.is_active = 0`,
-		h.cfg.PartsTable(), h.cfg.AttachmentsTable())
+		 WHERE p.primary_attachment_id > 0 AND f.is_active = %[3]s`,
+		h.cfg.PartsTable(), h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(false))
 	if err := scan(partQuery, "/part/"); err != nil {
 		return check, err
 	}
@@ -242,8 +242,8 @@ func (h *Handler) checkSoftDeletedAttachmentPointers(ctx context.Context) (utilC
 	compQuery := fmt.Sprintf(
 		`SELECT c.id, c.name
 		 FROM %[1]s c JOIN %[2]s a ON a.supplier_attachment_id = c.primary_attachment_id
-		 WHERE c.primary_attachment_id > 0 AND a.is_active = 0`,
-		h.cfg.CompanyTable(), h.cfg.CompanyAttachmentsTable())
+		 WHERE c.primary_attachment_id > 0 AND a.is_active = %[3]s`,
+		h.cfg.CompanyTable(), h.cfg.CompanyAttachmentsTable(), h.dialect.BoolLiteral(false))
 	if err := scan(compQuery, "/supplier/"); err != nil {
 		return check, err
 	}

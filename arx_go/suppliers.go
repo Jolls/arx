@@ -479,9 +479,9 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 	tbl := h.cfg.CompanyAttachmentsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT supplier_attachment_id, supplier_id, file_path, notes, sort_order
-		FROM %s WHERE supplier_id = @p1 AND is_active = 1
+		FROM %s WHERE supplier_id = @p1 AND is_active = %s
 		ORDER BY sort_order, supplier_attachment_id
-	`, tbl), s.ID)
+	`, tbl, h.dialect.BoolLiteral(true)), s.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
@@ -566,9 +566,9 @@ func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Reques
 	id := chi.URLParam(r, "id")
 	attID := chi.URLParam(r, "attID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET is_active = 0
+		UPDATE %s SET is_active = %s
 		WHERE supplier_attachment_id = @p1 AND supplier_id = @p2
-	`, h.cfg.CompanyAttachmentsTable()), attID, id)
+	`, h.cfg.CompanyAttachmentsTable(), h.dialect.BoolLiteral(false)), attID, id)
 	if err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return

@@ -139,8 +139,8 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 	}()
 
 	res, err := tx.ExecContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET is_locked=1, updated_at=GETDATE() WHERE id=@p1 AND is_locked=0"+guard,
-		h.cfg.RecordsTable()), args...)
+		"UPDATE %s SET is_locked=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s"+guard,
+		h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), args...)
 	if err != nil {
 		return false, err
 	}
