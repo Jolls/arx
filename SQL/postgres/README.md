@@ -4,14 +4,17 @@ Postgres port of the reference DDL in `SQL/*.sql`. Human-run, like the SQL Serve
 set - not auto-applied. These files exist alongside the T-SQL DDL during the
 migration; the T-SQL set is deleted at cutover (Phase 3).
 
-**Triggers are intentionally absent.** The 5 SQL Server triggers
-(`SQL/triggers.sql`) are held for a design review with Jolls before any
-PL/pgSQL is written (which of the 5 are still needed; triggers vs. app-side /
-native alternatives - see `docs/plans/625-postgres-migration-design.md` §3). Until
-that review lands, the denormalized count columns ported here
-(`part.attachment_count`, `part.po_line_count`, `company.SUNumOfLNKs`,
-`company.SUNumOfPOs`) have **no maintenance mechanism on Postgres** and the
-`test_definition_history` audit snapshot is not populated.
+**Triggers are ported in `triggers.sql`** (issue #670). The design review with
+Jolls concluded all 5 SQL Server triggers (`SQL/triggers.sql`) are still needed
+and stay triggers (see `docs/plans/625-postgres-migration-design.md` §3). The
+4 count triggers keep the denormalized columns (`part.attachment_count`,
+`part.po_line_count`, `company.SUNumOfLNKs`, `company.SUNumOfPOs`) in sync; the
+`test_definition_history` audit trigger snapshots pre-update rows, reading the
+app user from the `arx.username` session GUC (set by the app via the dialect's
+`SetAuditUser`) in place of SQL Server's `CONTEXT_INFO()`. Postgres uses
+statement-level triggers with transition tables — see the header of
+`triggers.sql` for why each count needs a per-operation trigger. Generalizing
+the audit trigger for future audited tables is deferred to #669.
 
 ## Translation rules applied
 
@@ -83,7 +86,6 @@ scripts here - noted so the live-DB integration session does not hit it cold.
   Postgres needs `nextval('po_number_seq')`. The sequence itself is created in
   `purchase_order.sql` here.
 - The `BIT` integer-idiom rewrite described above.
-- Trigger replacements (pending the Jolls review).
 
 ## Suggested run order
 
@@ -94,4 +96,4 @@ table must already exist): `unit`, `contact`, `company_attachment`, `company`,
 `inventory_transaction`, `form`, `test_definition`, `test_record`, `test_result`,
 `test_definition_history`, `form_events`, `record_events`,
 `record_event_results`, `app_config`, `named_queries`, `users`, `logs`,
-`release_notes`.
+`release_notes`. Run `triggers.sql` **last**, after every table above exists.

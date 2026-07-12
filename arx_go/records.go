@@ -682,6 +682,16 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// setAuditUser records the acting username for the current transaction so the
+// trg_test_definition_history trigger attributes the snapshot to them. The exact
+// statement is dialect-specific (SET CONTEXT_INFO on SQL Server, a session GUC on
+// Postgres). Best-effort: a failure here only leaves the history row unattributed,
+// matching the prior inline behavior, which also ignored the error.
+func (h *Handler) setAuditUser(ctx context.Context, tx *txLogger, username string) {
+	q, arg := h.dialect.SetAuditUser(username)
+	tx.ExecContext(ctx, q, arg)
+}
+
 // SaveFormDef â€" POST /forms/{id}/def/edit
 func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -731,7 +741,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	if u := h.currentUser(r); u != nil {
-		tx.ExecContext(r.Context(), "SET CONTEXT_INFO @p1", []byte(u.Username))
+		h.setAuditUser(r.Context(), tx, u.Username)
 	}
 
 	for id := range stepIDs {
@@ -1984,7 +1994,7 @@ func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	if u := h.currentUser(r); u != nil {
-		tx.ExecContext(r.Context(), "SET CONTEXT_INFO @p1", []byte(u.Username))
+		h.setAuditUser(r.Context(), tx, u.Username)
 	}
 
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(

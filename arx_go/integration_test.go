@@ -1264,3 +1264,82 @@ func TestIntegration_DashboardBelowReorderParts(t *testing.T) {
 			found.StockOnHand, found.ReorderMin)
 	}
 }
+
+// TestIntegration_TestDefinitionHistoryAudit exercises the audit path end to end:
+// dialect.SetAuditUser stashes the acting user where the trg_test_definition_history
+// trigger can read it, so an UPDATE to a test_definition row produces a snapshot
+// attributed to that user. It drives the SetAuditUser + UPDATE through the tx
+// wrapper (the same beginTx → SetAuditUser → UPDATE order SaveFormDef/ArchiveStep
+// use), so it validates that contract on whichever engine ArxDev runs — SQL Server
+// today (CONTEXT_INFO), Postgres after the ArxDev cutover (arx.username session GUC).
+func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Seed a throwaway form + one step to mutate.
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	var testID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Audit Seed')`,
+		h.cfg.StepsTable()), formID,
+	).Scan(&testID); err != nil {
+		t.Fatalf("seed test_definition: %v", err)
+	}
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE test_id=@p1`, h.cfg.TestDefinitionHistoryTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	}()
+
+	// Set the acting user, then UPDATE the step — both inside one tx, so the
+	// trigger sees the user and fires. Mirrors SaveFormDef/ArchiveStep exactly.
+	const actor = "itest-auditor"
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	q, arg := h.dialect.SetAuditUser(actor)
+	if _, err := tx.ExecContext(ctx, q, arg); err != nil {
+		tx.Rollback()
+		t.Fatalf("SetAuditUser exec: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET parameter=@p1 WHERE id=@p2`, h.cfg.StepsTable()), "Audit Changed", testID); err != nil {
+		tx.Rollback()
+		t.Fatalf("update step: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	// Exactly one snapshot row, holding the PRE-update value and attributed to actor.
+	var count int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE test_id=@p1`, h.cfg.TestDefinitionHistoryTable()), testID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("history rows for test %d = %d, want 1 (trigger should fire once per UPDATE)", testID, count)
+	}
+
+	var changedBy, snapParam string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT changed_by, parameter FROM %s WHERE test_id=@p1`, h.cfg.TestDefinitionHistoryTable()), testID,
+	).Scan(&changedBy, &snapParam); err != nil {
+		t.Fatalf("select history: %v", err)
+	}
+	if changedBy != actor {
+		t.Errorf("history changed_by = %q, want %q (SetAuditUser → trigger attribution)", changedBy, actor)
+	}
+	if snapParam != "Audit Seed" {
+		t.Errorf("history parameter = %q, want pre-update value %q", snapParam, "Audit Seed")
+	}
+}

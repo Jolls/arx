@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.117] - 2026-07-11 
+- Ported the SQL Server triggers to Postgres (denormalized count maintenance and the test_definition audit-history snapshot) and routed the audit user through the Dialect (CONTEXT_INFO on SQL Server, an arx.username session GUC on Postgres); no behavior change on SQL Server ([#670](https://github.com/Jolls/arx-legacy/issues/670))
+
 ## [0.5.116] - 2026-07-11 
 - Introduced a Dialect abstraction over SQL-Server-specific SQL (pagination, insert-and-get-id, TRY_CAST, DATEFROMPARTS, ISNULL/COALESCE) as groundwork for Postgres/SQLite support; no behavior change on SQL Server ([#625](https://github.com/Jolls/arx-legacy/issues/625))
 

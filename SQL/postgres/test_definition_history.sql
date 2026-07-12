@@ -1,10 +1,8 @@
 -- test_definition_history: audit trail for changes to test_definition rows.
--- On SQL Server this is populated by trg_test_definition_history (AFTER UPDATE),
--- which recovers the app user from CONTEXT_INFO(). That trigger is NOT yet ported
--- to Postgres (see SQL/postgres/README.md and design §3); until it is, this table
--- is not populated. The Postgres equivalent, if the trigger survives review, reads
--- the username from a session GUC (current_setting('arx.username')) instead of
--- CONTEXT_INFO().
+-- Populated by trg_test_definition_history (AFTER UPDATE) in
+-- SQL/postgres/triggers.sql. It reads the app user from the session GUC
+-- current_setting('arx.username') — set by the app via the dialect's
+-- SetAuditUser — in place of SQL Server's CONTEXT_INFO().
 
 DROP TABLE IF EXISTS test_definition_history CASCADE;
 

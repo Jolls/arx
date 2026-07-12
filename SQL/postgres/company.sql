@@ -1,7 +1,6 @@
 -- company: supplier, manufacturer, and vendor records.
--- SUNumOfLNKs and SUNumOfPOs are denormalized counts. On SQL Server they are
--- kept in sync by triggers; those triggers are NOT yet ported to Postgres (see
--- SQL/postgres/README.md), so these columns are unmaintained here for now.
+-- SUNumOfLNKs and SUNumOfPOs are denormalized counts, kept in sync by triggers
+-- (SQL/postgres/triggers.sql — run last, after all tables exist).
 
 DROP TABLE IF EXISTS company CASCADE;
 

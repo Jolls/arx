@@ -117,3 +117,29 @@ func TestPostgresInsertSelectReturningID(t *testing.T) {
 		t.Errorf("InsertSelectReturningID:\n got %q\nwant %q", got, want)
 	}
 }
+
+func TestSetAuditUser(t *testing.T) {
+	// SQL Server stashes the username in CONTEXT_INFO, which is varbinary — so the
+	// bound arg must be []byte, matching the prior inline call site exactly.
+	sq, sarg := NewSQLServerDialect().SetAuditUser("alice")
+	if sq != "SET CONTEXT_INFO @p1" {
+		t.Errorf("sqlserver query: got %q", sq)
+	}
+	if b, ok := sarg.([]byte); !ok || string(b) != "alice" {
+		t.Errorf("sqlserver arg: got %#v, want []byte(%q)", sarg, "alice")
+	}
+
+	// Postgres sets a transaction-local session GUC; the arg stays a string.
+	d := NewPostgresDialect()
+	pq, parg := d.SetAuditUser("alice")
+	if pq != "SELECT set_config('arx.username', @p1, true)" {
+		t.Errorf("postgres query: got %q", pq)
+	}
+	if s, ok := parg.(string); !ok || s != "alice" {
+		t.Errorf("postgres arg: got %#v, want %q", parg, "alice")
+	}
+	// The @p1 placeholder is rewritten to $1 by the tx wrapper before execution.
+	if got := d.Rewrite(pq); got != "SELECT set_config('arx.username', $1, true)" {
+		t.Errorf("postgres query after Rewrite: got %q", got)
+	}
+}
