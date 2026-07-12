@@ -1,7 +1,7 @@
 -- part_attachment: file and URL attachments linked to a part.
 -- Deletions are soft-delete only (is_active = FALSE); never hard-delete rows.
--- attachment_count on part is maintained by a trigger on SQL Server; that trigger
--- is NOT yet ported to Postgres (see SQL/postgres/README.md).
+-- attachment_count on part is maintained by a trigger (SQL/postgres/triggers.sql);
+-- it counts only active (is_active) rows.
 
 DROP TABLE IF EXISTS part_attachment CASCADE;
 

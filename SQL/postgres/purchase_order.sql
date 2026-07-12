@@ -3,8 +3,8 @@
 -- PO numbers are auto-assigned via po_number_seq. The app call site currently
 -- emits T-SQL 'NEXT VALUE FOR'; on Postgres it must use nextval('po_number_seq')
 -- (app-side change, not covered by this DDL - see SQL/postgres/README.md).
--- SUNumOfPOs on company is a denormalized count maintained by a trigger on
--- SQL Server; that trigger is NOT yet ported to Postgres.
+-- SUNumOfPOs on company is a denormalized count maintained by a trigger
+-- (SQL/postgres/triggers.sql).
 
 -- Sequence used to generate PO numbers.
 CREATE SEQUENCE IF NOT EXISTS po_number_seq AS integer START WITH 1 INCREMENT BY 1 NO CYCLE;

@@ -25,6 +25,13 @@ type Dialect interface {
 	InsertSelectReturningID(table, columnList, selectBody string, hasTrigger bool) string
 	TopClause(ph string) string
 	LimitClause(ph string) string
+	// SetAuditUser returns the statement, and its bound argument, that records
+	// the acting username for the current transaction so the
+	// trg_test_definition_history trigger can attribute the snapshot. SQL Server
+	// stashes it in CONTEXT_INFO (a varbinary, hence the []byte arg); Postgres
+	// sets a transaction-local session GUC the trigger reads via
+	// current_setting('arx.username').
+	SetAuditUser(username string) (query string, arg any)
 }
 
 type sqlServerDialect struct{}
@@ -80,6 +87,10 @@ func (sqlServerDialect) InsertSelectReturningID(table, columnList, selectBody st
 
 func (sqlServerDialect) TopClause(ph string) string { return "TOP (" + ph + ") " }
 func (sqlServerDialect) LimitClause(string) string  { return "" }
+
+func (sqlServerDialect) SetAuditUser(username string) (string, any) {
+	return "SET CONTEXT_INFO @p1", []byte(username)
+}
 
 // pgPlaceholder matches the @pN parameter markers the app emits (go-mssqldb's
 // numbering convention) so the Postgres dialect can rewrite them to $N.
@@ -143,3 +154,11 @@ func (postgresDialect) InsertSelectReturningID(table, columnList, selectBody str
 // after an ORDER BY clause with no separator in the query template.
 func (postgresDialect) TopClause(string) string      { return "" }
 func (postgresDialect) LimitClause(ph string) string { return " LIMIT " + ph }
+
+// SetAuditUser sets a transaction-local session GUC (is_local = true, matching
+// CONTEXT_INFO's scope within the audit transaction) that
+// trg_test_definition_history reads via current_setting('arx.username'). The
+// @p1 placeholder is rewritten to $1 by Rewrite in the tx wrapper.
+func (postgresDialect) SetAuditUser(username string) (string, any) {
+	return "SELECT set_config('arx.username', @p1, true)", username
+}
