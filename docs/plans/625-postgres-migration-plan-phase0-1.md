@@ -1,5 +1,15 @@
 # Postgres Migration - Phase 0 + Phase 1 Implementation Plan (#625)
 
+> **Status: complete.** Phases 0 and 1 landed (this plan's checkboxes below are
+> retroactively checked off to match). Work continued past this plan's scope
+> into Phase 2 (Postgres dialect, `SQL/postgres/*.sql`, triggers) and most of
+> the app-side gap closure (PR #674). Two portability gaps in `reports.go`
+> (4 hardcoded `TOP (@pN)` sites bypassing `Dialect.TopClause`/`LimitClause`,
+> and 2 `ISNULL` sites not yet `COALESCE`) were found during a post-merge audit
+> and fixed on `feature/625-reports-dialect-gaps`. See
+> [docs/plans/625-postgres-migration-design.md](./625-postgres-migration-design.md)
+> for overall phase status; issue #625 remains open pending Phase 3 cutover.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Introduce a behavior-preserving dialect seam into Arx so the app runs on SQL Server today through a `Dialect` abstraction, setting up the later Postgres port without changing any current behavior.
@@ -59,12 +69,12 @@
 - Consumes: nothing.
 - Produces: nothing (behavior-identical on SQL Server; `COALESCE` is ANSI and already used elsewhere in the codebase).
 
-- [ ] **Step 1: Confirm the exact current sites**
+- [x] **Step 1: Confirm the exact current sites**
 
 Run: `grep -n "ISNULL" arx_go/pos.go`
 Expected: two lines, `730` and `2289` (2289 contains four `ISNULL(...)` calls).
 
-- [ ] **Step 2: Edit line 730**
+- [x] **Step 2: Edit line 730**
 
 Change:
 ```go
@@ -75,7 +85,7 @@ to:
 		SELECT COALESCE(SUM(pol.qty * pol.unit_cost), 0)
 ```
 
-- [ ] **Step 3: Edit line 2289**
+- [x] **Step 3: Edit line 2289**
 
 Change:
 ```go
@@ -86,17 +96,17 @@ to:
 		SET total_cost = COALESCE(ls.s, 0) + COALESCE(po.tax1, 0) + COALESCE(po.shipping_cost, 0) + COALESCE(po.misc_cost, 0),
 ```
 
-- [ ] **Step 4: Verify no `ISNULL` remains in app code**
+- [x] **Step 4: Verify no `ISNULL` remains in app code**
 
 Run: `grep -rn "ISNULL" arx_go/*.go`
 Expected: no output.
 
-- [ ] **Step 5: Build and vet**
+- [x] **Step 5: Build and vet**
 
 Run: `cd arx_go && go build ./... && go vet ./...`
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add arx_go/pos.go
@@ -122,12 +132,12 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
 - Consumes: nothing.
 - Produces: a documented rule the Phase 1 `InsertReturningID` helper (Task 1.5) relies on.
 
-- [ ] **Step 1: Locate the trigger reference section**
+- [x] **Step 1: Locate the trigger reference section**
 
 Run: `grep -n "trigger\|Trigger\|SCOPE_IDENTITY\|OUTPUT INSERTED" SQL/schema.md`
 Expected: find the table-reference / trigger area; if no trigger subsection exists, add the note under the table reference for `purchase_order`/`po_line`.
 
-- [ ] **Step 2: Add the note**
+- [x] **Step 2: Add the note**
 
 Insert this paragraph in the trigger area:
 ```markdown
@@ -139,12 +149,12 @@ Insert this paragraph in the trigger area:
 > (issue #625) folds this quirk into `db.Dialect.InsertReturningID`.
 ```
 
-- [ ] **Step 3: Verify the note landed**
+- [x] **Step 3: Verify the note landed**
 
 Run: `grep -n "OUTPUT INSERTED. vs triggers\|SCOPE_IDENTITY" SQL/schema.md`
 Expected: the new note is present.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add SQL/schema.md
@@ -171,7 +181,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
   - `Base.Engine string` field on the config struct.
   - `func (b *Base) DBEngine() string` - returns the normalized engine id, defaulting to `"sqlserver"` when unset/unknown.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `arxlib/config/base_test.go` (or append):
 ```go
@@ -202,12 +212,12 @@ func TestDBEngineNormalizes(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd arxlib && go test ./config/ -run TestDBEngine -v`
 Expected: FAIL - `Engine` field and `DBEngine` method do not exist.
 
-- [ ] **Step 3: Add the field and accessor**
+- [x] **Step 3: Add the field and accessor**
 
 In `arxlib/config/base.go`, add to the `Base` struct (near `DBServer`):
 ```go
@@ -229,12 +239,12 @@ func (b *Base) DBEngine() string {
 ```
 Add `"strings"` to the imports in `base.go` if not present.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd arxlib && go test ./config/ -run TestDBEngine -v`
 Expected: PASS.
 
-- [ ] **Step 5: Wire loading from env / local.json**
+- [x] **Step 5: Wire loading from env / local.json**
 
 In `arxlib/config/config.go`, in the same block that reads other DB fields (near `TestMode: os.Getenv("TEST_MODE") == "true"`), set:
 ```go
@@ -248,12 +258,12 @@ and in the local-json override section (near where `local.TestMode` is applied),
 ```
 Add an `Engine *string` field to the local-json struct alongside the existing `TestMode *bool` (find the struct with `json:"test_mode"` and add `Engine *string \`json:"engine"\``).
 
-- [ ] **Step 6: Build + full config tests**
+- [x] **Step 6: Build + full config tests**
 
 Run: `cd arxlib && go build ./... && go test ./config/`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add arxlib/config/base.go arxlib/config/config.go arxlib/config/base_test.go
@@ -308,7 +318,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
   ```
   - `func NewSQLServerDialect() Dialect`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `arxlib/db/dialect_test.go`:
 ```go
@@ -342,12 +352,12 @@ func TestSQLServerDialectIsIdentityAndTSQL(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd arxlib && go test ./db/ -run TestSQLServerDialect -v`
 Expected: FAIL - `NewSQLServerDialect` undefined.
 
-- [ ] **Step 3: Implement `dialect.go`**
+- [x] **Step 3: Implement `dialect.go`**
 
 Create `arxlib/db/dialect.go`:
 ```go
@@ -413,12 +423,12 @@ func (sqlServerDialect) TopClause(ph string) string { return "TOP (" + ph + ") "
 func (sqlServerDialect) LimitClause(string) string  { return "" }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd arxlib && go test ./db/ -run TestSQLServerDialect -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add arxlib/db/dialect.go arxlib/db/dialect_test.go
@@ -443,7 +453,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
 - Consumes: `NewSQLServerDialect()` (Task 1.2), `Base.DBEngine()` (Task 1.1).
 - Produces: `func Connect(engine, dsn string) (*sql.DB, Dialect, error)`.
 
-- [ ] **Step 1: Update `Connect`**
+- [x] **Step 1: Update `Connect`**
 
 Replace the body of `arxlib/db/db.go`'s `Connect` with an engine switch. New signature and body:
 ```go
@@ -473,7 +483,7 @@ func Connect(engine, dsn string) (*sql.DB, Dialect, error) {
 ```
 Keep the `_ "github.com/microsoft/go-mssqldb"` blank import.
 
-- [ ] **Step 2: Update the `main.go` call site**
+- [x] **Step 2: Update the `main.go` call site**
 
 In `arx_go/main.go` around line 35, change:
 ```go
@@ -488,7 +498,7 @@ to:
 ```
 Declare `var dbDialect arxdb.Dialect` next to `var database *sql.DB`, and pass it into `New(...)` (updated in Task 1.4, Step 2). Until Task 1.4 changes `New`'s signature, this file will not compile - do Task 1.3 and 1.4 together before building.
 
-- [ ] **Step 3: Update the `settings.go` call site**
+- [x] **Step 3: Update the `settings.go` call site**
 
 In `arx_go/settings.go` around line 402, change:
 ```go
@@ -500,7 +510,7 @@ to:
 ```
 and, in the success branch where `h.db = newDB` is set, also set `h.dialect = newDialect` (the field is added in Task 1.4).
 
-- [ ] **Step 4: Defer build to Task 1.4**
+- [x] **Step 4: Defer build to Task 1.4**
 
 `Connect`'s new signature ripples into `Handler` construction, so build after Task 1.4. Proceed to Task 1.4 now; commit both together at the end of 1.4.
 
@@ -516,7 +526,7 @@ and, in the success branch where `h.db = newDB` is set, also set `h.dialect = ne
 - Consumes: `Connect` (Task 1.3), `Dialect.Rewrite`, `Dialect.UpsertAppConfig` (Task 1.2).
 - Produces: `h.dialect arxdb.Dialect`; all four wrappers apply `h.dialect.Rewrite(query)` before executing; `appConfigSet` routes through `h.dialect.UpsertAppConfig`.
 
-- [ ] **Step 1: Add the field**
+- [x] **Step 1: Add the field**
 
 In `arx_go/handlers.go`, add to `type Handler struct`:
 ```go
@@ -524,7 +534,7 @@ In `arx_go/handlers.go`, add to `type Handler struct`:
 ```
 (Confirm `arxdb` is the import alias for `arxlib/db` in this file; add it if missing.)
 
-- [ ] **Step 2: Thread it through `New`**
+- [x] **Step 2: Thread it through `New`**
 
 Change `New`'s signature (note `Dialect` lives in package `db`, alias `arxdb`, not `config`):
 ```go
@@ -536,7 +546,7 @@ and set it in the returned struct literal:
 ```
 In `arx_go/main.go`, update the call: `h = New(database, dbDialect, cfg, templatesFS, releaseNotesData)`.
 
-- [ ] **Step 3: Guard against a nil dialect**
+- [x] **Step 3: Guard against a nil dialect**
 
 When `database` is nil (no password configured), `dbDialect` is nil too. `Rewrite` is only reached through the wrappers, which are only called when `h.db != nil`, so a nil dialect is never dereferenced on the hot path. To be safe in `New`, default it:
 ```go
@@ -545,7 +555,7 @@ When `database` is nil (no password configured), `dbDialect` is nil too. `Rewrit
 	}
 ```
 
-- [ ] **Step 4: Apply `Rewrite` in the wrappers**
+- [x] **Step 4: Apply `Rewrite` in the wrappers**
 
 In `arx_go/handlers.go`, change each wrapper to rewrite the query once, before logging and executing. For `queryContext`:
 ```go
@@ -569,7 +579,7 @@ and in each `txLogger` method prepend `query = t.rewrite(query)` (for `ExecConte
 ```
 On SQL Server `Rewrite` is identity, so behavior is unchanged.
 
-- [ ] **Step 5: Route `appConfigSet` through the dialect**
+- [x] **Step 5: Route `appConfigSet` through the dialect**
 
 Replace the `MERGE` literal in `appConfigSet` (`arx_go/handlers.go:243-248`):
 ```go
@@ -579,12 +589,12 @@ func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
 }
 ```
 
-- [ ] **Step 6: Build + vet + unit tests**
+- [x] **Step 6: Build + vet + unit tests**
 
 Run: `cd arx_go && go build ./... && go vet ./...` then `cd ../arxlib && go test ./...`
 Expected: no errors; arxlib tests PASS.
 
-- [ ] **Step 7: Commit (Tasks 1.3 + 1.4 together)**
+- [x] **Step 7: Commit (Tasks 1.3 + 1.4 together)**
 
 ```bash
 git add arxlib/db/db.go arx_go/main.go arx_go/settings.go arx_go/handlers.go
@@ -611,7 +621,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
 
 **Transformation rule:** at each site, split the current inline SQL into `columnList` (the comma-joined columns), `valuesList` (the comma-joined `@pN` markers, plus any inline literals/`GETDATE()` already present), and replace the literal with `h.dialect.InsertReturningID(table, columnList, valuesList, hasTrigger)`. `hasTrigger` is `false` everywhere except the two `pos.go` PO inserts (the `purchase_order` table has triggers). Leave the surrounding `queryRowContext(...).Scan(&id)` / `tx.QueryRowContext(...).Scan(&id)` untouched - the helper's SQL Server output is byte-identical to today's for both branches.
 
-- [ ] **Step 1: Worked example - `parts.go:411` (non-trigger)**
+- [x] **Step 1: Worked example - `parts.go:411` (non-trigger)**
 
 Replace:
 ```go
@@ -643,7 +653,7 @@ with:
 ```
 (The trailing arg list stays exactly as-is.)
 
-- [ ] **Step 2: Worked example - `pos.go` PO insert (trigger table)**
+- [x] **Step 2: Worked example - `pos.go` PO insert (trigger table)**
 
 At `pos.go` (the `INSERT INTO ... ; SELECT CAST(SCOPE_IDENTITY() AS INT)` block near line 513), replace the inline SQL literal with:
 ```go
@@ -666,21 +676,21 @@ At `pos.go` (the `INSERT INTO ... ; SELECT CAST(SCOPE_IDENTITY() AS INT)` block 
 ```
 Keep the `tx.QueryRowContext(..., <args>).Scan(&newID)` and its argument list unchanged. Apply the same pattern to the second `SCOPE_IDENTITY` insert (`pos.go:~2380`, `hasTrigger=true`).
 
-- [ ] **Step 3: Apply the rule to the remaining 10 sites**
+- [x] **Step 3: Apply the rule to the remaining 10 sites**
 
 For each of `contacts.go:215`, `suppliers.go:242`, `records.go:864,1465,1813,2451,2554,2662`, `records_history.go:166`, `named_query_settings.go:124`: extract the column list and values list from the existing literal and route through `h.dialect.InsertReturningID(table, cols, vals, false)`. Note `records.go:2554/2662` and `named_query_settings.go:124` embed the `OUTPUT INSERTED.id` mid-string in a `fmt.Sprintf` template - split those the same way. `records_history.go:166` has `GETDATE()` inside its VALUES list; keep it inside `valuesList` verbatim (it is Tier-1 rewritten later).
 
-- [ ] **Step 4: Verify no stray insert-id T-SQL remains outside the dialect**
+- [x] **Step 4: Verify no stray insert-id T-SQL remains outside the dialect**
 
 Run: `grep -rn "OUTPUT INSERTED\|SCOPE_IDENTITY" arx_go/*.go | grep -v _test`
 Expected: no matches in handler files (only `arxlib/db/dialect.go` holds these strings). Test files are converted in Phase 2.
 
-- [ ] **Step 5: Build + vet**
+- [x] **Step 5: Build + vet**
 
 Run: `cd arx_go && go build ./... && go vet ./...`
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add arx_go/contacts.go arx_go/parts.go arx_go/suppliers.go arx_go/records.go arx_go/records_history.go arx_go/named_query_settings.go arx_go/pos.go
@@ -705,7 +715,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
 
 **Transformation rule:** for a "first N rows" query, insert `h.dialect.TopClause("@pN")` right after `SELECT ` and append `h.dialect.LimitClause("@pN")` at the very end (after any `ORDER BY`). On SQL Server `TopClause` = `"TOP (@pN) "` and `LimitClause` = `""`, reproducing today's SQL. The `@pN` marker must match the arg already bound for the row count.
 
-- [ ] **Step 1: Worked example - `reports.go:79`**
+- [x] **Step 1: Worked example - `reports.go:79`**
 
 Replace:
 ```go
@@ -717,25 +727,25 @@ with a Sprintf that injects the clause:
 ```
 ...and add `h.dialect.TopClause("@p1")` as the first Sprintf arg, plus `+ h.dialect.LimitClause("@p1")` appended to the end of the query string (outside the ORDER BY). Confirm the bound arg for `@p1` is still the limit value.
 
-- [ ] **Step 2: Worked example - `api.go:36` (already OFFSET/FETCH)**
+- [x] **Step 2: Worked example - `api.go:36` (already OFFSET/FETCH)**
 
 `api.go:36,121` use a hardcoded `OFFSET 0 ROWS FETCH NEXT N ROWS ONLY`. These are already ANSI and portable to Postgres unchanged, so leave them as-is in Phase 1 and add a `// #625: portable OFFSET/FETCH, revisited in Phase 2` comment. (They are listed here only so the pagination task accounts for every site; no code change.)
 
-- [ ] **Step 3: Apply to the `TOP` sites**
+- [x] **Step 3: Apply to the `TOP` sites**
 
 Convert `parts.go:1680,1721`, `reports.go:105`, and `suppliers.go:191` with the Step 1 pattern. `suppliers.go:151` builds a `top = "TOP (@p2) "` variable - replace that assignment with `top = h.dialect.TopClause("@p2")` and add the matching `+ h.dialect.LimitClause("@p2")` at the end of the query it feeds.
 
-- [ ] **Step 4: Verify no stray `TOP (` remains outside the dialect**
+- [x] **Step 4: Verify no stray `TOP (` remains outside the dialect**
 
 Run: `grep -rn "TOP (" arx_go/*.go | grep -v _test`
 Expected: no matches (the `"TOP (" ...` literal now lives only in `arxlib/db/dialect.go`).
 
-- [ ] **Step 5: Build + vet**
+- [x] **Step 5: Build + vet**
 
 Run: `cd arx_go && go build ./... && go vet ./...`
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add arx_go/parts.go arx_go/reports.go arx_go/suppliers.go arx_go/api.go
@@ -760,7 +770,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
 
 **Transformation rule:** replace each `TRY_CAST(<expr> AS INT)` occurrence with `%s` in a `fmt.Sprintf` and pass `h.dialect.TryCastInt("<expr>")`. Where two occurrences share one query (`1171,1172`), pass two args. Preserve the surrounding `ORDER BY ... DESC`, `LAG/LEAD OVER (...)`, and `COALESCE(MAX(...)+1, 1)` context exactly.
 
-- [ ] **Step 1: Worked example - `records.go:1360`**
+- [x] **Step 1: Worked example - `records.go:1360`**
 
 Replace:
 ```go
@@ -775,16 +785,16 @@ with:
 		FROM %s WHERE form_id = @p1`, h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
 ```
 
-- [ ] **Step 2: Apply to the remaining sites**
+- [x] **Step 2: Apply to the remaining sites**
 
 Convert `records.go:305,1171,1172,1450,2764` the same way. `2764` casts `trec.serial_number` (keep the table alias inside the expr argument: `h.dialect.TryCastInt("trec.serial_number")`).
 
-- [ ] **Step 3: Verify no stray `TRY_CAST` remains outside the dialect**
+- [x] **Step 3: Verify no stray `TRY_CAST` remains outside the dialect**
 
 Run: `grep -rn "TRY_CAST" arx_go/*.go | grep -v _test`
 Expected: no matches.
 
-- [ ] **Step 4: Build + vet; commit**
+- [x] **Step 4: Build + vet; commit**
 
 Run: `cd arx_go && go build ./... && go vet ./...` (expect no errors), then:
 ```bash
@@ -808,7 +818,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
 - Consumes: `Dialect.MonthStartExpr()` (Task 1.2).
 - Produces: nothing new.
 
-- [ ] **Step 1: Edit the site**
+- [x] **Step 1: Edit the site**
 
 Replace:
 ```go
@@ -820,7 +830,7 @@ with:
 ```
 Adjust to the existing `fmt.Sprintf` structure at this call (the table name is already a `%s` arg - keep it as the trailing arg, and note the doubled `%%s` if nesting Sprintf; otherwise build the month-start fragment into a local `monthStart := h.dialect.MonthStartExpr()` and interpolate both in a single `fmt.Sprintf`). The SQL Server output is identical to today.
 
-- [ ] **Step 2: Verify + build + commit**
+- [x] **Step 2: Verify + build + commit**
 
 Run: `grep -rn "DATEFROMPARTS" arx_go/*.go | grep -v _test` (expect no matches), then `cd arx_go && go build ./... && go vet ./...` (expect no errors), then:
 ```bash
@@ -839,7 +849,7 @@ Claude-Session: https://claude.ai/code/session_012UtYghgWTw6J3BqAnqo5Zc"
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Unit + build sweep**
+- [x] **Step 1: Unit + build sweep**
 
 Run:
 ```bash
@@ -847,12 +857,12 @@ cd arxlib && go test ./... && cd ../arx_go && go build ./... && go vet ./... && 
 ```
 Expected: all PASS, no vet errors.
 
-- [ ] **Step 2: Confirm the seam is complete**
+- [x] **Step 2: Confirm the seam is complete**
 
 Run: `grep -rn "OUTPUT INSERTED\|SCOPE_IDENTITY\|TRY_CAST\|DATEFROMPARTS\|MERGE INTO\|TOP (" arx_go/*.go | grep -v _test`
 Expected: no matches (all structural T-SQL now lives behind the dialect). `GETDATE()` and `@pN` intentionally remain in call sites - they are handled by the Tier-1 `Rewrite`, which is identity on SQL Server.
 
-- [ ] **Step 3: Integration suite (user-run, ArxDev)**
+- [x] **Step 3: Integration suite (user-run, ArxDev)**
 
 Hand off to the user to run the live-DB gate (this environment must not touch any DB):
 ```powershell
@@ -861,7 +871,7 @@ go test -tags integration ./arx_go/...
 ```
 Expected: PASS - proving the dialect seam changed no SQL Server behavior. This is the real Phase 1 gate.
 
-- [ ] **Step 4: Update the design doc phase status**
+- [x] **Step 4: Update the design doc phase status**
 
 Mark Phase 0 and Phase 1 complete in `docs/plans/625-postgres-migration-design.md` (a one-line status note under each phase), commit, and open/refresh the PR.
 

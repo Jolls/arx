@@ -171,7 +171,7 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 // #245).
 func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]dashboardFailureModeItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p1) f.id, pn.part_number, MAX(res.parameter) AS parameter,
+		SELECT %sf.id, pn.part_number, MAX(res.parameter) AS parameter,
 			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count
 		FROM %s res
 		JOIN %s trec ON res.record_id = trec.id
@@ -180,8 +180,8 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 		WHERE trec.is_active = %s AND res.pass_fail IS NOT NULL
 		GROUP BY f.id, pn.part_number, res.test_id
 		HAVING SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) > 0
-		ORDER BY failure_count DESC`,
-		h.dialect.BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit)
+		ORDER BY failure_count DESC`+h.dialect.LimitClause("@p1"),
+		h.dialect.TopClause("@p1"), h.dialect.BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -258,14 +258,14 @@ func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]d
 // surface on the Reports dashboard (issue #658, RPT-7).
 func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]dashboardStaleWIPItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p1) trec.id, trec.form_id, pn.part_number, trec.created_at
+		SELECT %strec.id, trec.form_id, pn.part_number, trec.created_at
 		FROM %s trec
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE trec.is_active = %s AND trec.is_locked = %s
 			AND trec.created_at <= DATEADD(day, -@p2, GETDATE())
-		ORDER BY trec.created_at ASC`,
-		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit, staleWIPThresholdDays)
+		ORDER BY trec.created_at ASC`+h.dialect.LimitClause("@p1"),
+		h.dialect.TopClause("@p1"), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit, staleWIPThresholdDays)
 	if err != nil {
 		return nil, err
 	}
@@ -289,13 +289,13 @@ func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]da
 // measured from the most recent 'submitted' approval event on each PO.
 func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([]dashboardPendingApprovalItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p1) po.number,
+		SELECT %spo.number,
 			(SELECT MAX(h.changed_at) FROM %s h
 			 WHERE h.po_id = po.id AND h.event_type = 'approval' AND h.action = 'submitted') AS submitted_at
 		FROM %s po
 		WHERE po.approval_status = 'pending'
-		ORDER BY submitted_at ASC`,
-		h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
+		ORDER BY submitted_at ASC`+h.dialect.LimitClause("@p1"),
+		h.dialect.TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -321,11 +321,11 @@ func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([
 // reorder point set (reorder_min IS NULL) are excluded.
 func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]dashboardBelowReorderItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT TOP (@p1) id, part_number, stock_on_hand, reorder_min
+		SELECT %sid, part_number, stock_on_hand, reorder_min
 		FROM %s
 		WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
-		ORDER BY (stock_on_hand - reorder_min) ASC`,
-		h.cfg.PartsTable()), limit)
+		ORDER BY (stock_on_hand - reorder_min) ASC`+h.dialect.LimitClause("@p1"),
+		h.dialect.TopClause("@p1"), h.cfg.PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +508,7 @@ type spendPartRow struct {
 func (h *Handler) querySpendBySupplier(ctx context.Context, rng reportDateRange) ([]spendSupplierRow, error) {
 	where, args := rng.whereClause("po.date_ordered", 1)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT po.supplier_name, ISNULL(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
+		SELECT po.supplier_name, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.id
 		WHERE 1=1%s
@@ -539,7 +539,7 @@ func (h *Handler) querySpendBySupplier(ctx context.Context, rng reportDateRange)
 func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]spendPartRow, error) {
 	where, args := rng.whereClause("po.date_ordered", 1)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pol.part_number_snapshot, p.title, ISNULL(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
+		SELECT pol.part_number_snapshot, p.title, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.id
 		LEFT JOIN %s p ON pol.part_id = p.id
