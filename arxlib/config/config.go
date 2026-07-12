@@ -48,7 +48,10 @@ func Load(version string) *Config {
 			DBServer:       os.Getenv("DB_SERVER"),
 			Engine:         os.Getenv("DB_ENGINE"),
 			DBName:         os.Getenv("DB_NAME"),
+			TestDBServer:   os.Getenv("TEST_DB_SERVER"),
+			TestEngine:     os.Getenv("TEST_DB_ENGINE"),
 			TestDBName:     GetEnv("TEST_DB_NAME", "ArxDev"),
+			TestDBUser:     os.Getenv("TEST_DB_USER"),
 			DBUser:         os.Getenv("DB_USER"),
 			DocControlRoot: os.Getenv("DOC_CONTROL_ROOT"),
 			TestMode:       os.Getenv("TEST_MODE") == "true",
@@ -111,9 +114,19 @@ func Load(version string) *Config {
 		if local.TestMode != nil {
 			cfg.TestMode = *local.TestMode
 		}
+		if local.TestDBServer != "" {
+			cfg.TestDBServer = local.TestDBServer
+		}
+		if local.TestEngine != "" {
+			cfg.TestEngine = local.TestEngine
+		}
 		if local.TestDBName != "" {
 			cfg.TestDBName = local.TestDBName
 		}
+		if local.TestDBUser != "" {
+			cfg.TestDBUser = local.TestDBUser
+		}
+		cfg.TestDBPassword = local.TestDBPassword
 	}
 
 	// Resolve the session secret used to sign session/CSRF cookies. Precedence:

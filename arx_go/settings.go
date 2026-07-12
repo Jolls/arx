@@ -63,6 +63,16 @@ func sanitizeLandingRoute(raw string) (string, bool) {
 	return ri, true
 }
 
+// firstNonEmpty returns the first non-empty string in vals, or "" if all are empty.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 type contactOption struct {
 	ID   int
 	Name string
@@ -163,7 +173,12 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"Connected":             h.db != nil,
 		"DBServer":              h.cfg.DBServer,
 		"DBName":                h.cfg.DBName,
+		"DBEngine":              h.cfg.DBEngine(),
+		"TestDBServer":          h.cfg.TestDBServer,
+		"TestEngine":            h.cfg.TestEngine,
 		"TestDBName":            h.cfg.TestDBName,
+		"TestDBUser":            h.cfg.TestDBUser,
+		"TestDBPasswordSet":     h.cfg.TestDBPassword != "",
 		"ActiveDBName":          h.cfg.ActiveDBName(),
 		"DBUser":                h.cfg.DBUser,
 		"DocControlRoot":        h.cfg.DocControlRoot,
@@ -342,9 +357,15 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 
 	dbServer := strings.TrimSpace(r.FormValue("db_server"))
 	dbName := strings.TrimSpace(r.FormValue("db_name"))
-	testDBName := strings.TrimSpace(r.FormValue("test_db_name"))
 	dbUser := strings.TrimSpace(r.FormValue("db_user"))
 	password := strings.TrimSpace(r.FormValue("db_password"))
+	// Test-mode connection profile. Server/engine/user are blank-clearable so a
+	// test override can be removed; a blank field then inherits the prod value.
+	testDBServer := strings.TrimSpace(r.FormValue("test_db_server"))
+	testEngine := strings.TrimSpace(r.FormValue("test_engine"))
+	testDBName := strings.TrimSpace(r.FormValue("test_db_name"))
+	testDBUser := strings.TrimSpace(r.FormValue("test_db_user"))
+	testPassword := strings.TrimSpace(r.FormValue("test_db_password"))
 	docRoot := strings.TrimSpace(r.FormValue("doc_control_root"))
 	poRoot := strings.TrimSpace(r.FormValue("po_folder_root"))
 	supplierFilesRoot := strings.TrimSpace(r.FormValue("supplier_files_root"))
@@ -363,13 +384,23 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		local.DBName = dbName
 		h.cfg.DBName = dbName
 	}
-	if testDBName != "" {
-		local.TestDBName = testDBName
-		h.cfg.TestDBName = testDBName
-	}
 	if dbUser != "" {
 		local.DBUser = dbUser
 		h.cfg.DBUser = dbUser
+	}
+
+	// Test-profile server/engine/user are written verbatim (blank clears the
+	// override). TestDBName keeps the "only if non-empty" guard so the ArxDev
+	// default is never wiped by an empty submit.
+	local.TestDBServer = testDBServer
+	h.cfg.TestDBServer = testDBServer
+	local.TestEngine = testEngine
+	h.cfg.TestEngine = testEngine
+	local.TestDBUser = testDBUser
+	h.cfg.TestDBUser = testDBUser
+	if testDBName != "" {
+		local.TestDBName = testDBName
+		h.cfg.TestDBName = testDBName
 	}
 
 	debugMode := r.FormValue("debug_mode") == "1"
@@ -388,11 +419,15 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	h.cfg.DebugMode = debugMode
 	h.cfg.TestMode = testMode
 
-	// Use new password if provided, otherwise reconnect with saved password.
-	// This lets test-mode toggles take effect immediately without re-entering credentials.
-	connectWith := password
-	if connectWith == "" {
-		connectWith = h.cfg.DBPassword
+	// Connect with the active profile's password: prefer a freshly-entered value,
+	// then the stored one. This lets test-mode toggles take effect immediately
+	// without re-entering credentials. In test mode the test password wins and
+	// falls back to the prod password when unset (mirrors Base.activePassword).
+	var connectWith string
+	if h.cfg.TestMode {
+		connectWith = firstNonEmpty(testPassword, h.cfg.TestDBPassword, password, h.cfg.DBPassword)
+	} else {
+		connectWith = firstNonEmpty(password, h.cfg.DBPassword)
 	}
 
 	var connErr string
@@ -410,6 +445,10 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			if password != "" {
 				local.DBPassword = password
 				h.cfg.DBPassword = password
+			}
+			if testPassword != "" {
+				local.TestDBPassword = testPassword
+				h.cfg.TestDBPassword = testPassword
 			}
 			h.CheckSchemaVersion(r.Context())
 			h.loadCompanyLogo(r.Context())
