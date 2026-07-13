@@ -8,6 +8,27 @@ let allRows = [];
 let sortCol = null;
 let sortDir = 'asc';
 
+// PO status / BOM cost-source badge markup, rendered client-side for the
+// /pos and BOM table views. Mirrors the po_status_badge / bom_source_badge
+// templates in shared/partials.html — keep both in sync.
+const PO_STATUS_BADGES = {
+    rfq:                '<span class="badge bg-dark">RFQ</span>',
+    draft:              '<span class="badge bg-secondary">Draft</span>',
+    open:               '<span class="badge bg-info text-dark">Open</span>',
+    sent:               '<span class="badge badge-sent">Sent</span>',
+    partially_received: '<span class="badge bg-warning text-dark">Partially Received</span>',
+    closed:             '<span class="badge bg-success">Closed</span>',
+    cancelled:          '<span class="badge bg-danger">Cancelled</span>',
+};
+
+const BOM_SOURCE_BADGES = {
+    rollup: '<span class="badge bg-info text-dark">Rollup</span>',
+    price: '<span class="badge bg-success">Price</span>',
+    labor: '<span class="badge badge-labor">Labor</span>',
+    current_cost: '<span class="badge bg-secondary">Cost</span>',
+    missing: '<span class="badge bg-warning text-dark">Missing</span>',
+};
+
 // --- Filter/sort state persistence across navigation (#390) ---
 // Saves to sessionStorage so the list restores its view when you hit Back.
 
@@ -187,21 +208,12 @@ const ROW_BUILDERS = {
     </tr>`,
 
     '/api/pos/rows': r => {
-        const badges = {
-            rfq:                '<span class="badge bg-dark">RFQ</span>',
-            draft:              '<span class="badge bg-secondary">Draft</span>',
-            open:               '<span class="badge bg-info text-dark">Open</span>',
-            sent:               '<span class="badge bg-primary">Sent</span>',
-            partially_received: '<span class="badge bg-warning text-dark">Partially Received</span>',
-            closed:             '<span class="badge bg-success">Closed</span>',
-            cancelled:          '<span class="badge bg-danger">Cancelled</span>',
-        };
         const vendor = r.sid
             ? `<a href="/supplier/${r.sid}" class="part-number-link">${escHtml(r.supplier)}</a>`
             : escHtml(r.supplier);
         return `<tr>
             <td><a href="/po/${escHtml(r.num)}" class="part-number-link">${escHtml(r.num)}</a></td>
-            <td>${badges[r.status] || `<span class="badge bg-secondary">${escHtml(r.status)}</span>`}</td>
+            <td>${PO_STATUS_BADGES[r.status] || `<span class="badge bg-secondary">${escHtml(r.status)}</span>`}</td>
             <td>${vendor}</td>
             <td>${r.ordered || '—'}</td>
             <td>${r.closed  || '—'}</td>
@@ -612,14 +624,7 @@ document.addEventListener('DOMContentLoaded', function () {
 // any inserted row whose ChildHasBOM is true, so nesting depth is unbounded.
 
 function bomSourceBadge(source) {
-    var badges = {
-        rollup: '<span class="badge bg-info text-dark">Rollup</span>',
-        price: '<span class="badge bg-success">Price</span>',
-        labor: '<span class="badge bg-primary">Labor</span>',
-        current_cost: '<span class="badge bg-secondary">Cost</span>',
-        missing: '<span class="badge bg-warning text-dark">Missing</span>',
-    }
-    return badges[source] || ''
+    return BOM_SOURCE_BADGES[source] || ''
 }
 
 // Mirrors the server's `{{printf "%.5g" .PLQty}}` formatting.

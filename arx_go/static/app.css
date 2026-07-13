@@ -9,6 +9,11 @@
     --header-bg: #1a1a2e;
 }
 
+/* Fixed-color badges — deliberately NOT var(--accent-1); they must stay
+   blue regardless of the active accent theme (unlike bg-primary, which
+   shifts per theme; see below). */
+.badge-sent, .badge-labor, .badge-part { background-color: #0d6efd; color: #fff; }
+
 /* --- Accent color themes (#537) -------------------------------
    Preset set applied via a class on <body>; "theme-blue" matches the
    :root defaults above so it needs no overrides of its own. Each preset
