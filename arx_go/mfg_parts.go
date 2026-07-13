@@ -46,6 +46,9 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "mfg-parts"); !ok {
+		return
+	}
 	mfgID := strings.TrimSpace(r.FormValue("mfg_id"))
 	mpn := strings.TrimSpace(r.FormValue("mfg_part_number"))
 
@@ -123,6 +126,9 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "mfg-parts"); !ok {
+		return
+	}
 	mid := chi.URLParam(r, "mid")
 	mfgID := strings.TrimSpace(r.FormValue("mfg_id"))
 	mpn := strings.TrimSpace(r.FormValue("mfg_part_number"))
@@ -149,6 +155,9 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "mfg-parts"); !ok {
+		return
+	}
 	mid := chi.URLParam(r, "mid")
 
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`

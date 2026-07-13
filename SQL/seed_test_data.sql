@@ -17,7 +17,8 @@
 --   5001-5099  purchase_order          8001-8099  users
 --   5501-5599  po_line                 8101-8199  part_attachment
 --   5801-5899  purchase_order_history  1-17       unit (natural identity)
---   5901-5999  inventory_transaction   (identity) app_config, named_queries
+--   5901-5999  inventory_transaction   8201-8299  build
+--   (identity) app_config, named_queries
 --
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
 -- one with a comment, one without. company_attachment is NOT seeded (would require real
@@ -44,6 +45,7 @@ BEGIN TRY
     DELETE FROM dbo.bom;
     DELETE FROM dbo.price;
     DELETE FROM dbo.inventory_transaction;
+    DELETE FROM dbo.build;
     DELETE FROM dbo.po_line;
     DELETE FROM dbo.purchase_order_history;
     DELETE FROM dbo.purchase_order;
@@ -361,6 +363,18 @@ BEGIN TRY
     UPDATE dbo.part SET reorder_min = 25 WHERE id = 3007;
 
     -- ============================================================
+    -- 10b. Build history (#675): one past build of assembly 3005.
+    -- ============================================================
+    -- The matching component 'issue' / output 'receipt' ledger rows are intentionally
+    -- NOT seeded here — the inventory seed above is calibrated so only 3007 carries a
+    -- balance (drives the reorder-point fixtures), and posting build ledger rows would
+    -- perturb those. This row just exercises the build table itself in test mode.
+    SET IDENTITY_INSERT dbo.build ON;
+    INSERT INTO dbo.build (id, part_id, output_lot_id, qty, build_date, username, note) VALUES
+        (8201, 3005, NULL, 1, '2026-05-25', 'tester', 'Built 1x assembly 3005 from BOM');
+    SET IDENTITY_INSERT dbo.build OFF;
+
+    -- ============================================================
     -- 11. Test records — form, test_definition, test_record, test_result,
     --     record_events, record_event_results
     -- ============================================================
@@ -508,6 +522,7 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.po_line',                  RESEED, 5599);
     DBCC CHECKIDENT ('dbo.purchase_order_history',   RESEED, 5899);
     DBCC CHECKIDENT ('dbo.inventory_transaction',    RESEED, 5999);
+    DBCC CHECKIDENT ('dbo.build',                    RESEED, 8299);
     DBCC CHECKIDENT ('dbo.form',                     RESEED, 6099);
     DBCC CHECKIDENT ('dbo.form_events',              RESEED, 6299);
     DBCC CHECKIDENT ('dbo.test_definition',          RESEED, 6199);

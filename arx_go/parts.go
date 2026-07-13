@@ -45,20 +45,79 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 }
 
 func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTab string) (models.Part, string, string, bool) {
-	p, err := h.fetchPartBasic(r.Context(), id)
-	if err == sql.ErrNoRows {
-		h.renderError(w, r, "Part not found")
-		return models.Part{}, "", "", false
-	}
-	if err != nil {
-		h.renderError(w, r, "Error retrieving part: "+err.Error())
+	p, ok := h.partForMutation(w, r, id)
+	if !ok {
 		return models.Part{}, "", "", false
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
-	h.applyCategoryTabs(r.Context(), &p)
+	if !tabVisible(p, subTab) {
+		h.renderError(w, r, "The "+subTab+" section does not apply to "+p.Category+" parts.")
+		return models.Part{}, "", "", false
+	}
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	return p, backURL, backLabel, true
+}
+
+// tabVisible reports whether a part subtab applies to p's category. It is the
+// single source of truth for subtab gating: partPageBase calls it to guard every
+// GET view, and the POST mutation handlers call it (via the same Show* methods)
+// to guard writes — the subtabs are hidden in the UI for categories that don't
+// apply, but the routes stay reachable by direct URL. Sections not listed here
+// (details, edit, where-used, attachments) apply to every category.
+func tabVisible(p models.Part, subTab string) bool {
+	switch subTab {
+	case "bom":
+		return p.ShowBOM()
+	case "build":
+		return p.ShowBuild()
+	case "orders":
+		return p.ShowOrders()
+	case "transactions":
+		return p.ShowInventory()
+	case "pricing", "price-history":
+		return p.ShowPricing()
+	case "mfg-parts":
+		return p.ShowMfgParts()
+	case "suppliers":
+		return p.ShowSuppliers()
+	default:
+		return true
+	}
+}
+
+// partForMutation loads a part and resolves its category tabs, rendering an
+// error (ok=false) if the part is missing. It is the shared "load part + resolve
+// tabs" primitive: partPageBase builds the GET page context on top of it, and
+// requireTab layers the write-side tab gate on top of it for POST handlers.
+func (h *Handler) partForMutation(w http.ResponseWriter, r *http.Request, id string) (models.Part, bool) {
+	p, err := h.fetchPartBasic(r.Context(), id)
+	if err == sql.ErrNoRows {
+		h.renderError(w, r, "Part not found")
+		return models.Part{}, false
+	}
+	if err != nil {
+		h.renderError(w, r, "Error retrieving part: "+err.Error())
+		return models.Part{}, false
+	}
+	h.applyCategoryTabs(r.Context(), &p)
+	return p, true
+}
+
+// requireTab loads a part for a POST mutation handler and rejects the request
+// (rendering an error, ok=false) when the given subtab does not apply to the
+// part's category — the write-side counterpart to partPageBase's GET gate, using
+// the same tabVisible mapping.
+func (h *Handler) requireTab(w http.ResponseWriter, r *http.Request, id, subTab string) (models.Part, bool) {
+	p, ok := h.partForMutation(w, r, id)
+	if !ok {
+		return p, false
+	}
+	if !tabVisible(p, subTab) {
+		h.renderError(w, r, "The "+subTab+" section does not apply to "+p.Category+" parts.")
+		return p, false
+	}
+	return p, true
 }
 
 func fv(r *http.Request, key string) string { return strings.TrimSpace(r.FormValue(key)) }
@@ -888,6 +947,9 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "bom"); !ok {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -1060,6 +1122,9 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 
 func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "bom"); !ok {
+		return
+	}
 	pnid, err := strconv.Atoi(id)
 	if err != nil {
 		h.renderError(w, r, "Invalid part ID")
@@ -1970,6 +2035,9 @@ func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID 
 // used for cost rollup (the multi-supplier review case from migration #484).
 func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+		return
+	}
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
 		h.renderError(w, r, "Invalid supplier")
@@ -1986,6 +2054,9 @@ func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+		return
+	}
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
 		h.renderError(w, r, "Invalid supplier")
@@ -2072,6 +2143,9 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+		return
+	}
 	priceID := chi.URLParam(r, "priceID")
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
@@ -2123,6 +2197,9 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+		return
+	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(), h.dialect.BoolLiteral(false),
@@ -2136,6 +2213,9 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+		return
+	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(), h.dialect.BoolLiteral(true),
@@ -2196,6 +2276,9 @@ func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "bom"); !ok {
+		return
+	}
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	var parentPN string
 	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
