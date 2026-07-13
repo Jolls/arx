@@ -38,10 +38,10 @@ type buildComponent struct {
 
 // loadBuildComponents returns the output part's inventory-tracked BOM lines for the
 // Build tab. Non-stocked categories (OPS labor, DOC, …) are skipped — they never
-// draw stock, mirroring the build handler's own filter. When outputLotTracked is
-// true, each lot-tracked component's active lots are loaded for the picker (an edge
-// into an output lot only exists when the output part is lot-tracked).
-func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int, outputLotTracked bool) ([]buildComponent, error) {
+// draw stock, mirroring the build handler's own filter. Each lot-tracked component's
+// active lots are loaded for the picker, since consuming a lot-tracked component
+// always draws from a specific lot regardless of whether the output is lot-tracked.
+func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]buildComponent, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT b.component_part_id, p.part_number, p.title, p.category, b.qty, p.stock_on_hand, p.is_lot_tracked
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
@@ -71,19 +71,16 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int, out
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// Load each lot-tracked component's active lots for the picker — only when the
-	// output is lot-tracked, since genealogy edges require an output lot to point at.
-	if outputLotTracked {
-		for i := range comps {
-			if !comps[i].IsLotTracked {
-				continue
-			}
-			lots, err := h.activeLotsForPart(ctx, comps[i].PartID)
-			if err != nil {
-				return nil, err
-			}
-			comps[i].Lots = lots
+	// Load each lot-tracked component's active lots for the picker.
+	for i := range comps {
+		if !comps[i].IsLotTracked {
+			continue
 		}
+		lots, err := h.activeLotsForPart(ctx, comps[i].PartID)
+		if err != nil {
+			return nil, err
+		}
+		comps[i].Lots = lots
 	}
 	return comps, nil
 }
@@ -127,16 +124,25 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		builds = append(builds, b)
 	}
 
-	// The BOM lines this build will consume, with current on-hand and (when the
-	// output is lot-tracked) a lot picker per lot-tracked component.
-	comps, err := h.loadBuildComponents(r.Context(), p.PNID, p.IsLotTracked)
+	// The BOM lines this build will consume, with current on-hand and a lot picker per
+	// lot-tracked component. The lot column shows whenever any consumed component is
+	// lot-tracked (independent of whether the output part is), since those components
+	// are always drawn from a specific lot.
+	comps, err := h.loadBuildComponents(r.Context(), p.PNID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
+	showLotColumn := false
+	for _, c := range comps {
+		if c.IsLotTracked {
+			showLotColumn = true
+			break
+		}
+	}
 
 	h.render(w, r, "parts/part_build.html", map[string]any{
-		"Part": p, "Builds": builds, "Components": comps,
+		"Part": p, "Builds": builds, "Components": comps, "ShowLotColumn": showLotColumn,
 		"Today": time.Now().Format("2006-01-02"),
 		"BuiltQty": r.URL.Query().Get("built"),
 		"ActiveTab": "parts", "ActiveSubTab": "build",
@@ -209,24 +215,23 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// When the output is lot-tracked, every stocked lot-tracked component must have a
-	// valid active lot selected — genealogy links each consumed component lot to the
-	// output lot. Validate the picks up front (before writing anything). When the
-	// output is not lot-tracked, no output lot exists to trace into, so component
-	// lot-tracking is ignored and the build behaves exactly as the #675 flow.
+	// Every stocked lot-tracked component must have a valid active lot selected —
+	// independent of whether the output is lot-tracked, since consuming a lot-tracked
+	// component always draws from a specific lot. The picked lot is recorded on the
+	// component's issue ledger row (inventory_transaction.lot_id), and — when the
+	// output part is also lot-tracked — additionally as a lot_genealogy edge into the
+	// output lot. Validate the picks up front, before writing anything.
 	lotPicks := map[int]int{} // componentPartID → selected lot id
-	if outputLotTracked {
-		for _, l := range lines {
-			if !l.isLotTracked || !models.TabsForCategory(h.partCategories, l.category).Inventory {
-				continue
-			}
-			lotID, err := strconv.Atoi(fv(r, fmt.Sprintf("lot[%d]", l.componentPartID)))
-			if err != nil || lotID <= 0 {
-				h.renderError(w, r, fmt.Sprintf("Select a lot to consume for lot-controlled component %s.", l.partNumber))
-				return
-			}
-			lotPicks[l.componentPartID] = lotID
+	for _, l := range lines {
+		if !l.isLotTracked || !models.TabsForCategory(h.partCategories, l.category).Inventory {
+			continue
 		}
+		lotID, err := strconv.Atoi(fv(r, fmt.Sprintf("lot[%d]", l.componentPartID)))
+		if err != nil || lotID <= 0 {
+			h.renderError(w, r, fmt.Sprintf("Select a lot to consume for lot-controlled component %s.", l.partNumber))
+			return
+		}
+		lotPicks[l.componentPartID] = lotID
 	}
 
 	tx, err := h.beginTx(r.Context())
@@ -288,14 +293,11 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		if consumed == 0 {
 			continue // degenerate BOM line (qty 0) — nothing to issue.
 		}
-		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", -consumed, *buildDate, "", ledgerNote, nil); err != nil {
-			h.renderError(w, r, "Error issuing component stock: "+err.Error())
-			return
-		}
-		// Record lot genealogy: the picked component lot → the output lot (#676).
-		if outputLotTracked && l.isLotTracked {
-			lotID := lotPicks[l.componentPartID]
-			okLot, err := h.lotBelongsToPart(r.Context(), tx, lotID, l.componentPartID)
+		// Lot-tracked component: validate the picked lot and record it on the issue.
+		var lotID *int
+		if l.isLotTracked {
+			picked := lotPicks[l.componentPartID]
+			okLot, err := h.lotBelongsToPart(r.Context(), tx, picked, l.componentPartID)
 			if err != nil {
 				h.renderError(w, r, "Error validating component lot: "+err.Error())
 				return
@@ -304,15 +306,29 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 				h.renderError(w, r, fmt.Sprintf("Selected lot is not an active lot of component %s.", l.partNumber))
 				return
 			}
-			if err := h.recordLotGenealogy(r.Context(), tx, lotID, outputLotID, consumed); err != nil {
+			lotID = &picked
+		}
+		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", -consumed, *buildDate, "", ledgerNote, nil, lotID); err != nil {
+			h.renderError(w, r, "Error issuing component stock: "+err.Error())
+			return
+		}
+		// When the output part is lot-tracked too, additionally link the consumed
+		// component lot to the output lot as a genealogy edge (#676).
+		if outputLotTracked && l.isLotTracked {
+			if err := h.recordLotGenealogy(r.Context(), tx, *lotID, outputLotID, consumed); err != nil {
 				h.renderError(w, r, "Error recording lot genealogy: "+err.Error())
 				return
 			}
 		}
 	}
 
-	// Produce the output part: receipt of the built quantity.
-	if err := h.recordInventoryTxn(r, tx, partID, "receipt", qty, *buildDate, "", ledgerNote, nil); err != nil {
+	// Produce the output part: receipt of the built quantity, stamped with the output
+	// lot when the output part is lot-tracked.
+	var outputLotArg *int
+	if outputLotTracked {
+		outputLotArg = &outputLotID
+	}
+	if err := h.recordInventoryTxn(r, tx, partID, "receipt", qty, *buildDate, "", ledgerNote, nil, outputLotArg); err != nil {
 		h.renderError(w, r, "Error receiving built stock: "+err.Error())
 		return
 	}

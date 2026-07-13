@@ -23,7 +23,10 @@ ALTER TABLE dbo.lot ADD CONSTRAINT FK_lot_part    FOREIGN KEY (part_id)    REFER
 ALTER TABLE dbo.lot ADD CONSTRAINT FK_lot_po_line FOREIGN KEY (po_line_id) REFERENCES dbo.po_line (id);
 CREATE INDEX IX_lot_part ON dbo.lot (part_id, is_active);
 
--- build.output_lot_id was a nullable placeholder (#675); wire it to lot now that the
--- table exists (#676). Added here rather than in build.sql so build can be created
--- before lot in the DDL run order.
+-- Wire the lot_id references that other tables carry, now that lot exists. Added here
+-- rather than in each table's own DDL so those tables can be created before lot in the
+-- run order:
+--   build.output_lot_id (#675 placeholder → lot, #676)
+--   inventory_transaction.lot_id (#676): lot a receipt/issue/adjustment touched
 ALTER TABLE dbo.build ADD CONSTRAINT FK_build_output_lot FOREIGN KEY (output_lot_id) REFERENCES dbo.lot (id);
+ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_lot FOREIGN KEY (lot_id) REFERENCES dbo.lot (id);

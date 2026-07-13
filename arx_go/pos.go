@@ -1525,18 +1525,22 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 		// Catalog-mapped lines move stock via the ledger; others just record receipt.
 		if items[i].POLPNID != nil {
 			polID := items[i].POLID
-			if err := h.recordInventoryTxn(r, tx, *items[i].POLPNID, "receipt", d, *txnDate, num, "", &polID); err != nil {
-				h.renderError(w, r, "Error recording receipt: "+err.Error())
-				return
-			}
-			// Lot-tracked part (#676): create a lot for this receipt. lot_number
-			// defaults to the PO number; vendor_lot_number is captured per line.
+			// Lot-tracked part (#676): create this receipt's lot first, so the ledger
+			// row can reference it. lot_number defaults to the PO number;
+			// vendor_lot_number is captured per line.
+			var lotID *int
 			if items[i].IsLotTracked {
 				vendorLot := fv(r, fmt.Sprintf("vlot[%d]", polID))
-				if _, err := h.createLot(r.Context(), tx, *items[i].POLPNID, num, vendorLot, &polID); err != nil {
+				id, err := h.createLot(r.Context(), tx, *items[i].POLPNID, num, vendorLot, &polID)
+				if err != nil {
 					h.renderError(w, r, "Error creating lot: "+err.Error())
 					return
 				}
+				lotID = &id
+			}
+			if err := h.recordInventoryTxn(r, tx, *items[i].POLPNID, "receipt", d, *txnDate, num, "", &polID, lotID); err != nil {
+				h.renderError(w, r, "Error recording receipt: "+err.Error())
+				return
 			}
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(

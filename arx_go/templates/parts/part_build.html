@@ -53,7 +53,7 @@
                                     <th class="text-end" style="width:90px;">Qty / ea</th>
                                     <th class="text-end" style="width:110px;">Required</th>
                                     <th class="text-end" style="width:130px;">On hand</th>
-                                    {{if $.Part.IsLotTracked}}<th style="width:220px;">Lot to consume</th>{{end}}
+                                    {{if $.ShowLotColumn}}<th style="width:220px;">Lot to consume</th>{{end}}
                                 </tr>
                             </thead>
                             <tbody>
@@ -68,7 +68,7 @@
                                     <td class="text-end">{{printf "%g" .QtyPer}}</td>
                                     <td class="text-end build-required">&mdash;</td>
                                     <td class="text-end build-onhand">{{printf "%.2f" .StockOnHand}}</td>
-                                    {{if $.Part.IsLotTracked}}
+                                    {{if $.ShowLotColumn}}
                                     <td>
                                         {{if .IsLotTracked}}
                                             {{if .Lots}}

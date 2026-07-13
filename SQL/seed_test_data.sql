@@ -402,6 +402,10 @@ BEGIN TRY
         (8401, 8301, 8302, 1);
     SET IDENTITY_INSERT dbo.lot_genealogy OFF;
 
+    -- Stamp the seed receipt (5901, part 3007 against po_line 5504) with the lot it
+    -- created (8301), exercising inventory_transaction.lot_id (#676).
+    UPDATE dbo.inventory_transaction SET lot_id = 8301 WHERE id = 5901;
+
     -- ============================================================
     -- 11. Test records — form, test_definition, test_record, test_result,
     --     record_events, record_event_results

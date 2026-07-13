@@ -13,19 +13,25 @@ import (
 // recordInventoryTxn appends one row to the inventory ledger and updates the
 // part's cached stock_on_hand by the same signed qty, inside the caller's tx.
 // Shared by manual adjustments (#272/#274) and PO receiving (#269). poLineID is
-// nil for everything except receipts.
-func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, txnType string, qty float64, txnDate time.Time, reference, note string, poLineID *int) error {
+// nil for everything except receipts. lotID (#676) is the lot this movement touched
+// — the lot created on a receipt, the component lot consumed by a build issue, or the
+// output lot produced by a build receipt — and is nil for non-lot-tracked parts.
+func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, txnType string, qty float64, txnDate time.Time, reference, note string, poLineID, lotID *int) error {
 	ctx := r.Context()
 	var poArg interface{}
 	if poLineID != nil {
 		poArg = *poLineID
 	}
+	var lotArg interface{}
+	if lotID != nil {
+		lotArg = *lotID
+	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (part_id, txn_type, qty, txn_date, username, reference, note, po_line_id, created_at)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9)
+		INSERT INTO %s (part_id, txn_type, qty, txn_date, username, reference, note, po_line_id, lot_id, created_at)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10)
 	`, h.cfg.InventoryTxnTable()),
 		partID, txnType, qty, txnDate, h.actorName(r),
-		nullableText(reference), nullableText(note), poArg, time.Now(),
+		nullableText(reference), nullableText(note), poArg, lotArg, time.Now(),
 	); err != nil {
 		return err
 	}
@@ -147,7 +153,7 @@ func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if err := h.recordInventoryTxn(r, tx, partID, "adjustment", qty, *txnDate, "", reason, nil); err != nil {
+	if err := h.recordInventoryTxn(r, tx, partID, "adjustment", qty, *txnDate, "", reason, nil, nil); err != nil {
 		h.renderError(w, r, "Error recording adjustment: "+err.Error())
 		return
 	}

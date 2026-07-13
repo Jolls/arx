@@ -55,3 +55,11 @@ IF OBJECT_ID('dbo.build', 'U') IS NOT NULL
    AND OBJECT_ID('dbo.FK_build_output_lot', 'F') IS NULL
     ALTER TABLE dbo.build ADD CONSTRAINT FK_build_output_lot
         FOREIGN KEY (output_lot_id) REFERENCES dbo.lot (id);
+
+-- 5. inventory_transaction.lot_id → lot (#676): the lot a receipt/issue/adjustment
+--    touched. Nullable; NULL for non-lot-tracked parts and all legacy rows.
+IF COL_LENGTH('dbo.inventory_transaction', 'lot_id') IS NULL
+    ALTER TABLE dbo.inventory_transaction ADD lot_id INT NULL;
+IF OBJECT_ID('dbo.FK_inv_txn_lot', 'F') IS NULL
+    ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_lot
+        FOREIGN KEY (lot_id) REFERENCES dbo.lot (id);

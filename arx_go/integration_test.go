@@ -1391,7 +1391,10 @@ func TestIntegration_BuildConsumesOnlyStockedComponents(t *testing.T) {
 		}
 	}()
 
-	req := withID(postForm("/part/3005/build", url.Values{"qty": {"3"}}), outputPart)
+	// Component 3012 is lot-tracked (seed), so building it requires a lot pick even
+	// though the output 3005 is not lot-tracked — the pick is recorded on the issue
+	// row. 8302 is 3012's seed lot.
+	req := withID(postForm("/part/3005/build", url.Values{"qty": {"3"}, "lot[3012]": {"8302"}}), outputPart)
 	rec := httptest.NewRecorder()
 	h.PartBuildCreate(rec, req)
 	assert302(t, "PartBuildCreate", rec)
@@ -1492,7 +1495,9 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 			return
 		}
 		// Recover the output lot id if a mid-test failure skipped its capture, so the
-		// row is still cleaned up (build FK references it, so delete build first).
+		// row is still cleaned up. Delete order respects the FKs: genealogy and the
+		// ledger rows (whose lot_id references the output lot) and the build (whose
+		// output_lot_id references it) all go before the output lot itself.
 		if outputLotID == 0 {
 			_ = h.DB().QueryRowContext(ctx, fmt.Sprintf(
 				`SELECT ISNULL(output_lot_id, 0) FROM %s WHERE id = @p1`, bt), buildID).Scan(&outputLotID)
@@ -1500,11 +1505,11 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 		if outputLotID != 0 {
 			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE child_lot_id = @p1`, lg), outputLotID)
 		}
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE note = @p1`, inv), fmt.Sprintf("Build #%d", buildID))
 		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, bt), buildID)
 		if outputLotID != 0 {
 			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, lt), outputLotID)
 		}
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE note = @p1`, inv), fmt.Sprintf("Build #%d", buildID))
 		for _, id := range []int{3001, trackedComp, 3002, outputPart} {
 			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(
 				`UPDATE %s SET stock_on_hand = (SELECT ISNULL(SUM(qty),0) FROM %s WHERE part_id = @p1) WHERE id = @p1`,
@@ -1559,14 +1564,31 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 		t.Errorf("genealogy qty_consumed = %v, want %v", qtyConsumed, 1*buildQty)
 	}
 
-	// The output part still receives its produced stock.
+	// The output part still receives its produced stock, and the receipt row carries
+	// the output lot (#676 lot-aware ledger).
+	note := fmt.Sprintf("Build #%d", buildID)
 	var recv float64
+	var recvLot int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT ISNULL(SUM(qty),0) FROM %s WHERE note = @p1 AND part_id = @p2 AND txn_type = 'receipt'`,
-		inv), fmt.Sprintf("Build #%d", buildID), outputPart).Scan(&recv); err != nil {
+		`SELECT ISNULL(SUM(qty),0), ISNULL(MAX(lot_id),0) FROM %s WHERE note = @p1 AND part_id = @p2 AND txn_type = 'receipt'`,
+		inv), note, outputPart).Scan(&recv, &recvLot); err != nil {
 		t.Fatalf("read receipt: %v", err)
 	}
 	if recv != buildQty {
 		t.Errorf("output receipt qty = %v, want %v", recv, buildQty)
+	}
+	if recvLot != outputLotID {
+		t.Errorf("output receipt lot_id = %d, want %d (the output lot)", recvLot, outputLotID)
+	}
+
+	// The lot-tracked component's issue row records the consumed lot (#676).
+	var issueLot int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT ISNULL(MAX(lot_id),0) FROM %s WHERE note = @p1 AND part_id = @p2 AND txn_type = 'issue'`,
+		inv), note, trackedComp).Scan(&issueLot); err != nil {
+		t.Fatalf("read component issue: %v", err)
+	}
+	if issueLot != compLot {
+		t.Errorf("component %d issue lot_id = %d, want %d (the consumed lot)", trackedComp, issueLot, compLot)
 	}
 }
