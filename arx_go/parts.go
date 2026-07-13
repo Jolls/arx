@@ -72,6 +72,8 @@ func tabVisible(p models.Part, subTab string) bool {
 		return p.ShowBOM()
 	case "build":
 		return p.ShowBuild()
+	case "lots":
+		return p.ShowLots()
 	case "orders":
 		return p.ShowOrders()
 	case "transactions":

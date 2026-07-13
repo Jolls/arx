@@ -144,6 +144,10 @@ func (p Part) ShowInventory() bool { return p.Tabs.Inventory }
 // record-picker convention and whose category is not stocked.
 func (p Part) ShowBuild() bool { return p.HasBOM && p.ShowInventory() }
 
+// ShowLots reports whether the Lots subtab applies: the part is lot/batch
+// controlled (#676), so it has (or will have) lot rows to list and trace.
+func (p Part) ShowLots() bool { return p.IsLotTracked }
+
 // BelowReorder reports whether on-hand stock has dropped below the part's reorder
 // point (#273). False when no reorder point is set (ReorderMin == nil).
 func (p Part) BelowReorder() bool {

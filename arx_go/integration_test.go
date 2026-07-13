@@ -1591,4 +1591,24 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 	if issueLot != compLot {
 		t.Errorf("component %d issue lot_id = %d, want %d (the consumed lot)", trackedComp, issueLot, compLot)
 	}
+
+	// The Lots-view genealogy walk (lot.go lotTrace) resolves the output lot back to
+	// its raw vendor lot — the #676 "trace an output lot back to raw vendor lots"
+	// acceptance criterion. Seed lot 8301 has a po_line_id, so it flags as a vendor lot.
+	ancestors, err := h.lotTrace(ctx, outputLotID, true)
+	if err != nil {
+		t.Fatalf("lotTrace ancestors: %v", err)
+	}
+	foundVendorLot := false
+	for _, a := range ancestors {
+		if a.ID == compLot {
+			foundVendorLot = true
+			if !a.IsVendorLot {
+				t.Errorf("traced ancestor lot %d not flagged as a raw vendor lot", compLot)
+			}
+		}
+	}
+	if !foundVendorLot {
+		t.Errorf("lotTrace(%d) ancestors did not resolve back to raw vendor lot %d", outputLotID, compLot)
+	}
 }

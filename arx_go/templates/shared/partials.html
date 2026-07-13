@@ -188,6 +188,9 @@
     {{else}}
     <span class="sub-tab disabled" title="Inventory does not apply to {{$part.Category}} parts">Transactions</span>
     {{end}}
+    {{if $part.ShowLots}}
+    <a href="/part/{{$id}}/lots" class="sub-tab{{if eq $sub "lots"}} active{{end}}">Lots</a>
+    {{end}}
     <a href="/part/{{$id}}/attachments" class="sub-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
     {{if $part.ShowPricing}}
     <a href="/part/{{$id}}/pricing"     class="sub-tab{{if eq $sub "pricing"}} active{{end}}">Pricing</a>
