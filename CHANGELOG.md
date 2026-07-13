@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.122] - 2026-07-13 
+- Added a read-only Lot column to the part Transactions tab; adjusting a lot-controlled part now requires attributing the movement to an existing lot or a newly created one, matching the lot requirement builds already enforce on component consumption ([#682](https://github.com/Jolls/arx-legacy/issues/682))
+
 ## [0.5.121] - 2026-07-12 
 - Added lot/batch control: a new "Batch / lot controlled" flag on parts makes goods receipt create a lot record (defaulting the lot number to the PO number, with an optional vendor lot number per line), and makes a build of a lot-controlled assembly create an output lot and record its genealogy — one edge per lot-controlled component consumed, picked from that component's active lots on the Build form — so an output lot can be traced back through its component lots to the raw vendor lots ([#676](https://github.com/Jolls/arx-legacy/issues/676))
 - Reworked the Build subtab to show the consumed BOM components up front with quantity per assembly, live required quantity, and current on-hand (shortages highlighted inline), replacing the previous after-the-fact shortage notice; the lot picker now shows for any lot-controlled component being consumed, regardless of whether the assembly being built is itself lot-controlled ([#676](https://github.com/Jolls/arx-legacy/issues/676))
