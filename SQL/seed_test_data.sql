@@ -18,6 +18,7 @@
 --   5501-5599  po_line                 8101-8199  part_attachment
 --   5801-5899  purchase_order_history  1-17       unit (natural identity)
 --   5901-5999  inventory_transaction   8201-8299  build
+--   8301-8399  lot                     8401-8499  lot_genealogy
 --   (identity) app_config, named_queries
 --
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
@@ -45,7 +46,9 @@ BEGIN TRY
     DELETE FROM dbo.bom;
     DELETE FROM dbo.price;
     DELETE FROM dbo.inventory_transaction;
-    DELETE FROM dbo.build;
+    DELETE FROM dbo.lot_genealogy;                     -- edges first (FK to lot)
+    DELETE FROM dbo.build;                             -- build.output_lot_id FK to lot, so before lot
+    DELETE FROM dbo.lot;                               -- lot FKs po_line + part, so before both
     DELETE FROM dbo.po_line;
     DELETE FROM dbo.purchase_order_history;
     DELETE FROM dbo.purchase_order;
@@ -373,6 +376,31 @@ BEGIN TRY
     INSERT INTO dbo.build (id, part_id, output_lot_id, qty, build_date, username, note) VALUES
         (8201, 3005, NULL, 1, '2026-05-25', 'tester', 'Built 1x assembly 3005 from BOM');
     SET IDENTITY_INSERT dbo.build OFF;
+
+    -- ============================================================
+    -- 10c. Lot control (#676): lot-tracked parts + a one-level genealogy chain.
+    -- ============================================================
+    -- 3007 (RAW-1002) is a lot-tracked purchased raw; 3012 (ASM-1002 sub-assembly) is a
+    -- lot-tracked manufactured part that consumes 3007. 3005 is intentionally left
+    -- un-tracked so the #675 build test (which builds 3005) is unaffected — lot machinery
+    -- only engages when the OUTPUT part is lot-tracked.
+    UPDATE dbo.part SET is_lot_tracked = 1 WHERE id IN (3007, 3012);
+
+    -- 8301: purchased lot of 3007, received against po_line 5504 (PO 5003); lot_number
+    --       defaults to the PO number, vendor_lot_number is the supplier's own batch ID.
+    -- 8302: manufactured lot of sub-assembly 3012 (po_line_id NULL).
+    SET IDENTITY_INSERT dbo.lot ON;
+    INSERT INTO dbo.lot (id, part_id, lot_number, vendor_lot_number, po_line_id, created_at, is_active) VALUES
+        (8301, 3007, '5003', 'SS304-LOT-0088', 5504, '2026-05-15T00:00:00', 1),
+        (8302, 3012, 'BLD-3012-0525', NULL,     NULL, '2026-05-25T00:00:00', 1);
+    SET IDENTITY_INSERT dbo.lot OFF;
+
+    -- 8401: 3012's lot 8302 consumed 1 unit of 3007's lot 8301 (bom line 3906, qty 1) —
+    --       a one-level chain so a recursive query from 8302 resolves back to vendor lot 8301.
+    SET IDENTITY_INSERT dbo.lot_genealogy ON;
+    INSERT INTO dbo.lot_genealogy (id, parent_lot_id, child_lot_id, qty_consumed) VALUES
+        (8401, 8301, 8302, 1);
+    SET IDENTITY_INSERT dbo.lot_genealogy OFF;
 
     -- ============================================================
     -- 11. Test records — form, test_definition, test_record, test_result,

@@ -1529,6 +1529,15 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 				h.renderError(w, r, "Error recording receipt: "+err.Error())
 				return
 			}
+			// Lot-tracked part (#676): create a lot for this receipt. lot_number
+			// defaults to the PO number; vendor_lot_number is captured per line.
+			if items[i].IsLotTracked {
+				vendorLot := fv(r, fmt.Sprintf("vlot[%d]", polID))
+				if _, err := h.createLot(r.Context(), tx, *items[i].POLPNID, num, vendorLot, &polID); err != nil {
+					h.renderError(w, r, "Error creating lot: "+err.Error())
+					return
+				}
+			}
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 			`UPDATE %s SET received_qty = received_qty + @p1, date_received = @p2 WHERE id = @p3`,
@@ -1841,6 +1850,7 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
 		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id, pol.lead_time_days,
 		       pol.received_qty, pol.date_received,
+		       p.is_lot_tracked,
 		       fil.id, fil.file_name, fil.category
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
@@ -1859,12 +1869,15 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 		var partNumber, rev, desc, vendorPN sql.NullString
 		var polpnid, leadTime sql.NullInt64
 		var dateReceived sql.NullTime
+		var isLotTracked sql.NullBool
 		var filID sql.NullInt64
 		var filFileName, filCategory sql.NullString
 		if err := rows.Scan(&item.POLID, &item.POLItem, &partNumber, &rev, &desc,
 			&item.POLQty, &item.POLCost, &vendorPN, &polpnid, &leadTime,
 			&item.ReceivedQty, &dateReceived,
+			&isLotTracked,
 			&filID, &filFileName, &filCategory); err == nil {
+			item.IsLotTracked = isLotTracked.Bool
 			item.POLPNPartNumber = partNumber.String
 			item.POLRev = rev.String
 			item.POLDesc = desc.String

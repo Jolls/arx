@@ -191,6 +191,8 @@ func (c *Config) ContactTable() string            { return "contact" }
 func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) InventoryTxnTable() string       { return "inventory_transaction" }
 func (c *Config) BuildTable() string              { return "build" }
+func (c *Config) LotTable() string                { return "lot" }
+func (c *Config) LotGenealogyTable() string       { return "lot_genealogy" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
 func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "LNK" }

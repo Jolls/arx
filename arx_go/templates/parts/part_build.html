@@ -8,21 +8,12 @@
 <div class="content">
     {{template "part_tabs" .}}
 
-    {{/* ── Post-build notices ─────────────────────────────────── */}}
+    {{/* ── Post-build notice ──────────────────────────────────── */}}
     {{if .BuiltQty}}
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         Built {{.BuiltQty}}&times; {{.Part.PartNumber}} &mdash; components issued and output stock received.
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
-    {{if .Shortages}}
-    <div class="alert alert-warning alert-dismissible fade show" role="alert">
-        <strong>Component shortage.</strong> These components are now below zero on hand &mdash; build or restock them:
-        <ul class="mb-0 mt-1">
-            {{range .Shortages}}<li><a href="/part/{{.PartID}}">{{.PartNumber}}</a> ({{printf "%.2f" .Stock}} on hand)</li>{{end}}
-        </ul>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-    {{end}}
     {{end}}
 
     {{/* ── Stock on hand + build form ─────────────────────────── */}}
@@ -32,12 +23,12 @@
             <div style="font-size:1.4em; font-weight:700; color:#333;">{{printf "%.2f" .Part.StockOnHand}}</div>
         </div>
         <div class="part-status-cell part-status-cell--flex">
-            <div class="part-status-label">Build from BOM</div>
+            <div class="part-status-label">Build from BOM{{if .Part.IsLotTracked}} <span class="badge bg-info text-dark">lot controlled</span>{{end}}</div>
             <form method="post" action="/part/{{.Part.PNID}}/build" class="d-flex flex-wrap gap-2 align-items-end mt-1">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div>
                     <label class="form-label mb-0" style="font-size:0.8em;">Qty to build</label>
-                    <input type="number" step="any" min="0" name="qty" class="form-control form-control-sm" style="width:110px;" placeholder="e.g. 10" required>
+                    <input type="number" step="any" min="0" id="build-qty" name="qty" class="form-control form-control-sm" style="width:110px;" placeholder="e.g. 10" required>
                 </div>
                 <div>
                     <label class="form-label mb-0" style="font-size:0.8em;">Date</label>
@@ -47,7 +38,63 @@
                     <label class="form-label mb-0" style="font-size:0.8em;">Note (optional)</label>
                     <input type="text" name="note" class="form-control form-control-sm" placeholder="Work order, comment…">
                 </div>
-                <button type="submit" class="btn btn-sm btn-primary">Build</button>
+
+                {{/* ── Components consumed (inventory-tracked BOM lines) ── */}}
+                {{if .Components}}
+                <div style="flex-basis:100%; width:100%;" class="mt-2">
+                    <label class="form-label mb-1" style="font-size:0.8em;">Components consumed</label>
+                    <div class="table-wrapper">
+                        <table class="table table-bordered table-sm mb-0" id="build-components">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Component</th>
+                                    <th>Description</th>
+                                    <th style="width:70px;">Type</th>
+                                    <th class="text-end" style="width:90px;">Qty / ea</th>
+                                    <th class="text-end" style="width:110px;">Required</th>
+                                    <th class="text-end" style="width:130px;">On hand</th>
+                                    {{if $.Part.IsLotTracked}}<th style="width:220px;">Lot to consume</th>{{end}}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range .Components}}
+                                <tr data-qty-per="{{.QtyPer}}" data-on-hand="{{.StockOnHand}}">
+                                    <td>
+                                        <a href="/part/{{.PartID}}">{{.PartNumber}}</a>
+                                        {{if .IsLotTracked}}<span class="badge bg-info text-dark" title="Lot controlled">lot</span>{{end}}
+                                    </td>
+                                    <td>{{.Title}}</td>
+                                    <td>{{.Category}}</td>
+                                    <td class="text-end">{{printf "%g" .QtyPer}}</td>
+                                    <td class="text-end build-required">&mdash;</td>
+                                    <td class="text-end build-onhand">{{printf "%.2f" .StockOnHand}}</td>
+                                    {{if $.Part.IsLotTracked}}
+                                    <td>
+                                        {{if .IsLotTracked}}
+                                            {{if .Lots}}
+                                            <select name="lot[{{.PartID}}]" class="form-select form-select-sm">
+                                                {{range .Lots}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+                                            </select>
+                                            {{else}}
+                                            <span class="text-danger small">No active lot &mdash; receive one first</span>
+                                            <select name="lot[{{.PartID}}]" class="form-select form-select-sm d-none"><option value="">—</option></select>
+                                            {{end}}
+                                        {{else}}
+                                            <span class="text-muted">&mdash;</span>
+                                        {{end}}
+                                    </td>
+                                    {{end}}
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {{end}}
+
+                <div style="flex-basis:100%;" class="mt-1">
+                    <button type="submit" class="btn btn-sm btn-primary">Build</button>
+                </div>
             </form>
         </div>
     </div>
@@ -57,7 +104,9 @@
         non-stocked lines like labor are skipped) and produces the output part (a
         <strong>receipt</strong>). Both post to the
         <a href="/part/{{.Part.PNID}}/transactions">Transactions</a> ledger. Component stock is
-        allowed to go negative if short.
+        allowed to go negative if short (highlighted above).
+        {{if .Part.IsLotTracked}} This part is lot controlled: each build creates an output lot and
+        records the lot consumed for each lot-controlled component.{{end}}
     </p>
 
     {{/* ── Build history ─────────────────────────────────────── */}}
@@ -89,4 +138,35 @@
     <p class="no-results">No builds yet. Use the form above to consume this part's BOM and produce output stock.</p>
     {{end}}
 </div>
+
+{{/* Live "Required" = qty per assembly × build qty, with shortage highlight. */}}
+<script>
+(function () {
+    var qtyInput = document.getElementById('build-qty');
+    var rows = document.querySelectorAll('#build-components tbody tr');
+    if (!qtyInput || !rows.length) return;
+    function recompute() {
+        var buildQty = parseFloat(qtyInput.value);
+        rows.forEach(function (tr) {
+            var per = parseFloat(tr.getAttribute('data-qty-per')) || 0;
+            var onHand = parseFloat(tr.getAttribute('data-on-hand')) || 0;
+            var reqCell = tr.querySelector('.build-required');
+            var onHandCell = tr.querySelector('.build-onhand');
+            if (isNaN(buildQty) || buildQty <= 0) {
+                reqCell.textContent = '—';
+                onHandCell.classList.remove('text-danger', 'fw-bold');
+                return;
+            }
+            var required = per * buildQty;
+            reqCell.textContent = required.toFixed(2);
+            if (required > onHand) {
+                onHandCell.classList.add('text-danger', 'fw-bold');
+            } else {
+                onHandCell.classList.remove('text-danger', 'fw-bold');
+            }
+        });
+    }
+    qtyInput.addEventListener('input', recompute);
+})();
+</script>
 {{end}}

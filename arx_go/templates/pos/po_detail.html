@@ -244,7 +244,8 @@
                         <td class="text-end">{{printf "%.2f" .POLQty}}</td>
                         <td class="text-end">
                             <span {{if ge .ReceivedQty .POLQty}}class="badge bg-success"{{end}}>{{printf "%.2f" .ReceivedQty}} / {{printf "%.2f" .POLQty}}</span>
-                            {{if $canReceive}}<input type="number" step="any" min="0" name="recv[{{.POLID}}]" class="form-control form-control-sm mt-1 text-end" placeholder="+ qty">{{end}}
+                            {{if $canReceive}}<input type="number" step="any" min="0" name="recv[{{.POLID}}]" class="form-control form-control-sm mt-1 text-end" placeholder="+ qty">
+                            {{if .IsLotTracked}}<input type="text" name="vlot[{{.POLID}}]" class="form-control form-control-sm mt-1 text-end" placeholder="Vendor lot #" title="Lot-controlled part: enter the vendor's lot/batch number for this receipt (optional).">{{end}}{{end}}
                         </td>
                         <td class="text-end">${{printf "%.4f" .POLCost}}</td>
                         <td class="text-end">${{printf "%.2f" (mul .POLQty .POLCost)}}</td>

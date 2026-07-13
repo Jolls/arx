@@ -1464,3 +1464,109 @@ func TestIntegration_BuildConsumesOnlyStockedComponents(t *testing.T) {
 		t.Errorf("OPS 3006 stock delta = %v, want 0 (skipped)", d)
 	}
 }
+
+// TestIntegration_BuildLotGenealogy exercises the #676 lot-control build path against
+// a live DB. Building the lot-tracked sub-assembly 3012 (seed) must create an output
+// lot linked from build.output_lot_id and write exactly one lot_genealogy edge from
+// the picked component lot (3007's seed lot 8301) to that output lot, with
+// qty_consumed = bom qty × build qty. Cleans up every row it writes (genealogy edge,
+// output lot, build, ledger rows) and recomputes the affected parts' cached balances.
+func TestIntegration_BuildLotGenealogy(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	inv := h.cfg.InventoryTxnTable()
+	bt := h.cfg.BuildTable()
+	lt := h.cfg.LotTable()
+	lg := h.cfg.LotGenealogyTable()
+	pn := h.cfg.PartsTable()
+
+	const outputPart = 3012  // ASM-1002 sub-assembly, is_lot_tracked in seed
+	const trackedComp = 3007 // RAW-1002 component, is_lot_tracked; seed lot 8301
+	const compLot = 8301     // 3007's active seed lot
+	const buildQty = 2.0
+
+	var buildID, outputLotID int
+	defer func() {
+		if buildID == 0 {
+			return
+		}
+		// Recover the output lot id if a mid-test failure skipped its capture, so the
+		// row is still cleaned up (build FK references it, so delete build first).
+		if outputLotID == 0 {
+			_ = h.DB().QueryRowContext(ctx, fmt.Sprintf(
+				`SELECT ISNULL(output_lot_id, 0) FROM %s WHERE id = @p1`, bt), buildID).Scan(&outputLotID)
+		}
+		if outputLotID != 0 {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE child_lot_id = @p1`, lg), outputLotID)
+		}
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, bt), buildID)
+		if outputLotID != 0 {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, lt), outputLotID)
+		}
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE note = @p1`, inv), fmt.Sprintf("Build #%d", buildID))
+		for _, id := range []int{3001, trackedComp, 3002, outputPart} {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(
+				`UPDATE %s SET stock_on_hand = (SELECT ISNULL(SUM(qty),0) FROM %s WHERE part_id = @p1) WHERE id = @p1`,
+				pn, inv), id)
+		}
+	}()
+
+	req := withID(postForm("/part/3012/build", url.Values{
+		"qty": {"2"},
+		fmt.Sprintf("lot[%d]", trackedComp): {strconv.Itoa(compLot)},
+	}), outputPart)
+	rec := httptest.NewRecorder()
+	h.PartBuildCreate(rec, req)
+	assert302(t, "PartBuildCreate(3012)", rec)
+
+	// New build is the highest-id build row for 3012 (seed has none for it).
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT MAX(id) FROM %s WHERE part_id = @p1`, bt), outputPart).Scan(&buildID); err != nil {
+		t.Fatalf("find build id: %v", err)
+	}
+
+	// build.output_lot_id must point at a lot of the output part.
+	var lotPart int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT b.output_lot_id, l.part_id FROM %s b JOIN %s l ON b.output_lot_id = l.id WHERE b.id = @p1`,
+		bt, lt), buildID).Scan(&outputLotID, &lotPart); err != nil {
+		t.Fatalf("build output lot not set (ArxDev may need the lot schema + reseed): %v", err)
+	}
+	if lotPart != outputPart {
+		t.Errorf("output lot part_id = %d, want %d", lotPart, outputPart)
+	}
+
+	// Exactly one genealogy edge into the output lot, from the picked component lot.
+	var n int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE child_lot_id = @p1`, lg), outputLotID).Scan(&n); err != nil {
+		t.Fatalf("count genealogy: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("genealogy edges into output lot = %d, want 1 (ArxDev may need reseeding)", n)
+	}
+	var parent int
+	var qtyConsumed float64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT parent_lot_id, qty_consumed FROM %s WHERE child_lot_id = @p1`, lg), outputLotID).Scan(&parent, &qtyConsumed); err != nil {
+		t.Fatalf("read genealogy: %v", err)
+	}
+	if parent != compLot {
+		t.Errorf("genealogy parent_lot_id = %d, want %d (3007's seed lot 8301)", parent, compLot)
+	}
+	if qtyConsumed != 1*buildQty { // bom line 3906: 1x 3007 per 3012
+		t.Errorf("genealogy qty_consumed = %v, want %v", qtyConsumed, 1*buildQty)
+	}
+
+	// The output part still receives its produced stock.
+	var recv float64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT ISNULL(SUM(qty),0) FROM %s WHERE note = @p1 AND part_id = @p2 AND txn_type = 'receipt'`,
+		inv), fmt.Sprintf("Build #%d", buildID), outputPart).Scan(&recv); err != nil {
+		t.Fatalf("read receipt: %v", err)
+	}
+	if recv != buildQty {
+		t.Errorf("output receipt qty = %v, want %v", recv, buildQty)
+	}
+}

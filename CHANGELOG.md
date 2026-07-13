@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.121] - 2026-07-12 
+- Added lot/batch control: a new "Batch / lot controlled" flag on parts makes goods receipt create a lot record (defaulting the lot number to the PO number, with an optional vendor lot number per line), and makes a build of a lot-controlled assembly create an output lot and record its genealogy — one edge per lot-controlled component consumed, picked from that component's active lots on the Build form — so an output lot can be traced back through its component lots to the raw vendor lots ([#676](https://github.com/Jolls/arx-legacy/issues/676))
+- Reworked the Build subtab to show the consumed BOM components up front with quantity per assembly, live required quantity, and current on-hand (shortages highlighted inline), replacing the previous after-the-fact shortage notice ([#676](https://github.com/Jolls/arx-legacy/issues/676))
+
 ## [0.5.120] - 2026-07-12 
 - Fixed the Sent, Labor, and Part badges shifting to the accent color theme (e.g. unreadable white-on-teal) by giving them fixed colors instead of the theme-linked bg-primary variant, and fixed the /pos table's client-side JS having its own separate (and now out-of-sync) copy of the same badge markup
 

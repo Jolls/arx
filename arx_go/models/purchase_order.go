@@ -62,6 +62,7 @@ type PurchaseOrderLine struct {
 	LeadTimeDays    *int
 	ReceivedQty     float64
 	DateReceived    *time.Time
+	IsLotTracked    bool // part.is_lot_tracked (#676): receiving this line creates a lot row
 	PrimaryAtt      *Attachment
 	// joined fields
 	PONumber     string

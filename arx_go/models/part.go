@@ -22,6 +22,7 @@ type Part struct {
 	PNFILIDPrimary   int
 	StockOnHand      float64
 	ReorderMin       *float64 // reorder point (#273); nil = none set, never flagged below-min
+	IsLotTracked     bool     // lot/batch control (#676); receipt/build create a lot row when true
 	PNCurrentCost    float64
 	PNLastRollupCost float64
 	PNLastRollupAt   *time.Time
