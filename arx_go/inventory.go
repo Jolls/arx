@@ -50,6 +50,7 @@ type InventoryTxnView struct {
 	Username  string
 	Reference string
 	Note      string
+	LotNumber string
 	Balance   float64
 }
 
@@ -78,9 +79,11 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT txn_type, qty, txn_date, username, reference, note
-		FROM %s WHERE part_id = @p1 ORDER BY txn_date ASC, id ASC
-	`, h.cfg.InventoryTxnTable()), id)
+		SELECT it.txn_type, it.qty, it.txn_date, it.username, it.reference, it.note, l.lot_number
+		FROM %s it
+		LEFT JOIN %s l ON l.id = it.lot_id
+		WHERE it.part_id = @p1 ORDER BY it.txn_date ASC, it.id ASC
+	`, h.cfg.InventoryTxnTable(), h.cfg.LotTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving transactions: "+err.Error())
 		return
@@ -89,15 +92,16 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	var asc []InventoryTxnView
 	for rows.Next() {
 		var v InventoryTxnView
-		var username, reference, note sql.NullString
+		var username, reference, note, lotNumber sql.NullString
 		var date sql.NullTime
-		if err := rows.Scan(&v.Type, &v.Qty, &date, &username, &reference, &note); err != nil {
+		if err := rows.Scan(&v.Type, &v.Qty, &date, &username, &reference, &note, &lotNumber); err != nil {
 			h.renderError(w, r, "Error reading transactions: "+err.Error())
 			return
 		}
 		v.Username = username.String
 		v.Reference = reference.String
 		v.Note = note.String
+		v.LotNumber = lotNumber.String
 		if date.Valid {
 			v.Date = date.Time.Format("2006-01-02")
 		}
@@ -105,8 +109,17 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 	txns := ledgerWithBalances(asc)
 
+	var lots []LotOption
+	if p.IsLotTracked {
+		lots, err = h.activeLotsForPart(r.Context(), p.PNID)
+		if err != nil {
+			h.renderError(w, r, "Error retrieving lots: "+err.Error())
+			return
+		}
+	}
+
 	h.render(w, r, "parts/part_transactions.html", map[string]any{
-		"Part": p, "Txns": txns, "Today": time.Now().Format("2006-01-02"),
+		"Part": p, "Txns": txns, "Lots": lots, "Today": time.Now().Format("2006-01-02"),
 		"ActiveTab": "parts", "ActiveSubTab": "transactions",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
@@ -153,7 +166,48 @@ func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if err := h.recordInventoryTxn(r, tx, partID, "adjustment", qty, *txnDate, "", reason, nil, nil); err != nil {
+	// A lot-tracked part must attribute every adjustment to a lot — same invariant
+	// a build's component consumption enforces — either an existing active lot or
+	// a brand-new one named on the spot (e.g. a cycle count finding stock that isn't
+	// part of any existing lot). Non-lot-tracked parts ignore both fields entirely.
+	var lotID *int
+	if p.IsLotTracked {
+		lotStr := fv(r, "lot_id")
+		newLotNumber := fv(r, "new_lot_number")
+		switch {
+		case lotStr != "" && newLotNumber != "":
+			h.renderError(w, r, "Choose an existing lot or enter a new lot number, not both.")
+			return
+		case lotStr != "":
+			picked, err := strconv.Atoi(lotStr)
+			if err != nil {
+				h.renderError(w, r, "Invalid lot selection.")
+				return
+			}
+			okLot, err := h.lotBelongsToPart(r.Context(), tx, picked, partID)
+			if err != nil {
+				h.renderError(w, r, "Error validating lot: "+err.Error())
+				return
+			}
+			if !okLot {
+				h.renderError(w, r, "Selected lot is not an active lot of this part.")
+				return
+			}
+			lotID = &picked
+		case newLotNumber != "":
+			created, err := h.createLot(r.Context(), tx, partID, newLotNumber, "", nil)
+			if err != nil {
+				h.renderError(w, r, "Error creating lot: "+err.Error())
+				return
+			}
+			lotID = &created
+		default:
+			h.renderError(w, r, "This part is lot-controlled — select a lot or enter a new lot number.")
+			return
+		}
+	}
+
+	if err := h.recordInventoryTxn(r, tx, partID, "adjustment", qty, *txnDate, "", reason, nil, lotID); err != nil {
 		h.renderError(w, r, "Error recording adjustment: "+err.Error())
 		return
 	}

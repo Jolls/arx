@@ -30,6 +30,19 @@
                     <label class="form-label mb-0" style="font-size:0.8em;">Reason (required)</label>
                     <input type="text" name="reason" class="form-control form-control-sm" placeholder="Cycle count, scrap, correction…" required>
                 </div>
+                {{if .Part.IsLotTracked}}
+                <div>
+                    <label class="form-label mb-0" style="font-size:0.8em;">Lot (required)</label>
+                    <select name="lot_id" class="form-select form-select-sm">
+                        <option value="">—</option>
+                        {{range .Lots}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label mb-0" style="font-size:0.8em;">or new lot #</label>
+                    <input type="text" name="new_lot_number" class="form-control form-control-sm" style="width:140px;" placeholder="e.g. cycle count find">
+                </div>
+                {{end}}
                 <button type="submit" class="btn btn-sm btn-primary">Adjust</button>
             </form>
         </div>
@@ -47,6 +60,7 @@
                     <th style="width:90px; text-align:right;">Balance</th>
                     <th style="width:150px;">By</th>
                     <th style="width:120px;">Reference</th>
+                    <th style="width:120px;">Lot</th>
                     <th>Note</th>
                 </tr>
             </thead>
@@ -59,6 +73,7 @@
                     <td style="text-align:right;">{{printf "%.2f" .Balance}}</td>
                     <td>{{.Username}}</td>
                     <td>{{if and (eq .Type "receipt") .Reference}}<a href="/po/{{.Reference}}" class="part-number-link">{{.Reference}}</a>{{else}}{{.Reference}}{{end}}</td>
+                    <td>{{.LotNumber}}</td>
                     <td>{{.Note}}</td>
                 </tr>
                 {{end}}
