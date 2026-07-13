@@ -68,7 +68,7 @@
                     <td data-col="col-source">
                         {{if eq .CostSource "rollup"}}<span class="badge bg-info text-dark">Rollup</span>
                         {{else if eq .CostSource "price"}}<span class="badge bg-success">Price</span>
-                        {{else if eq .CostSource "labor"}}<span class="badge bg-primary">Labor</span>
+                        {{else if eq .CostSource "labor"}}<span class="badge badge-labor">Labor</span>
                         {{else if eq .CostSource "current_cost"}}<span class="badge bg-secondary">Cost</span>
                         {{else if eq .CostSource "missing"}}<span class="badge bg-warning text-dark">Missing</span>
                         {{end}}

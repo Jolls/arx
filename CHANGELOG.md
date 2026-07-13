@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.120] - 2026-07-12 
+- Fixed the Sent, Labor, and Part badges shifting to the accent color theme (e.g. unreadable white-on-teal) by giving them fixed colors instead of the theme-linked bg-primary variant, and fixed the /pos table's client-side JS having its own separate (and now out-of-sync) copy of the same badge markup
+
 ## [0.5.119] - 2026-07-12 
 - Added a generic Build flow on assemblies: a Build subtab consumes the part's BOM components (an inventory issue per line) and produces the output part (a receipt) in one transaction, keeping stock on hand in sync on both sides, with a non-blocking notice when a consumed component (e.g. an unbuilt sub-assembly) drops below zero on hand; no lot control yet ([#675](https://github.com/Jolls/arx-legacy/issues/675))
 - Enforced category-tab gating server-side across all part subtabs (BOM, Build, Order History, Transactions, Pricing, Mfg Parts, Suppliers) so a subtab hidden for a part's category can no longer be viewed or posted to via a direct URL; builds additionally skip non-stocked BOM components (e.g. OPS labor) instead of issuing them ([#675](https://github.com/Jolls/arx-legacy/issues/675))
