@@ -1,5 +1,14 @@
 # #568 — Lot Control & Genealogy
 
+## Status
+- **#675 (landed):** generic `build` consume/produce flow, no lot awareness.
+- **#676 (landed):** `part.is_lot_tracked`, `lot`, `lot_genealogy`; lot created at goods
+  receipt (vendor lot capture) and by a lot-tracked build (output lot + one genealogy
+  edge per lot-tracked component consumed). The build's lot machinery engages only when
+  the **output** part is lot-tracked. (The issue text called the flag `is_batch_controlled`;
+  it landed as `is_lot_tracked` to match this plan and the rest of the epic.)
+- **Remaining:** `test_record.lot_id` (step 3 below) and the existing-records backfill.
+
 ## Problem
 Lot = PO number today, no vendor lot ID field, no way to trace a serialized unit back through assembled lots to raw vendor lots (e.g. final product lot consumes an Assy lot + 3 Reagent lots; Assy lot consumes Film + Disc lots).
 

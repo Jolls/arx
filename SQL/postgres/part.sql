@@ -39,7 +39,8 @@ CREATE TABLE part (
   default_supplier_id INTEGER          NULL,                 -- FK to company.id; deferred (#465/#213).
   unit_id             INTEGER          NULL,                 -- FK to unit.unit_id.
   stock_on_hand       NUMERIC(16,8)    NOT NULL DEFAULT 0,   -- Cached inventory balance (#272); app-maintained.
-  reorder_min         NUMERIC(16,8)    NULL                  -- Reorder point (#273); NULL = none.
+  reorder_min         NUMERIC(16,8)    NULL,                 -- Reorder point (#273); NULL = none.
+  is_lot_tracked      BOOLEAN          NOT NULL DEFAULT FALSE -- Lot/batch control (#676); receipt/build create a lot row when TRUE.
 );
 
 ALTER TABLE part ADD CONSTRAINT FK_part_number_unit FOREIGN KEY (unit_id) REFERENCES unit (unit_id);

@@ -76,6 +76,15 @@
                        value="{{if .Part.ReorderMin}}{{printf "%g" (deref .Part.ReorderMin)}}{{end}}">
             </div>
             <div class="detail-row">
+                <label class="form-label" data-bs-toggle="tooltip"
+                       title="When on, goods receipt and builds create a lot (batch) record for this part, capturing vendor lot numbers and build genealogy.">Lot Control</label>
+                <div class="form-checkbox-row">
+                    <input type="checkbox" id="is_lot_tracked" name="is_lot_tracked" value="1"
+                           {{if .Part.IsLotTracked}}checked{{end}}>
+                    <label for="is_lot_tracked">Batch / lot controlled</label>
+                </div>
+            </div>
+            <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
                 <input type="text" id="PNReqBy" name="PNReqBy" class="form-control"
                        value="{{.Part.PNReqBy}}">

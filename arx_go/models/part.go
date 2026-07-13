@@ -22,6 +22,7 @@ type Part struct {
 	PNFILIDPrimary   int
 	StockOnHand      float64
 	ReorderMin       *float64 // reorder point (#273); nil = none set, never flagged below-min
+	IsLotTracked     bool     // lot/batch control (#676); receipt/build create a lot row when true
 	PNCurrentCost    float64
 	PNLastRollupCost float64
 	PNLastRollupAt   *time.Time
@@ -142,6 +143,10 @@ func (p Part) ShowInventory() bool { return p.Tabs.Inventory }
 // produces stock). This excludes FORM parts, whose BOM row is only the
 // record-picker convention and whose category is not stocked.
 func (p Part) ShowBuild() bool { return p.HasBOM && p.ShowInventory() }
+
+// ShowLots reports whether the Lots subtab applies: the part is lot/batch
+// controlled (#676), so it has (or will have) lot rows to list and trace.
+func (p Part) ShowLots() bool { return p.IsLotTracked }
 
 // BelowReorder reports whether on-hand stock has dropped below the part's reorder
 // point (#273). False when no reorder point is set (ReorderMin == nil).

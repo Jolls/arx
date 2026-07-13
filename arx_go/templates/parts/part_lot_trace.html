@@ -1,0 +1,95 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
+        <li class="breadcrumb-item"><a href="/part/{{.Part.PNID}}/lots">{{.Part.PartNumber}} Lots</a></li>
+        <li class="breadcrumb-item active">Lot {{.Lot.LotNumber}}</li>
+    </ol>
+</nav>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    {{/* ── Lot header ─────────────────────────────────────────── */}}
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title mb-2">
+                Lot {{.Lot.LotNumber}}
+                {{if .Lot.IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Inactive</span>{{end}}
+            </h5>
+            <dl class="row mb-0 small">
+                <dt class="col-sm-2">Part</dt>
+                <dd class="col-sm-10"><a href="/part/{{.Lot.PartID}}">{{.Lot.PartNumber}}</a>{{if .Lot.PartTitle}} &mdash; {{.Lot.PartTitle}}{{end}}</dd>
+                <dt class="col-sm-2">Vendor Lot</dt>
+                <dd class="col-sm-10">{{if .Lot.VendorLot}}{{.Lot.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
+                <dt class="col-sm-2">Source</dt>
+                <dd class="col-sm-10">{{if .Lot.Source}}{{.Lot.Source}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
+                <dt class="col-sm-2">Created</dt>
+                <dd class="col-sm-10">{{.Lot.CreatedAt.Format "2006-01-02"}}</dd>
+            </dl>
+        </div>
+    </div>
+
+    {{/* ── Ancestry (consumed into this lot) ──────────────────── */}}
+    <h6>Source lots <span class="text-muted small fw-normal">(components consumed into this lot, traced back to raw vendor lots)</span></h6>
+    {{if .Ancestors}}
+    <div class="table-wrapper mb-4">
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Lot</th>
+                    <th>Part</th>
+                    <th>Vendor Lot</th>
+                    <th class="text-end" style="width:120px;">Qty Consumed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Ancestors}}
+                <tr>
+                    <td style="padding-left: calc(0.5rem + {{.Depth}} * 1.5rem);">
+                        <a href="/part/{{.PartID}}/lots/{{.ID}}">{{.LotNumber}}</a>
+                        {{if .IsVendorLot}}<span class="badge bg-warning text-dark" title="Purchased raw/vendor lot">vendor</span>{{end}}
+                    </td>
+                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartTitle}} &mdash; {{.PartTitle}}{{end}}</td>
+                    <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td class="text-end">{{printf "%g" .Qty}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="no-results mb-4">No component lots recorded &mdash; this is a raw vendor lot (a genealogy leaf).</p>
+    {{end}}
+
+    {{/* ── Descendants (this lot consumed into) ───────────────── */}}
+    <h6>Downstream lots <span class="text-muted small fw-normal">(assemblies this lot was consumed into)</span></h6>
+    {{if .Descendants}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Lot</th>
+                    <th>Part</th>
+                    <th>Vendor Lot</th>
+                    <th class="text-end" style="width:120px;">Qty Consumed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Descendants}}
+                <tr>
+                    <td style="padding-left: calc(0.5rem + {{.Depth}} * 1.5rem);">
+                        <a href="/part/{{.PartID}}/lots/{{.ID}}">{{.LotNumber}}</a>
+                    </td>
+                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartTitle}} &mdash; {{.PartTitle}}{{end}}</td>
+                    <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td class="text-end">{{printf "%g" .Qty}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="no-results">This lot has not been consumed into any assembly yet.</p>
+    {{end}}
+</div>
+{{end}}
