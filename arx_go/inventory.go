@@ -50,6 +50,7 @@ type InventoryTxnView struct {
 	Username  string
 	Reference string
 	Note      string
+	LotID     int
 	LotNumber string
 	Balance   float64
 }
@@ -79,7 +80,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT it.txn_type, it.qty, it.txn_date, it.username, it.reference, it.note, l.lot_number
+		SELECT it.txn_type, it.qty, it.txn_date, it.username, it.reference, it.note, l.id, l.lot_number
 		FROM %s it
 		LEFT JOIN %s l ON l.id = it.lot_id
 		WHERE it.part_id = @p1 ORDER BY it.txn_date ASC, it.id ASC
@@ -93,14 +94,16 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var v InventoryTxnView
 		var username, reference, note, lotNumber sql.NullString
+		var lotID sql.NullInt64
 		var date sql.NullTime
-		if err := rows.Scan(&v.Type, &v.Qty, &date, &username, &reference, &note, &lotNumber); err != nil {
+		if err := rows.Scan(&v.Type, &v.Qty, &date, &username, &reference, &note, &lotID, &lotNumber); err != nil {
 			h.renderError(w, r, "Error reading transactions: "+err.Error())
 			return
 		}
 		v.Username = username.String
 		v.Reference = reference.String
 		v.Note = note.String
+		v.LotID = int(lotID.Int64)
 		v.LotNumber = lotNumber.String
 		if date.Valid {
 			v.Date = date.Time.Format("2006-01-02")
