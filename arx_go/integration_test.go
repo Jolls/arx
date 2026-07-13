@@ -1343,3 +1343,124 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 		t.Errorf("history parameter = %q, want pre-update value %q", snapParam, "Audit Seed")
 	}
 }
+
+// TestIntegration_BuildConsumesOnlyStockedComponents drives PartBuildCreate for
+// the seeded ASM part 3005 and verifies the #675 consume/produce rules against a
+// live DB: the build posts an inventory 'issue' for each inventory-tracked BOM
+// component (screws 3002, o-ring 3003, sub-assembly 3012), SKIPS the non-stocked
+// OPS labor line (3006), and posts a single 'receipt' for the output part — with
+// part.stock_on_hand reflecting both sides. Cleans up every row it writes and
+// recomputes the affected parts' cached balances from the ledger.
+func TestIntegration_BuildConsumesOnlyStockedComponents(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	inv := h.cfg.InventoryTxnTable()
+	bt := h.cfg.BuildTable()
+	pn := h.cfg.PartsTable()
+
+	const outputPart = 3005
+	const buildQty = 3.0
+
+	stockOf := func(id int) float64 {
+		var s float64
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT stock_on_hand FROM %s WHERE id = @p1`, pn), id).Scan(&s); err != nil {
+			t.Fatalf("read stock_on_hand for %d: %v", id, err)
+		}
+		return s
+	}
+	before3005 := stockOf(outputPart)
+	before3002 := stockOf(3002)
+	before3006 := stockOf(3006)
+
+	// Registered before the write so a mid-test failure still cleans up. buildID is
+	// filled in after the POST; 0 means no build was created (nothing to undo).
+	var buildID int
+	defer func() {
+		if buildID == 0 {
+			return
+		}
+		note := fmt.Sprintf("Build #%d", buildID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE note = @p1`, inv), note)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, bt), buildID)
+		for _, id := range []int{3002, 3003, 3006, 3012, outputPart} {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(
+				`UPDATE %s SET stock_on_hand = (SELECT ISNULL(SUM(qty),0) FROM %s WHERE part_id = @p1) WHERE id = @p1`,
+				pn, inv), id)
+		}
+	}()
+
+	req := withID(postForm("/part/3005/build", url.Values{"qty": {"3"}}), outputPart)
+	rec := httptest.NewRecorder()
+	h.PartBuildCreate(rec, req)
+	assert302(t, "PartBuildCreate", rec)
+
+	// The new build is the highest-id row for this part (seed row 8201 is lower).
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT MAX(id) FROM %s WHERE part_id = @p1`, bt), outputPart).Scan(&buildID); err != nil {
+		t.Fatalf("find build id: %v", err)
+	}
+	note := fmt.Sprintf("Build #%d", buildID)
+
+	// Collect the ledger rows this build posted, keyed by part.
+	rows, err := h.DB().QueryContext(ctx, fmt.Sprintf(
+		`SELECT part_id, txn_type, qty FROM %s WHERE note = @p1`, inv), note)
+	if err != nil {
+		t.Fatalf("query build ledger rows: %v", err)
+	}
+	type txn struct {
+		typ string
+		qty float64
+	}
+	got := map[int]txn{}
+	for rows.Next() {
+		var pid int
+		var tt string
+		var q float64
+		if err := rows.Scan(&pid, &tt, &q); err != nil {
+			rows.Close()
+			t.Fatalf("scan ledger row: %v", err)
+		}
+		if _, dup := got[pid]; dup {
+			t.Errorf("part %d has more than one ledger row for this build", pid)
+		}
+		got[pid] = txn{tt, q}
+	}
+	rows.Close()
+
+	// Stocked components: issued at (qty per assembly × build qty), negative.
+	for pid, wantQty := range map[int]float64{3002: -2 * buildQty, 3003: -4 * buildQty, 3012: -1 * buildQty} {
+		g, ok := got[pid]
+		if !ok {
+			t.Errorf("no ledger row for stocked component %d (ArxDev may need reseeding)", pid)
+			continue
+		}
+		if g.typ != "issue" || g.qty != wantQty {
+			t.Errorf("component %d: got {%s %v}, want {issue %v}", pid, g.typ, g.qty, wantQty)
+		}
+	}
+
+	// The OPS labor line (category Inventory off) must be skipped entirely.
+	if g, ok := got[3006]; ok {
+		t.Errorf("OPS labor part 3006 should be skipped, but got a %s row of %v", g.typ, g.qty)
+	}
+
+	// Output part gets exactly one receipt.
+	if g, ok := got[outputPart]; !ok {
+		t.Errorf("no receipt row for output part %d", outputPart)
+	} else if g.typ != "receipt" || g.qty != buildQty {
+		t.Errorf("output %d: got {%s %v}, want {receipt %v}", outputPart, g.typ, g.qty, buildQty)
+	}
+
+	// stock_on_hand reflects both sides; the skipped OPS part is unchanged.
+	if d := stockOf(outputPart) - before3005; d != buildQty {
+		t.Errorf("output stock delta = %v, want %v", d, buildQty)
+	}
+	if d := stockOf(3002) - before3002; d != -2*buildQty {
+		t.Errorf("component 3002 stock delta = %v, want %v", d, -2*buildQty)
+	}
+	if d := stockOf(3006) - before3006; d != 0 {
+		t.Errorf("OPS 3006 stock delta = %v, want 0 (skipped)", d)
+	}
+}

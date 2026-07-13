@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.119] - 2026-07-12 
+- Added a generic Build flow on assemblies: a Build subtab consumes the part's BOM components (an inventory issue per line) and produces the output part (a receipt) in one transaction, keeping stock on hand in sync on both sides, with a non-blocking notice when a consumed component (e.g. an unbuilt sub-assembly) drops below zero on hand; no lot control yet ([#675](https://github.com/Jolls/arx-legacy/issues/675))
+- Enforced category-tab gating server-side across all part subtabs (BOM, Build, Order History, Transactions, Pricing, Mfg Parts, Suppliers) so a subtab hidden for a part's category can no longer be viewed or posted to via a direct URL; builds additionally skip non-stocked BOM components (e.g. OPS labor) instead of issuing them ([#675](https://github.com/Jolls/arx-legacy/issues/675))
+
 ## [0.5.118] - 2026-07-11 
 - Gave Test Mode a full second connection profile (server, engine, DB name, username, password) so ArxDev can live on a separate Postgres server while ArxProd stays on SQL Server; blank test fields inherit the prod value, and the fields are editable in Settings' new Test Connection section ([#672](https://github.com/Jolls/arx-legacy/issues/672))
 

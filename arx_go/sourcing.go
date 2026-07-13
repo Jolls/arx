@@ -41,6 +41,9 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "suppliers"); !ok {
+		return
+	}
 	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
 	if supplierID == "" {
 		h.renderSourcingWithError(w, r, id, "Supplier is required")
@@ -126,6 +129,9 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "suppliers"); !ok {
+		return
+	}
 	spID := chi.URLParam(r, "spID")
 	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
 	if supplierID == "" {
@@ -157,6 +163,9 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, id, "suppliers"); !ok {
+		return
+	}
 	spID := chi.URLParam(r, "spID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		DELETE FROM %s WHERE id=@p1 AND part_id=@p2

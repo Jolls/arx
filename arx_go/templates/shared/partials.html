@@ -172,6 +172,11 @@
     {{else}}
     <span class="sub-tab disabled" title="This part does not have a BOM">BOM</span>
     {{end}}
+    {{if $part.ShowBuild}}
+    <a href="/part/{{$id}}/build"       class="sub-tab{{if eq $sub "build"}} active{{end}}">Build</a>
+    {{else}}
+    <span class="sub-tab disabled" title="Add BOM lines before this part can be built">Build</span>
+    {{end}}
     <a href="/part/{{$id}}/where-used"  class="sub-tab{{if eq $sub "where-used"}} active{{end}}">Where Used</a>
     {{if $part.ShowOrders}}
     <a href="/part/{{$id}}/orders"      class="sub-tab{{if eq $sub "orders"}} active{{end}}">Order History</a>

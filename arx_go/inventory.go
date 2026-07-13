@@ -110,11 +110,11 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	partID, err := strconv.Atoi(id)
-	if err != nil {
-		h.renderError(w, r, "Invalid part")
+	p, ok := h.requireTab(w, r, id, "transactions")
+	if !ok {
 		return
 	}
+	partID := p.PNID
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return

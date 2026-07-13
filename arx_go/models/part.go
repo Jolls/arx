@@ -137,6 +137,12 @@ func (p Part) ShowMfgParts() bool  { return p.Tabs.MfgParts }
 func (p Part) ShowSuppliers() bool { return p.Tabs.Suppliers }
 func (p Part) ShowInventory() bool { return p.Tabs.Inventory }
 
+// ShowBuild reports whether the Build subtab applies: the part has actual BOM
+// lines to consume (#675) AND its category is inventory-tracked (building
+// produces stock). This excludes FORM parts, whose BOM row is only the
+// record-picker convention and whose category is not stocked.
+func (p Part) ShowBuild() bool { return p.HasBOM && p.ShowInventory() }
+
 // BelowReorder reports whether on-hand stock has dropped below the part's reorder
 // point (#273). False when no reorder point is set (ReorderMin == nil).
 func (p Part) BelowReorder() bool {
