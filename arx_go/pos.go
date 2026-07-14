@@ -1526,12 +1526,14 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 		if items[i].POLPNID != nil {
 			polID := items[i].POLID
 			// Lot-tracked part (#676): create this receipt's lot first, so the ledger
-			// row can reference it. lot_number defaults to the PO number;
-			// vendor_lot_number is captured per line.
+			// row can reference it. lot_number auto-defaults to the lot's own id
+			// (#687); lot_description records the PO as provenance. vendor_lot_number
+			// is captured per line.
 			var lotID *int
 			if items[i].IsLotTracked {
 				vendorLot := fv(r, fmt.Sprintf("vlot[%d]", polID))
-				id, err := h.createLot(r.Context(), tx, *items[i].POLPNID, num, vendorLot, &polID)
+				id, err := h.createLot(r.Context(), tx, *items[i].POLPNID,
+					lotCreateArgs{VendorLot: vendorLot, Description: "PO " + num}, &polID)
 				if err != nil {
 					h.renderError(w, r, "Error creating lot: "+err.Error())
 					return

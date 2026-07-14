@@ -204,7 +204,8 @@ func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
 			}
 			lotID = &picked
 		case newLotNumber != "":
-			created, err := h.createLot(r.Context(), tx, partID, newLotNumber, "", nil)
+			created, err := h.createLot(r.Context(), tx, partID,
+				lotCreateArgs{LotNumber: newLotNumber, Description: "Manual entry"}, nil)
 			if err != nil {
 				h.renderError(w, r, "Error creating lot: "+err.Error())
 				return

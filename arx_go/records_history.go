@@ -2,11 +2,17 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 
 	"arx/arx_go/models"
 )
+
+// errRecordNeedsLot is returned by completeRecordTx when a lot-tracked part's record has
+// no lot linked yet (#687) — surfaced by callers as a 400, not a server error.
+var errRecordNeedsLot = errors.New("a lot must be selected before this record can be completed — the tested part is lot-tracked")
 
 // snapshotRecordResults copies the record's current data-row results (test_result) into
 // record_event_results, linked to the given Complete event. Rows are inserted in the
@@ -137,6 +143,26 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 			tx.Rollback()
 		}
 	}()
+
+	// A lot-tracked part's tested unit must be traced to a lot before it can be
+	// marked Complete (#687) — WIP records may still be saved without one. Scoped to
+	// currently-WIP records so a nonexistent id or an already-locked record (e.g. a
+	// stale resubmit) falls through to the UPDATE's existing no-op semantics below
+	// instead of erroring.
+	var lotID sql.NullInt64
+	var isLotTracked sql.NullBool
+	err = tx.QueryRowContext(ctx, fmt.Sprintf(`
+		SELECT tr.lot_id, p.is_lot_tracked
+		FROM %s tr LEFT JOIN %s p ON p.id = tr.part_number_id
+		WHERE tr.id = @p1 AND tr.is_locked = %s`,
+		h.cfg.RecordsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(false)), recordID).
+		Scan(&lotID, &isLotTracked)
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	if err == nil && isLotTracked.Bool && !lotID.Valid {
+		return false, errRecordNeedsLot
+	}
 
 	res, err := tx.ExecContext(ctx, fmt.Sprintf(
 		"UPDATE %s SET is_locked=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s"+guard,
