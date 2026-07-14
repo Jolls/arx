@@ -25,7 +25,7 @@
         <div class="part-status-cell part-status-cell--flex">
             <div class="part-status-label">Build from BOM{{if .Part.IsLotTracked}} <span class="badge bg-info text-dark">lot controlled</span>{{end}}</div>
             {{if .ReturnRecord}}<div class="alert alert-info py-1 px-2 small mt-1 mb-1">Building for test record <a href="/records/{{.ReturnRecord}}/edit">#{{.ReturnRecord}}</a> — the new build (and its lot) will be linked to that record.</div>{{end}}
-            <form method="post" action="/part/{{.Part.PNID}}/build" class="d-flex flex-wrap gap-2 align-items-end mt-1">
+            <form method="post" action="/part/{{.Part.ID}}/build" class="d-flex flex-wrap gap-2 align-items-end mt-1">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 {{if .ReturnRecord}}<input type="hidden" name="return_record" value="{{.ReturnRecord}}">{{end}}
                 <div>
@@ -105,7 +105,7 @@
         Building consumes this part's stocked BOM components (an <strong>issue</strong> per line;
         non-stocked lines like labor are skipped) and produces the output part (a
         <strong>receipt</strong>). Both post to the
-        <a href="/part/{{.Part.PNID}}/transactions">Transactions</a> ledger. Component stock is
+        <a href="/part/{{.Part.ID}}/transactions">Transactions</a> ledger. Component stock is
         allowed to go negative if short (highlighted above).
         {{if .Part.IsLotTracked}} This part is lot controlled: each build creates an output lot and
         records the lot consumed for each lot-controlled component.{{end}}

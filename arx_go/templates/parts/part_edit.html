@@ -14,7 +14,7 @@
 
     {{if .IsDuplicate}}<div class="alert alert-info">Duplicating from <strong>{{.DuplicateFrom}}</strong>{{if .SourceHasBOM}} — the BOM will be copied{{end}}. Enter a new part number.</div>{{end}}
 
-    <form method="post" action="{{if .IsNew}}/parts{{else}}/part/{{.Part.PNID}}{{end}}">
+    <form method="post" action="{{if .IsNew}}/parts{{else}}/part/{{.Part.ID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         {{if .DuplicateBOMFrom}}
         <input type="hidden" name="duplicate_bom_from" value="{{.DuplicateBOMFrom}}">
@@ -67,7 +67,7 @@
                 <label for="current_cost" class="form-label" data-bs-toggle="tooltip"
                        title="Manually entered unit cost. For OPS (labor) parts this is the hourly rate; used as the rollup leaf cost when no preferred-supplier price exists.">Unit Cost / Rate</label>
                 <input type="number" id="current_cost" name="current_cost" class="form-control" step="any" min="0"
-                       value="{{if .Part.PNCurrentCost}}{{printf "%g" .Part.PNCurrentCost}}{{end}}">
+                       value="{{if .Part.CurrentCost}}{{printf "%g" .Part.CurrentCost}}{{end}}">
             </div>
             <div class="detail-row">
                 <label for="reorder_min" class="form-label" data-bs-toggle="tooltip"
@@ -87,7 +87,7 @@
             <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>
                 <input type="text" id="PNReqBy" name="PNReqBy" class="form-control"
-                       value="{{.Part.PNReqBy}}">
+                       value="{{.Part.RequestedBy}}">
             </div>
         </div>
 
@@ -106,7 +106,7 @@
         <div class="detail-section">
             <h3>Notes</h3>
             <textarea id="PNNotes" name="PNNotes" class="form-control" rows="4"
-                      style="width:100%; margin-top:8px;">{{.Part.PNNotes}}</textarea>
+                      style="width:100%; margin-top:8px;">{{.Part.Notes}}</textarea>
         </div>
 
         <div class="detail-section">
@@ -124,7 +124,7 @@
             <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create Part{{else}}Save Changes{{end}}
             </button>
-            <a href="{{if .IsNew}}/{{else}}/part/{{.Part.PNID}}{{end}}" class="btn btn-secondary">Cancel</a>
+            <a href="{{if .IsNew}}/{{else}}/part/{{.Part.ID}}{{end}}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>

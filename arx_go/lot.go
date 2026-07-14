@@ -274,7 +274,7 @@ func (h *Handler) PartLots(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	lots, err := h.lotsForPart(r.Context(), p.PNID)
+	lots, err := h.lotsForPart(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving lots: "+err.Error())
 		return
@@ -304,7 +304,7 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving lot: "+err.Error())
 		return
 	}
-	if !found || lot.PartID != p.PNID {
+	if !found || lot.PartID != p.ID {
 		h.renderError(w, r, "Lot not found for this part")
 		return
 	}

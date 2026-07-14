@@ -24,7 +24,7 @@
             <span class="badge bg-success align-middle ms-2" style="font-size:0.7em;"
                   data-bs-toggle="tooltip" title="Cost rollup uses this supplier's cheapest active price as the part's leaf cost">Preferred</span>
             {{else if .SupplierID}}
-            <form method="post" action="/part/{{$.Part.PNID}}/pricing/preferred" class="d-inline ms-2">
+            <form method="post" action="/part/{{$.Part.ID}}/pricing/preferred" class="d-inline ms-2">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="supplier_id" value="{{.SupplierID}}">
                 <button type="submit" class="btn btn-sm btn-outline-secondary align-middle" style="font-size:0.7em;">Set preferred</button>
@@ -60,13 +60,13 @@
                         </td>
                         <td class="text-end text-nowrap">
                             {{if .IsActive}}
-                            <a href="/part/{{$.Part.PNID}}/pricing/{{.ID}}/edit" class="btn btn-sm btn-secondary">Edit</a>
-                            <form method="post" action="/part/{{$.Part.PNID}}/pricing/{{.ID}}/deactivate" class="d-inline">
+                            <a href="/part/{{$.Part.ID}}/pricing/{{.ID}}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                            <form method="post" action="/part/{{$.Part.ID}}/pricing/{{.ID}}/deactivate" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                                 <button type="submit" class="btn btn-sm btn-danger">Deactivate</button>
                             </form>
                             {{else}}
-                            <form method="post" action="/part/{{$.Part.PNID}}/pricing/{{.ID}}/activate" class="d-inline">
+                            <form method="post" action="/part/{{$.Part.ID}}/pricing/{{.ID}}/activate" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                                 <button type="submit" class="btn btn-sm btn-secondary">Activate</button>
                             </form>
@@ -87,7 +87,7 @@
     <details class="mt-4">
         <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Price</summary>
         <div class="detail-section mt-2">
-            <form id="add-price-form" method="post" action="/part/{{.Part.PNID}}/pricing">
+            <form id="add-price-form" method="post" action="/part/{{.Part.ID}}/pricing">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
                     <label for="add_price_supplier_name" class="form-label">Supplier *</label>

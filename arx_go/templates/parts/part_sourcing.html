@@ -46,11 +46,11 @@
                         {{else}}—{{end}}
                     </td>
                     <td class="text-center">
-                        <a href="/part/{{$.Part.PNID}}/suppliers/{{.ID}}/edit#edit-form"
+                        <a href="/part/{{$.Part.ID}}/suppliers/{{.ID}}/edit#edit-form"
                            class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
                     </td>
                     <td class="text-center">
-                        <form method="post" action="/part/{{$.Part.PNID}}/suppliers/{{.ID}}/delete"
+                        <form method="post" action="/part/{{$.Part.ID}}/suppliers/{{.ID}}/delete"
                               class="m-0" onsubmit="return confirm('Remove this supplier link?')">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                             <button type="submit" class="btn btn-secondary text-danger"
@@ -67,7 +67,7 @@
                         {{if $pr.PriceEA}}<strong>{{printf "$%.4f" (deref $pr.PriceEA)}}</strong> ea{{end}}
                         {{if and $pr.PackSize (gt (deref $pr.PackSize) 1.0)}} &nbsp;(pack of {{printf "%g" (deref $pr.PackSize)}}{{if $pr.PricePack}} = {{printf "$%.4f" (deref $pr.PricePack)}}{{end}}){{end}}
                         {{end}}
-                        &nbsp;&mdash;&nbsp;<a href="/part/{{$.Part.PNID}}/pricing" style="font-size:0.85em;">View pricing tab &rarr;</a>
+                        &nbsp;&mdash;&nbsp;<a href="/part/{{$.Part.ID}}/pricing" style="font-size:0.85em;">View pricing tab &rarr;</a>
                     </td>
                 </tr>
                 {{end}}
@@ -84,7 +84,7 @@
     {{if .EditingLink}}
     <div id="edit-form" class="detail-section mt-4">
         <h3>Edit Supplier Link</h3>
-        <form method="post" action="/part/{{.Part.PNID}}/suppliers/{{.EditingLink.ID}}">
+        <form method="post" action="/part/{{.Part.ID}}/suppliers/{{.EditingLink.ID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
                 <label for="edit_supplier_name" class="form-label">Supplier *</label>
@@ -132,7 +132,7 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
-                <a href="/part/{{.Part.PNID}}/suppliers" class="btn btn-secondary">Cancel</a>
+                <a href="/part/{{.Part.ID}}/suppliers" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
@@ -143,7 +143,7 @@
     <details class="mt-4">
         <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Supplier</summary>
         <div class="detail-section mt-2">
-            <form id="add-supplier-form" method="post" action="/part/{{.Part.PNID}}/suppliers">
+            <form id="add-supplier-form" method="post" action="/part/{{.Part.ID}}/suppliers">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
                     <label for="add_supplier_name" class="form-label">Supplier *</label>

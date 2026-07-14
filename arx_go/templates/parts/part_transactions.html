@@ -16,7 +16,7 @@
         </div>
         <div class="part-status-cell part-status-cell--flex">
             <div class="part-status-label">Adjust stock</div>
-            <form method="post" action="/part/{{.Part.PNID}}/adjust-stock" class="d-flex flex-wrap gap-2 align-items-end mt-1">
+            <form method="post" action="/part/{{.Part.ID}}/adjust-stock" class="d-flex flex-wrap gap-2 align-items-end mt-1">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div>
                     <label class="form-label mb-0" style="font-size:0.8em;">Qty (+/−)</label>
@@ -73,7 +73,7 @@
                     <td style="text-align:right;">{{printf "%.2f" .Balance}}</td>
                     <td>{{.Username}}</td>
                     <td>{{if and (eq .Type "receipt") .Reference}}<a href="/po/{{.Reference}}" class="part-number-link">{{.Reference}}</a>{{else}}{{.Reference}}{{end}}</td>
-                    <td>{{if .LotNumber}}<a href="/part/{{$.Part.PNID}}/lots/{{.LotID}}" class="part-number-link">{{.LotNumber}}</a>{{end}}</td>
+                    <td>{{if .LotNumber}}<a href="/part/{{$.Part.ID}}/lots/{{.LotID}}" class="part-number-link">{{.LotNumber}}</a>{{end}}</td>
                     <td>{{.Note}}</td>
                 </tr>
                 {{end}}

@@ -93,8 +93,8 @@ func assertStatus(t *testing.T, label string, rec *httptest.ResponseRecorder, wa
 //
 //  1. Create a part (identity INSERT with OUTPUT INSERTED.PNID)
 //  2. Update the part title
-//  3. Add an attachment (triggers trg_FIL_part_count → PN.PNFILLinks = 1)
-//  4. Soft-delete the attachment (trigger → PN.PNFILLinks = 0)
+//  3. Add an attachment (triggers trg_FIL_part_count → PN.AttachmentCount = 1)
+//  4. Soft-delete the attachment (trigger → PN.AttachmentCount = 0)
 //  5. Hard-delete the test rows (cleanup)
 func TestIntegration_PartLifecycle(t *testing.T) {
 	h, baseCleanup := liveHandler(t)
@@ -169,13 +169,13 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
 	).Scan(&filLinks)
 	if err != nil {
-		t.Fatalf("SELECT PNFILLinks after attach create: %v", err)
+		t.Fatalf("SELECT AttachmentCount after attach create: %v", err)
 	}
 	if filLinks != 1 {
-		t.Errorf("PNFILLinks after attach create = %d, want 1", filLinks)
+		t.Errorf("AttachmentCount after attach create = %d, want 1", filLinks)
 	}
 
-	// Capture the new FILID for the delete step.
+	// Capture the new ID for the delete step.
 	var filID int
 	err = h.DB().QueryRowContext(ctx,
 		fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), pnID,
@@ -209,10 +209,10 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
 	).Scan(&filLinks)
 	if err != nil {
-		t.Fatalf("SELECT PNFILLinks after attach delete: %v", err)
+		t.Fatalf("SELECT AttachmentCount after attach delete: %v", err)
 	}
 	if filLinks != 0 {
-		t.Errorf("PNFILLinks after attach delete = %d, want 0", filLinks)
+		t.Errorf("AttachmentCount after attach delete = %d, want 0", filLinks)
 	}
 }
 

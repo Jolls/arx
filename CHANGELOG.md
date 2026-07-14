@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.126] - 2026-07-14 
+- Renamed the `Part`, `Attachment`, and `BOMItem` Go struct fields (and the `SupplierPart` part join) to match their renamed snake_case DB columns; no behavior change ([#693](https://github.com/Jolls/arx-legacy/issues/693))
+
 ## [0.5.125] - 2026-07-13 
 - Fixed auto-issued lot numbers colliding across multiple lot-tracked lines/partial receipts on the same PO by defaulting `lot_number` to the lot's own id instead of the PO number/build reference; added a `lot_description` column that instead carries that human-readable provenance ("PO 5003" / "Build #8202" / "Manual entry"), shown on the Lots subtab and lot detail ([#687](https://github.com/Jolls/arx-legacy/issues/687))
 - Fixed the Lots subtab not appearing on a lot-tracked part's main Details page until another subtab was visited first (`PartDetail` wasn't loading `is_lot_tracked`) ([#687](https://github.com/Jolls/arx-legacy/issues/687))

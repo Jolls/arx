@@ -10,7 +10,7 @@
 
     {{if .BOMItems}}
     <div class="d-flex justify-content-end gap-2 mb-2" data-col-table="bom-table">
-        <a href="/part/{{.Part.PNID}}/bom/export.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
+        <a href="/part/{{.Part.ID}}/bom/export.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="expandAllBOM()">Expand All</button>
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="collapseAllBOM()">Collapse All</button>
         <div class="dropdown">
@@ -53,16 +53,16 @@
             </thead>
             <tbody>
                 {{range .BOMItems}}
-                <tr data-item="{{.PLItem}}">
+                <tr data-item="{{.LineNumber}}">
                     <td data-col="col-item">
-                        {{if .ChildHasBOM}}<button type="button" class="bom-expand-toggle" data-part-id="{{.PLPartID}}" data-item="{{.PLItem}}" aria-expanded="false" onclick="toggleBOMRow(this)">&#9656;</button>{{end}}
-                        {{.PLItem}}
+                        {{if .ChildHasBOM}}<button type="button" class="bom-expand-toggle" data-part-id="{{.ComponentPartID}}" data-item="{{.LineNumber}}" aria-expanded="false" onclick="toggleBOMRow(this)">&#9656;</button>{{end}}
+                        {{.LineNumber}}
                     </td>
-                    <td data-col="col-pn"><a href="/part/{{.PLPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
+                    <td data-col="col-pn"><a href="/part/{{.ComponentPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
                     <td data-col="col-title">{{.Title}}</td>
                     <td data-col="col-rev">{{.Revision}}</td>
                     <td data-col="col-cat">{{.Category}}</td>
-                    <td data-col="col-qty" class="text-end">{{printf "%.5g" .PLQty}}</td>
+                    <td data-col="col-qty" class="text-end">{{printf "%.5g" .Qty}}</td>
                     <td data-col="col-unit-cost" class="text-end">{{if .LineUnitCost}}${{printf "%.4f" .LineUnitCost}}{{end}}</td>
                     <td data-col="col-ext-cost" class="text-end">{{if .LineExtCost}}${{printf "%.4f" .LineExtCost}}{{end}}</td>
                     <td data-col="col-source">

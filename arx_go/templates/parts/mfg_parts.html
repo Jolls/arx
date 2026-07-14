@@ -30,11 +30,11 @@
                     <td style="font-family:monospace;">{{.MfgPartNumber}}</td>
                     <td>{{.Description}}</td>
                     <td style="text-align:center;">
-                        <a href="/part/{{$.Part.PNID}}/mfg-parts/{{.ID}}/edit#edit-form"
+                        <a href="/part/{{$.Part.ID}}/mfg-parts/{{.ID}}/edit#edit-form"
                            class="btn btn-secondary" style="padding:2px 8px; font-size:0.8em; text-decoration:none;">Edit</a>
                     </td>
                     <td style="text-align:center;">
-                        <form method="post" action="/part/{{$.Part.PNID}}/mfg-parts/{{.ID}}/delete"
+                        <form method="post" action="/part/{{$.Part.ID}}/mfg-parts/{{.ID}}/delete"
                               style="margin:0;" onsubmit="return confirm('Remove this manufacturer part?')">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                             <button type="submit" class="btn btn-secondary"
@@ -55,7 +55,7 @@
     {{if .EditingMfgPart}}
     <div id="edit-form" class="detail-section" style="margin-top:24px;">
         <h3>Edit Manufacturer Part</h3>
-        <form method="post" action="/part/{{.Part.PNID}}/mfg-parts/{{.EditingMfgPart.ID}}">
+        <form method="post" action="/part/{{.Part.ID}}/mfg-parts/{{.EditingMfgPart.ID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
                 <label class="form-label">Manufacturer *</label>
@@ -85,7 +85,7 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
-                <a href="/part/{{.Part.PNID}}/mfg-parts" class="btn btn-secondary">Cancel</a>
+                <a href="/part/{{.Part.ID}}/mfg-parts" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
@@ -101,7 +101,7 @@
                 No manufacturers found. Edit a company and enable <em>Manufacturer (makes parts)</em> first.
             </p>
             {{end}}
-            <form method="post" action="/part/{{.Part.PNID}}/mfg-parts">
+            <form method="post" action="/part/{{.Part.ID}}/mfg-parts">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
                     <label class="form-label">Manufacturer *</label>

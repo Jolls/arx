@@ -1902,9 +1902,9 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 			}
 			if filID.Valid {
 				item.PrimaryAtt = &models.Attachment{
-					FILID:       int(filID.Int64),
-					FILFileName: filFileName.String,
-					Category:    filCategory.String,
+					ID:       int(filID.Int64),
+					FileName: filFileName.String,
+					Category: filCategory.String,
 				}
 			}
 			items = append(items, item)
