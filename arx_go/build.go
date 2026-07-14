@@ -320,10 +320,12 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Lot-tracked output (#676): create the produced lot and link the build to it.
-	// lot_number defaults to the build reference (editable later).
+	// lot_number auto-defaults to the lot's own id (#687); lot_description records
+	// the build as provenance.
 	var outputLotID int
 	if outputLotTracked {
-		outputLotID, err = h.createLot(r.Context(), tx, partID, fmt.Sprintf("Build #%d", buildID), "", nil)
+		outputLotID, err = h.createLot(r.Context(), tx, partID,
+			lotCreateArgs{Description: fmt.Sprintf("Build #%d", buildID)}, nil)
 		if err != nil {
 			h.renderError(w, r, "Error creating output lot: "+err.Error())
 			return

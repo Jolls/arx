@@ -393,12 +393,13 @@ BEGIN TRY
     UPDATE dbo.part SET is_lot_tracked = 1 WHERE id IN (3007, 3012);
 
     -- 8301: purchased lot of 3007, received against po_line 5504 (PO 5003); lot_number
-    --       defaults to the PO number, vendor_lot_number is the supplier's own batch ID.
+    --       defaults to the lot's own id (#687), vendor_lot_number is the supplier's
+    --       own batch ID, lot_description records the PO as provenance.
     -- 8302: manufactured lot of sub-assembly 3012 (po_line_id NULL).
     SET IDENTITY_INSERT dbo.lot ON;
-    INSERT INTO dbo.lot (id, part_id, lot_number, vendor_lot_number, po_line_id, created_at, is_active) VALUES
-        (8301, 3007, '5003', 'SS304-LOT-0088', 5504, '2026-05-15T00:00:00', 1),
-        (8302, 3012, 'BLD-3012-0525', NULL,     NULL, '2026-05-25T00:00:00', 1);
+    INSERT INTO dbo.lot (id, part_id, lot_number, lot_description, vendor_lot_number, po_line_id, created_at, is_active) VALUES
+        (8301, 3007, '8301', 'PO 5003',    'SS304-LOT-0088', 5504, '2026-05-15T00:00:00', 1),
+        (8302, 3012, '8302', 'Build #8202', NULL,            NULL, '2026-05-25T00:00:00', 1);
     SET IDENTITY_INSERT dbo.lot OFF;
 
     -- 8401: 3012's lot 8302 consumed 1 unit of 3007's lot 8301 (bom line 3906, qty 1) —
@@ -414,7 +415,7 @@ BEGIN TRY
 
     -- Link build 8202's output to lot 8302 (deferred until the lot exists, mirroring the
     -- build handler: insert build → create lot → set output_lot_id). Gives lot 8302 a real
-    -- originating build so its Source shows "Build #8202" and test_record 7010 can point at both.
+    -- originating build so its lot_description shows "Build #8202" and test_record 7010 can point at both.
     UPDATE dbo.build SET output_lot_id = 8302 WHERE id = 8202;
 
     -- ============================================================

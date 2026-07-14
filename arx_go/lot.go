@@ -13,8 +13,9 @@ import (
 
 // Lot control (#676, part of the #568 lot epic). A lot is one batch instance of a
 // lot-tracked part (part.is_lot_tracked). Purchased lots are created at goods
-// receipt (po_line_id set, lot_number defaults to the PO number); manufactured
-// lots are created by a build that produces a lot-tracked output part. lot_genealogy
+// receipt (po_line_id set); manufactured lots are created by a build that produces
+// a lot-tracked output part. Auto-issued lot_number defaults to the lot's own id
+// (#687); lot_description carries the human-readable provenance. lot_genealogy
 // records which parent (component) lots were consumed into a child (output) lot.
 
 // LotOption is one active lot of a part, offered in the build form's per-component
@@ -24,21 +25,37 @@ type LotOption struct {
 	Label string
 }
 
+// lotCreateArgs groups createLot's free-text fields so a positional call can't
+// silently swap VendorLot and Description (both are plain strings).
+type lotCreateArgs struct {
+	LotNumber   string // "" for auto-issued lots — defaults to the lot's own id (#687)
+	VendorLot   string // supplier's own lot/batch ID (purchased lots); "" when unknown
+	Description string // human-readable provenance stored in lot_description
+}
+
 // createLot inserts one lot row inside the caller's tx and returns its new id.
-// poLineID is nil for manufactured (build) lots; vendorLot is "" when unknown.
-func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, lotNumber, vendorLot string, poLineID *int) (int, error) {
+// poLineID is nil for manufactured (build) lots. args.LotNumber == "" (auto-issued
+// lots) defers to the lot's own id, guaranteed unique by construction (#687) — a
+// second UPDATE sets it once the id is known post-insert.
+func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args lotCreateArgs, poLineID *int) (int, error) {
 	var poArg interface{}
 	if poLineID != nil {
 		poArg = *poLineID
 	}
 	insert := h.dialect.InsertReturningID(h.cfg.LotTable(),
-		`part_id, lot_number, vendor_lot_number, po_line_id, created_at, is_active`,
-		`@p1, @p2, @p3, @p4, @p5, @p6`,
+		`part_id, lot_number, lot_description, vendor_lot_number, po_line_id, created_at, is_active`,
+		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`,
 		false)
 	var lotID int
 	err := tx.QueryRowContext(ctx, insert,
-		partID, lotNumber, nullableText(vendorLot), poArg, time.Now(), true,
+		partID, args.LotNumber, args.Description, nullableText(args.VendorLot), poArg, time.Now(), true,
 	).Scan(&lotID)
+	if err != nil || args.LotNumber != "" {
+		return lotID, err
+	}
+	_, err = tx.ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET lot_number = @p1 WHERE id = @p2`, h.cfg.LotTable()),
+		strconv.Itoa(lotID), lotID)
 	return lotID, err
 }
 
@@ -93,53 +110,43 @@ func (h *Handler) recordLotGenealogy(ctx context.Context, tx *txLogger, parentLo
 // ── Lots view (#676) ─────────────────────────────────────────────────────────
 
 // LotRow is one lot in the Lots subtab list and the header of a genealogy trace.
-// Source is a human-readable origin: "PO <number>" for a purchased lot, "Build
-// #<id>" for a manufactured one, or "" when neither is linked.
+// LotDescription is the human-readable provenance stored at creation (#687): "PO
+// <number>" for a purchased lot, "Build #<id>" for a manufactured one, "Manual
+// entry" for one created directly on the inventory adjustment tab.
 type LotRow struct {
-	ID         int
-	LotNumber  string
-	VendorLot  string
-	PartID     int
-	PartNumber string
-	PartTitle  string
-	Source     string
-	CreatedAt  time.Time
-	IsActive   bool
+	ID             int
+	LotNumber      string
+	VendorLot      string
+	PartID         int
+	PartNumber     string
+	PartTitle      string
+	LotDescription string
+	CreatedAt      time.Time
+	IsActive       bool
 }
 
-// lotRowSelect is the shared SELECT for a lot joined to its part and origin (PO
-// line → PO number, or the build that produced it). A `WHERE …` clause and
-// ordering are appended by callers.
+// lotRowSelect is the shared SELECT for a lot joined to its part. A `WHERE …`
+// clause and ordering are appended by callers.
 func (h *Handler) lotRowSelect() string {
 	return fmt.Sprintf(`
 		SELECT l.id, l.lot_number, l.vendor_lot_number, l.part_id,
-		       p.part_number, p.title, po.number, b.id, l.created_at, l.is_active
+		       p.part_number, p.title, l.lot_description, l.created_at, l.is_active
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
-		LEFT JOIN %s pl ON pl.id = l.po_line_id
-		LEFT JOIN %s po ON po.id = pl.po_id
-		LEFT JOIN %s b ON b.output_lot_id = l.id
-	`, h.cfg.LotTable(), h.cfg.PartsTable(), h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.BuildTable())
+	`, h.cfg.LotTable(), h.cfg.PartsTable())
 }
 
 // scanLotRow reads one LotRow from a row cursor over lotRowSelect's columns.
 func scanLotRow(sc interface{ Scan(...any) error }) (LotRow, error) {
 	var lr LotRow
-	var vendorLot, partNumber, partTitle, poNumber sql.NullString
-	var buildID sql.NullInt64
+	var vendorLot, partNumber, partTitle sql.NullString
 	if err := sc.Scan(&lr.ID, &lr.LotNumber, &vendorLot, &lr.PartID,
-		&partNumber, &partTitle, &poNumber, &buildID, &lr.CreatedAt, &lr.IsActive); err != nil {
+		&partNumber, &partTitle, &lr.LotDescription, &lr.CreatedAt, &lr.IsActive); err != nil {
 		return LotRow{}, err
 	}
 	lr.VendorLot = vendorLot.String
 	lr.PartNumber = partNumber.String
 	lr.PartTitle = partTitle.String
-	switch {
-	case poNumber.Valid:
-		lr.Source = "PO " + poNumber.String
-	case buildID.Valid:
-		lr.Source = fmt.Sprintf("Build #%d", buildID.Int64)
-	}
 	return lr, nil
 }
 

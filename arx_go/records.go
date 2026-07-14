@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -1792,7 +1793,11 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 
 	// Lock and, on transition, log the 'completed' event + result snapshot (#251).
 	if _, err := h.completeRecordTx(r.Context(), recordID, 0, username); err != nil {
-		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if errors.Is(err, errRecordNeedsLot) {
+			status = http.StatusBadRequest
+		}
+		http.Error(w, "lock error: "+err.Error(), status)
 		return
 	}
 

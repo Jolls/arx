@@ -116,7 +116,7 @@
       {{if .Trace.LinkedLot}}
       <tr>
         <th class="text-muted">Lot</th>
-        <td><a href="/part/{{.Trace.PartID}}/lots/{{.Trace.LinkedLot.ID}}">{{.Trace.LinkedLot.LotNumber}}</a>{{if .Trace.LinkedLot.Source}} · {{.Trace.LinkedLot.Source}}{{end}}</td>
+        <td><a href="/part/{{.Trace.PartID}}/lots/{{.Trace.LinkedLot.ID}}">{{.Trace.LinkedLot.LotNumber}}</a>{{if .Trace.LinkedLot.LotDescription}} · {{.Trace.LinkedLot.LotDescription}}{{end}}</td>
       </tr>
       {{end}}
       {{if .Trace.LinkedBuild}}

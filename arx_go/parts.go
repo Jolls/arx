@@ -218,7 +218,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		user1, user2, user3, user4, user5             sql.NullString
 		user6, user7, user8, user9, user10            sql.NullString
 		pnDate, pnDateModified, lastRollupAt          sql.NullTime
-		active, hasBOM                                sql.NullBool
+		active, hasBOM, isLotTracked                  sql.NullBool
 		filIDPrimary, filLinks, poLinks               sql.NullInt64
 		currentCost, lastRollupCost                   sql.NullFloat64
 		stockOnHand, reorderMin                        sql.NullFloat64
@@ -229,7 +229,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
-		       unit_id, stock_on_hand, reorder_min,
+		       unit_id, stock_on_hand, reorder_min, is_lot_tracked,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
@@ -238,7 +238,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
 		&currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
-		&unitID, &stockOnHand, &reorderMin,
+		&unitID, &stockOnHand, &reorderMin, &isLotTracked,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -268,6 +268,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		p.ReorderMin = &v
 	}
 	p.PNCurrentCost = currentCost.Float64
+	p.IsLotTracked = isLotTracked.Bool
 	p.PNLastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {
 		p.PNLastRollupAt = &lastRollupAt.Time
