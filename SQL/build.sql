@@ -22,3 +22,8 @@ CREATE TABLE build (
 
 ALTER TABLE dbo.build ADD CONSTRAINT FK_build_part FOREIGN KEY (part_id) REFERENCES dbo.part (id);
 CREATE INDEX IX_build_part ON dbo.build (part_id, build_date);
+
+-- FK_inv_txn_build (inventory_transaction.build_id → build.id, #677) is added here,
+-- after build is created, so inventory_transaction can be created first in DDL run
+-- order (mirrors how FK_inv_txn_lot is added in SQL/lot.sql after lot).
+ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_build FOREIGN KEY (build_id) REFERENCES dbo.build (id);

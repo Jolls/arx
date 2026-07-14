@@ -59,6 +59,45 @@
     </div>
   </div>
 
+  {{/* #677 — Lot/build traceability. These save with the record via the main Save
+       button (no separate submit). "Build this unit" is a navigation link. */}}
+  {{if .Trace}}
+  {{if or .Trace.IsLotTracked .Trace.Builds .Trace.Buildable}}
+  <div class="row mb-3 g-2 align-items-end">
+    {{if .Trace.IsLotTracked}}
+    <div class="col-auto">
+      <label class="form-label fw-semibold mb-1 small">Lot
+        {{if .Trace.LinkedLot}}<a href="/part/{{.Trace.PartID}}/lots/{{.Trace.LinkedLot.ID}}" class="ms-1 small fw-normal" title="View this lot's genealogy">trace</a>{{end}}
+      </label>
+      <select name="lot_id" class="form-select form-select-sm"
+              data-bs-toggle="tooltip" title="The lot this unit belongs to. Saved with the record so its serial number traces back to the material it was made from.">
+        <option value="">— none —</option>
+        {{range .Trace.Lots}}<option value="{{.ID}}"{{if eq .ID $.Trace.SelectedLot}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </div>
+    {{end}}
+    {{if .Trace.Builds}}
+    <div class="col-auto">
+      <label class="form-label fw-semibold mb-1 small">Build</label>
+      <select name="build_id" class="form-select form-select-sm"
+              data-bs-toggle="tooltip" title="The build that produced this unit. Saved with the record.">
+        <option value="">— none —</option>
+        {{range .Trace.Builds}}<option value="{{.ID}}"{{if eq .ID $.Trace.SelectedBuild}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </div>
+    {{end}}
+    {{if .Trace.Buildable}}
+    <div class="col-auto">
+      <a href="/part/{{.Trace.PartID}}/build?return_record={{.Record.ID}}" class="btn btn-sm btn-outline-secondary" data-build-this-unit
+         data-bs-toggle="tooltip" title="Build this unit from its BOM, then link the resulting build (and its lot) to this record on return.">
+        <i class="bi bi-hammer"></i> Build this unit
+      </a>
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+  {{end}}
+
   <table class="table table-bordered table-sm align-middle">
     <thead class="table-dark">
       <tr>
@@ -223,34 +262,50 @@ function restoreDraft(draft) {
   });
 }
 
-// On load: check for saved draft and show restore banner
+// On load: check for saved draft. Coming back from "Build this unit" (?built=1) the
+// in-progress results are auto-restored silently (#677); otherwise show the restore
+// banner. The lot/build linkage is never in the draft — it's read fresh from the DB —
+// so restoring only brings back the test-result fields the user was entering.
+const _autoRestore = new URLSearchParams(window.location.search).get('built') === '1';
 const _savedRaw = localStorage.getItem(DRAFT_KEY);
 if (_savedRaw) {
   try {
     const draft = JSON.parse(_savedRaw);
-    const ts = new Date(draft._saved).toLocaleTimeString();
-    const banner = document.createElement('div');
-    banner.className = 'alert alert-warning d-flex align-items-center gap-3 mb-3';
-    banner.id = 'draft-banner';
-    banner.innerHTML =
-      '<span>Unsaved draft from ' + ts + '</span>' +
-      '<button type="button" class="btn btn-sm btn-warning" id="draft-restore">Restore</button>' +
-      '<button type="button" class="btn btn-sm btn-outline-secondary" id="draft-discard">Discard</button>';
-    const form = document.getElementById('edit-form');
-    form.insertAdjacentElement('beforebegin', banner);
-
-    document.getElementById('draft-restore').addEventListener('click', function() {
+    if (_autoRestore) {
       restoreDraft(draft);
-      banner.remove();
-    });
-    document.getElementById('draft-discard').addEventListener('click', function() {
-      localStorage.removeItem(DRAFT_KEY);
-      banner.remove();
-    });
+      const ind = document.getElementById('draft-indicator');
+      if (ind) ind.textContent = 'Restored your in-progress results';
+    } else {
+      const ts = new Date(draft._saved).toLocaleTimeString();
+      const banner = document.createElement('div');
+      banner.className = 'alert alert-warning d-flex align-items-center gap-3 mb-3';
+      banner.id = 'draft-banner';
+      banner.innerHTML =
+        '<span>Unsaved draft from ' + ts + '</span>' +
+        '<button type="button" class="btn btn-sm btn-warning" id="draft-restore">Restore</button>' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary" id="draft-discard">Discard</button>';
+      const form = document.getElementById('edit-form');
+      form.insertAdjacentElement('beforebegin', banner);
+
+      document.getElementById('draft-restore').addEventListener('click', function() {
+        restoreDraft(draft);
+        banner.remove();
+      });
+      document.getElementById('draft-discard').addEventListener('click', function() {
+        localStorage.removeItem(DRAFT_KEY);
+        banner.remove();
+      });
+    }
   } catch(e) {
     localStorage.removeItem(DRAFT_KEY);
   }
 }
+
+// Save the draft before leaving via "Build this unit" so the round-trip captures the
+// very latest results (the 30s autosave may not have fired yet) (#677).
+document.querySelectorAll('[data-build-this-unit]').forEach(function(el) {
+  el.addEventListener('click', saveDraft);
+});
 
 // Auto-save every 30s
 setInterval(saveDraft, 30000);

@@ -72,6 +72,8 @@ type TestRecord struct {
 	Active           bool
 	TestOrder        string // comma-separated snapshot of test IDs at record creation
 	FormRevision     *int   // snapshot of form.Revision at record creation; nil for pre-#260 records or legacy data
+	LotID            *int   // lot the tested unit belongs to (#677); nil when the part is not lot-tracked or unlinked
+	BuildID          *int   // build that produced the tested unit (#677); nil when not built or unlinked
 }
 
 // OrderedTestIDs parses TestOrder into a slice of integer step IDs.

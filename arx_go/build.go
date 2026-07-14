@@ -21,6 +21,65 @@ type BuildView struct {
 	Note     string
 }
 
+// BuildOption is one past build of a part, offered when linking a test record to
+// the build that produced its unit (#677). Label is a human-readable identifier.
+type BuildOption struct {
+	ID    int
+	Label string
+}
+
+// buildOptionLabel formats a build for a picker/badge, e.g. "Build #12 — qty 1 — 2026-05-25".
+func buildOptionLabel(id int, qty float64, date sql.NullTime) string {
+	label := fmt.Sprintf("Build #%d — qty %g", id, qty)
+	if date.Valid {
+		label += " — " + date.Time.Format("2006-01-02")
+	}
+	return label
+}
+
+// activeBuildsForPart returns a part's builds, newest first, for the test-record
+// build picker (#677). Empty (not an error) when the part has no builds.
+func (h *Handler) activeBuildsForPart(ctx context.Context, partID int) ([]BuildOption, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT id, qty, build_date FROM %s WHERE part_id = @p1 ORDER BY build_date DESC, id DESC
+	`, h.cfg.BuildTable()), partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var builds []BuildOption
+	for rows.Next() {
+		var b BuildOption
+		var qty float64
+		var date sql.NullTime
+		if err := rows.Scan(&b.ID, &qty, &date); err != nil {
+			return nil, err
+		}
+		b.Label = buildOptionLabel(b.ID, qty, date)
+		builds = append(builds, b)
+	}
+	return builds, rows.Err()
+}
+
+// fetchBuildOption loads a single build for a linked-build display. Returns nil
+// (no error) when the build does not exist.
+func (h *Handler) fetchBuildOption(ctx context.Context, buildID int) (*BuildOption, error) {
+	var b BuildOption
+	var qty float64
+	var date sql.NullTime
+	err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT id, qty, build_date FROM %s WHERE id = @p1`, h.cfg.BuildTable()), buildID).
+		Scan(&b.ID, &qty, &date)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	b.Label = buildOptionLabel(b.ID, qty, date)
+	return &b, nil
+}
+
 // buildComponent is one inventory-tracked BOM line of the output part, shown on the
 // Build tab so the user sees what a build will consume before running it: quantity
 // per assembly, current on-hand, and (for lot-tracked components, when the output is
@@ -145,6 +204,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Builds": builds, "Components": comps, "ShowLotColumn": showLotColumn,
 		"Today": time.Now().Format("2006-01-02"),
 		"BuiltQty": r.URL.Query().Get("built"),
+		"ReturnRecord": r.URL.Query().Get("return_record"), // #677: link build back to the test record that launched it
 		"ActiveTab": "parts", "ActiveSubTab": "build",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
@@ -308,7 +368,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 			}
 			lotID = &picked
 		}
-		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", -consumed, *buildDate, "", ledgerNote, nil, lotID); err != nil {
+		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", -consumed, *buildDate, "", ledgerNote, nil, lotID, &buildID); err != nil {
 			h.renderError(w, r, "Error issuing component stock: "+err.Error())
 			return
 		}
@@ -328,9 +388,40 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 	if outputLotTracked {
 		outputLotArg = &outputLotID
 	}
-	if err := h.recordInventoryTxn(r, tx, partID, "receipt", qty, *buildDate, "", ledgerNote, nil, outputLotArg); err != nil {
+	if err := h.recordInventoryTxn(r, tx, partID, "receipt", qty, *buildDate, "", ledgerNote, nil, outputLotArg, &buildID); err != nil {
 		h.renderError(w, r, "Error receiving built stock: "+err.Error())
 		return
+	}
+
+	// #677: when this build was launched from a test record ("Build this unit"),
+	// link the record to the build (and its output lot, if any) in the same tx so
+	// the tested unit traces back to what it consumed. A stale/forged return_record
+	// (or one whose part doesn't match) is skipped silently — it must never block a
+	// build.
+	linkedRecord := 0
+	if rr := fv(r, "return_record"); rr != "" {
+		if recID, convErr := strconv.Atoi(rr); convErr == nil {
+			// Only link a WIP record of this same part; a stale/forged/locked
+			// return_record is skipped silently — it must never block the build.
+			var recPart int
+			var recLocked bool
+			err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
+				`SELECT COALESCE(part_number_id,0), is_locked FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recID).
+				Scan(&recPart, &recLocked)
+			if err == nil && recPart == partID && !recLocked {
+				var lotArg interface{}
+				if outputLotArg != nil {
+					lotArg = *outputLotArg
+				}
+				if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+					`UPDATE %s SET lot_id = @p1, build_id = @p2, updated_at = GETDATE() WHERE id = @p3`,
+					h.cfg.RecordsTable()), lotArg, buildID, recID); err != nil {
+					h.renderError(w, r, "Error linking build to test record: "+err.Error())
+					return
+				}
+				linkedRecord = recID
+			}
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -338,5 +429,11 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	committed = true
+	if linkedRecord != 0 {
+		// ?built=1 tells the record editor this is the return leg of "Build this unit"
+		// so it can auto-restore the in-progress draft instead of prompting (#677).
+		http.Redirect(w, r, fmt.Sprintf("/records/%d/edit?built=1", linkedRecord), http.StatusFound)
+		return
+	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/build?built=%g", id, qty), http.StatusFound)
 }

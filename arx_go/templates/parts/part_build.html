@@ -24,8 +24,10 @@
         </div>
         <div class="part-status-cell part-status-cell--flex">
             <div class="part-status-label">Build from BOM{{if .Part.IsLotTracked}} <span class="badge bg-info text-dark">lot controlled</span>{{end}}</div>
+            {{if .ReturnRecord}}<div class="alert alert-info py-1 px-2 small mt-1 mb-1">Building for test record <a href="/records/{{.ReturnRecord}}/edit">#{{.ReturnRecord}}</a> — the new build (and its lot) will be linked to that record.</div>{{end}}
             <form method="post" action="/part/{{.Part.PNID}}/build" class="d-flex flex-wrap gap-2 align-items-end mt-1">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                {{if .ReturnRecord}}<input type="hidden" name="return_record" value="{{.ReturnRecord}}">{{end}}
                 <div>
                     <label class="form-label mb-0" style="font-size:0.8em;">Qty to build</label>
                     <input type="number" step="any" min="0" id="build-qty" name="qty" class="form-control form-control-sm" style="width:110px;" placeholder="e.g. 10" required>
