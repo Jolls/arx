@@ -352,7 +352,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,
-		       pn.id, pn.part_number, pn.title, pn.revision, pn.category,
+		       pn.part_number, pn.title, pn.revision, pn.category,
 		       sp.unit_id,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
 		       CASE WHEN sp.unit_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
@@ -373,13 +373,13 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		var lk models.SupplierPart
 		var preference, supplierPN, supplierDesc, leadTime sql.NullString
 		var minIncr sql.NullFloat64
-		var pnID, unitID sql.NullInt64
+		var unitID sql.NullInt64
 		var partNumber, title, revision, category, unitAbbr sql.NullString
 		var unitIsExplicit bool
 		if err := rows.Scan(
 			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
 			&leadTime, &minIncr,
-			&pnID, &partNumber, &title, &revision, &category,
+			&partNumber, &title, &revision, &category,
 			&unitID, &unitAbbr, &unitIsExplicit,
 		); err != nil {
 			h.renderError(w, r, "Error reading linked parts: "+err.Error())
@@ -392,7 +392,6 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		if minIncr.Valid {
 			lk.MinIncrement = &minIncr.Float64
 		}
-		lk.PNID = int(pnID.Int64)
 		lk.PartNumber = partNumber.String
 		lk.Title = title.String
 		lk.Revision = revision.String
@@ -437,7 +436,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range links {
-		links[i].POLinks = poByPart[links[i].PNID]
+		links[i].POLinks = poByPart[links[i].PartID]
 	}
 
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)

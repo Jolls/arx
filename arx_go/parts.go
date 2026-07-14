@@ -34,12 +34,12 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, part_number, title, category, `+hasOwnBOMExpr+`, primary_attachment_id, stock_on_hand, is_lot_tracked FROM %s p WHERE id = @p1`,
 		h.cfg.BOMTable(), "p.id", h.cfg.PartsTable(),
-	), id).Scan(&p.PNID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand, &isLotTracked)
+	), id).Scan(&p.ID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand, &isLotTracked)
 	p.PartNumber = partNumber.String
 	p.Title = title.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
-	p.PNFILIDPrimary = int(filIDPrimary.Int64)
+	p.PrimaryAttachmentID = int(filIDPrimary.Int64)
 	p.StockOnHand = stockOnHand.Float64
 	p.IsLotTracked = isLotTracked.Bool
 	return p, err
@@ -50,7 +50,7 @@ func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTa
 	if !ok {
 		return models.Part{}, "", "", false
 	}
-	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
+	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.ID), p.PartNumber)
 	if !tabVisible(p, subTab) {
 		h.renderError(w, r, "The "+subTab+" section does not apply to "+p.Category+" parts.")
 		return models.Part{}, "", "", false
@@ -234,7 +234,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
 	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
-		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
+		&p.ID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
 		&currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
@@ -258,30 +258,30 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
 	p.ReleaseStatus = releaseStatusOrUnderReview(status.String)
-	p.Active = active.Bool
-	p.PNReqBy = reqBy.String
-	p.PNNotes = notes.String
-	p.PNFILIDPrimary = int(filIDPrimary.Int64)
+	p.IsActive = active.Bool
+	p.RequestedBy = reqBy.String
+	p.Notes = notes.String
+	p.PrimaryAttachmentID = int(filIDPrimary.Int64)
 	p.StockOnHand = stockOnHand.Float64
 	if reorderMin.Valid {
 		v := reorderMin.Float64
 		p.ReorderMin = &v
 	}
-	p.PNCurrentCost = currentCost.Float64
+	p.CurrentCost = currentCost.Float64
 	p.IsLotTracked = isLotTracked.Bool
-	p.PNLastRollupCost = lastRollupCost.Float64
+	p.LastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {
-		p.PNLastRollupAt = &lastRollupAt.Time
+		p.LastRollupAt = &lastRollupAt.Time
 	}
-	p.PNFILLinks = int(filLinks.Int64)
-	p.PNPOLinks = int(poLinks.Int64)
+	p.AttachmentCount = int(filLinks.Int64)
+	p.POLineCount = int(poLinks.Int64)
 	p.UserField1, p.UserField2, p.UserField3, p.UserField4, p.UserField5 = user1.String, user2.String, user3.String, user4.String, user5.String
 	p.UserField6, p.UserField7, p.UserField8, p.UserField9, p.UserField10 = user6.String, user7.String, user8.String, user9.String, user10.String
 	if pnDate.Valid {
-		p.PNDate = &pnDate.Time
+		p.CreatedDate = &pnDate.Time
 	}
 	if pnDateModified.Valid {
-		p.PNDateModified = &pnDateModified.Time
+		p.ModifiedDate = &pnDateModified.Time
 	}
 	if unitID.Valid {
 		v := int(unitID.Int64)
@@ -299,16 +299,16 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var primaryAtt *models.Attachment
-	if p.PNFILIDPrimary > 0 {
+	if p.PrimaryAttachmentID > 0 {
 		var att models.Attachment
 		var fname, fnotes, frev sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 			`SELECT id, file_name, category, part_revision FROM %s WHERE id = @p1`,
 			h.cfg.AttachmentsTable(),
-		), p.PNFILIDPrimary).Scan(&att.FILID, &fname, &fnotes, &frev); err == nil {
-			att.FILFileName = fname.String
+		), p.PrimaryAttachmentID).Scan(&att.ID, &fname, &fnotes, &frev); err == nil {
+			att.FileName = fname.String
 			att.Category = fnotes.String
-			att.FILPNRev = frev.String
+			att.PartRevision = frev.String
 			primaryAtt = &att
 		}
 	}
@@ -318,36 +318,36 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, file_name, category, part_revision, sort_order FROM %s
 		 WHERE part_id = @p1 AND is_active = %s
 		 ORDER BY sort_order, id`,
-		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true)), p.PNID)
+		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true)), p.ID)
 	if err == nil {
 		for rows.Next() {
 			var att models.Attachment
 			var fname, fnotes, frev sql.NullString
 			var sortOrder sql.NullInt64
-			if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev, &sortOrder); err == nil {
-				att.FILFileName = fname.String
+			if err := rows.Scan(&att.ID, &fname, &fnotes, &frev, &sortOrder); err == nil {
+				att.FileName = fname.String
 				att.Category = fnotes.String
-				att.FILPNRev = frev.String
+				att.PartRevision = frev.String
 				if sortOrder.Valid {
 					v := int(sortOrder.Int64)
 					att.OrderID = &v
 				}
-				if att.FILID != p.PNFILIDPrimary && len(topAtts) < 5 {
+				if att.ID != p.PrimaryAttachmentID && len(topAtts) < 5 {
 					topAtts = append(topAtts, att)
 				}
-				if urlutil.IsLocalFile(att.FILFileName) && !urlutil.IsLocalDir(att.FILFileName) &&
-					urlutil.IsImage(urlutil.FileBaseName(att.FILFileName)) {
+				if urlutil.IsLocalFile(att.FileName) && !urlutil.IsLocalDir(att.FileName) &&
+					urlutil.IsImage(urlutil.FileBaseName(att.FileName)) {
 					photoAtts = append(photoAtts, att)
 				}
 			}
 		}
 		if err := rows.Err(); err != nil {
-			log.Printf("[part] attachments for part %d: %v", p.PNID, err)
+			log.Printf("[part] attachments for part %d: %v", p.ID, err)
 		}
 		rows.Close()
 	}
 
-	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.PNID), p.PartNumber)
+	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.ID), p.PartNumber)
 	h.applyCategoryTabs(r.Context(), &p)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
@@ -355,20 +355,20 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	// Phase 2 (#465): the delta compares the rollup against the part's purchase
 	// price — the cheapest active price from its preferred supplier, falling back
 	// to current_cost when no preferred-supplier price exists.
-	purchasePrice := p.PNCurrentCost
+	purchasePrice := p.CurrentCost
 	var prefPrice sql.NullFloat64
 	h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT MIN(price_ea) FROM %s WHERE part_id=@p1 AND is_active=%s
 		 AND supplier_id=(SELECT default_supplier_id FROM %s WHERE id=@p1)`,
-		h.cfg.PriceTable(), h.dialect.BoolLiteral(true), h.cfg.PartsTable()), p.PNID).Scan(&prefPrice)
+		h.cfg.PriceTable(), h.dialect.BoolLiteral(true), h.cfg.PartsTable()), p.ID).Scan(&prefPrice)
 	if prefPrice.Valid && prefPrice.Float64 > 0 {
 		purchasePrice = prefPrice.Float64
 	}
 
 	var rollupDelta, rollupDeltaPct float64
 	var rollupSignificant bool
-	if p.PNLastRollupAt != nil && purchasePrice > 0 {
-		rollupDelta = p.PNLastRollupCost - purchasePrice
+	if p.LastRollupAt != nil && purchasePrice > 0 {
+		rollupDelta = p.LastRollupCost - purchasePrice
 		rollupDeltaPct = rollupDelta / purchasePrice * 100
 		rollupSignificant = math.Abs(rollupDeltaPct) >= 5.0
 	}
@@ -413,7 +413,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 	p := models.Part{}
 	if u := h.currentUser(r); u != nil {
-		p.PNReqBy = u.DisplayName
+		p.RequestedBy = u.DisplayName
 	}
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
@@ -444,11 +444,11 @@ func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
 	// whether to promise a BOM copy in the UI.
 	var bomLines int
 	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE parent_part_id=@p1`, h.cfg.BOMTable()), src.PNID).Scan(&bomLines)
+		`SELECT COUNT(*) FROM %s WHERE parent_part_id=@p1`, h.cfg.BOMTable()), src.ID).Scan(&bomLines)
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": src, "IsNew": true, "IsDuplicate": true,
-		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.PNID, "SourceHasBOM": bomLines > 0,
+		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.ID, "SourceHasBOM": bomLines > 0,
 		"Units": units, "Categories": h.partCategories,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -554,7 +554,7 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
-		// keep p.PNID available even though full has it too
+		// keep p.ID available even though full has it too
 		"PartBasic": p,
 	})
 }
@@ -638,8 +638,8 @@ func partFromForm(r *http.Request) models.Part {
 	p := models.Part{
 		PartNumber: fv(r, "part_number"), Revision: fv(r, "revision"),
 		Title: fv(r, "title"), Detail: fv(r, "detail"), Category: fv(r, "category"),
-		ReleaseStatus: releaseStatusOrUnderReview(fv(r, "release_status")), Active: activeFromStatus(r),
-		PNReqBy: fv(r, "PNReqBy"), PNNotes: fv(r, "PNNotes"),
+		ReleaseStatus: releaseStatusOrUnderReview(fv(r, "release_status")), IsActive: activeFromStatus(r),
+		RequestedBy: fv(r, "PNReqBy"), Notes: fv(r, "PNNotes"),
 		UserField1: fv(r, "user_field_1"), UserField2: fv(r, "user_field_2"), UserField3: fv(r, "user_field_3"),
 		UserField4: fv(r, "user_field_4"), UserField5: fv(r, "user_field_5"), UserField6: fv(r, "user_field_6"),
 		UserField7: fv(r, "user_field_7"), UserField8: fv(r, "user_field_8"), UserField9: fv(r, "user_field_9"),
@@ -648,7 +648,7 @@ func partFromForm(r *http.Request) models.Part {
 	}
 	if v := fv(r, "current_cost"); v != "" {
 		if c, err := strconv.ParseFloat(v, 64); err == nil {
-			p.PNCurrentCost = c
+			p.CurrentCost = c
 		}
 	}
 	if v := fv(r, "PNUNID"); v != "" {
@@ -684,7 +684,7 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
 	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
-		&p.PNID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
+		&p.ID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&unitID, &currentCost, &reorderMin, &isLotTracked,
 		&user1, &user2, &user3, &user4, &user5,
@@ -693,7 +693,7 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	if err != nil {
 		return p, err
 	}
-	p.PNCurrentCost = currentCost.Float64
+	p.CurrentCost = currentCost.Float64
 	if reorderMin.Valid {
 		v := reorderMin.Float64
 		p.ReorderMin = &v
@@ -706,9 +706,9 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
 	p.ReleaseStatus = releaseStatusOrUnderReview(status.String)
-	p.Active = active.Bool
-	p.PNReqBy = reqBy.String
-	p.PNNotes = notes.String
+	p.IsActive = active.Bool
+	p.RequestedBy = reqBy.String
+	p.Notes = notes.String
 	if unitID.Valid {
 		v := int(unitID.Int64)
 		p.UnitID = &v
@@ -774,7 +774,7 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 		var currentCost, lastRollupCost, preferredPrice sql.NullFloat64
 		var childHasBOM sql.NullBool
 		var attachCount, poLineCount sql.NullInt64
-		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLPartID,
+		if err := rows.Scan(&item.LineNumber, &item.Qty, &item.ComponentPartID,
 			&partNumber, &title, &revision, &category,
 			&currentCost, &lastRollupCost, &preferredPrice, &childHasBOM,
 			&attachCount, &poLineCount); err != nil {
@@ -784,14 +784,14 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 		item.Title = title.String
 		item.Revision = revision.String
 		item.Category = category.String
-		item.PNCurrentCost = currentCost.Float64
-		item.PNLastRollupCost = lastRollupCost.Float64
+		item.CurrentCost = currentCost.Float64
+		item.LastRollupCost = lastRollupCost.Float64
 		item.ChildHasBOM = childHasBOM.Bool
 		item.AttachCount = int(attachCount.Int64)
 		item.POLineCount = int(poLineCount.Int64)
 
-		item.LineUnitCost, item.CostSource = bomLeafCost(item.ChildHasBOM, item.PNLastRollupCost, preferredPrice, item.PNCurrentCost, item.Category)
-		item.LineExtCost = item.LineUnitCost * item.PLQty
+		item.LineUnitCost, item.CostSource = bomLeafCost(item.ChildHasBOM, item.LastRollupCost, preferredPrice, item.CurrentCost, item.Category)
+		item.LineExtCost = item.LineUnitCost * item.Qty
 		bomTotal += item.LineExtCost
 		items = append(items, item)
 	}
@@ -840,7 +840,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item models.BOMItem
 		var partNumber, title, revision, category sql.NullString
-		if err := rows.Scan(&item.PLItem, &item.PLQty, &item.PLListID,
+		if err := rows.Scan(&item.LineNumber, &item.Qty, &item.ParentPartID,
 			&partNumber, &title, &revision, &category); err != nil {
 			h.renderError(w, r, "Error reading where-used: "+err.Error())
 			return
@@ -926,7 +926,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item models.BOMItem
 		var partNumber, title sql.NullString
-		if err := rows.Scan(&item.PLID, &item.PLItem, &item.PLQty, &item.PLPartID,
+		if err := rows.Scan(&item.ID, &item.LineNumber, &item.Qty, &item.ComponentPartID,
 			&partNumber, &title); err != nil {
 			h.renderError(w, r, "Error reading BOM: "+err.Error())
 			return
@@ -940,9 +940,9 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id = @p1`, pn,
 	), id).Scan(&lastRollupCost, &lastRollupAt)
-	p.PNLastRollupCost = lastRollupCost.Float64
+	p.LastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {
-		p.PNLastRollupAt = &lastRollupAt.Time
+		p.LastRollupAt = &lastRollupAt.Time
 	}
 	h.render(w, r, "parts/part_bom_edit.html", map[string]any{
 		"Part": p, "BOMItems": items,
@@ -1470,13 +1470,13 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		var att models.Attachment
 		var fname, fnotes, frev, fcomment sql.NullString
 		var orderID sql.NullInt64
-		if err := rows.Scan(&att.FILID, &fname, &fnotes, &frev, &orderID, &fcomment); err != nil {
+		if err := rows.Scan(&att.ID, &fname, &fnotes, &frev, &orderID, &fcomment); err != nil {
 			h.renderError(w, r, "Error reading attachments: "+err.Error())
 			return
 		}
-		att.FILFileName = fname.String
+		att.FileName = fname.String
 		att.Category = fnotes.String
-		att.FILPNRev = frev.String
+		att.PartRevision = frev.String
 		att.Comment = fcomment.String
 		if orderID.Valid {
 			v := int(orderID.Int64)
@@ -1499,7 +1499,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	var editingAtt *models.Attachment
 	if editID != "" {
 		for i := range atts {
-			if fmt.Sprintf("%d", atts[i].FILID) == editID {
+			if fmt.Sprintf("%d", atts[i].ID) == editID {
 				editingAtt = &atts[i]
 				break
 			}

@@ -6,42 +6,42 @@ import (
 )
 
 type Part struct {
-	PNID             int
-	PartNumber       string
-	Revision         string
-	Title            string
-	Detail           string
-	Category         string
-	HasBOM           bool
-	ReleaseStatus    string
-	Active           bool
-	PNReqBy          string
-	PNNotes          string
-	PNDate           *time.Time
-	PNDateModified   *time.Time
-	PNFILIDPrimary   int
-	StockOnHand      float64
-	ReorderMin       *float64 // reorder point (#273); nil = none set, never flagged below-min
-	IsLotTracked     bool     // lot/batch control (#676); receipt/build create a lot row when true
-	PNCurrentCost    float64
-	PNLastRollupCost float64
-	PNLastRollupAt   *time.Time
-	PNFILLinks       int
-	PNPOLinks        int
-	DefaultSupplierID *int // preferred supplier for cost rollup (#465); nil = none pinned
-	UserField1       string
-	UserField2       string
-	UserField3       string
-	UserField4       string
-	UserField5       string
-	UserField6       string
-	UserField7       string
-	UserField8       string
-	UserField9       string
-	UserField10      string
-	UnitID           *int
-	UnitAbbr         string       // joined from unit table; abbreviation of PNUNID
-	Tabs             CategoryTabs // resolved subtab visibility for Category; set by applyCategoryTabs
+	ID                  int
+	PartNumber          string
+	Revision            string
+	Title               string
+	Detail              string
+	Category            string
+	HasBOM              bool
+	ReleaseStatus       string
+	IsActive            bool
+	RequestedBy         string
+	Notes               string
+	CreatedDate         *time.Time
+	ModifiedDate        *time.Time
+	PrimaryAttachmentID int
+	StockOnHand         float64
+	ReorderMin          *float64 // reorder point (#273); nil = none set, never flagged below-min
+	IsLotTracked        bool     // lot/batch control (#676); receipt/build create a lot row when true
+	CurrentCost         float64
+	LastRollupCost      float64
+	LastRollupAt        *time.Time
+	AttachmentCount     int
+	POLineCount         int
+	DefaultSupplierID   *int // preferred supplier for cost rollup (#465); nil = none pinned
+	UserField1          string
+	UserField2          string
+	UserField3          string
+	UserField4          string
+	UserField5          string
+	UserField6          string
+	UserField7          string
+	UserField8          string
+	UserField9          string
+	UserField10         string
+	UnitID              *int
+	UnitAbbr            string       // joined from unit table; abbreviation of unit_id
+	Tabs                CategoryTabs // resolved subtab visibility for Category; set by applyCategoryTabs
 }
 
 // CategoryTabs holds the optional-subtab visibility for a part category.
@@ -189,32 +189,32 @@ func (p Part) UserFields() []struct{ Label, Value string } {
 }
 
 type BOMItem struct {
-	PLID          int
-	PLItem        int
-	PLQty         float64
-	PLPartID      int
-	PLListID      int
-	PartNumber    string
-	Title         string
-	Revision      string
-	Category      string
-	PNCurrentCost float64
-	AttachCount   int
-	POLineCount   int
+	ID              int
+	LineNumber      int
+	Qty             float64
+	ComponentPartID int
+	ParentPartID    int
+	PartNumber      string
+	Title           string
+	Revision        string
+	Category        string
+	CurrentCost     float64
+	AttachCount     int
+	POLineCount     int
 	// Rollup display fields — populated by PartBOM handler.
-	PNLastRollupCost float64
-	ChildHasBOM      bool
-	LineUnitCost     float64
-	LineExtCost      float64
-	CostSource       string // "rollup" | "price" | "labor" | "current_cost" | "missing"
+	LastRollupCost float64
+	ChildHasBOM    bool
+	LineUnitCost   float64
+	LineExtCost    float64
+	CostSource     string // "rollup" | "price" | "labor" | "current_cost" | "missing"
 }
 
 type Attachment struct {
-	FILID       int
-	FILPNID     int
-	FILFileName string
-	FILPNRev    string
-	Category    string
-	OrderID     *int
-	Comment     string
+	ID           int
+	PartID       int
+	FileName     string
+	PartRevision string
+	Category     string
+	OrderID      *int
+	Comment      string
 }

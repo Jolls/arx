@@ -120,7 +120,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 
 	var lots []LotOption
 	if p.IsLotTracked {
-		lots, err = h.activeLotsForPart(r.Context(), p.PNID)
+		lots, err = h.activeLotsForPart(r.Context(), p.ID)
 		if err != nil {
 			h.renderError(w, r, "Error retrieving lots: "+err.Error())
 			return
@@ -142,7 +142,7 @@ func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	partID := p.PNID
+	partID := p.ID
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return

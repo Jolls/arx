@@ -8,7 +8,7 @@
 <div class="content">
     {{template "part_tabs" .}}
 
-    <form method="post" action="/part/{{.Part.PNID}}/bom">
+    <form method="post" action="/part/{{.Part.ID}}/bom">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
         <div class="table-wrapper" style="overflow-x:auto; margin-bottom:12px;">
@@ -24,19 +24,19 @@
                 </thead>
                 <tbody id="bom-tbody">
                     {{range .BOMItems}}
-                    <tr data-plid="{{.PLID}}">
-                        <td><input type="number" name="pl[{{.PLID}}][PLItem]" value="{{.PLItem}}" class="form-control form-control-sm" style="width:52px;"></td>
+                    <tr data-plid="{{.ID}}">
+                        <td><input type="number" name="pl[{{.ID}}][PLItem]" value="{{.LineNumber}}" class="form-control form-control-sm" style="width:52px;"></td>
                         <td>
-                            <input type="text" name="pl[{{.PLID}}][PLPartNumber]" value="{{.PartNumber}}"
+                            <input type="text" name="pl[{{.ID}}][PLPartNumber]" value="{{.PartNumber}}"
                                    class="tbl-input bom-pn-input" autocomplete="off">
-                            <input type="hidden" name="pl[{{.PLID}}][PLPNID]" value="{{.PLPartID}}">
+                            <input type="hidden" name="pl[{{.ID}}][PLPNID]" value="{{.ComponentPartID}}">
                         </td>
                         <td><span class="bom-title" style="font-size:0.9em; color:#555;">{{.Title}}</span></td>
-                        <td><input type="number" step="any" name="pl[{{.PLID}}][PLQty]" value="{{printf "%g" .PLQty}}"
+                        <td><input type="number" step="any" name="pl[{{.ID}}][PLQty]" value="{{printf "%g" .Qty}}"
                                    class="form-control form-control-sm" style="text-align:right;"></td>
                         <td style="text-align:center;">
                             <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1"
-                                    onclick="removeExistingRow(this,'{{.PLID}}')" title="Remove">&#215;</button>
+                                    onclick="removeExistingRow(this,'{{.ID}}')" title="Remove">&#215;</button>
                         </td>
                     </tr>
                     {{end}}
@@ -50,18 +50,18 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save BOM</button>
-            <a href="/part/{{.Part.PNID}}/bom" class="btn btn-secondary">Cancel</a>
+            <a href="/part/{{.Part.ID}}/bom" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 
     <div class="detail-section" style="margin-top:1.5rem;">
         <h3>Rollup Cost</h3>
-        {{if .Part.PNLastRollupAt}}
-        <div class="detail-row"><strong>Last Rollup:</strong> <span>${{printf "%.4f" .Part.PNLastRollupCost}} &mdash; {{.Part.PNLastRollupAt.Format "2006-01-02 15:04"}}</span></div>
+        {{if .Part.LastRollupAt}}
+        <div class="detail-row"><strong>Last Rollup:</strong> <span>${{printf "%.4f" .Part.LastRollupCost}} &mdash; {{.Part.LastRollupAt.Format "2006-01-02 15:04"}}</span></div>
         {{else}}
         <div class="detail-row"><strong>Last Rollup:</strong> <span class="muted">Never run</span></div>
         {{end}}
-        <form method="POST" action="/part/{{.Part.PNID}}/rollup-cost" style="margin-top:0.5rem;" onsubmit="runRollup(this)">
+        <form method="POST" action="/part/{{.Part.ID}}/rollup-cost" style="margin-top:0.5rem;" onsubmit="runRollup(this)">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <button type="submit" class="btn btn-secondary">Run Rollup</button>
         </form>
@@ -70,7 +70,7 @@
 
     <div class="detail-section" style="margin-top:1.5rem;">
         <h3>Cost to Build</h3>
-        <form method="GET" action="/part/{{.Part.PNID}}/build-cost" class="d-flex align-items-center gap-2" style="margin-top:0.5rem;" onsubmit="runBuildCost(this)">
+        <form method="GET" action="/part/{{.Part.ID}}/build-cost" class="d-flex align-items-center gap-2" style="margin-top:0.5rem;" onsubmit="runBuildCost(this)">
             <label for="build-qty" class="mb-0">Qty:</label>
             <input type="number" step="any" min="0" id="build-qty" name="qty" value="1" class="form-control form-control-sm" style="width:100px;">
             <button type="submit" class="btn btn-secondary">Calculate</button>

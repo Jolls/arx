@@ -15,7 +15,7 @@
         <p class="mb-2">A file named <strong>{{.ImportCollision.Name}}</strong> already exists in
             Doc Control. The file was <em>not</em> copied.</p>
         <form method="post"
-              action="{{if .ImportCollision.AttID}}/part/{{.Part.PNID}}/attachments/{{.ImportCollision.AttID}}{{else}}/part/{{.Part.PNID}}/attachments{{end}}"
+              action="{{if .ImportCollision.AttID}}/part/{{.Part.ID}}/attachments/{{.ImportCollision.AttID}}{{else}}/part/{{.Part.ID}}/attachments{{end}}"
               class="d-inline">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="source_path" value="{{.ImportCollision.SourcePath}}">
@@ -27,7 +27,7 @@
             <input type="hidden" name="link_existing" value="1">
             <button type="submit" class="btn btn-sm btn-warning">Link to existing file</button>
         </form>
-        <a href="/part/{{.Part.PNID}}/attachments{{if .ImportCollision.AttID}}?edit={{.ImportCollision.AttID}}#edit-form{{end}}"
+        <a href="/part/{{.Part.ID}}/attachments{{if .ImportCollision.AttID}}?edit={{.ImportCollision.AttID}}#edit-form{{end}}"
            class="btn btn-sm btn-secondary">Cancel</a>
     </div>
     {{end}}
@@ -47,11 +47,11 @@
             </thead>
             <tbody>
                 {{range .Attachments}}
-                {{$f := .FILFileName}}
-                {{$isPrimary := eq .FILID $.Part.PNFILIDPrimary}}
+                {{$f := .FileName}}
+                {{$isPrimary := eq .ID $.Part.PrimaryAttachmentID}}
                 <tr>
                     <td class="text-center text-muted">{{if .OrderID}}{{derefInt .OrderID}}{{end}}</td>
-                    <td>{{.FILPNRev}}</td>
+                    <td>{{.PartRevision}}</td>
                     <td class="text-truncate" style="max-width:340px;">
                         {{if $isPrimary}}<span style="color:#f5a623; font-size:1.1em;" title="Primary attachment">&#9733;</span> {{end}}
                         {{if isHTTPURL $f}}
@@ -83,18 +83,18 @@
                             <ul class="dropdown-menu dropdown-menu-end">
                                 {{if not $isPrimary}}
                                 <li>
-                                    <form method="post" action="/part/{{$.Part.PNID}}/primary_attachment" class="m-0">
+                                    <form method="post" action="/part/{{$.Part.ID}}/primary_attachment" class="m-0">
                                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                                        <input type="hidden" name="filid" value="{{.FILID}}">
+                                        <input type="hidden" name="filid" value="{{.ID}}">
                                         <button type="submit" class="dropdown-item">Set as default</button>
                                     </form>
                                 </li>
                                 {{end}}
-                                <li><a class="dropdown-item" href="/part/{{$.Part.PNID}}/attachments?edit={{.FILID}}#edit-form">Edit</a></li>
+                                <li><a class="dropdown-item" href="/part/{{$.Part.ID}}/attachments?edit={{.ID}}#edit-form">Edit</a></li>
                                 <li><a class="dropdown-item" href="/attachments/where-used?file={{$f | urlquery}}">Where used</a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <form method="post" action="/part/{{$.Part.PNID}}/attachments/{{.FILID}}/delete"
+                                    <form method="post" action="/part/{{$.Part.ID}}/attachments/{{.ID}}/delete"
                                           class="m-0" onsubmit="return confirm('Remove this attachment?')">
                                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                                         <button type="submit" class="dropdown-item text-danger">Delete</button>
@@ -117,14 +117,14 @@
     {{if .EditingAtt}}
     <div id="edit-form" class="detail-section mt-4">
         <h3>Edit Attachment</h3>
-        <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{displayLink .EditingAtt.FILFileName}}</p>
-        <form method="post" action="/part/{{.Part.PNID}}/attachments/{{.EditingAtt.FILID}}">
+        <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{displayLink .EditingAtt.FileName}}</p>
+        <form method="post" action="/part/{{.Part.ID}}/attachments/{{.EditingAtt.ID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="source_path" id="edit_source_path" value="">
             <div class="detail-row">
                 <label class="form-label">Rev</label>
                 <input type="text" name="FILPNRev" id="edit_FILPNRev" class="form-control" style="max-width:100px;"
-                       value="{{.EditingAtt.FILPNRev}}">
+                       value="{{.EditingAtt.PartRevision}}">
             </div>
             <div class="detail-row">
                 <label class="form-label">Category</label>
@@ -142,7 +142,7 @@
                         <button type="button" class="btn btn-sm btn-secondary" onclick="browseAttachment(this, 'edit')"
                                 {{if not $.DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>Browse…</button>
                         <button type="button" id="edit_paste-clipboard-btn" class="btn btn-sm btn-secondary" disabled
-                                onclick="pasteAttachmentFromClipboard(this, 'edit', {{.EditingAtt.FILID}})">Grab from clipboard</button>
+                                onclick="pasteAttachmentFromClipboard(this, 'edit', {{.EditingAtt.ID}})">Grab from clipboard</button>
                         <div class="form-check form-switch mb-0">
                             <input class="form-check-input" type="checkbox" role="switch"
                                    id="edit_move_source" name="move_source" value="1" onchange="updateBrowsePreview('edit')">
@@ -168,7 +168,7 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
-                <a href="/part/{{.Part.PNID}}/attachments" class="btn btn-secondary">Cancel</a>
+                <a href="/part/{{.Part.ID}}/attachments" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
@@ -178,7 +178,7 @@
     <details class="mt-4">
         <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Attachment</summary>
         <div class="detail-section mt-2">
-            <form method="post" action="/part/{{.Part.PNID}}/attachments">
+            <form method="post" action="/part/{{.Part.ID}}/attachments">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <input type="hidden" name="source_path" id="source_path" value="">
                 <div class="detail-row">
@@ -235,7 +235,7 @@
 <script>
 // Live preview of the imported filename. Fetched from the server so it always
 // matches buildAttachmentFileName in arx_go/attachments.go exactly (#558).
-var ATT_PART_ID = {{.Part.PNID}};
+var ATT_PART_ID = {{.Part.ID}};
 var attPreviewDebounce = {};
 var attPreviewRequestSeq = {};
 
@@ -349,7 +349,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <script>
-var PASTE_ATTACHMENT_PART_ID = {{.Part.PNID}};
+var PASTE_ATTACHMENT_PART_ID = {{.Part.ID}};
 var PASTE_ATTACHMENT_CSRF_TOKEN = {{.CSRFToken}};
 </script>
 <script src="/static/clipboard_paste.js?v={{.AppVersion}}"></script>

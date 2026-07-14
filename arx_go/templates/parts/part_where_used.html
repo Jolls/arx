@@ -23,11 +23,11 @@
             <tbody>
                 {{range .WhereUsedItems}}
                 <tr>
-                    <td><a href="/part/{{.PLListID}}" class="part-number-link">{{.PartNumber}}</a></td>
+                    <td><a href="/part/{{.ParentPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
                     <td>{{.Title}}</td>
                     <td>{{.Revision}}</td>
                     <td>{{.Category}}</td>
-                    <td style="text-align:right;">{{printf "%.5g" .PLQty}}</td>
+                    <td style="text-align:right;">{{printf "%.5g" .Qty}}</td>
                 </tr>
                 {{end}}
             </tbody>

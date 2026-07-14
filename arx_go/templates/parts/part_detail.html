@@ -31,12 +31,12 @@
         </div>
         <div class="part-status-cell">
             <div class="part-status-label">Last Modified</div>
-            <div class="part-status-value">{{formatDate .Part.PNDateModified}}</div>
+            <div class="part-status-value">{{formatDate .Part.ModifiedDate}}</div>
         </div>
         <div class="part-status-cell part-status-cell--flex">
             <div class="part-status-label">Primary Attachment</div>
             {{if .PrimaryAtt}}
-                {{$f := .PrimaryAtt.FILFileName}}
+                {{$f := .PrimaryAtt.FileName}}
                 {{$n := .PrimaryAtt.Category}}
                 {{if isHTTPURL $f}}
                     <a href="{{$f}}" target="_blank" rel="noopener noreferrer" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
@@ -73,7 +73,7 @@
                     <div class="detail-row"><strong>Revision:</strong><span>{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</span></div>
                     <div class="detail-row"><strong>Detail:</strong><span>{{.Part.Detail}}</span></div>
                     <div class="detail-row"><strong>Unit:</strong><span>{{if .Part.UnitAbbr}}{{.Part.UnitAbbr}}{{else}}—{{end}}</span></div>
-                    <div class="detail-row"><strong>Requested By:</strong><span>{{.Part.PNReqBy}}</span></div>
+                    <div class="detail-row"><strong>Requested By:</strong><span>{{.Part.RequestedBy}}</span></div>
                     {{range .Part.UserFields}}
                     <div class="detail-row"><strong>{{.Label}}:</strong><span>{{.Value}}</span></div>
                     {{end}}
@@ -87,14 +87,14 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Photos</span>
-                    <a href="/part/{{.Part.PNID}}/attachments" class="small">View all &rarr;</a>
+                    <a href="/part/{{.Part.ID}}/attachments" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
                     <div class="row {{if eq (len .PhotoAtts) 1}}row-cols-1{{else}}row-cols-2 row-cols-lg-3{{end}} g-2 photo-thumb-grid">
                         {{range .PhotoAtts}}
                         <div class="col">
-                            <a href="{{localFileURL .FILFileName}}" target="_blank" class="d-block photo-thumb-link" title="{{fileBaseName .FILFileName}}">
-                                <img src="{{localFileURL .FILFileName}}" class="photo-thumb-img" alt="{{fileBaseName .FILFileName}}" loading="lazy">
+                            <a href="{{localFileURL .FileName}}" target="_blank" class="d-block photo-thumb-link" title="{{fileBaseName .FileName}}">
+                                <img src="{{localFileURL .FileName}}" class="photo-thumb-img" alt="{{fileBaseName .FileName}}" loading="lazy">
                             </a>
                         </div>
                         {{end}}
@@ -110,12 +110,12 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Pricing</span>
-                    <a href="/part/{{.Part.PNID}}/pricing" class="small">View all &rarr;</a>
+                    <a href="/part/{{.Part.ID}}/pricing" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
-                    <div class="detail-row"><strong>Current Cost:</strong><span>${{printf "%.4f" .Part.PNCurrentCost}}</span></div>
-                    {{if .Part.PNLastRollupAt}}
-                    <div class="detail-row"><strong>Last Rollup:</strong><span>${{printf "%.4f" .Part.PNLastRollupCost}}</span></div>
+                    <div class="detail-row"><strong>Current Cost:</strong><span>${{printf "%.4f" .Part.CurrentCost}}</span></div>
+                    {{if .Part.LastRollupAt}}
+                    <div class="detail-row"><strong>Last Rollup:</strong><span>${{printf "%.4f" .Part.LastRollupCost}}</span></div>
                     <div class="detail-row"><strong>Rollup vs Price &Delta;:</strong>
                         <span class="{{if .RollupSignificant}}badge bg-warning text-dark{{end}}">
                             {{if gt .RollupDelta 0.0}}+{{end}}${{printf "%.4f" .RollupDelta}} ({{if gt .RollupDeltaPct 0.0}}+{{end}}{{printf "%.1f" .RollupDeltaPct}}%)
@@ -133,7 +133,7 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Inventory</span>
-                    <a href="/part/{{.Part.PNID}}/transactions" class="small">View all &rarr;</a>
+                    <a href="/part/{{.Part.ID}}/transactions" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
                     <div class="detail-row"><strong>Stock on hand:</strong><span>{{printf "%.2f" .Part.StockOnHand}}{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1">Below Min</span>{{end}}</span></div>
@@ -159,7 +159,7 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Price Trend</span>
-                    <a href="/part/{{.Part.PNID}}/price-history" class="small">View all &rarr;</a>
+                    <a href="/part/{{.Part.ID}}/price-history" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
                     {{if .HasPriceData}}
@@ -176,7 +176,7 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Recent POs</span>
-                    <a href="/part/{{.Part.PNID}}/orders" class="small">View all &rarr;</a>
+                    <a href="/part/{{.Part.ID}}/orders" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
                     {{if .RecentPOs}}
@@ -206,11 +206,11 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Attachments</span>
-                    <a href="/part/{{.Part.PNID}}/attachments" class="small">View all &rarr;</a>
+                    <a href="/part/{{.Part.ID}}/attachments" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
                     {{if .PrimaryAtt}}
-                        {{$f := .PrimaryAtt.FILFileName}}{{$n := .PrimaryAtt.Category}}
+                        {{$f := .PrimaryAtt.FileName}}{{$n := .PrimaryAtt.Category}}
                         <div class="detail-row"><strong>
                         {{if isHTTPURL $f}}<i class="bi bi-link-45deg"></i>
                         {{else if isLocalDir $f}}<i class="bi bi-folder2-open"></i>
@@ -227,7 +227,7 @@
                         </span></div>
                     {{else}}<p class="text-muted mb-0">No primary attachment set.</p>{{end}}
                     {{range .TopAtts}}
-                        {{$f := .FILFileName}}{{$n := .Category}}
+                        {{$f := .FileName}}{{$n := .Category}}
                         <div class="detail-row"><strong>
                         {{if isHTTPURL $f}}<i class="bi bi-link-45deg"></i>
                         {{else if isLocalDir $f}}<i class="bi bi-folder2-open"></i>
@@ -248,11 +248,11 @@
         </div>
 
         {{/* Notes — full width */}}
-        {{if .Part.PNNotes}}
+        {{if .Part.Notes}}
         <div class="col-12">
             <div class="card">
                 <div class="card-header">Notes</div>
-                <div class="card-body"><p class="mb-0" style="white-space:pre-wrap; word-break:break-word;">{{.Part.PNNotes}}</p></div>
+                <div class="card-body"><p class="mb-0" style="white-space:pre-wrap; word-break:break-word;">{{.Part.Notes}}</p></div>
             </div>
         </div>
         {{end}}

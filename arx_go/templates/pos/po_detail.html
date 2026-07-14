@@ -227,7 +227,7 @@
                         <td>{{.POLDesc}}</td>
                         <td>
                             {{if .PrimaryAtt}}
-                                {{$f := .PrimaryAtt.FILFileName}}
+                                {{$f := .PrimaryAtt.FileName}}
                                 {{if isHTTPURL $f}}
                                     <a href="{{$f}}" target="_blank" rel="noopener noreferrer">{{.VendorPN}}</a>
                                 {{else if isLocalDir $f}}

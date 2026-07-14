@@ -187,7 +187,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 	// lot-tracked component. The lot column shows whenever any consumed component is
 	// lot-tracked (independent of whether the output part is), since those components
 	// are always drawn from a specific lot.
-	comps, err := h.loadBuildComponents(r.Context(), p.PNID)
+	comps, err := h.loadBuildComponents(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
@@ -221,7 +221,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	partID := p.PNID
+	partID := p.ID
 	outputLotTracked := p.IsLotTracked
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
