@@ -1726,7 +1726,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		var dateOrdered, dateClosed sql.NullTime
 		if err := rows.Scan(
 			&poNum, &supplierName, &dateOrdered, &dateClosed, &status,
-			&item.POLItem, &item.POLQty, &item.POLCost, &desc, &vendorPN,
+			&item.LineNumber, &item.Qty, &item.UnitCost, &desc, &vendorPN,
 		); err != nil {
 			h.renderError(w, r, "Error reading orders: "+err.Error())
 			return
@@ -1734,7 +1734,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		item.PONumber = poNum.String
 		item.SupplierName = supplierName.String
 		item.Status = status.String
-		item.POLDesc = desc.String
+		item.Description = desc.String
 		item.VendorPN = vendorPN.String
 		if dateOrdered.Valid {
 			item.DateOrdered = &dateOrdered.Time

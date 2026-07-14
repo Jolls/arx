@@ -133,11 +133,11 @@ function printPO(btn) {
     <tbody>
       {{range .POItems}}
       <tr>
-        <td>{{.POLItem}}</td>
-        <td>{{.POLPNPartNumber}}</td>
-        <td>{{.POLRev}}</td>
-        <td>{{.POLDesc}}</td>
-        <td class="num">{{printf "%.2f" .POLQty}}</td>
+        <td>{{.LineNumber}}</td>
+        <td>{{.PartNumberSnapshot}}</td>
+        <td>{{.RevisionSnapshot}}</td>
+        <td>{{.Description}}</td>
+        <td class="num">{{printf "%.2f" .Qty}}</td>
         <td class="num">&nbsp;</td>
         <td class="num">&nbsp;</td>
       </tr>
@@ -162,14 +162,14 @@ function printPO(btn) {
     <tbody>
       {{range .POItems}}
       <tr>
-        <td>{{.POLItem}}</td>
-        <td>{{.POLPNPartNumber}}</td>
-        <td>{{.POLRev}}</td>
-        <td>{{.POLDesc}}</td>
+        <td>{{.LineNumber}}</td>
+        <td>{{.PartNumberSnapshot}}</td>
+        <td>{{.RevisionSnapshot}}</td>
+        <td>{{.Description}}</td>
         <td>{{.VendorPN}}</td>
-        <td class="num">{{printf "%.2f" .POLQty}}</td>
-        <td class="num">${{printf "%.4f" .POLCost}}</td>
-        <td class="num">${{printf "%.2f" (mul .POLQty .POLCost)}}</td>
+        <td class="num">{{printf "%.2f" .Qty}}</td>
+        <td class="num">${{printf "%.4f" .UnitCost}}</td>
+        <td class="num">${{printf "%.2f" (mul .Qty .UnitCost)}}</td>
       </tr>
       {{end}}
     </tbody>

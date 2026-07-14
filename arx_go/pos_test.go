@@ -199,7 +199,7 @@ func TestBuildRFQGridEmpty(t *testing.T) {
 
 func TestDerivePOReceiptStatus(t *testing.T) {
 	line := func(ordered, received float64) models.PurchaseOrderLine {
-		return models.PurchaseOrderLine{POLQty: ordered, ReceivedQty: received}
+		return models.PurchaseOrderLine{Qty: ordered, ReceivedQty: received}
 	}
 	cases := []struct {
 		name  string
@@ -221,7 +221,7 @@ func TestDerivePOReceiptStatus(t *testing.T) {
 }
 
 func TestParseReceiveDeltas(t *testing.T) {
-	items := []models.PurchaseOrderLine{{POLID: 1}, {POLID: 2}, {POLID: 3}}
+	items := []models.PurchaseOrderLine{{ID: 1}, {ID: 2}, {ID: 3}}
 
 	// Mixed submission: line 1 a valid qty, line 2 blank (skipped), line 3 zero (ignored).
 	form := map[string]string{"recv[1]": "  4.5 ", "recv[2]": "", "recv[3]": "0"}

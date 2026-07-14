@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.127] - 2026-07-14 
+- Renamed the `PurchaseOrderLine` Go struct fields (`POLQty`→`Qty`, `POLID`→`ID`, etc.) to match their renamed snake_case `po_line` DB columns; no behavior change ([#693](https://github.com/Jolls/arx-legacy/issues/693))
+
 ## [0.5.126] - 2026-07-14 
 - Renamed the `Part`, `Attachment`, and `BOMItem` Go struct fields (and the `SupplierPart` part join) to match their renamed snake_case DB columns; no behavior change ([#693](https://github.com/Jolls/arx-legacy/issues/693))
 

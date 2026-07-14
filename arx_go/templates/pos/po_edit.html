@@ -274,14 +274,14 @@
                         {{/* Duplicate source items as new_pol entries */}}
                         {{range $i, $item := .DuplicateItems}}
                         <tr class="new-line">
-                            <td><input type="number" name="new_pol[dup{{$i}}][POLItem]" value="{{$item.POLItem}}" class="form-control form-control-sm" style="width:48px;"></td>
-                            <td><input type="text"   name="new_pol[dup{{$i}}][POLPNPartNumber]" value="{{$item.POLPNPartNumber}}" class="form-control form-control-sm"></td>
-                            <td><input type="text"   name="new_pol[dup{{$i}}][POLRev]" value="{{$item.POLRev}}" class="form-control form-control-sm" style="width:56px;"></td>
-                            <td><input type="text"   name="new_pol[dup{{$i}}][POLDesc]" value="{{$item.POLDesc}}" class="form-control form-control-sm"></td>
+                            <td><input type="number" name="new_pol[dup{{$i}}][POLItem]" value="{{$item.LineNumber}}" class="form-control form-control-sm" style="width:48px;"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][POLPNPartNumber]" value="{{$item.PartNumberSnapshot}}" class="form-control form-control-sm"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][POLRev]" value="{{$item.RevisionSnapshot}}" class="form-control form-control-sm" style="width:56px;"></td>
+                            <td><input type="text"   name="new_pol[dup{{$i}}][POLDesc]" value="{{$item.Description}}" class="form-control form-control-sm"></td>
                             <td><input type="text"   name="new_pol[dup{{$i}}][VendorPN]" value="{{$item.VendorPN}}" class="form-control form-control-sm"></td>
-                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLQty]" value="{{printf "%g" $item.POLQty}}" class="form-control form-control-sm text-end"></td>
-                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLCost]" value="{{printf "%g" $item.POLCost}}" class="form-control form-control-sm text-end"></td>
-                            <td><input type="number" name="new_pol[dup{{$i}}][POLPNID]" value="{{if $item.POLPNID}}{{derefInt $item.POLPNID}}{{end}}" class="form-control form-control-sm"></td>
+                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLQty]" value="{{printf "%g" $item.Qty}}" class="form-control form-control-sm text-end"></td>
+                            <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLCost]" value="{{printf "%g" $item.UnitCost}}" class="form-control form-control-sm text-end"></td>
+                            <td><input type="number" name="new_pol[dup{{$i}}][POLPNID]" value="{{if $item.PartID}}{{derefInt $item.PartID}}{{end}}" class="form-control form-control-sm"></td>
                             <td class="text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
                             </td>
@@ -289,18 +289,18 @@
                         {{end}}
                         {{/* Existing items (edit mode) */}}
                         {{range .POItems}}
-                        <tr data-polid="{{.POLID}}">
-                            <td><input type="number" name="pol[{{.POLID}}][POLItem]" value="{{.POLItem}}" class="form-control form-control-sm" style="width:48px;"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][POLPNPartNumber]" value="{{.POLPNPartNumber}}" class="form-control form-control-sm"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][POLRev]" value="{{.POLRev}}" class="form-control form-control-sm" style="width:56px;"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][POLDesc]" value="{{.POLDesc}}" class="form-control form-control-sm"></td>
-                            <td><input type="text"   name="pol[{{.POLID}}][VendorPN]" value="{{.VendorPN}}" class="form-control form-control-sm"></td>
-                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLQty]" value="{{printf "%g" .POLQty}}" class="form-control form-control-sm text-end"></td>
-                            <td><input type="number" step="any" name="pol[{{.POLID}}][POLCost]" value="{{printf "%g" .POLCost}}" class="form-control form-control-sm text-end"></td>
-                            <td><input type="number" name="pol[{{.POLID}}][POLPNID]" value="{{if .POLPNID}}{{derefInt .POLPNID}}{{end}}" class="form-control form-control-sm"></td>
+                        <tr data-polid="{{.ID}}">
+                            <td><input type="number" name="pol[{{.ID}}][POLItem]" value="{{.LineNumber}}" class="form-control form-control-sm" style="width:48px;"></td>
+                            <td><input type="text"   name="pol[{{.ID}}][POLPNPartNumber]" value="{{.PartNumberSnapshot}}" class="form-control form-control-sm"></td>
+                            <td><input type="text"   name="pol[{{.ID}}][POLRev]" value="{{.RevisionSnapshot}}" class="form-control form-control-sm" style="width:56px;"></td>
+                            <td><input type="text"   name="pol[{{.ID}}][POLDesc]" value="{{.Description}}" class="form-control form-control-sm"></td>
+                            <td><input type="text"   name="pol[{{.ID}}][VendorPN]" value="{{.VendorPN}}" class="form-control form-control-sm"></td>
+                            <td><input type="number" step="any" name="pol[{{.ID}}][POLQty]" value="{{printf "%g" .Qty}}" class="form-control form-control-sm text-end"></td>
+                            <td><input type="number" step="any" name="pol[{{.ID}}][POLCost]" value="{{printf "%g" .UnitCost}}" class="form-control form-control-sm text-end"></td>
+                            <td><input type="number" name="pol[{{.ID}}][POLPNID]" value="{{if .PartID}}{{derefInt .PartID}}{{end}}" class="form-control form-control-sm"></td>
                             <td class="text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1"
-                                        onclick="removeExistingLine(this,'{{.POLID}}')" title="Remove">&#215;</button>
+                                        onclick="removeExistingLine(this,'{{.ID}}')" title="Remove">&#215;</button>
                             </td>
                         </tr>
                         {{end}}
