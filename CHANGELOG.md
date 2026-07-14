@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.128] - 2026-07-14 
+- Renamed the `Contact` Go struct fields (and the `Supplier` contact join plus the `ContactSummary`/`siblingContact` view structs) from `CN`-prefixed names to match the renamed snake_case `contact` DB columns (`CNName`→`DisplayName`, `CNID`→`ID`, `CNDateModified`→`UpdatedAt`, etc.); no behavior change ([#693](https://github.com/Jolls/arx-legacy/issues/693))
+
 ## [0.5.127] - 2026-07-14 
 - Renamed the `PurchaseOrderLine` Go struct fields (`POLQty`→`Qty`, `POLID`→`ID`, etc.) to match their renamed snake_case `po_line` DB columns; no behavior change ([#693](https://github.com/Jolls/arx-legacy/issues/693))
 

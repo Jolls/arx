@@ -26,16 +26,16 @@ import (
 // ── ContactSummary is used for supplier/receiver contact dropdowns ──────────
 
 type ContactSummary struct {
-	CNID    int
-	CNName  string
-	Address string
-	City    string
-	State   string
-	Zipcode string
-	Country string
-	Phone   string
-	Fax     string
-	Email   string
+	ID          int
+	DisplayName string
+	Address     string
+	City        string
+	State       string
+	Zipcode     string
+	Country     string
+	Phone       string
+	Fax         string
+	Email       string
 }
 
 func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []ContactSummary {
@@ -55,8 +55,8 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 	for rows.Next() {
 		var c ContactSummary
 		var name, addr, city, state, zip, country, phone, fax, email sql.NullString
-		if rows.Scan(&c.CNID, &name, &addr, &city, &state, &zip, &country, &phone, &fax, &email) == nil {
-			c.CNName = name.String
+		if rows.Scan(&c.ID, &name, &addr, &city, &state, &zip, &country, &phone, &fax, &email) == nil {
+			c.DisplayName = name.String
 			c.Address = addr.String
 			c.City = city.String
 			c.State = state.String
@@ -404,8 +404,8 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 		}
 		if wantContact > 0 {
 			for _, c := range receiverContacts {
-				if c.CNID == wantContact {
-					po.ReceiverContact = c.CNName
+				if c.ID == wantContact {
+					po.ReceiverContact = c.DisplayName
 					po.ReceiverEmail = c.Email
 					po.ReceiverAddress = c.Address
 					po.ReceiverCity = c.City

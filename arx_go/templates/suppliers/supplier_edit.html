@@ -32,12 +32,12 @@
                 <select id="default_contact" name="default_contact" class="form-select">
                     <option value="">-- None --</option>
                     {{range .Contacts}}
-                    <option value="{{.CNID}}"
+                    <option value="{{.ID}}"
                         data-phone="{{.Phone}}"
                         data-email="{{.Email}}"
                         data-city="{{.City}}"
-                        {{if and $.Supplier.DefaultContact (eq (derefInt $.Supplier.DefaultContact) .CNID)}}selected{{end}}>
-                        {{.CNName}}
+                        {{if and $.Supplier.DefaultContact (eq (derefInt $.Supplier.DefaultContact) .ID)}}selected{{end}}>
+                        {{.DisplayName}}
                     </option>
                     {{end}}
                 </select>

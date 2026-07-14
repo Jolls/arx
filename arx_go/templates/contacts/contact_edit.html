@@ -3,18 +3,18 @@
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="{{if .NavBackURL}}{{.NavBackURL}}{{else}}/contacts{{end}}">{{if .NavBackLabel}}{{.NavBackLabel}}{{else}}Contacts{{end}}</a></li>
-            <li class="breadcrumb-item active">{{if .IsNew}}New Contact{{else}}{{.Contact.CNName}}{{end}}</li>
+            <li class="breadcrumb-item active">{{if .IsNew}}New Contact{{else}}{{.Contact.DisplayName}}{{end}}</li>
         </ol>
     </nav>
     {{if not .IsNew}}
-    <a href="/contact/{{.Contact.CNID}}" class="btn btn-sm btn-outline-secondary">Cancel</a>
+    <a href="/contact/{{.Contact.ID}}" class="btn btn-sm btn-outline-secondary">Cancel</a>
     {{end}}
 </div>
 <div class="content">
 
     {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
-    <form method="post" action="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.CNID}}{{end}}">
+    <form method="post" action="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.ID}}{{end}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
         <div class="detail-section">
@@ -22,7 +22,7 @@
             <div class="detail-row">
                 <label for="CNName" class="form-label">Name *</label>
                 <input type="text" id="CNName" name="CNName" class="form-control" required
-                       value="{{.Contact.CNName}}">
+                       value="{{.Contact.DisplayName}}">
             </div>
             <div class="detail-row">
                 <label for="supplier_name" class="form-label">Supplier</label>
@@ -30,18 +30,18 @@
                     <input type="text" id="supplier_name" class="form-control"
                            value="{{.Contact.SupplierName}}" placeholder="Type to search…" autocomplete="off">
                     <input type="hidden" id="CNSUID" name="CNSUID"
-                           value="{{if .Contact.CNSUID}}{{derefInt .Contact.CNSUID}}{{end}}">
+                           value="{{if .Contact.CompanyID}}{{derefInt .Contact.CompanyID}}{{end}}">
                 </div>
             </div>
             <div class="detail-row">
                 <label for="CNEmail" class="form-label">Email</label>
                 <input type="email" id="CNEmail" name="CNEmail" class="form-control"
-                       value="{{.Contact.CNEmail}}">
+                       value="{{.Contact.Email}}">
             </div>
             <div class="detail-row">
                 <label for="CNWeb" class="form-label">Website</label>
                 <input type="text" id="CNWeb" name="CNWeb" class="form-control"
-                       value="{{.Contact.CNWeb}}">
+                       value="{{.Contact.Website}}">
             </div>
         </div>
 
@@ -50,17 +50,17 @@
             <div class="detail-row">
                 <label for="CNPhone1" class="form-label">Phone 1</label>
                 <input type="text" id="CNPhone1" name="CNPhone1" class="form-control"
-                       value="{{.Contact.CNPhone1}}">
+                       value="{{.Contact.Phone1}}">
             </div>
             <div class="detail-row">
                 <label for="CNPhone2" class="form-label">Phone 2</label>
                 <input type="text" id="CNPhone2" name="CNPhone2" class="form-control"
-                       value="{{.Contact.CNPhone2}}">
+                       value="{{.Contact.Phone2}}">
             </div>
             <div class="detail-row">
                 <label for="CNFAX" class="form-label">Fax</label>
                 <input type="text" id="CNFAX" name="CNFAX" class="form-control"
-                       value="{{.Contact.CNFAX}}">
+                       value="{{.Contact.Fax}}">
             </div>
         </div>
 
@@ -69,27 +69,27 @@
             <div class="detail-row">
                 <label for="CNAddress" class="form-label">Street</label>
                 <input type="text" id="CNAddress" name="CNAddress" class="form-control"
-                       value="{{.Contact.CNAddress}}">
+                       value="{{.Contact.Address}}">
             </div>
             <div class="detail-row">
                 <label for="CNCity" class="form-label">City</label>
                 <input type="text" id="CNCity" name="CNCity" class="form-control"
-                       value="{{.Contact.CNCity}}">
+                       value="{{.Contact.City}}">
             </div>
             <div class="detail-row">
                 <label for="CNState" class="form-label">State</label>
                 <input type="text" id="CNState" name="CNState" class="form-control"
-                       value="{{.Contact.CNState}}">
+                       value="{{.Contact.State}}">
             </div>
             <div class="detail-row">
                 <label for="CNZipcode" class="form-label">Zip</label>
                 <input type="text" id="CNZipcode" name="CNZipcode" class="form-control"
-                       value="{{.Contact.CNZipcode}}">
+                       value="{{.Contact.Zipcode}}">
             </div>
             <div class="detail-row">
                 <label for="CNCountry" class="form-label">Country</label>
                 <input type="text" id="CNCountry" name="CNCountry" class="form-control"
-                       value="{{.Contact.CNCountry}}">
+                       value="{{.Contact.Country}}">
             </div>
         </div>
 
@@ -99,7 +99,7 @@
                 <label class="form-label">Active</label>
                 <div class="form-checkbox-row">
                     <input type="checkbox" id="CNActive" name="CNActive" value="1"
-                           {{if .Contact.CNActive}}checked{{end}}>
+                           {{if .Contact.IsActive}}checked{{end}}>
                     <label for="CNActive">Contact is active</label>
                 </div>
             </div>
@@ -108,14 +108,14 @@
         <div class="detail-section">
             <h3>Notes</h3>
             <textarea id="CNNotes" name="CNNotes" class="form-control" rows="4"
-                      style="width:100%; margin-top:8px;">{{.Contact.CNNotes}}</textarea>
+                      style="width:100%; margin-top:8px;">{{.Contact.Notes}}</textarea>
         </div>
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create Contact{{else}}Save Changes{{end}}
             </button>
-            <a href="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.CNID}}{{end}}"
+            <a href="{{if .IsNew}}/contacts{{else}}/contact/{{.Contact.ID}}{{end}}"
                class="btn btn-secondary">Cancel</a>
         </div>
     </form>
