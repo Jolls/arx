@@ -968,27 +968,30 @@ func TestIntegration_BuildCostDoesNotWriteRollup(t *testing.T) {
 }
 
 // TestIntegration_BuildCostNonAssemblyPart verifies calling build-cost on a part
-// with no BOM (a leaf, e.g. the screw 3002 itself) returns zero consolidated
-// lines rather than erroring — and that the handler renders the same
-// "No BOM data found" message the BOM tab uses for the same case.
+// with no BOM (3004, MFG-1001, category MFG — BOM tab always applies for MFG but
+// this part has zero BOM lines) returns zero consolidated lines rather than
+// erroring — and that the handler renders the same "No BOM data found" message
+// the BOM tab uses for the same case. (#675's category-tab gating blocks the BOM
+// subtab for BUY parts, so the part used here must be in a category where the
+// BOM tab is always visible — see #689.)
 func TestIntegration_BuildCostNonAssemblyPart(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
 
-	res, err := h.buildCost(ctx, 3002, 10)
+	res, err := h.buildCost(ctx, 3004, 10)
 	if err != nil {
-		t.Fatalf("buildCost(3002, 10): %v", err)
+		t.Fatalf("buildCost(3004, 10): %v", err)
 	}
 	if len(res.Lines) != 0 {
-		t.Errorf("buildCost(3002, 10): got %d lines, want 0 (3002 has no BOM)", len(res.Lines))
+		t.Errorf("buildCost(3004, 10): got %d lines, want 0 (3004 has no BOM)", len(res.Lines))
 	}
 
-	req := withID(httptest.NewRequest(http.MethodGet, "/part/3002/build-cost?qty=10", nil), 3002)
+	req := withID(httptest.NewRequest(http.MethodGet, "/part/3004/build-cost?qty=10", nil), 3004)
 	rec := httptest.NewRecorder()
 	h.PartBuildCost(rec, req)
 	if !strings.Contains(rec.Body.String(), "No BOM data found") {
-		t.Error("PartBuildCost(3002): expected \"No BOM data found\" message for a non-assembly part")
+		t.Error("PartBuildCost(3004): expected \"No BOM data found\" message for a non-assembly part")
 	}
 }
 
