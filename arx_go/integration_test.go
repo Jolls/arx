@@ -1612,3 +1612,170 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 		t.Errorf("lotTrace(%d) ancestors did not resolve back to raw vendor lot %d", outputLotID, compLot)
 	}
 }
+
+// TestIntegration_BuildReturnsToRecord exercises the "Build this unit" round-trip
+// (#677): POSTing a build with a return_record links that WIP test record to the new
+// build and its output lot, redirects back to the record's editor with ?built=1, and
+// stamps the build's ledger rows with build_id.
+func TestIntegration_BuildReturnsToRecord(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	rt := h.cfg.RecordsTable()
+	bt := h.cfg.BuildTable()
+	lt := h.cfg.LotTable()
+	lg := h.cfg.LotGenealogyTable()
+	inv := h.cfg.InventoryTxnTable()
+	pn := h.cfg.PartsTable()
+
+	const outputPart = 3012  // ASM-1002, is_lot_tracked + has a BOM in seed
+	const trackedComp = 3007 // lot-tracked component; seed lot 8301
+	const compLot = 8301
+
+	// Throwaway WIP record whose tested part is the buildable output part.
+	var recordID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, part_number_id, serial_number, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 0, 1)`, rt),
+		outputPart, smokeUniq("BRR")).Scan(&recordID); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+
+	var buildID, outputLotID int
+	defer func() {
+		// The record's FKs (lot_id/build_id) reference the build+lot, so it goes first.
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, rt), recordID)
+		if buildID != 0 {
+			note := fmt.Sprintf("Build #%d", buildID)
+			if outputLotID == 0 {
+				_ = h.DB().QueryRowContext(ctx, fmt.Sprintf(
+					`SELECT ISNULL(output_lot_id,0) FROM %s WHERE id = @p1`, bt), buildID).Scan(&outputLotID)
+			}
+			if outputLotID != 0 {
+				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE child_lot_id = @p1`, lg), outputLotID)
+			}
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE note = @p1`, inv), note)
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, bt), buildID)
+			if outputLotID != 0 {
+				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, lt), outputLotID)
+			}
+			for _, id := range []int{3001, trackedComp, 3002, outputPart} {
+				smokeExec(ctx, h, fmt.Sprintf(
+					`UPDATE %s SET stock_on_hand = (SELECT ISNULL(SUM(qty),0) FROM %s WHERE part_id = @p1) WHERE id = @p1`,
+					pn, inv), id)
+			}
+		}
+	}()
+
+	req := withID(postForm(fmt.Sprintf("/part/%d/build", outputPart), url.Values{
+		"qty":                               {"1"},
+		"return_record":                     {strconv.Itoa(recordID)},
+		fmt.Sprintf("lot[%d]", trackedComp): {strconv.Itoa(compLot)},
+	}), outputPart)
+	rec := httptest.NewRecorder()
+	h.PartBuildCreate(rec, req)
+	assert302(t, "PartBuildCreate(return_record)", rec)
+
+	// Redirect lands back on the record's editor with the auto-restore marker.
+	if loc := rec.Header().Get("Location"); loc != fmt.Sprintf("/records/%d/edit?built=1", recordID) {
+		t.Errorf("redirect Location = %q, want /records/%d/edit?built=1", loc, recordID)
+	}
+
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT MAX(id) FROM %s WHERE part_id = @p1`, bt), outputPart).Scan(&buildID); err != nil {
+		t.Fatalf("find build id: %v", err)
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT ISNULL(output_lot_id,0) FROM %s WHERE id = @p1`, bt), buildID).Scan(&outputLotID); err != nil {
+		t.Fatalf("read output lot: %v", err)
+	}
+	if outputLotID == 0 {
+		t.Fatal("build produced no output lot (ArxDev may need lot schema + reseed)")
+	}
+
+	// The record is now linked to the build and its output lot.
+	var gotLot, gotBuild int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT ISNULL(lot_id,0), ISNULL(build_id,0) FROM %s WHERE id = @p1`, rt), recordID).
+		Scan(&gotLot, &gotBuild); err != nil {
+		t.Fatalf("read record linkage (ArxDev may need the #677 migration): %v", err)
+	}
+	if gotBuild != buildID {
+		t.Errorf("record build_id = %d, want %d", gotBuild, buildID)
+	}
+	if gotLot != outputLotID {
+		t.Errorf("record lot_id = %d, want %d (the output lot)", gotLot, outputLotID)
+	}
+
+	// The build's ledger rows carry build_id (#677) — the FK that replaces note-matching.
+	var stamped, total int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT SUM(CASE WHEN build_id = @p1 THEN 1 ELSE 0 END), COUNT(*) FROM %s WHERE note = @p2`,
+		inv), buildID, fmt.Sprintf("Build #%d", buildID)).Scan(&stamped, &total); err != nil {
+		t.Fatalf("read ledger build_id: %v", err)
+	}
+	if total == 0 || stamped != total {
+		t.Errorf("ledger rows with build_id = %d/%d, want all %d stamped", stamped, total, total)
+	}
+}
+
+// TestIntegration_RecordLinkageSave exercises saving lot/build linkage through the main
+// record editor Save (#677): a valid lot/build for the record's part persists, and a
+// selection belonging to a different part is rejected without altering the record.
+func TestIntegration_RecordLinkageSave(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	rt := h.cfg.RecordsTable()
+
+	const testedPart = 3012 // ASM-1002; seed lot 8302 + build 8202 belong to it
+	const goodLot = 8302
+	const goodBuild = 8202
+	const foreignLot = 8301 // belongs to part 3007, not 3012
+
+	// The string columns are set non-NULL because SaveResults scans them as plain
+	// strings (real records always carry these snapshots).
+	var recordID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc, comments, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1002', 'Sub-Assembly', '', '', 0, 1)`, rt),
+		testedPart, smokeUniq("RLS")).Scan(&recordID); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, rt), recordID)
+
+	// Valid linkage for the record's own part → persisted by SaveResults.
+	req := withID(postForm(fmt.Sprintf("/records/%d/edit", recordID), url.Values{
+		"lot_id":   {strconv.Itoa(goodLot)},
+		"build_id": {strconv.Itoa(goodBuild)},
+	}), recordID)
+	rec := httptest.NewRecorder()
+	h.SaveResults(rec, req)
+	assertStatus(t, "SaveResults(valid linkage)", rec, http.StatusSeeOther)
+
+	var gotLot, gotBuild int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT ISNULL(lot_id,0), ISNULL(build_id,0) FROM %s WHERE id = @p1`, rt), recordID).
+		Scan(&gotLot, &gotBuild); err != nil {
+		t.Fatalf("read linkage (ArxDev may need the #677 migration): %v", err)
+	}
+	if gotLot != goodLot || gotBuild != goodBuild {
+		t.Fatalf("after save: lot_id=%d build_id=%d, want %d/%d", gotLot, gotBuild, goodLot, goodBuild)
+	}
+
+	// A lot belonging to a different part is rejected (400) and leaves the record intact.
+	bad := withID(postForm(fmt.Sprintf("/records/%d/edit", recordID), url.Values{
+		"lot_id": {strconv.Itoa(foreignLot)},
+	}), recordID)
+	badRec := httptest.NewRecorder()
+	h.SaveResults(badRec, bad)
+	assertStatus(t, "SaveResults(foreign lot)", badRec, http.StatusBadRequest)
+
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT ISNULL(lot_id,0) FROM %s WHERE id = @p1`, rt), recordID).Scan(&gotLot); err != nil {
+		t.Fatalf("re-read lot: %v", err)
+	}
+	if gotLot != goodLot {
+		t.Errorf("rejected save changed lot_id to %d, want unchanged %d", gotLot, goodLot)
+	}
+}

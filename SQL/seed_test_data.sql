@@ -45,6 +45,12 @@ BEGIN TRY
     DELETE FROM dbo.mfg_part;
     DELETE FROM dbo.bom;
     DELETE FROM dbo.price;
+    -- test_record.lot_id/build_id (#677) reference lot + build, so the test-record group
+    -- (children first) must be cleared before build/lot below.
+    DELETE FROM dbo.record_event_results;
+    DELETE FROM dbo.record_events;
+    DELETE FROM dbo.test_result;
+    DELETE FROM dbo.test_record;
     DELETE FROM dbo.inventory_transaction;
     DELETE FROM dbo.lot_genealogy;                     -- edges first (FK to lot)
     DELETE FROM dbo.build;                             -- build.output_lot_id FK to lot, so before lot
@@ -57,10 +63,6 @@ BEGIN TRY
     DELETE FROM dbo.contact;
     DELETE FROM dbo.part;
     DELETE FROM dbo.form_events;
-    DELETE FROM dbo.record_event_results;
-    DELETE FROM dbo.record_events;
-    DELETE FROM dbo.test_result;
-    DELETE FROM dbo.test_record;
     DELETE FROM dbo.test_definition_history;
     DELETE FROM dbo.test_definition;
     DELETE FROM dbo.form;
@@ -372,9 +374,13 @@ BEGIN TRY
     -- NOT seeded here — the inventory seed above is calibrated so only 3007 carries a
     -- balance (drives the reorder-point fixtures), and posting build ledger rows would
     -- perturb those. This row just exercises the build table itself in test mode.
+    -- 8202 is the manufactured build that produced lot-tracked sub-assembly 3012's lot
+    -- 8302 (linked below in 10c, once the lot exists) — exercises test_record.build_id +
+    -- lot_id together (#677). Its ledger rows are likewise not seeded, per the note above.
     SET IDENTITY_INSERT dbo.build ON;
     INSERT INTO dbo.build (id, part_id, output_lot_id, qty, build_date, username, note) VALUES
-        (8201, 3005, NULL, 1, '2026-05-25', 'tester', 'Built 1x assembly 3005 from BOM');
+        (8201, 3005, NULL, 1, '2026-05-25', 'tester', 'Built 1x assembly 3005 from BOM'),
+        (8202, 3012, NULL, 1, '2026-05-25', 'tester', 'Built 1x sub-assembly 3012 (lot 8302)');
     SET IDENTITY_INSERT dbo.build OFF;
 
     -- ============================================================
@@ -405,6 +411,11 @@ BEGIN TRY
     -- Stamp the seed receipt (5901, part 3007 against po_line 5504) with the lot it
     -- created (8301), exercising inventory_transaction.lot_id (#676).
     UPDATE dbo.inventory_transaction SET lot_id = 8301 WHERE id = 5901;
+
+    -- Link build 8202's output to lot 8302 (deferred until the lot exists, mirroring the
+    -- build handler: insert build → create lot → set output_lot_id). Gives lot 8302 a real
+    -- originating build so its Source shows "Build #8202" and test_record 7010 can point at both.
+    UPDATE dbo.build SET output_lot_id = 8302 WHERE id = 8202;
 
     -- ============================================================
     -- 11. Test records — form, test_definition, test_record, test_result,
@@ -448,18 +459,25 @@ BEGIN TRY
     -- surfaces on the Reports dashboard's Stale WIP Records card (issue #658, RPT-7);
     -- the rest just mirror record_date, since the app sets created_at at record-creation
     -- time and none of them need to look stale (all are locked except 7001).
+    -- lot_id / build_id (#677) trace a serialized unit to the lot/build that produced it.
+    -- 7001-7009 predate lot control (both NULL — the legacy/unlinked case). 7010 links a
+    -- lot-tracked part (3012) to both its lot (8302) and build (8202); 7011 links a NON-
+    -- lot-tracked assembly (3005) to its build (8201) only — the build_id-without-lot_id
+    -- case that build_id exists to cover. Both are WIP with recent (non-stale) dates.
     SET IDENTITY_INSERT dbo.test_record ON;
-    INSERT INTO dbo.test_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, updated_at, created_at) VALUES
-        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
-        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
-        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
-        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, '2020-01-01T00:00:00', '2026-06-04T00:00:00'), -- soft-deleted
-        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-06-05T00:00:00'), -- Complete, pre-#251 style (backfillable)
+    INSERT INTO dbo.test_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, updated_at, created_at) VALUES
+        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
+        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
+        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
+        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-04T00:00:00'), -- soft-deleted
+        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-05T00:00:00'), -- Complete, pre-#251 style (backfillable)
         -- 7006-7009 span May and July so the Reports > Yield Summary "Group by month" view (#244) has more than one month to show.
-        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-05-15T00:00:00'), -- Complete, all pass
-        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, '2020-01-01T00:00:00', '2026-05-20T00:00:00'), -- Approved, has a FAIL
-        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-07-01T00:00:00'), -- Complete, all pass
-        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, '2020-01-01T00:00:00', '2026-07-05T00:00:00'); -- Complete, all pass
+        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-05-15T00:00:00'), -- Complete, all pass
+        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-05-20T00:00:00'), -- Approved, has a FAIL
+        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-07-01T00:00:00'), -- Complete, all pass
+        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-07-05T00:00:00'), -- Complete, all pass
+        (7010, 6001, 3012, '2026-07-10', '7010', 'ASM-1002', 'Sub-Assembly',  '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8302, 8202, '2020-01-01T00:00:00', '2026-07-10T00:00:00'), -- WIP, lot-tracked part → lot 8302 + build 8202 (#677)
+        (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Widget Assembly','6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, 8201, '2020-01-01T00:00:00', '2026-07-11T00:00:00'); -- WIP, non-lot-tracked assembly → build 8201 only (#677)
     SET IDENTITY_INSERT dbo.test_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what
@@ -499,7 +517,16 @@ BEGIN TRY
         (7129, 7009, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7130, 7009, 6102, 1,    '5.05', 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7131, 7009, 6103, 1,    '190',  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
-        (7132, 7009, 6104, 1,    '240',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
+        (7132, 7009, 6104, 1,    '240',  'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        -- 7010 / 7011 (#677) are WIP with empty results, mirroring 7001's unfilled snapshot rows.
+        (7133, 7010, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7134, 7010, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7135, 7010, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7136, 7010, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7137, 7011, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7138, 7011, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7139, 7011, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7140, 7011, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.test_result OFF;
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).

@@ -1538,7 +1538,7 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 				}
 				lotID = &id
 			}
-			if err := h.recordInventoryTxn(r, tx, *items[i].POLPNID, "receipt", d, *txnDate, num, "", &polID, lotID); err != nil {
+			if err := h.recordInventoryTxn(r, tx, *items[i].POLPNID, "receipt", d, *txnDate, num, "", &polID, lotID, nil); err != nil {
 				h.renderError(w, r, "Error recording receipt: "+err.Error())
 				return
 			}

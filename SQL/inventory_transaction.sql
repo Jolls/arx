@@ -10,6 +10,10 @@
 --   build 'receipt'; NULL for non-lot-tracked parts. FK to lot.id — see SQL/lot.sql,
 --   which must exist before this table's lot FK is added (the standalone DDL below
 --   creates lot separately; the guarded migration orders them).
+-- build_id links an 'issue'/'receipt' row back to the build event that wrote it (#677);
+--   NULL for movements not driven by a build (receipts, manual adjustments/counts).
+--   Previously the only pointer back to a build was the free-text note ("Build #N"),
+--   which is fragile to match on — this is a proper FK for that lookup.
 -- reference is a free-text pointer (PO number, count sheet, note) for display/search.
 
 IF OBJECT_ID('dbo.inventory_transaction', 'U') IS NOT NULL DROP TABLE dbo.inventory_transaction;
@@ -25,6 +29,7 @@ CREATE TABLE inventory_transaction (
   note        VARCHAR(MAX),                                                               -- Adjustment reason or comment.
   po_line_id  INT          NULL,                                                          -- FK to po_line.id for receipts (#269); NULL otherwise.
   lot_id      INT          NULL,                                                          -- FK to lot.id (#676): lot touched by this movement; NULL if part not lot-tracked.
+  build_id    INT          NULL,                                                          -- FK to build.id (#677): build event that produced this row; NULL otherwise.
   created_at  DATETIME     NOT NULL CONSTRAINT DF_inv_txn_created DEFAULT GETDATE()
 );
 
@@ -32,4 +37,11 @@ ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_PN  FOREIGN KEY 
 ALTER TABLE dbo.inventory_transaction ADD CONSTRAINT FK_inv_txn_po_line FOREIGN KEY (po_line_id) REFERENCES dbo.po_line (id);
 -- FK_inv_txn_lot (lot_id → lot.id) is added in SQL/lot.sql, after lot is created, so
 -- this table can be created before lot in the DDL run order (like build's output-lot FK).
+-- FK_inv_txn_build (build_id → build.id) is added in SQL/build.sql, for the same reason
+-- (build is created after inventory_transaction in DDL run order).
 CREATE INDEX IX_inv_txn_part ON dbo.inventory_transaction (part_id, txn_date);
+
+-- Migration (run once on live DB; also add build_id to the matching INSERT in
+-- SQL/seed_test_data.sql):
+-- ALTER TABLE inventory_transaction ADD build_id INT NULL;
+-- ALTER TABLE inventory_transaction ADD CONSTRAINT FK_inv_txn_build FOREIGN KEY (build_id) REFERENCES build (id);

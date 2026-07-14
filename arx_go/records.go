@@ -1124,11 +1124,13 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       lot_id, build_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder,
+			&record.LotID, &record.BuildID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1217,6 +1219,12 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		canApproveRecords = u.CanApproveRecords
 	}
 
+	trace, err := h.loadRecordTrace(r.Context(), &record, false)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	h.renderTR(w, r, "records_show.html", map[string]any{
 		"Form":              form,
 		"Record":            record,
@@ -1224,6 +1232,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		"ImageRows":         imageRows,
 		"Events":            events,
 		"Snapshots":         snapshots,
+		"Trace":             trace,
 		"CanApproveRecords": canApproveRecords,
 		"PrevID":            prevID,
 		"NextID":            nextID,
@@ -1538,6 +1547,138 @@ func (h *Handler) materializeRecordSteps(ctx context.Context, tx *txLogger, reco
 	return nil
 }
 
+// RecordTrace is the lot/build linkage panel for a test record (#677): the currently
+// linked lot/build, and — when editable — the pickable options plus whether the part
+// can be built. Nil when the record has no resolved part.
+type RecordTrace struct {
+	PartID        int
+	IsLotTracked  bool
+	Buildable     bool          // the record's part has a BOM → offer "Build this unit"
+	LinkedLot     *LotRow       // currently linked lot, nil if none
+	LinkedBuild   *BuildOption  // currently linked build, nil if none
+	SelectedLot   int           // record.LotID (0 = none) — for the picker's selected option
+	SelectedBuild int           // record.BuildID (0 = none)
+	Lots          []LotOption   // active lots to pick (editable view only)
+	Builds        []BuildOption // builds to pick (editable view only)
+}
+
+// loadRecordTrace builds the traceability view for a record's tested part (#677).
+// Returns nil (no error) when the record has no resolved part. When editable, it also
+// loads the pickable lot/build options for the edit form.
+func (h *Handler) loadRecordTrace(ctx context.Context, record *models.TestRecord, editable bool) (*RecordTrace, error) {
+	if record.PartNumberID == 0 {
+		return nil, nil
+	}
+	t := &RecordTrace{PartID: record.PartNumberID}
+	if record.LotID != nil {
+		t.SelectedLot = *record.LotID
+	}
+	if record.BuildID != nil {
+		t.SelectedBuild = *record.BuildID
+	}
+
+	// The tested part's lot-tracking + whether it has a BOM (is buildable).
+	// part_number_id is a logical reference with no FK, so a stale id may not resolve —
+	// treat that as simply having no trace rather than failing the whole page.
+	var isLotTracked sql.NullBool
+	var bomCount int
+	err := h.queryRowContext(ctx, fmt.Sprintf(`
+		SELECT p.is_lot_tracked, (SELECT COUNT(*) FROM %s b WHERE b.parent_part_id = p.id)
+		FROM %s p WHERE p.id = @p1`, h.cfg.BOMTable(), h.cfg.PartsTable()), record.PartNumberID).
+		Scan(&isLotTracked, &bomCount)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.IsLotTracked = isLotTracked.Bool
+	t.Buildable = bomCount > 0
+
+	if record.LotID != nil {
+		if lr, found, err := h.fetchLotRow(ctx, *record.LotID); err != nil {
+			return nil, err
+		} else if found {
+			t.LinkedLot = &lr
+		}
+	}
+	if record.BuildID != nil {
+		b, err := h.fetchBuildOption(ctx, *record.BuildID)
+		if err != nil {
+			return nil, err
+		}
+		t.LinkedBuild = b
+	}
+
+	if editable {
+		if t.IsLotTracked {
+			lots, err := h.activeLotsForPart(ctx, record.PartNumberID)
+			if err != nil {
+				return nil, err
+			}
+			// The currently-linked lot may since have been deactivated; keep it in the
+			// options (it's the selected one) so saving the form doesn't silently clear
+			// a still-valid link the user never touched.
+			if t.SelectedLot != 0 && t.LinkedLot != nil && !containsLotOption(lots, t.SelectedLot) {
+				lots = append(lots, LotOption{ID: t.LinkedLot.ID, Label: t.LinkedLot.LotNumber + " (inactive)"})
+			}
+			t.Lots = lots
+		}
+		builds, err := h.activeBuildsForPart(ctx, record.PartNumberID)
+		if err != nil {
+			return nil, err
+		}
+		t.Builds = builds
+	}
+	return t, nil
+}
+
+// containsLotOption reports whether lots already includes the lot with id lotID.
+func containsLotOption(lots []LotOption, lotID int) bool {
+	for _, o := range lots {
+		if o.ID == lotID {
+			return true
+		}
+	}
+	return false
+}
+
+// recordLinkageArgs reads and validates the lot_id/build_id form fields for a record
+// whose tested part is partID (#677), for saving alongside the record's other metadata.
+// Each returned value is the chosen id, or nil to clear the link when the field is
+// blank. A non-blank id that doesn't belong to the part yields an error (surfaced as a
+// 400). Unlike the build's component-lot check, a lot need not be active here — a record
+// may legitimately reference a since-retired lot.
+func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildArg interface{}, err error) {
+	ctx := r.Context()
+	belongs := func(table, v string) (interface{}, error) {
+		id, convErr := strconv.Atoi(v)
+		if convErr != nil || id <= 0 {
+			return nil, fmt.Errorf("invalid selection")
+		}
+		var n int
+		if e := h.queryRowContext(ctx, fmt.Sprintf(
+			`SELECT COUNT(*) FROM %s WHERE id = @p1 AND part_id = @p2`, table), id, partID).Scan(&n); e != nil {
+			return nil, e
+		}
+		if n != 1 {
+			return nil, fmt.Errorf("selection does not belong to this record's part")
+		}
+		return id, nil
+	}
+	if v := fv(r, "lot_id"); v != "" {
+		if lotArg, err = belongs(h.cfg.LotTable(), v); err != nil {
+			return nil, nil, err
+		}
+	}
+	if v := fv(r, "build_id"); v != "" {
+		if buildArg, err = belongs(h.cfg.BuildTable(), v); err != nil {
+			return nil, nil, err
+		}
+	}
+	return lotArg, buildArg, nil
+}
+
 // EditRecord — GET /records/{id}/edit
 func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -1549,11 +1690,13 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       lot_id, build_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder)
+			&record.InstrumentType, &record.Locked, &record.Approved, &record.Active, &record.TestOrder,
+			&record.LotID, &record.BuildID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1606,10 +1749,17 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		resolveStepRefs(row.Step, results, refSteps, &record, &form)
 	}
 
+	trace, err := h.loadRecordTrace(r.Context(), &record, true)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	h.renderTR(w, r, "record_edit.html", map[string]any{
 		"Form":                form,
 		"Record":              record,
 		"Rows":                resultRows,
+		"Trace":               trace,
 		"CSRFToken":           h.csrfToken(w, r),
 		"ActiveTab":           "records",
 		"TestMode":            h.cfg.TestMode,
@@ -2177,6 +2327,14 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 
 	comments := strings.TrimSpace(r.FormValue("comments"))
 	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
+
+	// #677: lot/build linkage saves with the record's other metadata (blank clears it).
+	lotArg, buildArg, linkErr := h.recordLinkageArgs(r, record.PartNumberID)
+	if linkErr != nil {
+		http.Error(w, linkErr.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if rdStr := r.FormValue("record_date"); rdStr != "" {
 		var rd time.Time
 		var parseErr error
@@ -2185,17 +2343,17 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		}
 		if parseErr == nil {
 			h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, updated_at=GETDATE() WHERE id=@p4",
-				h.cfg.RecordsTable()), rd, comments, instrumentType, recordID)
+				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, updated_at=GETDATE() WHERE id=@p6",
+				h.cfg.RecordsTable()), rd, comments, instrumentType, lotArg, buildArg, recordID)
 		} else {
 			h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE id=@p3",
-				h.cfg.RecordsTable()), comments, instrumentType, recordID)
+				"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, updated_at=GETDATE() WHERE id=@p5",
+				h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID)
 		}
 	} else {
 		h.execContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET comments=@p1, instrument_type=@p2, updated_at=GETDATE() WHERE id=@p3",
-			h.cfg.RecordsTable()), comments, instrumentType, recordID)
+			"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, updated_at=GETDATE() WHERE id=@p5",
+			h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID)
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)

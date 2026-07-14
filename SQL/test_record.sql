@@ -5,9 +5,21 @@
 -- test_order is a snapshot of form.test_order at record creation;
 --   the app falls back to form.test_order when empty.
 -- is_locked prevents further edits. is_active = 0 soft-deletes the record.
+-- lot_id (#677) ties the record to the lot the tested unit itself belongs to — set only
+--   when the tested part is lot-tracked (part.is_lot_tracked), referencing whichever
+--   lot a prior receipt or build already produced. NULL otherwise. No write-back to
+--   lot_genealogy from test_record itself.
+-- build_id (#677) ties the record to the build event that produced the tested unit,
+--   independent of lot_id — covers the case where the tested part is NOT itself
+--   lot-tracked but its BOM had lot-tracked components: there is no output lot to
+--   reference, but the build still recorded which component lots were consumed
+--   (inventory_transaction.lot_id/build_id), so this is the only path back to them.
+--   NULL when the unit wasn't produced by a build (e.g. purchased, non-assembled part).
 
 IF OBJECT_ID('dbo.test_record', 'U') IS NOT NULL DROP TABLE test_record;
 -- FK added after creation: ALTER TABLE dbo.test_record ADD CONSTRAINT FK_test_record_form FOREIGN KEY (form_id) REFERENCES dbo.form (id);
+-- FK added after creation: ALTER TABLE dbo.test_record ADD CONSTRAINT FK_test_record_lot FOREIGN KEY (lot_id) REFERENCES dbo.lot (id);
+-- FK added after creation: ALTER TABLE dbo.test_record ADD CONSTRAINT FK_test_record_build FOREIGN KEY (build_id) REFERENCES dbo.build (id);
 
 CREATE TABLE test_record (
   id                     INT          PRIMARY KEY IDENTITY,
@@ -25,10 +37,16 @@ CREATE TABLE test_record (
   is_active              BIT          NOT NULL CONSTRAINT DF_test_record_is_active DEFAULT 1, -- 0 = soft-deleted; excluded from all views.
   created_at             DATETIME,
   updated_at             DATETIME,
-  form_revision          INT                                                                  -- Snapshot of form.revision at record creation. NULL for pre-#260 records.
+  form_revision          INT,                                                                 -- Snapshot of form.revision at record creation. NULL for pre-#260 records.
+  lot_id                 INT,                                                                  -- FK to lot.id (#677). Lot the tested unit belongs to; NULL if part not lot-tracked.
+  build_id               INT                                                                   -- FK to build.id (#677). Build that produced the tested unit; NULL if not build-produced.
 );
 
 -- Migration (run once on live DB; also add the new column to the matching
 -- INSERT in SQL/seed_test_data.sql — it inserts explicit column lists, so new
 -- columns are NOT picked up automatically the way the old _test.sql clone was):
 -- ALTER TABLE test_record ADD instrument_type VARCHAR(100) NULL;
+-- ALTER TABLE test_record ADD lot_id INT NULL;
+-- ALTER TABLE test_record ADD CONSTRAINT FK_test_record_lot FOREIGN KEY (lot_id) REFERENCES lot (id);
+-- ALTER TABLE test_record ADD build_id INT NULL;
+-- ALTER TABLE test_record ADD CONSTRAINT FK_test_record_build FOREIGN KEY (build_id) REFERENCES build (id);

@@ -112,6 +112,20 @@
         <td>{{.Record.InstrumentType}}</td>
       </tr>
       {{end}}
+      {{if .Trace}}
+      {{if .Trace.LinkedLot}}
+      <tr>
+        <th class="text-muted">Lot</th>
+        <td><a href="/part/{{.Trace.PartID}}/lots/{{.Trace.LinkedLot.ID}}">{{.Trace.LinkedLot.LotNumber}}</a>{{if .Trace.LinkedLot.Source}} · {{.Trace.LinkedLot.Source}}{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .Trace.LinkedBuild}}
+      <tr>
+        <th class="text-muted">Build</th>
+        <td>{{.Trace.LinkedBuild.Label}}</td>
+      </tr>
+      {{end}}
+      {{end}}
     </table>
   </div>
   <div class="dropdown" data-col-table="results-table">
