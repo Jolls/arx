@@ -34,56 +34,15 @@ CREATE TABLE company_attachment (
 );
 ```
 
-### What to do with legacy tables
-- The legacy tables are being renamed to snake_case in the db-table-rename effort (one commit per table/group): `CN`→`contact` (commit 1), `PL`→`bom` (2), `FIL`→`part_attachment` (3), `PO`/`PO_history`→`purchase_order`/`purchase_order_history` (4), `POL`→`po_line` (5), `PN`→`part_number` (6), the test-records group (`Forms`→`form`, `TestRecords`→`test_record`, `TestResults`→`test_result`, plus `Parameter`/`Specification` lowercasing) (commit 7), `part_number`→`part` (commit 8, table name only — the `part_number` column is kept). Go struct fields intentionally retain the old names during this effort — DB column names and Go field names will diverge until a follow-up cleanup aligns them.
-- New columns added to a legacy table that has not yet been renamed should still use the legacy prefix style. Once a table is renamed, use snake_case for any new columns.
-- When a legacy table is fully replaced/migrated, use the go-forward convention for the replacement.
+### Db-table-rename effort — complete
+
+All tables have been renamed to snake_case; there are no more uppercase-abbreviation tables in
+the schema. Go struct fields for the renamed tables intentionally retain the old
+abbreviation-prefixed names (e.g. `FILFileName`, `POLQty`) — DB column names and Go field names
+diverge until a follow-up cleanup aligns them. See the per-table notes in "Table reference"
+below for each table's old name and abbreviation.
 
 ---
-
-## Legacy conventions (existing tables)
-
-Two eras of tables exist. When extending or mirroring a legacy table, follow its existing style.
-
-### Table naming
-
-Two eras of tables exist in this schema. Follow the era of the table you are extending or parallel-ing.
-
-**Legacy tables** (VBA/Ruby era) — uppercase short abbreviation; being renamed in the db-table-rename effort:
-
-| Table | Abbreviation | Notes |
-|-------|-------------|-------|
-| `part` | — | Part numbers / parts catalog (renamed from `PN` in commit 6, then `part_number`→`part` in commit 8; the `part_number` column is retained) |
-| `part_attachment` | — | File/URL attachments (to parts) (renamed from `FIL` in db-table-rename commit 3) |
-| `supplier_part` | — | Sourcing links (migrated from `LNK`) |
-| `mfg_part` | — | Manufacturer part numbers |
-| `bom` | —     | Parts list / BOM (renamed from `PL` in db-table-rename commit 2) |
-| `po_line` | — | PO line items (renamed from `POL` in db-table-rename commit 5) |
-
-**Go-era tables** — lowercase snake_case:
-
-| Table | Notes |
-|-------|-------|
-| `company` | Mixed: has both generic columns and leftover `SU`-prefixed columns |
-| `contact` | Contacts (renamed from `CN` in db-table-rename commit 1) |
-| `purchase_order` | Clean snake_case (renamed from `PO` in db-table-rename commit 4) |
-| `purchase_order_history` | Clean snake_case (renamed from `PO_history` in db-table-rename commit 4) |
-| `inventory_transaction` | Clean snake_case |
-| `price` | Clean snake_case |
-
-## Column naming
-
-**Legacy tables** prefix every column with the table abbreviation:
-
-```
-{TABLE_ABBREV}ID          -- primary key (e.g. PNID, FILID, CNID)
-{TABLE_ABBREV}{TargetABBREV}ID  -- foreign key (e.g. FILPNID → PN, LNKSUID → supplier)
-{TABLE_ABBREV}ColumnName  -- all other columns (e.g. FILFileName, LNKVendorPN)
-```
-
-Exception: `order_id` in `part_attachment` (formerly `FIL`) broke the prefix rule and was renamed to `sort_order` in db-table-rename commit 3.
-
-**Go-era tables** use generic snake_case: `id`, `name`, `is_active`, `date_modified`, `supplier_id`.
 
 ## Test mode
 
@@ -151,7 +110,7 @@ Trigger DDL lives in `SQL/triggers.sql`. These fire identically in ArxDev, since
 
 > **Dropped trigger:** `trg_Tests_history` was a legacy AFTER UPDATE trigger on `test_definition` created when the table was named `Tests`. It referenced the old column `applicable_instrs` (since renamed to `instrument_types`), silently rolling back every UPDATE once the rename was applied. It was dropped in v0.4.1 and superseded by `trg_test_definition_history`.
 
-These fire for all writers (Go app and VBA). Do not update `SUNumOfLNKs`, `SUNumOfPOs`, `part.attachment_count`, or `part.po_line_count` manually in application code.
+These fire for all writers. Do not update `SUNumOfLNKs`, `SUNumOfPOs`, `part.attachment_count`, or `part.po_line_count` manually in application code.
 
 > **`OUTPUT INSERTED` vs triggers:** SQL Server blocks the `OUTPUT INSERTED.*`
 > clause on any table that has an `AFTER` trigger. `purchase_order` therefore
