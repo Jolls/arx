@@ -337,7 +337,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	items := h.fetchPOItems(w, r, num)
 	var lineTotal float64
 	for _, item := range items {
-		lineTotal += item.POLQty * item.POLCost
+		lineTotal += item.Qty * item.UnitCost
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
@@ -939,7 +939,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 	items := h.fetchPOItems(w, r, num)
 	var lineTotal float64
 	for _, item := range items {
-		lineTotal += item.POLQty * item.POLCost
+		lineTotal += item.Qty * item.UnitCost
 	}
 
 	var folderPath string
@@ -1421,7 +1421,7 @@ func derivePOReceiptStatus(items []models.PurchaseOrderLine) string {
 		if it.ReceivedQty > 0 {
 			anyReceived = true
 		}
-		if it.ReceivedQty < it.POLQty {
+		if it.ReceivedQty < it.Qty {
 			allFull = false
 		}
 	}
@@ -1436,23 +1436,23 @@ func derivePOReceiptStatus(items []models.PurchaseOrderLine) string {
 }
 
 // parseReceiveDeltas reads the per-line "receive now" quantities from a submitted
-// receive form. Each line is looked up via get("recv[<POLID>]"); blank entries are
+// receive form. Each line is looked up via get("recv[<ID>]"); blank entries are
 // skipped and non-positive values are ignored. A value that is present but not a
 // number is a hard error. The returned map holds only the positive deltas keyed by
 // po_line id; an empty map means nothing was entered to receive.
 func parseReceiveDeltas(items []models.PurchaseOrderLine, get func(string) string) (map[int]float64, error) {
 	deltas := map[int]float64{}
 	for _, it := range items {
-		raw := strings.TrimSpace(get(fmt.Sprintf("recv[%d]", it.POLID)))
+		raw := strings.TrimSpace(get(fmt.Sprintf("recv[%d]", it.ID)))
 		if raw == "" {
 			continue
 		}
 		d, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid quantity %q for line %d", raw, it.POLID)
+			return nil, fmt.Errorf("invalid quantity %q for line %d", raw, it.ID)
 		}
 		if d > 0 {
-			deltas[it.POLID] = d
+			deltas[it.ID] = d
 		}
 	}
 	return deltas, nil
@@ -1518,13 +1518,13 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for i := range items {
-		d, ok := deltas[items[i].POLID]
+		d, ok := deltas[items[i].ID]
 		if !ok {
 			continue
 		}
 		// Catalog-mapped lines move stock via the ledger; others just record receipt.
-		if items[i].POLPNID != nil {
-			polID := items[i].POLID
+		if items[i].PartID != nil {
+			polID := items[i].ID
 			// Lot-tracked part (#676): create this receipt's lot first, so the ledger
 			// row can reference it. lot_number auto-defaults to the lot's own id
 			// (#687); lot_description records the PO as provenance. vendor_lot_number
@@ -1532,7 +1532,7 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 			var lotID *int
 			if items[i].IsLotTracked {
 				vendorLot := fv(r, fmt.Sprintf("vlot[%d]", polID))
-				id, err := h.createLot(r.Context(), tx, *items[i].POLPNID,
+				id, err := h.createLot(r.Context(), tx, *items[i].PartID,
 					lotCreateArgs{VendorLot: vendorLot, Description: "PO " + num}, &polID)
 				if err != nil {
 					h.renderError(w, r, "Error creating lot: "+err.Error())
@@ -1540,14 +1540,14 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 				}
 				lotID = &id
 			}
-			if err := h.recordInventoryTxn(r, tx, *items[i].POLPNID, "receipt", d, *txnDate, num, "", &polID, lotID, nil); err != nil {
+			if err := h.recordInventoryTxn(r, tx, *items[i].PartID, "receipt", d, *txnDate, num, "", &polID, lotID, nil); err != nil {
 				h.renderError(w, r, "Error recording receipt: "+err.Error())
 				return
 			}
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 			`UPDATE %s SET received_qty = received_qty + @p1, date_received = @p2 WHERE id = @p3`,
-			h.cfg.POLineTable()), d, *txnDate, items[i].POLID); err != nil {
+			h.cfg.POLineTable()), d, *txnDate, items[i].ID); err != nil {
 			h.renderError(w, r, "Error updating line item: "+err.Error())
 			return
 		}
@@ -1878,19 +1878,19 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 		var isLotTracked sql.NullBool
 		var filID sql.NullInt64
 		var filFileName, filCategory sql.NullString
-		if err := rows.Scan(&item.POLID, &item.POLItem, &partNumber, &rev, &desc,
-			&item.POLQty, &item.POLCost, &vendorPN, &polpnid, &leadTime,
+		if err := rows.Scan(&item.ID, &item.LineNumber, &partNumber, &rev, &desc,
+			&item.Qty, &item.UnitCost, &vendorPN, &polpnid, &leadTime,
 			&item.ReceivedQty, &dateReceived,
 			&isLotTracked,
 			&filID, &filFileName, &filCategory); err == nil {
 			item.IsLotTracked = isLotTracked.Bool
-			item.POLPNPartNumber = partNumber.String
-			item.POLRev = rev.String
-			item.POLDesc = desc.String
+			item.PartNumberSnapshot = partNumber.String
+			item.RevisionSnapshot = rev.String
+			item.Description = desc.String
 			item.VendorPN = vendorPN.String
 			if polpnid.Valid {
 				v := int(polpnid.Int64)
-				item.POLPNID = &v
+				item.PartID = &v
 			}
 			if leadTime.Valid {
 				v := int(leadTime.Int64)
@@ -2046,7 +2046,7 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 	}
 	items := h.fetchPOItems(w, r, num)
 	for i := range items {
-		items[i].POLCost = 0
+		items[i].UnitCost = 0
 		items[i].VendorPN = ""
 		items[i].LeadTimeDays = nil
 	}

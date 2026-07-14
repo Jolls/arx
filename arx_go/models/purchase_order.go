@@ -49,21 +49,21 @@ type PurchaseOrder struct {
 }
 
 type PurchaseOrderLine struct {
-	POLID           int
-	POLPOID         int
-	POLItem         int
-	POLPNPartNumber string
-	POLRev          string
-	POLDesc         string
-	POLQty          float64
-	POLCost         float64
-	VendorPN        string
-	POLPNID         *int
-	LeadTimeDays    *int
-	ReceivedQty     float64
-	DateReceived    *time.Time
-	IsLotTracked    bool // part.is_lot_tracked (#676): receiving this line creates a lot row
-	PrimaryAtt      *Attachment
+	ID                 int
+	POID               int
+	LineNumber         int
+	PartNumberSnapshot string
+	RevisionSnapshot   string
+	Description        string
+	Qty                float64
+	UnitCost           float64
+	VendorPN           string
+	PartID             *int
+	LeadTimeDays       *int
+	ReceivedQty        float64
+	DateReceived       *time.Time
+	IsLotTracked       bool // part.is_lot_tracked (#676): receiving this line creates a lot row
+	PrimaryAtt         *Attachment
 	// joined fields
 	PONumber     string
 	SupplierName string

@@ -38,13 +38,22 @@ Branch `feature/693-field-rename-parts`.
 | `BOMItem` | `bom` (+ part joins) | `PLID→ID`, `PLItem→LineNumber`, `PLQty→Qty`, `PLPartID→ComponentPartID`, `PLListID→ParentPartID`, `PNCurrentCost→CurrentCost`, `PNLastRollupCost→LastRollupCost` |
 | `SupplierPart` | `supplier_part` (+ part join) | removed redundant joined `PNID` (identical to `PartID` via the JOIN); query drops `pn.id`, `POLinks` map keys on `PartID` |
 
-## PR 2 - Purchase-order lines (`POL`) - TODO
+## PR 2 - Purchase-order lines (`POL`) - DONE
+
+Branch `feature/693-field-rename-po-lines`.
 
 `models.PurchaseOrderLine` (`po_line`): `POLID→ID`, `POLPOID→POID`, `POLItem→LineNumber`,
 `POLPNPartNumber→PartNumberSnapshot`, `POLRev→RevisionSnapshot`, `POLDesc→Description`,
 `POLQty→Qty`, `POLCost→UnitCost`, `POLPNID→PartID`. `PurchaseOrder` itself is already clean.
-Files: `models/purchase_order.go`, `pos.go`, `templates/pos/*`. Watch the `POL*` **form-field
-string keys** in `pos.go` (`case "POLPNID":` etc.) - those are POST keys, leave them.
+Files: `models/purchase_order.go`, `pos.go`, `parts.go`, `templates/pos/{po_detail,po_print,po_edit}.html`,
+`templates/parts/part_orders.html`, plus the `pos_test.go` model literals.
+
+Left untouched (POST keys / local structs, as planned):
+- `case "POL*":` switch in `pos.go` and the matching `name="...[POL*]"` / `[name$="[POL*]"]`
+  attributes and JS selectors in `po_edit.html` (and the `pol[..][POL*]` map keys in the tests).
+- `rfqCell.POLID` / `rfqScanLine.POLID` local structs (`pos.go`, `pos_test.go`, `rfq_compare.html`) -
+  their own `POLID` field, deferred as a non-`models` view struct.
+- `VendorPN` (`po_line.vendor_part_number`) - not `POL`-prefixed; left to match `SupplierPart.SupplierPN`.
 
 ## PR 3 - Contacts + test records (`CN` + convention) - TODO
 
