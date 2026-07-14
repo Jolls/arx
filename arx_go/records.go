@@ -1732,6 +1732,13 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	namedQueryDescs := map[string]string{}
+	if nqs, err := h.listNamedQueries(r.Context()); err == nil {
+		for _, nq := range nqs {
+			namedQueryDescs[nq.Name] = nq.Description
+		}
+	}
+
 	for i := range resultRows {
 		row := &resultRows[i]
 		if row.Level > 0 || row.Step == nil {
@@ -1741,6 +1748,8 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		// "raw" state the edit JS re-resolves live as cross-step results change.
 		if strings.HasPrefix(row.Step.SpecNom, "query:") {
 			row.RawSpecNom = row.Step.SpecNom
+			name, _ := parseQuerySpec(row.Step.SpecNom)
+			row.QueryDescription = namedQueryDescs[name]
 		}
 		if row.Step.DefaultResult != "" {
 			row.RawDefault = row.Step.DefaultResult
