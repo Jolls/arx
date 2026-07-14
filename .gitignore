@@ -8,3 +8,4 @@ arx_go/Arx.exe
 .claude/
 docs/plans/412-unprivate-repo-scrub.md
 docs/security-review-*.local.md
+arx_go/config/LOCAL-IntTesting.txt
