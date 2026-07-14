@@ -162,6 +162,7 @@ type ResultRow struct {
 	RawSpecNom  string      // spec_nom with {record.X} resolved but {id} tokens kept — edit view only
 	RawDefault  string      // default_result with {record.X} resolved but {id} tokens kept — edit view only
 	Hidden      bool        // hide_formula currently evaluates to hidden — edit view renders it display:none for live toggling
+	QueryDescription string // description of the named query backing this row's spec_nom, if any — edit view tooltip
 }
 
 // EffectiveParameter returns the result snapshot if available, else the step definition.

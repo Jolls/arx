@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.124] - 2026-07-13 
+- Added a tooltip to test record rows backed by a named query, showing the query's description on hover ([#688](https://github.com/Jolls/arx-legacy/issues/688))
+
 ## [0.5.123] - 2026-07-13 
 - Linked test records to the lot/build that produced the tested unit: the record editor now has Lot and Build fields (saved with the record's normal Save) for picking the unit's lot (on lot-controlled parts) and/or the build that made it, plus a "Build this unit" button that jumps to the Build form and links the resulting build and its output lot back to the record on return — auto-restoring your in-progress results when you come back — so a serial number traces through to the component lots it consumed even when the assembly itself isn't lot-controlled; the inventory ledger now also stamps each build's issue/receipt rows with the build id ([#677](https://github.com/Jolls/arx-legacy/issues/677))
 

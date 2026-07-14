@@ -119,7 +119,7 @@
       {{$opts := .Step.ListOptions}}
       {{$sid := .Step.ID}}
       <tr data-hide="{{.Step.HideFormula}}"{{if .Hidden}} style="display:none"{{end}}>
-        <td>{{.EffectiveParameter}}</td>
+        <td{{if .QueryDescription}} data-bs-toggle="tooltip" title="{{.QueryDescription}}"{{end}}>{{.EffectiveParameter}}</td>
         <td class="small text-muted">{{.EffectiveSpec}}</td>
         <td>
           {{if eq .Step.PFType "attach"}}
