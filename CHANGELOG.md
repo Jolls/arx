@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.129] - 2026-07-15 
+- Renamed the `TestForm` and `TestRecord` Go struct fields (and the records-domain `BOMPart`/`formPN`/records-list view structs) to match their renamed snake_case DB columns (`PNID`→`PartNumberID`, `Locked`→`IsLocked`, `Approved`→`IsApproved`, `Active`→`IsActive`); no behavior change ([#693](https://github.com/Jolls/arx-legacy/issues/693))
+
 ## [0.5.128] - 2026-07-14 
 - Renamed the `Contact` Go struct fields (and the `Supplier` contact join plus the `ContactSummary`/`siblingContact` view structs) from `CN`-prefixed names to match the renamed snake_case `contact` DB columns (`CNName`→`DisplayName`, `CNID`→`ID`, `CNDateModified`→`UpdatedAt`, etc.); no behavior change ([#693](https://github.com/Jolls/arx-legacy/issues/693))
 

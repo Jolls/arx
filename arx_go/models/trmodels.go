@@ -9,13 +9,13 @@ import (
 // TestForm is a row in the form table.
 // PartNumber and Title are joined from the part_number table.
 type TestForm struct {
-	ID          int
-	PNID        int
-	Locked      bool
-	Active      bool
-	TestOrder   string // comma-separated test IDs in display order
-	PartNumber  string // joined: PN.part_number
-	Title       string // joined: PN.title
+	ID              int
+	PartNumberID    int
+	IsLocked        bool
+	IsActive        bool
+	TestOrder       string // comma-separated test IDs in display order
+	PartNumber      string // joined: PN.part_number
+	Title           string // joined: PN.title
 	RecordTypes     string // comma-separated allowed record types; empty = free-text
 	InstrumentTypes string // comma-separated valid instrument types for this form; empty = free-text
 	Revision        int    // number of times this form has been released (locked); 0 = never released ("Draft"). Bumped on unlock->lock, never on save (#260).
@@ -60,16 +60,16 @@ func (f TestForm) RecordTypeList() []string {
 type TestRecord struct {
 	ID               int
 	FormID           int
-	PartNumberID     int        // FK to part_number.id; 0 if NULL
+	PartNumberID     int    // FK to part_number.id; 0 if NULL
 	SerialNumber     string // #214: migrate to INT once DB column is migrated from VARCHAR(64)
-	SerialNumberPN   string     // part number of the unit under test
-	SerialNumberDesc string     // description of the unit under test
+	SerialNumberPN   string // part number of the unit under test
+	SerialNumberDesc string // description of the unit under test
 	RecordDate       *time.Time
 	Comments         string // used as "Type" in the UI
 	InstrumentType   string // free-text instrument type label; matched against test_definition.instrument_types to filter steps
-	Locked           bool
-	Approved         bool // 1 = reviewer-approved; only a TR reviewer may unlock (#249). Requires Locked.
-	Active           bool
+	IsLocked         bool
+	IsApproved       bool // 1 = reviewer-approved; only a TR reviewer may unlock (#249). Requires IsLocked.
+	IsActive         bool
 	TestOrder        string // comma-separated snapshot of test IDs at record creation
 	FormRevision     *int   // snapshot of form.Revision at record creation; nil for pre-#260 records or legacy data
 	LotID            *int   // lot the tested unit belongs to (#677); nil when the part is not lot-tracked or unlinked

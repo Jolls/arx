@@ -22,7 +22,7 @@
     <select class="form-select" id="bom_pnid" name="bom_pnid">
       <option value="">— select part —</option>
       {{range .BOMParts}}
-      <option value="{{.PNID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
+      <option value="{{.PartNumberID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
       {{end}}
     </select>
     {{else}}
