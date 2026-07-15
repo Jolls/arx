@@ -27,7 +27,7 @@
     <select class="form-select" id="pnid" name="pnid" required>
       <option value="">— select part number —</option>
       {{range .PNs}}
-      <option value="{{.PNID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
+      <option value="{{.PartNumberID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
       {{end}}
     </select>
   </div>

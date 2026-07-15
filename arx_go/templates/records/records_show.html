@@ -32,10 +32,10 @@
     <h4>
       {{if .Record.PartNumberID}}<a href="/part/{{.Record.PartNumberID}}">{{.Record.SerialNumberPN}}</a>{{else}}{{.Record.SerialNumberPN}}{{end}}
       &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
-      {{if .Record.Approved}}<span class="badge bg-success ms-2"><i class="bi bi-patch-check-fill"></i> Approved</span>
-      {{else if .Record.Locked}}<span class="badge bg-secondary ms-2"><i class="bi bi-check2-circle"></i> Complete</span>
+      {{if .Record.IsApproved}}<span class="badge bg-success ms-2"><i class="bi bi-patch-check-fill"></i> Approved</span>
+      {{else if .Record.IsLocked}}<span class="badge bg-secondary ms-2"><i class="bi bi-check2-circle"></i> Complete</span>
       {{else}}<span class="badge bg-info text-dark ms-2">WIP</span>{{end}}
-      {{if not .Record.Locked}}
+      {{if not .Record.IsLocked}}
       {{/* WIP: edit / complete / resync */}}
       <a href="/records/{{.Record.ID}}/edit" class="btn btn-sm btn-primary ms-2">
         <i class="bi bi-pencil"></i> Edit
@@ -54,7 +54,7 @@
           <i class="bi bi-arrow-repeat"></i> Update to latest
         </button>
       </form>
-      {{else if not .Record.Approved}}
+      {{else if not .Record.IsApproved}}
       {{/* Complete: reviewer may approve; anyone may unlock */}}
       {{if .CanApproveRecords}}
       <form method="POST" action="/records/{{.Record.ID}}/approve" class="d-inline"
@@ -263,7 +263,7 @@
 </div>
 {{end}}
 
-{{if .Record.Locked}}
+{{if .Record.IsLocked}}
 <div class="modal fade" id="unlockModal" tabindex="-1" aria-labelledby="unlockModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

@@ -74,7 +74,9 @@ overlap many local structs) and was split into its own PR4 for an isolated integ
   templates, matching `fv(r, "CN*")` in `contactFromForm`), and the lowercase-json-tagged
   contacts API DTO (`row` in contacts.go) - no `CN`-prefixed fields, serves the picker JS.
 
-## PR 4 - Test records (`Locked`/`Active`/`Approved` + `PNID`) - TODO — carries `Closes #693`
+## PR 4 - Test records (`Locked`/`Active`/`Approved` + `PNID`) - DONE — carries `Closes #693`
+
+Branch `feature/693-field-rename-test-records`.
 
 Test-record domain convention alignment (tables were renamed from `Forms`/`TestRecords`/
 `TestResults`): `TestForm.PNID→PartNumberID`, `Locked→IsLocked`, `Active→IsActive`;

@@ -27,7 +27,7 @@
       <td>{{.Title}}</td>
       <td class="text-center">{{if .Revision}}Rev {{.Revision}}{{else}}Draft{{end}}</td>
       <td class="text-center">
-        {{if .Locked}}
+        {{if .IsLocked}}
         <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Locked</span>
         {{else}}
         <span class="badge bg-success">Active</span>
