@@ -16,15 +16,15 @@ type Supplier struct {
 	SUNumOfPOs           int
 	PrimaryAttachmentID  *int
 	// joined fields (contact)
-	CNName    string
-	CNWeb     string
-	CNAddress string
-	CNCity    string
-	CNState   string
-	CNZipcode string
-	CNCountry string
-	CNPhone1  string
-	CNEmail   string
+	DisplayName string
+	Website     string
+	Address     string
+	City        string
+	State       string
+	Zipcode     string
+	Country     string
+	Phone1      string
+	Email       string
 }
 
 type SupplierAttachment struct {

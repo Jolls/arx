@@ -74,11 +74,11 @@
                             onchange="fillContactFields(this,'supplier')">
                         <option value="">-- Select --</option>
                         {{range .SupplierContacts}}
-                        <option value="{{.CNName}}" data-cnid="{{.CNID}}"
+                        <option value="{{.DisplayName}}" data-cnid="{{.ID}}"
                                 data-address="{{.Address}}" data-city="{{.City}}" data-state="{{.State}}"
                                 data-zipcode="{{.Zipcode}}" data-country="{{.Country}}"
                                 data-phone="{{.Phone}}" data-fax="{{.Fax}}" data-email="{{.Email}}"
-                                {{if eq $.PO.SupplierContact .CNName}}selected{{end}}>{{.CNName}}</option>
+                                {{if eq $.PO.SupplierContact .DisplayName}}selected{{end}}>{{.DisplayName}}</option>
                         {{end}}
                     </select>
                     <input type="hidden" id="supplier_contact_id" name="supplier_contact_id"
@@ -135,11 +135,11 @@
                             onchange="fillContactFields(this,'receiver')">
                         <option value="">-- Select --</option>
                         {{range .ReceiverContacts}}
-                        <option value="{{.CNName}}" data-cnid="{{.CNID}}"
+                        <option value="{{.DisplayName}}" data-cnid="{{.ID}}"
                                 data-address="{{.Address}}" data-city="{{.City}}" data-state="{{.State}}"
                                 data-zipcode="{{.Zipcode}}" data-country="{{.Country}}"
                                 data-phone="{{.Phone}}" data-fax="{{.Fax}}" data-email="{{.Email}}"
-                                {{if eq $.PO.ReceiverContact .CNName}}selected{{end}}>{{.CNName}}</option>
+                                {{if eq $.PO.ReceiverContact .DisplayName}}selected{{end}}>{{.DisplayName}}</option>
                         {{end}}
                     </select>
                     <input type="hidden" id="receiver_contact_id" name="receiver_contact_id"

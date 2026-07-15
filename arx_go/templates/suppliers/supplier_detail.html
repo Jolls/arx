@@ -36,10 +36,10 @@
                 <div class="card-header">Default Contact</div>
                 <div class="card-body">
                     {{if .Supplier.DefaultContact}}
-                    <div class="detail-row"><strong>Name:</strong><span><a href="/contact/{{derefInt .Supplier.DefaultContact}}">{{.Supplier.CNName}}</a></span></div>
-                    <div class="detail-row"><strong>Phone:</strong><span>{{if .Supplier.CNPhone1}}{{.Supplier.CNPhone1}}{{else}}—{{end}}</span></div>
-                    <div class="detail-row"><strong>Email:</strong><span>{{if .Supplier.CNEmail}}{{.Supplier.CNEmail}}{{else}}—{{end}}</span></div>
-                    <div class="detail-row"><strong>City:</strong><span>{{if .Supplier.CNCity}}{{.Supplier.CNCity}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>Name:</strong><span><a href="/contact/{{derefInt .Supplier.DefaultContact}}">{{.Supplier.DisplayName}}</a></span></div>
+                    <div class="detail-row"><strong>Phone:</strong><span>{{if .Supplier.Phone1}}{{.Supplier.Phone1}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>Email:</strong><span>{{if .Supplier.Email}}{{.Supplier.Email}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>City:</strong><span>{{if .Supplier.City}}{{.Supplier.City}}{{else}}—{{end}}</span></div>
                     {{else}}<p class="text-muted mb-0">No default contact set.</p>{{end}}
                 </div>
             </div>
@@ -55,7 +55,7 @@
                         <tbody>
                         {{range .OtherContacts}}
                             <tr>
-                                <td><a href="/contact/{{.CNID}}">{{.CNName}}</a></td>
+                                <td><a href="/contact/{{.ID}}">{{.DisplayName}}</a></td>
                                 <td class="text-truncate" style="max-width:14rem;">{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
                                 <td>{{if .Phone}}{{.Phone}}{{else}}—{{end}}</td>
                             </tr>

@@ -94,18 +94,18 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.CNID), c.CNName)
+	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.ID), c.DisplayName)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	var siblings []siblingContact
-	if c.CNSUID != nil {
-		siblings = h.siblingContacts(r.Context(), *c.CNSUID, c.CNID)
+	if c.CompanyID != nil {
+		siblings = h.siblingContacts(r.Context(), *c.CompanyID, c.ID)
 	}
 	h.render(w, r, "contacts/contact_detail.html", map[string]any{
 		"Contact": c, "ActiveTab": "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 		"Siblings": siblings,
-		"POs":      h.contactPOs(r.Context(), c.CNID),
+		"POs":      h.contactPOs(r.Context(), c.ID),
 	})
 }
 
@@ -157,8 +157,8 @@ func (h *Handler) contactPOs(ctx context.Context, contactID int) []contactPO {
 
 // siblingContact is one row in the Contact dashboard "Related" card (#521).
 type siblingContact struct {
-	CNID   int
-	CNName string
+	ID          int
+	DisplayName string
 }
 
 // siblingContacts returns other active contacts at the same supplier, excluding
@@ -180,10 +180,10 @@ func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContac
 	for rows.Next() {
 		var s siblingContact
 		var name sql.NullString
-		if rows.Scan(&s.CNID, &name) != nil {
+		if rows.Scan(&s.ID, &name) != nil {
 			continue
 		}
-		s.CNName = name.String
+		s.DisplayName = name.String
 		out = append(out, s)
 	}
 	return out
@@ -239,7 +239,7 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.CNID), c.CNName)
+	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.ID), c.DisplayName)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "contacts/contact_edit.html", map[string]any{
@@ -306,7 +306,7 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 		LEFT JOIN %s su ON cn.company_id = su.id
 		WHERE cn.id = @p1
 	`, cn, su), id).Scan(
-		&c.CNID, &cnsuid, &name, &email,
+		&c.ID, &cnsuid, &name, &email,
 		&phone1, &phone2, &fax,
 		&address, &city, &state, &zip, &country,
 		&web, &userLink, &notes, &active, &dateModified, &suName,
@@ -321,37 +321,37 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 	}
 	if cnsuid.Valid {
 		v := int(cnsuid.Int64)
-		c.CNSUID = &v
+		c.CompanyID = &v
 	}
-	c.CNName = name.String
-	c.CNEmail = email.String
-	c.CNPhone1 = phone1.String
-	c.CNPhone2 = phone2.String
-	c.CNFAX = fax.String
-	c.CNAddress = address.String
-	c.CNCity = city.String
-	c.CNState = state.String
-	c.CNZipcode = zip.String
-	c.CNCountry = country.String
-	c.CNWeb = web.String
-	c.CNUserAccountLink = userLink.String
-	c.CNNotes = notes.String
-	c.CNActive = active.Bool
+	c.DisplayName = name.String
+	c.Email = email.String
+	c.Phone1 = phone1.String
+	c.Phone2 = phone2.String
+	c.Fax = fax.String
+	c.Address = address.String
+	c.City = city.String
+	c.State = state.String
+	c.Zipcode = zip.String
+	c.Country = country.String
+	c.Website = web.String
+	c.UserAccountLink = userLink.String
+	c.Notes = notes.String
+	c.IsActive = active.Bool
 	c.SupplierName = suName.String
 	if dateModified.Valid {
-		c.CNDateModified = &dateModified.Time
+		c.UpdatedAt = &dateModified.Time
 	}
 	return c, true
 }
 
 func contactFromForm(r *http.Request) models.Contact {
 	c := models.Contact{
-		CNName: fv(r, "CNName"), CNEmail: fv(r, "CNEmail"),
-		CNPhone1: fv(r, "CNPhone1"), CNPhone2: fv(r, "CNPhone2"), CNFAX: fv(r, "CNFAX"),
-		CNAddress: fv(r, "CNAddress"), CNCity: fv(r, "CNCity"), CNState: fv(r, "CNState"),
-		CNZipcode: fv(r, "CNZipcode"), CNCountry: fv(r, "CNCountry"),
-		CNWeb: fv(r, "CNWeb"),
-		CNNotes: fv(r, "CNNotes"), CNActive: r.FormValue("CNActive") == "1",
+		DisplayName: fv(r, "CNName"), Email: fv(r, "CNEmail"),
+		Phone1: fv(r, "CNPhone1"), Phone2: fv(r, "CNPhone2"), Fax: fv(r, "CNFAX"),
+		Address: fv(r, "CNAddress"), City: fv(r, "CNCity"), State: fv(r, "CNState"),
+		Zipcode: fv(r, "CNZipcode"), Country: fv(r, "CNCountry"),
+		Website: fv(r, "CNWeb"),
+		Notes: fv(r, "CNNotes"), IsActive: r.FormValue("CNActive") == "1",
 	}
 	if v := fv(r, "CNSUID"); v != "" {
 		// store as string; template will re-select the right option

@@ -55,18 +55,33 @@ Left untouched (POST keys / local structs, as planned):
   their own `POLID` field, deferred as a non-`models` view struct.
 - `VendorPN` (`po_line.vendor_part_number`) - not `POL`-prefixed; left to match `SupplierPart.SupplierPN`.
 
-## PR 3 - Contacts + test records (`CN` + convention) - TODO
+## PR 3 - Contacts (`CN`) - DONE
 
-- `models.Contact` (`contact`): `CNID→ID`, `CNSUID→CompanyID`, `CNName→Name`, `CNEmail→Email`,
-  `CNPhone1/2→Phone1/2`, `CNFAX→Fax`, `CNAddress→Address`, `CNCity→City`, `CNState→State`,
-  `CNZipcode→Zipcode`, `CNCountry→Country`, `CNWeb→Website`, `CNUserAccountLink→UserAccountLink`,
-  `CNActive→IsActive`, `CNNotes→Notes`, `CNDateModified→ModifiedDate`.
+Branch `feature/693-field-rename-contacts`. Originally planned to also carry the test-record
+convention alignment, but that half is collision-heavy (`Locked`/`Active`/`Approved`/`PNID`
+overlap many local structs) and was split into its own PR4 for an isolated integration run.
+
+- `models.Contact` (`contact`): `CNID→ID`, `CNSUID→CompanyID`, `CNName→DisplayName`,
+  `CNEmail→Email`, `CNPhone1/2→Phone1/2`, `CNFAX→Fax`, `CNAddress→Address`, `CNCity→City`,
+  `CNState→State`, `CNZipcode→Zipcode`, `CNCountry→Country`, `CNWeb→Website`,
+  `CNUserAccountLink→UserAccountLink`, `CNActive→IsActive`, `CNNotes→Notes`, `CNDateModified→UpdatedAt`.
+  (`DisplayName`/`UpdatedAt` match the actual columns `display_name`/`updated_at` - the earlier
+  plan's `Name`/`ModifiedDate` were wrong.)
 - `models.Supplier` **joined** `CN*` fields → same targets (SU* stay).
-- `ContactSummary.CNID`, `siblingContact.CNID`.
-- Test-record domain convention alignment (tables were renamed from `Forms`/`TestRecords`/
-  `TestResults`): `TestForm.PNID→PartNumberID`, `Locked→IsLocked`, `Active→IsActive`;
-  `TestRecord.Locked/Approved/Active→IsLocked/IsApproved/IsActive`; `FormEvent`/`RecordEvent`
-  as needed. Fold the deferred records-domain `PNID` structs (below) in here.
+- Local view structs folded in (they only carried `CNID`/`CNName`, and uniform rename beats
+  receiver disambiguation): `ContactSummary.CNID/CNName` (pos.go), `siblingContact.CNID/CNName`.
+- Left untouched: the `CN*` form POST keys (`name=`/`id=`/`for=` in the contact/supplier/po_edit
+  templates, matching `fv(r, "CN*")` in `contactFromForm`), and the lowercase-json-tagged
+  contacts API DTO (`row` in contacts.go) - no `CN`-prefixed fields, serves the picker JS.
+
+## PR 4 - Test records (`Locked`/`Active`/`Approved` + `PNID`) - TODO — carries `Closes #693`
+
+Test-record domain convention alignment (tables were renamed from `Forms`/`TestRecords`/
+`TestResults`): `TestForm.PNID→PartNumberID`, `Locked→IsLocked`, `Active→IsActive`;
+`TestRecord.Locked/Approved/Active→IsLocked/IsApproved/IsActive` (note `TestRecord.PartNumberID`
+is already correct); `FormEvent`/`RecordEvent` as needed. Fold the deferred records-domain `PNID`
+structs (below) in here. Collision-heavy - the generic field names overlap the deferred local
+structs, so rename per-receiver, not by blanket `.Field` replace. This PR carries `Closes #693`.
 
 ## Deferred / Open questions (not model structs - decide in PR3 or a follow-up)
 

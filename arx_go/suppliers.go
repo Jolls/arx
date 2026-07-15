@@ -117,7 +117,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 	// Active contacts for this vendor, excluding the default (shown in its own card).
 	var otherContacts []ContactSummary
 	for _, c := range h.contactsForSupplier(r, s.ID) {
-		if s.DefaultContact != nil && c.CNID == *s.DefaultContact {
+		if s.DefaultContact != nil && c.ID == *s.DefaultContact {
 			continue
 		}
 		otherContacts = append(otherContacts, c)
@@ -663,10 +663,10 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 	s.Name = name.String
 	s.SUSupplierCode = code.String
 	s.SUNotes = notes.String
-	s.CNName = cnName.String
-	s.CNPhone1 = cnPhone.String
-	s.CNEmail = cnEmail.String
-	s.CNCity = cnCity.String
+	s.DisplayName = cnName.String
+	s.Phone1 = cnPhone.String
+	s.Email = cnEmail.String
+	s.City = cnCity.String
 	s.IsActive = isActive.Bool
 	s.IsSupplier = isSupplier.Bool
 	s.IsManufacturer = isManufacturer.Bool
