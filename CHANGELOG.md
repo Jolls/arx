@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.131] - 2026-07-16
+### Changed
+- Restyled the All Lots table to match the Parts table (dark sortable headers) and reordered/renamed columns: Lot Number, Vendor Lot, Lot Description, Part Number, Part Description, Created, Status
+
 ## [0.5.130] - 2026-07-15
 ### Changed
 - Reformatted CHANGELOG.md to follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): added an `[Unreleased]` section, grouped every version's entries under `Added`/`Changed`/`Fixed`/`Removed`/`Security` subheadings, and dropped the per-version author suffix; updated CLAUDE.md's changelog instructions to match ([#699](https://github.com/Jolls/arx-legacy/issues/699))
