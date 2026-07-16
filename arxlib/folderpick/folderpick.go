@@ -5,7 +5,6 @@ import (
 	"context"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -17,7 +16,7 @@ func BrowseFolderContext(ctx context.Context) string {
 			`$d = New-Object System.Windows.Forms.FolderBrowserDialog; `+
 			`$d.Description = 'Select folder'; `+
 			`if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath } else { '' }`)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	hideWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -41,7 +40,7 @@ func BrowseFileContext(ctx context.Context) string {
 			`$d = New-Object System.Windows.Forms.OpenFileDialog; `+
 			`$d.Title = 'Select file'; `+
 			`if ($d.ShowDialog() -eq 'OK') { $d.FileName } else { '' }`)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	hideWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
