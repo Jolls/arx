@@ -216,6 +216,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/api/part/{id}/attachment-name", h.APIPartAttachmentName)
 		r.Post("/api/part/{id}/paste-attachment", h.APIPartPasteAttachment)
 		r.Post("/api/part/{id}/attachments/{attID}/paste-attachment", h.APIPartPasteAttachmentReplace)
+		r.Post("/api/part/{id}/attachments/{attID}/generate-thumbnail", h.APIPartGenerateThumbnail)
 		r.Get("/part/{id}/orders", h.PartOrders)
 		r.Get("/part/{id}/price-history", h.PartPriceHistory)
 		r.Get("/part/{id}/transactions", h.PartTransactions)

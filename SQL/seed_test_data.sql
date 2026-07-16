@@ -104,7 +104,7 @@ BEGIN TRY
     -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO dbo.app_config (setting_key, setting_value, updated_at) VALUES
         ('schema_version', '3', '2020-01-01T00:00:00'),
-        ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo', '2020-01-01T00:00:00');
+        ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
     -- keep the two in sync. Identity-assigned (looked up by unique `name`, not by id).

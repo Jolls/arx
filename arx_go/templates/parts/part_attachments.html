@@ -92,6 +92,14 @@
                                 {{end}}
                                 <li><a class="dropdown-item" href="/part/{{$.Part.ID}}/attachments?edit={{.ID}}#edit-form">Edit</a></li>
                                 <li><a class="dropdown-item" href="/attachments/where-used?file={{$f | urlquery}}">Where used</a></li>
+                                {{if and (isLocalFile $f) (isPDF $f)}}
+                                <li>
+                                    <button type="button" class="dropdown-item" onclick="generateThumbnail(this, {{.ID}})"
+                                            {{if not $.DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>
+                                        {{if $.HasThumbnail}}Replace thumbnail{{else}}Generate thumbnail{{end}}
+                                    </button>
+                                </li>
+                                {{end}}
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
                                     <form method="post" action="/part/{{$.Part.ID}}/attachments/{{.ID}}/delete"
@@ -347,6 +355,24 @@ document.addEventListener('DOMContentLoaded', function() {
     updatePasteButtonState('add');
     updatePasteButtonState('edit');
 });
+// Generate (or replace) a PDF's first-page images. Renders on the server into a
+// "PDF Preview" + "Thumbnail" attachment; reloads to show the result.
+function generateThumbnail(btn, attID) {
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Working…';
+    fetch('/api/part/' + ATT_PART_ID + '/attachments/' + attID + '/generate-thumbnail?csrf_token=' + encodeURIComponent(PASTE_ATTACHMENT_CSRF_TOKEN), { method: 'POST' })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+            if (!res.ok) { throw new Error((res.d && res.d.error) || 'Failed to generate thumbnail'); }
+            location.reload();
+        })
+        .catch(function (err) {
+            alert(err.message);
+            btn.disabled = false;
+            btn.textContent = orig;
+        });
+}
 </script>
 <script>
 var PASTE_ATTACHMENT_PART_ID = {{.Part.ID}};
