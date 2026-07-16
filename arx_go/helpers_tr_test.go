@@ -12,12 +12,12 @@ func TestIsAutoSerial(t *testing.T) {
 		suggested string
 		want      bool
 	}{
-		{"42", "42", true},        // exact match → auto
-		{"42", "43", false},       // differing value → override
-		{" 42 ", "42", true},      // whitespace differences that trim to equal → true
-		{"42", " 42 ", true},      // whitespace on suggested side
-		{"", "42", false},         // empty submitted vs non-empty suggested → false
-		{"", "", true},            // both empty → true
+		{"42", "42", true},   // exact match → auto
+		{"42", "43", false},  // differing value → override
+		{" 42 ", "42", true}, // whitespace differences that trim to equal → true
+		{"42", " 42 ", true}, // whitespace on suggested side
+		{"", "42", false},    // empty submitted vs non-empty suggested → false
+		{"", "", true},       // both empty → true
 	}
 	for _, c := range cases {
 		if got := isAutoSerial(c.submitted, c.suggested); got != c.want {
@@ -48,7 +48,7 @@ func TestIsSafeQuery(t *testing.T) {
 		// EXECUTE is still blocked
 		{"SELECT EXECUTE sp_something", false},
 		// SELECT-prefixed writes / admin / DoS must be rejected
-		{"SELECT * INTO junk FROM parts", false},   // table-creating write
+		{"SELECT * INTO junk FROM parts", false},     // table-creating write
 		{"SELECT 1 WAITFOR DELAY '00:00:10'", false}, // DoS
 		{"SELECT * FROM parts MERGE x", false},
 		{"SELECT 1; GRANT SELECT TO app", false},
@@ -109,12 +109,12 @@ func TestStepAppliesToRecord(t *testing.T) {
 		instrumentTypes, recordType string
 		want                        bool
 	}{
-		{"", "anything", true},     // no filter
-		{"A,B", "", true},          // no record type
-		{"A,B", "b", true},         // case-insensitive match
-		{" A , B ", "a", true},     // trimmed match
-		{"A,B", "C", false},        // no match
-		{"cal", "CAL", true},       // case fold
+		{"", "anything", true}, // no filter
+		{"A,B", "", true},      // no record type
+		{"A,B", "b", true},     // case-insensitive match
+		{" A , B ", "a", true}, // trimmed match
+		{"A,B", "C", false},    // no match
+		{"cal", "CAL", true},   // case fold
 	}
 	for _, c := range cases {
 		if got := stepAppliesToRecord(c.instrumentTypes, c.recordType); got != c.want {

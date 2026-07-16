@@ -75,9 +75,9 @@ var DefaultCategoryTabs = CategoryTabs{Orders: true, Pricing: true, MfgParts: tr
 // DefaultCategories is the seed list shown until an admin customizes it in
 // Settings. It reproduces the original hardcoded behavior.
 func DefaultCategories() []Category {
-	proc := DefaultCategoryTabs                                                                                    // purchased + stocked: procurement tabs + inventory, BOM data-driven
+	proc := DefaultCategoryTabs                                                                                     // purchased + stocked: procurement tabs + inventory, BOM data-driven
 	built := CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true} // made + stocked
-	svc := proc                                                                                                    // purchased but not stocked (service, tooling)
+	svc := proc                                                                                                     // purchased but not stocked (service, tooling)
 	svc.Inventory = false
 	return []Category{
 		{"ASM", "Assembly", built},

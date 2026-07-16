@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"arx/arxlib/urlutil"
 	"arx/arx_go/models"
+	"arx/arxlib/urlutil"
 )
 
 // renderTR renders a Test Records page using TR's layout and template funcs.
@@ -77,7 +77,7 @@ func trTemplateFuncs() template.FuncMap {
 			}
 			return t.Format("2006-01-02 3:04 PM")
 		},
-		"isQuerySpec": func(s string) bool { return strings.HasPrefix(s, "query:") },
+		"isQuerySpec":  func(s string) bool { return strings.HasPrefix(s, "query:") },
 		"isHTTPURL":    urlutil.IsHTTPURL,
 		"isLocalFile":  urlutil.IsLocalFile,
 		"localFileURL": func(val string) string { return urlutil.LocalFileURL(val, "/local/") },

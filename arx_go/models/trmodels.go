@@ -110,17 +110,17 @@ type TestStep struct {
 	PFType        string // evaluator type: 'range' or empty = range check
 
 	// debug fields still needed for form-def authoring — see FUTURE_GOALS.md (debug fields cleanup)
-	ArchiveID        int
-	Revision         int
-	Category         string
-	SheetName        string
-	SpecUnits        string
-	SpecNom          string
-	InstrumentTypes  string
-	Format           string
-	StepComment      string
-	StepCreatedAt    *time.Time
-	StepUpdatedAt    *time.Time
+	ArchiveID       int
+	Revision        int
+	Category        string
+	SheetName       string
+	SpecUnits       string
+	SpecNom         string
+	InstrumentTypes string
+	Format          string
+	StepComment     string
+	StepCreatedAt   *time.Time
+	StepUpdatedAt   *time.Time
 }
 
 // TestResult is a row in the test_result table.
@@ -130,8 +130,8 @@ type TestResult struct {
 	ID            int
 	RecordID      int
 	TestID        int
-	Parameter     string     // snapshot of parameter at commit time (resolved)
-	Specification string     // snapshot (resolved)
+	Parameter     string // snapshot of parameter at commit time (resolved)
+	Specification string // snapshot (resolved)
 	Result        string
 	PassFail      *bool
 	Comment       string
@@ -156,13 +156,13 @@ func (r *TestResult) HasSnapshot() bool {
 
 // ResultRow pairs a step definition with its recorded result for template rendering.
 type ResultRow struct {
-	Step        *TestStep
-	Result      *TestResult // nil if no result recorded for this step
-	Level       int         // mirrors Step.Type; 0=data, 1/2/3=heading
-	RawSpecNom  string      // spec_nom with {record.X} resolved but {id} tokens kept — edit view only
-	RawDefault  string      // default_result with {record.X} resolved but {id} tokens kept — edit view only
-	Hidden      bool        // hide_formula currently evaluates to hidden — edit view renders it display:none for live toggling
-	QueryDescription string // description of the named query backing this row's spec_nom, if any — edit view tooltip
+	Step             *TestStep
+	Result           *TestResult // nil if no result recorded for this step
+	Level            int         // mirrors Step.Type; 0=data, 1/2/3=heading
+	RawSpecNom       string      // spec_nom with {record.X} resolved but {id} tokens kept — edit view only
+	RawDefault       string      // default_result with {record.X} resolved but {id} tokens kept — edit view only
+	Hidden           bool        // hide_formula currently evaluates to hidden — edit view renders it display:none for live toggling
+	QueryDescription string      // description of the named query backing this row's spec_nom, if any — edit view tooltip
 }
 
 // EffectiveParameter returns the result snapshot if available, else the step definition.
@@ -251,9 +251,10 @@ type EventSnapshot struct {
 // ComputePassFail evaluates pass/fail for a result value against a step's spec bounds.
 // Returns nil if the result cannot be evaluated (empty, non-numeric, no bounds).
 // pf_type values:
-//   "filled" — PASS if non-empty, nil (MISSING) if blank
-//   "attach" — PASS if non-empty (an image has been pasted), nil (MISSING) if blank
-//   "range"  — numeric range check against spec_min / spec_max (default)
+//
+//	"filled" — PASS if non-empty, nil (MISSING) if blank
+//	"attach" — PASS if non-empty (an image has been pasted), nil (MISSING) if blank
+//	"range"  — numeric range check against spec_min / spec_max (default)
 func ComputePassFail(value string, step *TestStep) *bool {
 	if step == nil {
 		return nil

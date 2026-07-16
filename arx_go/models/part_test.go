@@ -39,10 +39,10 @@ func TestUserFieldsForEdit(t *testing.T) {
 
 	// All 10 returned regardless of empty/non-empty
 	cases := []struct {
-		idx        int
-		wantName   string
-		wantLabel  string
-		wantValue  string
+		idx       int
+		wantName  string
+		wantLabel string
+		wantValue string
 	}{
 		{0, "user_field_1", "User 1", "Alpha"},
 		{1, "user_field_2", "User 2", ""},

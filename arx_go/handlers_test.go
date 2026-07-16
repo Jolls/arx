@@ -77,10 +77,10 @@ func TestAttachLabel(t *testing.T) {
 	cases := []struct {
 		filename, category, want string
 	}{
-		{"foo/bar/doc.pdf", "Drawing", "Drawing"},     // category wins
-		{"foo/bar/doc.pdf", "", "doc.pdf"},            // no category → basename
-		{"foo\\bar\\doc.pdf", "", "doc.pdf"},          // backslash path
-		{"doc.pdf", "", "doc.pdf"},                    // no directory
+		{"foo/bar/doc.pdf", "Drawing", "Drawing"}, // category wins
+		{"foo/bar/doc.pdf", "", "doc.pdf"},        // no category → basename
+		{"foo\\bar\\doc.pdf", "", "doc.pdf"},      // backslash path
+		{"doc.pdf", "", "doc.pdf"},                // no directory
 	}
 	for _, c := range cases {
 		if got := attachLabel(c.filename, c.category); got != c.want {
@@ -164,11 +164,11 @@ func TestResourceBase(t *testing.T) {
 		input, want string
 	}{
 		{"/part/42/bom", "/part/42"},
-		{"/part/42/bom/edit", "/part/42"},   // deeper path truncated to 3 segments
-		{"/part/42", "/part/42"},            // exactly 3 segments — unchanged
-		{"/part/42/", "/part/42"},           // trailing slash stripped
+		{"/part/42/bom/edit", "/part/42"}, // deeper path truncated to 3 segments
+		{"/part/42", "/part/42"},          // exactly 3 segments — unchanged
+		{"/part/42/", "/part/42"},         // trailing slash stripped
 		{"/supplier/7", "/supplier/7"},
-		{"/po", "/po"},                      // short path returned as-is
+		{"/po", "/po"}, // short path returned as-is
 	}
 	for _, c := range cases {
 		if got := resourceBase(c.input); got != c.want {

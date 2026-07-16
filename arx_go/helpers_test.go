@@ -89,10 +89,10 @@ func TestParseFormFloat(t *testing.T) {
 
 func TestRowLineTotal(t *testing.T) {
 	rows := map[string]polRow{
-		"1": {Qty: "2", Cost: "10.00"},   // 20
-		"2": {Qty: "1.5", Cost: "4"},     // 6
-		"3": {Qty: "bad", Cost: "5"},     // qty unparseable -> 0
-		"4": {Qty: "3", Cost: ""},        // cost empty -> 0
+		"1": {Qty: "2", Cost: "10.00"}, // 20
+		"2": {Qty: "1.5", Cost: "4"},   // 6
+		"3": {Qty: "bad", Cost: "5"},   // qty unparseable -> 0
+		"4": {Qty: "3", Cost: ""},      // cost empty -> 0
 	}
 	got := rowLineTotal(rows)
 	if got != 26.0 {

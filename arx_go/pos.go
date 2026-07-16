@@ -199,14 +199,22 @@ func extractPolRows(form url.Values, prefix string) map[string]polRow {
 		}
 		row := rows[id]
 		switch field {
-		case "POLItem":          row.Item = val
-		case "POLPNPartNumber":  row.PartNumber = val
-		case "POLRev":           row.Rev = val
-		case "POLDesc":          row.Desc = val
-		case "VendorPN":         row.VendorPN = val
-		case "POLQty":           row.Qty = val
-		case "POLCost":          row.Cost = val
-		case "POLPNID":          row.PNID = val
+		case "POLItem":
+			row.Item = val
+		case "POLPNPartNumber":
+			row.PartNumber = val
+		case "POLRev":
+			row.Rev = val
+		case "POLDesc":
+			row.Desc = val
+		case "VendorPN":
+			row.VendorPN = val
+		case "POLQty":
+			row.Qty = val
+		case "POLCost":
+			row.Cost = val
+		case "POLPNID":
+			row.PNID = val
 		}
 		rows[id] = row
 	}
@@ -634,7 +642,7 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": items, "IsNew": false,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab": "pos", "ActiveSubTab": "edit",
+		"ActiveTab":        "pos", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode": h.cfg.TestMode, "CSRFToken": h.csrfToken(w, r),
 	})
@@ -890,7 +898,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 		"IsNew": true, "IsDuplicate": true, "DuplicateFrom": num,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
+		"ActiveTab":        "pos", "TestMode": h.cfg.TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -1183,8 +1191,8 @@ var poTransitions = map[string][]string{
 	"open":               {"sent", "cancelled"},
 	"sent":               {"partially_received", "closed", "cancelled"},
 	"partially_received": {"closed", "cancelled"},
-	"closed":             {"open"},   // reopen
-	"cancelled":          {"draft"},  // reopen
+	"closed":             {"open"},  // reopen
+	"cancelled":          {"draft"}, // reopen
 }
 
 func poCanTransition(from, to string) bool {
@@ -1622,10 +1630,10 @@ func (h *Handler) resetApproval(r *http.Request, tx *txLogger, poID int, note st
 
 // ApprovalAction is an approval button rendered on the PO detail page.
 type ApprovalAction struct {
-	Action  string
-	Label   string
-	Class   string // Bootstrap button variant
-	NeedNote bool  // show a reason/comment field
+	Action   string
+	Label    string
+	Class    string // Bootstrap button variant
+	NeedNote bool   // show a reason/comment field
 }
 
 // poApprovalActions returns the approval buttons available for the current state.
@@ -1726,18 +1734,18 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (models.PurchaseOrder, bool) {
 	var po models.PurchaseOrder
 	var (
-		isActive                                        sql.NullBool
-		supplierID, receiverID, rfqGroupID              sql.NullInt64
-		supContactID, recContactID                      sql.NullInt64
-		number, orderer, accountID, status, approvalStatus sql.NullString
-		supName, supContact, supEmail                   sql.NullString
-		supAddr, supCity, supState, supZip, supCountry  sql.NullString
-		supPhone, supFax                                sql.NullString
-		recName, recContact, recEmail                   sql.NullString
-		recAddr, recCity, recState, recZip, recCountry  sql.NullString
-		recPhone, recFax                                sql.NullString
-		tax1, shipping, misc, totalCost                 sql.NullFloat64
-		notes, internalNotes                            sql.NullString
+		isActive                                                     sql.NullBool
+		supplierID, receiverID, rfqGroupID                           sql.NullInt64
+		supContactID, recContactID                                   sql.NullInt64
+		number, orderer, accountID, status, approvalStatus           sql.NullString
+		supName, supContact, supEmail                                sql.NullString
+		supAddr, supCity, supState, supZip, supCountry               sql.NullString
+		supPhone, supFax                                             sql.NullString
+		recName, recContact, recEmail                                sql.NullString
+		recAddr, recCity, recState, recZip, recCountry               sql.NullString
+		recPhone, recFax                                             sql.NullString
+		tax1, shipping, misc, totalCost                              sql.NullFloat64
+		notes, internalNotes                                         sql.NullString
 		dateOrdered, dateRequested, dateClosed, datePrinted, dateMod sql.NullTime
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
@@ -2068,7 +2076,7 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 		"PO": source, "POItems": nil, "DuplicateItems": items,
 		"IsNew": true, "IsRFQ": true, "RFQGroupID": group, "RFQAddFrom": num,
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
+		"ActiveTab":        "pos", "TestMode": h.cfg.TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }

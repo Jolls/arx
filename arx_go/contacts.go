@@ -244,7 +244,7 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "contacts/contact_edit.html", map[string]any{
 		"Contact": c, "IsNew": false,
-		"ActiveTab": "contacts",
+		"ActiveTab":  "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -351,7 +351,7 @@ func contactFromForm(r *http.Request) models.Contact {
 		Address: fv(r, "CNAddress"), City: fv(r, "CNCity"), State: fv(r, "CNState"),
 		Zipcode: fv(r, "CNZipcode"), Country: fv(r, "CNCountry"),
 		Website: fv(r, "CNWeb"),
-		Notes: fv(r, "CNNotes"), IsActive: r.FormValue("CNActive") == "1",
+		Notes:   fv(r, "CNNotes"), IsActive: r.FormValue("CNActive") == "1",
 	}
 	if v := fv(r, "CNSUID"); v != "" {
 		// store as string; template will re-select the right option

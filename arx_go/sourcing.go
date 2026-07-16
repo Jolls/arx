@@ -31,7 +31,7 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		"Links":            links,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
 		"Units":            units,
-		"ActiveTab": "parts", "ActiveSubTab": "suppliers",
+		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})

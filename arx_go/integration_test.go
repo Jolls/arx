@@ -157,7 +157,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	// ── 3. Attachment create + trigger check ───────────────────────────────────
 	attVals := url.Values{
 		"FILFileName": {"http://example.test/itest"},
-		"FILPNRev":   {"A"},
+		"FILPNRev":    {"A"},
 		"category":    {"integration-test-category"},
 	}
 	rec = httptest.NewRecorder()
@@ -1521,7 +1521,7 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 	}()
 
 	req := withID(postForm("/part/3012/build", url.Values{
-		"qty": {"2"},
+		"qty":                               {"2"},
 		fmt.Sprintf("lot[%d]", trackedComp): {strconv.Itoa(compLot)},
 	}), outputPart)
 	rec := httptest.NewRecorder()
