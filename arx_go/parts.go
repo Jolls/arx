@@ -157,14 +157,21 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		Attach   int    `json:"attach"`
 		POLines  int    `json:"poLines"`
 		BelowMin bool   `json:"belowMin"`
+		Thumb    string `json:"thumb"`
 	}
+
+	// Thumb is the /parts hover-tooltip image from a part's generated PDF thumbnail
+	// (#696), pulled via a correlated subquery on the parts SELECT rather than a
+	// separate round-trip; MIN() is an arbitrary tie-break since the app enforces
+	// one active Thumbnail row per part.
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail,
 		       requested_by, created_date, category, modified_date, is_active,
 		       attachment_count, po_line_count,
-		       CAST(CASE WHEN reorder_min IS NOT NULL AND stock_on_hand < reorder_min THEN 1 ELSE 0 END AS BIT)
-		FROM %s ORDER BY part_number
-	`, h.cfg.PartsTable()))
+		       CAST(CASE WHEN reorder_min IS NOT NULL AND stock_on_hand < reorder_min THEN 1 ELSE 0 END AS BIT),
+		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = %s AND a.category = @p1)
+		FROM %s p ORDER BY part_number
+	`, h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true), h.cfg.PartsTable()), thumbnailCategory)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -173,13 +180,16 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 	out := make([]row, 0)
 	for rows.Next() {
 		var p row
-		var pn, rev, title, detail, reqBy, cat sql.NullString
+		var pn, rev, title, detail, reqBy, cat, thumbFile sql.NullString
 		var date, modified sql.NullTime
 		var active sql.NullBool
 		var attach, poLines sql.NullInt64
-		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines, &p.BelowMin); err != nil {
+		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines, &p.BelowMin, &thumbFile); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if urlutil.IsLocalFile(thumbFile.String) {
+			p.Thumb = urlutil.LocalFileURL(thumbFile.String, "/local/")
 		}
 		p.PN = pn.String
 		p.Active = !active.Valid || active.Bool
@@ -335,8 +345,11 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 				if att.ID != p.PrimaryAttachmentID && len(topAtts) < 5 {
 					topAtts = append(topAtts, att)
 				}
+				// The generated "Thumbnail" (#696) is purpose-built for the /parts
+				// hover tooltip; its larger "PDF Preview" sibling represents the PDF
+				// in the Photos card, so keep the tiny thumbnail out of it.
 				if urlutil.IsLocalFile(att.FileName) && !urlutil.IsLocalDir(att.FileName) &&
-					urlutil.IsImage(urlutil.FileBaseName(att.FileName)) {
+					urlutil.IsImage(urlutil.FileBaseName(att.FileName)) && att.Category != thumbnailCategory {
 					photoAtts = append(photoAtts, att)
 				}
 			}
@@ -1505,6 +1518,13 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 			}
 		}
 	}
+	var hasThumbnail bool
+	for i := range atts {
+		if atts[i].Category == thumbnailCategory {
+			hasThumbnail = true
+			break
+		}
+	}
 	cats := splitCSV(h.appConfigGetOr(r.Context(), "attachment_categories", ""))
 	data := map[string]any{
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
@@ -1513,6 +1533,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		"CSRFToken":            h.csrfToken(w, r),
 		"AttachmentCategories": cats,
 		"DocControlConfigured": h.cfg.DocControlRoot != "",
+		"HasThumbnail":         hasThumbnail,
 		"TestMode":             h.cfg.TestMode,
 		"NextOrderID":          nextOrderID,
 	}

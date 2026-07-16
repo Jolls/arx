@@ -171,7 +171,9 @@ function escHtml(s) {
 // One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
 const ROW_BUILDERS = {
     '/api/parts/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
-        <td data-col="col-pn"><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum">Below Min</span>' : ''}</td>
+        <td data-col="col-pn">${r.thumb
+            ? `<span class="pn-thumb" data-thumb="${escHtml(r.thumb)}"><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a></span>`
+            : `<a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>`}${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum">Below Min</span>' : ''}</td>
         <td data-col="col-rev">${escHtml(r.rev)}</td>
         <td data-col="col-title">${escHtml(r.title)}</td>
         <td data-col="col-detail">${escHtml(r.detail)}</td>
@@ -742,3 +744,39 @@ function collapseAllBOM() {
         btn.innerHTML = '&#9656;'
     })
 }
+
+// Hover preview for the /parts part-number thumbnail (#696). The parts table cells
+// use overflow:hidden and the wrapper scrolls, which clip an in-cell tooltip — so
+// this uses a single position:fixed element appended to <body> that escapes the
+// clipping, positioned by JS relative to the hovered part number. Only activates
+// for .pn-thumb elements, so it's inert on pages without them.
+(function () {
+    var tip, tipImg
+    function ensureTip() {
+        if (tip) return
+        tip = document.createElement('div')
+        tip.className = 'pn-thumb-tip hover-preview-box'
+        tipImg = document.createElement('img')
+        tipImg.alt = 'preview'
+        tip.appendChild(tipImg)
+        document.body.appendChild(tip)
+    }
+    document.addEventListener('mouseover', function (e) {
+        var wrap = e.target.closest ? e.target.closest('.pn-thumb') : null
+        if (!wrap) return
+        ensureTip()
+        if (tipImg.getAttribute('src') !== wrap.dataset.thumb) { tipImg.setAttribute('src', wrap.dataset.thumb) }
+        var r = wrap.getBoundingClientRect()
+        var above = r.top > 260
+        tip.style.left = r.left + 'px'
+        tip.style.top = (above ? r.top - 8 : r.bottom + 8) + 'px'
+        tip.style.transform = above ? 'translateY(-100%)' : 'none'
+        tip.classList.add('show')
+    })
+    document.addEventListener('mouseout', function (e) {
+        var wrap = e.target.closest ? e.target.closest('.pn-thumb') : null
+        if (!wrap) return
+        if (e.relatedTarget && wrap.contains(e.relatedTarget)) return
+        if (tip) tip.classList.remove('show')
+    })
+})()

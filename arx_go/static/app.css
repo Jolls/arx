@@ -332,6 +332,17 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 /* Formula-computed result inputs */
 input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; cursor: default; }
 
+/* Shared visual box for hover-preview tooltips (background/border/shadow only —
+   positioning is per-mechanism, see .img-hover-preview and .pn-thumb-tip below). */
+.hover-preview-box {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    pointer-events: none;
+}
+
 /* Image hover preview */
 .img-hover-wrap { position: relative; display: inline-block; }
 .img-hover-preview {
@@ -350,6 +361,18 @@ input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; c
 }
 .img-hover-preview img { display: block; max-width: 480px; max-height: 480px; }
 .img-hover-wrap:hover .img-hover-preview { display: block; }
+
+/* /parts part-number thumbnail hover preview (#696). position:fixed so it escapes
+   the parts table's overflow:hidden cells / scrolling wrapper; positioned by JS.
+   Box appearance comes from .hover-preview-box (shared with .img-hover-preview
+   above), applied via JS since this element is created dynamically. */
+.pn-thumb-tip {
+    display: none;
+    position: fixed;
+    z-index: 1080;
+}
+.pn-thumb-tip.show { display: block; }
+.pn-thumb-tip img { display: block; max-width: 250px; max-height: 250px; }
 
 /* Photo attachment thumbnail grid (part detail page) */
 .photo-thumb-grid .photo-thumb-img {
