@@ -1,0 +1,48 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
+        <li class="breadcrumb-item active">All Lots</li>
+    </ol>
+</nav>
+<div class="content">
+    <p class="text-muted small mb-3">
+        Every lot across all lot-controlled parts, newest first. Open a lot to trace its
+        genealogy back to raw vendor lots and forward to the assemblies it fed.
+    </p>
+
+    {{if .Lots}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm">
+            <thead>
+                <tr class="table-dark">
+                    <th class="sortable" onclick="sortTable(this)">Lot Number</th>
+                    <th class="sortable" onclick="sortTable(this)">Vendor Lot</th>
+                    <th class="sortable" onclick="sortTable(this)">Lot Description</th>
+                    <th class="sortable" onclick="sortTable(this)">Part Number</th>
+                    <th class="sortable" onclick="sortTable(this)">Part Description</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:120px;">Created</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:80px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Lots}}
+                <tr>
+                    <td><a href="/part/{{.PartID}}/lots/{{.ID}}">{{.LotNumber}}</a></td>
+                    <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{if .LotDescription}}{{.LotDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
+                    <td>{{if .PartTitle}}{{.PartTitle}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+                    <td>{{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Inactive</span>{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Lots}} lot{{if ne (len .Lots) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No lots yet.</p>
+    {{end}}
+</div>
+{{end}}
