@@ -12,9 +12,12 @@
     {{/* ── Lot header ─────────────────────────────────────────── */}}
     <div class="card mb-3">
         <div class="card-body">
-            <h5 class="card-title mb-2">
-                Lot {{.Lot.LotNumber}}
-                {{if .Lot.IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Inactive</span>{{end}}
+            <h5 class="card-title mb-2 d-flex justify-content-between align-items-center">
+                <span>
+                    Lot {{.Lot.LotNumber}}
+                    {{if .Lot.IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Inactive</span>{{end}}
+                </span>
+                <a href="/part/{{.Lot.PartID}}/lots/{{.Lot.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
             </h5>
             <dl class="row mb-0 small">
                 <dt class="col-sm-2">Part</dt>

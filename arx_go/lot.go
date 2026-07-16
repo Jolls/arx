@@ -324,3 +324,98 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
 }
+
+// LotEdit — GET /part/{id}/lots/{lotID}/edit. Form to edit a lot's Lot
+// Description and Vendor Lot (#701) — the only two free-text fields set at
+// creation that are safe to revise after the fact.
+func (h *Handler) LotEdit(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "lots")
+	if !ok {
+		return
+	}
+	lotID, err := strconv.Atoi(chi.URLParam(r, "lotID"))
+	if err != nil {
+		h.renderError(w, r, "Invalid lot id")
+		return
+	}
+	lot, found, err := h.fetchLotRow(r.Context(), lotID)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving lot: "+err.Error())
+		return
+	}
+	if !found || lot.PartID != p.ID {
+		h.renderError(w, r, "Lot not found for this part")
+		return
+	}
+	h.render(w, r, "parts/part_lot_edit.html", map[string]any{
+		"Part": p, "Lot": lot,
+		"ActiveTab": "parts", "ActiveSubTab": "lots",
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r),
+	})
+}
+
+// LotUpdate — POST /part/{id}/lots/{lotID}. Saves Lot Description and Vendor
+// Lot; every other lot field is read-only (#701).
+func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, ok := h.requireTab(w, r, id, "lots")
+	if !ok {
+		return
+	}
+	lotID, err := strconv.Atoi(chi.URLParam(r, "lotID"))
+	if err != nil {
+		h.renderError(w, r, "Invalid lot id")
+		return
+	}
+	lot, found, err := h.fetchLotRow(r.Context(), lotID)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving lot: "+err.Error())
+		return
+	}
+	if !found || lot.PartID != p.ID {
+		h.renderError(w, r, "Lot not found for this part")
+		return
+	}
+	description := fv(r, "lot_description")
+	vendorLot := fv(r, "vendor_lot")
+	_, err = h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET lot_description = @p1, vendor_lot_number = @p2 WHERE id = @p3 AND part_id = @p4`,
+		h.cfg.LotTable()), description, nullableText(vendorLot), lotID, p.ID)
+	if err != nil {
+		h.renderError(w, r, "Error saving lot: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/lots/%d", id, lotID), http.StatusFound)
+}
+
+// ── All lots (#701) ──────────────────────────────────────────────────────────
+
+// AllLots — GET /lots. Cross-part list of every lot, newest first, for
+// browsing without drilling into a specific part first.
+func (h *Handler) AllLots(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queryContext(r.Context(), h.lotRowSelect()+
+		`ORDER BY l.created_at DESC, l.id DESC`)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving lots: "+err.Error())
+		return
+	}
+	defer rows.Close()
+	var lots []LotRow
+	for rows.Next() {
+		lr, err := scanLotRow(rows)
+		if err != nil {
+			h.renderError(w, r, "Error retrieving lots: "+err.Error())
+			return
+		}
+		lots = append(lots, lr)
+	}
+	if err := rows.Err(); err != nil {
+		h.renderError(w, r, "Error retrieving lots: "+err.Error())
+		return
+	}
+	h.render(w, r, "parts/all_lots.html", map[string]any{
+		"Lots": lots, "ActiveTab": "parts", "TestMode": h.cfg.TestMode,
+	})
+}
