@@ -1553,6 +1553,11 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	rev, category := fv(r, "FILPNRev"), fv(r, "category")
 	comment := fv(r, "comment")
+	if isGeneratedCategory(category) {
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": fmt.Sprintf(
+			"Category %q is reserved for generated PDF thumbnails; please choose a different category.", category)})
+		return
+	}
 
 	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, "")
 	if in.ErrMsg != "" {
@@ -1595,11 +1600,19 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	rev, category := fv(r, "FILPNRev"), fv(r, "category")
 	comment := fv(r, "comment")
 
-	var oldFileNameNS sql.NullString
+	var oldFileNameNS, oldCategoryNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(),
-	), attIDInt, id).Scan(&oldFileNameNS); err != nil {
+		`SELECT file_name, category FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(),
+	), attIDInt, id).Scan(&oldFileNameNS, &oldCategoryNS); err != nil {
 		h.renderError(w, r, "Error loading attachment: "+err.Error())
+		return
+	}
+	// Only reject when the category is actually changing into a reserved value —
+	// re-saving a row that's already the generated one (e.g. editing its comment)
+	// must keep working, since that's not a new collision.
+	if isGeneratedCategory(category) && category != oldCategoryNS.String {
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": fmt.Sprintf(
+			"Category %q is reserved for generated PDF thumbnails; please choose a different category.", category)})
 		return
 	}
 	oldFileName := oldFileNameNS.String

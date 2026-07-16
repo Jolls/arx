@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 
@@ -380,6 +383,177 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 	}
 
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// Categories for the images generated from a PDF's first page (#696). Both are
+// distinct from user-pasted "Photo" rows so regeneration can find and replace
+// exactly these rows. previewCategory (large) surfaces in the part's Photos card;
+// thumbnailCategory (small) drives the /parts part-number hover tooltip and is
+// kept out of the Photos card.
+const (
+	previewCategory   = "PDF Preview"
+	thumbnailCategory = "Thumbnail"
+)
+
+// isGeneratedCategory reports whether category is reserved for PDF-thumbnail
+// generation (#696). The category field is otherwise free text (users can type
+// any value via the Add/Edit Attachment form's custom-category option), so
+// PartAttachmentCreate/PartAttachmentUpdate reject these two values on user
+// submissions — otherwise a user's own attachment could later be silently
+// overwritten and its file deleted the next time someone clicks "Generate
+// Thumbnail" on an unrelated PDF for the same part, since upsertGeneratedAttachment
+// finds its target by (part_id, category) alone.
+func isGeneratedCategory(category string) bool {
+	return category == previewCategory || category == thumbnailCategory
+}
+
+// generateThumbnailLocks serialises concurrent "Generate Thumbnail" requests for
+// the same part (e.g. a double-click, or two requests racing) so the find-or-create
+// logic in upsertGeneratedAttachment never runs twice in parallel for one part and
+// can't create duplicate PDF Preview/Thumbnail rows.
+var (
+	generateThumbnailLocksMu sync.Mutex
+	generateThumbnailLocks   = map[string]*sync.Mutex{}
+)
+
+func lockPartForThumbnail(partID string) func() {
+	generateThumbnailLocksMu.Lock()
+	mu, ok := generateThumbnailLocks[partID]
+	if !ok {
+		mu = &sync.Mutex{}
+		generateThumbnailLocks[partID] = mu
+	}
+	generateThumbnailLocksMu.Unlock()
+	mu.Lock()
+	return mu.Unlock
+}
+
+// APIPartGenerateThumbnail renders page 1 of a local PDF attachment into two
+// images — a large "PDF Preview" (which surfaces in the part's Photos card) and a
+// small "Thumbnail" (which drives the /parts hover tooltip) — each stored as its
+// own part_attachment row. Re-running edits those rows in place rather than
+// creating duplicates. POST /api/part/{id}/attachments/{attID}/generate-thumbnail.
+func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	attID, err := strconv.Atoi(chi.URLParam(r, "attID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid attachment id")
+		return
+	}
+	if h.cfg.DocControlRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "DOC_CONTROL_ROOT is not configured; cannot generate thumbnails.")
+		return
+	}
+
+	var fileNameNS, revNS sql.NullString
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT file_name, part_revision FROM %s WHERE id=@p1 AND part_id=@p2 AND is_active=%s`,
+		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true),
+	), attID, id).Scan(&fileNameNS, &revNS); err != nil {
+		if err == sql.ErrNoRows {
+			writeJSONError(w, http.StatusNotFound, "Attachment not found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "Error loading attachment: "+err.Error())
+		return
+	}
+	srcFile := fileNameNS.String
+	rev := revNS.String
+	if !urlutil.IsLocalFile(srcFile) || urlutil.IsLocalDir(srcFile) || !urlutil.IsPDF(urlutil.FileBaseName(srcFile)) {
+		writeJSONError(w, http.StatusBadRequest, "Thumbnails can only be generated from a local PDF attachment.")
+		return
+	}
+
+	path, ok := safePath(h.cfg.DocControlRoot, urlutil.LocalFileURL(srcFile, ""))
+	if !ok {
+		writeJSONError(w, http.StatusBadRequest, "Invalid attachment path.")
+		return
+	}
+	pdfBytes, err := os.ReadFile(path)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error reading PDF: "+err.Error())
+		return
+	}
+
+	page, err := renderPDFFirstPage(pdfBytes, 150)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Error rendering PDF: "+err.Error())
+		return
+	}
+
+	p, err := h.fetchPartBasic(r.Context(), id)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "Error loading part: "+err.Error())
+		return
+	}
+
+	unlock := lockPartForThumbnail(id)
+	defer unlock()
+
+	for _, spec := range []struct {
+		category string
+		maxPx    int
+	}{{previewCategory, 800}, {thumbnailCategory, 250}} {
+		data, err := encodePNG(resizeLongEdge(page, spec.maxPx))
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "Error encoding image: "+err.Error())
+			return
+		}
+		name := buildAttachmentFileName(p.PartNumber, rev, p.Title, spec.category, ".png")
+		finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ".png", data)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
+			return
+		}
+		if err := h.upsertGeneratedAttachment(r.Context(), id, rev, spec.category, "LOCAL:"+finalName); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "Error saving attachment: "+err.Error())
+			return
+		}
+	}
+
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// upsertGeneratedAttachment points the part's single active row of the given
+// generated category (PDF Preview / Thumbnail) at newFile: it edits the existing
+// row in place — preserving its id so any primary-attachment pointer stays valid —
+// or inserts one if none exists. Callers must hold lockPartForThumbnail(partID) so
+// the find-or-create check below can't race with another request for the same
+// part. partID is the URL string form used elsewhere in this file.
+func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, category, newFile string) error {
+	var existingID int
+	var oldFileNS sql.NullString
+	err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT id, file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s ORDER BY id`,
+		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true),
+	), partID, category).Scan(&existingID, &oldFileNS)
+	if err == sql.ErrNoRows {
+		_, err = h.execContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (part_id, file_name, part_revision, category) VALUES (@p1,@p2,@p3,@p4)`,
+			h.cfg.AttachmentsTable(),
+		), partID, newFile, rev, category)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := h.execContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET file_name=@p1, part_revision=@p2 WHERE id=@p3`, h.cfg.AttachmentsTable(),
+	), newFile, rev, existingID); err != nil {
+		return err
+	}
+	// The DB row is already correctly repointed at newFile at this point, so a
+	// failure removing the now-superseded old file is a cleanup miss, not a
+	// request failure — matches APIPartPasteAttachmentReplace's soft-warning
+	// treatment of the same failure mode instead of hard-failing the request.
+	oldFile := oldFileNS.String
+	if urlutil.IsLocalFile(oldFile) && oldFile != newFile {
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name",
+			existingID, oldFile, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(oldFile)); err != nil {
+			log.Printf("[thumbnail] part %s: attachment %d updated, but old file %q could not be removed: %v", partID, existingID, oldFile, err)
+		}
+	}
+	return nil
 }
 
 // APIRecordPasteResultImage saves a clipboard-pasted image to disk for a
