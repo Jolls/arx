@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [0.5.131] - 2026-07-16
-### Changed
-- Restyled the All Lots table to match the Parts table (dark sortable headers) and reordered/renamed columns: Lot Number, Vendor Lot, Lot Description, Part Number, Part Description, Created, Status
+### Added
+- Cross-part "All Lots" list at `/lots` for browsing lots without drilling into a part first, styled like the Parts table with sortable headers (Lot Number, Vendor Lot, Lot Description, Part Number, Part Description, Created, Status) ([#701](https://github.com/Jolls/arx-legacy/issues/701))
+- Edit form for a lot's Description and Vendor Lot, reachable from the lot's trace page ([#701](https://github.com/Jolls/arx-legacy/issues/701))
 
 ## [0.5.130] - 2026-07-15
 ### Changed
