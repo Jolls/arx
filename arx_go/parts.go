@@ -221,7 +221,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		active, hasBOM, isLotTracked                  sql.NullBool
 		filIDPrimary, filLinks, poLinks               sql.NullInt64
 		currentCost, lastRollupCost                   sql.NullFloat64
-		stockOnHand, reorderMin                        sql.NullFloat64
+		stockOnHand, reorderMin                       sql.NullFloat64
 		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
@@ -624,7 +624,7 @@ func activeFromStatus(r *http.Request) bool { return fv(r, "release_status") != 
 
 // releaseStatusOrUnderReview coalesces a blank release_status to "U" (Under Review).
 // A part with no explicit status is Under Review — never implicitly active/released.
-// Applied on write (so the DB never receives '') and on read (so legacy/old-binary
+// Applied on write (so the DB never receives ”) and on read (so legacy/old-binary
 // blank rows present as Under Review everywhere) (#542).
 func releaseStatusOrUnderReview(s string) string {
 	if s == "" {
@@ -643,7 +643,7 @@ func partFromForm(r *http.Request) models.Part {
 		UserField1: fv(r, "user_field_1"), UserField2: fv(r, "user_field_2"), UserField3: fv(r, "user_field_3"),
 		UserField4: fv(r, "user_field_4"), UserField5: fv(r, "user_field_5"), UserField6: fv(r, "user_field_6"),
 		UserField7: fv(r, "user_field_7"), UserField8: fv(r, "user_field_8"), UserField9: fv(r, "user_field_9"),
-		UserField10: fv(r, "user_field_10"),
+		UserField10:  fv(r, "user_field_10"),
 		IsLotTracked: fv(r, "is_lot_tracked") == "1",
 	}
 	if v := fv(r, "current_cost"); v != "" {
@@ -1840,7 +1840,7 @@ type pricePoint struct {
 	Cost     float64  `json:"cost"`
 	PO       string   `json:"po"`
 	Supplier string   `json:"supplier"`
-	Source   string   `json:"source"`            // "po" | "price"
+	Source   string   `json:"source"`             // "po" | "price"
 	PackSize *float64 `json:"packSize,omitempty"` // qty-break tier, "price" source only (#612)
 }
 

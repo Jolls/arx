@@ -202,10 +202,10 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "parts/part_build.html", map[string]any{
 		"Part": p, "Builds": builds, "Components": comps, "ShowLotColumn": showLotColumn,
-		"Today": time.Now().Format("2006-01-02"),
-		"BuiltQty": r.URL.Query().Get("built"),
+		"Today":        time.Now().Format("2006-01-02"),
+		"BuiltQty":     r.URL.Query().Get("built"),
 		"ReturnRecord": r.URL.Query().Get("return_record"), // #677: link build back to the test record that launched it
-		"ActiveTab": "parts", "ActiveSubTab": "build",
+		"ActiveTab":    "parts", "ActiveSubTab": "build",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
 }

@@ -21,8 +21,8 @@ func TestPOApprovalNext(t *testing.T) {
 	}
 
 	bad := []struct{ action, from string }{
-		{"submit", "pending"},   // already submitted
-		{"submit", "approved"},  // already approved
+		{"submit", "pending"},  // already submitted
+		{"submit", "approved"}, // already approved
 		{"approve", "not_submitted"},
 		{"approve", "approved"}, // not pending
 		{"approve", "rejected"},
@@ -88,17 +88,17 @@ func TestPOCanTransition(t *testing.T) {
 	}
 
 	disallowed := []struct{ from, to string }{
-		{"rfq", "draft"},                // awarding is a duplicate-to-PO, not a generic transition (#270)
-		{"rfq", "sent"},                 // RFQ can only be declined
-		{"draft", "rfq"},                // nothing transitions into rfq
-		{"draft", "sent"},               // must go through open
-		{"draft", "closed"},             // skips the chain
-		{"open", "partially_received"},  // must be sent first
-		{"closed", "cancelled"},         // closed only reopens to open
-		{"cancelled", "open"},           // cancelled only reopens to draft
-		{"sent", "draft"},               // no backward jump
-		{"draft", "draft"},              // no self-transition
-		{"bogus", "open"},               // unknown source
+		{"rfq", "draft"},               // awarding is a duplicate-to-PO, not a generic transition (#270)
+		{"rfq", "sent"},                // RFQ can only be declined
+		{"draft", "rfq"},               // nothing transitions into rfq
+		{"draft", "sent"},              // must go through open
+		{"draft", "closed"},            // skips the chain
+		{"open", "partially_received"}, // must be sent first
+		{"closed", "cancelled"},        // closed only reopens to open
+		{"cancelled", "open"},          // cancelled only reopens to draft
+		{"sent", "draft"},              // no backward jump
+		{"draft", "draft"},             // no self-transition
+		{"bogus", "open"},              // unknown source
 	}
 	for _, c := range disallowed {
 		if poCanTransition(c.from, c.to) {
@@ -111,10 +111,10 @@ func TestRFQBaseNumber(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"1050R1", "1050"},
 		{"1050R2", "1050"},
-		{"1050R10", "1050"},   // multi-digit suffix
-		{"1050", "1050"},      // no suffix (already a bare PO number)
-		{"1050R", "1050R"},    // 'R' without a number is not a suffix
-		{"12R3R4", "12R3"},    // only the trailing R<n> is stripped
+		{"1050R10", "1050"}, // multi-digit suffix
+		{"1050", "1050"},    // no suffix (already a bare PO number)
+		{"1050R", "1050R"},  // 'R' without a number is not a suffix
+		{"12R3R4", "12R3"},  // only the trailing R<n> is stripped
 		{"", ""},
 	}
 	for _, c := range cases {

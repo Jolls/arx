@@ -539,25 +539,40 @@ func navBack(sess *sessions.Session) (url, label string) {
 
 func pmTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"formatDate":     formatDate,
-		"formatFileSize": formatFileSize,
-		"fileIcon":       urlutil.FileIcon,
-		"isHTTPURL":      urlutil.IsHTTPURL,
-		"isAbsPath":      urlutil.IsAbsPath,
-		"isLocalDir":     urlutil.IsLocalDir,
-		"isLocalFile":    urlutil.IsLocalFile,
+		"formatDate":           formatDate,
+		"formatFileSize":       formatFileSize,
+		"fileIcon":             urlutil.FileIcon,
+		"isHTTPURL":            urlutil.IsHTTPURL,
+		"isAbsPath":            urlutil.IsAbsPath,
+		"isLocalDir":           urlutil.IsLocalDir,
+		"isLocalFile":          urlutil.IsLocalFile,
 		"localFileURL":         func(val string) string { return urlutil.LocalFileURL(val, "/local/") },
 		"localDirURL":          func(val string) string { return urlutil.LocalDirURL(val, "/local-dir/") },
 		"supplierLocalFileURL": func(val string) string { return urlutil.LocalFileURL(val, "/supplier-local/") },
 		"supplierLocalDirURL":  func(val string) string { return urlutil.LocalDirURL(val, "/supplier-local-dir/") },
-		"fileBaseName":   urlutil.FileBaseName,
-		"displayLink":    urlutil.StripLocalPrefix,
-		"attachLabel":    attachLabel,
-		"isPDF":          urlutil.IsPDF,
-		"isImage":        urlutil.IsImage,
-		"deref":          func(f *float64) float64 { if f == nil { return 0 }; return *f },
-		"derefInt":       func(i *int) int { if i == nil { return 0 }; return *i },
-		"packSizeStr":    func(f *float64) string { if f == nil { return "—" }; return fmt.Sprintf("%g", *f) },
+		"fileBaseName":         urlutil.FileBaseName,
+		"displayLink":          urlutil.StripLocalPrefix,
+		"attachLabel":          attachLabel,
+		"isPDF":                urlutil.IsPDF,
+		"isImage":              urlutil.IsImage,
+		"deref": func(f *float64) float64 {
+			if f == nil {
+				return 0
+			}
+			return *f
+		},
+		"derefInt": func(i *int) int {
+			if i == nil {
+				return 0
+			}
+			return *i
+		},
+		"packSizeStr": func(f *float64) string {
+			if f == nil {
+				return "—"
+			}
+			return fmt.Sprintf("%g", *f)
+		},
 		"categoryCtx": func(opts []string, current, inputID string) map[string]any {
 			return map[string]any{"Opts": opts, "Current": current, "InputID": inputID}
 		},
@@ -669,7 +684,6 @@ func attachLabel(filename, category string) string {
 	}
 	return urlutil.FileBaseName(filename)
 }
-
 
 // ── Units of measure ─────────────────────────────────────────────────────────
 

@@ -253,7 +253,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Contacts": nil,
-			"Error": "Error creating supplier: " + err.Error(),
+			"Error":     "Error creating supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})
@@ -291,7 +291,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
-			"Error": "Supplier name is required",
+			"Error":     "Supplier name is required",
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})
@@ -300,7 +300,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := validateFolderStub(fv(r, "SUSupplierCode")); err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
-			"Error": err.Error(),
+			"Error":     err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})
@@ -322,7 +322,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
-			"Error": "Error saving supplier: " + err.Error(),
+			"Error":     "Error saving supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		})

@@ -3,18 +3,18 @@ package models
 import "time"
 
 type Supplier struct {
-	ID                   int
-	Name                 string
-	SUSupplierCode       string
-	SUNotes              string
-	IsActive             bool
-	IsSupplier           bool
-	IsManufacturer       bool
-	DefaultContact       *int
-	DateModified         *time.Time
-	SUNumOfLNKs          int
-	SUNumOfPOs           int
-	PrimaryAttachmentID  *int
+	ID                  int
+	Name                string
+	SUSupplierCode      string
+	SUNotes             string
+	IsActive            bool
+	IsSupplier          bool
+	IsManufacturer      bool
+	DefaultContact      *int
+	DateModified        *time.Time
+	SUNumOfLNKs         int
+	SUNumOfPOs          int
+	PrimaryAttachmentID *int
 	// joined fields (contact)
 	DisplayName string
 	Website     string
@@ -50,14 +50,14 @@ type SupplierPart struct {
 	Revision   string
 	Category   string
 	// joined — supplier + mfg info (part sourcing view)
-	SupplierName    string
-	MfgPartID       *int
-	MfgPartNumber   string
-	MfgName         string
-	UnitID               *int
-	PurchaseUnitAbbr     string // joined from unit table; COALESCE(purchase unit, part base unit)
-	PurchaseUnitIsExplicit bool // true = unit_id set on supplier_part; false = inherited from part_number.unit_id
-	POLinks []string // populated post-query — PO numbers placed with this vendor for the part (supplier parts view)
+	SupplierName           string
+	MfgPartID              *int
+	MfgPartNumber          string
+	MfgName                string
+	UnitID                 *int
+	PurchaseUnitAbbr       string   // joined from unit table; COALESCE(purchase unit, part base unit)
+	PurchaseUnitIsExplicit bool     // true = unit_id set on supplier_part; false = inherited from part_number.unit_id
+	POLinks                []string // populated post-query — PO numbers placed with this vendor for the part (supplier parts view)
 }
 
 type MfgPart struct {

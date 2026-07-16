@@ -29,7 +29,7 @@ func TestIsLocalFile(t *testing.T) {
 		want  bool
 	}{
 		{"LOCAL:foo/bar.pdf", true},
-		{"local:foo/bar.pdf", true},  // case-insensitive
+		{"local:foo/bar.pdf", true}, // case-insensitive
 		{"LOCAL:foo\\bar\\", true},
 		{"https://example.com", false},
 		{"", false},
@@ -48,7 +48,7 @@ func TestIsLocalDir(t *testing.T) {
 	}{
 		{"LOCAL:foo/bar/", true},
 		{"LOCAL:foo\\bar\\", true},
-		{"LOCAL:foo/bar.pdf", false},  // no trailing slash
+		{"LOCAL:foo/bar.pdf", false}, // no trailing slash
 		{"https://example.com/", false},
 		{"", false},
 	}
@@ -66,7 +66,7 @@ func TestLocalFileURL(t *testing.T) {
 		{"LOCAL:foo\\bar.pdf", "/local/", "/local/foo/bar.pdf"},
 		{"LOCAL:foo/bar.pdf", "/local/", "/local/foo/bar.pdf"},
 		{"LOCAL:bar.pdf", "/local/", "/local/bar.pdf"},
-		{"LOCAL:/bar.pdf", "/local/", "/local/bar.pdf"},  // leading slash stripped
+		{"LOCAL:/bar.pdf", "/local/", "/local/bar.pdf"}, // leading slash stripped
 	}
 	for _, c := range cases {
 		if got := LocalFileURL(c.val, c.prefix); got != c.want {
@@ -97,9 +97,9 @@ func TestFileBaseName(t *testing.T) {
 		{"foo\\bar\\baz.pdf", "baz.pdf"},
 		{"foo/bar/baz.pdf", "baz.pdf"},
 		{"baz.pdf", "baz.pdf"},
-		{"LOCAL:baz.pdf", "baz.pdf"},          // no subdir — prefix stripped
-		{"LOCAL:foo\\baz.pdf", "baz.pdf"},     // subdir + prefix
-		{"local:baz.pdf", "baz.pdf"},          // case-insensitive prefix
+		{"LOCAL:baz.pdf", "baz.pdf"},      // no subdir — prefix stripped
+		{"LOCAL:foo\\baz.pdf", "baz.pdf"}, // subdir + prefix
+		{"local:baz.pdf", "baz.pdf"},      // case-insensitive prefix
 	}
 	for _, c := range cases {
 		if got := FileBaseName(c.input); got != c.want {
@@ -113,7 +113,7 @@ func TestFileIcon(t *testing.T) {
 		input, want string
 	}{
 		{"doc.pdf", "bi-file-pdf text-danger"},
-		{"DOC.PDF", "bi-file-pdf text-danger"},  // case-insensitive
+		{"DOC.PDF", "bi-file-pdf text-danger"}, // case-insensitive
 		{"report.doc", "bi-file-word text-primary"},
 		{"report.docx", "bi-file-word text-primary"},
 		{"data.xls", "bi-file-excel text-success"},
@@ -172,8 +172,8 @@ func TestSafePathSegments(t *testing.T) {
 		want  []string
 	}{
 		{"foo/bar/baz.pdf", []string{"foo", "bar", "baz.pdf"}},
-		{"foo//bar", []string{"foo", "bar"}},         // empty segments dropped
-		{"../../../etc/passwd", []string{"etc", "passwd"}},  // traversal blocked — .. dropped, remaining segments kept
+		{"foo//bar", []string{"foo", "bar"}},               // empty segments dropped
+		{"../../../etc/passwd", []string{"etc", "passwd"}}, // traversal blocked — .. dropped, remaining segments kept
 		{"foo/../bar", []string{"foo", "bar"}},
 		{"", []string{}},
 	}

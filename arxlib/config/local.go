@@ -65,16 +65,16 @@ func SaveLocal(lc *LocalConfig) error {
 // PM fields win for shared values (they carry the DB password).
 func migrateLegacy() *LocalConfig {
 	type legacyPM struct {
-		DBServer            string `json:"db_server"`
-		DBName              string `json:"db_name"`
-		DBUser              string `json:"db_user"`
-		DBPassword          string `json:"db_password"`
-		DocControlRoot      string `json:"doc_control_root"`
-		POFolderRoot        string `json:"po_folder_root"`
-		SupplierFilesRoot   string `json:"supplier_files_root"`
-		DebugMode           bool   `json:"debug_mode"`
-		TestMode            *bool  `json:"test_mode,omitempty"`
-		TestDBName          string `json:"test_db_name,omitempty"`
+		DBServer          string `json:"db_server"`
+		DBName            string `json:"db_name"`
+		DBUser            string `json:"db_user"`
+		DBPassword        string `json:"db_password"`
+		DocControlRoot    string `json:"doc_control_root"`
+		POFolderRoot      string `json:"po_folder_root"`
+		SupplierFilesRoot string `json:"supplier_files_root"`
+		DebugMode         bool   `json:"debug_mode"`
+		TestMode          *bool  `json:"test_mode,omitempty"`
+		TestDBName        string `json:"test_db_name,omitempty"`
 	}
 	type legacyTR struct {
 		DBServer       string `json:"db_server"`
@@ -107,17 +107,17 @@ func migrateLegacy() *LocalConfig {
 	}
 
 	lc := &LocalConfig{
-		DBServer:            pm.DBServer,
-		DBName:              pm.DBName,
-		DBUser:              pm.DBUser,
-		DBPassword:          pm.DBPassword,
-		DocControlRoot:      pm.DocControlRoot,
-		POFolderRoot:        pm.POFolderRoot,
-		SupplierFilesRoot:   pm.SupplierFilesRoot,
-		ImageRoot:           tr.ImageRoot,
-		DebugMode:           pm.DebugMode,
-		TestMode:            pm.TestMode,
-		TestDBName:          pm.TestDBName,
+		DBServer:          pm.DBServer,
+		DBName:            pm.DBName,
+		DBUser:            pm.DBUser,
+		DBPassword:        pm.DBPassword,
+		DocControlRoot:    pm.DocControlRoot,
+		POFolderRoot:      pm.POFolderRoot,
+		SupplierFilesRoot: pm.SupplierFilesRoot,
+		ImageRoot:         tr.ImageRoot,
+		DebugMode:         pm.DebugMode,
+		TestMode:          pm.TestMode,
+		TestDBName:        pm.TestDBName,
 	}
 	if lc.DBServer == "" {
 		lc.DBServer = tr.DBServer

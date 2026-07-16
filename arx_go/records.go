@@ -214,9 +214,9 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderTR(w, r, "index.html", map[string]any{
-		"Forms":    forms,
+		"Forms":     forms,
 		"ActiveTab": "records",
-		"TestMode": h.cfg.TestMode,
+		"TestMode":  h.cfg.TestMode,
 	})
 }
 
@@ -389,11 +389,11 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		var s models.TestStep
 		var archiveID, revision sql.NullInt32
 		var (
-			param, spec, defaultResult, hideFormula     sql.NullString
-			specMin, specMax, pfType                    sql.NullString
-			category, sheetName, specUnits, specNom     sql.NullString
-			instrumentTypes, format                     sql.NullString
-			stepComment                                 sql.NullString
+			param, spec, defaultResult, hideFormula sql.NullString
+			specMin, specMax, pfType                sql.NullString
+			category, sheetName, specUnits, specNom sql.NullString
+			instrumentTypes, format                 sql.NullString
+			stepComment                             sql.NullString
 		)
 		if err := stepRows.Scan(
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
@@ -801,21 +801,21 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 
 	// Parse and INSERT new rows submitted via new_row[IDX][field] inputs.
 	type newRowData struct {
-		Type             string
-		Parameter        string
-		Specification    string
-		SpecNom          string
-		SpecMin          string
-		SpecMax          string
-		SpecUnits        string
-		PFType           string
-		DefaultResult    string
-		Hide             string
-		Category         string
-		SheetName        string
-		InstrumentTypes  string
-		Format           string
-		Comment          string
+		Type            string
+		Parameter       string
+		Specification   string
+		SpecNom         string
+		SpecMin         string
+		SpecMax         string
+		SpecUnits       string
+		PFType          string
+		DefaultResult   string
+		Hide            string
+		Category        string
+		SheetName       string
+		InstrumentTypes string
+		Format          string
+		Comment         string
 	}
 	parsedNewRows := map[string]newRowData{}
 	for key, vals := range r.Form {
@@ -835,21 +835,36 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 		row := parsedNewRows[idx]
 		switch field {
-		case "type":              row.Type = val
-		case "parameter":         row.Parameter = val
-		case "specification":     row.Specification = val
-		case "spec_nom":          row.SpecNom = val
-		case "spec_min":          row.SpecMin = val
-		case "spec_max":          row.SpecMax = val
-		case "spec_units":        row.SpecUnits = val
-		case "pf_type":           row.PFType = val
-		case "default_result":    row.DefaultResult = val
-		case "hide":              row.Hide = val
-		case "category":          row.Category = val
-		case "sheet_name":        row.SheetName = val
-		case "instrument_types":  row.InstrumentTypes = val
-		case "format":            row.Format = val
-		case "comment":           row.Comment = val
+		case "type":
+			row.Type = val
+		case "parameter":
+			row.Parameter = val
+		case "specification":
+			row.Specification = val
+		case "spec_nom":
+			row.SpecNom = val
+		case "spec_min":
+			row.SpecMin = val
+		case "spec_max":
+			row.SpecMax = val
+		case "spec_units":
+			row.SpecUnits = val
+		case "pf_type":
+			row.PFType = val
+		case "default_result":
+			row.DefaultResult = val
+		case "hide":
+			row.Hide = val
+		case "category":
+			row.Category = val
+		case "sheet_name":
+			row.SheetName = val
+		case "instrument_types":
+			row.InstrumentTypes = val
+		case "format":
+			row.Format = val
+		case "comment":
+			row.Comment = val
 		}
 		parsedNewRows[idx] = row
 	}
