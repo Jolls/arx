@@ -1,10 +1,8 @@
 # Traceability Data Model — Part → Lot → Unit
 
-**Status:** DRAFT / not frozen. Nothing here is committed until the §9 freeze checklist is checked
-and an epic issue is filed. Sub-issues are carved **after** freeze, from the migration path (§5),
-not from the target schema.
+**Status:** FROZEN. Epic and sub-issues filed; see §9.
 
-**Epic issue:** _TBD_ (file once frozen; rename this doc to `<epic#>-traceability-data-model.md`).
+**Epic issue:** [#736](https://github.com/Jolls/arx-legacy/issues/736).
 
 **Supersedes:** the `trace_id` / `is_batch` issue set — #702 (parent thread), #713
 (serial_number→trace_id), #714 (is_batch + compound trace_id), #715 (build detail view), #716
@@ -293,6 +291,18 @@ Adoption order — renames first, in isolation:
 Throughout, honor the Q4 constraint: don't strand the revision-control snapshot columns or the
 `form_row_history` trigger — leave real change control (v0.9) easy to add later.
 
+**Prod application gate — release independently, don't bundle features.** Each slice's migration
+is applied to ArxProd **when that slice's PR ships as its own release** (schema + the matching Go
+code in lockstep), **without needing to wait for or bundle in unrelated new-feature work** from a
+later slice. Under this gate, column/table renames (slices 1–2) qualify — the migration and the
+renamed-column-aware code release together, so there's no old-code-vs-new-schema mismatch to worry
+about. New tables (e.g. slice 3's `unit`) qualify too — additive and inert until later slices use
+them. What does **not** qualify is a slice whose migration would only be safe to ship alongside
+functionality from a later, not-yet-built slice (e.g. schema that's only meaningful once slice 8's
+behavior lands) — that migration is carried forward and batched into the release that actually
+ships the dependent behavior. Assess each slice's PR against this gate at merge time; don't
+presume dependency order alone settles it.
+
 ## 6. Design decisions (resolved)
 
 Each decision has a stable ID (`Qn`) referenced inline throughout; the rationale lives only here.
@@ -385,40 +395,51 @@ Each decision has a stable ID (`Qn`) referenced inline throughout; the rationale
   beneath any output — the per-serial "birth certificate." Widened from today's `lot_genealogy`
   (lot→lot only); existing lot→lot rows stay valid (unit columns NULL) through the guarded migration.
 
-## 7. Sub-issue carving (DRAFT — finalize after freeze)
+## 7. Sub-issue carving
 
-Carved from the migration path (§5), one shippable guarded-migration slice each, dependency order:
+Filed as [#737](https://github.com/Jolls/arx-legacy/issues/737)–[#747](https://github.com/Jolls/arx-legacy/issues/747)
+under epic [#736](https://github.com/Jolls/arx-legacy/issues/736), matching the numbering below (0→#737 … 10→#747).
 
-0. **Expand seed data → migration testbed (PRE any code change).** Before the rename wave, grow
-   `SQL/seed_test_data.sql` into a representative PRE-state dataset so the big rename/reshape
-   migration can be dry-run PRE→POST and verified end-to-end. TODO: assess whether the current seed
-   is already large enough (its own design pass).
-1. **Rename wave** — `test_record`→`form_record`, `test_result`→`result`, `test_definition`→`form_row`,
-   UoM `unit`→`uom` (absorbs
-   #712). Pure renames, isolated, tested standalone. Front of the epic; may be one PR or split
-   (TR-rename vs UoM-rename) since they're independent.
-2. **`unit` table** (DDL both dialects, seed, `*Table()` helper, SCHEMA.md, migration) — keystone.
-   Lazy one-at-a-time creation at test time (Q5), independent of inventory (Q2).
-3. **`genealogy` table** — widen `lot_genealogy` (add `parent_unit_id`/`child_unit_id`, the
-   exactly-one-parent/child CHECK; Q11); builds write one edge per consumed lot or unit.
-4. **`form_record.unit_id`** — nullable FK (Q8; no join table). Also promote
-   `form_record.part_number_id` → real FK during the reshape (§4.4).
-5. **`tracking_mode`** on part (migrate `is_lot_tracked` values).
-6. **Enum formalization** (`lot.source`, `form.form_type`, `form_row.granularity`).
-   Promote `form.part_number_id` → real FK while in `form` DDL (§4.4).
-7. **Create/render logic** — derive batch-vs-unit from structure; completeness "N of build.qty"
-   (Q6); retest = a unit-testing form_record pointing at the same unit.
-8. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes). Walks the
-   single `genealogy` edge table to render the as-built lot+unit tree beneath any output.
-9. _(optional)_ embedded build-at-test-time UX (re-scoped #716) — highest risk, last.
+Carved from the migration path (§5), dependency order. **One PR per slice, in order.** Each PR
+merges to `main` green (build/vet/test, live ArxDev integration, migration applied), carries **one
+guarded migration** (needn't be designed up front — just exist and be guarded), and **updates the
+seed** to cover its new cases. Additive-first; renames are atomic within their PR; behavior (slice 8)
+lands late and alone. Slices 0, 8, 9 are the exceptions to "one migration" — seed-only or pure-code.
+
+0. **Expand seed data → migration testbed (PRE any code change).** Grow `SQL/seed_test_data.sql`
+   into a representative PRE-state dataset so every later reshape can be dry-run PRE→POST end-to-end.
+   Seed-only, no migration. TODO: assess whether the current seed is already large enough (its own
+   design pass).
+1. **Rename: test-record family** — `test_record`→`form_record`, `test_result`→`result`,
+   `test_definition`→`form_row` (+ `_history`, `test_id`→`form_row_id`), across DDL/Go/templates/seed.
+   Pure `sp_rename`s, atomic.
+2. **Rename: UoM `unit`→`uom`** (+ `part.unit_id`/`supplier_part.unit_id`→`uom_id`; absorbs #712).
+   Independent of slice 1, atomic — frees the `unit` name (§3).
+3. **`unit` table** (DDL both dialects, `*Table()` helper, SCHEMA.md) — keystone. Additive/unused
+   until slice 8. Lazy one-at-a-time creation at test time (Q5), independent of inventory (Q2).
+4. **`genealogy` table** — widen `lot_genealogy` (add `parent_unit_id`/`child_unit_id`, the
+   exactly-one-parent/child CHECK; Q11). Additive; existing lot→lot rows stay valid.
+5. **`form_record.unit_id`** — nullable FK (Q8; no join table). Also promote
+   `form_record.part_number_id` → real FK during the reshape (§4.4). Additive.
+6. **`tracking_mode`** on part — add column + backfill from `is_lot_tracked` (`0→none`,`1→lot`).
+   Additive only: `is_lot_tracked` stays and keeps driving reads; the read-swap happens in slice 8.
+7. **Enum formalization** (`lot.source`, `form.form_type`, `form_row.granularity` VARCHAR+CHECK).
+   Promote `form.part_number_id` → real FK while in `form` DDL (§4.4). Additive.
+8. **Create/render logic** — derive batch-vs-unit from structure; read `tracking_mode`; completeness
+   "N of build.qty" (Q6); retest = a unit-testing form_record on the same unit. Pure code, no
+   migration; the only user-visible-behavior PR — lands alone so a regression bisects here.
+9. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes). Walks the
+   single `genealogy` edge table to render the as-built lot+unit tree beneath any output. Migration =
+   indexes only.
+10. _(optional)_ embedded build-at-test-time UX (re-scoped #716) — pure code, highest risk, last.
 
 ## 8. Stays outside the epic
 
 - **#717** — `serial_number_pn` / `_pn_desc` → `subject_part_number` / `subject_pn_description`, kept
   on `form_record` (see §4.3). Independent of the traceability core; can land anytime, but the
-  rename fits naturally in the step-1 rename wave.
-- **#712** — **absorbed into the epic.** It's the UoM `unit`→`uom` half of the step-1 rename wave
-  (§3), not an outside cleanup. Close/relabel it accordingly when the epic is filed.
+  rename fits naturally in slice 1.
+- **#712** — **absorbed into the epic.** It's the UoM `unit`→`uom` rename, slice 2 (§3), not an
+  outside cleanup. Close/relabel it accordingly when the epic is filed.
 
 ## 9. Freeze checklist
 
@@ -426,5 +447,6 @@ Carved from the migration path (§5), one shippable guarded-migration slice each
 - [x] `unit.serial_number` = string, UNIQUE per `part_id`; `tracking_mode` migration maps
       `is_lot_tracked` `0→none`, `1→lot` (`serial`/`lot_serial` set per-part afterward; existing
       data implies neither).
-- [ ] Migration slices (§7) each map to exactly one guarded migration.
-- [ ] Epic issue filed; this doc renamed with its number; superseded #702 set closed.
+- [x] Migration slices (§7) each map to exactly one guarded migration.
+- [x] Epic issue filed; this doc renamed with its number; superseded #702 set closed.
+
