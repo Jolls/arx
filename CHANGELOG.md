@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Removed
+- Hid the test-record lot/build linkage UI (lot/build pickers on the record editor, lot/build display rows on the record view) — the feature isn't finished for 0.6.0; the `lot_id`/`build_id` columns and data are untouched, and the completion gate requiring a lot on lot-tracked records is disabled since there's no picker to satisfy it. Deferred to v0.7.0's Lot & Serial epic ([#677](https://github.com/Jolls/arx-legacy/issues/677), [#687](https://github.com/Jolls/arx-legacy/issues/687))
 
 ## [0.5.131] - 2026-07-16
 ### Added

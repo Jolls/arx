@@ -112,6 +112,8 @@
         <td>{{.Record.InstrumentType}}</td>
       </tr>
       {{end}}
+      {{/* #677/#687 — Lot/build display hidden for 0.6.0 (unfinished, deferred to v0.7.0
+           #702). See docs/plans/677-hide-testrecord-lot-linkage.md
       {{if .Trace}}
       {{if .Trace.LinkedLot}}
       <tr>
@@ -126,6 +128,7 @@
       </tr>
       {{end}}
       {{end}}
+      */}}
     </table>
   </div>
   <div class="dropdown" data-col-table="results-table">

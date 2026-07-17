@@ -59,8 +59,8 @@
     </div>
   </div>
 
-  {{/* #677 — Lot/build traceability. These save with the record via the main Save
-       button (no separate submit). "Build this unit" is a navigation link. */}}
+  {{/* #677/#687 — Lot/build traceability UI hidden for 0.6.0 (unfinished, deferred to
+       v0.7.0 #702). Data model (lot_id/build_id columns) untouched; see docs/plans/677-hide-testrecord-lot-linkage.md
   {{if .Trace}}
   {{if or .Trace.IsLotTracked .Trace.Builds .Trace.Buildable}}
   <div class="row mb-3 g-2 align-items-end">
@@ -97,6 +97,7 @@
   </div>
   {{end}}
   {{end}}
+  */}}
 
   <table class="table table-bordered table-sm align-middle">
     <thead class="table-dark">
