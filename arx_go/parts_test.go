@@ -85,3 +85,22 @@ func TestPickTier(t *testing.T) {
 		}
 	}
 }
+
+func TestReleaseStatusOrUnderReview(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"A", "A"},
+		{"D", "D"},
+		{"U", "U"},
+		{"", "U"},       // blank coalesces to Under Review
+		{"X", "U"},      // out-of-range value the CHECK would reject
+		{"a", "U"},      // lowercase is not a valid code
+		{"active", "U"}, // legacy junk
+	}
+	for _, c := range cases {
+		if got := releaseStatusOrUnderReview(c.in); got != c.want {
+			t.Errorf("releaseStatusOrUnderReview(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

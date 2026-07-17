@@ -1,6 +1,5 @@
 -- contact: Contacts associated with suppliers.
 -- company_id links to company.id — each contact belongs to one company.
--- user_account_link holds the associated Windows/network account name for internal users.
 
 IF OBJECT_ID('dbo.contact', 'U') IS NOT NULL DROP TABLE dbo.contact;
 
@@ -19,7 +18,6 @@ CREATE TABLE contact (
   email               VARCHAR(127),
   is_active           BIT            DEFAULT 1,
   company_id          INT,                           -- FK to company.id; FK constraint deferred — see #213.
-  user_account_link   VARCHAR(127),                  -- Associated Windows/network account for internal users.
   updated_at          DATETIME       CONSTRAINT DF_contact_updated_at DEFAULT GETDATE(),
   notes               VARCHAR(4000)
 );

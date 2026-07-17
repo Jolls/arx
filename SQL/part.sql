@@ -17,8 +17,7 @@
 -- NOTE: Go struct fields still use the old PN-prefixed names (e.g. Part.PNID, .PNReqBy);
 --       only the DB columns were renamed. See SQL/schema.md.
 -- has_bom column dropped (#555) — BOM presence is computed on demand via EXISTS(bom) instead
--- of a denormalized flag. Drop migration tracked in #540 (not yet added to SQL/migrations/,
--- since existing binaries still SELECT the column by name).
+-- of a denormalized flag. Drop migration: SQL/migrations/migrate_drop_has_bom.sql (#540).
 
 IF OBJECT_ID('dbo.part', 'U') IS NOT NULL DROP TABLE part;
 
@@ -30,7 +29,8 @@ CREATE TABLE part (
   revision            VARCHAR(10)      CONSTRAINT DF_part_number_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
   title               VARCHAR(255)     CONSTRAINT DF_part_number_title            DEFAULT '',
   detail              VARCHAR(255)     CONSTRAINT DF_part_number_detail           DEFAULT '',
-  release_status      VARCHAR(255)     NOT NULL CONSTRAINT DF_part_number_release_status   DEFAULT 'U',  -- U/A/D only; NOT NULL + default 'U' (#542); CHECK/narrowing deferred — see #213.
+  release_status      VARCHAR(255)     NOT NULL CONSTRAINT DF_part_number_release_status   DEFAULT 'U'
+                                       CONSTRAINT CK_part_number_release_status CHECK (release_status IN ('U','A','D')),  -- NOT NULL + default 'U' (#542); CHECK added #540/#542; VARCHAR(255) narrowing deferred — see #213.
   requested_by        VARCHAR(50)      CONSTRAINT DF_part_number_requested_by     DEFAULT '',
   notes               VARCHAR(MAX)     CONSTRAINT DF_part_number_notes            DEFAULT '',
   user_field_1        VARCHAR(255)     CONSTRAINT DF_part_number_user_field_1     DEFAULT '',

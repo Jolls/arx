@@ -16,7 +16,6 @@ type Contact struct {
 	Zipcode         string
 	Country         string
 	Website         string
-	UserAccountLink string
 	IsActive        bool
 	Notes           string
 	UpdatedAt       *time.Time

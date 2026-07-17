@@ -18,7 +18,6 @@ CREATE TABLE contact (
   email               VARCHAR(127),
   is_active           BOOLEAN        DEFAULT TRUE,
   company_id          INTEGER,                       -- FK to company.id; deferred (#213).
-  user_account_link   VARCHAR(127),
   updated_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
   notes               VARCHAR(4000)
 );

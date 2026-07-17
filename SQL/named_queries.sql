@@ -25,7 +25,7 @@ CREATE TABLE named_queries (
   sql         VARCHAR(MAX) NOT NULL,          -- parameterized SELECT; @param_name syntax
   params      VARCHAR(255),                   -- comma-separated expected param names
   result_type VARCHAR(10)  NOT NULL CONSTRAINT DF_named_queries_result_type DEFAULT 'list', -- 'list' = picker; 'single' = take first row only
-  active      BIT          NOT NULL CONSTRAINT DF_named_queries_active       DEFAULT 1,
+  is_active   BIT          NOT NULL CONSTRAINT DF_named_queries_is_active    DEFAULT 1,
   created_at  DATETIME,
   updated_at  DATETIME
 );
