@@ -127,6 +127,15 @@ func Load(version string) *Config {
 		}
 	}
 
+	// Expand a %USERPROFILE% token in the four folder roots so a shared
+	// config/local.json (e.g. Arx.exe on a shared OneDrive folder) resolves
+	// under whichever user's profile is running it, instead of the path the
+	// last user to save Settings happened to have (#731).
+	cfg.DocControlRoot = ExpandUserPath(cfg.DocControlRoot)
+	cfg.POFolderRoot = ExpandUserPath(cfg.POFolderRoot)
+	cfg.SupplierFilesRoot = ExpandUserPath(cfg.SupplierFilesRoot)
+	cfg.ImageRoot = ExpandUserPath(cfg.ImageRoot)
+
 	// Secrets (DB passwords, session secret) live in a per-user store, not the
 	// shared config/local.json, so a shared exe does not leak them (#732). A nil
 	// return means the store is unavailable — leave passwords empty (re-prompt).
