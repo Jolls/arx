@@ -1,3 +1,70 @@
+Arx v0.6.0 — July 2026
+========================
+
+NEW FEATURES
+
+  Inventory — Lot & Batch Tracking
+  Mark a part "Batch / lot controlled" and goods receipts and builds now
+  create and track lots. A new Lots subtab lists a part's lots and traces
+  genealogy both directions — the raw vendor lots that went into an
+  output lot, and the downstream assemblies it was consumed into. A new
+  cross-part "All Lots" page lists every lot without drilling into a part
+  first, and each lot's Vendor Lot and Description can be edited from its
+  trace page.
+
+  Inventory — Build Flow
+  A new Build subtab on assemblies consumes BOM components and produces
+  the output part in one transaction, keeping stock on hand in sync on
+  both sides — required quantities and current on-hand (with shortages
+  highlighted) are shown up front. Lot-controlled components prompt for
+  the specific lot consumed, and lot-controlled assemblies get a
+  traceable output lot.
+
+  Parts — Reorder Points
+  Set a Reorder Minimum on any part; parts below it are flagged on the
+  Parts list, the part detail page, and a new Below Reorder Point card on
+  the Reports dashboard.
+
+  Reports Dashboard
+  A new Reports tab gives a KPI dashboard (open POs, POs received this
+  month, recent activity) plus dedicated views for Spend Analysis (by
+  supplier/part, with CSV export), Yield Summary and Failure Modes per
+  test form, Supplier On-Time Delivery, PO Cycle Time, and
+  Attachment/Data Quality Gaps — plus summary cards for Stale WIP
+  records, POs Pending Approval, and Below Reorder Point parts.
+
+  Accent Colors
+  Choose a preset accent color theme (blue/indigo/teal/green/slate) from
+  Settings under My Preferences so primary-colored UI elements stand out
+  from the app header.
+
+  Purchasing Improvements
+  Vendor part numbers on PO lines link back to that part's primary
+  attachment. "Supplier Code" is renamed to "Folder Stub" (with
+  validation against filesystem-unsafe characters) to better reflect its
+  role naming attachment/PO folders. Contacts now show the purchase
+  orders tied to them, and PO defaults (receiver/contact) are set per
+  user under My Preferences rather than one shared machine default.
+
+  Small Touches
+  Per-tab browser favicon matches the active section. The Parts list
+  "Type" filter is now a dropdown of configured categories. The Price
+  History chart splits quantity-break price-list points into separate
+  series per tier. A "Cost to Build" calculator on the BOM edit page
+  prices out a full assembly at the correct quantity-break tier for each
+  component.
+
+BUG FIXES
+
+  Fixed auto-issued lot numbers colliding across multiple lot-tracked
+  lines or partial receipts on the same PO. Fixed the Lots subtab not
+  appearing on a lot-tracked part until another subtab was visited
+  first. Fixed the Sent, Labor, and Part badges becoming unreadable under
+  certain accent color themes. Fixed PO line items with only a vendor
+  part number (or only qty/cost/rev) entered being silently dropped
+  instead of saved. Fixed a row-action menu getting clipped for rows near
+  the bottom of a table.
+
 Arx v0.5.88 — July 2026
 ========================
 

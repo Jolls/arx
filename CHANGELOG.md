@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.6.0] - 2026-07-16
 ### Changed
 - Bumped `ExpectedSchemaVersion` to `4` for the non-backwards-compatible schema changes below (column drops, the `named_queries` rename, and the `release_status` CHECK); a mismatched binary/DB now shows the schema banner until `SQL/migrations/migrate_schema_v4.sql` is run last after the four v4 migrations ([#540](https://github.com/Jolls/arx-legacy/issues/540))
 - Renamed the `named_queries.active` column to `is_active` for naming consistency with every other table; updated the Go queries and reference DDL, with a human-run rename migration (`SQL/migrations/migrate_rename_named_queries_active.sql`) ([#573](https://github.com/Jolls/arx-legacy/issues/573), [#540](https://github.com/Jolls/arx-legacy/issues/540))
