@@ -410,10 +410,13 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	debugMode := r.FormValue("debug_mode") == "1"
 	testMode := r.FormValue("test_mode") == "1"
 	testModeChanged := testMode != h.cfg.TestMode
-	local.DocControlRoot = docRoot
-	local.POFolderRoot = poRoot
-	local.SupplierFilesRoot = supplierFilesRoot
-	local.ImageRoot = imageRoot
+	// Tokenize a leading %USERPROFILE% before persisting so a shared
+	// config/local.json stays portable across users (#731); h.cfg keeps the
+	// expanded, absolute path the handlers already expect.
+	local.DocControlRoot = arxbase.TokenizeUserPath(docRoot)
+	local.POFolderRoot = arxbase.TokenizeUserPath(poRoot)
+	local.SupplierFilesRoot = arxbase.TokenizeUserPath(supplierFilesRoot)
+	local.ImageRoot = arxbase.TokenizeUserPath(imageRoot)
 	local.DebugMode = debugMode
 	local.TestMode = &testMode
 	h.cfg.DocControlRoot = docRoot

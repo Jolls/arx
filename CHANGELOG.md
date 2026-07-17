@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-07-17
+### Fixed
+- Folder-root settings (`DOC_CONTROL_ROOT`, `PO_FOLDER_ROOT`, `SUPPLIER_FILES_ROOT`, `IMAGE_ROOT`) under a user's profile directory (e.g. OneDrive) are now stored with a `%USERPROFILE%` token instead of a hardcoded path, so a shared/OneDrive `Arx.exe`'s `config/local.json` resolves correctly for every user instead of only the one who last saved Settings ([#731](https://github.com/Jolls/arx-legacy/issues/731))
+
 ## [0.6.1] - 2026-07-17
 ### Security
 - Moved the DB passwords and session-signing secret out of the shared, exe-adjacent `config/local.json` into a per-user store (`%APPDATA%\Arx\local.json`; `~/.config/arx/local.json` on Linux). A shared/OneDrive `Arx.exe` no longer exposes one user's plaintext DB password to everyone with folder access or lets any user forge another's session cookie via a shared signing key. First run after upgrade migrates existing secrets into the per-user file and scrubs them from the shared file ([#732](https://github.com/Jolls/arx-legacy/issues/732))
