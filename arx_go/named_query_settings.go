@@ -40,7 +40,7 @@ func validResultType(rt string) bool {
 // listNamedQueries, which is the view-only active-only reference used elsewhere.
 func (h *Handler) loadNamedQueriesFull(ctx context.Context) ([]NamedQueryRow, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, name, COALESCE(description,''), sql, COALESCE(params,''), result_type, active, updated_at
+		`SELECT id, name, COALESCE(description,''), sql, COALESCE(params,''), result_type, is_active, updated_at
 		 FROM %s ORDER BY name`, h.cfg.NamedQueriesTable()))
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 	if id > 0 {
 		res, err := h.execContext(ctx, fmt.Sprintf(
 			`UPDATE %s SET name=@p1, description=@p2, sql=@p3, params=@p4,
-			 result_type=@p5, active=@p6, updated_at=@p7 WHERE id=@p8`, tbl),
+			 result_type=@p5, is_active=@p6, updated_at=@p7 WHERE id=@p8`, tbl),
 			name, description, sqlText, params, resultType, active, now, id)
 		if err != nil {
 			writeErr(http.StatusBadRequest, namedQuerySaveError(name, err))
@@ -120,7 +120,7 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 		}
 	} else {
 		insertQuery := h.dialect.InsertReturningID(tbl,
-			"name, description, sql, params, result_type, active, created_at, updated_at",
+			"name, description, sql, params, result_type, is_active, created_at, updated_at",
 			"@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
 			false)
 		err := h.queryRowContext(ctx, insertQuery,

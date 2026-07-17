@@ -635,15 +635,16 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 // source of truth for a part's active state (#532).
 func activeFromStatus(r *http.Request) bool { return fv(r, "release_status") != "D" }
 
-// releaseStatusOrUnderReview coalesces a blank release_status to "U" (Under Review).
-// A part with no explicit status is Under Review — never implicitly active/released.
-// Applied on write (so the DB never receives ”) and on read (so legacy/old-binary
-// blank rows present as Under Review everywhere) (#542).
+// releaseStatusOrUnderReview coerces a release_status to "U" (Under Review) unless it
+// is one of the valid codes A/D. A part with no explicit (or an out-of-range) status is
+// Under Review — never implicitly active/released. Applied on write (so the DB never
+// receives a blank or a value the CK_part_number_release_status CHECK would reject) and
+// on read (so legacy/old-binary blank rows present as Under Review everywhere) (#542).
 func releaseStatusOrUnderReview(s string) string {
-	if s == "" {
-		return "U"
+	if s == "A" || s == "D" {
+		return s
 	}
-	return s
+	return "U"
 }
 
 // partFromForm rebuilds a Part struct from POST form values (for re-displaying on error).

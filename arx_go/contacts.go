@@ -293,14 +293,14 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 	var c models.Contact
 	var cnsuid sql.NullInt64
 	var name, email, phone1, phone2, fax, address, city, state, zip, country sql.NullString
-	var web, userLink, notes, suName sql.NullString
+	var web, notes, suName sql.NullString
 	var active sql.NullBool
 	var dateModified sql.NullTime
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT cn.id, cn.company_id, cn.display_name, cn.email,
 		       cn.phone_1, cn.phone_2, cn.fax,
 		       cn.address, cn.city, cn.state, cn.zipcode, cn.country,
-		       cn.website, cn.user_account_link, cn.notes, cn.is_active, cn.updated_at,
+		       cn.website, cn.notes, cn.is_active, cn.updated_at,
 		       su.name
 		FROM %s cn
 		LEFT JOIN %s su ON cn.company_id = su.id
@@ -309,7 +309,7 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 		&c.ID, &cnsuid, &name, &email,
 		&phone1, &phone2, &fax,
 		&address, &city, &state, &zip, &country,
-		&web, &userLink, &notes, &active, &dateModified, &suName,
+		&web, &notes, &active, &dateModified, &suName,
 	)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Contact not found")
@@ -334,7 +334,6 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 	c.Zipcode = zip.String
 	c.Country = country.String
 	c.Website = web.String
-	c.UserAccountLink = userLink.String
 	c.Notes = notes.String
 	c.IsActive = active.Bool
 	c.SupplierName = suName.String

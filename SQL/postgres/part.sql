@@ -13,7 +13,8 @@ CREATE TABLE part (
   revision            VARCHAR(10)      DEFAULT '',
   title               VARCHAR(255)     DEFAULT '',
   detail              VARCHAR(255)     DEFAULT '',
-  release_status      VARCHAR(255)     NOT NULL DEFAULT 'U',   -- U = Under Review, A = Active, D = Deprecated.
+  release_status      VARCHAR(255)     NOT NULL DEFAULT 'U'
+                                       CONSTRAINT CK_part_number_release_status CHECK (release_status IN ('U','A','D')),  -- U = Under Review, A = Active, D = Deprecated (#542); CHECK added #540/#542.
   requested_by        VARCHAR(50)      DEFAULT '',
   notes               TEXT             DEFAULT '',
   user_field_1        VARCHAR(255)     DEFAULT '',

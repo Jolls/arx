@@ -16,7 +16,7 @@ CREATE TABLE named_queries (
   sql         TEXT         NOT NULL,          -- parameterized SELECT; @param_name syntax.
   params      VARCHAR(255),                   -- comma-separated expected param names.
   result_type VARCHAR(10)  NOT NULL DEFAULT 'list', -- 'list' | 'single' | 'multi'.
-  active      BOOLEAN      NOT NULL DEFAULT TRUE,
+  is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
   created_at  TIMESTAMP,
   updated_at  TIMESTAMP
 );
