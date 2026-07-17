@@ -124,7 +124,7 @@ native enum type or a lookup table — see §4.4 for why. `?` marks a nullable F
 | `unit` | **NEW** | `id`, `part_id` FK, `lot_id` FK?, `build_id` FK?, `serial_number`, `is_active` | `serial_number` is a STRING (non-numeric serials), UNIQUE per `part_id` |
 | `form_record` | = `test_record`, reshaped | `form_id`, `part_id`, `lot_id?`, `build_id?`, `unit_id?`, `subject_part_number`, `subject_pn_description` | disposition derived (Q3); `subject_*` = snapshot of the part the record is about (was `serial_number_pn`/`_pn_desc`) |
 | `result` | = `test_result`, reshaped | `form_record_id`, `form_row_id`, `pass_fail` | unit granularity via `form_record.unit_id` (Q8) |
-| `form` | existing | `+ form_type` | `VARCHAR`+`CHECK`: kind of quality record — `inspection\|test\|calibration\|checklist\|…` (Q10); `part_number_id` stays (the FORM's own PN) |
+| `form` | existing | `+ form_type` | `VARCHAR`+`CHECK`: kind of quality document — `inspection\|test\|calibration\|checklist\|batch record` (Q10); orthogonal to existing `record_types`; `part_number_id` stays (the FORM's own PN) |
 | `form_row` | = `test_definition`, renamed | `+ granularity` | a form line (test / heading / instruction / …), not only a "test"; `VARCHAR`+`CHECK` granularity: `lot\|unit` |
 | `build` | existing | — | unchanged |
 | `lot_genealogy` | existing | — | unchanged |
@@ -321,6 +321,12 @@ here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives o
     unit-tested — which naturally bounds row volume.
   - `is_active` for scrap; `serial_number` is a string entered at test time, **UNIQUE per `part_id`**,
     editable until the unit's first *locked* form_record.
+  - **Provenance invariant (the linchpin of "trace any unit back").** `unit.lot_id` and
+    `unit.build_id` are individually nullable, but a unit with **both** NULL is orphaned — it
+    defeats traceability and Q6 completeness. Enforce that every `unit` carries at least one:
+    `CHECK (lot_id IS NOT NULL OR build_id IS NOT NULL)`, plus app-level assignment at creation
+    (a build-sourced unit gets `build_id`; a received-lot unit gets `lot_id`). FK constraints alone
+    won't catch this — call it out as an explicit invariant.
   - **Batch vs unit testing:** unit testing = one form_record per unit → one `unit` row, full
     per-parameter results. Batch testing = one lot/build-granularity form_record covering many units
     at once (whole-lot y/n), which does **not** enumerate or create per-unit rows.
@@ -337,6 +343,12 @@ here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives o
   form_record↔unit many-to-many — no join table, add a nullable `form_record.unit_id`. Retest = a
   unit-testing form_record
   with `unit_id` set.
+  - **FK-consistency invariant across the four form_record FKs (`part_id`, `lot_id`, `build_id`,
+    `unit_id`).** When `unit_id` is set, the unit already knows its `part_id`/`lot_id`/`build_id`, so
+    setting those independently on the form_record invites redundant or *contradictory* state. Rule:
+    when `unit_id` is present, read lot/build **through the unit** and leave `form_record.lot_id` /
+    `build_id` NULL (or, if denormalized for query speed, enforce they equal the unit's). Document
+    this; a CHECK can't span the FK join, so it's an app-layer invariant.
 - **Q9 — Form ↔ Assembly many-to-many. → RESOLVED: already exists, no schema change.** A **Form is
   itself a part** (`part.category = 'FORM'`); `form.part_number_id` links to the FORM's *own* part
   number (inspection/test plans have PNs) — **not** to the assembly under test. The FORM part carries
@@ -345,13 +357,21 @@ here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives o
   m2m is provided by the existing (Form-is-a-part + BOM) mechanism. **No `form_part` junction, no
   drop of `form.part_number_id`.** A `form_record` still carries both `part_id` (assembly under test)
   and `form_id`; applicability is validated by the form's BOM containing that part.
-- **Q10 — `form.form_type` value set (stage → kind). → OPEN.** This column was renamed from the old
-  `inspection_type` (it could not be `record_type` — `form.record_types` already exists for the
-  allowed record-type labels). Its meaning also **broadened**: the old value set was a *stage*
-  (`incoming|in_process|final`), but a `form_record` now spans *kinds* of quality record
-  (`inspection|test|calibration|checklist|…`). Confirm the final `CHECK` value list, and decide
-  whether the old stage axis (incoming/in-process/final) is still needed as a **separate** concern
-  or is subsumed here.
+- **Q10 — `form.form_type` value set. → RESOLVED.** `form_type` is a **new** column (there is no
+  existing `inspection_type`/`record_type` column to rename from). It is a single `VARCHAR`+`CHECK`
+  naming the **kind of quality document** the form is:
+  `inspection | test | calibration | checklist | batch record`.
+  `form_type` and the existing `form.record_types` are **kept as two orthogonal axes** — do not
+  merge. `form_type` (single, template-level) = what the document *is*; `record_types` (plural,
+  comma-separated, per-form, drives conditional row visibility on records) = *why this fill-out
+  happened*. Every combination is legal (`test`+`retest`, `calibration`+`retest`, …); merging would
+  force compound values and break record-type-driven visibility.
+  - `batch record` **moves** from `record_types` → `form_type` (it's a document kind, not an
+    occasion).
+  - `record_types` value set becomes:
+    `new release | retest | upgrade | rma evaluation | rework | requalification | first article`.
+  - No separate stage axis (incoming/in-process/final) — stage is read from where in the flow the
+    form sits, not stored on the form.
 
 ## 7. Sub-issue carving (DRAFT — finalize after freeze)
 
@@ -375,7 +395,9 @@ Carved from the migration path (§5), one shippable guarded-migration slice each
    Promote `form.part_number_id` → real FK while in `form` DDL (§4.5).
 6. **Create/render logic** — derive batch-vs-unit from structure; completeness "N of build.qty"
    (Q6); retest = a unit-testing form_record pointing at the same unit.
-7. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes).
+7. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes). Note it
+   must reconcile **two genealogy paths**: `lot_genealogy` (lot→lot parentage) and
+   `inventory_transaction` (consumption/movement ledger). The view has to walk both, not assume one.
 8. _(optional)_ embedded build-at-test-time UX (re-scoped #716) — highest risk, last.
 
 ## 8. Stays outside the epic
