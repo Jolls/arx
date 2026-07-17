@@ -39,25 +39,30 @@ flowchart TD
     %% to the right: identity tiers (orange) + quality records (blue)
     R -. creates .-> L(["<b>Lot</b> — batch instance"])
     II -. tests .-> L
-    A -. creates .-> OL(["<b>Output Lot</b> + genealogy"])
+    A -. creates .-> OL(["<b>Output Lot / Unit</b>"])
     IP -. tests .-> OL
     FT -. creates .-> U(["<b>Unit</b> — serialized instance"])
-    U -. traces back .-> OL -. genealogy .-> L
+    CU(["<b>Child Unit</b><br/>serialized subassembly"])
+    U -. genealogy .-> L
+    U -. genealogy .-> CU
+    CU -. genealogy .-> L
 
     II -. records .-> QR{{"<b>Quality Records</b><br/>every form_record —<br/>inspection · test · calibration · checklist"}}
     IP -. records .-> QR
     FT -. records .-> QR
 
     classDef tier fill:#f0e4d2,stroke:#a86b1f,color:#6f4715;
-    class L,OL,U tier;
+    class L,OL,U,CU tier;
     classDef qr fill:#dce8f0,stroke:#1f5f86,color:#153f57;
     class QR qr;
 ```
 
 **Tiers produced along the way:** Receipt mints a **Lot** (Tier 2); a Build produces an output
-**Lot** and records genealogy back to the component lots it consumed; Final/unit testing mints a
-**Unit** (Tier 3), a serialized instance that traces back through its lot(s). Every step is a
-change-controlled quality record — the whole point of the system.
+**Lot** or **Unit** and records genealogy back to what it consumed — component **lots** and
+individual serialized **child units** alike, in one `genealogy` edge table (Q11); Final/unit testing
+mints a **Unit** (Tier 3), a serialized instance whose as-built tree traces back through both its
+child units and its lots — the per-serial "birth certificate." Every step is a change-controlled
+quality record — the whole point of the system.
 
 ---
 
@@ -127,7 +132,7 @@ native enum type or a lookup table — see §4.4 for why. `?` marks a nullable F
 | `form` | existing | `+ form_type` | `VARCHAR`+`CHECK`: kind of quality document — `inspection\|test\|calibration\|checklist\|batch record` (Q10); orthogonal to existing `record_types`; `part_number_id` stays (the FORM's own PN) |
 | `form_row` | = `test_definition`, renamed | `+ granularity` | a form line (test / heading / instruction / …), not only a "test"; `VARCHAR`+`CHECK` granularity: `lot\|unit` |
 | `build` | existing | — | unchanged |
-| `lot_genealogy` | existing | — | unchanged |
+| `genealogy` | = `lot_genealogy`, widened | `parent_lot_id?`, `parent_unit_id?`, `child_lot_id?`, `child_unit_id?`, `qty_consumed` | one edge table for all provenance; CHECK: exactly one parent FK + exactly one child FK set (Q11); recurse for the as-built lot+unit tree beneath any output |
 
 Relationships between those tables (only the columns needed to show the links):
 
@@ -141,8 +146,10 @@ erDiagram
   lot             ||--o{ unit            : "lot_id ·nullable"
   lot             ||--o{ build           : "output_lot_id ·nullable"
   lot             ||--o{ form_record     : "lot_id ·nullable"
-  lot             ||--o{ lot_genealogy   : "parent_lot_id"
-  lot             ||--o{ lot_genealogy   : "child_lot_id"
+  lot             ||--o{ genealogy       : "parent_lot_id ·nullable"
+  lot             ||--o{ genealogy       : "child_lot_id ·nullable"
+  unit            ||--o{ genealogy       : "parent_unit_id ·nullable"
+  unit            ||--o{ genealogy       : "child_unit_id ·nullable"
   build           ||--o{ unit            : "build_id ·nullable"
   build           ||--o{ form_record     : "build_id ·nullable"
   unit            ||--o{ form_record     : "unit_id ·nullable (retest → many)"
@@ -176,10 +183,12 @@ erDiagram
     int output_lot_id FK "nullable"
     decimal qty
   }
-  lot_genealogy {
+  genealogy {
     int id PK
-    int parent_lot_id FK
-    int child_lot_id FK
+    int parent_lot_id FK "nullable"
+    int parent_unit_id FK "nullable"
+    int child_lot_id FK "nullable"
+    int child_unit_id FK "nullable"
     decimal qty_consumed
   }
   form {
@@ -222,6 +231,7 @@ erDiagram
 | `form` (record_types, instrument_types, revision) | `form` + `form_type` | change-control columns **stay** (Q4); `part_number_id` unchanged — it's the FORM's own PN |
 | `test_definition` (spec_*, pf_type, archived, history) | `form_row` + `granularity` (`test_definition_history`→`form_row_history`, `test_id`→`form_row_id`) | it's a form line — test / heading / instruction / … — not only a "test"; change-control machinery **stays** (Q4) |
 | `lot` (po_line_id NULL ⇒ built) | `lot.source` explicit | today source is inferred; make it a column |
+| `lot_genealogy` (lot→lot only) | `genealogy` (lot + unit endpoints) | records serialized-child provenance, not just lots — enables per-serial as-built genealogy (Q11) |
 
 ### 4.3 What the artifact's ERD *omitted* and we must not
 
@@ -255,8 +265,9 @@ what it is across every form type. (This retargets #717.)
 ### 4.5 FK cleanup in scope
 
 New tables/columns this epic creates get **real FKs from birth** (`unit.part_id`, `unit.lot_id?`,
-`unit.build_id?`, `form_record.unit_id`, and the retained `form_record`/`result`/`lot`/`build` links)
-— no legacy data, no sentinels, nothing to defer.
+`unit.build_id?`, `form_record.unit_id`, `genealogy.parent_unit_id?`/`child_unit_id?`, and the
+retained `form_record`/`result`/`lot`/`build`/`genealogy` links) — no legacy data, no sentinels,
+nothing to defer.
 
 Two **legacy** logical references get promoted here because the epic already reshapes their tables
 (each gated on an ArxProd orphan check; keep `ON DELETE NO ACTION`; both dialects):
@@ -283,7 +294,9 @@ Adoption order — renames first, in isolation:
    free the `unit` name for step 2.
 2. **Additive keystone:** add the `unit` table (Tier-3), a nullable `form_record.unit_id` FK (Q8),
    and `tracking_mode` on part. Units are created **lazily, one at a time at test time** (Q5) —
-   independent of inventory (Q2).
+   independent of inventory (Q2). Then widen `lot_genealogy`→`genealogy` (Q11): add
+   `parent_unit_id`/`child_unit_id` and the exactly-one-parent/child CHECK, so a build writes one
+   edge per consumed lot **or** unit.
 3. **Enum formalization:** `lot.source`, `form.form_type`, `form_row.granularity`.
 4. **Behavior:** derive batch-vs-unit from structure; completeness "N tested of build.qty" (Q6);
    retest = a unit-testing form_record pointing at the same unit.
@@ -302,6 +315,10 @@ here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives o
   There is no reconciliation requirement — if a build makes 20 and only 19 are ever tested, there
   are 19 `unit` rows and that's correct; the 20th is simply untested/unaccounted. A future flag or
   report could surface a units-vs-build-qty mismatch, but that is **out of scope** for v0.7.
+  **Two separate ledgers, do not conflate:** `inventory_transaction` is the **stock ledger** (signed
+  qty movements → `stock_on_hand`); `genealogy` (Q11) is the **provenance record** (which lots/units
+  went into which). A build writes both — quantity rows to inventory, parentage edges to genealogy —
+  but a traceability walk reads only `genealogy`, never the stock ledger.
 - **Q3 — `disposition`: computed or stored? → RESOLVED: computed/derived.** Keep Arx's current
   approach — derive pass/fail from results + spec; do not store a `disposition` column that can
   drift. The `form_record` pass/fail roll-up is computed at read time, not persisted.
@@ -372,6 +389,15 @@ here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives o
     `new release | retest | upgrade | rma evaluation | rework | requalification | first article`.
   - No separate stage axis (incoming/in-process/final) — stage is read from where in the flow the
     form sits, not stored on the form.
+- **Q11 — Genealogy across tiers. → RESOLVED: one `genealogy` edge table.** A build's consumed
+  parents and children can each be a **lot** (batch component) or a **unit** (serialized
+  subassembly), so a serialized top assembly records both its lot components and its individual
+  serialized children. A single
+  `genealogy(parent_lot_id?, parent_unit_id?, child_lot_id?, child_unit_id?, qty_consumed)` carries
+  every combination, with a CHECK enforcing **exactly one parent FK and exactly one child FK** set.
+  Each column is a real FK, so integrity holds. Recurse it to build the as-built lot+unit tree
+  beneath any output — the per-serial "birth certificate." Widened from today's `lot_genealogy`
+  (lot→lot only); existing lot→lot rows stay valid (unit columns NULL) through the guarded migration.
 
 ## 7. Sub-issue carving (DRAFT — finalize after freeze)
 
@@ -388,17 +414,18 @@ Carved from the migration path (§5), one shippable guarded-migration slice each
    (TR-rename vs UoM-rename) since they're independent.
 2. **`unit` table** (DDL both dialects, seed, `*Table()` helper, SCHEMA.md, migration) — keystone.
    Lazy one-at-a-time creation at test time (Q5), independent of inventory (Q2).
-3. **`form_record.unit_id`** — nullable FK (Q8; no join table). Also promote
+3. **`genealogy` table** — widen `lot_genealogy` (add `parent_unit_id`/`child_unit_id`, the
+   exactly-one-parent/child CHECK; Q11); builds write one edge per consumed lot or unit.
+4. **`form_record.unit_id`** — nullable FK (Q8; no join table). Also promote
    `form_record.part_number_id` → real FK during the reshape (§4.5).
-4. **`tracking_mode`** on part (migrate `is_lot_tracked` values).
-5. **Enum formalization** (`lot.source`, `form.form_type`, `form_row.granularity`).
+5. **`tracking_mode`** on part (migrate `is_lot_tracked` values).
+6. **Enum formalization** (`lot.source`, `form.form_type`, `form_row.granularity`).
    Promote `form.part_number_id` → real FK while in `form` DDL (§4.5).
-6. **Create/render logic** — derive batch-vs-unit from structure; completeness "N of build.qty"
+7. **Create/render logic** — derive batch-vs-unit from structure; completeness "N of build.qty"
    (Q6); retest = a unit-testing form_record pointing at the same unit.
-7. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes). Note it
-   must reconcile **two genealogy paths**: `lot_genealogy` (lot→lot parentage) and
-   `inventory_transaction` (consumption/movement ledger). The view has to walk both, not assume one.
-8. _(optional)_ embedded build-at-test-time UX (re-scoped #716) — highest risk, last.
+8. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes). Walks the
+   single `genealogy` edge table to render the as-built lot+unit tree beneath any output.
+9. _(optional)_ embedded build-at-test-time UX (re-scoped #716) — highest risk, last.
 
 ## 8. Stays outside the epic
 
@@ -414,6 +441,7 @@ Carved from the migration path (§5), one shippable guarded-migration slice each
       Q5 lazy one-at-a-time, Q6 denominator=build.qty, Q7 renames early).
 - [x] Q8 resolved (no per-record unit join table; nullable `form_record.unit_id`).
 - [x] Q9 resolved (Form↔Assembly m2m already exists via Form-is-a-part + BOM; no schema change).
+- [x] Q11 resolved (one `genealogy` edge table, lot/unit endpoints, exactly-one-parent/child CHECK).
 - [x] §4 detail settled: `unit.serial_number` is a **string, UNIQUE per `part_id`**;
       `tracking_mode` migration maps `is_lot_tracked` `0→none`, `1→lot` (`serial`/`lot_serial` set
       per-part afterward; existing data implies neither).
