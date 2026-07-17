@@ -95,7 +95,6 @@ func Load(version string) *Config {
 		if local.Engine != nil {
 			cfg.Engine = *local.Engine
 		}
-		cfg.DBPassword = local.DBPassword
 		if local.DocControlRoot != "" {
 			cfg.DocControlRoot = local.DocControlRoot
 		}
@@ -126,39 +125,48 @@ func Load(version string) *Config {
 		if local.TestDBUser != "" {
 			cfg.TestDBUser = local.TestDBUser
 		}
-		cfg.TestDBPassword = local.TestDBPassword
+	}
+
+	// Secrets (DB passwords, session secret) live in a per-user store, not the
+	// shared config/local.json, so a shared exe does not leak them (#732). A nil
+	// return means the store is unavailable — leave passwords empty (re-prompt).
+	secrets, _ := LoadSecrets()
+	if secrets != nil {
+		cfg.DBPassword = secrets.DBPassword
+		cfg.TestDBPassword = secrets.TestDBPassword
 	}
 
 	// Resolve the session secret used to sign session/CSRF cookies. Precedence:
-	// explicit SESSION_SECRET env, then the persisted local secret, else generate
-	// a strong random one and persist it. Never fall back to a shared constant —
-	// a known key lets anyone forge a valid session cookie (#648; regression of
-	// #352, lost in the two-app merge).
-	cfg.SessionSecret = resolveSessionSecret(local)
+	// explicit SESSION_SECRET env, then the persisted per-user secret, else
+	// generate a strong random one and persist it. Never fall back to a shared
+	// constant — a known key lets anyone forge a valid session cookie (#648;
+	// regression of #352, lost in the two-app merge).
+	cfg.SessionSecret = resolveSessionSecret(secrets)
 
 	return cfg
 }
 
 // resolveSessionSecret returns the session-signing key, generating and persisting
-// a random one to local.json when neither the environment nor local.json supplies
-// it. It only writes when local.json was readable (local != nil), so a corrupt
-// file is never clobbered — in that case an ephemeral per-process key is used.
-func resolveSessionSecret(local *LocalConfig) string {
+// a random one to the per-user secrets store when neither the environment nor the
+// store supplies it. It only writes when the store was readable (secrets != nil),
+// so an unavailable store is never clobbered — in that case an ephemeral
+// per-process key is used.
+func resolveSessionSecret(secrets *SecretsConfig) string {
 	if env := os.Getenv("SESSION_SECRET"); env != "" {
 		return env
 	}
-	if local != nil && local.SessionSecret != "" {
-		return local.SessionSecret
+	if secrets != nil && secrets.SessionSecret != "" {
+		return secrets.SessionSecret
 	}
 
 	secret := randomSecret()
-	if local != nil {
-		local.SessionSecret = secret
-		if err := SaveLocal(local); err != nil {
+	if secrets != nil {
+		secrets.SessionSecret = secret
+		if err := SaveSecrets(secrets); err != nil {
 			log.Printf("warning: could not persist generated session secret: %v", err)
 		}
 	} else {
-		log.Println("warning: local.json unreadable; using an ephemeral session secret (sessions will not survive a restart)")
+		log.Println("warning: secrets store unavailable; using an ephemeral session secret (sessions will not survive a restart)")
 	}
 	return secret
 }
