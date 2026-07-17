@@ -33,12 +33,6 @@ NEW FEATURES
   Attachment/Data Quality Gaps — plus summary cards for Stale WIP
   records, POs Pending Approval, and Below Reorder Point parts.
 
-  Settings — Split Test/Prod Database Connections
-  Test Mode now supports a fully separate connection profile (server,
-  engine, database, credentials) instead of only swapping the database
-  name, so a dev environment can live on a different server or engine
-  entirely.
-
   Accent Colors
   Choose a preset accent color theme (blue/indigo/teal/green/slate) from
   Settings under My Preferences so primary-colored UI elements stand out
