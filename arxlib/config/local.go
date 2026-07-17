@@ -7,15 +7,15 @@ import (
 
 const localConfigPath = "config/local.json"
 
-// LocalConfig holds user-specific overrides saved in config/local.json.
-// This file is gitignored — it is the only place the DB password is persisted on disk.
+// LocalConfig holds shared, user-agnostic overrides saved in the exe-adjacent
+// config/local.json. This file is gitignored. Per-user secrets (DB passwords,
+// session secret) live separately in SecretsConfig so they are not shared when
+// the exe runs from a shared folder (#732).
 type LocalConfig struct {
 	DBServer          string  `json:"db_server"`
 	Engine            *string `json:"engine,omitempty"`
 	DBName            string  `json:"db_name"`
 	DBUser            string  `json:"db_user"`
-	DBPassword        string  `json:"db_password"`
-	SessionSecret     string  `json:"session_secret,omitempty"`
 	DocControlRoot    string  `json:"doc_control_root"`
 	POFolderRoot      string  `json:"po_folder_root"`
 	SupplierFilesRoot string  `json:"supplier_files_root"`
@@ -26,7 +26,6 @@ type LocalConfig struct {
 	TestEngine        string  `json:"test_engine,omitempty"`
 	TestDBName        string  `json:"test_db_name,omitempty"`
 	TestDBUser        string  `json:"test_db_user,omitempty"`
-	TestDBPassword    string  `json:"test_db_password,omitempty"`
 }
 
 // LoadLocal reads config/local.json. On first run after upgrading from the two-app
@@ -62,13 +61,14 @@ func SaveLocal(lc *LocalConfig) error {
 }
 
 // migrateLegacy reads the old per-app config files and merges them.
-// PM fields win for shared values (they carry the DB password).
+// PM fields win for shared values. Secrets are intentionally not carried over:
+// this pre-#422 two-app layout is effectively extinct, and secrets now live in
+// SecretsConfig (#732); the rare install still on it re-prompts for its password.
 func migrateLegacy() *LocalConfig {
 	type legacyPM struct {
 		DBServer          string `json:"db_server"`
 		DBName            string `json:"db_name"`
 		DBUser            string `json:"db_user"`
-		DBPassword        string `json:"db_password"`
 		DocControlRoot    string `json:"doc_control_root"`
 		POFolderRoot      string `json:"po_folder_root"`
 		SupplierFilesRoot string `json:"supplier_files_root"`
@@ -80,7 +80,6 @@ func migrateLegacy() *LocalConfig {
 		DBServer       string `json:"db_server"`
 		DBName         string `json:"db_name"`
 		DBUser         string `json:"db_user"`
-		DBPassword     string `json:"db_password"`
 		ImageRoot      string `json:"image_root"`
 		DocControlRoot string `json:"doc_control_root"`
 		DebugMode      bool   `json:"debug_mode"`
@@ -110,7 +109,6 @@ func migrateLegacy() *LocalConfig {
 		DBServer:          pm.DBServer,
 		DBName:            pm.DBName,
 		DBUser:            pm.DBUser,
-		DBPassword:        pm.DBPassword,
 		DocControlRoot:    pm.DocControlRoot,
 		POFolderRoot:      pm.POFolderRoot,
 		SupplierFilesRoot: pm.SupplierFilesRoot,
@@ -127,9 +125,6 @@ func migrateLegacy() *LocalConfig {
 	}
 	if lc.DBUser == "" {
 		lc.DBUser = tr.DBUser
-	}
-	if lc.DBPassword == "" {
-		lc.DBPassword = tr.DBPassword
 	}
 	if lc.DocControlRoot == "" {
 		lc.DocControlRoot = tr.DocControlRoot

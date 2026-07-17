@@ -375,6 +375,10 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	if local == nil {
 		local = &arxbase.LocalConfig{}
 	}
+	secrets, _ := arxbase.LoadSecrets()
+	if secrets == nil {
+		secrets = &arxbase.SecretsConfig{}
+	}
 
 	if dbServer != "" {
 		local.DBServer = dbServer
@@ -443,11 +447,11 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			h.dialect = newDialect
 			dbSwapped = true
 			if password != "" {
-				local.DBPassword = password
+				secrets.DBPassword = password
 				h.cfg.DBPassword = password
 			}
 			if testPassword != "" {
-				local.TestDBPassword = testPassword
+				secrets.TestDBPassword = testPassword
 				h.cfg.TestDBPassword = testPassword
 			}
 			h.CheckSchemaVersion(r.Context())
@@ -461,6 +465,9 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 
 	if err := arxbase.SaveLocal(local); err != nil {
 		log.Printf("warning: could not save local config: %v", err)
+	}
+	if err := arxbase.SaveSecrets(secrets); err != nil {
+		log.Printf("warning: could not save secrets config: %v", err)
 	}
 
 	if connErr != "" {

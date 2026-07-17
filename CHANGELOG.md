@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-17
+### Security
+- Moved the DB passwords and session-signing secret out of the shared, exe-adjacent `config/local.json` into a per-user store (`%APPDATA%\Arx\local.json`; `~/.config/arx/local.json` on Linux). A shared/OneDrive `Arx.exe` no longer exposes one user's plaintext DB password to everyone with folder access or lets any user forge another's session cookie via a shared signing key. First run after upgrade migrates existing secrets into the per-user file and scrubs them from the shared file ([#732](https://github.com/Jolls/arx-legacy/issues/732))
+
 ## [0.6.0] - 2026-07-16
 ### Changed
 - Bumped `ExpectedSchemaVersion` to `4` for the non-backwards-compatible schema changes below (column drops, the `named_queries` rename, and the `release_status` CHECK); a mismatched binary/DB now shows the schema banner until `SQL/migrations/migrate_schema_v4.sql` is run last after the four v4 migrations ([#540](https://github.com/Jolls/arx-legacy/issues/540))
