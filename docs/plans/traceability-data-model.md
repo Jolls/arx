@@ -18,6 +18,49 @@ the *existing* Arx schema and splits the work into target-state vs. migration.
 
 ---
 
+## 0. Flow — part number through to final test
+
+The lifecycle this model has to support, end to end and change-controlled. The identity tier
+each stage produces or acts on is shown on the right.
+
+```mermaid
+flowchart TD
+    D["<b>Part Number Design</b><br/>drawings · links · PDFs · BOM"]
+    P["<b>Purchase</b><br/>PO line"]
+    R["<b>Receipt</b><br/>goods in"]
+    II["<b>Incoming Inspection</b><br/>test the received lot"]
+    A["<b>Assembly / Build</b><br/>consume BOM components"]
+    IP["<b>In-Process Test</b><br/>during/after build"]
+    FT["<b>Final Test</b><br/>individual serialized assembly"]
+
+    %% spine, top → bottom
+    D --> P --> R --> II --> A --> IP --> FT
+
+    %% to the right: identity tiers (orange) + quality records (blue)
+    R -. creates .-> L(["<b>Lot</b> — batch instance"])
+    II -. tests .-> L
+    A -. creates .-> OL(["<b>Output Lot</b> + genealogy"])
+    IP -. tests .-> OL
+    FT -. creates .-> U(["<b>Unit</b> — serialized instance"])
+    U -. traces back .-> OL -. genealogy .-> L
+
+    II -. records .-> QR{{"<b>Quality Records</b><br/>every form_record —<br/>inspection · test · calibration · checklist"}}
+    IP -. records .-> QR
+    FT -. records .-> QR
+
+    classDef tier fill:#f0e4d2,stroke:#a86b1f,color:#6f4715;
+    class L,OL,U tier;
+    classDef qr fill:#dce8f0,stroke:#1f5f86,color:#153f57;
+    class QR qr;
+```
+
+**Tiers produced along the way:** Receipt mints a **Lot** (Tier 2); a Build produces an output
+**Lot** and records genealogy back to the component lots it consumed; Final/unit testing mints a
+**Unit** (Tier 3), a serialized instance that traces back through its lot(s). Every step is a
+change-controlled quality record — the whole point of the system.
+
+---
+
 ## 1. Goal (milestone v0.7)
 
 Integrate the full sequence of testing **from receipt through final testing of individual
@@ -48,26 +91,21 @@ Two nullable FKs carry the model:
 
 - **`unit.lot_id` nullable** — set for `lot_serial` parts (a serialized unit inside a lot);
   NULL for serial-only parts with no batch. One `unit` table serves both.
-- **per-unit result FK nullable** — a whole-lot measurement leaves it NULL; a per-unit reading
-  points at the covered unit. One results table carries both granularities, no separate batch
-  structure.
+- **`form_record.unit_id` nullable (Q8)** — a whole-lot/batch form_record leaves it NULL; a per-unit
+  form_record points at the tested unit. One form_record/result shape carries both granularities, no
+  separate batch structure.
 
-"Is this a batch?" needs **no flag**: an inspection is a batch because it links a lot and/or has
-per-unit coverage rows. Retest of unit 4 = a new inspection with one coverage row pointing at that
-same `unit_id`. No compound string, no ambiguous delimiter, no `is_batch` boolean.
+"Is this a batch?" needs **no flag**: a form_record is a batch because it links a lot/build and has
+no `unit_id`; a unit form_record sets `unit_id`. Retest of unit 4 = a new form_record with `unit_id`
+pointing at that same unit. No compound string, no ambiguous delimiter, no `is_batch` boolean.
 
-## 3. ⚠️ Naming collision — `unit` is already taken
+## 3. `unit` name — freed by renaming UoM → `uom`
 
-`unit` **already exists** as the unit-of-measure reference table (`part.unit_id → unit.unit_id`,
-`supplier_part.unit_id`). The Tier-3 table **cannot** be named `unit` as-is. Options:
-
-- **(A)** Rename existing UoM table `unit` → `uom` (and `part.unit_id` → `uom_id`,
-  `supplier_part.unit_id` → `uom_id`) **first**, freeing the name — this is exactly what **#712**
-  proposed. Under this option #712 becomes an **epic prerequisite**, not an orthogonal cleanup.
-- **(B)** Name the Tier-3 table something else — `serialized_unit`, `unit_instance`, or `item` —
-  and leave UoM alone. Zero rename blast radius, but the model's vocabulary drifts from the artifact.
-
-**OPEN Q1 — decide the Tier-3 table name (and whether #712 is a prerequisite).**
+`unit` **currently** means the unit-of-measure reference table (`part.unit_id → unit.unit_id`,
+`supplier_part.unit_id`). **Decision:** rename the UoM table `unit` → `uom` (and `part.unit_id` /
+`supplier_part.unit_id` → `uom_id`) **first**, as part of the front rename wave (§5/§7). This
+absorbs **#712** as an epic prerequisite and frees the `unit` name for the Tier-3 serialized-instance
+table. No collision remains.
 
 ## 4. Target schema (end-state, grounded to current tables)
 
@@ -76,31 +114,113 @@ but out of scope here **except** where §6 open questions force an interaction.
 
 ### 4.1 New / changed tables
 
-```
-part            (existing)  + tracking_mode   -- replaces/extends is_lot_tracked
-lot             (existing)  + source enum      -- purchase|build|adjust (today inferred from po_line_id)
-unit            (NEW, Q1)   id, part_id FK, lot_id FK?, build_id FK?, serial_number VARCHAR, is_active
-                            -- serial_number is a STRING (shops use non-numeric serials); UNIQUE per part_id
-inspection      (= test_record, reshaped)      form_id, part_id, lot_id?, build_id?, unit_id?  -- disposition derived (Q3)
-result          (= test_result, reshaped)      inspection_id, test_id, pass_fail   -- unit granularity via inspection.unit_id (Q8)
-form            (existing)  + inspection_type   -- incoming|in_process|final; part_number_id stays (it's the FORM's own PN)
-test_definition (existing)  + granularity       -- lot|unit
-build           (existing, unchanged)
-lot_genealogy   (existing, unchanged)
+All constrained-value columns below (`none|lot|...`) are **`VARCHAR` + `CHECK` constraint**, not a
+native enum type or a lookup table — see §4.4 for why. `?` marks a nullable FK.
+
+| Table | Status | Key columns / additions | Notes |
+|-------|--------|-------------------------|-------|
+| `part` | existing | `+ tracking_mode` | `VARCHAR`+`CHECK`: `none\|lot\|serial\|lot_serial`; replaces `is_lot_tracked` |
+| `lot` | existing | `+ source` | `VARCHAR`+`CHECK`: `purchase\|build\|adjust`; today inferred from `po_line_id` |
+| `unit` | **NEW** | `id`, `part_id` FK, `lot_id` FK?, `build_id` FK?, `serial_number`, `is_active` | `serial_number` is a STRING (non-numeric serials), UNIQUE per `part_id` |
+| `form_record` | = `test_record`, reshaped | `form_id`, `part_id`, `lot_id?`, `build_id?`, `unit_id?`, `subject_part_number`, `subject_pn_description` | disposition derived (Q3); `subject_*` = snapshot of the part the record is about (was `serial_number_pn`/`_pn_desc`) |
+| `result` | = `test_result`, reshaped | `form_record_id`, `form_row_id`, `pass_fail` | unit granularity via `form_record.unit_id` (Q8) |
+| `form` | existing | `+ form_type` | `VARCHAR`+`CHECK`: kind of quality record — `inspection\|test\|calibration\|checklist\|…` (Q10); `part_number_id` stays (the FORM's own PN) |
+| `form_row` | = `test_definition`, renamed | `+ granularity` | a form line (test / heading / instruction / …), not only a "test"; `VARCHAR`+`CHECK` granularity: `lot\|unit` |
+| `build` | existing | — | unchanged |
+| `lot_genealogy` | existing | — | unchanged |
+
+Relationships between those tables (only the columns needed to show the links):
+
+```mermaid
+erDiagram
+  part            ||--o{ lot             : "part_id"
+  part            ||--o{ unit            : "part_id"
+  part            ||--o{ build           : "part_id"
+  part            ||--o{ form            : "part_number_id (FORM's own PN)"
+  part            ||--o{ form_record     : "part_id (assembly under test)"
+  lot             ||--o{ unit            : "lot_id ·nullable"
+  lot             ||--o{ build           : "output_lot_id ·nullable"
+  lot             ||--o{ form_record     : "lot_id ·nullable"
+  lot             ||--o{ lot_genealogy   : "parent_lot_id"
+  lot             ||--o{ lot_genealogy   : "child_lot_id"
+  build           ||--o{ unit            : "build_id ·nullable"
+  build           ||--o{ form_record     : "build_id ·nullable"
+  unit            ||--o{ form_record     : "unit_id ·nullable (retest → many)"
+  form            ||--o{ form_row : "form_id"
+  form            ||--o{ form_record     : "form_id"
+  form_record     ||--o{ result          : "form_record_id"
+  form_row ||--o{ result          : "form_row_id"
+
+  part {
+    int id PK
+    string part_number
+    string tracking_mode "none|lot|serial|lot_serial"
+  }
+  lot {
+    int id PK
+    int part_id FK
+    string source "purchase|build|adjust"
+    string lot_number
+  }
+  unit {
+    int id PK
+    int part_id FK
+    int lot_id FK "nullable"
+    int build_id FK "nullable"
+    string serial_number "unique per part"
+    bool is_active
+  }
+  build {
+    int id PK
+    int part_id FK
+    int output_lot_id FK "nullable"
+    decimal qty
+  }
+  lot_genealogy {
+    int id PK
+    int parent_lot_id FK
+    int child_lot_id FK
+    decimal qty_consumed
+  }
+  form {
+    int id PK
+    int part_number_id FK "the FORM's own PN"
+    string form_type "inspection|test|calibration|checklist|..."
+  }
+  form_row {
+    int id PK
+    int form_id FK
+    string granularity "lot|unit"
+  }
+  form_record {
+    int id PK
+    int form_id FK
+    int part_id FK
+    int lot_id FK "nullable"
+    int build_id FK "nullable"
+    int unit_id FK "nullable"
+    string subject_part_number
+  }
+  result {
+    int id PK
+    int form_record_id FK
+    int form_row_id FK
+    bool pass_fail
+  }
 ```
 
 ### 4.2 Old → new mapping (for reviewers who know today's schema)
 
 | Today | Target | Note |
 |-------|--------|------|
-| `part.is_lot_tracked` (bool) | `part.tracking_mode` enum `none\|lot\|serial\|lot_serial` | adds the serial axis Arx has no concept of today |
-| `test_record` | `inspection` | rename + reshape (see §5 on whether the rename is worth its blast radius) |
-| `test_record.serial_number` | **gone** — replaced by `unit` rows + nullable `inspection.unit_id` (Q8) | this is the whole point; kills the `trace_id`/`is_batch` idea |
-| `test_record.serial_number_pn` / `_pn_desc` | denormalized snapshots, keep (retarget name, see #717) | *not* serials; the `serial_number_*` prefix was always wrong |
-| `test_result` | `result` + nullable per-unit FK | one table, both granularities (whole-lot vs unit) |
+| `part.is_lot_tracked` (bool) | `part.tracking_mode` (VARCHAR+CHECK `none\|lot\|serial\|lot_serial`) | adds the serial axis Arx has no concept of today |
+| `test_record` | `form_record` | rename + reshape |
+| `test_record.serial_number` | **gone** — replaced by `unit` rows + nullable `form_record.unit_id` (Q8) | this is the whole point; kills the `trace_id`/`is_batch` idea |
+| `test_record.serial_number_pn` / `_pn_desc` | `form_record.subject_part_number` / `subject_pn_description` — kept in place | snapshot of the part-under-test's PN/desc; *not* serials, and *not* the `unit` table (see §4.4) |
+| `test_result` | `result` (child FK `record_id` → `form_record_id`) | one table, both granularities; unit granularity lives on `form_record.unit_id`, not here (Q8) |
 | `unit` (UoM) | `uom` | renamed to free `unit` for Tier-3 (Q1, absorbs #712) |
-| `form` (record_types, instrument_types, revision) | `form` + `inspection_type` | change-control columns **stay** (Q4); `part_number_id` unchanged — it's the FORM's own PN |
-| `test_definition` (spec_*, pf_type, archived, history) | `test_definition` + `granularity` | change-control machinery **stays** (see OPEN Q4) |
+| `form` (record_types, instrument_types, revision) | `form` + `form_type` | change-control columns **stay** (Q4); `part_number_id` unchanged — it's the FORM's own PN |
+| `test_definition` (spec_*, pf_type, archived, history) | `form_row` + `granularity` (`test_definition_history`→`form_row_history`, `test_id`→`form_row_id`) | it's a form line — test / heading / instruction / … — not only a "test"; change-control machinery **stays** (Q4) |
 | `lot` (po_line_id NULL ⇒ built) | `lot.source` explicit | today source is inferred; make it a column |
 
 ### 4.3 What the artifact's ERD *omitted* and we must not
@@ -108,33 +228,74 @@ lot_genealogy   (existing, unchanged)
 The artifact footer trims inventory/BOM/UoM "out of scope." Those omissions are exactly where the
 hard design is — captured as open questions in §6.
 
+### 4.4 Column-type & FK conventions
+
+**"Enum" columns are `VARCHAR` + `CHECK`, not a native enum type and not a lookup table.**
+SQL Server has no native `ENUM`, and Arx's established pattern for a small, stable, *code-branched*
+value set is exactly this — `part.category`, `part.release_status`, `inventory_transaction.txn_type`
+are all `VARCHAR` + `CHECK`. `tracking_mode`, `lot.source`, `form.form_type`, and
+`form_row.granularity` are the same shape: the app branches on these values in code, so a
+new value has no meaning until code handles it — which is precisely when a `CHECK` (a small, guarded
+migration to widen it) is correct and a user-editable lookup table would be wrong. Reserve lookup
+tables (like `uom`, or the `app_config` category lists) for sets users extend without code changes;
+these are not that. `CHECK` also works identically across SQL Server and Postgres (#625), whereas a
+native Postgres `ENUM` would diverge from the SQL Server DDL. So: **`VARCHAR` + `CHECK`.**
+
+**Snapshot columns stay on `form_record`, and avoid the `unit` table name.** `serial_number_pn` /
+`serial_number_pn_desc` are a denormalized snapshot of the **part-under-test's** number and
+description, frozen on the quality record at creation. They must stay on `form_record` (not move to
+`unit`): a lot/batch form_record has **no** `unit` row, yet still needs the subject part's PN
+snapshotted. Renamed to `subject_part_number` / `subject_pn_description`. We avoid `tested_*`
+because `form_record` is general (inspection/calibration/checklist, not just tests), and we avoid
+`unit_part_number` because `unit` is now a **table name** (the Tier-3 serialized instance) —
+`unit_part_number` would read as "a column relating to a `unit` row" (a FK-like link) when it is
+really a frozen string copied off `part`. `subject_*` — the part the record is about — says exactly
+what it is across every form type. (This retargets #717.)
+
+### 4.5 FK cleanup in scope
+
+New tables/columns this epic creates get **real FKs from birth** (`unit.part_id`, `unit.lot_id?`,
+`unit.build_id?`, `form_record.unit_id`, and the retained `form_record`/`result`/`lot`/`build` links)
+— no legacy data, no sentinels, nothing to defer.
+
+Two **legacy** logical references get promoted here because the epic already reshapes their tables
+(each gated on an ArxProd orphan check; keep `ON DELETE NO ACTION`; both dialects):
+
+- **`form.part_number_id` → `part.id`** — clean `NOT NULL` ref (the FORM's own PN); promote while
+  we're in `form` DDL for `form_type`.
+- **`test_record`→`form_record`.`part_number_id` → `part.id`** — promote during the reshape.
+
+Every **other** deferred logical reference (`contact.company_id`, `part.default_supplier_id`, and
+the `0`-sentinel `part.price_id` / `part.primary_attachment_id`, which need a none-`0`→`NULL`
+conversion + code change before a FK is even possible) is **out of scope** — tracked in **#735**.
+
 ## 5. Migration philosophy — "from scratch" is the *design*, not the *rewrite*
 
 The design starts clean; the **implementation migrates a live DB with a ~2200-line `records.go`
 built on `test_record`/`test_result` column names.** Do not let greenfield leak into big-bang.
-Adoption order (Q7 resolved — renames first, in isolation):
+Adoption order — renames first, in isolation:
 
-1. **Rename wave, isolated PR(s) (Q7 + Q1):** `test_record`→`inspection`, `test_result`→`result`,
-   and UoM `unit`→`uom` (`part.unit_id`/`supplier_part.unit_id`→`uom_id`, absorbing #712). Pure
-   renames, no behavior change — stand up and test the reshaped DB before anything is built on it.
-   Get the churn against `records.go` out of the way while behavior is provably unchanged, and free
-   the `unit` name for step 2.
-2. **Additive keystone:** add the `unit` table (Tier-3), a nullable per-unit FK on `result`, and
-   `tracking_mode` on part. Units are created **lazily, one at a time at test time** (Q5) —
-   independent of inventory (Q2). Pending Q8: nullable `inspection.unit_id` rather than an
-   `inspection_unit` m2m.
-3. **Enum formalization:** `lot.source`, `form.inspection_type`, `test_definition.granularity`.
+1. **Rename wave, isolated PR(s):** `test_record`→`form_record`, `test_result`→`result`,
+   `test_definition`→`form_row` (`test_definition_history`→`form_row_history`, `test_id`→`form_row_id`),
+   and UoM `unit`→`uom` (`part.unit_id`/`supplier_part.unit_id`→`uom_id`, absorbing #712; see §3).
+   Pure renames, no behavior change — stand up and test the reshaped DB before anything is built on
+   it. Get the churn against `records.go` out of the way while behavior is provably unchanged, and
+   free the `unit` name for step 2.
+2. **Additive keystone:** add the `unit` table (Tier-3), a nullable `form_record.unit_id` FK (Q8),
+   and `tracking_mode` on part. Units are created **lazily, one at a time at test time** (Q5) —
+   independent of inventory (Q2).
+3. **Enum formalization:** `lot.source`, `form.form_type`, `form_row.granularity`.
 4. **Behavior:** derive batch-vs-unit from structure; completeness "N tested of build.qty" (Q6);
-   retest = a unit-testing inspection pointing at the same unit.
+   retest = a unit-testing form_record pointing at the same unit.
 
 Throughout, honor the Q4 constraint: don't strand the revision-control snapshot columns or the
-`test_definition_history` trigger — leave real change control (v0.9) easy to add later.
+`form_row_history` trigger — leave real change control (v0.9) easy to add later.
 
-## 6. Open questions (resolve before freeze)
+## 6. Design decisions (resolved)
 
-- **Q1 — Tier-3 table name / #712 prerequisite. → RESOLVED: rename UoM `unit`→`uom`.** Absorb #712
-  as an epic prerequisite (part of the early rename wave, §5/§7). This frees `unit` for the
-  Tier-3 serialized-instance table and keeps the artifact's vocabulary.
+Stable IDs — referenced inline throughout as `(Qn)`. Q1 (name/#712) and Q7 (renames) are dropped
+here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives only here.
+
 - **Q2 — Unit ↔ inventory / stock. → RESOLVED: fully decoupled.** `stock_on_hand` stays
   `SUM(inventory_transaction.qty)`, unchanged. **Unit count is independent of inventory; inventory
   needs no knowledge of units, and no `unit` row is ever written in an inventory transaction.**
@@ -143,12 +304,12 @@ Throughout, honor the Q4 constraint: don't strand the revision-control snapshot 
   report could surface a units-vs-build-qty mismatch, but that is **out of scope** for v0.7.
 - **Q3 — `disposition`: computed or stored? → RESOLVED: computed/derived.** Keep Arx's current
   approach — derive pass/fail from results + spec; do not store a `disposition` column that can
-  drift. `inspection`/`inspection_unit` roll-up is computed at read time, not persisted.
+  drift. The `form_record` pass/fail roll-up is computed at read time, not persisted.
 - **Q4 — Change control placement. → RESOLVED (scope): deferred to v0.9.** Full change control is a
   later (v0.9) feature. v0.7 keeps the **existing limited revision control** as-is
-  (`form.revision`, `test_record`/`inspection`.`form_revision` snapshot, `test_result`/`result.*`
-  snapshots, `test_definition_history`). **Constraint on this epic:** every schema decision here
-  must leave adding real change control later *easy*, not foreclosed — don't reshape `inspection`/
+  (`form.revision`, `test_record`/`form_record`.`form_revision` snapshot, `test_result`/`result.*`
+  snapshots, `form_row_history`). **Constraint on this epic:** every schema decision here
+  must leave adding real change control later *easy*, not foreclosed — don't reshape `form_record`/
   `result` in a way that strands the snapshot columns or the history trigger. Carry this as a
   review lens on every sub-issue, not as work in v0.7.
 - **Q5 — Unit lifecycle. → RESOLVED: lazy, one at a time, at test time.**
@@ -158,10 +319,10 @@ Throughout, honor the Q4 constraint: don't strand the revision-control snapshot 
     (see revised Q6). Units are independent of both inventory (Q2) and lot/build quantity.
   - Units exist **only** for `tracking_mode` `serial` / `lot_serial`, and only for items actually
     unit-tested — which naturally bounds row volume.
-  - `is_active` for scrap; `serial_number` entered at test time; editable until the unit's first
-    *locked* inspection; uniqueness scope TBD (per-part vs per-lot).
-  - **Batch vs unit testing:** unit testing = one inspection per unit → one `unit` row, full
-    per-parameter results. Batch testing = one lot/build-granularity inspection covering many units
+  - `is_active` for scrap; `serial_number` is a string entered at test time, **UNIQUE per `part_id`**,
+    editable until the unit's first *locked* form_record.
+  - **Batch vs unit testing:** unit testing = one form_record per unit → one `unit` row, full
+    per-parameter results. Batch testing = one lot/build-granularity form_record covering many units
     at once (whole-lot y/n), which does **not** enumerate or create per-unit rows.
 - **Q6 — Completeness "19 of 20 tested". → RESOLVED, denominator relocated.** Track completeness as
   `COUNT(units for the build/lot) / build.qty (or lot qty)`. The **denominator is the build/lot
@@ -170,15 +331,11 @@ Throughout, honor the Q4 constraint: don't strand the revision-control snapshot 
   are simply absent from the unit table — a future report can surface the gap (out of scope). This
   supersedes both the old thread's "don't reconcile at all" *and* the earlier draft's mistaken
   "eager-create all N units" — neither is needed.
-- **Q7 — Renames worth it? → RESOLVED: yes, and done early in isolation.** `test_record`→
-  `inspection` and `test_result`→`result` ship as their **own early PR** — pure rename, no behavior
-  change, so the reshaped DB can be stood up and tested in isolation before the new tables are built
-  on top of the clean names. This moves the renames to the *front* of the epic (see §5/§7), not the
-  end.
-- **Q8 — `inspection_unit`. → RESOLVED: not m2m; use a nullable `inspection.unit_id` FK.** An
-  inspection covers at most one specific serialized unit (unit testing); batch testing is whole-lot
-  and enumerates no individual units. So there is no inspection↔unit many-to-many — drop the
-  `inspection_unit` table, add a nullable `inspection.unit_id`. Retest = a unit-testing inspection
+- **Q8 — per-record unit m2m (the artifact's `inspection_unit`). → RESOLVED: not m2m; use a nullable
+  `form_record.unit_id` FK.** A form_record covers at most one specific serialized unit (unit
+  testing); batch testing is whole-lot and enumerates no individual units. So there is no
+  form_record↔unit many-to-many — no join table, add a nullable `form_record.unit_id`. Retest = a
+  unit-testing form_record
   with `unit_id` set.
 - **Q9 — Form ↔ Assembly many-to-many. → RESOLVED: already exists, no schema change.** A **Form is
   itself a part** (`part.category = 'FORM'`); `form.part_number_id` links to the FORM's *own* part
@@ -186,40 +343,54 @@ Throughout, honor the Q4 constraint: don't strand the revision-control snapshot 
   a **BOM**, whose components are the assembly part numbers the form applies to. So Form → many
   assemblies (its BOM lines) and assembly → many Forms (it appears in many FORM parts' BOMs). The
   m2m is provided by the existing (Form-is-a-part + BOM) mechanism. **No `form_part` junction, no
-  drop of `form.part_number_id`.** An `inspection` still carries both `part_id` (assembly under test)
+  drop of `form.part_number_id`.** A `form_record` still carries both `part_id` (assembly under test)
   and `form_id`; applicability is validated by the form's BOM containing that part.
+- **Q10 — `form.form_type` value set (stage → kind). → OPEN.** This column was renamed from the old
+  `inspection_type` (it could not be `record_type` — `form.record_types` already exists for the
+  allowed record-type labels). Its meaning also **broadened**: the old value set was a *stage*
+  (`incoming|in_process|final`), but a `form_record` now spans *kinds* of quality record
+  (`inspection|test|calibration|checklist|…`). Confirm the final `CHECK` value list, and decide
+  whether the old stage axis (incoming/in-process/final) is still needed as a **separate** concern
+  or is subsumed here.
 
 ## 7. Sub-issue carving (DRAFT — finalize after freeze)
 
 Carved from the migration path (§5), one shippable guarded-migration slice each, dependency order:
 
-1. **Rename wave** (Q7 + Q1) — `test_record`→`inspection`, `test_result`→`result`, UoM
-   `unit`→`uom` (absorbs #712). Pure renames, isolated, tested standalone. Front of the epic; may be
-   one PR or split (TR-rename vs UoM-rename) since they're independent.
+0. **Expand seed data → migration testbed (PRE any code change).** Before the rename wave, grow
+   `SQL/seed_test_data.sql` into a representative PRE-state dataset so the big rename/reshape
+   migration can be dry-run PRE→POST and verified end-to-end. This is a large rename with a large
+   migration; a richer dataset to migrate against de-risks it. TODO: assess whether current seed is
+   already big enough — **revisit and think hard later** (own design pass), for now just a placeholder task.
+1. **Rename wave** — `test_record`→`form_record`, `test_result`→`result`, `test_definition`→`form_row`,
+   UoM `unit`→`uom` (absorbs
+   #712). Pure renames, isolated, tested standalone. Front of the epic; may be one PR or split
+   (TR-rename vs UoM-rename) since they're independent.
 2. **`unit` table** (DDL both dialects, seed, `*Table()` helper, SCHEMA.md, migration) — keystone.
    Lazy one-at-a-time creation at test time (Q5), independent of inventory (Q2).
-3. **Per-unit result FK** — nullable `inspection.unit_id` (pending Q8; drops the `inspection_unit`
-   m2m) + nullable per-unit FK on `result`.
+3. **`form_record.unit_id`** — nullable FK (Q8; no join table). Also promote
+   `form_record.part_number_id` → real FK during the reshape (§4.5).
 4. **`tracking_mode`** on part (migrate `is_lot_tracked` values).
-5. **Enum formalization** (`lot.source`, `form.inspection_type`, `test_definition.granularity`).
+5. **Enum formalization** (`lot.source`, `form.form_type`, `form_row.granularity`).
+   Promote `form.part_number_id` → real FK while in `form` DDL (§4.5).
 6. **Create/render logic** — derive batch-vs-unit from structure; completeness "N of build.qty"
-   (Q6); retest = a unit-testing inspection pointing at the same unit.
+   (Q6); retest = a unit-testing form_record pointing at the same unit.
 7. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes).
 8. _(optional)_ embedded build-at-test-time UX (re-scoped #716) — highest risk, last.
 
 ## 8. Stays outside the epic
 
-- **#717** — `serial_number_pn` / `_pn_desc` rename. Still valid (they're not serials), but the
-  target name must avoid the new `unit` vocabulary — retarget to e.g. `tested_part_number` /
-  `tested_pn_description`, **not** `unit_part_number`.
-- **#712** — **now absorbed into the epic** (Q1 = A). It's the UoM half of the step-1 rename wave,
-  not an outside cleanup. Close/relabel it accordingly when the epic is filed.
+- **#717** — `serial_number_pn` / `_pn_desc` → `subject_part_number` / `subject_pn_description`, kept
+  on `form_record` (see §4.4). Independent of the traceability core; can land anytime, but the
+  rename fits naturally in the step-1 rename wave.
+- **#712** — **absorbed into the epic.** It's the UoM `unit`→`uom` half of the step-1 rename wave
+  (§3), not an outside cleanup. Close/relabel it accordingly when the epic is filed.
 
 ## 9. Freeze checklist
 
 - [x] Q1–Q7 resolved and recorded inline (Q1 uom-rename, Q2 decoupled, Q3 derived, Q4 v0.9-deferred,
       Q5 lazy one-at-a-time, Q6 denominator=build.qty, Q7 renames early).
-- [x] Q8 resolved (no `inspection_unit`; nullable `inspection.unit_id`).
+- [x] Q8 resolved (no per-record unit join table; nullable `form_record.unit_id`).
 - [x] Q9 resolved (Form↔Assembly m2m already exists via Form-is-a-part + BOM; no schema change).
 - [x] §4 detail settled: `unit.serial_number` is a **string, UNIQUE per `part_id`**;
       `tracking_mode` migration maps `is_lot_tracked` `0→none`, `1→lot` (`serial`/`lot_serial` set
