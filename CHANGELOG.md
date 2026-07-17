@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-07-17
+### Changed
+- Expanded `SQL/seed_test_data.sql` into a richer PRE-state migration testbed for the traceability data model epic: a manually-adjusted lot with no `po_line_id`/owning build (the third `lot.source` origin), and a full receipt→incoming-inspection→build→build→final-test chain (new lot-tracked assembly 3013) with a two-level, branching lot genealogy tree, so later epic slices can dry-run their migrations against real rows ([#737](https://github.com/Jolls/arx-legacy/issues/737))
+
 ## [0.6.1] - 2026-07-17
 ### Security
 - Moved the DB passwords and session-signing secret out of the shared, exe-adjacent `config/local.json` into a per-user store (`%APPDATA%\Arx\local.json`; `~/.config/arx/local.json` on Linux). A shared/OneDrive `Arx.exe` no longer exposes one user's plaintext DB password to everyone with folder access or lets any user forge another's session cookie via a shared signing key. First run after upgrade migrates existing secrets into the per-user file and scrubs them from the shared file ([#732](https://github.com/Jolls/arx-legacy/issues/732))

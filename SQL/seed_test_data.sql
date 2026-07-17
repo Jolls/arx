@@ -208,7 +208,13 @@ BEGIN TRY
         -- toggle and the "rollup" cost-source badge, neither of which any other seeded
         -- assembly-of-assemblies line reaches. last_rollup_cost matches the sum of its own
         -- BOM lines below (2*2.50 + 1*4.10 = 9.10) as if the rollup engine had just run.
-        (3012, 'ASM-1002', 'ASM', 'A', 'Widget Sub-Assembly',        'A', 1, 1,  0,      NULL, 9.10,  GETDATE());
+        (3012, 'ASM-1002', 'ASM', 'A', 'Widget Sub-Assembly',        'A', 1, 1,  0,      NULL, 9.10,  GETDATE()),
+        -- Top-level lot-tracked assembly (#737): consumes sub-assembly 3012 AND raw 3007
+        -- directly, so its build writes a two-parent genealogy edge into a two-level-deep
+        -- chain (8301→8302→8306, plus 8303→8306) — a PRE-state tree for the future
+        -- traceability view (epic #736 slice 9) and completes the
+        -- receipt→incoming-inspection→build→build→final-test flow (§0 of the plan).
+        (3013, 'ASM-1003', 'ASM', 'A', 'Widget Deluxe Assembly',     'A', 1, 1,  0,      NULL, NULL, NULL);
     SET IDENTITY_INSERT dbo.part OFF;
 
     -- Fully populated part so the detail card and edit round-trip show detail/notes/user fields.
@@ -246,7 +252,12 @@ BEGIN TRY
         (3905, 3012, 3001, 1, 2),   -- sub-assembly 3012's own BOM: 2x Aluminum Stock
         (3906, 3012, 3007, 2, 1),   -- + 1x Stainless Steel Bar Stock
         (3907, 3005, 3012, 4, 1),   -- 3005 nests 3012 as a sub-assembly component
-        (3908, 3012, 3002, 3, 3);   -- 3012 also directly uses 3x screw 3002 (shared leaf, #466)
+        (3908, 3012, 3002, 3, 3),   -- 3012 also directly uses 3x screw 3002 (shared leaf, #466)
+        (3909, 3010, 3007, 2, 1),   -- FORM part's BOM also covers 3007 (#737), so it can carry an
+                                    -- Incoming Inspection record — see test_record 7012 below
+        (3910, 3013, 3012, 1, 1),   -- 3013's own BOM: 1x sub-assembly 3012 (#737)
+        (3911, 3013, 3007, 2, 1),   -- + 1x raw stainless bar stock, direct (not via 3012)
+        (3912, 3010, 3013, 3, 1);   -- FORM part's BOM also covers 3013, for its Final Test record
     SET IDENTITY_INSERT dbo.bom OFF;
 
     -- ============================================================
@@ -377,46 +388,70 @@ BEGIN TRY
     -- 8202 is the manufactured build that produced lot-tracked sub-assembly 3012's lot
     -- 8302 (linked below in 10c, once the lot exists) — exercises test_record.build_id +
     -- lot_id together (#677). Its ledger rows are likewise not seeded, per the note above.
+    -- 8203 (#737): builds top-level assembly 3013 out of sub-assembly 3012's lot 8302 and
+    -- raw 3007's lot 8303, five days after 8202 — the second tier of the multi-level chain.
     SET IDENTITY_INSERT dbo.build ON;
     INSERT INTO dbo.build (id, part_id, output_lot_id, qty, build_date, username, note) VALUES
         (8201, 3005, NULL, 1, '2026-05-25', 'tester', 'Built 1x assembly 3005 from BOM'),
-        (8202, 3012, NULL, 1, '2026-05-25', 'tester', 'Built 1x sub-assembly 3012 (lot 8302)');
+        (8202, 3012, NULL, 1, '2026-05-25', 'tester', 'Built 1x sub-assembly 3012 (lot 8302)'),
+        (8203, 3013, NULL, 1, '2026-05-30', 'tester', 'Built 1x deluxe assembly 3013 (lot 8306)');
     SET IDENTITY_INSERT dbo.build OFF;
 
     -- ============================================================
     -- 10c. Lot control (#676): lot-tracked parts + a one-level genealogy chain.
     -- ============================================================
-    -- 3007 (RAW-1002) is a lot-tracked purchased raw; 3012 (ASM-1002 sub-assembly) is a
-    -- lot-tracked manufactured part that consumes 3007. 3005 is intentionally left
-    -- un-tracked so the #675 build test (which builds 3005) is unaffected — lot machinery
-    -- only engages when the OUTPUT part is lot-tracked.
-    UPDATE dbo.part SET is_lot_tracked = 1 WHERE id IN (3007, 3012);
+    -- 3007 (RAW-1002) is a lot-tracked purchased raw; 3012 (ASM-1002 sub-assembly) and 3013
+    -- (ASM-1003 top-level assembly, #737) are lot-tracked manufactured parts that consume
+    -- 3007 (and, for 3013, 3012 too). 3005 is intentionally left un-tracked so the #675
+    -- build test (which builds 3005 via the app's build-create POST) is unaffected — lot
+    -- machinery only engages when the OUTPUT part is lot-tracked, and 3005's own BOM
+    -- components (3002/3003) are deliberately left un-tracked as well so that existing
+    -- app-driven build integration tests don't need an extra lot pick per component.
+    UPDATE dbo.part SET is_lot_tracked = 1 WHERE id IN (3007, 3012, 3013);
 
     -- 8301: purchased lot of 3007, received against po_line 5504 (PO 5003); lot_number
     --       defaults to the lot's own id (#687), vendor_lot_number is the supplier's
     --       own batch ID, lot_description records the PO as provenance.
     -- 8302: manufactured lot of sub-assembly 3012 (po_line_id NULL).
+    -- 8303 (#737): manually-adjusted lot of 3007 — neither po_line_id nor an owning build,
+    --       the third lot origin (found/uncounted stock folded in via cycle count) that
+    --       today is inferred, not stored; a PRE-state row for the future lot.source enum
+    --       (traceability epic #736 slice 7) to backfill as 'adjust'. Consumed below into
+    --       8306, so it's not an orphan node in the genealogy graph.
+    -- 8306 (#737): manufactured lot of top-level assembly 3013 (po_line_id NULL) — the
+    --       second tier of the multi-level chain, output of build 8203.
     SET IDENTITY_INSERT dbo.lot ON;
     INSERT INTO dbo.lot (id, part_id, lot_number, lot_description, vendor_lot_number, po_line_id, created_at, is_active) VALUES
-        (8301, 3007, '8301', 'PO 5003',    'SS304-LOT-0088', 5504, '2026-05-15T00:00:00', 1),
-        (8302, 3012, '8302', 'Build #8202', NULL,            NULL, '2026-05-25T00:00:00', 1);
+        (8301, 3007, '8301', 'PO 5003',                          'SS304-LOT-0088', 5504, '2026-05-15T00:00:00', 1),
+        (8302, 3012, '8302', 'Build #8202',                      NULL,             NULL, '2026-05-25T00:00:00', 1),
+        (8303, 3007, '8303', 'Cycle count - unlabeled found lot', NULL,            NULL, '2026-05-22T00:00:00', 1),
+        (8306, 3013, '8306', 'Build #8203',                       NULL,            NULL, '2026-05-30T00:00:00', 1);
     SET IDENTITY_INSERT dbo.lot OFF;
 
-    -- 8401: 3012's lot 8302 consumed 1 unit of 3007's lot 8301 (bom line 3906, qty 1) —
-    --       a one-level chain so a recursive query from 8302 resolves back to vendor lot 8301.
+    -- 8401: 3012's lot 8302 consumed 1 unit of 3007's lot 8301 (bom line 3906, qty 1) — a
+    --       one-level chain so a recursive query from 8302 resolves back to vendor lot 8301.
+    -- 8402/8403 (#737): 3013's lot 8306 consumed 1 unit each of 8302 (bom line 3910) and
+    --       8303 (bom line 3911) — two parents into one child (branching), and a second
+    --       level on top of 8401 (8301→8302→8306), so a recursive trace from 8306 resolves
+    --       back through BOTH raw lots (8301 via 8302, and 8303 directly). PRE-state tree
+    --       for the future genealogy widening + traceability view (epic #736 slices 4/9).
     SET IDENTITY_INSERT dbo.lot_genealogy ON;
     INSERT INTO dbo.lot_genealogy (id, parent_lot_id, child_lot_id, qty_consumed) VALUES
-        (8401, 8301, 8302, 1);
+        (8401, 8301, 8302, 1),
+        (8402, 8302, 8306, 1),
+        (8403, 8303, 8306, 1);
     SET IDENTITY_INSERT dbo.lot_genealogy OFF;
 
     -- Stamp the seed receipt (5901, part 3007 against po_line 5504) with the lot it
     -- created (8301), exercising inventory_transaction.lot_id (#676).
     UPDATE dbo.inventory_transaction SET lot_id = 8301 WHERE id = 5901;
 
-    -- Link build 8202's output to lot 8302 (deferred until the lot exists, mirroring the
-    -- build handler: insert build → create lot → set output_lot_id). Gives lot 8302 a real
-    -- originating build so its lot_description shows "Build #8202" and test_record 7010 can point at both.
+    -- Link build 8202/8203's output to their lots (deferred until the lots exist, mirroring
+    -- the build handler: insert build → create lot → set output_lot_id). Gives each lot a
+    -- real originating build so its lot_description shows "Build #NNNN" and the matching
+    -- test_record can point at both.
     UPDATE dbo.build SET output_lot_id = 8302 WHERE id = 8202;
+    UPDATE dbo.build SET output_lot_id = 8306 WHERE id = 8203;
 
     -- ============================================================
     -- 11. Test records — form, test_definition, test_record, test_result,
@@ -478,7 +513,9 @@ BEGIN TRY
         (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-07-01T00:00:00'), -- Complete, all pass
         (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-07-05T00:00:00'), -- Complete, all pass
         (7010, 6001, 3012, '2026-07-10', '7010', 'ASM-1002', 'Sub-Assembly',  '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8302, 8202, '2020-01-01T00:00:00', '2026-07-10T00:00:00'), -- WIP, lot-tracked part → lot 8302 + build 8202 (#677)
-        (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Widget Assembly','6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, 8201, '2020-01-01T00:00:00', '2026-07-11T00:00:00'); -- WIP, non-lot-tracked assembly → build 8201 only (#677)
+        (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Widget Assembly','6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, 8201, '2020-01-01T00:00:00', '2026-07-11T00:00:00'), -- WIP, non-lot-tracked assembly → build 8201 only (#677)
+        (7012, 6001, 3007, '2026-05-16', '7012', 'RAW-1002', 'Stainless Steel Bar Stock', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8301, NULL, '2020-01-01T00:00:00', '2026-05-16T00:00:00'), -- WIP, Incoming Inspection: lot 8301 → build_id NULL (#737 PRE-state row; reuses form 6001 purely to cover the receipt-not-yet-consumed case, not a realistic electrical test on bar stock)
+        (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Widget Deluxe Assembly', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8306, 8203, '2020-01-01T00:00:00', '2026-05-31T00:00:00'); -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0)
     SET IDENTITY_INSERT dbo.test_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what
@@ -527,7 +564,16 @@ BEGIN TRY
         (7137, 7011, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7138, 7011, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7139, 7011, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
-        (7140, 7011, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
+        (7140, 7011, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        -- 7012 / 7013 (#737) are WIP with empty results, same unfilled pattern as 7010/7011.
+        (7141, 7012, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7142, 7012, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7143, 7012, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7144, 7012, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        (7145, 7013, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7146, 7013, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7147, 7013, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7148, 7013, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.test_result OFF;
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).
