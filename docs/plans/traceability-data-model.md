@@ -1,20 +1,14 @@
 # Traceability Data Model — Part → Lot → Unit
 
-**Status:** DRAFT / not frozen. This is the discussion surface for the v0.7 traceability
-redesign. Nothing here is committed until the "Freeze" checklist at the bottom is checked
-and an epic issue is filed. Sub-issues are carved **after** freeze, from the migration path,
+**Status:** DRAFT / not frozen. Nothing here is committed until the §9 freeze checklist is checked
+and an epic issue is filed. Sub-issues are carved **after** freeze, from the migration path (§5),
 not from the target schema.
 
 **Epic issue:** _TBD_ (file once frozen; rename this doc to `<epic#>-traceability-data-model.md`).
 
-**Supersedes:** the `trace_id` / `is_batch` issue set — #702 (parent design thread), #713
-(serial_number→trace_id rename), #714 (is_batch + compound trace_id), #715 (build detail view),
-#716 (embedded build UX). Those are to be **closed as superseded** (not deleted — the reasoning
-and the rejected dead-ends are the audit trail), each pointing back at the epic.
-
-**Origin:** design artifact "Parts · Lots · Testing — from-scratch data model" (three-tier
-identity) plus the review of the #702 thread. This doc reconciles that greenfield model against
-the *existing* Arx schema and splits the work into target-state vs. migration.
+**Supersedes:** the `trace_id` / `is_batch` issue set — #702 (parent thread), #713
+(serial_number→trace_id), #714 (is_batch + compound trace_id), #715 (build detail view), #716
+(embedded build UX) — each closed as superseded and pointed back at the epic.
 
 ---
 
@@ -78,7 +72,7 @@ data (not parsed strings or proxy flags):
 - Retest of one failed unit drawn from a batch.
 - The provenance chain: which raw lots → which build → which output lot/units → which test events.
 
-## 2. Core thesis (from the artifact)
+## 2. Core thesis
 
 Identity is a three-tier hierarchy, each tier a **real table**, never one overloaded string:
 
@@ -88,11 +82,11 @@ Identity is a three-tier hierarchy, each tier a **real table**, never one overlo
 | 2 · batch instance | `lot` | which batch | yes (#676) |
 | 3 · serialized instance | **`unit`** (new) | which exact one | **no — this is the gap** |
 
-The `unit` table is the piece Arx lacks, and its absence *is* the whole `trace_id` / `is_batch`
-struggle in #702. A serial number becomes a **row with real FKs** (`part_id`, nullable `lot_id`,
-nullable `build_id`), not a parsed string like `LOT123.4`.
+The `unit` table is the piece Arx lacks. A serial number becomes a **row with real FKs**
+(`part_id`, nullable `lot_id`, nullable `build_id`), not a parsed string like `LOT123.4` — replacing
+the `trace_id` / `is_batch` approach (#702).
 
-Two nullable FKs carry the model:
+Nullable FKs — not flags or parsed strings — carry the model:
 
 - **`unit.lot_id` nullable** — set for `lot_serial` parts (a serialized unit inside a lot);
   NULL for serial-only parts with no batch. One `unit` table serves both.
@@ -120,7 +114,7 @@ but out of scope here **except** where §6 open questions force an interaction.
 ### 4.1 New / changed tables
 
 All constrained-value columns below (`none|lot|...`) are **`VARCHAR` + `CHECK` constraint**, not a
-native enum type or a lookup table — see §4.4 for why. `?` marks a nullable FK.
+native enum type or a lookup table — see §4.3 for why. `?` marks a nullable FK.
 
 | Table | Status | Key columns / additions | Notes |
 |-------|--------|-------------------------|-------|
@@ -225,20 +219,15 @@ erDiagram
 | `part.is_lot_tracked` (bool) | `part.tracking_mode` (VARCHAR+CHECK `none\|lot\|serial\|lot_serial`) | adds the serial axis Arx has no concept of today |
 | `test_record` | `form_record` | rename + reshape |
 | `test_record.serial_number` | **gone** — replaced by `unit` rows + nullable `form_record.unit_id` (Q8) | this is the whole point; kills the `trace_id`/`is_batch` idea |
-| `test_record.serial_number_pn` / `_pn_desc` | `form_record.subject_part_number` / `subject_pn_description` — kept in place | snapshot of the part-under-test's PN/desc; *not* serials, and *not* the `unit` table (see §4.4) |
+| `test_record.serial_number_pn` / `_pn_desc` | `form_record.subject_part_number` / `subject_pn_description` — kept in place | snapshot of the part-under-test's PN/desc; *not* serials, and *not* the `unit` table (see §4.3) |
 | `test_result` | `result` (child FK `record_id` → `form_record_id`) | one table, both granularities; unit granularity lives on `form_record.unit_id`, not here (Q8) |
-| `unit` (UoM) | `uom` | renamed to free `unit` for Tier-3 (Q1, absorbs #712) |
+| `unit` (UoM) | `uom` | renamed to free `unit` for Tier-3 (§3, absorbs #712) |
 | `form` (record_types, instrument_types, revision) | `form` + `form_type` | change-control columns **stay** (Q4); `part_number_id` unchanged — it's the FORM's own PN |
 | `test_definition` (spec_*, pf_type, archived, history) | `form_row` + `granularity` (`test_definition_history`→`form_row_history`, `test_id`→`form_row_id`) | it's a form line — test / heading / instruction / … — not only a "test"; change-control machinery **stays** (Q4) |
 | `lot` (po_line_id NULL ⇒ built) | `lot.source` explicit | today source is inferred; make it a column |
 | `lot_genealogy` (lot→lot only) | `genealogy` (lot + unit endpoints) | records serialized-child provenance, not just lots — enables per-serial as-built genealogy (Q11) |
 
-### 4.3 What the artifact's ERD *omitted* and we must not
-
-The artifact footer trims inventory/BOM/UoM "out of scope." Those omissions are exactly where the
-hard design is — captured as open questions in §6.
-
-### 4.4 Column-type & FK conventions
+### 4.3 Column-type & FK conventions
 
 **"Enum" columns are `VARCHAR` + `CHECK`, not a native enum type and not a lookup table.**
 SQL Server has no native `ENUM`, and Arx's established pattern for a small, stable, *code-branched*
@@ -262,7 +251,7 @@ because `form_record` is general (inspection/calibration/checklist, not just tes
 really a frozen string copied off `part`. `subject_*` — the part the record is about — says exactly
 what it is across every form type. (This retargets #717.)
 
-### 4.5 FK cleanup in scope
+### 4.4 FK cleanup in scope
 
 New tables/columns this epic creates get **real FKs from birth** (`unit.part_id`, `unit.lot_id?`,
 `unit.build_id?`, `form_record.unit_id`, `genealogy.parent_unit_id?`/`child_unit_id?`, and the
@@ -306,8 +295,7 @@ Throughout, honor the Q4 constraint: don't strand the revision-control snapshot 
 
 ## 6. Design decisions (resolved)
 
-Stable IDs — referenced inline throughout as `(Qn)`. Q1 (name/#712) and Q7 (renames) are dropped
-here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives only here.
+Each decision has a stable ID (`Qn`) referenced inline throughout; the rationale lives only here.
 
 - **Q2 — Unit ↔ inventory / stock. → RESOLVED: fully decoupled.** `stock_on_hand` stays
   `SUM(inventory_transaction.qty)`, unchanged. **Unit count is independent of inventory; inventory
@@ -347,14 +335,12 @@ here as fully captured in §3/§4/§5/§7; the rest carry rationale that lives o
   - **Batch vs unit testing:** unit testing = one form_record per unit → one `unit` row, full
     per-parameter results. Batch testing = one lot/build-granularity form_record covering many units
     at once (whole-lot y/n), which does **not** enumerate or create per-unit rows.
-- **Q6 — Completeness "19 of 20 tested". → RESOLVED, denominator relocated.** Track completeness as
+- **Q6 — Completeness "19 of 20 tested". → RESOLVED.** Track completeness as
   `COUNT(units for the build/lot) / build.qty (or lot qty)`. The **denominator is the build/lot
-  quantity, which already exists** (this is the old thread's correct "qty lives on the build"
-  insight); the **numerator is the count of unit-tested units**. Missing units (built-but-untested)
-  are simply absent from the unit table — a future report can surface the gap (out of scope). This
-  supersedes both the old thread's "don't reconcile at all" *and* the earlier draft's mistaken
-  "eager-create all N units" — neither is needed.
-- **Q8 — per-record unit m2m (the artifact's `inspection_unit`). → RESOLVED: not m2m; use a nullable
+  quantity, which already exists**; the **numerator is the count of unit-tested units**. Missing
+  units (built-but-untested) are simply absent from the unit table — a future report can surface the
+  gap (out of scope).
+- **Q8 — per-record unit m2m. → RESOLVED: not m2m; use a nullable
   `form_record.unit_id` FK.** A form_record covers at most one specific serialized unit (unit
   testing); batch testing is whole-lot and enumerates no individual units. So there is no
   form_record↔unit many-to-many — no join table, add a nullable `form_record.unit_id`. Retest = a
@@ -405,9 +391,8 @@ Carved from the migration path (§5), one shippable guarded-migration slice each
 
 0. **Expand seed data → migration testbed (PRE any code change).** Before the rename wave, grow
    `SQL/seed_test_data.sql` into a representative PRE-state dataset so the big rename/reshape
-   migration can be dry-run PRE→POST and verified end-to-end. This is a large rename with a large
-   migration; a richer dataset to migrate against de-risks it. TODO: assess whether current seed is
-   already big enough — **revisit and think hard later** (own design pass), for now just a placeholder task.
+   migration can be dry-run PRE→POST and verified end-to-end. TODO: assess whether the current seed
+   is already large enough (its own design pass).
 1. **Rename wave** — `test_record`→`form_record`, `test_result`→`result`, `test_definition`→`form_row`,
    UoM `unit`→`uom` (absorbs
    #712). Pure renames, isolated, tested standalone. Front of the epic; may be one PR or split
@@ -417,10 +402,10 @@ Carved from the migration path (§5), one shippable guarded-migration slice each
 3. **`genealogy` table** — widen `lot_genealogy` (add `parent_unit_id`/`child_unit_id`, the
    exactly-one-parent/child CHECK; Q11); builds write one edge per consumed lot or unit.
 4. **`form_record.unit_id`** — nullable FK (Q8; no join table). Also promote
-   `form_record.part_number_id` → real FK during the reshape (§4.5).
+   `form_record.part_number_id` → real FK during the reshape (§4.4).
 5. **`tracking_mode`** on part (migrate `is_lot_tracked` values).
 6. **Enum formalization** (`lot.source`, `form.form_type`, `form_row.granularity`).
-   Promote `form.part_number_id` → real FK while in `form` DDL (§4.5).
+   Promote `form.part_number_id` → real FK while in `form` DDL (§4.4).
 7. **Create/render logic** — derive batch-vs-unit from structure; completeness "N of build.qty"
    (Q6); retest = a unit-testing form_record pointing at the same unit.
 8. **Build/lot/unit traceability view** (re-scoped #715 — read-only drill-down + indexes). Walks the
@@ -430,20 +415,16 @@ Carved from the migration path (§5), one shippable guarded-migration slice each
 ## 8. Stays outside the epic
 
 - **#717** — `serial_number_pn` / `_pn_desc` → `subject_part_number` / `subject_pn_description`, kept
-  on `form_record` (see §4.4). Independent of the traceability core; can land anytime, but the
+  on `form_record` (see §4.3). Independent of the traceability core; can land anytime, but the
   rename fits naturally in the step-1 rename wave.
 - **#712** — **absorbed into the epic.** It's the UoM `unit`→`uom` half of the step-1 rename wave
   (§3), not an outside cleanup. Close/relabel it accordingly when the epic is filed.
 
 ## 9. Freeze checklist
 
-- [x] Q1–Q7 resolved and recorded inline (Q1 uom-rename, Q2 decoupled, Q3 derived, Q4 v0.9-deferred,
-      Q5 lazy one-at-a-time, Q6 denominator=build.qty, Q7 renames early).
-- [x] Q8 resolved (no per-record unit join table; nullable `form_record.unit_id`).
-- [x] Q9 resolved (Form↔Assembly m2m already exists via Form-is-a-part + BOM; no schema change).
-- [x] Q11 resolved (one `genealogy` edge table, lot/unit endpoints, exactly-one-parent/child CHECK).
-- [x] §4 detail settled: `unit.serial_number` is a **string, UNIQUE per `part_id`**;
-      `tracking_mode` migration maps `is_lot_tracked` `0→none`, `1→lot` (`serial`/`lot_serial` set
-      per-part afterward; existing data implies neither).
-- [ ] Migration slices §7 each map to exactly one guarded migration.
-- [ ] Epic issue filed; this doc renamed with its number; old #702 set closed as superseded.
+- [x] All §6 design decisions resolved and recorded inline.
+- [x] `unit.serial_number` = string, UNIQUE per `part_id`; `tracking_mode` migration maps
+      `is_lot_tracked` `0→none`, `1→lot` (`serial`/`lot_serial` set per-part afterward; existing
+      data implies neither).
+- [ ] Migration slices (§7) each map to exactly one guarded migration.
+- [ ] Epic issue filed; this doc renamed with its number; superseded #702 set closed.
