@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-07-17
+### Changed
+- Expanded `SQL/seed_test_data.sql` into a richer PRE-state migration testbed for the traceability data model epic: a manually-adjusted lot with no `po_line_id`/owning build (the third `lot.source` origin), and a full receipt→incoming-inspection→build→build→final-test chain (new lot-tracked assembly 3013) with a two-level, branching lot genealogy tree, so later epic slices can dry-run their migrations against real rows ([#737](https://github.com/Jolls/arx-legacy/issues/737))
+
 ## [0.6.2] - 2026-07-17
 ### Fixed
 - Folder-root settings (`DOC_CONTROL_ROOT`, `PO_FOLDER_ROOT`, `SUPPLIER_FILES_ROOT`, `IMAGE_ROOT`) under a user's profile directory (e.g. OneDrive) are now stored with a `%USERPROFILE%` token instead of a hardcoded path, so a shared/OneDrive `Arx.exe`'s `config/local.json` resolves correctly for every user instead of only the one who last saved Settings ([#731](https://github.com/Jolls/arx-legacy/issues/731))

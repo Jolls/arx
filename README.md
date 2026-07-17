@@ -6,6 +6,25 @@ Parts catalog, purchasing, and test-record management for an engineering/manufac
 
 ---
 
+## What Arx is
+
+Arx is a **part and quality-record-centric ERP** for engineering and manufacturing shops. Instead of bolting quality onto a parts database as an afterthought, Arx follows each part through its whole life — from the first drawing to the final tested assembly — and keeps a change-controlled record (future feature) at every step. A part number is designed and documented, purchased, received into a traceable lot, inspected, assembled from a bill of materials, and finally tested as an individual unit. At each stage the paperwork that proves what happened — the PO, the receipt, the inspection, the test results — lives in one place and traces back to the exact lots and parts it came from.
+
+```mermaid
+flowchart LR
+    A["<b>Design</b><br/>part numbers<br/>drawings · BOMs"]
+    B["<b>Purchase</b><br/>RFQs · POs"]
+    C["<b>Receive</b><br/>into lots"]
+    D["<b>Inspect</b><br/>incoming quality"]
+    E["<b>Assemble</b><br/>build from BOM"]
+    F["<b>Final Test</b><br/>per unit"]
+    A --> B --> C --> D --> E --> F
+```
+
+The result is end-to-end traceability: pick up any finished unit and follow it back through the assemblies, lots, suppliers, and test records that produced it.
+
+---
+
 ## Features
 
 Arx is organized into a few sections, navigable from a single top nav bar:
