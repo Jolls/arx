@@ -411,6 +411,10 @@ BEGIN TRY
     -- app-driven build integration tests don't need an extra lot pick per component.
     UPDATE dbo.part SET is_lot_tracked = 1 WHERE id IN (3007, 3012, 3013);
 
+    -- tracking_mode backfill (#743): mirrors is_lot_tracked (0->'none', 1->'lot') until the
+    -- slice 8 read-swap; is_lot_tracked keeps driving reads until then.
+    UPDATE dbo.part SET tracking_mode = 'lot' WHERE id IN (3007, 3012, 3013);
+
     -- 8301: purchased lot of 3007, received against po_line 5504 (PO 5003); lot_number
     --       defaults to the lot's own id (#687), vendor_lot_number is the supplier's
     --       own batch ID, lot_description records the PO as provenance.
