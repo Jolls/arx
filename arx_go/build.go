@@ -279,7 +279,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 	// independent of whether the output is lot-tracked, since consuming a lot-tracked
 	// component always draws from a specific lot. The picked lot is recorded on the
 	// component's issue ledger row (inventory_transaction.lot_id), and — when the
-	// output part is also lot-tracked — additionally as a lot_genealogy edge into the
+	// output part is also lot-tracked — additionally as a genealogy edge into the
 	// output lot. Validate the picks up front, before writing anything.
 	lotPicks := map[int]int{} // componentPartID → selected lot id
 	for _, l := range lines {
@@ -377,7 +377,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		// When the output part is lot-tracked too, additionally link the consumed
 		// component lot to the output lot as a genealogy edge (#676).
 		if outputLotTracked && l.isLotTracked {
-			if err := h.recordLotGenealogy(r.Context(), tx, *lotID, outputLotID, consumed); err != nil {
+			if err := h.recordGenealogy(r.Context(), tx, *lotID, outputLotID, consumed); err != nil {
 				h.renderError(w, r, "Error recording lot genealogy: "+err.Error())
 				return
 			}
