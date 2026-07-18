@@ -298,7 +298,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		p.UnitID = &v
 		var abbr sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT abbreviation FROM %s WHERE uom_id = @p1`, h.cfg.UnitTable(),
+			`SELECT abbreviation FROM %s WHERE uom_id = @p1`, h.cfg.UomTable(),
 		), v).Scan(&abbr)
 		p.UnitAbbr = abbr.String
 	}

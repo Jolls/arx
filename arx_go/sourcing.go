@@ -180,7 +180,7 @@ func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.SupplierPart, error) {
-	sp, co, ut, pn := h.cfg.SupplierPartTable(), h.cfg.CompanyTable(), h.cfg.UnitTable(), h.cfg.PartsTable()
+	sp, co, ut, pn := h.cfg.SupplierPartTable(), h.cfg.CompanyTable(), h.cfg.UomTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment, sp.uom_id,

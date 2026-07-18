@@ -348,7 +348,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Name = name.String
 
-	sp, pn, ut := h.cfg.SupplierPartTable(), h.cfg.PartsTable(), h.cfg.UnitTable()
+	sp, pn, ut := h.cfg.SupplierPartTable(), h.cfg.PartsTable(), h.cfg.UomTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,

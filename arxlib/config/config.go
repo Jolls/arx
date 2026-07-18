@@ -201,11 +201,12 @@ func (c *Config) SupplierPartTable() string       { return "supplier_part" }
 func (c *Config) MfgPartTable() string            { return "mfg_part" }
 func (c *Config) CompanyAttachmentsTable() string { return "company_attachment" }
 func (c *Config) ContactTable() string            { return "contact" }
-func (c *Config) UnitTable() string               { return "uom" }
+func (c *Config) UomTable() string                { return "uom" }
 func (c *Config) InventoryTxnTable() string       { return "inventory_transaction" }
 func (c *Config) BuildTable() string              { return "build" }
 func (c *Config) LotTable() string                { return "lot" }
 func (c *Config) LotGenealogyTable() string       { return "lot_genealogy" }
+func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
 func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "LNK" }
