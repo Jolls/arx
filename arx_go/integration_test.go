@@ -242,7 +242,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	}
 
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
 			h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
@@ -271,7 +271,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 		}
 		for _, pf := range s.passFails {
 			if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-				`INSERT INTO %s (record_id, form_row_id, pass_fail) VALUES (@p1, @p2, @p3)`,
+				`INSERT INTO %s (form_record_id, form_row_id, pass_fail) VALUES (@p1, @p2, @p3)`,
 				h.cfg.ResultsTable()), recordID, testID, pf); err != nil {
 				t.Fatalf("seed result: %v", err)
 			}
@@ -285,7 +285,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT record_date, MAX(CASE WHEN pass_fail = 0 THEN 1 ELSE 0 END)
 		FROM %s trec
-		LEFT JOIN %s res ON res.record_id = trec.id
+		LEFT JOIN %s res ON res.form_record_id = trec.id
 		WHERE form_id = @p1 AND is_active = 1%s
 		GROUP BY trec.id, record_date`,
 		h.cfg.RecordsTable(), h.cfg.ResultsTable(), dateClause), args...)
@@ -418,7 +418,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	}
 	defer func() {
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
+			fmt.Sprintf(`DELETE FROM %s WHERE form_record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
 				h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
 			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
@@ -445,7 +445,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, is_locked, is_active)
+		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, test_order, comments, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587', '', '', @p2, '', 0, 1)`, h.cfg.RecordsTable()),
 		formID, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
@@ -463,7 +463,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	var result string
 	var passFail sql.NullBool
 	err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND form_row_id=@p2`,
+		`SELECT result, pass_fail FROM %s WHERE form_record_id=@p1 AND form_row_id=@p2`,
 		h.cfg.ResultsTable()), recordID, testID,
 	).Scan(&result, &passFail)
 	if err != nil {
@@ -484,7 +484,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	assertStatus(t, "SaveResults (attach, cleared)", rec, http.StatusSeeOther)
 
 	err = h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND form_row_id=@p2`,
+		`SELECT result, pass_fail FROM %s WHERE form_record_id=@p1 AND form_row_id=@p2`,
 		h.cfg.ResultsTable()), recordID, testID,
 	).Scan(&result, &passFail)
 	if err != nil {
@@ -565,7 +565,7 @@ func TestIntegration_PasteResultImageGuards(t *testing.T) {
 
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, serial_number, serial_number_pn, serial_number_pn_desc, is_locked, is_active)
+		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587-LOCKED', '', '', 1, 1)`, h.cfg.RecordsTable()), formID,
 	).Scan(&recordID); err != nil {
 		t.Fatalf("seed locked form_record: %v", err)
@@ -1638,7 +1638,7 @@ func TestIntegration_BuildReturnsToRecord(t *testing.T) {
 	// Throwaway WIP record whose tested part is the buildable output part.
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, part_number_id, serial_number, is_locked, is_active)
+		`INSERT INTO %s (form_id, part_id, serial_number, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 0, 1)`, rt),
 		outputPart, smokeUniq("BRR")).Scan(&recordID); err != nil {
 		t.Fatalf("seed record: %v", err)
@@ -1740,7 +1740,7 @@ func TestIntegration_RecordLinkageSave(t *testing.T) {
 	// strings (real records always carry these snapshots).
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc, comments, test_order, is_locked, is_active)
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1002', 'Sub-Assembly', '', '', 0, 1)`, rt),
 		testedPart, smokeUniq("RLS")).Scan(&recordID); err != nil {
 		t.Fatalf("seed record: %v", err)

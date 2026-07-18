@@ -28,7 +28,7 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 		SELECT form_row_id, COALESCE(parameter,''), COALESCE(specification,''), COALESCE(spec_units,''),
 		       COALESCE(result,''), pass_fail, COALESCE(comment,'')
-		FROM %s WHERE record_id=@p1 AND COALESCE(type,0)=0`, h.cfg.ResultsTable()), recordID)
+		FROM %s WHERE form_record_id=@p1 AND COALESCE(type,0)=0`, h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (h *Handler) loadEventSnapshots(ctx context.Context, recordID int) (map[int
 		       COALESCE(rer.spec_units,''), COALESCE(rer.result,''), rer.pass_fail, COALESCE(rer.comment,'')
 		FROM %s rer
 		JOIN %s re ON re.id = rer.event_id
-		WHERE re.test_record_id = @p1
+		WHERE re.form_record_id = @p1
 		ORDER BY re.event_date ASC, re.id ASC, rer.id ASC`,
 		h.cfg.RecordEventResultsTable(), h.cfg.RecordEventsTable()), recordID)
 	if err != nil {
@@ -172,7 +172,7 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 func (h *Handler) logCompletionSnapshot(ctx context.Context, tx *txLogger, recordID int, username string) error {
 	var eventID int
 	insertEvent := h.dialect.InsertReturningID(h.cfg.RecordEventsTable(),
-		"test_record_id, event_type, username, event_date",
+		"form_record_id, event_type, username, event_date",
 		"@p1, 'completed', @p2, GETDATE()",
 		false)
 	if err := tx.QueryRowContext(ctx, insertEvent,

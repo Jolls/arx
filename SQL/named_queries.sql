@@ -101,11 +101,11 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'max_subbatch_result',
   'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
-  'SELECT MAX(TRY_CAST(r.result AS INT)) FROM result r JOIN form_record tr ON r.record_id = tr.id WHERE r.form_row_id = @test_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
-  'test_id, record_date', 'single',
+  'SELECT MAX(TRY_CAST(r.result AS INT)) FROM result r JOIN form_record tr ON r.form_record_id = tr.id WHERE r.form_row_id = @form_row_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
+  'form_row_id, record_date', 'single',
   GETDATE()
 );
--- Usage in spec_nom: query:max_subbatch_result(@test_id=117,@record_date={record.date})
+-- Usage in spec_nom: query:max_subbatch_result(@form_row_id=117,@record_date={record.date})
 
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'vendor_pns_for_pn',

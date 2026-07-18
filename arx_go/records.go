@@ -118,9 +118,9 @@ func isAutoSerial(submitted, suggested string) bool {
 // substituteRefs replaces tokens in s:
 //   - {123}              → recorded result for step 123, falling back to that step's spec_nom
 //   - {record.type}      → record's Type (comments field)
-//   - {record.pn}        → record's unit-under-test part number (serial_number_pn)
+//   - {record.pn}        → record's unit-under-test part number (subject_part_number)
 //   - {record.sn}        → record's serial number
-//   - {record.pndesc}    → record's unit-under-test description (serial_number_pn_desc / title)
+//   - {record.pndesc}    → record's unit-under-test description (subject_pn_description / title)
 //   - {record.date}      → record's test date (MM/DD/YYYY) — date only, safe for SQL format 101
 //   - {record.datetime}  → record's test date + time (MM/DD/YYYY H:MM AM/PM)
 //
@@ -299,7 +299,7 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		SELECT id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, is_locked, is_approved, form_revision
 		FROM %s
 		WHERE form_id = @p1 AND is_active = %s
@@ -1038,14 +1038,14 @@ func (h *Handler) loadSteps(ctx context.Context, formID int) (map[int]*models.Te
 // loadRecordResults loads the materialized snapshot rows for a record, keyed by form_row_id (#487).
 func (h *Handler) loadRecordResults(ctx context.Context, recordID int) (map[int]*models.TestResult, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, record_id, form_row_id,
+		SELECT id, form_record_id, form_row_id,
 		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
 		       pass_fail, COALESCE(comment,''),
 		       COALESCE(spec_min,''), COALESCE(spec_nom,''), COALESCE(spec_max,''),
 		       COALESCE(spec_units,''), COALESCE(pf_type,''), COALESCE(format,''),
 		       COALESCE(type,0), COALESCE(hide_formula,''), COALESCE(default_result,''),
 		       updated_at
-		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
+		FROM %s WHERE form_record_id = @p1`, h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		return nil, err
 	}
@@ -1139,7 +1139,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       lot_id, build_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
@@ -1212,8 +1212,8 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	// Lifecycle audit trail (#250) — complete/approve/unlock events, oldest first.
 	var events []models.RecordEvent
 	eventRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, test_record_id, event_type, username, event_date, COALESCE(comments,'')
-		FROM %s WHERE test_record_id = @p1 ORDER BY event_date ASC, id ASC`,
+		SELECT id, form_record_id, event_type, username, event_date, COALESCE(comments,'')
+		FROM %s WHERE form_record_id = @p1 ORDER BY event_date ASC, id ASC`,
 		h.cfg.RecordEventsTable()), recordID)
 	if err == nil {
 		for eventRows.Next() {
@@ -1269,7 +1269,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
@@ -1493,7 +1493,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var newID int
 	insertRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
-		`form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
+		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
 		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0,@p10`,
 		false)
@@ -1550,7 +1550,7 @@ func (h *Handler) materializeRecordSteps(ctx context.Context, tx *txLogger, reco
 		bakeStepTokens(step, record, form)
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s
-			  (record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+			  (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 			   spec_units, pf_type, format, hide_formula, default_result, updated_at)
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,GETDATE())`,
 			h.cfg.ResultsTable()),
@@ -1594,7 +1594,7 @@ func (h *Handler) loadRecordTrace(ctx context.Context, record *models.TestRecord
 	}
 
 	// The tested part's lot-tracking + whether it has a BOM (is buildable).
-	// part_number_id is a logical reference with no FK, so a stale id may not resolve —
+	// part_id is a logical reference with no FK, so a stale id may not resolve —
 	// treat that as simply having no trace rather than failing the whole page.
 	var isLotTracked sql.NullBool
 	var bomCount int
@@ -1705,7 +1705,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       lot_id, build_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
@@ -1845,7 +1845,7 @@ func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
 
 	if n, _ := res.RowsAffected(); n > 0 {
 		h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (test_record_id, event_type, username, event_date) VALUES (@p1, 'approved', @p2, GETDATE())",
+			"INSERT INTO %s (form_record_id, event_type, username, event_date) VALUES (@p1, 'approved', @p2, GETDATE())",
 			h.cfg.RecordEventsTable()), recordID, u.Username)
 	}
 
@@ -1901,7 +1901,7 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 
 	if n, _ := res.RowsAffected(); n > 0 {
 		h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (test_record_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
+			"INSERT INTO %s (form_record_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
 			h.cfg.RecordEventsTable()), recordID, username, comment)
 	}
 
@@ -1954,7 +1954,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	// Load source record — same SELECT as RecordDetail.
 	var src models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&src.ID, &src.FormID, &src.PartNumberID, &src.SerialNumber, &src.SerialNumberPN,
@@ -1976,7 +1976,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// INSERT new form_record; part_number_id is NULL when PartNumberID == 0 (mirrors CreateRecord).
+	// INSERT new form_record; part_id is NULL when PartNumberID == 0 (mirrors CreateRecord).
 	var partNumberID *int
 	if src.PartNumberID != 0 {
 		partNumberID = &src.PartNumberID
@@ -1994,7 +1994,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	var newID int
 	// record_date is set to now — a duplicate is a fresh re-test, dated the day it's made.
 	insertDupRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
-		`form_id, part_number_id, serial_number, serial_number_pn, serial_number_pn_desc,
+		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
 		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),1,0,0,@p9`,
 		false)
@@ -2010,7 +2010,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 		       spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail
-		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
+		FROM %s WHERE form_record_id = @p1`, h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2043,7 +2043,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s
-			  (record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+			  (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 			   spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE())`,
 			h.cfg.ResultsTable()),
@@ -2205,7 +2205,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
@@ -2279,7 +2279,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 	existing := map[int]savedResult{}
 	exRows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		"SELECT id, form_row_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
+		"SELECT id, form_row_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE form_record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2341,7 +2341,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			}
 			h.execContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
-				  (record_id, form_row_id, result, comment, pass_fail, type,
+				  (form_record_id, form_row_id, result, comment, pass_fail, type,
 				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, pf_type, format,
 				   hide_formula, default_result, updated_at)
 				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE())`,
@@ -2403,7 +2403,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_number_id,0), serial_number, serial_number_pn, serial_number_pn_desc,
+		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
@@ -2441,7 +2441,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	existing := map[int]int{}                  // form_row_id -> result row id
 	curResults := map[int]*models.TestResult{} // form_row_id -> recorded value (for {id} P/F resolution)
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		"SELECT id, form_row_id, COALESCE(result,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
+		"SELECT id, form_row_id, COALESCE(result,'') FROM %s WHERE form_record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2503,7 +2503,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 			// Step added to the form since this record was created — materialize an empty row.
 			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
-				  (record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+				  (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 				   spec_units, pf_type, format, hide_formula, default_result, updated_at)
 				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,GETDATE())`,
 				h.cfg.ResultsTable()),
@@ -2952,13 +2952,13 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT trec.id, trec.serial_number, COALESCE(trec.serial_number_pn,''),
-		       COALESCE(trec.part_number_id,0),
+		SELECT trec.id, trec.serial_number, COALESCE(trec.subject_part_number,''),
+		       COALESCE(trec.part_id,0),
 		       trec.record_date, trec.is_locked,
 		       COALESCE(res.result,''), res.pass_fail, COALESCE(res.comment,''),
 		       res.updated_at
 		FROM %s res
-		JOIN %s trec ON res.record_id = trec.id
+		JOIN %s trec ON res.form_record_id = trec.id
 		WHERE res.form_row_id = @p1 AND trec.form_id = @p2 AND trec.is_active = %s
 		ORDER BY %s DESC, trec.record_date DESC`,
 		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.TryCastInt("trec.serial_number")), testID, formID)

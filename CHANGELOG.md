@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-07-18
+### Changed
+- Completed the traceability-epic slice-1 rename wave with the pure column renames the slice bullets never carved: `result.record_id` → `form_record_id`, `record_events.test_record_id` → `form_record_id`, `form_record.serial_number_pn` / `serial_number_pn_desc` → `subject_part_number` / `subject_pn_description`, and `form_record.part_number_id` → `part_id` (the form's own `form.part_number_id` deliberately unchanged). Pure renames, no behavior change, across DDL (both SQL Server and Postgres), Go, seed, and schema docs; the stored `max_subbatch_result` named query and its `@test_id` param (→ `@form_row_id`) are rewritten in lockstep. Bumped `ExpectedSchemaVersion` to `7`; ships with the guarded rename migration `SQL/migrations/migrate_769_traceability_renames.sql`, which gates the rollout via the schema banner ([#769](https://github.com/Jolls/arx-legacy/issues/769), closes [#717](https://github.com/Jolls/arx-legacy/issues/717))
+
 ## [0.6.7] - 2026-07-17
 ### Changed
 - Renamed the unit-of-measure reference table `unit` → `uom` (and `part.unit_id` / `supplier_part.unit_id` → `uom_id`), freeing the `unit` name for the Tier-3 serialized-instance table in a later traceability-epic slice. Pure rename, no behavior change; ships with migration `SQL/migrations/migrate_rename_uom.sql` and bumps `schema_version` 5 → 6 ([#739](https://github.com/Jolls/arx-legacy/issues/739), absorbs [#712](https://github.com/Jolls/arx-legacy/issues/712))

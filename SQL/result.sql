@@ -1,16 +1,16 @@
 -- result: One row per test step per test record.
--- record_id FKs to form_record.id. form_row_id FKs to form_row.id.
+-- form_record_id FKs to form_record.id. form_row_id FKs to form_row.id.
 -- parameter/specification/spec_* are denormalized snapshots from form_row at record creation.
 -- pass_fail: 1 = PASS, 0 = FAIL, NULL = not yet evaluated.
 
 IF OBJECT_ID('dbo.result', 'U') IS NOT NULL DROP TABLE result;
 -- FKs added after creation:
---   ALTER TABLE dbo.result ADD CONSTRAINT FK_result_form_record FOREIGN KEY (record_id)   REFERENCES dbo.form_record (id);
+--   ALTER TABLE dbo.result ADD CONSTRAINT FK_result_form_record FOREIGN KEY (form_record_id) REFERENCES dbo.form_record (id);
 --   ALTER TABLE dbo.result ADD CONSTRAINT FK_result_form_row    FOREIGN KEY (form_row_id) REFERENCES dbo.form_row (id);
 
 CREATE TABLE result (
   id             INT          PRIMARY KEY IDENTITY,
-  record_id      INT          NOT NULL,             -- FK to form_record.id.
+  form_record_id INT          NOT NULL,             -- FK to form_record.id.
   form_row_id    INT          NOT NULL,             -- FK to form_row.id.
   pass_fail      BIT,                               -- 1 = PASS, 0 = FAIL, NULL = not evaluated.
   result         VARCHAR(255),

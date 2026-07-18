@@ -103,7 +103,7 @@ BEGIN TRY
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
     -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO dbo.app_config (setting_key, setting_value, updated_at) VALUES
-        ('schema_version', '6', '2020-01-01T00:00:00'),
+        ('schema_version', '7', '2020-01-01T00:00:00'),
         ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
@@ -131,8 +131,8 @@ BEGIN TRY
          'SELECT TOP 20 serial_number FROM form_record WHERE form_id = @form_id AND is_active = 1 ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC',
          'form_id', 'multi', GETDATE(), '2020-01-01T00:00:00'),
         ('max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
-         'SELECT MAX(TRY_CAST(r.result AS INT)) FROM result r JOIN form_record tr ON r.record_id = tr.id WHERE r.form_row_id = @test_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
-         'test_id, record_date', 'single', GETDATE(), '2020-01-01T00:00:00'),
+         'SELECT MAX(TRY_CAST(r.result AS INT)) FROM result r JOIN form_record tr ON r.form_record_id = tr.id WHERE r.form_row_id = @form_row_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
+         'form_row_id, record_date', 'single', GETDATE(), '2020-01-01T00:00:00'),
         ('vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
          'SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' + @pn + ''%'' ORDER BY po_id DESC',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00');
@@ -501,7 +501,7 @@ BEGIN TRY
     -- lot-tracked assembly (3005) to its build (8201) only — the build_id-without-lot_id
     -- case that build_id exists to cover. Both are WIP with recent (non-stale) dates.
     SET IDENTITY_INSERT dbo.form_record ON;
-    INSERT INTO dbo.form_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, updated_at, created_at) VALUES
+    INSERT INTO dbo.form_record (id, form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, updated_at, created_at) VALUES
         (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
         (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
         (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
@@ -523,7 +523,7 @@ BEGIN TRY
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
     -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
     SET IDENTITY_INSERT dbo.result ON;
-    INSERT INTO dbo.result (id, record_id, form_row_id, pass_fail, result, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, type, updated_at) VALUES
+    INSERT INTO dbo.result (id, form_record_id, form_row_id, pass_fail, result, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, type, updated_at) VALUES
         (7101, 7001, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7102, 7001, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7103, 7001, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
@@ -581,7 +581,7 @@ BEGIN TRY
     -- view has a real snapshot-to-snapshot diff. 7005's completed event deliberately has NO
     -- snapshot rows — a pre-#251 record that makes the backfill bulk action appear.
     SET IDENTITY_INSERT dbo.record_events ON;
-    INSERT INTO dbo.record_events (id, test_record_id, event_type, username, event_date, comments) VALUES
+    INSERT INTO dbo.record_events (id, form_record_id, event_type, username, event_date, comments) VALUES
         (7201, 7003, 'completed', 'admin', '2026-06-03', 'Initial completion'),
         (7202, 7002, 'completed', 'tester','2026-06-02', 'Marked complete'),
         (7203, 7005, 'completed', 'tester','2026-06-05', 'Completed before per-lock snapshots existed'),
