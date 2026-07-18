@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-07-17
+### Changed
+- Renamed the test-record table family for the traceability data model epic (slice 1, pure rename, no behavior change): `test_record`→`form_record`, `test_result`→`result`, `test_definition`→`form_row` (`test_definition_history`→`form_row_history`, column `test_id`→`form_row_id`), across DDL (both SQL Server and Postgres), Go, seed, and schema docs. Bumped `ExpectedSchemaVersion` to `5`; a human-run guarded rename migration (`SQL/migrations/migrate_rename_test_record_family.sql`) recreates the definition-history trigger against the new names, rewrites the two stored `named_queries` that referenced the old table/column names, and gates the rollout via the schema banner ([#738](https://github.com/Jolls/arx-legacy/issues/738))
+### Fixed
+- Reconciled the reference/seed `named_queries` set (`SQL/named_queries.sql`, `SQL/seed_test_data.sql`) with production, which had drifted: `fil_category_for_pn` now selects the attachment `comment` (was incorrectly `category`, from an un-applied migration that no longer exists), `recent_serial_numbers_for_form` is `multi`, and `pos_for_pn`/`vendor_pns_for_pn` match the production query text ([#738](https://github.com/Jolls/arx-legacy/issues/738))
+
 ## [0.6.3] - 2026-07-17
 ### Changed
 - Expanded `SQL/seed_test_data.sql` into a richer PRE-state migration testbed for the traceability data model epic: a manually-adjusted lot with no `po_line_id`/owning build (the third `lot.source` origin), and a full receipt→incoming-inspection→build→build→final-test chain (new lot-tracked assembly 3013) with a two-level, branching lot genealogy tree, so later epic slices can dry-run their migrations against real rows ([#737](https://github.com/Jolls/arx-legacy/issues/737))

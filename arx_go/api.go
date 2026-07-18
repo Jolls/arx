@@ -558,7 +558,7 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 
 // APIRecordPasteResultImage saves a clipboard-pasted image to disk for a
 // test-record result step (pf_type = "attach") and returns its filename.
-// It does not touch test_result — the caller drops the returned filename into
+// It does not touch result — the caller drops the returned filename into
 // the step's result input, and the existing SaveResults handler persists it
 // along with the rest of the record's edits.
 // POST /api/record/{id}/step/{tid}/paste-image.

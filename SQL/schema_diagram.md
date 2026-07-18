@@ -125,7 +125,7 @@ erDiagram
         bit     is_active
     }
 
-    test_definition {
+    form_row {
         int     id              PK
         int     form_id         FK
         varchar parameter
@@ -137,7 +137,7 @@ erDiagram
         int     revision
     }
 
-    test_record {
+    form_record {
         int      id             PK
         int      form_id        FK
         int      part_number_id FK
@@ -147,10 +147,10 @@ erDiagram
         bit      is_active
     }
 
-    test_result {
+    result {
         int     id              PK
         int     record_id       FK
-        int     test_id         FK
+        int     form_row_id         FK
         int     form_id         FK
         varchar result
         bit     pass_fail
@@ -199,12 +199,12 @@ erDiagram
 
     %% Test records
     part ||--o{    form        : "test forms (part_number_id)"
-    part ||--o{    test_record : "test records (part_number_id)"
-    form        ||--o{    test_definition : "test definitions (form_id)"
-    form        ||--o{    test_record : "executed records (form_id)"
-    form        ||--o{    test_result : "results (form_id)"
-    test_record ||--o{    test_result : "results (record_id)"
-    test_definition ||--o{    test_result : "result per test (test_id)"
+    part ||--o{    form_record : "test records (part_number_id)"
+    form        ||--o{    form_row : "test definitions (form_id)"
+    form        ||--o{    form_record : "executed records (form_id)"
+    form        ||--o{    result : "results (form_id)"
+    form_record ||--o{    result : "results (record_id)"
+    form_row ||--o{    result : "result per test (form_row_id)"
 ```
 
 ## Notes
@@ -212,5 +212,5 @@ erDiagram
 - **part_attachment.part_id** is an INT FK to `part.id` with an enforced constraint. Migrated from VARCHAR in #297. (Table renamed from `FIL` in db-table-rename commit 3.)
 - **LNK.LNKToPNID** is a secondary PN reference used for substitute/alternate parts.
 - **purchase_order.receiver_id** references a supplier acting as the ship-to location; omitted above to reduce clutter.
-- **TestRecordHistory.record_id** is polymorphic — it references either `form.id` or `test_record.id` depending on `history_type`.
+- **TestRecordHistory.record_id** is polymorphic — it references either `form.id` or `form_record.id` depending on `history_type`.
 - **part_types**, **logs**, and **release_notes** have no foreign key relationships.

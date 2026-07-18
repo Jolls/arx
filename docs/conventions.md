@@ -65,7 +65,7 @@ grid and to show a hover-preview popup on the Attachments list page.
 A test-record step whose `pf_type = "attach"` shows a **Grab from clipboard**
 button on its result cell (record edit page). Pasting an image writes it to
 disk and returns its filename; the filename is stored as the step's plain
-`test_result.result` value (no `LOCAL:` prefix — this is not a
+`result.result` value (no `LOCAL:` prefix — this is not a
 `part_attachment`/`company_attachment` row, just a filename string) and
 persisted on **Save**, alongside the rest of the record's edits.
 

@@ -1,10 +1,10 @@
 -- Triggers that maintain denormalized counts on company and part, plus the
--- test_definition audit-history trigger.
+-- form_row audit-history trigger.
 --   company.SUNumOfLNKs            — active supplier_part rows for a supplier
 --   company.SUNumOfPOs             — purchase_order rows for a supplier
 --   part.attachment_count          — active part_attachment rows for a part
 --   part.po_line_count             — po_line line-item rows for a part
---   test_definition_history        — snapshot of test_definition rows on UPDATE
+--   form_row_history               — snapshot of form_row rows on UPDATE
 --
 -- The count triggers recompute a full COUNT(*) from live data (not increment/decrement),
 -- so any drift is self-correcting on the next write to an affected row.
@@ -107,20 +107,20 @@ SET    p.attachment_count = (SELECT COUNT(*) FROM dbo.part_attachment f WHERE f.
 FROM   dbo.part p;
 GO
 
--- test_definition → test_definition_history
--- Snapshot old values into test_definition_history on every test_definition UPDATE.
+-- form_row → form_row_history
+-- Snapshot old values into form_row_history on every form_row UPDATE.
 -- Uses DELETED pseudo-table which contains pre-update row values.
 -- Set-based: handles bulk updates (multiple rows changed at once) correctly.
-IF OBJECT_ID('dbo.trg_test_definition_history', 'TR') IS NOT NULL DROP TRIGGER trg_test_definition_history;
+IF OBJECT_ID('dbo.trg_form_row_history', 'TR') IS NOT NULL DROP TRIGGER trg_form_row_history;
 GO
-CREATE TRIGGER dbo.trg_test_definition_history
-ON dbo.test_definition
+CREATE TRIGGER dbo.trg_form_row_history
+ON dbo.form_row
 AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-    INSERT INTO dbo.test_definition_history
-      (test_id, changed_at, changed_by,
+    INSERT INTO dbo.form_row_history
+      (form_row_id, changed_at, changed_by,
        type, parameter, specification, spec_units,
        spec_min, spec_max, spec_nom, default_result,
        hide_formula, pf_type,

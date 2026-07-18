@@ -14,7 +14,7 @@ import (
 // (as parseRecordFilters always sets) is the historic default WIP-only view.
 type recordFilters struct {
 	Status  string    // "wip" | "complete" | "approved" | "all"
-	Type    string    // exact match on test_record.comments; "" = no filter
+	Type    string    // exact match on form_record.comments; "" = no filter
 	From    time.Time // record_date lower bound; zero = no filter
 	To      time.Time // record_date upper bound (inclusive day); zero = no filter
 	FromStr string    // original YYYY-MM-DD input, for repopulating the form

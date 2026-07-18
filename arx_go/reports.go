@@ -178,7 +178,7 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE trec.is_active = %s AND res.pass_fail IS NOT NULL
-		GROUP BY f.id, pn.part_number, res.test_id
+		GROUP BY f.id, pn.part_number, res.form_row_id
 		HAVING SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) > 0
 		ORDER BY failure_count DESC`+h.dialect.LimitClause("@p1"),
 		h.dialect.TopClause("@p1"), h.dialect.BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit)

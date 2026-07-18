@@ -67,7 +67,7 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		FROM %s res
 		JOIN %s trec ON res.record_id = trec.id
 		WHERE trec.form_id = @p1 AND trec.is_active = %s AND res.pass_fail IS NOT NULL%s
-		GROUP BY res.test_id
+		GROUP BY res.form_row_id
 		ORDER BY failure_count DESC, parameter ASC`,
 		h.dialect.BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), dateClause), args...)
 	if err != nil {
