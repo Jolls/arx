@@ -10,7 +10,7 @@ CREATE TABLE supplier_part (
   supplier_id        INTEGER        NOT NULL,    -- FK to company.id (who you buy from).
   part_id            INTEGER        NOT NULL,    -- FK to part.id (the internal part).
   mfg_part_id        INTEGER,                    -- FK to mfg_part.id. NULL = buying direct.
-  unit_id            INTEGER,                    -- FK to unit.unit_id. NULL = same as part's base unit.
+  uom_id             INTEGER,                    -- FK to uom.uom_id. NULL = same as part's base unit.
 
   supplier_pn        VARCHAR(55),                -- Supplier's own part number / SKU.
   supplier_desc      VARCHAR(100),
@@ -25,4 +25,4 @@ CREATE TABLE supplier_part (
 ALTER TABLE supplier_part ADD CONSTRAINT FK_supplier_part_company  FOREIGN KEY (supplier_id)  REFERENCES company (id);
 ALTER TABLE supplier_part ADD CONSTRAINT FK_supplier_part_pn       FOREIGN KEY (part_id)      REFERENCES part (id);
 ALTER TABLE supplier_part ADD CONSTRAINT FK_supplier_part_mfg_part FOREIGN KEY (mfg_part_id)  REFERENCES mfg_part (id);
-ALTER TABLE supplier_part ADD CONSTRAINT FK_supplier_part_unit     FOREIGN KEY (unit_id)      REFERENCES unit (unit_id);
+ALTER TABLE supplier_part ADD CONSTRAINT FK_supplier_part_uom      FOREIGN KEY (uom_id)       REFERENCES uom (uom_id);

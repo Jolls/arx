@@ -50,7 +50,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, unit_id)
+		INSERT INTO %s (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
 	`, h.cfg.SupplierPartTable()),
 		supplierID, id,
@@ -82,7 +82,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 	var minIncr sql.NullFloat64
 	var unitID sql.NullInt64
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, unit_id
+		SELECT id, supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id
 		FROM %s WHERE id = @p1 AND part_id = @p2
 	`, h.cfg.SupplierPartTable()), spID, id).Scan(
 		&sp.ID, &sp.SupplierID, &sp.PartID, &pref, &supplierPN, &supplierDesc, &leadTime, &minIncr, &unitID,
@@ -140,7 +140,7 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET supplier_id=@p1, preference=@p2, supplier_pn=@p3, supplier_desc=@p4,
-		              lead_time=@p5, min_increment=@p6, unit_id=@p7
+		              lead_time=@p5, min_increment=@p6, uom_id=@p7
 		WHERE id=@p8 AND part_id=@p9
 	`, h.cfg.SupplierPartTable()),
 		supplierID,
@@ -183,15 +183,15 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 	sp, co, ut, pn := h.cfg.SupplierPartTable(), h.cfg.CompanyTable(), h.cfg.UnitTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
-		       sp.lead_time, sp.min_increment, sp.unit_id,
+		       sp.lead_time, sp.min_increment, sp.uom_id,
 		       c.name AS supplier_name,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
-		       CASE WHEN sp.unit_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
+		       CASE WHEN sp.uom_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
 		FROM %s sp
 		JOIN %s c  ON sp.supplier_id = c.id
-		LEFT JOIN %s pu ON sp.unit_id  = pu.unit_id
+		LEFT JOIN %s pu ON sp.uom_id   = pu.uom_id
 		LEFT JOIN %s p  ON sp.part_id  = p.id
-		LEFT JOIN %s bu ON p.unit_id   = bu.unit_id
+		LEFT JOIN %s bu ON p.uom_id    = bu.uom_id
 		WHERE sp.part_id = @p1
 		ORDER BY c.name, sp.supplier_pn
 	`, sp, co, ut, pn, ut), partID)

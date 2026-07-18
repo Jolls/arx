@@ -1,7 +1,7 @@
 -- part: the core parts catalog. The part_number COLUMN is the human-readable PN.
 -- attachment_count and po_line_count are denormalized counts, maintained by
 -- triggers (SQL/postgres/triggers.sql).
--- price_id / default_supplier_id / unit_id FKs are mostly deferred - see #213.
+-- price_id / default_supplier_id / uom_id FKs are mostly deferred - see #213.
 
 DROP TABLE IF EXISTS part CASCADE;
 
@@ -38,10 +38,10 @@ CREATE TABLE part (
   modified_date       DATE             DEFAULT CURRENT_DATE,
   price_id            INTEGER          DEFAULT 0,             -- FK to price; deferred (#213).
   default_supplier_id INTEGER          NULL,                 -- FK to company.id; deferred (#465/#213).
-  unit_id             INTEGER          NULL,                 -- FK to unit.unit_id.
+  uom_id              INTEGER          NULL,                 -- FK to uom.uom_id.
   stock_on_hand       NUMERIC(16,8)    NOT NULL DEFAULT 0,   -- Cached inventory balance (#272); app-maintained.
   reorder_min         NUMERIC(16,8)    NULL,                 -- Reorder point (#273); NULL = none.
   is_lot_tracked      BOOLEAN          NOT NULL DEFAULT FALSE -- Lot/batch control (#676); receipt/build create a lot row when TRUE.
 );
 
-ALTER TABLE part ADD CONSTRAINT FK_part_number_unit FOREIGN KEY (unit_id) REFERENCES unit (unit_id);
+ALTER TABLE part ADD CONSTRAINT FK_part_number_uom FOREIGN KEY (uom_id) REFERENCES uom (uom_id);

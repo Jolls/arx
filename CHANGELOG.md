@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-07-17
+### Changed
+- Renamed the unit-of-measure reference table `unit` → `uom` (and `part.unit_id` / `supplier_part.unit_id` → `uom_id`), freeing the `unit` name for the Tier-3 serialized-instance table in a later traceability-epic slice. Pure rename, no behavior change; ships with migration `SQL/migrations/migrate_rename_uom.sql` and bumps `schema_version` 5 → 6 ([#739](https://github.com/Jolls/arx-legacy/issues/739), absorbs [#712](https://github.com/Jolls/arx-legacy/issues/712))
+
 ## [0.6.6] - 2026-07-17
 ### Changed
 - Cleaned up leftover PM/TR (Parts Master/Test Records) naming from the pre-merge separate-app era: dropped unused `TestRecordsURL`/`PartsMasterURL` config fields and `TR_URL`/`PM_URL` env vars (dead data, not referenced in any template), renamed `renderTR`/`renderPrintTR`/`trTemplateFuncs` to `renderRecords`/`renderPrintRecords`/`recordsTemplateFuncs`, `pmTemplateFuncs` to `coreTemplateFuncs`, and fixed CLAUDE.md's stale `templates/pm/`+`templates/tr/` description to match the actual unified `templates/` tree ([#764](https://github.com/Jolls/arx-legacy/issues/764))

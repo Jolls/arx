@@ -701,7 +701,7 @@ type UnitOption struct {
 // fetchUnits returns all rows from the unit table ordered by unit_type, abbreviation.
 func (h *Handler) fetchUnits(ctx context.Context) ([]UnitOption, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT unit_id, abbreviation, display_name, unit_type FROM %s ORDER BY unit_type, abbreviation`,
+		`SELECT uom_id, abbreviation, display_name, unit_type FROM %s ORDER BY unit_type, abbreviation`,
 		h.cfg.UnitTable(),
 	))
 	if err != nil {
