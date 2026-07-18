@@ -144,7 +144,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 
 	total, monthly := computeYieldBuckets(records, grouped)
 
-	h.renderTR(w, r, "yield.html", map[string]any{
+	h.renderRecords(w, r, "yield.html", map[string]any{
 		"Form":      form,
 		"Total":     total,
 		"Monthly":   monthly,

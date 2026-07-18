@@ -213,7 +213,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 		forms = append(forms, f)
 	}
 
-	h.renderTR(w, r, "index.html", map[string]any{
+	h.renderRecords(w, r, "index.html", map[string]any{
 		"Forms":     forms,
 		"ActiveTab": "records",
 		"TestMode":  h.cfg.TestMode,
@@ -264,7 +264,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderTR(w, r, "records_index.html", map[string]any{
+	h.renderRecords(w, r, "records_index.html", map[string]any{
 		"Form":        form,
 		"TypeOptions": typeOptions,
 		"LockedCount": lockedCount,
@@ -497,7 +497,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderTR(w, r, "form_def.html", map[string]any{
+	h.renderRecords(w, r, "form_def.html", map[string]any{
 		"Form":        form,
 		"Steps":       steps,
 		"HasArchived": hasArchived,
@@ -672,7 +672,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		log.Printf("warning: could not load named queries for def editor: %v", err)
 	}
 
-	h.renderTR(w, r, "form_def_edit.html", map[string]any{
+	h.renderRecords(w, r, "form_def_edit.html", map[string]any{
 		"Form":         form,
 		"Steps":        steps,
 		"HasArchived":  hasArchived,
@@ -1241,7 +1241,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderTR(w, r, "records_show.html", map[string]any{
+	h.renderRecords(w, r, "records_show.html", map[string]any{
 		"Form":              form,
 		"Record":            record,
 		"Rows":              resultRows,
@@ -1325,7 +1325,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderPrintTR(w, "record_print.html", map[string]any{
+	h.renderPrintRecords(w, "record_print.html", map[string]any{
 		"Form":      form,
 		"Record":    record,
 		"Rows":      resultRows,
@@ -1399,7 +1399,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		nextSNStr = strconv.FormatInt(nextSN.Int64, 10)
 	}
 
-	h.renderTR(w, r, "record_new.html", map[string]any{
+	h.renderRecords(w, r, "record_new.html", map[string]any{
 		"Form":      form,
 		"BOMParts":  bomParts,
 		"NextSN":    nextSNStr,
@@ -1780,7 +1780,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderTR(w, r, "record_edit.html", map[string]any{
+	h.renderRecords(w, r, "record_edit.html", map[string]any{
 		"Form":                form,
 		"Record":              record,
 		"Rows":                resultRows,
@@ -2693,7 +2693,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 		sourceForms = append(sourceForms, f)
 	}
 
-	h.renderTR(w, r, "form_new.html", map[string]any{
+	h.renderRecords(w, r, "form_new.html", map[string]any{
 		"PNs":         pns,
 		"SourceForms": sourceForms,
 		"CSRFToken":   h.csrfToken(w, r),
@@ -2803,7 +2803,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderTR(w, r, "form_duplicate.html", map[string]any{
+	h.renderRecords(w, r, "form_duplicate.html", map[string]any{
 		"Form":      form,
 		"StepCount": stepCount,
 		"PNs":       pns,
@@ -2982,7 +2982,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
-	h.renderTR(w, r, "test_report.html", map[string]any{
+	h.renderRecords(w, r, "test_report.html", map[string]any{
 		"Form":      form,
 		"Step":      step,
 		"Rows":      rows,

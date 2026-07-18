@@ -371,7 +371,7 @@ func (h *Handler) profileRequest(next http.Handler) http.Handler {
 // renderPrint parses a single standalone template (no layout wrapper) and executes it.
 // Used for print views that ship their own full HTML document.
 func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
-	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
+	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/"+page,
 	)
 	if err != nil {
@@ -383,8 +383,8 @@ func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
 	}
 }
 
-// pmTabFavicons maps each Parts Master nav tab to its favicon, reusing the
-// same icon shown in the nav bar so the browser tab matches the active section.
+// pmTabFavicons maps each nav tab to its favicon, reusing the same icon
+// shown in the nav bar so the browser tab matches the active section.
 var pmTabFavicons = map[string]string{
 	"parts":     "/static/shared/icons/parts.svg",
 	"suppliers": "/static/shared/icons/vendors.svg",
@@ -399,7 +399,6 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 	if m, ok := data.(map[string]any); ok {
 		m["AppVersion"] = h.cfg.Version
 		m["SchemaMismatch"] = h.schemaMismatch
-		m["TestRecordsURL"] = h.cfg.TestRecordsURL
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
@@ -414,7 +413,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 			}
 		}
 	}
-	tmpl, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(h.tmplFS,
+	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/shared/layout.html",
 		"templates/shared/partials.html",
 		"templates/"+page,
@@ -539,9 +538,9 @@ func navBack(sess *sessions.Session) (url, label string) {
 	return
 }
 
-// --- Template functions (Parts Master) ------------------------------------
+// --- Template functions (core) ---------------------------------------------
 
-func pmTemplateFuncs() template.FuncMap {
+func coreTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"formatDate":           formatDate,
 		"formatFileSize":       formatFileSize,

@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-07-17
+### Changed
+- Cleaned up leftover PM/TR (Parts Master/Test Records) naming from the pre-merge separate-app era: dropped unused `TestRecordsURL`/`PartsMasterURL` config fields and `TR_URL`/`PM_URL` env vars (dead data, not referenced in any template), renamed `renderTR`/`renderPrintTR`/`trTemplateFuncs` to `renderRecords`/`renderPrintRecords`/`recordsTemplateFuncs`, `pmTemplateFuncs` to `coreTemplateFuncs`, and fixed CLAUDE.md's stale `templates/pm/`+`templates/tr/` description to match the actual unified `templates/` tree ([#764](https://github.com/Jolls/arx-legacy/issues/764))
+
 ## [0.6.5] - 2026-07-17
 ### Fixed
 - Schema-version mismatch now blocks app routes (redirecting to `/login`) instead of only showing a banner while every page kept querying the DB, since rename migrations bump `schema_version` last, leaving a window where renamed/dropped columns could throw raw DB errors on live pages ([#720](https://github.com/Jolls/arx-legacy/issues/720))

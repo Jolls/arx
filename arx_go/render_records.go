@@ -13,12 +13,11 @@ import (
 	"arx/arxlib/urlutil"
 )
 
-// renderTR renders a Test Records page using TR's layout and template funcs.
-func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, data any) {
+// renderRecords renders a Test Records nav-section page using its layout and template funcs.
+func (h *Handler) renderRecords(w http.ResponseWriter, r *http.Request, page string, data any) {
 	if m, ok := data.(map[string]any); ok {
 		m["AppVersion"] = h.cfg.Version
 		m["SchemaMismatch"] = h.schemaMismatch
-		m["PartsMasterURL"] = h.cfg.PartsMasterURL
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
@@ -28,7 +27,7 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 		m["FaviconType"] = "image/svg+xml"
 		m["ExtraScript"] = "/static/records/app.js"
 	}
-	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
+	tmpl, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/shared/layout.html",
 		"templates/records/"+page,
 	)
@@ -41,9 +40,9 @@ func (h *Handler) renderTR(w http.ResponseWriter, r *http.Request, page string, 
 	}
 }
 
-// renderPrintTR renders a standalone TR print template (no layout wrapper).
-func (h *Handler) renderPrintTR(w http.ResponseWriter, page string, data any) {
-	tmpl, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(h.tmplFS,
+// renderPrintRecords renders a standalone Test Records print template (no layout wrapper).
+func (h *Handler) renderPrintRecords(w http.ResponseWriter, page string, data any) {
+	tmpl, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(h.tmplFS,
 		"templates/records/"+page,
 	)
 	if err != nil {
@@ -55,10 +54,10 @@ func (h *Handler) renderPrintTR(w http.ResponseWriter, page string, data any) {
 	}
 }
 
-// trTemplateFuncs returns the template function map for Test Records views.
-func trTemplateFuncs() template.FuncMap {
+// recordsTemplateFuncs returns the template function map for Test Records views.
+func recordsTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"formatDate": trFormatDate,
+		"formatDate": recordsFormatDate,
 		"formatDateInput": func(t *time.Time) string {
 			if t == nil {
 				return ""
@@ -139,7 +138,7 @@ func trTemplateFuncs() template.FuncMap {
 	}
 }
 
-func trFormatDate(t *time.Time) string {
+func recordsFormatDate(t *time.Time) string {
 	if t == nil {
 		return ""
 	}

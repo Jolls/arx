@@ -85,7 +85,7 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		steps = append(steps, row)
 	}
 
-	h.renderTR(w, r, "failure_modes.html", map[string]any{
+	h.renderRecords(w, r, "failure_modes.html", map[string]any{
 		"Form":      form,
 		"Steps":     steps,
 		"FromStr":   filters.FromStr,
