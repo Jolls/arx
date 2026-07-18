@@ -19,6 +19,7 @@
 --   5801-5899  purchase_order_history  1-17       uom (natural identity)
 --   5901-5999  inventory_transaction   8201-8299  build
 --   8301-8399  lot                     8401-8499  lot_genealogy
+--   8501-8599  unit
 --   (identity) app_config, named_queries
 --
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
@@ -52,6 +53,7 @@ BEGIN TRY
     DELETE FROM dbo.result;
     DELETE FROM dbo.form_record;
     DELETE FROM dbo.inventory_transaction;
+    DELETE FROM dbo.unit;                               -- unit FKs part + lot + build, so before all three
     DELETE FROM dbo.lot_genealogy;                     -- edges first (FK to lot)
     DELETE FROM dbo.build;                             -- build.output_lot_id FK to lot, so before lot
     DELETE FROM dbo.lot;                               -- lot FKs po_line + part, so before both
@@ -452,6 +454,23 @@ BEGIN TRY
     -- form_record can point at both.
     UPDATE dbo.build SET output_lot_id = 8302 WHERE id = 8202;
     UPDATE dbo.build SET output_lot_id = 8306 WHERE id = 8203;
+
+    -- ============================================================
+    -- 10d. Units (#740): Tier-3 serialized instances — additive/inert until slice 8.
+    -- ============================================================
+    -- Three PRE-state rows exercising every branch of the CK_unit_provenance invariant
+    -- (a unit must carry a lot_id OR a build_id):
+    --   8501: final-tested serial of top assembly 3013 — BOTH lot 8306 and build 8203 set
+    --         (the keystone case: a build-sourced serialized unit that also lives in a lot).
+    --   8502: serial of raw 3007 received inside purchased lot 8301 — lot only, build NULL.
+    --   8503: serial of assembly 3005 from non-lot-tracked build 8201 — build only, lot NULL.
+    -- serial_number is a string, UNIQUE per part_id (UQ_unit_serial).
+    SET IDENTITY_INSERT dbo.unit ON;
+    INSERT INTO dbo.unit (id, part_id, lot_id, build_id, serial_number, created_at, is_active) VALUES
+        (8501, 3013, 8306, 8203, 'SN-3013-001', '2026-05-30T00:00:00', 1),
+        (8502, 3007, 8301, NULL, 'SN-3007-A1',  '2026-05-15T00:00:00', 1),
+        (8503, 3005, NULL, 8201, 'SN-3005-001', '2026-05-25T00:00:00', 1);
+    SET IDENTITY_INSERT dbo.unit OFF;
 
     -- ============================================================
     -- 11. Test records — form, form_row, form_record, result,

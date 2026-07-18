@@ -698,11 +698,11 @@ type UnitOption struct {
 	UnitType     string
 }
 
-// fetchUnits returns all rows from the unit table ordered by unit_type, abbreviation.
+// fetchUnits returns all rows from the uom table ordered by unit_type, abbreviation.
 func (h *Handler) fetchUnits(ctx context.Context) ([]UnitOption, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT uom_id, abbreviation, display_name, unit_type FROM %s ORDER BY unit_type, abbreviation`,
-		h.cfg.UnitTable(),
+		h.cfg.UomTable(),
 	))
 	if err != nil {
 		return nil, err
