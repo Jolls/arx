@@ -24,7 +24,7 @@
 
     <div class="sub-tabs mb-4">
         <a href="#connection" class="sub-tab" data-tab="connection">Connection</a>
-        {{if .Connected}}
+        {{if and .Connected .CurrentUser}}
         <a href="#configuration" class="sub-tab" data-tab="configuration">Configuration</a>
         {{end}}
         {{if and .Connected .CurrentUser}}
@@ -239,7 +239,7 @@
     </div><!-- /tab-connection -->
 
     <!-- ── Configuration tab ────────────────────────────────────────────── -->
-    {{if .Connected}}
+    {{if and .Connected .CurrentUser}}
     <div class="settings-tab-panel" id="tab-configuration">
 
     <div class="detail-section">
