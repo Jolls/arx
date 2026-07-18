@@ -25,8 +25,6 @@ type Config struct {
 	Base
 	POFolderRoot      string
 	SupplierFilesRoot string
-	TestRecordsURL    string
-	PartsMasterURL    string
 	ImageRoot         string // used by Test Records; stored/displayed here so settings save round-trips it
 }
 
@@ -59,8 +57,6 @@ func Load(version string) *Config {
 		},
 		POFolderRoot:      os.Getenv("PO_FOLDER_ROOT"),
 		SupplierFilesRoot: os.Getenv("SUPPLIER_FILES_ROOT"),
-		TestRecordsURL:    GetEnv("TR_URL", "/records"),
-		PartsMasterURL:    GetEnv("PM_URL", "/"),
 		ImageRoot:         os.Getenv("IMAGE_ROOT"),
 	}
 

@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-// pmTabDirs are the tab-based template subfolders rendered via render()/renderPrint()
+// coreTabDirs are the tab-based template subfolders rendered via render()/renderPrint()
 // (i.e. everything except templates/shared and templates/records).
-var pmTabDirs = []string{"parts", "suppliers", "pos", "contacts", "settings", "reports"}
+var coreTabDirs = []string{"parts", "suppliers", "pos", "contacts", "settings", "reports"}
 
-// TestPMTemplatesParse parses every pm page template together with the layout
+// TestCoreTemplatesParse parses every core page template together with the layout
 // and partials, catching missing/renamed template definitions (e.g. shared
 // partials referenced via {{template ...}}) before they fail at render time.
-func TestPMTemplatesParse(t *testing.T) {
-	for _, dir := range pmTabDirs {
+func TestCoreTemplatesParse(t *testing.T) {
+	for _, dir := range coreTabDirs {
 		pages, err := fs.Glob(templatesFS, "templates/"+dir+"/*.html")
 		if err != nil {
 			t.Fatalf("glob: %v", err)
@@ -25,7 +25,7 @@ func TestPMTemplatesParse(t *testing.T) {
 			if strings.HasSuffix(base, "_print.html") {
 				continue
 			}
-			if _, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(templatesFS,
+			if _, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS,
 				"templates/shared/layout.html",
 				"templates/shared/partials.html",
 				page,
@@ -36,9 +36,9 @@ func TestPMTemplatesParse(t *testing.T) {
 	}
 }
 
-// TestTRTemplatesParse parses every tr page template the way renderTR does (with layout),
-// and standalone print templates the way renderPrintTR does.
-func TestTRTemplatesParse(t *testing.T) {
+// TestRecordsTemplatesParse parses every records page template the way renderRecords does
+// (with layout), and standalone print templates the way renderPrintRecords does.
+func TestRecordsTemplatesParse(t *testing.T) {
 	pages, err := fs.Glob(templatesFS, "templates/records/*.html")
 	if err != nil {
 		t.Fatalf("glob: %v", err)
@@ -49,12 +49,12 @@ func TestTRTemplatesParse(t *testing.T) {
 			continue
 		}
 		if strings.HasSuffix(base, "_print.html") {
-			if _, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(templatesFS, page); err != nil {
+			if _, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(templatesFS, page); err != nil {
 				t.Errorf("parse %s: %v", base, err)
 			}
 			continue
 		}
-		if _, err := template.New("").Funcs(trTemplateFuncs()).ParseFS(templatesFS,
+		if _, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(templatesFS,
 			"templates/shared/layout.html", page,
 		); err != nil {
 			t.Errorf("parse %s: %v", base, err)
@@ -62,16 +62,16 @@ func TestTRTemplatesParse(t *testing.T) {
 	}
 }
 
-// TestPMPrintTemplatesParse parses standalone print templates the way renderPrint does.
-func TestPMPrintTemplatesParse(t *testing.T) {
-	for _, dir := range pmTabDirs {
+// TestCorePrintTemplatesParse parses standalone print templates the way renderPrint does.
+func TestCorePrintTemplatesParse(t *testing.T) {
+	for _, dir := range coreTabDirs {
 		pages, err := fs.Glob(templatesFS, "templates/"+dir+"/*_print.html")
 		if err != nil {
 			t.Fatalf("glob: %v", err)
 		}
 		for _, page := range pages {
 			base := strings.TrimPrefix(page, "templates/")
-			if _, err := template.New("").Funcs(pmTemplateFuncs()).ParseFS(templatesFS, page); err != nil {
+			if _, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS, page); err != nil {
 				t.Errorf("parse %s: %v", base, err)
 			}
 		}
