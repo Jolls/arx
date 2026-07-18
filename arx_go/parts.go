@@ -239,7 +239,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
-		       unit_id, stock_on_hand, reorder_min, is_lot_tracked,
+		       uom_id, stock_on_hand, reorder_min, is_lot_tracked,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
@@ -298,7 +298,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		p.UnitID = &v
 		var abbr sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT abbreviation FROM %s WHERE unit_id = @p1`, h.cfg.UnitTable(),
+			`SELECT abbreviation FROM %s WHERE uom_id = @p1`, h.cfg.UnitTable(),
 		), v).Scan(&abbr)
 		p.UnitAbbr = abbr.String
 	}
@@ -487,7 +487,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	insertPart := h.dialect.InsertReturningID(h.cfg.PartsTable(),
 		`part_number, revision, title, detail, category,
 		 release_status, is_active, requested_by, notes, created_date, modified_date,
-		 unit_id, current_cost, reorder_min,
+		 uom_id, current_cost, reorder_min,
 		 user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, is_lot_tracked`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
@@ -595,7 +595,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET
 		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5,
 		  release_status=@p6, is_active=@p7, requested_by=@p8, notes=@p9, modified_date=@p10,
-		  unit_id=@p11, current_cost=@p12, reorder_min=@p13,
+		  uom_id=@p11, current_cost=@p12, reorder_min=@p13,
 		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
 		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23,
 		  is_lot_tracked=@p24
@@ -693,7 +693,7 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr+`,
 		       release_status, is_active, requested_by, notes,
-		       unit_id, current_cost, reorder_min, is_lot_tracked,
+		       uom_id, current_cost, reorder_min, is_lot_tracked,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1

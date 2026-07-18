@@ -54,7 +54,7 @@ the audit trigger for future audited tables is deferred to #669.
   lowercase names on Postgres where SQL Server preserved the original case -
   verify in the integration session.
 
-- **`_Test` clone tables** (`app_config_Test`, `unit_Test`,
+- **`_Test` clone tables** (`app_config_Test`, `uom_Test`,
   `company_attachment_Test`) are **not** ported. Postgres test mode uses a
   separate `ArxDev` database with identical (bare) table names, per the design's
   test strategy - no `_Test` suffix tables needed.
@@ -90,7 +90,7 @@ scripts here - noted so the live-DB integration session does not hit it cold.
 ## Suggested run order
 
 Parents before children (each file adds its outgoing FKs, so the referenced
-table must already exist): `unit`, `contact`, `company_attachment`, `company`,
+table must already exist): `uom`, `contact`, `company_attachment`, `company`,
 `part`, `mfg_part`, `supplier_part`, `price`, `bom`, `part_attachment`,
 `purchase_order` (creates `po_number_seq` + `purchase_order_history`), `po_line`,
 `inventory_transaction`, `form`, `form_row`, `form_record`, `result`,

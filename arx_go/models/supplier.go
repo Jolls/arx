@@ -55,8 +55,8 @@ type SupplierPart struct {
 	MfgPartNumber          string
 	MfgName                string
 	UnitID                 *int
-	PurchaseUnitAbbr       string   // joined from unit table; COALESCE(purchase unit, part base unit)
-	PurchaseUnitIsExplicit bool     // true = unit_id set on supplier_part; false = inherited from part_number.unit_id
+	PurchaseUnitAbbr       string   // joined from uom table; COALESCE(purchase unit, part base unit)
+	PurchaseUnitIsExplicit bool     // true = uom_id set on supplier_part; false = inherited from part.uom_id
 	POLinks                []string // populated post-query — PO numbers placed with this vendor for the part (supplier parts view)
 }
 

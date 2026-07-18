@@ -40,7 +40,7 @@ type Part struct {
 	UserField9          string
 	UserField10         string
 	UnitID              *int
-	UnitAbbr            string       // joined from unit table; abbreviation of unit_id
+	UnitAbbr            string       // joined from uom table; abbreviation of uom_id
 	Tabs                CategoryTabs // resolved subtab visibility for Category; set by applyCategoryTabs
 }
 

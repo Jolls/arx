@@ -16,7 +16,7 @@
 --   4201-4299  price                   7301-7399  record_event_results
 --   5001-5099  purchase_order          8001-8099  users
 --   5501-5599  po_line                 8101-8199  part_attachment
---   5801-5899  purchase_order_history  1-17       unit (natural identity)
+--   5801-5899  purchase_order_history  1-17       uom (natural identity)
 --   5901-5999  inventory_transaction   8201-8299  build
 --   8301-8399  lot                     8401-8499  lot_genealogy
 --   (identity) app_config, named_queries
@@ -68,7 +68,7 @@ BEGIN TRY
     DELETE FROM dbo.form;
     DELETE FROM dbo.named_queries;
     DELETE FROM dbo.app_config;
-    DELETE FROM dbo.unit;
+    DELETE FROM dbo.uom;
     DELETE FROM dbo.release_notes;
     DELETE FROM dbo.logs;
     DELETE FROM dbo.users;
@@ -76,8 +76,8 @@ BEGIN TRY
     -- ============================================================
     -- 2. Reference data (no fixed-ID scheme — natural identity)
     -- ============================================================
-    SET IDENTITY_INSERT dbo.unit ON;
-    INSERT INTO dbo.unit (unit_id, abbreviation, display_name, unit_type) VALUES
+    SET IDENTITY_INSERT dbo.uom ON;
+    INSERT INTO dbo.uom (uom_id, abbreviation, display_name, unit_type) VALUES
         (1,  'EA',    'Each',        'count'),
         (2,  'PC',    'Piece',       'count'),
         (3,  'mL',    'Milliliter',  'volume'),
@@ -95,7 +95,7 @@ BEGIN TRY
         (15, 'BOX',   'Box',         'package'),
         (16, 'BTL',   'Bottle',      'package'),
         (17, 'SPOOL', 'Spool',       'package');
-    SET IDENTITY_INSERT dbo.unit OFF;
+    SET IDENTITY_INSERT dbo.uom OFF;
 
     -- updated_at is pinned to a fixed sentinel (not GETDATE()) so an integration test can
     -- assert these rows go untouched by unrelated code paths — see
@@ -103,7 +103,7 @@ BEGIN TRY
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
     -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO dbo.app_config (setting_key, setting_value, updated_at) VALUES
-        ('schema_version', '5', '2020-01-01T00:00:00'),
+        ('schema_version', '6', '2020-01-01T00:00:00'),
         ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
@@ -190,7 +190,7 @@ BEGIN TRY
     -- 6. Parts
     -- ============================================================
     SET IDENTITY_INSERT dbo.part ON;
-    INSERT INTO dbo.part (id, part_number, category, revision, title, release_status, is_active, unit_id, current_cost, default_supplier_id, last_rollup_cost, last_rollup_at) VALUES
+    INSERT INTO dbo.part (id, part_number, category, revision, title, release_status, is_active, uom_id, current_cost, default_supplier_id, last_rollup_cost, last_rollup_at) VALUES
         (3001, 'RAW-1001', 'RAW', 'A', 'Aluminum Stock 6061',        'A', 1, 6,  2.50,   1001, NULL, NULL),
         (3002, 'BUY-1001', 'BUY', 'A', 'M3x8 SHCS',                  'A', 1, 1,  0.05,   1002, NULL, NULL),
         (3003, 'BUY-1002', 'BUY', 'A', 'O-Ring 2-014',               'A', 1, 1,  0.12,   1001, NULL, NULL),
@@ -269,10 +269,10 @@ BEGIN TRY
         (4102, 3002, 1004, 'CX-9999-OBSOLETE', 'Superseded MPN (soft-deleted)', 0); -- inactive; filtered unique index allows re-add
     SET IDENTITY_INSERT dbo.mfg_part OFF;
 
-    -- supplier_part 4002 buys part 3002 (base unit EA) by the REEL (unit_id 14), exercising
+    -- supplier_part 4002 buys part 3002 (base unit EA) by the REEL (uom_id 14), exercising
     -- purchase-unit ≠ base-unit conversion plus the min_increment / lead_time fields.
     SET IDENTITY_INSERT dbo.supplier_part ON;
-    INSERT INTO dbo.supplier_part (id, supplier_id, part_id, mfg_part_id, unit_id, supplier_pn, supplier_desc, min_increment, lead_time, preference) VALUES
+    INSERT INTO dbo.supplier_part (id, supplier_id, part_id, mfg_part_id, uom_id, supplier_pn, supplier_desc, min_increment, lead_time, preference) VALUES
         (4001, 1001, 3001, NULL, NULL, 'ACME-AL6061',  'Aluminum 6061 bar stock', NULL,  NULL,        1),
         (4002, 1002, 3002, 4101, 14,   'PMC-M3X8',     'M3x8 SHCS (reel of 1000)', 1000, '2-3 weeks', 1),
         (4003, 1001, 3003, NULL, NULL, 'ACME-OR2014',  'O-Ring 2-014',            NULL,  NULL,        1);
