@@ -1,3 +1,24 @@
+Arx v0.6.4 — July 2026
+========================
+
+SECURITY
+
+  Database passwords and the session-signing secret now live in a
+  per-user config file instead of the shared, exe-adjacent one. A
+  shared or OneDrive install of Arx no longer exposes one user's
+  database password to everyone with folder access, and no longer lets
+  any user forge another's session by sharing a signing key. Existing
+  secrets are migrated automatically on first run.
+
+BUG FIXES
+
+  Fixed folder-root settings (Doc Control, PO Folders, Supplier Files,
+  Images) under a user's profile directory saving a path specific to
+  whoever last saved Settings, so a shared or OneDrive install now
+  resolves each user's own profile correctly. Fixed two stored named
+  queries that had drifted out of sync with what they're supposed to
+  return.
+
 Arx v0.6.0 — July 2026
 ========================
 
