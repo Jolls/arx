@@ -1266,7 +1266,7 @@ func statusIsActive(status string) bool {
 }
 
 // actorName returns the logged-in user's username for audit fields, matching the
-// other audit/event tables (record_events.username, test_definition_history.changed_by).
+// other audit/event tables (record_events.username, form_row_history.changed_by).
 // Falls back to "system" when there is no user.
 func (h *Handler) actorName(r *http.Request) string {
 	if u := h.currentUser(r); u != nil && u.Username != "" {

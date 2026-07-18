@@ -165,7 +165,7 @@ func imageResult(val string) bool {
 // isImageRow returns true for a Level-0 result row that holds a pasted
 // image: either a pf_type="attach" step with a recorded value (the
 // authoritative signal on the edit page), or a value matching the legacy/new
-// image filename shape via imageResult (for rows whose test_definition
+// image filename shape via imageResult (for rows whose form_row
 // predates the #587 migration to pf_type="attach"). Checking both keeps the
 // Screenshots gallery (records.go's ImageRows) consistent with what
 // record_edit.html shows as an image step.

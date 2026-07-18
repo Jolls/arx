@@ -85,7 +85,7 @@ ALTER TABLE dbo.purchase_order ADD CONSTRAINT FK_purchase_order_receiver_contact
 --                           (submitted | approved | rejected | reset), with an
 --                           optional `note` (e.g. a rejection reason).
 -- changed_by holds the app user's username (login handle), written by the Go handler
--- — consistent with record_events.username / test_definition_history.changed_by.
+-- — consistent with record_events.username / form_row_history.changed_by.
 IF OBJECT_ID('dbo.purchase_order_history', 'U') IS NOT NULL DROP TABLE dbo.purchase_order_history;
 
 CREATE TABLE purchase_order_history (

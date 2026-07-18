@@ -1,11 +1,11 @@
 -- Postgres port of SQL/triggers.sql (issue #625, #670).
 -- Maintains the denormalized counts on company and part, plus the
--- test_definition audit-history snapshot.
+-- form_row audit-history snapshot.
 --   company.SUNumOfLNKs    — supplier_part rows for a supplier
 --   company.SUNumOfPOs     — purchase_order rows for a supplier
 --   part.attachment_count  — active (is_active) part_attachment rows for a part
 --   part.po_line_count     — po_line rows for a part
---   test_definition_history — snapshot of test_definition rows on UPDATE
+--   form_row_history       — snapshot of form_row rows on UPDATE
 --
 -- Like the SQL Server set, the count triggers recompute a full COUNT(*) from live
 -- data (not increment/decrement), so any drift is self-correcting on the next
@@ -192,15 +192,15 @@ CREATE TRIGGER trg_POL_part_count_del
     REFERENCING OLD TABLE AS oldtab
     FOR EACH STATEMENT EXECUTE FUNCTION trg_POL_part_count();
 
--- test_definition → test_definition_history
--- Snapshot pre-update values into test_definition_history on every UPDATE, using
+-- form_row → form_row_history
+-- Snapshot pre-update values into form_row_history on every UPDATE, using
 -- the OLD TABLE transition table (set-based; handles bulk updates correctly).
 -- changed_by comes from the session GUC arx.username set by the app (dialect
 -- SetAuditUser); it is empty when unset, matching the SQL Server CONTEXT_INFO path.
-CREATE OR REPLACE FUNCTION trg_test_definition_history() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION trg_form_row_history() RETURNS trigger AS $$
 BEGIN
-    INSERT INTO test_definition_history
-      (test_id, changed_at, changed_by,
+    INSERT INTO form_row_history
+      (form_row_id, changed_at, changed_by,
        type, parameter, specification, spec_units,
        spec_min, spec_max, spec_nom, default_result,
        hide_formula, pf_type,
@@ -217,11 +217,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_test_definition_history ON test_definition;
-CREATE TRIGGER trg_test_definition_history
-    AFTER UPDATE ON test_definition
+DROP TRIGGER IF EXISTS trg_form_row_history ON form_row;
+CREATE TRIGGER trg_form_row_history
+    AFTER UPDATE ON form_row
     REFERENCING OLD TABLE AS oldtab
-    FOR EACH STATEMENT EXECUTE FUNCTION trg_test_definition_history();
+    FOR EACH STATEMENT EXECUTE FUNCTION trg_form_row_history();
 
 -- One-time recalibration: corrects any counts that drifted before triggers
 -- existed (or were seeded with explicit values). Safe to re-run at any time.

@@ -13,9 +13,9 @@ import (
 // no lot linked yet (#687) — surfaced by callers as a 400, not a server error.
 var errRecordNeedsLot = errors.New("a lot must be selected before this record can be completed — the tested part is lot-tracked")
 
-// snapshotRecordResults copies the record's current data-row results (test_result) into
+// snapshotRecordResults copies the record's current data-row results (result) into
 // record_event_results, linked to the given Complete event. Rows are inserted in the
-// record's frozen display order (test_order, falling back to test_id order) so the snapshot
+// record's frozen display order (test_order, falling back to form_row_id order) so the snapshot
 // renders by id. Headings (type > 0) are not captured. Runs inside the caller's tx.
 func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, eventID, recordID int) error {
 	var testOrder string
@@ -26,7 +26,7 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 	}
 
 	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
-		SELECT test_id, COALESCE(parameter,''), COALESCE(specification,''), COALESCE(spec_units,''),
+		SELECT form_row_id, COALESCE(parameter,''), COALESCE(specification,''), COALESCE(spec_units,''),
 		       COALESCE(result,''), pass_fail, COALESCE(comment,'')
 		FROM %s WHERE record_id=@p1 AND COALESCE(type,0)=0`, h.cfg.ResultsTable()), recordID)
 	if err != nil {
@@ -47,7 +47,7 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 		return err
 	}
 
-	ins := fmt.Sprintf(`INSERT INTO %s (event_id, test_id, parameter, specification, spec_units, result, pass_fail, comment)
+	ins := fmt.Sprintf(`INSERT INTO %s (event_id, form_row_id, parameter, specification, spec_units, result, pass_fail, comment)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)`, h.cfg.RecordEventResultsTable())
 	for _, tid := range orderedResultIDs(testOrder, byTest) {
 		s := byTest[tid]
@@ -59,7 +59,7 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 	return nil
 }
 
-// orderedResultIDs returns the test_ids present in byTest, ordered by their position in the
+// orderedResultIDs returns the form_row_ids present in byTest, ordered by their position in the
 // record's test_order; ids absent from test_order (or all of them when test_order is empty,
 // e.g. a legacy record) are appended in ascending numeric order so nothing is dropped.
 func orderedResultIDs(testOrder string, byTest map[int]models.RecordResultSnapshot) []int {
@@ -86,7 +86,7 @@ func orderedResultIDs(testOrder string, byTest map[int]models.RecordResultSnapsh
 // unchanged). Events without a snapshot are absent from the map.
 func (h *Handler) loadEventSnapshots(ctx context.Context, recordID int) (map[int][]models.SnapshotDiffRow, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT rer.event_id, rer.test_id, COALESCE(rer.parameter,''), COALESCE(rer.specification,''),
+		SELECT rer.event_id, rer.form_row_id, COALESCE(rer.parameter,''), COALESCE(rer.specification,''),
 		       COALESCE(rer.spec_units,''), COALESCE(rer.result,''), rer.pass_fail, COALESCE(rer.comment,'')
 		FROM %s rer
 		JOIN %s re ON re.id = rer.event_id
@@ -183,7 +183,7 @@ func (h *Handler) logCompletionSnapshot(ctx context.Context, tx *txLogger, recor
 }
 
 // diffSnapshot annotates each row of a Complete-event result snapshot with how it changed
-// vs. the previous Complete snapshot, matching on test_id. prev is nil for the earliest
+// vs. the previous Complete snapshot, matching on form_row_id. prev is nil for the earliest
 // snapshot, in which case every row is "unchanged" (a plain baseline with nothing to diff).
 func diffSnapshot(curr, prev []models.RecordResultSnapshot) []models.SnapshotDiffRow {
 	prevByTest := make(map[int]models.RecordResultSnapshot, len(prev))

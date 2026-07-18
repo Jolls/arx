@@ -217,7 +217,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 }
 
 // TestIntegration_YieldSummary exercises RecordsYieldSummary's actual query
-// (LEFT JOIN + GROUP BY over test_record/test_result, aliased to sidestep the
+// (LEFT JOIN + GROUP BY over form_record/result, aliased to sidestep the
 // "id" column existing on both tables) against a real ArxDev connection, since
 // TestComputeYieldBuckets only covers the pure Go aggregation, not the SQL.
 func TestIntegration_YieldSummary(t *testing.T) {
@@ -233,12 +233,12 @@ func TestIntegration_YieldSummary(t *testing.T) {
 		t.Fatalf("seed form: %v", err)
 	}
 
-	// test_result.test_id FKs to test_definition.id, so results need a real step to point at.
+	// result.form_row_id FKs to form_row.id, so results need a real step to point at.
 	var testID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type) OUTPUT INSERTED.id VALUES (@p1, 0)`, h.cfg.StepsTable()),
 		formID).Scan(&testID); err != nil {
-		t.Fatalf("seed test_definition: %v", err)
+		t.Fatalf("seed form_row: %v", err)
 	}
 
 	defer func() {
@@ -254,7 +254,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	// "fail only if a step actually failed" rule).
 	type seedRecord struct {
 		date      string
-		passFails []sql.NullBool // one test_result row per entry; nil = no results
+		passFails []sql.NullBool // one result row per entry; nil = no results
 	}
 	seeds := []seedRecord{
 		{"2026-03-01", []sql.NullBool{{Bool: true, Valid: true}, {Bool: true, Valid: true}}},
@@ -271,7 +271,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 		}
 		for _, pf := range s.passFails {
 			if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-				`INSERT INTO %s (record_id, test_id, pass_fail) VALUES (@p1, @p2, @p3)`,
+				`INSERT INTO %s (record_id, form_row_id, pass_fail) VALUES (@p1, @p2, @p3)`,
 				h.cfg.ResultsTable()), recordID, testID, pf); err != nil {
 				t.Fatalf("seed result: %v", err)
 			}
@@ -434,7 +434,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 		 OUTPUT INSERTED.id VALUES (@p1, 0, 'Screenshot/File Panel Photo', 'attach')`,
 		h.cfg.StepsTable()), formID,
 	).Scan(&testID); err != nil {
-		t.Fatalf("seed test_definition: %v", err)
+		t.Fatalf("seed form_row: %v", err)
 	}
 
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
@@ -449,7 +449,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587', '', '', @p2, '', 0, 1)`, h.cfg.RecordsTable()),
 		formID, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
-		t.Fatalf("seed test_record: %v", err)
+		t.Fatalf("seed form_record: %v", err)
 	}
 
 	// ── Post a stand-in filename (no disk write) and confirm PASS ──────────────
@@ -463,7 +463,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	var result string
 	var passFail sql.NullBool
 	err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND test_id=@p2`,
+		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND form_row_id=@p2`,
 		h.cfg.ResultsTable()), recordID, testID,
 	).Scan(&result, &passFail)
 	if err != nil {
@@ -484,7 +484,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	assertStatus(t, "SaveResults (attach, cleared)", rec, http.StatusSeeOther)
 
 	err = h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND test_id=@p2`,
+		`SELECT result, pass_fail FROM %s WHERE record_id=@p1 AND form_row_id=@p2`,
 		h.cfg.ResultsTable()), recordID, testID,
 	).Scan(&result, &passFail)
 	if err != nil {
@@ -568,7 +568,7 @@ func TestIntegration_PasteResultImageGuards(t *testing.T) {
 		`INSERT INTO %s (form_id, serial_number, serial_number_pn, serial_number_pn_desc, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587-LOCKED', '', '', 1, 1)`, h.cfg.RecordsTable()), formID,
 	).Scan(&recordID); err != nil {
-		t.Fatalf("seed locked test_record: %v", err)
+		t.Fatalf("seed locked form_record: %v", err)
 	}
 
 	rec = postPasteImage(recordID, 1)
@@ -1269,8 +1269,8 @@ func TestIntegration_DashboardBelowReorderParts(t *testing.T) {
 }
 
 // TestIntegration_TestDefinitionHistoryAudit exercises the audit path end to end:
-// dialect.SetAuditUser stashes the acting user where the trg_test_definition_history
-// trigger can read it, so an UPDATE to a test_definition row produces a snapshot
+// dialect.SetAuditUser stashes the acting user where the trg_form_row_history
+// trigger can read it, so an UPDATE to a form_row row produces a snapshot
 // attributed to that user. It drives the SetAuditUser + UPDATE through the tx
 // wrapper (the same beginTx → SetAuditUser → UPDATE order SaveFormDef/ArchiveStep
 // use), so it validates that contract on whichever engine ArxDev runs — SQL Server
@@ -1293,10 +1293,10 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Audit Seed')`,
 		h.cfg.StepsTable()), formID,
 	).Scan(&testID); err != nil {
-		t.Fatalf("seed test_definition: %v", err)
+		t.Fatalf("seed form_row: %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE test_id=@p1`, h.cfg.TestDefinitionHistoryTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
 	}()
@@ -1325,7 +1325,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 	// Exactly one snapshot row, holding the PRE-update value and attributed to actor.
 	var count int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE test_id=@p1`, h.cfg.TestDefinitionHistoryTable()), testID,
+		`SELECT COUNT(*) FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID,
 	).Scan(&count); err != nil {
 		t.Fatalf("count history: %v", err)
 	}
@@ -1335,7 +1335,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 
 	var changedBy, snapParam string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT changed_by, parameter FROM %s WHERE test_id=@p1`, h.cfg.TestDefinitionHistoryTable()), testID,
+		`SELECT changed_by, parameter FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID,
 	).Scan(&changedBy, &snapParam); err != nil {
 		t.Fatalf("select history: %v", err)
 	}

@@ -10,5 +10,5 @@ CREATE TABLE app_config (
     updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO app_config (setting_key, setting_value) VALUES ('schema_version', '4');
+INSERT INTO app_config (setting_key, setting_value) VALUES ('schema_version', '5');
 INSERT INTO app_config (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail');

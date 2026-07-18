@@ -7,7 +7,7 @@ IF OBJECT_ID('dbo.record_event_results', 'U') IS NOT NULL DROP TABLE record_even
 CREATE TABLE record_event_results (
   id            INT          PRIMARY KEY IDENTITY,
   event_id      INT          NOT NULL REFERENCES dbo.record_events(id),  -- the 'completed' event this snapshot belongs to.
-  test_id       INT          NOT NULL,    -- FK to test_definition.id (which step).
+  form_row_id   INT          NOT NULL,    -- FK to form_row.id (which step).
   parameter     VARCHAR(255),             -- resolved parameter snapshot, so the row renders without a join.
   specification VARCHAR(255),             -- resolved spec snapshot (tokens already baked in), frozen at completion.
   spec_units    VARCHAR(255),

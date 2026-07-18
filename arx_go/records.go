@@ -44,7 +44,7 @@ func stepVisibleOnRecord(archived, hasResult bool) bool {
 }
 
 // stepFromResult builds a render step from a materialized snapshot row (#487). A saved record
-// renders entirely from these — the live test_definition is never consulted for a materialized row.
+// renders entirely from these — the live form_row is never consulted for a materialized row.
 func stepFromResult(tid int, res *models.TestResult) *models.TestStep {
 	return &models.TestStep{
 		ID:            tid,
@@ -467,11 +467,11 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		PctLeft float64 // position along timeline bar (5â€"95%)
 	}
 	hRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT CAST(changed_at AS DATE) AS day, COUNT(DISTINCT test_id) AS cnt
+		SELECT CAST(changed_at AS DATE) AS day, COUNT(DISTINCT form_row_id) AS cnt
 		FROM %s
-		WHERE test_id IN (SELECT id FROM %s WHERE form_id = @p1)
+		WHERE form_row_id IN (SELECT id FROM %s WHERE form_id = @p1)
 		GROUP BY CAST(changed_at AS DATE) ORDER BY day ASC`,
-		h.cfg.TestDefinitionHistoryTable(), h.cfg.StepsTable()), formID)
+		h.cfg.FormRowHistoryTable(), h.cfg.StepsTable()), formID)
 	var histPoints []HistoryPoint
 	if err == nil {
 		defer hRows.Close()
@@ -541,25 +541,25 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 	// see FUTURE_GOALS.md (records index query refactor)
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT t.id,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.type,0)            ELSE COALESCE(t.type,0)            END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.parameter,'')      ELSE COALESCE(t.parameter,'')      END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.spec_nom,'')       ELSE COALESCE(t.spec_nom,'')       END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.spec_min,'')       ELSE COALESCE(t.spec_min,'')       END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.spec_max,'')       ELSE COALESCE(t.spec_max,'')       END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.spec_units,'')     ELSE COALESCE(t.spec_units,'')     END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.pf_type,'')        ELSE COALESCE(t.pf_type,'')        END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.default_result,'') ELSE COALESCE(t.default_result,'') END,
-		       CASE WHEN h.test_id IS NOT NULL THEN COALESCE(h.hide_formula,'')   ELSE COALESCE(t.hide_formula,'')   END,
-		       CASE WHEN h.test_id IS NOT NULL THEN 1 ELSE 0 END
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.type,0)            ELSE COALESCE(t.type,0)            END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.parameter,'')      ELSE COALESCE(t.parameter,'')      END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_nom,'')       ELSE COALESCE(t.spec_nom,'')       END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_min,'')       ELSE COALESCE(t.spec_min,'')       END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_max,'')       ELSE COALESCE(t.spec_max,'')       END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_units,'')     ELSE COALESCE(t.spec_units,'')     END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.pf_type,'')        ELSE COALESCE(t.pf_type,'')        END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.default_result,'') ELSE COALESCE(t.default_result,'') END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.hide_formula,'')   ELSE COALESCE(t.hide_formula,'')   END,
+		       CASE WHEN h.form_row_id IS NOT NULL THEN 1 ELSE 0 END
 		FROM %s t
 		LEFT JOIN (
-		    SELECT test_id, type, parameter, spec_nom, spec_min, spec_max,
+		    SELECT form_row_id, type, parameter, spec_nom, spec_min, spec_max,
 		           spec_units, pf_type, default_result, hide_formula
 		    FROM %s
 		    WHERE CAST(changed_at AS DATE) = CAST(@p2 AS DATE)
-		) h ON h.test_id = t.id
+		) h ON h.form_row_id = t.id
 		WHERE t.form_id = @p1`,
-		h.cfg.StepsTable(), h.cfg.TestDefinitionHistoryTable()),
+		h.cfg.StepsTable(), h.cfg.FormRowHistoryTable()),
 		formID, at)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
@@ -684,7 +684,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 }
 
 // setAuditUser records the acting username for the current transaction so the
-// trg_test_definition_history trigger attributes the snapshot to them. The exact
+// trg_form_row_history trigger attributes the snapshot to them. The exact
 // statement is dialect-specific (SET CONTEXT_INFO on SQL Server, a session GUC on
 // Postgres). Best-effort: a failure here only leaves the history row unattributed,
 // matching the prior inline behavior, which also ignored the error.
@@ -733,7 +733,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Open a transaction so SET CONTEXT_INFO (connection-scoped) is seen by the
-	// trg_test_definition_history trigger on every UPDATE in this batch.
+	// trg_form_row_history trigger on every UPDATE in this batch.
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
@@ -978,7 +978,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
 }
 
-// loadSteps loads all test_definition rows for a form keyed by id, with every field used for
+// loadSteps loads all form_row rows for a form keyed by id, with every field used for
 // rendering and token resolution. Used as the live-definition fallback for un-materialized rows.
 func (h *Handler) loadSteps(ctx context.Context, formID int) (map[int]*models.TestStep, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
@@ -1035,10 +1035,10 @@ func (h *Handler) loadSteps(ctx context.Context, formID int) (map[int]*models.Te
 	return steps, nil
 }
 
-// loadRecordResults loads the materialized snapshot rows for a record, keyed by test_id (#487).
+// loadRecordResults loads the materialized snapshot rows for a record, keyed by form_row_id (#487).
 func (h *Handler) loadRecordResults(ctx context.Context, recordID int) (map[int]*models.TestResult, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, record_id, test_id,
+		SELECT id, record_id, form_row_id,
 		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
 		       pass_fail, COALESCE(comment,''),
 		       COALESCE(spec_min,''), COALESCE(spec_nom,''), COALESCE(spec_max,''),
@@ -1523,7 +1523,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/records/%d/edit", newID), http.StatusSeeOther)
 }
 
-// materializeRecordSteps creates a frozen test_result snapshot row for every applicable step in the
+// materializeRecordSteps creates a frozen result snapshot row for every applicable step in the
 // form's order at record creation (#487): headings included (type > 0); archived and non-applicable
 // instrument-type data steps skipped. Self/record/form tokens are baked; {id} cross-step tokens are
 // left for render-time resolution. result/comment/pass_fail start empty.
@@ -1550,7 +1550,7 @@ func (h *Handler) materializeRecordSteps(ctx context.Context, tx *txLogger, reco
 		bakeStepTokens(step, record, form)
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s
-			  (record_id, test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+			  (record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 			   spec_units, pf_type, format, hide_formula, default_result, updated_at)
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,GETDATE())`,
 			h.cfg.ResultsTable()),
@@ -1942,7 +1942,7 @@ func (h *Handler) BulkLockRecords(w http.ResponseWriter, r *http.Request) {
 }
 
 // DuplicateRecord — POST /records/{id}/duplicate
-// Creates a new WIP record with the same serial number as the source, copying all test_result rows.
+// Creates a new WIP record with the same serial number as the source, copying all result rows.
 // Redirects to the new record's edit view on success.
 func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -1976,7 +1976,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// INSERT new test_record; part_number_id is NULL when PartNumberID == 0 (mirrors CreateRecord).
+	// INSERT new form_record; part_number_id is NULL when PartNumberID == 0 (mirrors CreateRecord).
 	var partNumberID *int
 	if src.PartNumberID != 0 {
 		partNumberID = &src.PartNumberID
@@ -2006,9 +2006,9 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Copy all test_result rows from the source record into the new record.
+	// Copy all result rows from the source record into the new record.
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+		SELECT form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 		       spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail
 		FROM %s WHERE record_id = @p1`, h.cfg.ResultsTable()), recordID)
 	if err != nil {
@@ -2043,7 +2043,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s
-			  (record_id, test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+			  (record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 			   spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE())`,
 			h.cfg.ResultsTable()),
@@ -2142,7 +2142,7 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 }
 
 // ArchiveStep — POST /forms/{id}/tests/{testID}/archive
-// Toggles test_definition.archived for a single step. Form field "archived"=1 archives,
+// Toggles form_row.archived for a single step. Form field "archived"=1 archives,
 // anything else unarchives. No hard delete. Wrapped in a transaction so SET CONTEXT_INFO
 // attributes the history-trigger row to the current user (same pattern as SaveFormDef).
 func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
@@ -2266,7 +2266,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		steps[s.ID] = &s
 	}
 
-	// Load existing results keyed by test_id â€" used for change detection and UPDATE vs INSERT.
+	// Load existing results keyed by form_row_id â€" used for change detection and UPDATE vs INSERT.
 	// SpecMin/SpecMax/PFType carry the frozen snapshot so edits re-evaluate P/F against the spec
 	// the record was taken under, not the live definition (#487).
 	type savedResult struct {
@@ -2279,7 +2279,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 	existing := map[int]savedResult{}
 	exRows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		"SELECT id, test_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
+		"SELECT id, form_row_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2341,7 +2341,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			}
 			h.execContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
-				  (record_id, test_id, result, comment, pass_fail, type,
+				  (record_id, form_row_id, result, comment, pass_fail, type,
 				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, pf_type, format,
 				   hide_formula, default_result, updated_at)
 				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,GETDATE())`,
@@ -2438,10 +2438,10 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	existing := map[int]int{}                  // test_id -> test_result row id
-	curResults := map[int]*models.TestResult{} // test_id -> recorded value (for {id} P/F resolution)
+	existing := map[int]int{}                  // form_row_id -> result row id
+	curResults := map[int]*models.TestResult{} // form_row_id -> recorded value (for {id} P/F resolution)
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		"SELECT id, test_id, COALESCE(result,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
+		"SELECT id, form_row_id, COALESCE(result,'') FROM %s WHERE record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2503,7 +2503,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 			// Step added to the form since this record was created — materialize an empty row.
 			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
-				  (record_id, test_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+				  (record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
 				   spec_units, pf_type, format, hide_formula, default_result, updated_at)
 				VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,GETDATE())`,
 				h.cfg.ResultsTable()),
@@ -2959,7 +2959,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		       res.updated_at
 		FROM %s res
 		JOIN %s trec ON res.record_id = trec.id
-		WHERE res.test_id = @p1 AND trec.form_id = @p2 AND trec.is_active = %s
+		WHERE res.form_row_id = @p1 AND trec.form_id = @p2 AND trec.is_active = %s
 		ORDER BY %s DESC, trec.record_date DESC`,
 		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.TryCastInt("trec.serial_number")), testID, formID)
 	if err != nil {

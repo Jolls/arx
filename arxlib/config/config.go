@@ -18,7 +18,7 @@ import (
 // binary can no longer run against the migrated DB (dropped/renamed columns or tables,
 // type changes, repurposed columns). Additive changes (new nullable or defaulted columns,
 // new tables) are backward-compatible and must NOT bump this — the old binary ignores them.
-const ExpectedSchemaVersion = "4"
+const ExpectedSchemaVersion = "5"
 
 // Config holds all configuration for the merged Arx application.
 type Config struct {
@@ -215,15 +215,15 @@ func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "LNK" }
 
 // Test Records tables
-func (c *Config) FormsTable() string                 { return "form" }
-func (c *Config) RecordsTable() string               { return "test_record" }
-func (c *Config) StepsTable() string                 { return "test_definition" }
-func (c *Config) ResultsTable() string               { return "test_result" }
-func (c *Config) NamedQueriesTable() string          { return "named_queries" }
-func (c *Config) TestDefinitionHistoryTable() string { return "test_definition_history" }
-func (c *Config) FormEventsTable() string            { return "form_events" }
-func (c *Config) RecordEventsTable() string          { return "record_events" }
-func (c *Config) RecordEventResultsTable() string    { return "record_event_results" }
+func (c *Config) FormsTable() string              { return "form" }
+func (c *Config) RecordsTable() string            { return "form_record" }
+func (c *Config) StepsTable() string              { return "form_row" }
+func (c *Config) ResultsTable() string            { return "result" }
+func (c *Config) NamedQueriesTable() string       { return "named_queries" }
+func (c *Config) FormRowHistoryTable() string     { return "form_row_history" }
+func (c *Config) FormEventsTable() string          { return "form_events" }
+func (c *Config) RecordEventsTable() string        { return "record_events" }
+func (c *Config) RecordEventResultsTable() string  { return "record_event_results" }
 
 // CheckSchemaVersion queries app_config for schema_version and returns "" when it
 // matches ExpectedSchemaVersion, or a non-empty mismatch/error message otherwise.

@@ -27,7 +27,7 @@ type Dialect interface {
 	LimitClause(ph string) string
 	// SetAuditUser returns the statement, and its bound argument, that records
 	// the acting username for the current transaction so the
-	// trg_test_definition_history trigger can attribute the snapshot. SQL Server
+	// trg_form_row_history trigger can attribute the snapshot. SQL Server
 	// stashes it in CONTEXT_INFO (a varbinary, hence the []byte arg); Postgres
 	// sets a transaction-local session GUC the trigger reads via
 	// current_setting('arx.username').
@@ -187,7 +187,7 @@ func (postgresDialect) LimitClause(ph string) string { return " LIMIT " + ph }
 
 // SetAuditUser sets a transaction-local session GUC (is_local = true, matching
 // CONTEXT_INFO's scope within the audit transaction) that
-// trg_test_definition_history reads via current_setting('arx.username'). The
+// trg_form_row_history reads via current_setting('arx.username'). The
 // @p1 placeholder is rewritten to $1 by Rewrite in the tx wrapper.
 func (postgresDialect) SetAuditUser(username string) (string, any) {
 	return "SELECT set_config('arx.username', @p1, true)", username

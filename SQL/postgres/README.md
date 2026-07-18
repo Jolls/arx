@@ -9,7 +9,7 @@ Jolls concluded all 5 SQL Server triggers (`SQL/triggers.sql`) are still needed
 and stay triggers (see `docs/plans/625-postgres-migration-design.md` §3). The
 4 count triggers keep the denormalized columns (`part.attachment_count`,
 `part.po_line_count`, `company.SUNumOfLNKs`, `company.SUNumOfPOs`) in sync; the
-`test_definition_history` audit trigger snapshots pre-update rows, reading the
+`form_row_history` audit trigger snapshots pre-update rows, reading the
 app user from the `arx.username` session GUC (set by the app via the dialect's
 `SetAuditUser`) in place of SQL Server's `CONTEXT_INFO()`. Postgres uses
 statement-level triggers with transition tables — see the header of
@@ -93,7 +93,7 @@ Parents before children (each file adds its outgoing FKs, so the referenced
 table must already exist): `unit`, `contact`, `company_attachment`, `company`,
 `part`, `mfg_part`, `supplier_part`, `price`, `bom`, `part_attachment`,
 `purchase_order` (creates `po_number_seq` + `purchase_order_history`), `po_line`,
-`inventory_transaction`, `form`, `test_definition`, `test_record`, `test_result`,
-`test_definition_history`, `form_events`, `record_events`,
+`inventory_transaction`, `form`, `form_row`, `form_record`, `result`,
+`form_row_history`, `form_events`, `record_events`,
 `record_event_results`, `app_config`, `named_queries`, `users`, `logs`,
 `release_notes`. Run `triggers.sql` **last**, after every table above exists.

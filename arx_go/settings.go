@@ -555,7 +555,7 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 		h.cfg.UnitTable(), h.cfg.AppConfigTable(),
 		h.cfg.FormsTable(), h.cfg.RecordsTable(), h.cfg.ResultsTable(),
 		h.cfg.StepsTable(), h.cfg.FormEventsTable(), h.cfg.RecordEventsTable(),
-		h.cfg.NamedQueriesTable(), h.cfg.TestDefinitionHistoryTable(),
+		h.cfg.NamedQueriesTable(), h.cfg.FormRowHistoryTable(),
 	}
 
 	for _, tbl := range tables {

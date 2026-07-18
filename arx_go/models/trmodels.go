@@ -56,7 +56,7 @@ func (f TestForm) RecordTypeList() []string {
 	return out
 }
 
-// TestRecord is a row in the test_record table.
+// TestRecord is a row in the form_record table.
 type TestRecord struct {
 	ID               int
 	FormID           int
@@ -66,7 +66,7 @@ type TestRecord struct {
 	SerialNumberDesc string // description of the unit under test
 	RecordDate       *time.Time
 	Comments         string // used as "Type" in the UI
-	InstrumentType   string // free-text instrument type label; matched against test_definition.instrument_types to filter steps
+	InstrumentType   string // free-text instrument type label; matched against form_row.instrument_types to filter steps
 	IsLocked         bool
 	IsApproved       bool // 1 = reviewer-approved; only a TR reviewer may unlock (#249). Requires IsLocked.
 	IsActive         bool
@@ -94,7 +94,7 @@ func (r TestRecord) FormRevLabel() string {
 	return "Rev " + strconv.Itoa(*r.FormRevision)
 }
 
-// TestStep is a row in the test_definition table.
+// TestStep is a row in the form_row table.
 // Type is the heading level: 0 = data row, 1/2/3 = section heading.
 type TestStep struct {
 	ID            int
@@ -123,7 +123,7 @@ type TestStep struct {
 	StepUpdatedAt   *time.Time
 }
 
-// TestResult is a row in the test_result table.
+// TestResult is a row in the result table.
 // The snapshot fields (Parameter, Specification, SpecMin/Nom/Max, SpecUnits, PFType, Format)
 // freeze the definition as it was when the result was recorded (#487). Stored resolved.
 type TestResult struct {
@@ -141,7 +141,7 @@ type TestResult struct {
 	SpecUnits     string // snapshot
 	PFType        string // snapshot of pf_type — saved records evaluate P/F against this
 	Format        string // snapshot of format — controls how the recorded value renders
-	Type          int    // snapshot of test_definition.type — 0=data, 1/2/3=heading
+	Type          int    // snapshot of form_row.type — 0=data, 1/2/3=heading
 	HideFormula   string // snapshot of hide_formula — frozen visibility, evaluated vs the record's own results
 	DefaultResult string // snapshot of default_result — used by the edit page for auto-calc; not shown on the view
 	UpdatedAt     *time.Time
@@ -234,7 +234,7 @@ func (s RecordResultSnapshot) PF() string {
 }
 
 // SnapshotDiffRow is a snapshot row annotated with how it changed vs. the prior snapshot:
-// "added" (test_id absent from the prior snapshot), "changed" (value/pass-fail/comment
+// "added" (form_row_id absent from the prior snapshot), "changed" (value/pass-fail/comment
 // differ), or "unchanged".
 type SnapshotDiffRow struct {
 	RecordResultSnapshot

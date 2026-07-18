@@ -8,10 +8,10 @@
 --
 -- ID ranges (see also SQL/schema.md "Reference test data"):
 --   1001-1099  company                 6001-6099  form
---   2001-2099  contact                 6101-6199  test_definition
+--   2001-2099  contact                 6101-6199  form_row
 --   3001-3099  part                    6201-6299  form_events
---   3901-3999  bom                     7001-7099  test_record
---   4001-4099  supplier_part           7101-7199  test_result
+--   3901-3999  bom                     7001-7099  form_record
+--   4001-4099  supplier_part           7101-7199  result
 --   4101-4199  mfg_part                7201-7299  record_events
 --   4201-4299  price                   7301-7399  record_event_results
 --   5001-5099  purchase_order          8001-8099  users
@@ -24,7 +24,7 @@
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
 -- one with a comment, one without. company_attachment is NOT seeded (would require real
 -- files/URLs on companies too) and is cleared and left empty, along with logs and release_notes.
--- test_definition_history gets one row written by trg_test_definition_history (the seed
+-- form_row_history gets one row written by trg_form_row_history (the seed
 -- updates step 6103 after insert precisely to exercise the definition-history timeline).
 --
 -- Login (ArxDev only): admin/admin (PO + record approver), tester/tester (no approvals).
@@ -45,12 +45,12 @@ BEGIN TRY
     DELETE FROM dbo.mfg_part;
     DELETE FROM dbo.bom;
     DELETE FROM dbo.price;
-    -- test_record.lot_id/build_id (#677) reference lot + build, so the test-record group
+    -- form_record.lot_id/build_id (#677) reference lot + build, so the test-record group
     -- (children first) must be cleared before build/lot below.
     DELETE FROM dbo.record_event_results;
     DELETE FROM dbo.record_events;
-    DELETE FROM dbo.test_result;
-    DELETE FROM dbo.test_record;
+    DELETE FROM dbo.result;
+    DELETE FROM dbo.form_record;
     DELETE FROM dbo.inventory_transaction;
     DELETE FROM dbo.lot_genealogy;                     -- edges first (FK to lot)
     DELETE FROM dbo.build;                             -- build.output_lot_id FK to lot, so before lot
@@ -63,8 +63,8 @@ BEGIN TRY
     DELETE FROM dbo.contact;
     DELETE FROM dbo.part;
     DELETE FROM dbo.form_events;
-    DELETE FROM dbo.test_definition_history;
-    DELETE FROM dbo.test_definition;
+    DELETE FROM dbo.form_row_history;
+    DELETE FROM dbo.form_row;
     DELETE FROM dbo.form;
     DELETE FROM dbo.named_queries;
     DELETE FROM dbo.app_config;
@@ -103,20 +103,20 @@ BEGIN TRY
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
     -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO dbo.app_config (setting_key, setting_value, updated_at) VALUES
-        ('schema_version', '4', '2020-01-01T00:00:00'),
+        ('schema_version', '5', '2020-01-01T00:00:00'),
         ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
     -- keep the two in sync. Identity-assigned (looked up by unique `name`, not by id).
     INSERT INTO dbo.named_queries (name, description, sql, params, result_type, created_at, updated_at) VALUES
-        ('fil_category_for_pn', 'Attachment categories for a given part number',
-         'SELECT category FROM part_attachment WHERE part_id = (SELECT id FROM part WHERE part_number = @pn) AND is_active = 1',
+        ('fil_category_for_pn', 'Comments of active Attachments for a given part number',
+         'SELECT comment FROM part_attachment WHERE part_id = (SELECT id FROM part WHERE part_number = @pn) AND is_active = 1',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('parts_matching', 'Part numbers matching a LIKE pattern (caller supplies wildcards)',
          'SELECT part_number FROM part WHERE part_number LIKE @pattern AND is_active = 1 ORDER BY part_number DESC',
          'pattern', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('pos_for_pn', 'PO numbers where a line item part number prefix matches (active = not soft-deleted)',
-         'SELECT purchase_order.number FROM po_line LEFT JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE is_active = 1 AND po_line.part_number_snapshot LIKE @pn + ''%'' ORDER BY po_line.po_id DESC',
+         'SELECT purchase_order.number FROM po_line LEFT JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE po_line.part_number_snapshot LIKE @pn + ''%'' ORDER BY po_line.po_id DESC',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
         ('bom_pn_by_item', 'Part number at a specific BOM item position for a given parent assembly PN',
          'SELECT p.part_number, p.title FROM bom JOIN part p ON bom.component_part_id = p.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
@@ -128,13 +128,13 @@ BEGIN TRY
          'SELECT TOP 1 f.file_name, COALESCE(f.category, f.file_name) FROM part_attachment f JOIN part p ON f.part_id = p.id WHERE p.id = @pnid AND f.is_active = 1 ORDER BY CASE WHEN p.primary_attachment_id > 0 AND f.id = p.primary_attachment_id THEN 0 ELSE 1 END, f.sort_order ASC',
          'pnid', 'single', GETDATE(), '2020-01-01T00:00:00'),
         ('recent_serial_numbers_for_form', 'Most recent 20 serial numbers tested against a given form (active records only, newest first). Use a literal form_id to reference a different form than the current one.',
-         'SELECT TOP 20 serial_number FROM test_record WHERE form_id = @form_id AND is_active = 1 ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC',
-         'form_id', 'list', GETDATE(), '2020-01-01T00:00:00'),
+         'SELECT TOP 20 serial_number FROM form_record WHERE form_id = @form_id AND is_active = 1 ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC',
+         'form_id', 'multi', GETDATE(), '2020-01-01T00:00:00'),
         ('max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
-         'SELECT MAX(TRY_CAST(r.result AS INT)) FROM test_result r JOIN test_record tr ON r.record_id = tr.id WHERE r.test_id = @test_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
+         'SELECT MAX(TRY_CAST(r.result AS INT)) FROM result r JOIN form_record tr ON r.record_id = tr.id WHERE r.form_row_id = @test_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
          'test_id, record_date', 'single', GETDATE(), '2020-01-01T00:00:00'),
         ('vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
-         'SELECT po_line.vendor_part_number, po_line.description FROM po_line JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE purchase_order.status NOT IN (''rfq'', ''cancelled'') AND po_line.part_number_snapshot LIKE ''%'' + @pn + ''%'' ORDER BY po_line.po_id DESC',
+         'SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' + @pn + ''%'' ORDER BY po_id DESC',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00');
 
     -- ============================================================
@@ -254,7 +254,7 @@ BEGIN TRY
         (3907, 3005, 3012, 4, 1),   -- 3005 nests 3012 as a sub-assembly component
         (3908, 3012, 3002, 3, 3),   -- 3012 also directly uses 3x screw 3002 (shared leaf, #466)
         (3909, 3010, 3007, 2, 1),   -- FORM part's BOM also covers 3007 (#737), so it can carry an
-                                    -- Incoming Inspection record — see test_record 7012 below
+                                    -- Incoming Inspection record — see form_record 7012 below
         (3910, 3013, 3012, 1, 1),   -- 3013's own BOM: 1x sub-assembly 3012 (#737)
         (3911, 3013, 3007, 2, 1),   -- + 1x raw stainless bar stock, direct (not via 3012)
         (3912, 3010, 3013, 3, 1);   -- FORM part's BOM also covers 3013, for its Final Test record
@@ -386,7 +386,7 @@ BEGIN TRY
     -- balance (drives the reorder-point fixtures), and posting build ledger rows would
     -- perturb those. This row just exercises the build table itself in test mode.
     -- 8202 is the manufactured build that produced lot-tracked sub-assembly 3012's lot
-    -- 8302 (linked below in 10c, once the lot exists) — exercises test_record.build_id +
+    -- 8302 (linked below in 10c, once the lot exists) — exercises form_record.build_id +
     -- lot_id together (#677). Its ledger rows are likewise not seeded, per the note above.
     -- 8203 (#737): builds top-level assembly 3013 out of sub-assembly 3012's lot 8302 and
     -- raw 3007's lot 8303, five days after 8202 — the second tier of the multi-level chain.
@@ -449,12 +449,12 @@ BEGIN TRY
     -- Link build 8202/8203's output to their lots (deferred until the lots exist, mirroring
     -- the build handler: insert build → create lot → set output_lot_id). Gives each lot a
     -- real originating build so its lot_description shows "Build #NNNN" and the matching
-    -- test_record can point at both.
+    -- form_record can point at both.
     UPDATE dbo.build SET output_lot_id = 8302 WHERE id = 8202;
     UPDATE dbo.build SET output_lot_id = 8306 WHERE id = 8203;
 
     -- ============================================================
-    -- 11. Test records — form, test_definition, test_record, test_result,
+    -- 11. Test records — form, form_row, form_record, result,
     --     record_events, record_event_results
     -- ============================================================
     -- Form hangs off FORM-category part 3010 (FormsList filters pn.category='FORM').
@@ -473,8 +473,8 @@ BEGIN TRY
     -- List:/query: spec_nom pickers, {id} cross-step tokens, default_result, and hide_formula.
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
     -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
-    SET IDENTITY_INSERT dbo.test_definition ON;
-    INSERT INTO dbo.test_definition (id, form_id, revision, type, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, instrument_types, archived, format, default_result, hide_formula, updated_at) VALUES
+    SET IDENTITY_INSERT dbo.form_row ON;
+    INSERT INTO dbo.form_row (id, form_id, revision, type, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, instrument_types, archived, format, default_result, hide_formula, updated_at) VALUES
         (6101, 6001, 1, 1, 'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    NULL,            0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
         (6102, 6001, 1, 0, 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
         (6103, 6001, 1, 0, 'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '250', 'range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
@@ -483,11 +483,11 @@ BEGIN TRY
         (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00'),
         (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00'),
         (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, 0, '0.00', NULL, '{record.type}!=Re-Test', '2020-01-01T00:00:00'); -- only shown on Re-Test records
-    SET IDENTITY_INSERT dbo.test_definition OFF;
+    SET IDENTITY_INSERT dbo.form_row OFF;
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
-    -- trg_test_definition_history snapshots the old row into test_definition_history.
-    UPDATE dbo.test_definition SET spec_max = '200' WHERE id = 6103;
+    -- trg_form_row_history snapshots the old row into form_row_history.
+    UPDATE dbo.form_row SET spec_max = '200' WHERE id = 6103;
 
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
     -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
@@ -500,8 +500,8 @@ BEGIN TRY
     -- lot-tracked part (3012) to both its lot (8302) and build (8202); 7011 links a NON-
     -- lot-tracked assembly (3005) to its build (8201) only — the build_id-without-lot_id
     -- case that build_id exists to cover. Both are WIP with recent (non-stale) dates.
-    SET IDENTITY_INSERT dbo.test_record ON;
-    INSERT INTO dbo.test_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, updated_at, created_at) VALUES
+    SET IDENTITY_INSERT dbo.form_record ON;
+    INSERT INTO dbo.form_record (id, form_id, part_number_id, record_date, serial_number, serial_number_pn, serial_number_pn_desc, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, updated_at, created_at) VALUES
         (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
         (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
         (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
@@ -516,14 +516,14 @@ BEGIN TRY
         (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Widget Assembly','6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, 8201, '2020-01-01T00:00:00', '2026-07-11T00:00:00'), -- WIP, non-lot-tracked assembly → build 8201 only (#677)
         (7012, 6001, 3007, '2026-05-16', '7012', 'RAW-1002', 'Stainless Steel Bar Stock', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8301, NULL, '2020-01-01T00:00:00', '2026-05-16T00:00:00'), -- WIP, Incoming Inspection: lot 8301 → build_id NULL (#737 PRE-state row; reuses form 6001 purely to cover the receipt-not-yet-consumed case, not a realistic electrical test on bar stock)
         (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Widget Deluxe Assembly', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8306, 8203, '2020-01-01T00:00:00', '2026-05-31T00:00:00'); -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0)
-    SET IDENTITY_INSERT dbo.test_record OFF;
+    SET IDENTITY_INSERT dbo.form_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what
     -- materializeRecordSteps produces for post-#487 records. Grouped by record.
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
     -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
-    SET IDENTITY_INSERT dbo.test_result ON;
-    INSERT INTO dbo.test_result (id, record_id, test_id, pass_fail, result, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, type, updated_at) VALUES
+    SET IDENTITY_INSERT dbo.result ON;
+    INSERT INTO dbo.result (id, record_id, form_row_id, pass_fail, result, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, type, updated_at) VALUES
         (7101, 7001, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7102, 7001, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7103, 7001, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
@@ -574,7 +574,7 @@ BEGIN TRY
         (7146, 7013, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7147, 7013, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
         (7148, 7013, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
-    SET IDENTITY_INSERT dbo.test_result OFF;
+    SET IDENTITY_INSERT dbo.result OFF;
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).
     -- 7003 was locked twice (result 6104 corrected 300→310 in between) so the record detail
@@ -594,7 +594,7 @@ BEGIN TRY
     SET IDENTITY_INSERT dbo.record_events OFF;
 
     SET IDENTITY_INSERT dbo.record_event_results ON;
-    INSERT INTO dbo.record_event_results (id, event_id, test_id, parameter, specification, spec_units, result, pass_fail) VALUES
+    INSERT INTO dbo.record_event_results (id, event_id, form_row_id, parameter, specification, spec_units, result, pass_fail) VALUES
         (7301, 7201, 6102, 'Output Voltage',        '5V +/-0.25V', 'V',   '4.98', 1),
         (7302, 7201, 6103, 'Current Draw',          '<=200mA',     'mA',  '180',  1),
         (7303, 7201, 6104, 'Insulation Resistance', '>100 Mohm',   'Mohm','300',  1),
@@ -631,9 +631,9 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.build',                    RESEED, 8299);
     DBCC CHECKIDENT ('dbo.form',                     RESEED, 6099);
     DBCC CHECKIDENT ('dbo.form_events',              RESEED, 6299);
-    DBCC CHECKIDENT ('dbo.test_definition',          RESEED, 6199);
-    DBCC CHECKIDENT ('dbo.test_record',              RESEED, 7099);
-    DBCC CHECKIDENT ('dbo.test_result',              RESEED, 7199);
+    DBCC CHECKIDENT ('dbo.form_row',                 RESEED, 6199);
+    DBCC CHECKIDENT ('dbo.form_record',              RESEED, 7099);
+    DBCC CHECKIDENT ('dbo.result',                   RESEED, 7199);
     DBCC CHECKIDENT ('dbo.record_events',            RESEED, 7299);
     DBCC CHECKIDENT ('dbo.record_event_results',     RESEED, 7399);
     DBCC CHECKIDENT ('dbo.users',                    RESEED, 8099);
