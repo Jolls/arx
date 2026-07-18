@@ -174,7 +174,7 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 		SELECT %sf.id, pn.part_number, MAX(res.parameter) AS parameter,
 			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count
 		FROM %s res
-		JOIN %s trec ON res.record_id = trec.id
+		JOIN %s trec ON res.form_record_id = trec.id
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE trec.is_active = %s AND res.pass_fail IS NOT NULL
@@ -210,7 +210,7 @@ func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]d
 		FROM %s trec
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
-		LEFT JOIN %s res ON res.record_id = trec.id
+		LEFT JOIN %s res ON res.form_record_id = trec.id
 		WHERE trec.is_active = %s
 		GROUP BY trec.id, trec.form_id, pn.part_number`,
 		h.dialect.BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.cfg.ResultsTable(), h.dialect.BoolLiteral(true)))

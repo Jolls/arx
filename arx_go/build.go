@@ -408,7 +408,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 			var recPart int
 			var recLocked bool
 			err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT COALESCE(part_number_id,0), is_locked FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recID).
+				`SELECT COALESCE(part_id,0), is_locked FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recID).
 				Scan(&recPart, &recLocked)
 			if err == nil && recPart == partID && !recLocked {
 				var lotArg interface{}

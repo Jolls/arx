@@ -18,7 +18,7 @@ import (
 // binary can no longer run against the migrated DB (dropped/renamed columns or tables,
 // type changes, repurposed columns). Additive changes (new nullable or defaulted columns,
 // new tables) are backward-compatible and must NOT bump this — the old binary ignores them.
-const ExpectedSchemaVersion = "6"
+const ExpectedSchemaVersion = "7"
 
 // Config holds all configuration for the merged Arx application.
 type Config struct {

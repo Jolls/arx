@@ -1,7 +1,7 @@
 -- form_record: A single test session for one serial number against one form.
 -- (serial_number, record_date) is the intended unique pair per instrument.
--- part_number_id FKs to part.id (logical reference; no FK constraint).
--- serial_number_pn and serial_number_pn_desc are denormalized snapshots from part.
+-- part_id FKs to part.id (logical reference; no FK constraint).
+-- subject_part_number and subject_pn_description are denormalized snapshots from part.
 -- test_order is a snapshot of form.test_order at record creation;
 --   the app falls back to form.test_order when empty.
 -- is_locked prevents further edits. is_active = 0 soft-deletes the record.
@@ -24,11 +24,11 @@ IF OBJECT_ID('dbo.form_record', 'U') IS NOT NULL DROP TABLE form_record;
 CREATE TABLE form_record (
   id                     INT          PRIMARY KEY IDENTITY,
   form_id                INT          NOT NULL,             -- FK to form.id.
-  part_number_id         INT,                               -- FK to part.id.
+  part_id                INT,                               -- FK to part.id.
   record_date            DATETIME,                          -- TODO: add UNIQUE (serial_number, record_date).
   serial_number          VARCHAR(64),                       -- TODO: change to INT once all existing records are numeric
-  serial_number_pn       VARCHAR(64),                       -- Denormalized PN at record creation.
-  serial_number_pn_desc  VARCHAR(64),                       -- Denormalized PN description at record creation.
+  subject_part_number    VARCHAR(64),                       -- Denormalized PN at record creation.
+  subject_pn_description  VARCHAR(64),                      -- Denormalized PN description at record creation.
   test_order             VARCHAR(MAX),                      -- Snapshot of form.test_order at record creation.
   comments               VARCHAR(MAX),
   instrument_type        VARCHAR(100),                      -- Instrument type label (e.g. 'ModelA'). Matched against form_row.instrument_types to filter applicable steps.

@@ -140,7 +140,7 @@ erDiagram
     form_record {
         int      id             PK
         int      form_id        FK
-        int      part_number_id FK
+        int      part_id        FK
         varchar  serial_number
         datetime record_date
         bit      is_locked
@@ -149,7 +149,7 @@ erDiagram
 
     result {
         int     id              PK
-        int     record_id       FK
+        int     form_record_id  FK
         int     form_row_id         FK
         int     form_id         FK
         varchar result
@@ -199,11 +199,11 @@ erDiagram
 
     %% Test records
     part ||--o{    form        : "test forms (part_number_id)"
-    part ||--o{    form_record : "test records (part_number_id)"
+    part ||--o{    form_record : "test records (part_id)"
     form        ||--o{    form_row : "test definitions (form_id)"
     form        ||--o{    form_record : "executed records (form_id)"
     form        ||--o{    result : "results (form_id)"
-    form_record ||--o{    result : "results (record_id)"
+    form_record ||--o{    result : "results (form_record_id)"
     form_row ||--o{    result : "result per test (form_row_id)"
 ```
 

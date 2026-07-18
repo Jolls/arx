@@ -65,7 +65,7 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count,
 			COUNT(res.pass_fail) AS total_tested
 		FROM %s res
-		JOIN %s trec ON res.record_id = trec.id
+		JOIN %s trec ON res.form_record_id = trec.id
 		WHERE trec.form_id = @p1 AND trec.is_active = %s AND res.pass_fail IS NOT NULL%s
 		GROUP BY res.form_row_id
 		ORDER BY failure_count DESC, parameter ASC`,
