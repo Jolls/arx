@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.12] - 2026-07-18
+### Added
+- Added the nullable `form_record.unit_id` FK (traceability epic slice 5) — the link from a quality record to the single serialized `unit` it tests (Q8): set on a unit-testing/retest record, NULL for whole-lot/batch records (no form_record↔unit m2m, so a plain FK, no join table). Also promoted `form_record.part_id` from a bare logical reference to a real FK (`FK_form_record_part`, §4.4). Additive and inert until a later slice wires create/render logic, so `ExpectedSchemaVersion` is deliberately unchanged; ships DDL for both SQL Server and Postgres (also closing pre-existing Postgres drift where `form_record` was missing `lot_id`/`build_id`), the guarded migration `SQL/migrations/migrate_742_form_record_unit_fk.sql`, seed fixtures wiring three records to units, and schema docs. The Q8 FK-consistency invariant (read lot/build through the unit when `unit_id` is set) is documented as an app-layer rule for the behavior slice ([#742](https://github.com/Jolls/arx-legacy/issues/742))
+
 ## [0.6.11] - 2026-07-18
 ### Security
 - Gated the Settings → Configuration tab (attachment categories, categories, part numbering, company logo) behind login. Its five save routes were registered outside the `RequireAuth` group, so anyone who could reach the HTTP port could mutate shop-wide `app_config` without a session; they now sit inside the authenticated group and the Configuration tab link/panel is shown only when a user is logged in, matching the Named Queries/Users/Preferences tabs ([#771](https://github.com/Jolls/arx-legacy/issues/771))
