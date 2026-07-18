@@ -8,7 +8,7 @@
 -- lot_id (#677) ties the record to the lot the tested unit itself belongs to — set only
 --   when the tested part is lot-tracked (part.is_lot_tracked), referencing whichever
 --   lot a prior receipt or build already produced. NULL otherwise. No write-back to
---   lot_genealogy from form_record itself.
+--   genealogy from form_record itself.
 -- build_id (#677) ties the record to the build event that produced the tested unit,
 --   independent of lot_id — covers the case where the tested part is NOT itself
 --   lot-tracked but its BOM had lot-tracked components: there is no output lot to

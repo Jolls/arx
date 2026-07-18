@@ -18,7 +18,7 @@
 --   5501-5599  po_line                 8101-8199  part_attachment
 --   5801-5899  purchase_order_history  1-17       uom (natural identity)
 --   5901-5999  inventory_transaction   8201-8299  build
---   8301-8399  lot                     8401-8499  lot_genealogy
+--   8301-8399  lot                     8401-8499  genealogy
 --   8501-8599  unit
 --   (identity) app_config, named_queries
 --
@@ -53,8 +53,8 @@ BEGIN TRY
     DELETE FROM dbo.result;
     DELETE FROM dbo.form_record;
     DELETE FROM dbo.inventory_transaction;
+    DELETE FROM dbo.genealogy;                          -- edges first (FKs to lot + unit)
     DELETE FROM dbo.unit;                               -- unit FKs part + lot + build, so before all three
-    DELETE FROM dbo.lot_genealogy;                     -- edges first (FK to lot)
     DELETE FROM dbo.build;                             -- build.output_lot_id FK to lot, so before lot
     DELETE FROM dbo.lot;                               -- lot FKs po_line + part, so before both
     DELETE FROM dbo.po_line;
@@ -105,7 +105,7 @@ BEGIN TRY
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
     -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO dbo.app_config (setting_key, setting_value, updated_at) VALUES
-        ('schema_version', '7', '2020-01-01T00:00:00'),
+        ('schema_version', '8', '2020-01-01T00:00:00'),
         ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
@@ -435,14 +435,14 @@ BEGIN TRY
     -- 8402/8403 (#737): 3013's lot 8306 consumed 1 unit each of 8302 (bom line 3910) and
     --       8303 (bom line 3911) — two parents into one child (branching), and a second
     --       level on top of 8401 (8301→8302→8306), so a recursive trace from 8306 resolves
-    --       back through BOTH raw lots (8301 via 8302, and 8303 directly). PRE-state tree
-    --       for the future genealogy widening + traceability view (epic #736 slices 4/9).
-    SET IDENTITY_INSERT dbo.lot_genealogy ON;
-    INSERT INTO dbo.lot_genealogy (id, parent_lot_id, child_lot_id, qty_consumed) VALUES
+    --       back through BOTH raw lots (8301 via 8302, and 8303 directly). Lot->lot tree
+    --       (unit columns NULL after the slice-4 widening) for the future traceability view (epic #736 slice 9).
+    SET IDENTITY_INSERT dbo.genealogy ON;
+    INSERT INTO dbo.genealogy (id, parent_lot_id, child_lot_id, qty_consumed) VALUES
         (8401, 8301, 8302, 1),
         (8402, 8302, 8306, 1),
         (8403, 8303, 8306, 1);
-    SET IDENTITY_INSERT dbo.lot_genealogy OFF;
+    SET IDENTITY_INSERT dbo.genealogy OFF;
 
     -- Stamp the seed receipt (5901, part 3007 against po_line 5504) with the lot it
     -- created (8301), exercising inventory_transaction.lot_id (#676).

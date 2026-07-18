@@ -15,8 +15,8 @@ import (
 // lot-tracked part (part.is_lot_tracked). Purchased lots are created at goods
 // receipt (po_line_id set); manufactured lots are created by a build that produces
 // a lot-tracked output part. Auto-issued lot_number defaults to the lot's own id
-// (#687); lot_description carries the human-readable provenance. lot_genealogy
-// records which parent (component) lots were consumed into a child (output) lot.
+// (#687); lot_description carries the human-readable provenance. The genealogy
+// table records which parent (component) lots were consumed into a child (output) lot.
 
 // LotOption is one active lot of a part, offered in the build form's per-component
 // lot picker. Label is a human-readable identifier (lot number + vendor/PO hint).
@@ -97,13 +97,14 @@ func (h *Handler) lotBelongsToPart(ctx context.Context, tx *txLogger, lotID, par
 	return n == 1, err
 }
 
-// recordLotGenealogy inserts one edge linking a consumed parent (component) lot to
-// the child (output) lot it fed, inside the caller's tx.
-func (h *Handler) recordLotGenealogy(ctx context.Context, tx *txLogger, parentLotID, childLotID int, qtyConsumed float64) error {
+// recordGenealogy inserts one genealogy edge linking a consumed parent (component)
+// lot to the child (output) lot it fed, inside the caller's tx. Lot→lot only; unit
+// endpoints (parent_unit_id/child_unit_id) are written from slice 8 (#736).
+func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID, childLotID int, qtyConsumed float64) error {
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (parent_lot_id, child_lot_id, qty_consumed)
 		VALUES (@p1, @p2, @p3)
-	`, h.cfg.LotGenealogyTable()), parentLotID, childLotID, qtyConsumed)
+	`, h.cfg.GenealogyTable()), parentLotID, childLotID, qtyConsumed)
 	return err
 }
 
@@ -200,6 +201,11 @@ type LotTraceNode struct {
 // lotNeighbors returns the immediate parent (ancestors) or child (descendants)
 // lots of one lot in the genealogy. It fully drains its cursor before returning so
 // the caller can recurse without exhausting the connection pool.
+//
+// Lot endpoints only: the inner JOIN on g.parent_lot_id/child_lot_id silently skips
+// any edge with a unit endpoint (those lot columns NULL). Correct today — every
+// genealogy row is lot→lot — but slice 8 (#736), which starts writing unit endpoints,
+// must generalize this walk (union the unit joins) or the trace will under-report.
 func (h *Handler) lotNeighbors(ctx context.Context, lotID int, ancestors bool) ([]LotTraceNode, error) {
 	joinCol, whereCol := "parent_lot_id", "child_lot_id"
 	if !ancestors {
@@ -213,7 +219,7 @@ func (h *Handler) lotNeighbors(ctx context.Context, lotID int, ancestors bool) (
 		JOIN %s p ON p.id = l.part_id
 		WHERE g.%s = @p1
 		ORDER BY l.id
-	`, h.cfg.LotGenealogyTable(), h.cfg.LotTable(), joinCol, h.cfg.PartsTable(), whereCol), lotID)
+	`, h.cfg.GenealogyTable(), h.cfg.LotTable(), joinCol, h.cfg.PartsTable(), whereCol), lotID)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +242,7 @@ func (h *Handler) lotNeighbors(ctx context.Context, lotID int, ancestors bool) (
 	return out, rows.Err()
 }
 
-// lotTrace walks lot_genealogy from rootID and returns the reachable lots flattened
+// lotTrace walks the genealogy table from rootID and returns the reachable lots flattened
 // depth-first (ancestors=parents down to raw vendor lots, or descendants=children).
 // A visited set guards against cycles, so each lot's subtree is expanded once.
 func (h *Handler) lotTrace(ctx context.Context, rootID int, ancestors bool) ([]LotTraceNode, error) {

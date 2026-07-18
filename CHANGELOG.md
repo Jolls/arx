@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-07-18
+### Changed
+- Widened the lot-genealogy edge table into a single provenance table for both lots and serialized units (traceability epic slice 4): renamed `lot_genealogy` → `genealogy`, added nullable `parent_unit_id` / `child_unit_id` FKs to `unit`, relaxed the lot columns to nullable, and added the `CK_gen_one_parent` / `CK_gen_one_child` CHECKs enforcing exactly one parent FK and one child FK per edge (so an edge is lot→lot, lot→unit, unit→lot, or unit→unit). Additive for data — existing lot→lot rows stay valid (unit columns NULL); no code writes unit endpoints until a later slice. Renamed the `Config.LotGenealogyTable()` helper to `GenealogyTable()`, ships DDL for both SQL Server and Postgres, the guarded migration `SQL/migrations/migrate_741_genealogy_table.sql`, updated seed fixtures, and schema docs. Bumped `ExpectedSchemaVersion` to `8` (the table rename is not backward-compatible) ([#741](https://github.com/Jolls/arx-legacy/issues/741))
+
 ## [0.6.9] - 2026-07-18
 ### Added
 - Added the `unit` table — the Tier-3 serialized-instance (keystone) of the traceability data model: a serial number becomes a real row with FKs (`part_id`, nullable `lot_id`, nullable `build_id`, `serial_number` unique per part) rather than a parsed string. A `CK_unit_provenance` CHECK enforces every unit traces to at least a lot or a build. Additive and inert until a later slice wires create/render logic, so `ExpectedSchemaVersion` is deliberately unchanged; ships DDL for both SQL Server and Postgres, the guarded migration `SQL/migrations/migrate_740_unit_table.sql`, seed fixtures, and schema docs. Also renamed the stale `Config.UnitTable()` helper (which returned `"uom"`) to `UomTable()`, freeing `UnitTable()` for the new table ([#740](https://github.com/Jolls/arx-legacy/issues/740))

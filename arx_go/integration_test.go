@@ -1473,7 +1473,7 @@ func TestIntegration_BuildConsumesOnlyStockedComponents(t *testing.T) {
 
 // TestIntegration_BuildLotGenealogy exercises the #676 lot-control build path against
 // a live DB. Building the lot-tracked sub-assembly 3012 (seed) must create an output
-// lot linked from build.output_lot_id and write exactly one lot_genealogy edge from
+// lot linked from build.output_lot_id and write exactly one genealogy edge from
 // the picked component lot (3007's seed lot 8301) to that output lot, with
 // qty_consumed = bom qty × build qty. Cleans up every row it writes (genealogy edge,
 // output lot, build, ledger rows) and recomputes the affected parts' cached balances.
@@ -1484,7 +1484,7 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 	inv := h.cfg.InventoryTxnTable()
 	bt := h.cfg.BuildTable()
 	lt := h.cfg.LotTable()
-	lg := h.cfg.LotGenealogyTable()
+	lg := h.cfg.GenealogyTable()
 	pn := h.cfg.PartsTable()
 
 	const outputPart = 3012  // ASM-1002 sub-assembly, is_lot_tracked in seed
@@ -1627,7 +1627,7 @@ func TestIntegration_BuildReturnsToRecord(t *testing.T) {
 	rt := h.cfg.RecordsTable()
 	bt := h.cfg.BuildTable()
 	lt := h.cfg.LotTable()
-	lg := h.cfg.LotGenealogyTable()
+	lg := h.cfg.GenealogyTable()
 	inv := h.cfg.InventoryTxnTable()
 	pn := h.cfg.PartsTable()
 
