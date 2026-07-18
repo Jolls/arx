@@ -149,7 +149,7 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
-	if _, u := h.withUser(r); u != nil {
+	if _, u := h.withUser(r); u != nil && h.schemaMismatch == "" {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -405,6 +405,7 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 func (h *Handler) renderLogin(w http.ResponseWriter, r *http.Request, data map[string]any) {
 	data["CSRFToken"] = h.csrfToken(w, r)
 	data["CompanyLogo"] = h.companyLogoURL()
+	data["SchemaMismatch"] = h.schemaMismatch
 	tmpl, err := template.New("").ParseFS(h.tmplFS, "templates/shared/login.html")
 	if err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)

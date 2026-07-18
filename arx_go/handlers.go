@@ -282,6 +282,10 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/settings", http.StatusSeeOther)
 			return
 		}
+		if h.schemaMismatch != "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
 		r2, u := h.withUser(r)
 		if u == nil {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)

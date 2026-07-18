@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"database/sql/driver"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +18,28 @@ func testHandler() *Handler {
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
 	return New(nil, nil, cfg, nil, nil)
+}
+
+// nopDriver is a database/sql driver that is never actually dialed; it exists
+// only so testHandlerWithDB can construct a non-nil *sql.DB.
+type nopDriver struct{}
+
+func (nopDriver) Open(name string) (driver.Conn, error) { return nil, nil }
+
+func init() {
+	sql.Register("nop-driver", nopDriver{})
+}
+
+// testHandlerWithDB builds a Handler with a non-nil (never-dialed) *sql.DB, so
+// the h.db == nil short-circuit in RequireAuth doesn't mask other checks.
+func testHandlerWithDB() *Handler {
+	db, err := sql.Open("nop-driver", "")
+	if err != nil {
+		panic(err)
+	}
+	cfg := &arxbase.Config{}
+	cfg.SessionSecret = "test-secret"
+	return New(db, nil, cfg, nil, nil)
 }
 
 // sentinel reports whether the wrapped next-handler was reached.
@@ -42,6 +66,26 @@ func TestRequireAuth_RedirectsWhenNoDB(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); loc != "/settings" {
 		t.Errorf("Location = %q, want /settings", loc)
+	}
+}
+
+func TestRequireAuth_RedirectsOnSchemaMismatch(t *testing.T) {
+	h := testHandlerWithDB()
+	h.schemaMismatch = "expected v5, found v4"
+
+	var reached bool
+	req := httptest.NewRequest(http.MethodGet, "/part/1", nil)
+	rec := httptest.NewRecorder()
+	h.RequireAuth(sentinel(&reached)).ServeHTTP(rec, req)
+
+	if reached {
+		t.Error("next handler ran; expected redirect to /login instead")
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/login" {
+		t.Errorf("Location = %q, want /login", loc)
 	}
 }
 

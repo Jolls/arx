@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Arx — Sign In</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    {{if .SchemaMismatch}}<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">{{end}}
     <link rel="icon" type="image/png" href="/static/shared/favicon.png">
     <link rel="stylesheet" href="/static/app.css?v={{.AppVersion}}">
     <style>
@@ -22,6 +23,12 @@
     <div class="login-sub">
         {{if .Bootstrap}}Create your admin account to get started.{{else}}Sign in to continue.{{end}}
     </div>
+
+    {{if .SchemaMismatch}}
+    <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>Schema mismatch: {{.SchemaMismatch}} — the database needs to be migrated before Arx can be used. Contact your administrator.
+    </div>
+    {{end}}
 
     {{if .Notice}}
     <div class="alert alert-info" role="alert">

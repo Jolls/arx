@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-07-17
+### Fixed
+- Schema-version mismatch now blocks app routes (redirecting to `/login`) instead of only showing a banner while every page kept querying the DB, since rename migrations bump `schema_version` last, leaving a window where renamed/dropped columns could throw raw DB errors on live pages ([#720](https://github.com/Jolls/arx-legacy/issues/720))
+
 ## [0.6.4] - 2026-07-17
 ### Changed
 - Renamed the test-record table family for the traceability data model epic (slice 1, pure rename, no behavior change): `test_record`→`form_record`, `test_result`→`result`, `test_definition`→`form_row` (`test_definition_history`→`form_row_history`, column `test_id`→`form_row_id`), across DDL (both SQL Server and Postgres), Go, seed, and schema docs. Bumped `ExpectedSchemaVersion` to `5`; a human-run guarded rename migration (`SQL/migrations/migrate_rename_test_record_family.sql`) recreates the definition-history trigger against the new names, rewrites the two stored `named_queries` that referenced the old table/column names, and gates the rollout via the schema banner ([#738](https://github.com/Jolls/arx-legacy/issues/738))
