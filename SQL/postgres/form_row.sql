@@ -22,6 +22,8 @@ CREATE TABLE form_row (
   hide_formula        VARCHAR(255),                      -- 'HIDE' excludes this row from display.
   archived            BOOLEAN      NOT NULL DEFAULT FALSE, -- TRUE = retired step.
   pf_type             VARCHAR(50),                       -- 'range' (default/NULL = range check).
+  granularity         VARCHAR(10)  NOT NULL DEFAULT 'unit' -- #744: unit|lot. Existing rows are per-unit tests.
+                                   CONSTRAINT CK_form_row_granularity CHECK (granularity IN ('lot', 'unit')),
   instrument_types    VARCHAR(255),
   format              VARCHAR(255),
   comment             VARCHAR(500),

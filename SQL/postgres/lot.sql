@@ -12,6 +12,7 @@ CREATE TABLE lot (
   part_id            INTEGER       NOT NULL,                        -- FK to part.id (the part this lot is of).
   lot_number         VARCHAR(255)  NOT NULL DEFAULT '',             -- Internal lot #; defaults to PO number / build ref, editable.
   vendor_lot_number  VARCHAR(255)  NULL,                            -- Supplier's own lot/batch ID (purchased lots); NULL otherwise.
+  source             VARCHAR(10)   NULL CONSTRAINT CK_lot_source CHECK (source IN ('purchase', 'build', 'adjust')), -- How the lot originated (#744): purchase/build/adjust. NULL = not yet classified.
   po_line_id         INTEGER       NULL,                            -- FK to po_line.id for purchased receipts; NULL for manufactured lots.
   created_at         TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   is_active          BOOLEAN       NOT NULL DEFAULT TRUE
