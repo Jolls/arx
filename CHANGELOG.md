@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-07-18
+### Added
+- Formalized three previously-inferred value sets as `VARCHAR`+`CHECK` "enum" columns (traceability epic slice 7): `lot.source` (`purchase|build|adjust`, nullable — no neutral resting source, backfilled by inference from `po_line_id`/owning build), `form.form_type` (`inspection|test|calibration|checklist|batch record`, `NOT NULL DEFAULT 'test'` — the kind of quality document, orthogonal to `record_types`; `batch record` is a `form_type` value not a `record_types` token, Q10), and `form_row.granularity` (`lot|unit`, `NOT NULL DEFAULT 'unit'` — per-unit vs per-lot check). Also promoted `form.part_number_id` from a bare logical reference to a real FK (`FK_form_part`, §4.4). Additive and inert until a later slice reads these columns, so `ExpectedSchemaVersion` is deliberately unchanged; ships DDL for both SQL Server and Postgres, the guarded migration `SQL/migrations/migrate_744_enum_formalization.sql`, seed fixture backfill, and schema docs ([#744](https://github.com/Jolls/arx-legacy/issues/744))
+
 ## [0.6.13] - 2026-07-18
 ### Added
 - Added `part.tracking_mode` (traceability epic slice 6): a `VARCHAR(10)` + `CK_part_number_tracking_mode` CHECK restricting it to `none|lot|serial|lot_serial`, backfilled from `is_lot_tracked` (`0`→`none`, `1`→`lot`). Additive and inert — `is_lot_tracked` stays and keeps driving reads; the read-swap happens in a later slice. Ships DDL for both SQL Server and Postgres, the guarded migration `SQL/migrations/migrate_743_part_tracking_mode.sql`, seed fixture backfill, and schema docs ([#743](https://github.com/Jolls/arx-legacy/issues/743))

@@ -16,6 +16,7 @@ CREATE TABLE lot (
   lot_number         VARCHAR(255)  NOT NULL CONSTRAINT DF_lot_number    DEFAULT '',   -- Internal lot #; auto-generated lots default to the lot's own id (unique by construction), editable.
   lot_description    VARCHAR(255)  NOT NULL CONSTRAINT DF_lot_desc      DEFAULT '',   -- Human-readable provenance: "PO <number>" (purchased), "Build #<id>" (manufactured), "Manual entry" (adjustment tab).
   vendor_lot_number  VARCHAR(255)  NULL,                                              -- Supplier's own lot/batch ID (purchased lots); NULL otherwise.
+  source             VARCHAR(10)   NULL CONSTRAINT CK_lot_source CHECK (source IN ('purchase', 'build', 'adjust')), -- How the lot originated (#744): purchase (receipt), build (manufactured), adjust (manual/cycle-count). Today inferred from po_line_id / owning build; made explicit. NULL = not yet classified (set going forward in the epic's slice-8 code).
   po_line_id         INT           NULL,                                              -- FK to po_line.id for purchased receipts; NULL for manufactured lots.
   created_at         DATETIME      NOT NULL CONSTRAINT DF_lot_created   DEFAULT GETDATE(),
   is_active          BIT           NOT NULL CONSTRAINT DF_lot_is_active DEFAULT 1

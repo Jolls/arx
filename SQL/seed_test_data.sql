@@ -427,11 +427,12 @@ BEGIN TRY
     -- 8306 (#737): manufactured lot of top-level assembly 3013 (po_line_id NULL) — the
     --       second tier of the multi-level chain, output of build 8203.
     SET IDENTITY_INSERT dbo.lot ON;
-    INSERT INTO dbo.lot (id, part_id, lot_number, lot_description, vendor_lot_number, po_line_id, created_at, is_active) VALUES
-        (8301, 3007, '8301', 'PO 5003',                          'SS304-LOT-0088', 5504, '2026-05-15T00:00:00', 1),
-        (8302, 3012, '8302', 'Build #8202',                      NULL,             NULL, '2026-05-25T00:00:00', 1),
-        (8303, 3007, '8303', 'Cycle count - unlabeled found lot', NULL,            NULL, '2026-05-22T00:00:00', 1),
-        (8306, 3013, '8306', 'Build #8203',                       NULL,            NULL, '2026-05-30T00:00:00', 1);
+    -- source (#744): purchase (po_line set) / build (build output) / adjust (manual/cycle-count).
+    INSERT INTO dbo.lot (id, part_id, lot_number, lot_description, vendor_lot_number, source, po_line_id, created_at, is_active) VALUES
+        (8301, 3007, '8301', 'PO 5003',                          'SS304-LOT-0088', 'purchase', 5504, '2026-05-15T00:00:00', 1),
+        (8302, 3012, '8302', 'Build #8202',                      NULL,             'build',    NULL, '2026-05-25T00:00:00', 1),
+        (8303, 3007, '8303', 'Cycle count - unlabeled found lot', NULL,            'adjust',   NULL, '2026-05-22T00:00:00', 1),
+        (8306, 3013, '8306', 'Build #8203',                       NULL,            'build',    NULL, '2026-05-30T00:00:00', 1);
     SET IDENTITY_INSERT dbo.lot OFF;
 
     -- 8401: 3012's lot 8302 consumed 1 unit of 3007's lot 8301 (bom line 3906, qty 1) — a
@@ -485,8 +486,9 @@ BEGIN TRY
     -- form's test_order but not the records' snapshots, so new records pick them up while
     -- existing ones don't (realistic form evolution, and keeps the frozen-row model honest).
     SET IDENTITY_INSERT dbo.form ON;
-    INSERT INTO dbo.form (id, part_number_id, test_order, is_locked, is_active, record_types, instrument_types, revision) VALUES
-        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108', 1, 1, 'New Release,Re-Test', 'ModelA,ModelB', 1);
+    -- form_type (#744) = the kind of quality document (orthogonal to record_types); this seed form is a test.
+    INSERT INTO dbo.form (id, part_number_id, test_order, is_locked, is_active, form_type, record_types, instrument_types, revision) VALUES
+        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108', 1, 1, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1);
     SET IDENTITY_INSERT dbo.form OFF;
 
     -- 6104 is an archived (retired) step: hidden from new records and the live definition view
@@ -497,15 +499,16 @@ BEGIN TRY
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
     -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
     SET IDENTITY_INSERT dbo.form_row ON;
-    INSERT INTO dbo.form_row (id, form_id, revision, type, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, instrument_types, archived, format, default_result, hide_formula, updated_at) VALUES
-        (6101, 6001, 1, 1, 'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    NULL,            0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
-        (6102, 6001, 1, 0, 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
-        (6103, 6001, 1, 0, 'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '250', 'range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00'),
-        (6104, 6001, 1, 0, 'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 'ModelA,ModelB', 1, NULL,   NULL,  NULL, '2020-01-01T00:00:00'), -- archived/retired step
-        (6105, 6001, 1, 0, 'Firmware Version',      'Record installed version', NULL, NULL, NULL, NULL, 'filled', NULL, 0, NULL,   'v2.1',NULL, '2020-01-01T00:00:00'),
-        (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00'),
-        (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00'),
-        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, 0, '0.00', NULL, '{record.type}!=Re-Test', '2020-01-01T00:00:00'); -- only shown on Re-Test records
+    -- granularity (#744): all existing form lines are per-unit tests ('unit'); the DEFAULT also covers this.
+    INSERT INTO dbo.form_row (id, form_id, revision, type, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, instrument_types, archived, format, default_result, hide_formula, updated_at, granularity) VALUES
+        (6101, 6001, 1, 1, 'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    NULL,            0, NULL,   NULL,  NULL, '2020-01-01T00:00:00', 'unit'),
+        (6102, 6001, 1, 0, 'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00', 'unit'),
+        (6103, 6001, 1, 0, 'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '250', 'range', 'ModelA,ModelB', 0, NULL,   NULL,  NULL, '2020-01-01T00:00:00', 'unit'),
+        (6104, 6001, 1, 0, 'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 'ModelA,ModelB', 1, NULL,   NULL,  NULL, '2020-01-01T00:00:00', 'unit'), -- archived/retired step
+        (6105, 6001, 1, 0, 'Firmware Version',      'Record installed version', NULL, NULL, NULL, NULL, 'filled', NULL, 0, NULL,   'v2.1',NULL, '2020-01-01T00:00:00', 'unit'),
+        (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
+        (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, 0, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
+        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, 0, '0.00', NULL, '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'); -- only shown on Re-Test records
     SET IDENTITY_INSERT dbo.form_row OFF;
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
