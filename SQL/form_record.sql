@@ -15,6 +15,14 @@
 --   reference, but the build still recorded which component lots were consumed
 --   (inventory_transaction.lot_id/build_id), so this is the only path back to them.
 --   NULL when the unit wasn't produced by a build (e.g. purchased, non-assembled part).
+-- unit_id (#742, traceability epic #736 slice 5) ties the record to the one serialized unit
+--   under test (Q8). Set on a unit-testing/retest record; NULL for whole-lot/batch records,
+--   which enumerate no individual unit. No form_record<->unit m2m — at most one unit per record.
+--   FK-consistency invariant (Q8): when unit_id is set the unit already knows its
+--   part_id/lot_id/build_id, so read lot/build THROUGH the unit and leave form_record.lot_id/
+--   build_id NULL (or, if denormalized for query speed, keep them equal to the unit's). A CHECK
+--   can't span the FK join, so this is enforced at the app layer (slice 8), not in DDL.
+-- part_id carries a real FK to part.id as of #742 (§4.4 promotion; was a bare logical reference).
 
 IF OBJECT_ID('dbo.form_record', 'U') IS NOT NULL DROP TABLE form_record;
 -- FK added after creation: ALTER TABLE dbo.form_record ADD CONSTRAINT FK_form_record_form FOREIGN KEY (form_id) REFERENCES dbo.form (id);
@@ -39,8 +47,14 @@ CREATE TABLE form_record (
   updated_at             DATETIME,
   form_revision          INT,                                                                 -- Snapshot of form.revision at record creation. NULL for pre-#260 records.
   lot_id                 INT,                                                                  -- FK to lot.id (#677). Lot the tested unit belongs to; NULL if part not lot-tracked.
-  build_id               INT                                                                   -- FK to build.id (#677). Build that produced the tested unit; NULL if not build-produced.
+  build_id               INT,                                                                  -- FK to build.id (#677). Build that produced the tested unit; NULL if not build-produced.
+  unit_id                INT                                                                   -- FK to unit.id (#742, Q8). The one serialized unit under test; NULL for whole-lot/batch records.
 );
+
+-- Real FKs from #742 (§4.4): part_id promoted from a logical reference, unit_id born as a FK.
+ALTER TABLE dbo.form_record ADD CONSTRAINT FK_form_record_part FOREIGN KEY (part_id) REFERENCES dbo.part (id);
+ALTER TABLE dbo.form_record ADD CONSTRAINT FK_form_record_unit FOREIGN KEY (unit_id) REFERENCES dbo.unit (id);
+CREATE INDEX IX_form_record_unit ON dbo.form_record (unit_id);
 
 -- Migration (run once on live DB; also add the new column to the matching
 -- INSERT in SQL/seed_test_data.sql — it inserts explicit column lists, so new
@@ -50,3 +64,4 @@ CREATE TABLE form_record (
 -- ALTER TABLE form_record ADD CONSTRAINT FK_form_record_lot FOREIGN KEY (lot_id) REFERENCES lot (id);
 -- ALTER TABLE form_record ADD build_id INT NULL;
 -- ALTER TABLE form_record ADD CONSTRAINT FK_form_record_build FOREIGN KEY (build_id) REFERENCES build (id);
+-- #742: see SQL/migrations/migrate_742_form_record_unit_fk.sql (adds unit_id + its FK, promotes part_id to a real FK).
