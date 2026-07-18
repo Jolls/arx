@@ -123,11 +123,6 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Post("/logout", h.Logout)
 	r.Get("/settings", h.Settings)
 	r.Post("/settings", h.SettingsSave)
-	r.Post("/settings/attachment-categories", h.SettingsAttachmentCategoriesSave)
-	r.Post("/settings/categories", h.SettingsCategoriesSave)
-	r.Post("/settings/part-numbering", h.SettingsPartNumberingSave)
-	r.Post("/settings/company-logo", h.SettingsCompanyLogoSave)
-	r.Post("/settings/company-logo/remove", h.SettingsCompanyLogoRemove)
 	r.Get("/whats-new", h.WhatsNew)
 	r.Get("/api/browse-folder", h.APIBrowseFolder)
 	r.Get("/api/browse-file", h.APIBrowseFile)
@@ -135,6 +130,15 @@ func buildRouter(h *Handler) *chi.Mux {
 	// All other routes require a live database connection.
 	r.Group(func(r chi.Router) {
 		r.Use(h.RequireAuth)
+
+		// Configuration tab saves (Settings → Configuration: attachment categories,
+		// categories, part numbering, company logo). Behind auth because these mutate
+		// shop-wide app_config that affects data integrity (#771).
+		r.Post("/settings/attachment-categories", h.SettingsAttachmentCategoriesSave)
+		r.Post("/settings/categories", h.SettingsCategoriesSave)
+		r.Post("/settings/part-numbering", h.SettingsPartNumberingSave)
+		r.Post("/settings/company-logo", h.SettingsCompanyLogoSave)
+		r.Post("/settings/company-logo/remove", h.SettingsCompanyLogoRemove)
 
 		// Named Queries editor (Settings → Named Queries tab). Behind auth because
 		// these routes execute/persist SQL and require a live DB connection.

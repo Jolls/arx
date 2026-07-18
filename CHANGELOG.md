@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-07-18
+### Security
+- Gated the Settings → Configuration tab (attachment categories, categories, part numbering, company logo) behind login. Its five save routes were registered outside the `RequireAuth` group, so anyone who could reach the HTTP port could mutate shop-wide `app_config` without a session; they now sit inside the authenticated group and the Configuration tab link/panel is shown only when a user is logged in, matching the Named Queries/Users/Preferences tabs ([#771](https://github.com/Jolls/arx-legacy/issues/771))
+
 ## [0.6.10] - 2026-07-18
 ### Changed
 - Widened the lot-genealogy edge table into a single provenance table for both lots and serialized units (traceability epic slice 4): renamed `lot_genealogy` → `genealogy`, added nullable `parent_unit_id` / `child_unit_id` FKs to `unit`, relaxed the lot columns to nullable, and added the `CK_gen_one_parent` / `CK_gen_one_child` CHECKs enforcing exactly one parent FK and one child FK per edge (so an edge is lot→lot, lot→unit, unit→lot, or unit→unit). Additive for data — existing lot→lot rows stay valid (unit columns NULL); no code writes unit endpoints until a later slice. Renamed the `Config.LotGenealogyTable()` helper to `GenealogyTable()`, ships DDL for both SQL Server and Postgres, the guarded migration `SQL/migrations/migrate_741_genealogy_table.sql`, updated seed fixtures, and schema docs. Bumped `ExpectedSchemaVersion` to `8` (the table rename is not backward-compatible) ([#741](https://github.com/Jolls/arx-legacy/issues/741))
