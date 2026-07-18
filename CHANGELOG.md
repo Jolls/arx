@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-07-18
+### Added
+- Added `part.tracking_mode` (traceability epic slice 6): a `VARCHAR(10)` + `CK_part_number_tracking_mode` CHECK restricting it to `none|lot|serial|lot_serial`, backfilled from `is_lot_tracked` (`0`→`none`, `1`→`lot`). Additive and inert — `is_lot_tracked` stays and keeps driving reads; the read-swap happens in a later slice. Ships DDL for both SQL Server and Postgres, the guarded migration `SQL/migrations/migrate_743_part_tracking_mode.sql`, seed fixture backfill, and schema docs ([#743](https://github.com/Jolls/arx-legacy/issues/743))
+
 ## [0.6.12] - 2026-07-18
 ### Added
 - Added the nullable `form_record.unit_id` FK (traceability epic slice 5) — the link from a quality record to the single serialized `unit` it tests (Q8): set on a unit-testing/retest record, NULL for whole-lot/batch records (no form_record↔unit m2m, so a plain FK, no join table). Also promoted `form_record.part_id` from a bare logical reference to a real FK (`FK_form_record_part`, §4.4). Additive and inert until a later slice wires create/render logic, so `ExpectedSchemaVersion` is deliberately unchanged; ships DDL for both SQL Server and Postgres (also closing pre-existing Postgres drift where `form_record` was missing `lot_id`/`build_id`), the guarded migration `SQL/migrations/migrate_742_form_record_unit_fk.sql`, seed fixtures wiring three records to units, and schema docs. The Q8 FK-consistency invariant (read lot/build through the unit when `unit_id` is set) is documented as an app-layer rule for the behavior slice ([#742](https://github.com/Jolls/arx-legacy/issues/742))

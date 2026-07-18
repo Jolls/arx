@@ -41,7 +41,10 @@ CREATE TABLE part (
   uom_id              INTEGER          NULL,                 -- FK to uom.uom_id.
   stock_on_hand       NUMERIC(16,8)    NOT NULL DEFAULT 0,   -- Cached inventory balance (#272); app-maintained.
   reorder_min         NUMERIC(16,8)    NULL,                 -- Reorder point (#273); NULL = none.
-  is_lot_tracked      BOOLEAN          NOT NULL DEFAULT FALSE -- Lot/batch control (#676); receipt/build create a lot row when TRUE.
+  is_lot_tracked      BOOLEAN          NOT NULL DEFAULT FALSE, -- Lot/batch control (#676); receipt/build create a lot row when TRUE.
+  tracking_mode       VARCHAR(10)      NOT NULL DEFAULT 'none'
+                                       CONSTRAINT CK_part_number_tracking_mode CHECK (tracking_mode IN ('none', 'lot', 'serial', 'lot_serial'))
+                                       -- Traceability epic (#736) slice 6 (#743): additive/inert, see SQL/part.sql.
 );
 
 ALTER TABLE part ADD CONSTRAINT FK_part_number_uom FOREIGN KEY (uom_id) REFERENCES uom (uom_id);

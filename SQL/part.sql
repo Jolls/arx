@@ -57,7 +57,12 @@ CREATE TABLE part (
   uom_id              INT              NULL,                                             -- FK to uom.uom_id. Base/inventory unit for this part (EA, mL, kg, …).
   stock_on_hand       DECIMAL(16,8)    NOT NULL CONSTRAINT DF_part_number_stock_on_hand DEFAULT 0, -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
   reorder_min         DECIMAL(16,8)    NULL,                                            -- Reorder point (issue #273): flag the part when stock_on_hand < reorder_min. NULL = no reorder point set (never flagged).
-  is_lot_tracked      BIT              NOT NULL CONSTRAINT DF_part_number_is_lot_tracked DEFAULT 0  -- Lot/batch control (#676): when 1, goods receipt and build create a `lot` row for this part (see SQL/lot.sql).
+  is_lot_tracked      BIT              NOT NULL CONSTRAINT DF_part_number_is_lot_tracked DEFAULT 0, -- Lot/batch control (#676): when 1, goods receipt and build create a `lot` row for this part (see SQL/lot.sql).
+  tracking_mode       VARCHAR(10)      NOT NULL CONSTRAINT DF_part_number_tracking_mode DEFAULT 'none'
+                                       CONSTRAINT CK_part_number_tracking_mode CHECK (tracking_mode IN ('none', 'lot', 'serial', 'lot_serial'))
+                                       -- Traceability epic (#736) slice 6 (#743): additive/inert — is_lot_tracked
+                                       -- still drives reads until the slice 8 read-swap. Backfilled from
+                                       -- is_lot_tracked (0->'none', 1->'lot'); 'serial'/'lot_serial' set per-part later.
 );
 
 ALTER TABLE dbo.part ADD CONSTRAINT FK_part_number_uom FOREIGN KEY (uom_id) REFERENCES dbo.uom (uom_id);
