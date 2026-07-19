@@ -996,8 +996,8 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	for _, plidStr := range r.Form["delete_pl[]"] {
 		deleteSet[plidStr] = true
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE id=@p1`, pl,
-		), plidStr); err != nil {
+			`DELETE FROM %s WHERE id=@p1 AND parent_part_id=@p2`, pl,
+		), plidStr, id); err != nil {
 			h.renderError(w, r, "Error deleting BOM row: "+err.Error())
 			return
 		}
@@ -1022,8 +1022,8 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET line_number=@p1, qty=@p2, component_part_id=@p3 WHERE id=@p4
-		`, pl), item, qty, pnid, plidStr); err != nil {
+			UPDATE %s SET line_number=@p1, qty=@p2, component_part_id=@p3 WHERE id=@p4 AND parent_part_id=@p5
+		`, pl), item, qty, pnid, plidStr, id); err != nil {
 			h.renderError(w, r, "Error updating BOM row: "+err.Error())
 			return
 		}

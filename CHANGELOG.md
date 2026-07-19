@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.20] - 2026-07-18
+### Security
+- Scoped PO-line and BOM row edits/deletes to their parent record (H2+H3, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). `POUpdate`'s delete/update loops and `PartBOMSave`'s delete/update loops took the row id straight from the submitted form with no `AND po_id=`/`AND parent_part_id=` guard, so a user editing PO A or part X's BOM could overwrite or delete a row belonging to PO B or part Y by crafting the form/id, silently drifting the other record's `total_cost`/BOM. Both loops now scope by the already-resolved parent id, matching the existing `MfgPartDelete`/`PriceDeactivate` guard pattern ([#752](https://github.com/Jolls/arx-legacy/issues/752))
+
 ## [0.6.19] - 2026-07-18
 ### Fixed
 - Unified the leaf-cost rule between Roll Up Cost and the BOM tab/CSV export, and stopped storing blank preferred-price form fields as `0` instead of `NULL` (H1, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). Roll Up Cost used a looser rule (`preferredPrice.Valid` alone) than `bomLeafCost`'s `Valid && > 0` check, so a leaf whose preferred price was stored as `0.00` rolled up as `$0` while the BOM tab/CSV fell back to `current_cost` for the same leaf, silently understating assembly cost. `rollupCost` now calls the shared `bomLeafCost` helper, and `PriceCreate`/`PriceUpdate` now use `nullableFloat` so a blank price/pack-size field stores `NULL` rather than `0` ([#760](https://github.com/Jolls/arx-legacy/issues/760))
