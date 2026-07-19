@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.16] - 2026-07-18
+### Fixed
+- Record-history diff now flags a step's `specification`/`spec_units`/`parameter` as changed between Complete-event snapshots, not just `result`/`comment`/`pass_fail`. Resyncing an unlocked record pulls those fields from the live form definition, so a complete → unlock → resync → complete cycle could shift a step's acceptance criteria while the history view silently reported it as "unchanged" (H7, epic [#719](https://github.com/Jolls/arx-legacy/issues/719), [#779](https://github.com/Jolls/arx-legacy/issues/779))
+
 ## [0.6.15] - 2026-07-18
 ### Security
 - Gated the main `POST /settings` save behind login once a database is connected (C1, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). The route stayed in the always-accessible block for first-run setup, so with a DB already connected an unauthenticated caller could submit a blank password with an attacker-controlled `db_server`; the handler fell back to the stored password (`firstNonEmpty(pw, cfg.DBPassword)`) and dialed the attacker's server, exfiltrating it. A new `RequireAuthOnceConnected` middleware lets `POST /settings` through only while `h.db == nil` (first-run) and requires a logged-in user otherwise; it intentionally skips the schema-mismatch redirect so an admin can still re-point a mis-connected DB ([#748](https://github.com/Jolls/arx-legacy/issues/748))

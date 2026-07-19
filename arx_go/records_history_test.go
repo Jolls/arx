@@ -63,6 +63,14 @@ func TestDiffSnapshot_AddedRow(t *testing.T) {
 	}
 }
 
+func TestDiffSnapshot_ChangedSpecification(t *testing.T) {
+	prev := models.RecordResultSnapshot{TestID: 1, Result: "5", Specification: "4-6"}
+	curr := models.RecordResultSnapshot{TestID: 1, Result: "5", Specification: "4-6.5"}
+	if diffSnapshot([]models.RecordResultSnapshot{curr}, []models.RecordResultSnapshot{prev})[0].Status != "changed" {
+		t.Errorf("specification change not detected")
+	}
+}
+
 func TestDiffSnapshot_IdenticalIsUnchanged(t *testing.T) {
 	prev := []models.RecordResultSnapshot{snap(1, "5", boolPtr(true), "note")}
 	curr := []models.RecordResultSnapshot{snap(1, "5", boolPtr(true), "note")}
