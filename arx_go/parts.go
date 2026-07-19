@@ -1125,10 +1125,8 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 				hasCycle = true
 			}
 			unitCost = res.cost
-		} else if preferredPrice.Valid {
-			unitCost = preferredPrice.Float64
 		} else {
-			unitCost = currentCost.Float64
+			unitCost, _ = bomLeafCost(false, 0, preferredPrice, currentCost.Float64, "")
 		}
 		total += unitCost * qty
 	}
@@ -2115,7 +2113,7 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
 	`, h.cfg.PriceTable(), h.dialect.BoolLiteral(true)),
 		partID, supplierID,
-		r.FormValue("pack_size"), r.FormValue("price_ea"), r.FormValue("price_pack"),
+		nullableFloat(r.FormValue("pack_size")), nullableFloat(r.FormValue("price_ea")), nullableFloat(r.FormValue("price_pack")),
 		effectiveDate,
 	)
 	if err != nil {
@@ -2219,7 +2217,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
 	`, pr, h.dialect.BoolLiteral(true)),
 		partID, supplierID,
-		r.FormValue("pack_size"), r.FormValue("price_ea"), r.FormValue("price_pack"),
+		nullableFloat(r.FormValue("pack_size")), nullableFloat(r.FormValue("price_ea")), nullableFloat(r.FormValue("price_pack")),
 		effectiveDate,
 	)
 	if err != nil {
