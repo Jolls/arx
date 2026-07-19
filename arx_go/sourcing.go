@@ -240,7 +240,7 @@ func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) ma
 		FROM %s
 		WHERE part_id = @p1 AND is_active = %s
 		ORDER BY supplier_id, pack_size
-	`, h.cfg.PriceTable(), h.dialect.BoolLiteral(true)), partID)
+	`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)), partID)
 	if err != nil {
 		return nil
 	}

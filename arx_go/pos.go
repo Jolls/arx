@@ -46,7 +46,7 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 		SELECT id, display_name, address, city, state, zipcode,
 		       country, phone_1, fax, email
 		FROM %s WHERE company_id = @p1 AND is_active = %s ORDER BY display_name
-	`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), supplierID)
+	`, h.cfg.ContactTable(), h.dia().BoolLiteral(true)), supplierID)
 	if err != nil {
 		return nil
 	}
@@ -55,18 +55,23 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 	for rows.Next() {
 		var c ContactSummary
 		var name, addr, city, state, zip, country, phone, fax, email sql.NullString
-		if rows.Scan(&c.ID, &name, &addr, &city, &state, &zip, &country, &phone, &fax, &email) == nil {
-			c.DisplayName = name.String
-			c.Address = addr.String
-			c.City = city.String
-			c.State = state.String
-			c.Zipcode = zip.String
-			c.Country = country.String
-			c.Phone = phone.String
-			c.Fax = fax.String
-			c.Email = email.String
-			out = append(out, c)
+		if err := rows.Scan(&c.ID, &name, &addr, &city, &state, &zip, &country, &phone, &fax, &email); err != nil {
+			log.Printf("contactsForSupplier: scan error: %v", err)
+			break
 		}
+		c.DisplayName = name.String
+		c.Address = addr.String
+		c.City = city.String
+		c.State = state.String
+		c.Zipcode = zip.String
+		c.Country = country.String
+		c.Phone = phone.String
+		c.Fax = fax.String
+		c.Email = email.String
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("contactsForSupplier: rows error: %v", err)
 	}
 	return out
 }
@@ -105,13 +110,18 @@ func (h *Handler) fetchSuggestLinks(r *http.Request, poNum string) []SuggestLink
 		var l SuggestLink
 		var partID sql.NullInt64
 		var partNum, vendorPN sql.NullString
-		if rows.Scan(&partID, &partNum, &vendorPN) == nil {
-			l.Index = len(out)
-			l.PartID = int(partID.Int64)
-			l.PartNumber = partNum.String
-			l.VendorPN = vendorPN.String
-			out = append(out, l)
+		if err := rows.Scan(&partID, &partNum, &vendorPN); err != nil {
+			log.Printf("fetchSuggestLinks: scan error: %v", err)
+			break
 		}
+		l.Index = len(out)
+		l.PartID = int(partID.Int64)
+		l.PartNumber = partNum.String
+		l.VendorPN = vendorPN.String
+		out = append(out, l)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("fetchSuggestLinks: rows error: %v", err)
 	}
 	return out
 }
@@ -142,7 +152,7 @@ func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPri
 		      AND pr.is_active = %s
 		      AND pr.price_ea = pol.unit_cost
 		  )
-	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PriceTable(), h.dialect.BoolLiteral(true)), poNum)
+	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PriceTable(), h.dia().BoolLiteral(true)), poNum)
 	if err != nil {
 		return nil
 	}
@@ -152,12 +162,17 @@ func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPri
 		var s SuggestPrice
 		var partID sql.NullInt64
 		var partNum sql.NullString
-		if rows.Scan(&partID, &partNum, &s.Cost) == nil {
-			s.Index = len(out)
-			s.PartID = int(partID.Int64)
-			s.PartNumber = partNum.String
-			out = append(out, s)
+		if err := rows.Scan(&partID, &partNum, &s.Cost); err != nil {
+			log.Printf("fetchSuggestPrices: scan error: %v", err)
+			break
 		}
+		s.Index = len(out)
+		s.PartID = int(partID.Int64)
+		s.PartNumber = partNum.String
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("fetchSuggestPrices: rows error: %v", err)
 	}
 	return out
 }
@@ -330,6 +345,10 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, po)
 	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	log.Printf("[rows] pos: %d rows in %v", len(out), time.Since(start))
 	writeJSON(w, out)
 }
@@ -342,7 +361,11 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items := h.fetchPOItems(w, r, num)
+	items, err := h.fetchPOItems(r, num)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO items: "+err.Error())
+		return
+	}
 	var lineTotal float64
 	for _, item := range items {
 		lineTotal += item.Qty * item.UnitCost
@@ -484,7 +507,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		// is correct: a rolled-back PO should not reuse its number.
 		var base string
 		if err := h.queryRowContext(r.Context(),
-			fmt.Sprintf("SELECT CAST(%s AS VARCHAR)", h.dialect.NextSequenceValueExpr("po_number_seq")),
+			fmt.Sprintf("SELECT CAST(%s AS VARCHAR)", h.dia().NextSequenceValueExpr("po_number_seq")),
 		).Scan(&base); err != nil {
 			h.renderError(w, r, "Error getting PO number: "+err.Error())
 			return
@@ -517,7 +540,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		newStatus = "rfq"
 	}
 	var newID int
-	insertPO := h.dialect.InsertReturningID(h.cfg.POTable(),
+	insertPO := h.dia().InsertReturningID(h.cfg.POTable(),
 		`number, status, is_active, orderer, account_id,
 		 supplier_id, supplier_name, supplier_contact, supplier_email,
 		 supplier_address, supplier_city, supplier_state, supplier_zipcode,
@@ -626,7 +649,11 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items := h.fetchPOItems(w, r, num)
+	items, err := h.fetchPOItems(r, num)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO items: "+err.Error())
+		return
+	}
 	supID := 0
 	if po.SupplierID != nil {
 		supID = *po.SupplierID
@@ -850,14 +877,14 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET is_active=%s
 			WHERE part_id=@p1 AND supplier_id=@p2 AND pack_size=1 AND is_active=%s
-		`, pr, h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(true)), partID, supplierID); err != nil {
+		`, pr, h.dia().BoolLiteral(false), h.dia().BoolLiteral(true)), partID, supplierID); err != nil {
 			h.renderError(w, r, "Error updating price: "+err.Error())
 			return
 		}
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
 			VALUES (@p1, @p2, 1, @p3, @p3, @p4, %s)
-		`, pr, h.dialect.BoolLiteral(true)), partID, supplierID, cost, today); err != nil {
+		`, pr, h.dia().BoolLiteral(true)), partID, supplierID, cost, today); err != nil {
 			h.renderError(w, r, "Error inserting price: "+err.Error())
 			return
 		}
@@ -875,7 +902,11 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sourceItems := h.fetchPOItems(w, r, num)
+	sourceItems, err := h.fetchPOItems(r, num)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO items: "+err.Error())
+		return
+	}
 
 	// Clear fields that shouldn't carry over
 	source.Number = ""
@@ -945,7 +976,11 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 		supplierCode = code.String
 	}
 
-	items := h.fetchPOItems(w, r, num)
+	items, err := h.fetchPOItems(r, num)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO items: "+err.Error())
+		return
+	}
 	var lineTotal float64
 	for _, item := range items {
 		lineTotal += item.Qty * item.UnitCost
@@ -979,9 +1014,12 @@ func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "PO is not approved", http.StatusForbidden)
 		return
 	}
-	h.execContext(r.Context(), fmt.Sprintf(
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET date_printed=@p1 WHERE number=@p2`, h.cfg.POTable(),
-	), time.Now(), num)
+	), time.Now(), num); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1302,8 +1340,9 @@ func (h *Handler) fetchPOHistory(r *http.Request, poID int) []POHistoryEvent {
 		var e POHistoryEvent
 		var from, to, action, note, by sql.NullString
 		var at sql.NullTime
-		if rows.Scan(&e.EventType, &from, &to, &action, &note, &by, &at) != nil {
-			continue
+		if err := rows.Scan(&e.EventType, &from, &to, &action, &note, &by, &at); err != nil {
+			log.Printf("fetchPOHistory: scan error: %v", err)
+			break
 		}
 		e.FromStatus = from.String
 		e.ToStatus = to.String
@@ -1314,6 +1353,9 @@ func (h *Handler) fetchPOHistory(r *http.Request, poID int) []POHistoryEvent {
 			e.ChangedAt = at.Time
 		}
 		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("fetchPOHistory: rows error: %v", err)
 	}
 	return out
 }
@@ -1497,7 +1539,11 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := h.fetchPOItems(w, r, num)
+	items, err := h.fetchPOItems(r, num)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO items: "+err.Error())
+		return
+	}
 	txnDate := parseFormDate(fv(r, "txn_date"))
 	if txnDate == nil {
 		now := time.Now()
@@ -1859,7 +1905,7 @@ func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (m
 	return po, true
 }
 
-func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num string) []models.PurchaseOrderLine {
+func (h *Handler) fetchPOItems(r *http.Request, num string) ([]models.PurchaseOrderLine, error) {
 	pol, po, parts, fil := h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PartsTable(), h.cfg.AttachmentsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
@@ -1875,7 +1921,7 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 		ORDER BY pol.line_number
 	`, pol, po, parts, fil), num)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 	var items []models.PurchaseOrderLine
@@ -1891,35 +1937,39 @@ func (h *Handler) fetchPOItems(w http.ResponseWriter, r *http.Request, num strin
 			&item.Qty, &item.UnitCost, &vendorPN, &polpnid, &leadTime,
 			&item.ReceivedQty, &dateReceived,
 			&isLotTracked,
-			&filID, &filFileName, &filCategory); err == nil {
-			item.IsLotTracked = isLotTracked.Bool
-			item.PartNumberSnapshot = partNumber.String
-			item.RevisionSnapshot = rev.String
-			item.Description = desc.String
-			item.VendorPN = vendorPN.String
-			if polpnid.Valid {
-				v := int(polpnid.Int64)
-				item.PartID = &v
-			}
-			if leadTime.Valid {
-				v := int(leadTime.Int64)
-				item.LeadTimeDays = &v
-			}
-			if dateReceived.Valid {
-				t := dateReceived.Time
-				item.DateReceived = &t
-			}
-			if filID.Valid {
-				item.PrimaryAtt = &models.Attachment{
-					ID:       int(filID.Int64),
-					FileName: filFileName.String,
-					Category: filCategory.String,
-				}
-			}
-			items = append(items, item)
+			&filID, &filFileName, &filCategory); err != nil {
+			return nil, err
 		}
+		item.IsLotTracked = isLotTracked.Bool
+		item.PartNumberSnapshot = partNumber.String
+		item.RevisionSnapshot = rev.String
+		item.Description = desc.String
+		item.VendorPN = vendorPN.String
+		if polpnid.Valid {
+			v := int(polpnid.Int64)
+			item.PartID = &v
+		}
+		if leadTime.Valid {
+			v := int(leadTime.Int64)
+			item.LeadTimeDays = &v
+		}
+		if dateReceived.Valid {
+			t := dateReceived.Time
+			item.DateReceived = &t
+		}
+		if filID.Valid {
+			item.PrimaryAtt = &models.Attachment{
+				ID:       int(filID.Int64),
+				FileName: filFileName.String,
+				Category: filCategory.String,
+			}
+		}
+		items = append(items, item)
 	}
-	return items
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // POReceiptView is one goods-receipt (a 'receipt' ledger row) for the PO detail page.
@@ -1950,18 +2000,23 @@ func (h *Handler) fetchPOReceipts(r *http.Request, poID int) []POReceiptView {
 		var date sql.NullTime
 		var partID sql.NullInt64
 		var pn, user sql.NullString
-		if err := rows.Scan(&date, &partID, &pn, &v.Qty, &user); err == nil {
-			if date.Valid {
-				v.Date = date.Time.Format("2006-01-02")
-			}
-			if partID.Valid {
-				id := int(partID.Int64)
-				v.PartID = &id
-			}
-			v.PartNumber = pn.String
-			v.Username = user.String
-			out = append(out, v)
+		if err := rows.Scan(&date, &partID, &pn, &v.Qty, &user); err != nil {
+			log.Printf("fetchPOReceipts: scan error: %v", err)
+			break
 		}
+		if date.Valid {
+			v.Date = date.Time.Format("2006-01-02")
+		}
+		if partID.Valid {
+			id := int(partID.Int64)
+			v.PartID = &id
+		}
+		v.PartNumber = pn.String
+		v.Username = user.String
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("fetchPOReceipts: rows error: %v", err)
 	}
 	return out
 }
@@ -2053,7 +2108,11 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 	if source.RFQGroupID != nil {
 		group = *source.RFQGroupID
 	}
-	items := h.fetchPOItems(w, r, num)
+	items, err := h.fetchPOItems(r, num)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO items: "+err.Error())
+		return
+	}
 	for i := range items {
 		items[i].UnitCost = 0
 		items[i].VendorPN = ""
@@ -2222,9 +2281,10 @@ func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
 		var number, supName, status, partNum, rev, desc sql.NullString
 		var supID, polID, leadDays sql.NullInt64
 		var total, qty, cost sql.NullFloat64
-		if rows.Scan(&number, &supName, &supID, &status, &total,
-			&polID, &partNum, &rev, &desc, &qty, &cost, &leadDays) != nil {
-			continue
+		if err := rows.Scan(&number, &supName, &supID, &status, &total,
+			&polID, &partNum, &rev, &desc, &qty, &cost, &leadDays); err != nil {
+			h.renderError(w, r, "Error loading RFQ group: "+err.Error())
+			return
 		}
 		ln := rfqScanLine{
 			Number: number.String, SupplierName: supName.String, Status: status.String,
@@ -2241,6 +2301,10 @@ func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
 			ln.LeadDays = &v
 		}
 		lines = append(lines, ln)
+	}
+	if err := rows.Err(); err != nil {
+		h.renderError(w, r, "Error loading RFQ group: "+err.Error())
+		return
 	}
 
 	suppliers, orderedRows := buildRFQGrid(lines)
@@ -2290,9 +2354,17 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 	var polIDs []int
 	for idRows.Next() {
 		var id int
-		if idRows.Scan(&id) == nil {
-			polIDs = append(polIDs, id)
+		if err := idRows.Scan(&id); err != nil {
+			idRows.Close()
+			h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
+			return
 		}
+		polIDs = append(polIDs, id)
+	}
+	if err := idRows.Err(); err != nil {
+		idRows.Close()
+		h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
+		return
 	}
 	idRows.Close()
 
@@ -2393,7 +2465,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 	// Duplicate the winning quote's header into a new real PO: bare base number,
 	// draft, no rfq_group_id (so it always shows on the PO list).
 	var newID int
-	insertPO := h.dialect.InsertSelectReturningID(h.cfg.POTable(),
+	insertPO := h.dia().InsertSelectReturningID(h.cfg.POTable(),
 		`number, status, is_active, approval_status, rfq_group_id,
 		  orderer, account_id,
 		  supplier_id, supplier_name, supplier_contact, supplier_email,
@@ -2416,7 +2488,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
 		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, @p2,
 		  supplier_contact_id, receiver_contact_id
-		FROM %s WHERE id=@p3`, h.dialect.BoolLiteral(true), h.cfg.POTable()),
+		FROM %s WHERE id=@p3`, h.dia().BoolLiteral(true), h.cfg.POTable()),
 		true)
 	if err := tx.QueryRowContext(r.Context(), insertPO, base, now, poID).Scan(&newID); err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
@@ -2453,7 +2525,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET status='closed', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable(), h.dialect.BoolLiteral(false)),
+		`UPDATE %s SET status='closed', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable(), h.dia().BoolLiteral(false)),
 		now, poID); err != nil {
 		h.renderError(w, r, "Error closing awarded quote: "+err.Error())
 		return
@@ -2471,9 +2543,17 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		var sibIDs []int
 		for sibRows.Next() {
 			var id int
-			if sibRows.Scan(&id) == nil {
-				sibIDs = append(sibIDs, id)
+			if err := sibRows.Scan(&id); err != nil {
+				sibRows.Close()
+				h.renderError(w, r, "Error finding sibling quotes: "+err.Error())
+				return
 			}
+			sibIDs = append(sibIDs, id)
+		}
+		if err := sibRows.Err(); err != nil {
+			sibRows.Close()
+			h.renderError(w, r, "Error finding sibling quotes: "+err.Error())
+			return
 		}
 		sibRows.Close()
 		note := "Not awarded — PO #" + base + " issued"
@@ -2486,7 +2566,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-				`UPDATE %s SET status='cancelled', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable(), h.dialect.BoolLiteral(false)),
+				`UPDATE %s SET status='cancelled', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg.POTable(), h.dia().BoolLiteral(false)),
 				now, id); err != nil {
 				h.renderError(w, r, "Error declining quote: "+err.Error())
 				return
@@ -2578,7 +2658,7 @@ func (h *Handler) POImportPartFile(w http.ResponseWriter, r *http.Request) {
 	var fname sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT file_name FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`,
-		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true)), attID, partID).Scan(&fname); err != nil {
+		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), attID, partID).Scan(&fname); err != nil {
 		h.renderError(w, r, "Attachment not found.")
 		return
 	}

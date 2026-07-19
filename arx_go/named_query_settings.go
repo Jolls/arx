@@ -73,7 +73,7 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(map[string]string{"error": msg})
 	}
-	if h.db == nil {
+	if h.database() == nil {
 		writeErr(http.StatusServiceUnavailable, "Not connected to database.")
 		return
 	}
@@ -119,7 +119,7 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	} else {
-		insertQuery := h.dialect.InsertReturningID(tbl,
+		insertQuery := h.dia().InsertReturningID(tbl,
 			"name, description, sql, params, result_type, is_active, created_at, updated_at",
 			"@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
 			false)
@@ -154,7 +154,7 @@ func (h *Handler) SettingsNamedQueryTest(w http.ResponseWriter, r *http.Request)
 		json.NewEncoder(w).Encode(map[string]string{"error": msg})
 	}
 
-	if h.db == nil {
+	if h.database() == nil {
 		writeErr(http.StatusServiceUnavailable, "Not connected to database.")
 		return
 	}

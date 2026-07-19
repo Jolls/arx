@@ -32,7 +32,7 @@ func init() {
 }
 
 // testHandlerWithDB builds a Handler with a non-nil (never-dialed) *sql.DB, so
-// the h.db == nil short-circuit in RequireAuth doesn't mask other checks.
+// the h.database() == nil short-circuit in RequireAuth doesn't mask other checks.
 func testHandlerWithDB() *Handler {
 	db, err := sql.Open("nop-driver", "")
 	if err != nil {

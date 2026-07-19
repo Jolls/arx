@@ -42,7 +42,7 @@ func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args 
 	if poLineID != nil {
 		poArg = *poLineID
 	}
-	insert := h.dialect.InsertReturningID(h.cfg.LotTable(),
+	insert := h.dia().InsertReturningID(h.cfg.LotTable(),
 		`part_id, lot_number, lot_description, vendor_lot_number, po_line_id, created_at, is_active`,
 		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`,
 		false)
@@ -66,7 +66,7 @@ func (h *Handler) activeLotsForPart(ctx context.Context, partID int) ([]LotOptio
 		SELECT id, lot_number, vendor_lot_number
 		FROM %s WHERE part_id = @p1 AND is_active = %s
 		ORDER BY created_at DESC, id DESC
-	`, h.cfg.LotTable(), h.dialect.BoolLiteral(true)), partID)
+	`, h.cfg.LotTable(), h.dia().BoolLiteral(true)), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (h *Handler) lotBelongsToPart(ctx context.Context, tx *txLogger, lotID, par
 	var n int
 	err := tx.QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT COUNT(*) FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`,
-		h.cfg.LotTable(), h.dialect.BoolLiteral(true)), lotID, partID).Scan(&n)
+		h.cfg.LotTable(), h.dia().BoolLiteral(true)), lotID, partID).Scan(&n)
 	return n == 1, err
 }
 

@@ -24,6 +24,25 @@ func TestFormatDate(t *testing.T) {
 	}
 }
 
+func TestValidResultType(t *testing.T) {
+	cases := []struct {
+		rt   string
+		want bool
+	}{
+		{"list", true},
+		{"single", true},
+		{"multi", true},
+		{"", false},
+		{"List", false},
+		{"bogus", false},
+	}
+	for _, c := range cases {
+		if got := validResultType(c.rt); got != c.want {
+			t.Errorf("validResultType(%q) = %v, want %v", c.rt, got, c.want)
+		}
+	}
+}
+
 func TestAccentThemeClass(t *testing.T) {
 	cases := []struct {
 		accentColor string

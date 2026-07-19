@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"golang.org/x/crypto/bcrypt"
 
 	arxbase "arx/arxlib/config"
 	arxdb "arx/arxlib/db"
@@ -389,7 +390,7 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	// run applies a filter's clauses to the form's records and returns matching SNs.
 	run := func(q url.Values) []string {
 		f := parseRecordFilters(q)
-		clauses, fargs := f.whereClauses(h.dialect, 2)
+		clauses, fargs := f.whereClauses(h.dia(), 2)
 		query := fmt.Sprintf(
 			`SELECT serial_number FROM %s WHERE form_id = @p1 AND is_active = 1%s
 			 ORDER BY TRY_CAST(serial_number AS INT)`, h.cfg.RecordsTable(), clauses)
@@ -1357,7 +1358,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("beginTx: %v", err)
 	}
-	q, arg := h.dialect.SetAuditUser(actor)
+	q, arg := h.dia().SetAuditUser(actor)
 	if _, err := tx.ExecContext(ctx, q, arg); err != nil {
 		tx.Rollback()
 		t.Fatalf("SetAuditUser exec: %v", err)
@@ -1871,5 +1872,452 @@ func TestIntegration_UserAdminRequiresAdmin(t *testing.T) {
 			tc.handler(rec, userReq("/settings/users"))
 			assertStatus(t, tc.name+" non-admin", rec, http.StatusForbidden)
 		})
+	}
+}
+
+// TestIntegration_LoginPost_ValidCredentials exercises LoginPost's normal-login
+// success branch (issue #758) — bcrypt compare, session cookie set, redirect to
+// the fallback landing route for a fresh user with no DefaultRoute. Every
+// redirect in this codebase's handlers uses http.StatusSeeOther (303), not 302.
+func TestIntegration_LoginPost_ValidCredentials(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-login-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	const password = "correct-horse-battery-staple"
+	if err := h.createUser(ctx, username, "Integration Test User", password, false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username)
+	}()
+
+	rec := httptest.NewRecorder()
+	h.LoginPost(rec, postForm("/login", url.Values{"username": {username}, "password": {password}}))
+	assertStatus(t, "LoginPost(valid)", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); loc != "/parts" {
+		t.Errorf("Location = %q, want /parts (fallback landing route)", loc)
+	}
+	if len(rec.Result().Cookies()) == 0 {
+		t.Error("no session cookie set on successful login")
+	}
+}
+
+// TestIntegration_LoginPost_InvalidPassword and TestIntegration_LoginPost_UnknownUsername
+// both hit the same "invalid username or password" branch — a wrong password for
+// a real user, and a username that doesn't exist at all.
+func TestIntegration_LoginPost_InvalidPassword(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-login-badpw-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.createUser(ctx, username, "Integration Test User", "the-real-password", false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username)
+	}()
+
+	rec := httptest.NewRecorder()
+	h.LoginPost(rec, postForm("/login", url.Values{"username": {username}, "password": {"wrong-password"}}))
+	assertStatus(t, "LoginPost(wrong password)", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/login?error=") {
+		t.Errorf("Location = %q, want prefix /login?error=", loc)
+	}
+}
+
+func TestIntegration_LoginPost_UnknownUsername(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.LoginPost(rec, postForm("/login", url.Values{
+		"username": {"itest-nonexistent-" + strconv.FormatInt(time.Now().UnixNano(), 10)},
+		"password": {"whatever"},
+	}))
+	assertStatus(t, "LoginPost(unknown username)", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); loc != "/login?error=invalid+username+or+password" {
+		t.Errorf("Location = %q, want /login?error=invalid+username+or+password", loc)
+	}
+}
+
+// adminCtx returns req with the seeded admin user (8001) on the context, the
+// same shape RequireAuth would inject after resolving the session.
+func adminCtx(req *http.Request) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), ctxUserKey, &User{ID: 8001, Username: "admin", IsAdmin: true}))
+}
+
+// withUserID injects a chi route context carrying the given "userID" URL
+// parameter — the SettingsUsers* handlers read chi.URLParam(r, "userID"),
+// unlike withID's "id" param used elsewhere in this file.
+func withUserID(req *http.Request, id int) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("userID", strconv.Itoa(id))
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+// TestIntegration_SettingsUsersCreate_Success/_MissingFields cover
+// SettingsUsersCreate's two branches with a real admin in context.
+func TestIntegration_SettingsUsersCreate_Success(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-create-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	rec := httptest.NewRecorder()
+	h.SettingsUsersCreate(rec, adminCtx(postForm("/settings/users", url.Values{
+		"username": {username}, "display_name": {"Integration Test User"}, "password": {"a-password"},
+	})))
+	assertStatus(t, "SettingsUsersCreate", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); loc != "/settings?tab=users" {
+		t.Errorf("Location = %q, want /settings?tab=users", loc)
+	}
+
+	var isAdmin bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT is_admin FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&isAdmin); err != nil {
+		t.Fatalf("SELECT after create: %v", err)
+	}
+	if isAdmin {
+		t.Error("user created via SettingsUsersCreate has is_admin=1, want 0 (only bootstrap creates an admin)")
+	}
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username)
+}
+
+func TestIntegration_SettingsUsersCreate_MissingFields(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-create-missing-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	rec := httptest.NewRecorder()
+	h.SettingsUsersCreate(rec, adminCtx(postForm("/settings/users", url.Values{
+		"username": {username}, "display_name": {"Integration Test User"}, "password": {""},
+	})))
+	assertStatus(t, "SettingsUsersCreate(missing password)", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); loc != "/settings?tab=users&error=all+fields+required" {
+		t.Errorf("Location = %q, want /settings?tab=users&error=all+fields+required", loc)
+	}
+
+	var n int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&n); err != nil {
+		t.Fatalf("count after rejected create: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("row count for %q = %d, want 0 (no row should be inserted)", username, n)
+	}
+}
+
+// TestIntegration_SettingsUsersResetPassword_Success/_EmptyPassword cover both
+// branches of the password-reset handler.
+func TestIntegration_SettingsUsersResetPassword_Success(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-resetpw-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.createUser(ctx, username, "Integration Test User", "old-password", false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	var userID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&userID); err != nil {
+		t.Fatalf("look up created user id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+	}()
+
+	rec := httptest.NewRecorder()
+	h.SettingsUsersResetPassword(rec, withUserID(adminCtx(postForm(
+		fmt.Sprintf("/settings/users/%d/password", userID), url.Values{"password": {"new-password"}},
+	)), userID))
+	assertStatus(t, "SettingsUsersResetPassword", rec, http.StatusSeeOther)
+
+	var hash string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT password_hash FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+	).Scan(&hash); err != nil {
+		t.Fatalf("SELECT password_hash: %v", err)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte("new-password")) != nil {
+		t.Error("password_hash does not match the new password after reset")
+	}
+}
+
+func TestIntegration_SettingsUsersResetPassword_EmptyPassword(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-resetpw-empty-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.createUser(ctx, username, "Integration Test User", "old-password", false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	var userID int
+	var beforeHash string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id, password_hash FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&userID, &beforeHash); err != nil {
+		t.Fatalf("look up created user: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+	}()
+
+	rec := httptest.NewRecorder()
+	h.SettingsUsersResetPassword(rec, withUserID(adminCtx(postForm(
+		fmt.Sprintf("/settings/users/%d/password", userID), url.Values{"password": {""}},
+	)), userID))
+	assertStatus(t, "SettingsUsersResetPassword(empty)", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); loc != "/settings?tab=users&error=password+required" {
+		t.Errorf("Location = %q, want /settings?tab=users&error=password+required", loc)
+	}
+
+	var afterHash string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT password_hash FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+	).Scan(&afterHash); err != nil {
+		t.Fatalf("SELECT password_hash after rejected reset: %v", err)
+	}
+	if afterHash != beforeHash {
+		t.Error("password_hash changed despite empty password being rejected")
+	}
+}
+
+// TestIntegration_SettingsUsersToggleActive_Success flips is_active both
+// directions and confirms invalidateUserCache ran on each toggle.
+func TestIntegration_SettingsUsersToggleActive_Success(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-toggleactive-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.createUser(ctx, username, "Integration Test User", "a-password", false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	var userID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&userID); err != nil {
+		t.Fatalf("look up created user id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+	}()
+
+	readActive := func() bool {
+		var active bool
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT is_active FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+		).Scan(&active); err != nil {
+			t.Fatalf("read is_active: %v", err)
+		}
+		return active
+	}
+	toggle := func() {
+		h.userCache[userID] = &userCacheEntry{user: &User{ID: userID}, expires: time.Now().Add(time.Minute)}
+		rec := httptest.NewRecorder()
+		h.SettingsUsersToggleActive(rec, withUserID(adminCtx(postForm(
+			fmt.Sprintf("/settings/users/%d/toggle-active", userID), url.Values{},
+		)), userID))
+		assertStatus(t, "SettingsUsersToggleActive", rec, http.StatusSeeOther)
+		if _, ok := h.userCache[userID]; ok {
+			t.Error("userCache entry still present after toggle; invalidateUserCache did not run")
+		}
+	}
+
+	if !readActive() {
+		t.Fatal("newly created user is_active = false, want true (DDL default)")
+	}
+	toggle()
+	if readActive() {
+		t.Error("is_active still true after first toggle, want false")
+	}
+	toggle()
+	if !readActive() {
+		t.Error("is_active still false after second toggle, want true")
+	}
+}
+
+func TestIntegration_SettingsUsersToggleActive_CannotDeactivateSelf(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var before bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT is_active FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+	).Scan(&before); err != nil {
+		t.Fatalf("read admin is_active: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.SettingsUsersToggleActive(rec, withUserID(adminCtx(postForm(
+		"/settings/users/8001/toggle-active", url.Values{},
+	)), 8001))
+	assertStatus(t, "SettingsUsersToggleActive(self)", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); loc != "/settings?tab=users&error=cannot+deactivate+your+own+account" {
+		t.Errorf("Location = %q, want /settings?tab=users&error=cannot+deactivate+your+own+account", loc)
+	}
+
+	var after bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT is_active FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+	).Scan(&after); err != nil {
+		t.Fatalf("re-read admin is_active: %v", err)
+	}
+	if after != before {
+		t.Error("admin is_active changed despite the self-deactivate guard")
+	}
+}
+
+// TestIntegration_SettingsUsersToggleApprove_Success and
+// TestIntegration_SettingsUsersToggleApproveRecords_Success mirror ToggleActive's
+// success shape for can_approve_po / can_approve_records (neither has a
+// self-guard, unlike ToggleActive/ToggleAdmin).
+func TestIntegration_SettingsUsersToggleApprove_Success(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-toggleapprove-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.createUser(ctx, username, "Integration Test User", "a-password", false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	var userID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&userID); err != nil {
+		t.Fatalf("look up created user id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+	}()
+
+	rec := httptest.NewRecorder()
+	h.SettingsUsersToggleApprove(rec, withUserID(adminCtx(postForm(
+		fmt.Sprintf("/settings/users/%d/toggle-approve", userID), url.Values{},
+	)), userID))
+	assertStatus(t, "SettingsUsersToggleApprove", rec, http.StatusSeeOther)
+
+	var canApprove bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT can_approve_po FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+	).Scan(&canApprove); err != nil {
+		t.Fatalf("read can_approve_po: %v", err)
+	}
+	if !canApprove {
+		t.Error("can_approve_po still false after toggle, want true")
+	}
+}
+
+func TestIntegration_SettingsUsersToggleApproveRecords_Success(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-toggleapproverec-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.createUser(ctx, username, "Integration Test User", "a-password", false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	var userID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&userID); err != nil {
+		t.Fatalf("look up created user id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+	}()
+
+	rec := httptest.NewRecorder()
+	h.SettingsUsersToggleApproveRecords(rec, withUserID(adminCtx(postForm(
+		fmt.Sprintf("/settings/users/%d/toggle-approve-records", userID), url.Values{},
+	)), userID))
+	assertStatus(t, "SettingsUsersToggleApproveRecords", rec, http.StatusSeeOther)
+
+	var canApprove bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT can_approve_records FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+	).Scan(&canApprove); err != nil {
+		t.Fatalf("read can_approve_records: %v", err)
+	}
+	if !canApprove {
+		t.Error("can_approve_records still false after toggle, want true")
+	}
+}
+
+func TestIntegration_SettingsUsersToggleAdmin_Success(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	username := "itest-toggleadmin-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.createUser(ctx, username, "Integration Test User", "a-password", false); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	var userID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+	).Scan(&userID); err != nil {
+		t.Fatalf("look up created user id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+	}()
+
+	rec := httptest.NewRecorder()
+	h.SettingsUsersToggleAdmin(rec, withUserID(adminCtx(postForm(
+		fmt.Sprintf("/settings/users/%d/toggle-admin", userID), url.Values{},
+	)), userID))
+	assertStatus(t, "SettingsUsersToggleAdmin", rec, http.StatusSeeOther)
+
+	var isAdmin bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT is_admin FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+	).Scan(&isAdmin); err != nil {
+		t.Fatalf("read is_admin: %v", err)
+	}
+	if !isAdmin {
+		t.Error("is_admin still false after toggle, want true")
+	}
+}
+
+func TestIntegration_SettingsUsersToggleAdmin_CannotRemoveOwnAdmin(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var before bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+	).Scan(&before); err != nil {
+		t.Fatalf("read admin is_admin: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.SettingsUsersToggleAdmin(rec, withUserID(adminCtx(postForm(
+		"/settings/users/8001/toggle-admin", url.Values{},
+	)), 8001))
+	assertStatus(t, "SettingsUsersToggleAdmin(self)", rec, http.StatusSeeOther)
+	if loc := rec.Header().Get("Location"); loc != "/settings?tab=users&error=cannot+remove+your+own+admin+rights" {
+		t.Errorf("Location = %q, want /settings?tab=users&error=cannot+remove+your+own+admin+rights", loc)
+	}
+
+	var after bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+	).Scan(&after); err != nil {
+		t.Fatalf("re-read admin is_admin: %v", err)
+	}
+	if after != before {
+		t.Error("admin is_admin changed despite the self-remove guard")
 	}
 }

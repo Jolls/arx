@@ -122,13 +122,16 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Post("/login", h.LoginPost)
 	r.Post("/logout", h.Logout)
 	r.Get("/settings", h.Settings)
-	// POST /settings must stay reachable during first-run setup (h.db == nil) but
+	// POST /settings must stay reachable during first-run setup (no DB connected) but
 	// requires a logged-in user once a database is connected, so an unauthenticated
 	// caller can't re-point the connection and exfiltrate the stored password (#748).
 	r.With(h.RequireAuthOnceConnected).Post("/settings", h.SettingsSave)
 	r.Get("/whats-new", h.WhatsNew)
-	r.Get("/api/browse-folder", h.APIBrowseFolder)
-	r.Get("/api/browse-file", h.APIBrowseFile)
+	// Gated the same way as POST /settings: reachable unauthenticated only during
+	// first-run setup, since each spawns a native folder/file picker dialog and an
+	// unauthenticated GET on a connected instance would be a local DoS/nuisance (#757).
+	r.With(h.RequireAuthOnceConnected).Get("/api/browse-folder", h.APIBrowseFolder)
+	r.With(h.RequireAuthOnceConnected).Get("/api/browse-file", h.APIBrowseFile)
 
 	// All other routes require a live database connection.
 	r.Group(func(r chi.Router) {

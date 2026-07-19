@@ -28,7 +28,7 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	supplierFilter := ""
 	if r.URL.Query().Get("supplier_only") == "1" {
-		supplierFilter = " AND su.is_supplier = " + h.dialect.BoolLiteral(true)
+		supplierFilter = " AND su.is_supplier = " + h.dia().BoolLiteral(true)
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, cn.city
@@ -37,7 +37,7 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 		WHERE su.name LIKE @p1 AND su.is_active = %s`+supplierFilter+`
 		ORDER BY su.name
 		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
-	`, h.cfg.CompanyTable(), h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
+	`, h.cfg.CompanyTable(), h.cfg.ContactTable(), h.dia().BoolLiteral(true)), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -69,7 +69,7 @@ func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
 		FROM %s
 		WHERE company_id = @p1 AND is_active = %s
 		ORDER BY display_name
-	`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), id)
+	`, h.cfg.ContactTable(), h.dia().BoolLiteral(true)), id)
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -448,7 +448,7 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 	var fileNameNS, revNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT file_name, part_revision FROM %s WHERE id=@p1 AND part_id=@p2 AND is_active=%s`,
-		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true),
+		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
 	), attID, id).Scan(&fileNameNS, &revNS); err != nil {
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Attachment not found")
@@ -525,7 +525,7 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 	var oldFileNS sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s ORDER BY id`,
-		h.cfg.AttachmentsTable(), h.dialect.BoolLiteral(true),
+		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
 	), partID, category).Scan(&existingID, &oldFileNS)
 	if err == sql.ErrNoRows {
 		_, err = h.execContext(ctx, fmt.Sprintf(

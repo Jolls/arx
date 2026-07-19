@@ -87,7 +87,7 @@ func (item dashboardYieldItem) FPYPct() float64 {
 // ReportsDashboard is the Reports tab landing page (issue #282, RPT-1).
 func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "dashboard"}
-	if h.db == nil {
+	if h.database() == nil {
 		h.render(w, r, "reports/dashboard.html", data)
 		return
 	}
@@ -160,7 +160,7 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT COUNT(DISTINCT po_id) FROM %s WHERE date_received >= %s`,
-		h.cfg.POLineTable(), h.dialect.MonthStartExpr()),
+		h.cfg.POLineTable(), h.dia().MonthStartExpr()),
 	).Scan(&n)
 	return n, err
 }
@@ -171,7 +171,9 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 // #245).
 func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]dashboardFailureModeItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %sf.id, pn.part_number, MAX(res.parameter) AS parameter,
+		SELECT %sf.id, pn.part_number, (SELECT %sr2.parameter FROM %s r2
+			WHERE r2.form_row_id = res.form_row_id
+			ORDER BY r2.id DESC%s) AS parameter,
 			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count
 		FROM %s res
 		JOIN %s trec ON res.form_record_id = trec.id
@@ -180,8 +182,9 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 		WHERE trec.is_active = %s AND res.pass_fail IS NOT NULL
 		GROUP BY f.id, pn.part_number, res.form_row_id
 		HAVING SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) > 0
-		ORDER BY failure_count DESC`+h.dialect.LimitClause("@p1"),
-		h.dialect.TopClause("@p1"), h.dialect.BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit)
+		ORDER BY failure_count DESC`+h.dia().LimitClause("@p1"),
+		h.dia().TopClause("@p1"), h.dia().TopClause("1"), h.cfg.ResultsTable(), h.dia().LimitClause("1"),
+		h.dia().BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +216,7 @@ func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]d
 		LEFT JOIN %s res ON res.form_record_id = trec.id
 		WHERE trec.is_active = %s
 		GROUP BY trec.id, trec.form_id, pn.part_number`,
-		h.dialect.BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.cfg.ResultsTable(), h.dialect.BoolLiteral(true)))
+		h.dia().BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.cfg.ResultsTable(), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -264,8 +267,8 @@ func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]da
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE trec.is_active = %s AND trec.is_locked = %s
 			AND trec.created_at <= DATEADD(day, -@p2, GETDATE())
-		ORDER BY trec.created_at ASC`+h.dialect.LimitClause("@p1"),
-		h.dialect.TopClause("@p1"), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), limit, staleWIPThresholdDays)
+		ORDER BY trec.created_at ASC`+h.dia().LimitClause("@p1"),
+		h.dia().TopClause("@p1"), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit, staleWIPThresholdDays)
 	if err != nil {
 		return nil, err
 	}
@@ -294,8 +297,8 @@ func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([
 			 WHERE h.po_id = po.id AND h.event_type = 'approval' AND h.action = 'submitted') AS submitted_at
 		FROM %s po
 		WHERE po.approval_status = 'pending'
-		ORDER BY submitted_at ASC`+h.dialect.LimitClause("@p1"),
-		h.dialect.TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
+		ORDER BY submitted_at ASC`+h.dia().LimitClause("@p1"),
+		h.dia().TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -324,8 +327,8 @@ func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]
 		SELECT %sid, part_number, stock_on_hand, reorder_min
 		FROM %s
 		WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
-		ORDER BY (stock_on_hand - reorder_min) ASC`+h.dialect.LimitClause("@p1"),
-		h.dialect.TopClause("@p1"), h.cfg.PartsTable()), limit)
+		ORDER BY (stock_on_hand - reorder_min) ASC`+h.dia().LimitClause("@p1"),
+		h.dia().TopClause("@p1"), h.cfg.PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -349,8 +352,8 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 
 	partRows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT %sid, part_number, title, modified_date
-		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC`+h.dialect.LimitClause("@p1"),
-		h.dialect.TopClause("@p1"), h.cfg.PartsTable()), limit)
+		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC`+h.dia().LimitClause("@p1"),
+		h.dia().TopClause("@p1"), h.cfg.PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -375,8 +378,8 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 
 	poRows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT %sh.po_id, po.number, h.event_type, h.to_status, h.action, h.changed_at
-		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC`+h.dialect.LimitClause("@p1"),
-		h.dialect.TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
+		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC`+h.dia().LimitClause("@p1"),
+		h.dia().TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -539,12 +542,14 @@ func (h *Handler) querySpendBySupplier(ctx context.Context, rng reportDateRange)
 func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]spendPartRow, error) {
 	where, args := rng.whereClause("po.date_ordered", 1)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pol.part_number_snapshot, p.title, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
+		SELECT COALESCE(p.part_number, pol.part_number_snapshot) AS part_number,
+			p.title, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.id
 		LEFT JOIN %s p ON pol.part_id = p.id
 		WHERE 1=1%s
-		GROUP BY pol.part_number_snapshot, p.title
+		GROUP BY COALESCE(CAST(pol.part_id AS VARCHAR(20)), CONCAT('snap:', pol.part_number_snapshot)),
+			p.part_number, p.title, pol.part_number_snapshot
 		ORDER BY total_spend DESC
 	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PartsTable(), where), args...)
 	if err != nil {
@@ -568,7 +573,7 @@ func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]
 func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "spend", "Range": rng, "DateRangeAction": "/reports/spend"}
-	if h.db == nil {
+	if h.database() == nil {
 		h.render(w, r, "reports/spend.html", data)
 		return
 	}
@@ -656,7 +661,7 @@ func (h *Handler) queryOnTimeDelivery(ctx context.Context, rng reportDateRange) 
 func (h *Handler) ReportsOnTime(w http.ResponseWriter, r *http.Request) {
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "on-time", "Range": rng, "DateRangeAction": "/reports/on-time"}
-	if h.db == nil {
+	if h.database() == nil {
 		h.render(w, r, "reports/on_time.html", data)
 		return
 	}
@@ -761,7 +766,7 @@ func (h *Handler) queryPOCycleTime(ctx context.Context, rng reportDateRange) ([]
 func (h *Handler) ReportsCycleTime(w http.ResponseWriter, r *http.Request) {
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "cycle-time", "Range": rng, "DateRangeAction": "/reports/cycle-time"}
-	if h.db == nil {
+	if h.database() == nil {
 		h.render(w, r, "reports/cycle_time.html", data)
 		return
 	}
@@ -809,7 +814,7 @@ func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]da
 		FROM %s p
 		WHERE p.is_active = %s AND %s
 		ORDER BY p.part_number ASC
-	`, h.cfg.PartsTable(), h.dialect.BoolLiteral(true), where))
+	`, h.cfg.PartsTable(), h.dia().BoolLiteral(true), where))
 	if err != nil {
 		return nil, err
 	}
@@ -853,7 +858,7 @@ func (h *Handler) queryPartsStaleRollup(ctx context.Context) ([]dataQualityPartR
 // /reports/data-quality. Point-in-time snapshot; no date range.
 func (h *Handler) ReportsDataQuality(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "data-quality"}
-	if h.db == nil {
+	if h.database() == nil {
 		h.render(w, r, "reports/data_quality.html", data)
 		return
 	}
@@ -938,7 +943,7 @@ func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, erro
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
 		ORDER BY pn.part_number ASC`,
-		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(true)))
+		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -960,7 +965,7 @@ func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, erro
 // from, since the yield page itself is scoped to one form (issue #244).
 func (h *Handler) ReportsYieldPicker(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "yield"}
-	if h.db == nil {
+	if h.database() == nil {
 		h.render(w, r, "reports/yield_picker.html", data)
 		return
 	}
@@ -981,7 +986,7 @@ func (h *Handler) ReportsYieldPicker(w http.ResponseWriter, r *http.Request) {
 // scoped to one form (issue #245).
 func (h *Handler) ReportsFailureModesPicker(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "failure-modes"}
-	if h.db == nil {
+	if h.database() == nil {
 		h.render(w, r, "reports/failure_modes_picker.html", data)
 		return
 	}

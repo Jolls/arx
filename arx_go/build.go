@@ -308,7 +308,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Record the build event first so its id can label the ledger rows and output lot.
 	var buildID int
-	insertBuild := h.dialect.InsertReturningID(h.cfg.BuildTable(),
+	insertBuild := h.dia().InsertReturningID(h.cfg.BuildTable(),
 		`part_id, output_lot_id, qty, build_date, username, note, created_at`,
 		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`,
 		false)

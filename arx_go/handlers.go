@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -25,9 +27,16 @@ import (
 	"arx/arxlib/urlutil"
 )
 
+// dbConn is an immutable snapshot of the active connection + its dialect,
+// swapped atomically so concurrent requests never see a torn pointer or use
+// a handle mid-close (#757).
+type dbConn struct {
+	db      *sql.DB
+	dialect arxdb.Dialect
+}
+
 type Handler struct {
-	db             *sql.DB
-	dialect        arxdb.Dialect
+	conn           atomic.Pointer[dbConn] // holds the live *dbConn; nil => not connected
 	cfg            *arxbase.Config
 	store          *sessions.CookieStore
 	tmplFS         ioFS.FS
@@ -41,6 +50,27 @@ type Handler struct {
 
 	userMu    sync.RWMutex
 	userCache map[int]*userCacheEntry
+
+	loginMu       sync.Mutex
+	loginAttempts map[string]*loginAttempt
+}
+
+// database returns the live *sql.DB, or nil when not connected.
+func (h *Handler) database() *sql.DB {
+	if c := h.conn.Load(); c != nil {
+		return c.db
+	}
+	return nil
+}
+
+// dia returns the live dialect, or a default SQL Server dialect when not
+// connected (mirrors New()'s nil-dialect fallback so template/query building
+// never nil-panics).
+func (h *Handler) dia() arxdb.Dialect {
+	if c := h.conn.Load(); c != nil && c.dialect != nil {
+		return c.dialect
+	}
+	return arxdb.NewSQLServerDialect()
 }
 
 func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
@@ -57,11 +87,14 @@ func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS,
 	if dialect == nil {
 		dialect = arxdb.NewSQLServerDialect()
 	}
-	return &Handler{
-		db: db, dialect: dialect, cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
-		routeStats: make(map[int]*routeAccumulator),
-		userCache:  make(map[int]*userCacheEntry),
+	h := &Handler{
+		cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
+		routeStats:    make(map[int]*routeAccumulator),
+		userCache:     make(map[int]*userCacheEntry),
+		loginAttempts: make(map[string]*loginAttempt),
 	}
+	h.conn.Store(&dbConn{db: db, dialect: dialect})
+	return h
 }
 
 func (h *Handler) logSQL(query string, args ...any) {
@@ -122,25 +155,29 @@ func timeQueryErr[T any](ctx context.Context, query string, call func() (T, erro
 // across recent-item queries (recentPartPOs, recentPartTxns, recentSupplierPOs,
 // topSupplierParts).
 func (h *Handler) topLimit(ph string) (top, limit string) {
-	return h.dialect.TopClause(ph), h.dialect.LimitClause(ph)
+	d := h.dia()
+	return d.TopClause(ph), d.LimitClause(ph)
 }
 
 func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	query = h.dialect.Rewrite(query)
+	c := h.conn.Load()
+	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
-	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return h.db.QueryContext(ctx, query, args...) })
+	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return c.db.QueryContext(ctx, query, args...) })
 }
 
 func (h *Handler) queryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	query = h.dialect.Rewrite(query)
+	c := h.conn.Load()
+	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
-	return timeQuery(ctx, query, func() *sql.Row { return h.db.QueryRowContext(ctx, query, args...) })
+	return timeQuery(ctx, query, func() *sql.Row { return c.db.QueryRowContext(ctx, query, args...) })
 }
 
 func (h *Handler) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	query = h.dialect.Rewrite(query)
+	c := h.conn.Load()
+	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
-	return timeQueryErr(ctx, query, func() (sql.Result, error) { return h.db.ExecContext(ctx, query, args...) })
+	return timeQueryErr(ctx, query, func() (sql.Result, error) { return c.db.ExecContext(ctx, query, args...) })
 }
 
 type txLogger struct {
@@ -171,17 +208,18 @@ func (t *txLogger) Commit() error   { t.logFn("COMMIT"); return t.Tx.Commit() }
 func (t *txLogger) Rollback() error { t.logFn("ROLLBACK"); return t.Tx.Rollback() }
 
 func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
-	tx, err := h.db.BeginTx(ctx, nil)
+	c := h.conn.Load()
+	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &txLogger{Tx: tx, logFn: h.logSQL, rewrite: h.dialect.Rewrite}, nil
+	return &txLogger{Tx: tx, logFn: h.logSQL, rewrite: c.dialect.Rewrite}, nil
 }
 
 // CheckSchemaVersion queries app_config for schema_version and stores a mismatch
 // message if it doesn't match ExpectedSchemaVersion. Safe to call when db is nil.
 func (h *Handler) CheckSchemaVersion(ctx context.Context) {
-	if h.db == nil {
+	if h.database() == nil {
 		h.schemaMismatch = ""
 		return
 	}
@@ -239,7 +277,7 @@ func (h *Handler) accentThemeClass(r *http.Request) string {
 
 // appConfigGet reads a single key from app_config.
 func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) {
-	if h.db == nil {
+	if h.database() == nil {
 		return "", nil
 	}
 	var val string
@@ -260,17 +298,17 @@ func (h *Handler) appConfigGetOr(ctx context.Context, key, def string) string {
 
 // appConfigSet upserts a key/value pair in app_config.
 func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
-	_, err := h.execContext(ctx, h.dialect.UpsertAppConfig(h.cfg.AppConfigTable()), key, value)
+	_, err := h.execContext(ctx, h.dia().UpsertAppConfig(h.cfg.AppConfigTable()), key, value)
 	return err
 }
 
 // DB returns the underlying *sql.DB. Used in integration tests.
-func (h *Handler) DB() *sql.DB { return h.db }
+func (h *Handler) DB() *sql.DB { return h.database() }
 
 // CloseDB closes the underlying database connection if one is open.
 func (h *Handler) CloseDB() {
-	if h.db != nil {
-		h.db.Close()
+	if db := h.database(); db != nil {
+		db.Close()
 	}
 }
 
@@ -278,7 +316,7 @@ func (h *Handler) CloseDB() {
 // no user is logged in, and otherwise stashes the user on the request context.
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.db == nil {
+		if h.database() == nil {
 			http.Redirect(w, r, "/settings", http.StatusSeeOther)
 			return
 		}
@@ -286,7 +324,7 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		r2, u := h.withUser(r)
+		r2, u := h.withUser(w, r)
 		if u == nil {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
@@ -296,7 +334,7 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 }
 
 // RequireAuthOnceConnected gates a route that must stay reachable during
-// first-run setup (h.db == nil) but requires a logged-in user once a database
+// first-run setup (no DB connected) but requires a logged-in user once a database
 // is connected. Used for POST /settings so an unauthenticated caller can't
 // rewrite the DB connection and exfiltrate the stored password after setup
 // (#748). Unlike RequireAuth it does not redirect on schemaMismatch: an admin
@@ -304,11 +342,11 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 // stays reachable under a schema mismatch.
 func (h *Handler) RequireAuthOnceConnected(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.db == nil {
+		if h.database() == nil {
 			next.ServeHTTP(w, r)
 			return
 		}
-		r2, u := h.withUser(r)
+		r2, u := h.withUser(w, r)
 		if u == nil {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
@@ -488,7 +526,11 @@ func (h *Handler) csrfToken(w http.ResponseWriter, r *http.Request) string {
 func (h *Handler) verifyCsrf(r *http.Request) bool {
 	sess := h.session(r)
 	token, _ := sess.Values["csrf_token"].(string)
-	return token != "" && r.FormValue("csrf_token") == token
+	got := r.FormValue("csrf_token")
+	if token == "" || got == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1
 }
 
 // RequireCsrfOnPost is middleware that rejects any POST whose csrf_token form
