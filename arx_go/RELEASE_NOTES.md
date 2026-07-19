@@ -1,3 +1,36 @@
+Arx v0.6.24 — July 2026
+========================
+
+SECURITY
+
+  Login is now required for every settings page and save action once
+  Arx is connected to a database, including Configuration, the folder
+  and file browse dialogs, and the main Settings page itself. Passwords
+  are compared in constant time, sessions rotate on login/logout and
+  time out after 7 days idle, and repeated failed logins are throttled.
+
+  Added an admin flag for user accounts. Managing other users,
+  resetting a password, or changing approval permissions now requires
+  an admin account.
+
+BUG FIXES
+
+  Settings > Backup now includes several inventory and traceability
+  tables that were previously left out.
+
+  Fixed Roll Up Cost and the BOM tab disagreeing on how to handle a
+  part with a $0.00 preferred price, which could understate an
+  assembly's rolled-up cost.
+
+  Fixed editing or deleting a line on one purchase order or BOM being
+  able to affect a different PO or BOM's rows.
+
+  Fixed the record history view not flagging a step's specification or
+  acceptance criteria as changed when it drifted between test events.
+
+  Fixed several reports and saved queries (Failure Modes, Spend by
+  Part, and others) returning stale, incomplete, or mismatched results.
+
 Arx v0.6.4 — July 2026
 ========================
 
