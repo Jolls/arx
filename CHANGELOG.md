@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.21] - 2026-07-18
+### Fixed
+- Postgres-readiness batch (epic [#719](https://github.com/Jolls/arx-legacy/issues/719)): ported the lot/build/inventory schema to `SQL/postgres/*` (missing `inventory_transaction.build_id` + FK, `lot.lot_description`, and a `README.md` run-order bug that listed `form_record` before `unit` despite depending on it) and routed the remaining SQL-Server-only outlier SQL through the `arxlib/db` dialect seam: `POAddSuggestions`'s `IF NOT EXISTS...INSERT` rewritten as a portable `INSERT...SELECT...WHERE NOT EXISTS`, `RFQCompareSave`'s `UPDATE...FROM...OUTER APPLY` rewritten as a portable correlated subquery, inline `BIT` literals in `RFQConvert`/`CreateRecord`/`DuplicateRecord`/`CreateForm`/`CreateDuplicate` replaced with `dialect.BoolLiteral`, and `copyFormSteps` switched from a raw `*sql.Tx` (bypassing `dialect.Rewrite`/DEBUG logging, and reading its source outside the transaction it was handed) to the `*txLogger` wrapper via `h.beginTx` (H4, M1-M5, [#753](https://github.com/Jolls/arx-legacy/issues/753), [#755](https://github.com/Jolls/arx-legacy/issues/755))
 ## [0.6.20] - 2026-07-18
 ### Security
 - Scoped PO-line and BOM row edits/deletes to their parent record (H2+H3, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). `POUpdate`'s delete/update loops and `PartBOMSave`'s delete/update loops took the row id straight from the submitted form with no `AND po_id=`/`AND parent_part_id=` guard, so a user editing PO A or part X's BOM could overwrite or delete a row belonging to PO B or part Y by crafting the form/id, silently drifting the other record's `total_cost`/BOM. Both loops now scope by the already-resolved parent id, matching the existing `MfgPartDelete`/`PriceDeactivate` guard pattern ([#752](https://github.com/Jolls/arx-legacy/issues/752))

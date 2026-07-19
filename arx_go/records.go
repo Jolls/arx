@@ -1480,6 +1480,10 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	// A user-typed override (serialNumber != suggestedSN) is inserted as-is.
 	if isAutoSerial(serialNumber, suggestedSN) {
 		var nextSN int
+		// WITH (UPDLOCK, HOLDLOCK) is a SQL Server locking hint with no textual
+		// Postgres equivalent; the #369 concurrency guarantee has no Postgres
+		// story yet (needs a design decision: advisory lock / SERIALIZABLE /
+		// dedicated sequence) — tracked as a follow-up for the #625 cutover.
 		err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 			SELECT COALESCE(MAX(%s), 0) + 1
 			FROM %s WITH (UPDLOCK, HOLDLOCK) WHERE form_id = @p1`,
@@ -1495,7 +1499,8 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	insertRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
 		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
 		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision`,
-		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),1,0,@p10`,
+		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),%s,%s,@p10`,
+			h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)),
 		false)
 	err = tx.QueryRowContext(r.Context(), insertRecord,
 		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
@@ -1996,7 +2001,8 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	insertDupRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
 		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
 		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision`,
-		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),1,0,0,@p9`,
+		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),%s,%s,%s,@p9`,
+			h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(false)),
 		false)
 	err = tx.QueryRowContext(r.Context(), insertDupRecord,
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
@@ -2570,15 +2576,15 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 
 // copyFormSteps copies all test steps from sourceID into newFormID (within tx)
 // and sets test_order on the new form. Returns an error on any failure.
-func (h *Handler) copyFormSteps(ctx context.Context, tx *sql.Tx, sourceID, newFormID int) error {
+func (h *Handler) copyFormSteps(ctx context.Context, tx *txLogger, sourceID, newFormID int) error {
 	var sourceOrder string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
+	if err := tx.QueryRowContext(ctx, fmt.Sprintf(
 		"SELECT COALESCE(test_order,'') FROM %s WHERE id=@p1", h.cfg.FormsTable()), sourceID).
 		Scan(&sourceOrder); err != nil {
 		return err
 	}
 
-	stepRows, err := h.queryContext(ctx, fmt.Sprintf(`
+	stepRows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 		SELECT id, COALESCE(type,0), parameter, specification, spec_nom, spec_min, spec_max,
 		       spec_units, pf_type, default_result, hide_formula,
 		       category, sheet_name, instrument_types, format, comment,
@@ -2736,7 +2742,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 			h.cfg.FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
 	}
 
-	tx, err := h.db.BeginTx(r.Context(), nil)
+	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		http.Error(w, "tx error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2745,7 +2751,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	var newID int
 	insertForm := h.dialect.InsertReturningID(h.cfg.FormsTable(),
 		"part_number_id, is_active, is_locked, test_order, record_types, instrument_types",
-		"@p1, 1, 0, '', @p2, @p3",
+		fmt.Sprintf("@p1, %s, %s, '', @p2, @p3", h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)),
 		false)
 	if err := tx.QueryRowContext(r.Context(), insertForm,
 		pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
@@ -2847,7 +2853,7 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 		"SELECT record_types, instrument_types FROM %s WHERE id=@p1",
 		h.cfg.FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
 
-	tx, err := h.db.BeginTx(r.Context(), nil)
+	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		http.Error(w, "tx error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2856,7 +2862,7 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	var newFormID int
 	insertDupForm := h.dialect.InsertReturningID(h.cfg.FormsTable(),
 		"part_number_id, is_active, is_locked, test_order, record_types, instrument_types",
-		"@p1, 1, 0, '', @p2, @p3",
+		fmt.Sprintf("@p1, %s, %s, '', @p2, @p3", h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)),
 		false)
 	if err := tx.QueryRowContext(r.Context(), insertDupForm,
 		pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {

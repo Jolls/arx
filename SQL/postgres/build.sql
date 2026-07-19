@@ -23,3 +23,7 @@ CREATE TABLE build (
 
 ALTER TABLE build ADD CONSTRAINT FK_build_part FOREIGN KEY (part_id) REFERENCES part (id);
 CREATE INDEX IX_build_part ON build (part_id, build_date);
+
+-- FK_inv_txn_build (inventory_transaction.build_id → build.id, #677) is added here,
+-- after build is created, so inventory_transaction can be created first in run order.
+ALTER TABLE inventory_transaction ADD CONSTRAINT FK_inv_txn_build FOREIGN KEY (build_id) REFERENCES build (id);
