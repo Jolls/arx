@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.22] - 2026-07-18
+### Fixed
+- Settings → Backup now includes `inventory_transaction`, `build`, `lot`, `genealogy`, `purchase_order_history`, and `record_event_results` (H5, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)), which were previously silently omitted from a backup users trust to be complete. Also fixed `LinksTable()` returning the renamed-away `"LNK"` (dropped from the backup's table list entirely since the fixed string now duplicates the existing `SupplierPartTable()` entry) ([#754](https://github.com/Jolls/arx-legacy/issues/754))
 ## [0.6.21] - 2026-07-18
 ### Fixed
 - Postgres-readiness batch (epic [#719](https://github.com/Jolls/arx-legacy/issues/719)): ported the lot/build/inventory schema to `SQL/postgres/*` (missing `inventory_transaction.build_id` + FK, `lot.lot_description`, and a `README.md` run-order bug that listed `form_record` before `unit` despite depending on it) and routed the remaining SQL-Server-only outlier SQL through the `arxlib/db` dialect seam: `POAddSuggestions`'s `IF NOT EXISTS...INSERT` rewritten as a portable `INSERT...SELECT...WHERE NOT EXISTS`, `RFQCompareSave`'s `UPDATE...FROM...OUTER APPLY` rewritten as a portable correlated subquery, inline `BIT` literals in `RFQConvert`/`CreateRecord`/`DuplicateRecord`/`CreateForm`/`CreateDuplicate` replaced with `dialect.BoolLiteral`, and `copyFormSteps` switched from a raw `*sql.Tx` (bypassing `dialect.Rewrite`/DEBUG logging, and reading its source outside the transaction it was handed) to the `*txLogger` wrapper via `h.beginTx` (H4, M1-M5, [#753](https://github.com/Jolls/arx-legacy/issues/753), [#755](https://github.com/Jolls/arx-legacy/issues/755))
