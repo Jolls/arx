@@ -139,6 +139,13 @@ func (postgresDialect) Name() string { return "postgres" }
 // placeholders and GETDATE() -> CURRENT_TIMESTAMP. Both are also applied to the
 // SQL produced by the Tier-2 helpers below (every query passes through here in
 // the Handler wrappers), so those helpers may keep emitting @pN/GETDATE().
+//
+// Known limitation: this is a blind textual pass — it also matches inside
+// quoted string literals, and named_queries stores user-authored SQL that
+// flows through Rewrite unguarded. A literal '@p1' or 'GETDATE()' in data or
+// in named_queries text would be mangled. No current caller triggers this;
+// left as a documented gap rather than fixed here (would need a tokenizer or
+// a named_queries-specific exemption).
 func (postgresDialect) Rewrite(query string) string {
 	query = strings.ReplaceAll(query, "GETDATE()", "CURRENT_TIMESTAMP")
 	return pgPlaceholder.ReplaceAllString(query, "$$${1}")
@@ -150,6 +157,12 @@ func (postgresDialect) Rewrite(query string) string {
 // the serial-number ordering use. (A value exceeding INTEGER range would still
 // raise, as it also does under a 32-bit SQL Server INT; serial numbers stay well
 // inside that range.)
+//
+// Constraint: expr is evaluated twice (once in the regex check, once in the
+// CAST), and the regex diverges from T-SQL TRY_CAST at whitespace/sign edges.
+// Callers must pass a side-effect-free, simple expression (e.g. a bare
+// column) — not an arbitrary/complex expression. The current caller
+// (serial_number) satisfies this.
 func (postgresDialect) TryCastInt(expr string) string {
 	return fmt.Sprintf("CASE WHEN %s ~ '^[0-9]+$' THEN CAST(%s AS INTEGER) END", expr, expr)
 }

@@ -683,8 +683,8 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	// Delete flagged line items
 	for _, idStr := range r.Form["delete_pol[]"] {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE id=@p1`, h.cfg.POLineTable(),
-		), idStr); err != nil {
+			`DELETE FROM %s WHERE id=@p1 AND po_id=@p2`, h.cfg.POLineTable(),
+		), idStr, poID); err != nil {
 			h.renderError(w, r, "Error deleting PO line: "+err.Error())
 			return
 		}
@@ -705,8 +705,8 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET line_number=@p1, part_number_snapshot=@p2, revision_snapshot=@p3, description=@p4,
 			              qty=@p5, unit_cost=@p6, vendor_part_number=@p7, part_id=@p8
-			WHERE id=@p9
-		`, h.cfg.POLineTable()), item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid, polID); err != nil {
+			WHERE id=@p9 AND po_id=@p10
+		`, h.cfg.POLineTable()), item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid, polID, poID); err != nil {
 			h.renderError(w, r, "Error updating PO line: "+err.Error())
 			return
 		}
@@ -821,10 +821,11 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
-			IF NOT EXISTS (
+			INSERT INTO %s (part_id, supplier_id, supplier_pn)
+			SELECT @p1, @p2, @p3
+			WHERE NOT EXISTS (
 			  SELECT 1 FROM %s WHERE part_id=@p1 AND supplier_id=@p2 AND supplier_pn=@p3
 			)
-			INSERT INTO %s (part_id, supplier_id, supplier_pn) VALUES (@p1,@p2,@p3)
 		`, h.cfg.SupplierPartTable(), h.cfg.SupplierPartTable()),
 			partID, supplierID, supplierPN,
 		); err != nil {
@@ -2312,13 +2313,12 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 
 	// Recompute each quote's total (line sum + its own tax/shipping/misc).
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		UPDATE po
-		SET total_cost = COALESCE(ls.s, 0) + COALESCE(po.tax1, 0) + COALESCE(po.shipping_cost, 0) + COALESCE(po.misc_cost, 0),
+		UPDATE %s
+		SET total_cost = COALESCE((SELECT SUM(pol.qty * pol.unit_cost) FROM %s pol WHERE pol.po_id = %s.ID), 0)
+		    + COALESCE(tax1, 0) + COALESCE(shipping_cost, 0) + COALESCE(misc_cost, 0),
 		    date_modified = GETDATE()
-		FROM %s po
-		OUTER APPLY (SELECT SUM(pol.qty * pol.unit_cost) AS s FROM %s pol WHERE pol.po_id = po.ID) ls
-		WHERE po.rfq_group_id = @p1
-	`, h.cfg.POTable(), h.cfg.POLineTable()), group); err != nil {
+		WHERE rfq_group_id = @p1
+	`, h.cfg.POTable(), h.cfg.POLineTable(), h.cfg.POTable()), group); err != nil {
 		h.renderError(w, r, "Error recomputing totals: "+err.Error())
 		return
 	}
@@ -2405,7 +2405,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
 		  date_ordered, date_requested, date_closed, date_printed, date_modified,
 		  supplier_contact_id, receiver_contact_id`,
-		fmt.Sprintf(`SELECT @p1, 'draft', 1, 'not_submitted', NULL,
+		fmt.Sprintf(`SELECT @p1, 'draft', %s, 'not_submitted', NULL,
 		  orderer, account_id,
 		  supplier_id, supplier_name, supplier_contact, supplier_email,
 		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
@@ -2416,7 +2416,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
 		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, @p2,
 		  supplier_contact_id, receiver_contact_id
-		FROM %s WHERE id=@p3`, h.cfg.POTable()),
+		FROM %s WHERE id=@p3`, h.dialect.BoolLiteral(true), h.cfg.POTable()),
 		true)
 	if err := tx.QueryRowContext(r.Context(), insertPO, base, now, poID).Scan(&newID); err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
