@@ -209,7 +209,7 @@ func (c *Config) GenealogyTable() string          { return "genealogy" }
 func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
 func (c *Config) UsersTable() string              { return "users" }
-func (c *Config) LinksTable() string              { return "LNK" }
+func (c *Config) LinksTable() string              { return "supplier_part" }
 
 // Test Records tables
 func (c *Config) FormsTable() string              { return "form" }

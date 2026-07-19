@@ -550,12 +550,14 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 	tables := []string{
 		h.cfg.PartsTable(), h.cfg.BOMTable(), h.cfg.CompanyTable(),
 		h.cfg.ContactTable(), h.cfg.POTable(), h.cfg.POLineTable(),
-		h.cfg.AttachmentsTable(), h.cfg.LinksTable(), h.cfg.PriceTable(),
+		h.cfg.AttachmentsTable(), h.cfg.PriceTable(),
 		h.cfg.MfgPartTable(), h.cfg.SupplierPartTable(), h.cfg.CompanyAttachmentsTable(),
 		h.cfg.UomTable(), h.cfg.AppConfigTable(),
 		h.cfg.FormsTable(), h.cfg.RecordsTable(), h.cfg.ResultsTable(),
 		h.cfg.StepsTable(), h.cfg.FormEventsTable(), h.cfg.RecordEventsTable(),
 		h.cfg.NamedQueriesTable(), h.cfg.FormRowHistoryTable(),
+		h.cfg.InventoryTxnTable(), h.cfg.BuildTable(), h.cfg.LotTable(),
+		h.cfg.GenealogyTable(), h.cfg.POHistoryTable(), h.cfg.RecordEventResultsTable(),
 	}
 
 	for _, tbl := range tables {

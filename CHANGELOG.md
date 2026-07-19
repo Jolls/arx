@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.22] - 2026-07-18
+### Fixed
+- Settings → Backup now includes `inventory_transaction`, `build`, `lot`, `genealogy`, `purchase_order_history`, and `record_event_results` (H5, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)), which were previously silently omitted from a backup users trust to be complete. Also fixed `LinksTable()` returning the renamed-away `"LNK"` (dropped from the backup's table list entirely since the fixed string now duplicates the existing `SupplierPartTable()` entry) ([#754](https://github.com/Jolls/arx-legacy/issues/754))
+
 ## [0.6.19] - 2026-07-18
 ### Fixed
 - Unified the leaf-cost rule between Roll Up Cost and the BOM tab/CSV export, and stopped storing blank preferred-price form fields as `0` instead of `NULL` (H1, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). Roll Up Cost used a looser rule (`preferredPrice.Valid` alone) than `bomLeafCost`'s `Valid && > 0` check, so a leaf whose preferred price was stored as `0.00` rolled up as `$0` while the BOM tab/CSV fell back to `current_cost` for the same leaf, silently understating assembly cost. `rollupCost` now calls the shared `bomLeafCost` helper, and `PriceCreate`/`PriceUpdate` now use `nullableFloat` so a blank price/pack-size field stores `NULL` rather than `0` ([#760](https://github.com/Jolls/arx-legacy/issues/760))
