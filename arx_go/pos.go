@@ -2512,7 +2512,8 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 // ── PO import part file (issue #156) ────────────────────────────────────────
 
 // localFilePath resolves a LOCAL: FILFileName value to an absolute path.
-// Returns ("", false) when root is empty, the value isn't LOCAL:, or it is a directory reference.
+// Returns ("", false) when root is empty, the value isn't LOCAL:, it is a directory
+// reference, or it would escape root (path traversal attempt).
 func localFilePath(root, filename string) (string, bool) {
 	if root == "" || !urlutil.IsLocalFile(filename) {
 		return "", false
@@ -2522,7 +2523,7 @@ func localFilePath(root, filename string) (string, bool) {
 	if rel == "" || strings.HasSuffix(rel, "/") {
 		return "", false
 	}
-	return filepath.Join(root, filepath.FromSlash(rel)), true
+	return safePath(root, rel)
 }
 
 func copyFile(src, dst string) error {

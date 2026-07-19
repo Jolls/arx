@@ -63,11 +63,11 @@ BEGIN TRY
     DELETE FROM dbo.company;
     DELETE FROM dbo.company_attachment;
     DELETE FROM dbo.contact;
-    DELETE FROM dbo.part;
     DELETE FROM dbo.form_events;
     DELETE FROM dbo.form_row_history;
     DELETE FROM dbo.form_row;
-    DELETE FROM dbo.form;
+    DELETE FROM dbo.form;                               -- form.part_number_id FKs part, so before part
+    DELETE FROM dbo.part;
     DELETE FROM dbo.named_queries;
     DELETE FROM dbo.app_config;
     DELETE FROM dbo.uom;

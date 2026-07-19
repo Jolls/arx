@@ -225,10 +225,21 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
+	// form.part_number_id FKs part.id (#744), so the throwaway form needs a real part.
+	var partID int
+	partNumber := "ITEST-YS-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
@@ -247,6 +258,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
 	}()
 
 	// Three records: one all-pass, one with a failing result, one with no
@@ -325,11 +337,21 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	// Seed one throwaway form (part_number_id is NOT NULL but unconstrained).
+	// Seed one throwaway form. form.part_number_id FKs part.id (#744), so it needs a real part.
+	var partID int
+	partNumber := "ITEST-RF-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
@@ -338,6 +360,8 @@ func TestIntegration_RecordFilters(t *testing.T) {
 			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
 			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
 	}()
 
 	// Seed four records: WIP/Complete/Approved + a type/date spread.
@@ -409,10 +433,21 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
+	// form.part_number_id FKs part.id (#744), so the throwaway form needs a real part.
+	var partID int
+	partNumber := "ITEST-ASPF-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
@@ -426,6 +461,8 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.StepsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
 			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
 	}()
 
 	var testID int
@@ -1281,10 +1318,21 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 	ctx := context.Background()
 
 	// Seed a throwaway form + one step to mutate.
+	// form.part_number_id FKs part.id (#744), so the throwaway form needs a real part.
+	var partID int
+	partNumber := "ITEST-TDHA-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (0, '', 0, 1)`, h.cfg.FormsTable()),
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
@@ -1299,6 +1347,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
 	}()
 
 	// Set the acting user, then UPDATE the step — both inside one tx, so the
