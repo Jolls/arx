@@ -124,7 +124,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN %s res ON res.form_record_id = trec.id
 		WHERE form_id = @p1 AND is_active = %s%s
 		GROUP BY trec.id, record_date`,
-		h.dialect.BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.ResultsTable(), h.dialect.BoolLiteral(true), dateClause), args...)
+		h.dia().BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.ResultsTable(), h.dia().BoolLiteral(true), dateClause), args...)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return

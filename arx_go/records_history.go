@@ -150,7 +150,7 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 
 	res, err := tx.ExecContext(ctx, fmt.Sprintf(
 		"UPDATE %s SET is_locked=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s"+guard,
-		h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), args...)
+		h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), args...)
 	if err != nil {
 		return false, err
 	}
@@ -171,7 +171,7 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 // captures its result snapshot, within the caller's tx. Shared by single + bulk lock.
 func (h *Handler) logCompletionSnapshot(ctx context.Context, tx *txLogger, recordID int, username string) error {
 	var eventID int
-	insertEvent := h.dialect.InsertReturningID(h.cfg.RecordEventsTable(),
+	insertEvent := h.dia().InsertReturningID(h.cfg.RecordEventsTable(),
 		"form_record_id, event_type, username, event_date",
 		"@p1, 'completed', @p2, GETDATE()",
 		false)

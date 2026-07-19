@@ -61,7 +61,9 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 	args := append([]any{formID}, dateArgs...)
 
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT MAX(res.parameter) AS parameter,
+		SELECT (SELECT %sr2.parameter FROM %s r2
+			WHERE r2.form_row_id = res.form_row_id
+			ORDER BY r2.id DESC%s) AS parameter,
 			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count,
 			COUNT(res.pass_fail) AS total_tested
 		FROM %s res
@@ -69,7 +71,8 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		WHERE trec.form_id = @p1 AND trec.is_active = %s AND res.pass_fail IS NOT NULL%s
 		GROUP BY res.form_row_id
 		ORDER BY failure_count DESC, parameter ASC`,
-		h.dialect.BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), dateClause), args...)
+		h.dia().TopClause("1"), h.cfg.ResultsTable(), h.dia().LimitClause("1"),
+		h.dia().BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dia().BoolLiteral(true), dateClause), args...)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return

@@ -171,7 +171,7 @@ func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContac
 		SELECT id, display_name FROM %s
 		WHERE company_id = @p1 AND id <> @p2 AND is_active = %s
 		ORDER BY display_name
-	`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true)), supplierID, excludeContactID)
+	`, h.cfg.ContactTable(), h.dia().BoolLiteral(true)), supplierID, excludeContactID)
 	if err != nil {
 		return nil
 	}
@@ -208,7 +208,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var newID int
-	insertContact := h.dialect.InsertReturningID(h.cfg.ContactTable(),
+	insertContact := h.dia().InsertReturningID(h.cfg.ContactTable(),
 		`display_name, company_id, email, phone_1, phone_2, fax,
 		 address, city, state, zipcode, country,
 		 website, is_active, notes, updated_at`,

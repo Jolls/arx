@@ -110,7 +110,7 @@ func (h *Handler) PartsNextNumber(w http.ResponseWriter, r *http.Request) {
 
 // SettingsPartNumberingSave persists the base-number config to app_config.
 func (h *Handler) SettingsPartNumberingSave(w http.ResponseWriter, r *http.Request) {
-	if h.db == nil {
+	if h.database() == nil {
 		http.Redirect(w, r, "/settings", http.StatusFound)
 		return
 	}

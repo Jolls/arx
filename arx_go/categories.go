@@ -40,7 +40,7 @@ func (h *Handler) applyCategoryTabs(ctx context.Context, p *models.Part) {
 // Rows are submitted indexed (code_i, label_i, bom_i, ...) with cat_count rows;
 // rows with an empty code are dropped.
 func (h *Handler) SettingsCategoriesSave(w http.ResponseWriter, r *http.Request) {
-	if h.db == nil {
+	if h.database() == nil {
 		http.Redirect(w, r, "/settings", http.StatusFound)
 		return
 	}

@@ -48,7 +48,7 @@ func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var accentColor, defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, username, display_name, can_approve_po, can_approve_records, is_admin, default_po_contact_id, default_po_receiver_id, accent_color, default_route FROM %s WHERE id = @p1 AND is_active = %s`,
-		h.cfg.UsersTable(), h.dialect.BoolLiteral(true)), id,
+		h.cfg.UsersTable(), h.dia().BoolLiteral(true)), id,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &u.IsAdmin, &defContact, &defReceiver, &accentColor, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -104,7 +104,7 @@ func (h *Handler) userByUsername(ctx context.Context, username string) (*User, s
 	var defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, username, display_name, password_hash, default_route FROM %s WHERE username = @p1 AND is_active = %s`,
-		h.cfg.UsersTable(), h.dialect.BoolLiteral(true)), username,
+		h.cfg.UsersTable(), h.dia().BoolLiteral(true)), username,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &hash, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, "", nil
@@ -116,7 +116,7 @@ func (h *Handler) userByUsername(ctx context.Context, username string) (*User, s
 func (h *Handler) userCount(ctx context.Context) (int, error) {
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE is_active = %s`, h.cfg.UsersTable(), h.dialect.BoolLiteral(true)),
+		`SELECT COUNT(*) FROM %s WHERE is_active = %s`, h.cfg.UsersTable(), h.dia().BoolLiteral(true)),
 	).Scan(&n)
 	return n, err
 }
@@ -129,29 +129,107 @@ func (h *Handler) currentUser(r *http.Request) *User {
 	return u
 }
 
+// sessionIdleTimeout logs a session out after this long with no authenticated
+// request, independent of the cookie's 30-day absolute lifetime (#757). This
+// is a shop tool where a session may be left open for long stretches, so the
+// window is generous.
+const sessionIdleTimeout = 7 * 24 * time.Hour
+
 // withUser fetches the session user from the DB and stashes it on r's context.
-func (h *Handler) withUser(r *http.Request) (*http.Request, *User) {
+// It also enforces sessionIdleTimeout: a session whose last authenticated
+// request predates the timeout is treated as logged out.
+func (h *Handler) withUser(w http.ResponseWriter, r *http.Request) (*http.Request, *User) {
 	sess := h.session(r)
 	id, ok := sess.Values["user_id"].(int)
 	if !ok || id <= 0 {
+		return r, nil
+	}
+	now := time.Now().Unix()
+	if last, ok := sess.Values["last_activity"].(int64); ok && now-last > int64(sessionIdleTimeout/time.Second) {
+		delete(sess.Values, "user_id")
+		sess.Save(r, w)
 		return r, nil
 	}
 	u, err := h.cachedUserByID(r.Context(), id)
 	if err != nil || u == nil {
 		return r, nil
 	}
+	// Only re-stamp last_activity (and re-save the cookie) once it's gone stale
+	// by more than a coarse granularity — every authenticated request re-signing
+	// and re-writing the session cookie is unnecessary work when the idle
+	// timeout only needs minute-level precision, not per-request precision.
+	const activityStampGranularity = 5 * time.Minute
+	if last, ok := sess.Values["last_activity"].(int64); !ok || now-last > int64(activityStampGranularity/time.Second) {
+		sess.Values["last_activity"] = now
+		sess.Save(r, w)
+	}
 	return r.WithContext(context.WithValue(r.Context(), ctxUserKey, u)), u
+}
+
+// --- Login throttling (#757) ---
+// Keyed by lowercased username, not RemoteAddr: the app binds 127.0.0.1 only
+// (main.go), so every request's RemoteAddr is loopback and per-IP keying would
+// be meaningless. A short fixed cooldown (not an escalating hard lock) is the
+// intended tradeoff for this localhost-only, single-shop threat model.
+type loginAttempt struct {
+	fails   int
+	lockCap time.Time // requests before this are rejected
+}
+
+const loginMaxFails = 10
+const loginLockout = 1 * time.Minute
+
+// maxTrackedLogins caps loginAttempts so failed logins against arbitrary
+// (attacker-supplied) usernames can't grow the map without bound. The map only
+// holds transient throttle counters, so dropping them under a flood costs at
+// most a re-accumulation window.
+const maxTrackedLogins = 1024
+
+func (h *Handler) loginBlocked(user string) bool {
+	h.loginMu.Lock()
+	defer h.loginMu.Unlock()
+	a, ok := h.loginAttempts[user]
+	return ok && a.fails >= loginMaxFails && time.Now().Before(a.lockCap)
+}
+
+func (h *Handler) noteLoginFail(user string) {
+	h.loginMu.Lock()
+	defer h.loginMu.Unlock()
+	a, ok := h.loginAttempts[user]
+	if ok && a.fails >= loginMaxFails && time.Now().After(a.lockCap) {
+		// A prior lockout has fully elapsed — start the count over so a legit
+		// user isn't stuck at one attempt per lockout window forever.
+		delete(h.loginAttempts, user)
+		ok = false
+	}
+	if !ok {
+		if len(h.loginAttempts) >= maxTrackedLogins {
+			h.loginAttempts = make(map[string]*loginAttempt)
+		}
+		a = &loginAttempt{}
+		h.loginAttempts[user] = a
+	}
+	a.fails++
+	if a.fails >= loginMaxFails {
+		a.lockCap = time.Now().Add(loginLockout)
+	}
+}
+
+func (h *Handler) noteLoginOK(user string) {
+	h.loginMu.Lock()
+	defer h.loginMu.Unlock()
+	delete(h.loginAttempts, user)
 }
 
 // --- Login / logout handlers ---
 
 // GET /login
 func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
-	if h.db == nil {
+	if h.database() == nil {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
-	if _, u := h.withUser(r); u != nil && h.schemaMismatch == "" {
+	if _, u := h.withUser(w, r); u != nil && h.schemaMismatch == "" {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -173,7 +251,7 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 
 // POST /login
 func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
-	if h.db == nil {
+	if h.database() == nil {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
@@ -211,15 +289,22 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Normal login.
+	loginKey := strings.ToLower(username)
+	if h.loginBlocked(loginKey) {
+		http.Redirect(w, r, "/login?error=too+many+attempts,+try+again+shortly", http.StatusSeeOther)
+		return
+	}
 	u, hash, err := h.userByUsername(r.Context(), username)
 	if err != nil {
 		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if u == nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
+		h.noteLoginFail(loginKey)
 		http.Redirect(w, r, "/login?error=invalid+username+or+password", http.StatusSeeOther)
 		return
 	}
+	h.noteLoginOK(loginKey)
 	h.saveSessionUser(w, r, u)
 	http.Redirect(w, r, landingRoute(u), http.StatusSeeOther)
 }
@@ -246,6 +331,7 @@ func landingRoute(u *User) string {
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	sess := h.session(r)
 	delete(sess.Values, "user_id")
+	delete(sess.Values, "csrf_token")
 	sess.Save(r, w)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -253,6 +339,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) saveSessionUser(w http.ResponseWriter, r *http.Request, u *User) {
 	sess := h.session(r)
 	sess.Values["user_id"] = u.ID
+	sess.Values["last_activity"] = time.Now().Unix() // reset the idle clock on login (#757)
+	delete(sess.Values, "csrf_token")                // rotate CSRF across the privilege change (#757)
 	sess.Save(r, w)
 }
 
@@ -383,7 +471,7 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_active = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("is_active")), id); err != nil {
+		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("is_active")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -403,7 +491,7 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET can_approve_po = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("can_approve_po")), id); err != nil {
+		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("can_approve_po")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -423,7 +511,7 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET can_approve_records = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("can_approve_records")), id); err != nil {
+		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("can_approve_records")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -449,7 +537,7 @@ func (h *Handler) SettingsUsersToggleAdmin(w http.ResponseWriter, r *http.Reques
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_admin = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("is_admin")), id); err != nil {
+		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("is_admin")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}

@@ -197,7 +197,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
 		ORDER BY pn.part_number ASC`,
-		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(true)))
+		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -208,9 +208,14 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f models.TestForm
 		if err := rows.Scan(&f.ID, &f.PartNumberID, &f.IsLocked, &f.Revision, &f.PartNumber, &f.Title); err != nil {
-			continue
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		forms = append(forms, f)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	h.renderRecords(w, r, "index.html", map[string]any{
@@ -253,14 +258,19 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	typeRows, terr := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT DISTINCT comments FROM %s
 		WHERE form_id = @p1 AND is_active = %s AND comments <> ''
-		ORDER BY comments`, h.cfg.RecordsTable(), h.dialect.BoolLiteral(true)), formID)
+		ORDER BY comments`, h.cfg.RecordsTable(), h.dia().BoolLiteral(true)), formID)
 	if terr == nil {
 		defer typeRows.Close()
 		for typeRows.Next() {
 			var c string
-			if typeRows.Scan(&c) == nil {
-				typeOptions = append(typeOptions, c)
+			if err := typeRows.Scan(&c); err != nil {
+				log.Printf("RecordsList: type filter scan error: %v", err)
+				break
 			}
+			typeOptions = append(typeOptions, c)
+		}
+		if err := typeRows.Err(); err != nil {
+			log.Printf("RecordsList: type filter rows error: %v", err)
 		}
 	}
 
@@ -304,7 +314,7 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 		FROM %s
 		WHERE form_id = @p1 AND is_active = %s
 		ORDER BY %s DESC, record_date DESC`,
-		h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.TryCastInt("serial_number")), formID)
+		h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().TryCastInt("serial_number")), formID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -403,7 +413,8 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
-			continue
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		s.Parameter = param.String
 		s.Specification = spec.String
@@ -426,6 +437,10 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		s.Format = format.String
 		s.StepComment = stepComment.String
 		stepsMap[s.ID] = &s
+	}
+	if err := stepRows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	ids := form.OrderedTestIDs()
@@ -477,9 +492,14 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		defer hRows.Close()
 		for hRows.Next() {
 			var hp HistoryPoint
-			if err := hRows.Scan(&hp.At, &hp.Count); err == nil {
-				histPoints = append(histPoints, hp)
+			if err := hRows.Scan(&hp.At, &hp.Count); err != nil {
+				log.Printf("FormDef: history scan error: %v", err)
+				break
 			}
+			histPoints = append(histPoints, hp)
+		}
+		if err := hRows.Err(); err != nil {
+			log.Printf("FormDef: history rows error: %v", err)
 		}
 	}
 	// Position dots: earliest â†' 5%, now â†' 95%.
@@ -575,10 +595,15 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 			&s.SpecNom, &s.SpecMin, &s.SpecMax,
 			&s.SpecUnits, &s.PFType, &s.DefaultResult, &s.HideFormula, &changed,
 		); err != nil {
-			continue
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		s.Changed = changed == 1
 		steps = append(steps, s)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -636,7 +661,8 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 			&pfType, &defaultResult, &hideFormula, &s.Archived, &category, &sheetName,
 			&instrumentTypes, &format, &comment,
 		); err != nil {
-			continue
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		s.Parameter = param.String
 		s.Specification = spec.String
@@ -653,6 +679,10 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		s.Format = format.String
 		s.StepComment = comment.String
 		stepsMap[s.ID] = &s
+	}
+	if err := stepRows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	ids := form.OrderedTestIDs()
@@ -689,7 +719,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 // Postgres). Best-effort: a failure here only leaves the history row unattributed,
 // matching the prior inline behavior, which also ignored the error.
 func (h *Handler) setAuditUser(ctx context.Context, tx *txLogger, username string) {
-	q, arg := h.dialect.SetAuditUser(username)
+	q, arg := h.dia().SetAuditUser(username)
 	tx.ExecContext(ctx, q, arg)
 }
 
@@ -775,7 +805,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		tx.ExecContext(r.Context(), fmt.Sprintf(`
+		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET
 			  type=@p1, parameter=@p2, specification=@p3,
 			  spec_nom=@p4, spec_min=@p5, spec_max=@p6, spec_units=@p7,
@@ -796,7 +826,10 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			nullOrVal(sid(id, "format")),
 			nullOrVal(sid(id, "comment")),
 			id, formID,
-		)
+		); err != nil {
+			http.Error(w, "could not save step: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Parse and INSERT new rows submitted via new_row[IDX][field] inputs.
@@ -882,7 +915,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 		hideFormula := row.Hide
 		var newID int
-		insertStep := h.dialect.InsertReturningID(h.cfg.StepsTable(),
+		insertStep := h.dia().InsertReturningID(h.cfg.StepsTable(),
 			`form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
 			 pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
 			 format, comment, created_at, updated_at`,
@@ -895,8 +928,8 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			nullOrVal(hideFormula), nullOrVal(row.Category), nullOrVal(row.SheetName),
 			nullOrVal(row.InstrumentTypes), nullOrVal(row.Format), nullOrVal(row.Comment),
 		).Scan(&newID); err2 != nil {
-			log.Printf("insert new test step: %v", err2)
-			continue
+			http.Error(w, "could not insert new step: "+err2.Error(), http.StatusInternalServerError)
+			return
 		}
 		newIDMap[idx] = newID
 	}
@@ -958,9 +991,12 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			"SELECT COALESCE(test_order,'') FROM %s WHERE id=@p1", h.cfg.FormsTable()),
 			formID).Scan(&currentOrder)
 		if normalizeOrder(stepOrder) != normalizeOrder(currentOrder) {
-			h.execContext(r.Context(), fmt.Sprintf(
+			if _, err := h.execContext(r.Context(), fmt.Sprintf(
 				"UPDATE %s SET test_order=@p1 WHERE id=@p2", h.cfg.FormsTable()),
-				normalizeOrder(stepOrder), formID)
+				normalizeOrder(stepOrder), formID); err != nil {
+				http.Error(w, "could not save step order: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -969,10 +1005,13 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	newInstrTypes := strings.TrimSpace(r.FormValue("instrument_types"))
 	if newRecordTypes != r.FormValue("original_record_types") ||
 		newInstrTypes != r.FormValue("original_instrument_types") {
-		h.execContext(r.Context(), fmt.Sprintf(
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"UPDATE %s SET record_types=@p1, instrument_types=@p2 WHERE id=@p3",
 			h.cfg.FormsTable()),
-			nullOrVal(newRecordTypes), nullOrVal(newInstrTypes), formID)
+			nullOrVal(newRecordTypes), nullOrVal(newInstrTypes), formID); err != nil {
+			http.Error(w, "could not save record types: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
@@ -1200,7 +1239,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 			FROM %s WHERE form_id = @p1 AND is_active = %s
 		)
 		SELECT COALESCE(prev_id, 0), COALESCE(next_id, 0) FROM ordered WHERE id = @p2`,
-		h.dialect.TryCastInt("serial_number"), h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true)), record.FormID, recordID).Scan(&prevID, &nextID)
+		h.dia().TryCastInt("serial_number"), h.dia().TryCastInt("serial_number"), h.cfg.RecordsTable(), h.dia().BoolLiteral(true)), record.FormID, recordID).Scan(&prevID, &nextID)
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
@@ -1215,20 +1254,29 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		SELECT id, form_record_id, event_type, username, event_date, COALESCE(comments,'')
 		FROM %s WHERE form_record_id = @p1 ORDER BY event_date ASC, id ASC`,
 		h.cfg.RecordEventsTable()), recordID)
-	if err == nil {
+	if err != nil {
+		log.Printf("RecordDetail: audit trail query error: %v", err)
+	} else {
 		for eventRows.Next() {
 			var ev models.RecordEvent
 			if err := eventRows.Scan(&ev.ID, &ev.TestRecordID, &ev.EventType, &ev.Username,
 				&ev.EventDate, &ev.Comments); err != nil {
-				continue
+				log.Printf("RecordDetail: audit trail scan error: %v", err)
+				break
 			}
 			events = append(events, ev)
+		}
+		if err := eventRows.Err(); err != nil {
+			log.Printf("RecordDetail: audit trail rows error: %v", err)
 		}
 		eventRows.Close()
 	}
 
 	// Per-lock result snapshots (#251), keyed by event_id and diffed against the prior snapshot.
-	snapshots, _ := h.loadEventSnapshots(r.Context(), recordID)
+	snapshots, err := h.loadEventSnapshots(r.Context(), recordID)
+	if err != nil {
+		log.Printf("RecordDetail: event snapshots error: %v", err)
+	}
 
 	canApproveRecords := false
 	if u := h.currentUser(r); u != nil {
@@ -1392,7 +1440,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	var nextSN sql.NullInt64
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT COALESCE(MAX(%s) + 1, 1)
-		FROM %s WHERE form_id = @p1`, h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
+		FROM %s WHERE form_id = @p1`, h.dia().TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
 
 	nextSNStr := "1"
 	if nextSN.Valid {
@@ -1487,7 +1535,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 			SELECT COALESCE(MAX(%s), 0) + 1
 			FROM %s WITH (UPDLOCK, HOLDLOCK) WHERE form_id = @p1`,
-			h.dialect.TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
+			h.dia().TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
 		if err != nil {
 			http.Error(w, "serial number error: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -1496,11 +1544,11 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var newID int
-	insertRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
+	insertRecord := h.dia().InsertReturningID(h.cfg.RecordsTable(),
 		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
 		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision`,
 		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),%s,%s,@p10`,
-			h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)),
+			h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)),
 		false)
 	err = tx.QueryRowContext(r.Context(), insertRecord,
 		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
@@ -1842,16 +1890,19 @@ func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET is_approved=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s AND is_approved=%s",
-		h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), recordID)
+		h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), recordID)
 	if err != nil {
 		http.Error(w, "approve error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if n, _ := res.RowsAffected(); n > 0 {
-		h.execContext(r.Context(), fmt.Sprintf(
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_record_id, event_type, username, event_date) VALUES (@p1, 'approved', @p2, GETDATE())",
-			h.cfg.RecordEventsTable()), recordID, u.Username)
+			h.cfg.RecordEventsTable()), recordID, u.Username); err != nil {
+			http.Error(w, "approve error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
@@ -1898,16 +1949,19 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET is_locked=%s, is_approved=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s",
-		h.cfg.RecordsTable(), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(true)), recordID)
+		h.cfg.RecordsTable(), h.dia().BoolLiteral(false), h.dia().BoolLiteral(false), h.dia().BoolLiteral(true)), recordID)
 	if err != nil {
 		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if n, _ := res.RowsAffected(); n > 0 {
-		h.execContext(r.Context(), fmt.Sprintf(
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_record_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
-			h.cfg.RecordEventsTable()), recordID, username, comment)
+			h.cfg.RecordEventsTable()), recordID, username, comment); err != nil {
+			http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
@@ -1998,11 +2052,11 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var newID int
 	// record_date is set to now — a duplicate is a fresh re-test, dated the day it's made.
-	insertDupRecord := h.dialect.InsertReturningID(h.cfg.RecordsTable(),
+	insertDupRecord := h.dia().InsertReturningID(h.cfg.RecordsTable(),
 		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
 		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision`,
 		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),%s,%s,%s,@p9`,
-			h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(false)),
+			h.dia().BoolLiteral(true), h.dia().BoolLiteral(false), h.dia().BoolLiteral(false)),
 		false)
 	err = tx.QueryRowContext(r.Context(), insertDupRecord,
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
@@ -2091,16 +2145,19 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET is_locked=%s, revision = revision + 1 WHERE id=@p1 AND is_locked=%s",
-		h.cfg.FormsTable(), h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)), formID)
+		h.cfg.FormsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), formID)
 	if err != nil {
 		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if n, _ := res.RowsAffected(); n > 0 {
-		h.execContext(r.Context(), fmt.Sprintf(
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_id, event_type, username, event_date) VALUES (@p1, 'locked', @p2, GETDATE())",
-			h.cfg.FormEventsTable()), formID, username)
+			h.cfg.FormEventsTable()), formID, username); err != nil {
+			http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
@@ -2132,16 +2189,19 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.execContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET is_locked=%s WHERE id=@p1 AND is_locked=%s",
-		h.cfg.FormsTable(), h.dialect.BoolLiteral(false), h.dialect.BoolLiteral(true)), formID)
+		h.cfg.FormsTable(), h.dia().BoolLiteral(false), h.dia().BoolLiteral(true)), formID)
 	if err != nil {
 		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if n, _ := res.RowsAffected(); n > 0 {
-		h.execContext(r.Context(), fmt.Sprintf(
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
-			h.cfg.FormEventsTable()), formID, username, comment)
+			h.cfg.FormEventsTable()), formID, username, comment); err != nil {
+			http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
@@ -2258,7 +2318,8 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType, &specUnits, &specNom, &s.Archived,
 		); err != nil {
-			continue
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		s.Parameter = param.String
 		s.Specification = spec.String
@@ -2270,6 +2331,10 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		s.SpecUnits = specUnits.String
 		s.SpecNom = specNom.String
 		steps[s.ID] = &s
+	}
+	if err := stepRows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// Load existing results keyed by form_row_id â€" used for change detection and UPDATE vs INSERT.
@@ -2296,10 +2361,15 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		var result, comment sql.NullString
 		var specMin, specMax, pfType string
 		if err := exRows.Scan(&rid, &tid, &result, &comment, &specMin, &specMax, &pfType); err != nil {
-			continue
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		existing[tid] = savedResult{ID: rid, Result: result.String, Comment: comment.String,
 			SpecMin: specMin, SpecMax: specMax, PFType: pfType}
+	}
+	if err := exRows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	for key, vals := range r.Form {
@@ -2331,10 +2401,13 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 					passFail = models.ComputePassFail(result, pfStep)
 				}
 				// #251: insert into TestResultHistory here when per-result change history is added
-				h.execContext(r.Context(), fmt.Sprintf(`
+				if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 					UPDATE %s SET result=@p1, comment=@p2, pass_fail=@p3, updated_at=GETDATE()
 					WHERE id=@p4`, h.cfg.ResultsTable()),
-					result, comment, passFail, prev.ID)
+					result, comment, passFail, prev.ID); err != nil {
+					http.Error(w, "could not save result: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
 			}
 		} else if result != "" || comment != "" {
 			// Legacy path: a pre-#487 record's previously-unrecorded row gets its first value.
@@ -2345,7 +2418,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			if result != "" {
 				passFail = models.ComputePassFail(result, step)
 			}
-			h.execContext(r.Context(), fmt.Sprintf(`
+			if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
 				  (form_record_id, form_row_id, result, comment, pass_fail, type,
 				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, pf_type, format,
@@ -2356,7 +2429,10 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 				result, comment, passFail, step.Type,
 				step.Parameter, step.Specification,
 				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
-				step.HideFormula, step.DefaultResult)
+				step.HideFormula, step.DefaultResult); err != nil {
+				http.Error(w, "could not save result: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -2377,18 +2453,27 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			rd, parseErr = time.Parse("2006-01-02", rdStr)
 		}
 		if parseErr == nil {
-			h.execContext(r.Context(), fmt.Sprintf(
+			if _, err := h.execContext(r.Context(), fmt.Sprintf(
 				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, updated_at=GETDATE() WHERE id=@p6",
-				h.cfg.RecordsTable()), rd, comments, instrumentType, lotArg, buildArg, recordID)
+				h.cfg.RecordsTable()), rd, comments, instrumentType, lotArg, buildArg, recordID); err != nil {
+				http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		} else {
-			h.execContext(r.Context(), fmt.Sprintf(
+			if _, err := h.execContext(r.Context(), fmt.Sprintf(
 				"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, updated_at=GETDATE() WHERE id=@p5",
-				h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID)
+				h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID); err != nil {
+				http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	} else {
-		h.execContext(r.Context(), fmt.Sprintf(
+		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, updated_at=GETDATE() WHERE id=@p5",
-			h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID)
+			h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID); err != nil {
+			http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
@@ -2456,10 +2541,17 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		var id, tid int
 		var result string
 		if err := resRows.Scan(&id, &tid, &result); err != nil {
-			continue
+			resRows.Close()
+			http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		existing[tid] = id
 		curResults[tid] = &models.TestResult{ID: id, TestID: tid, Result: result}
+	}
+	if err := resRows.Err(); err != nil {
+		resRows.Close()
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 	resRows.Close()
 
@@ -2558,7 +2650,7 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 		      SELECT 1 FROM %s WHERE part_number_id = %s.id AND is_active = %s
 		  )
 		ORDER BY part_number`,
-		h.cfg.PartsTable(), h.dialect.BoolLiteral(true), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true)))
+		h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -2570,6 +2662,9 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 			return nil, err
 		}
 		list = append(list, pn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }
@@ -2629,6 +2724,9 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *txLogger, sourceID, new
 		}
 		stepsMap[s.ID] = s
 	}
+	if err := stepRows.Err(); err != nil {
+		return err
+	}
 
 	// Walk steps in source test_order sequence.
 	var src models.TestForm
@@ -2642,7 +2740,7 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *txLogger, sourceID, new
 			continue
 		}
 		var newStepID int
-		insertCopiedStep := h.dialect.InsertReturningID(h.cfg.StepsTable(),
+		insertCopiedStep := h.dia().InsertReturningID(h.cfg.StepsTable(),
 			`form_id, type, parameter, specification, spec_nom, spec_min, spec_max,
 			 spec_units, pf_type, default_result, hide_formula,
 			 category, sheet_name, instrument_types, format, comment,
@@ -2684,7 +2782,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 		SELECT f.id, pn.part_number, pn.title
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.is_active = %s ORDER BY pn.part_number`,
-		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true)))
+		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true)))
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2694,9 +2792,13 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f models.TestForm
 		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Title); err != nil {
-			continue
+			log.Printf("NewForm: source-forms scan error: %v", err)
+			break
 		}
 		sourceForms = append(sourceForms, f)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("NewForm: source-forms rows error: %v", err)
 	}
 
 	h.renderRecords(w, r, "form_new.html", map[string]any{
@@ -2727,7 +2829,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	var exists int
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=%s",
-		h.cfg.PartsTable(), h.dialect.BoolLiteral(true)), pnid).Scan(&exists); err != nil || exists == 0 {
+		h.cfg.PartsTable(), h.dia().BoolLiteral(true)), pnid).Scan(&exists); err != nil || exists == 0 {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
 	}
@@ -2749,9 +2851,9 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var newID int
-	insertForm := h.dialect.InsertReturningID(h.cfg.FormsTable(),
+	insertForm := h.dia().InsertReturningID(h.cfg.FormsTable(),
 		"part_number_id, is_active, is_locked, test_order, record_types, instrument_types",
-		fmt.Sprintf("@p1, %s, %s, '', @p2, @p3", h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)),
+		fmt.Sprintf("@p1, %s, %s, '', @p2, @p3", h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)),
 		false)
 	if err := tx.QueryRowContext(r.Context(), insertForm,
 		pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
@@ -2842,7 +2944,7 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	var exists int
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 		"SELECT COUNT(1) FROM %s WHERE id=@p1 AND category='FORM' AND is_active=%s",
-		h.cfg.PartsTable(), h.dialect.BoolLiteral(true)), pnid).Scan(&exists); err != nil || exists == 0 {
+		h.cfg.PartsTable(), h.dia().BoolLiteral(true)), pnid).Scan(&exists); err != nil || exists == 0 {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
 	}
@@ -2860,9 +2962,9 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var newFormID int
-	insertDupForm := h.dialect.InsertReturningID(h.cfg.FormsTable(),
+	insertDupForm := h.dia().InsertReturningID(h.cfg.FormsTable(),
 		"part_number_id, is_active, is_locked, test_order, record_types, instrument_types",
-		fmt.Sprintf("@p1, %s, %s, '', @p2, @p3", h.dialect.BoolLiteral(true), h.dialect.BoolLiteral(false)),
+		fmt.Sprintf("@p1, %s, %s, '', @p2, @p3", h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)),
 		false)
 	if err := tx.QueryRowContext(r.Context(), insertDupForm,
 		pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {
@@ -2967,7 +3069,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		JOIN %s trec ON res.form_record_id = trec.id
 		WHERE res.form_row_id = @p1 AND trec.form_id = @p2 AND trec.is_active = %s
 		ORDER BY %s DESC, trec.record_date DESC`,
-		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dialect.BoolLiteral(true), h.dialect.TryCastInt("trec.serial_number")), testID, formID)
+		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().TryCastInt("trec.serial_number")), testID, formID)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2983,9 +3085,14 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 			&row.Result, &row.PassFail, &row.Comment,
 			&row.ResultUpdatedAt,
 		); err != nil {
-			continue
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		rows = append(rows, row)
+	}
+	if err := resRows.Err(); err != nil {
+		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	h.renderRecords(w, r, "test_report.html", map[string]any{

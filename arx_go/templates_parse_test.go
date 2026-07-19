@@ -77,3 +77,26 @@ func TestCorePrintTemplatesParse(t *testing.T) {
 		}
 	}
 }
+
+// TestSharedStandaloneTemplatesParse parses the templates/shared pages that are
+// rendered on their own rather than as a tab under coreTabDirs: login.html via
+// renderLogin's standalone ParseFS (no layout, no Funcs), and error.html/
+// not_found.html/local_dir.html via render()'s usual layout+partials+
+// coreTemplateFuncs call (files.go, handlers.go, pos.go, suppliers.go). Zero
+// parse coverage here means a renamed {{define}} block would break these
+// pages silently while TestCoreTemplatesParse/TestRecordsTemplatesParse stay
+// green (#758).
+func TestSharedStandaloneTemplatesParse(t *testing.T) {
+	if _, err := template.New("").ParseFS(templatesFS, "templates/shared/login.html"); err != nil {
+		t.Errorf("parse login.html: %v", err)
+	}
+	for _, page := range []string{"error.html", "not_found.html", "local_dir.html"} {
+		if _, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS,
+			"templates/shared/layout.html",
+			"templates/shared/partials.html",
+			"templates/shared/"+page,
+		); err != nil {
+			t.Errorf("parse %s: %v", page, err)
+		}
+	}
+}

@@ -244,7 +244,7 @@ func replaceLocalFile(root, name, src string) error {
 func (h *Handler) deleteAttachmentFileIfUnshared(ctx context.Context, table, idCol, fileCol string, excludeID any, fullFileName, root, strippedName string) error {
 	var count int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE %s=@p1 AND is_active=%s AND %s<>@p2`, table, fileCol, h.dialect.BoolLiteral(true), idCol,
+		`SELECT COUNT(*) FROM %s WHERE %s=@p1 AND is_active=%s AND %s<>@p2`, table, fileCol, h.dia().BoolLiteral(true), idCol,
 	), fullFileName, excludeID).Scan(&count); err != nil {
 		return err
 	}
@@ -262,12 +262,12 @@ func (h *Handler) deleteAttachmentFileIfUnshared(ctx context.Context, table, idC
 func (h *Handler) softDeleteAttachment(ctx context.Context, table, idCol string, id int, ownerCol string, ownerID int) error {
 	if ownerCol != "" {
 		_, err := h.execContext(ctx, fmt.Sprintf(
-			`UPDATE %s SET is_active=%s WHERE %s=@p1 AND %s=@p2`, table, h.dialect.BoolLiteral(false), idCol, ownerCol,
+			`UPDATE %s SET is_active=%s WHERE %s=@p1 AND %s=@p2`, table, h.dia().BoolLiteral(false), idCol, ownerCol,
 		), id, ownerID)
 		return err
 	}
 	_, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET is_active=%s WHERE %s=@p1`, table, h.dialect.BoolLiteral(false), idCol,
+		`UPDATE %s SET is_active=%s WHERE %s=@p1`, table, h.dia().BoolLiteral(false), idCol,
 	), id)
 	return err
 }
@@ -307,8 +307,8 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 		FROM %s ca JOIN %s c ON c.id = ca.supplier_id
 		WHERE ca.is_active = %s AND ca.file_path = @p1
 		ORDER BY 1, 4
-	`, h.cfg.AttachmentsTable(), h.cfg.PartsTable(), h.dialect.BoolLiteral(true),
-		h.cfg.CompanyAttachmentsTable(), h.cfg.CompanyTable(), h.dialect.BoolLiteral(true)), file)
+	`, h.cfg.AttachmentsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true),
+		h.cfg.CompanyAttachmentsTable(), h.cfg.CompanyTable(), h.dia().BoolLiteral(true)), file)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
 		return

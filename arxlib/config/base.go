@@ -75,15 +75,16 @@ func (b *Base) DBEngine() string {
 // config fields + a password, in the scheme the active engine's driver expects.
 func (b *Base) BuildDSN(password string) string {
 	if b.DBEngine() == "postgres" {
-		// pgx/stdlib accepts a postgres:// URL. sslmode=prefer negotiates TLS
-		// when the server offers it and falls back to plaintext otherwise, so
-		// the same DSN works against managed and local Postgres.
+		// pgx/stdlib accepts a postgres:// URL. sslmode=require forces TLS and
+		// refuses a plaintext fallback, matching the SQL Server path's encrypt=true
+		// (#757). (require encrypts but does not verify the server cert; #666 puts
+		// the DB on a separate box, so plaintext must never be silently used.)
 		u := &url.URL{
 			Scheme:   "postgres",
 			User:     url.UserPassword(b.activeUser(), password),
 			Host:     b.activeServer(),
 			Path:     "/" + b.ActiveDBName(),
-			RawQuery: url.Values{"sslmode": {"prefer"}}.Encode(),
+			RawQuery: url.Values{"sslmode": {"require"}}.Encode(),
 		}
 		return u.String()
 	}

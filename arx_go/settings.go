@@ -87,7 +87,7 @@ type supplierOption struct {
 // When companyID > 0 it is scoped to that company's contacts (the configured
 // default receiver); companyID == 0 returns all contacts as a fallback.
 func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactOption {
-	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = %s`, h.cfg.ContactTable(), h.dialect.BoolLiteral(true))
+	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = %s`, h.cfg.ContactTable(), h.dia().BoolLiteral(true))
 	var args []any
 	if companyID > 0 {
 		q += ` AND company_id = @p1`
@@ -112,7 +112,7 @@ func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactO
 func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 	rows, err := h.queryContext(r.Context(),
 		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = %s ORDER BY name`,
-			h.cfg.CompanyTable(), h.dialect.BoolLiteral(true)))
+			h.cfg.CompanyTable(), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil
 	}
@@ -140,7 +140,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var poContactID, poReceiverID int
 	accentColor := "blue"
 	landingRoutePref := "/"
-	if h.db != nil {
+	if h.database() != nil {
 		if u := h.currentUser(r); u != nil {
 			poContactID = u.DefaultPOContactID
 			poReceiverID = u.DefaultPOReceiverID
@@ -170,7 +170,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	}
 
 	data := map[string]any{
-		"Connected":             h.db != nil,
+		"Connected":             h.database() != nil,
 		"DBServer":              h.cfg.DBServer,
 		"DBName":                h.cfg.DBName,
 		"DBEngine":              h.cfg.DBEngine(),
@@ -225,8 +225,8 @@ func (h *Handler) WhatsNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
-	if h.db != nil {
-		r, _ = h.withUser(r)
+	if h.database() != nil {
+		r, _ = h.withUser(w, r)
 	}
 	h.render(w, r, "settings/settings.html", h.settingsData(w, r, nil))
 }
@@ -235,7 +235,7 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 // app_config. It has its own endpoint so this partial form can't blank the
 // path fields that SettingsSave writes from the main settings form.
 func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *http.Request) {
-	if h.db != nil {
+	if h.database() != nil {
 		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")
 		if err := h.appConfigSet(r.Context(), "attachment_categories", cats); err != nil {
 			log.Printf("warning: could not save attachment_categories: %v", err)
@@ -307,7 +307,7 @@ func (h *Handler) SettingsDefaultRouteSave(w http.ResponseWriter, r *http.Reques
 // app_config. It has its own endpoint so this partial form can't blank the
 // path fields that SettingsSave writes from the main settings form.
 func (h *Handler) SettingsCompanyLogoSave(w http.ResponseWriter, r *http.Request) {
-	if h.db == nil {
+	if h.database() == nil {
 		http.Redirect(w, r, "/settings", http.StatusFound)
 		return
 	}
@@ -344,7 +344,7 @@ func (h *Handler) SettingsCompanyLogoSave(w http.ResponseWriter, r *http.Request
 
 // SettingsCompanyLogoRemove clears the stored company logo.
 func (h *Handler) SettingsCompanyLogoRemove(w http.ResponseWriter, r *http.Request) {
-	if h.db != nil {
+	if h.database() != nil {
 		if err := h.appConfigSet(r.Context(), "company_logo", ""); err != nil {
 			log.Printf("warning: could not clear company_logo: %v", err)
 		}
@@ -445,9 +445,8 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			connErr = err.Error()
 		} else {
-			oldDB := h.db
-			h.db = newDB
-			h.dialect = newDialect
+			old := h.conn.Load()
+			h.conn.Store(&dbConn{db: newDB, dialect: newDialect})
 			dbSwapped = true
 			if password != "" {
 				secrets.DBPassword = password
@@ -460,8 +459,8 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			h.CheckSchemaVersion(r.Context())
 			h.loadCompanyLogo(r.Context())
 			h.loadPartCategories(r.Context())
-			if oldDB != nil {
-				oldDB.Close()
+			if old != nil && old.db != nil {
+				old.db.Close()
 			}
 		}
 	}
@@ -487,13 +486,14 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		// attributed to a valid user in the now-active DB (#631).
 		sess := h.session(r)
 		delete(sess.Values, "user_id")
+		delete(sess.Values, "csrf_token")
 		sess.Save(r, w)
 		msg := "Test Mode switched the active database to " + h.cfg.ActiveDBName() + ". Please sign in again."
 		http.Redirect(w, r, "/login?notice="+url.QueryEscape(msg), http.StatusSeeOther)
 		return
 	}
 
-	if h.db != nil {
+	if h.database() != nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
