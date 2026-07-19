@@ -683,8 +683,8 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	// Delete flagged line items
 	for _, idStr := range r.Form["delete_pol[]"] {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE id=@p1`, h.cfg.POLineTable(),
-		), idStr); err != nil {
+			`DELETE FROM %s WHERE id=@p1 AND po_id=@p2`, h.cfg.POLineTable(),
+		), idStr, poID); err != nil {
 			h.renderError(w, r, "Error deleting PO line: "+err.Error())
 			return
 		}
@@ -705,8 +705,8 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET line_number=@p1, part_number_snapshot=@p2, revision_snapshot=@p3, description=@p4,
 			              qty=@p5, unit_cost=@p6, vendor_part_number=@p7, part_id=@p8
-			WHERE id=@p9
-		`, h.cfg.POLineTable()), item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid, polID); err != nil {
+			WHERE id=@p9 AND po_id=@p10
+		`, h.cfg.POLineTable()), item, row.PartNumber, rev, row.Desc, qty, cost, row.VendorPN, pnid, polID, poID); err != nil {
 			h.renderError(w, r, "Error updating PO line: "+err.Error())
 			return
 		}
