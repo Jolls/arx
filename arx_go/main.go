@@ -121,10 +121,11 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Get("/login", h.LoginGet)
 	r.Post("/login", h.LoginPost)
 	r.Post("/logout", h.Logout)
-	r.Get("/settings", h.Settings)
-	// POST /settings must stay reachable during first-run setup (no DB connected) but
-	// requires a logged-in user once a database is connected, so an unauthenticated
-	// caller can't re-point the connection and exfiltrate the stored password (#748).
+	// GET/POST /settings must stay reachable during first-run setup (no DB connected) but
+	// require a logged-in user once a database is connected — GET renders db_server,
+	// db_user, and filesystem roots, which is a config-disclosure hole to an
+	// unauthenticated caller once connected (#781, read-side sibling of #748).
+	r.With(h.RequireAuthOnceConnected).Get("/settings", h.Settings)
 	r.With(h.RequireAuthOnceConnected).Post("/settings", h.SettingsSave)
 	r.Get("/whats-new", h.WhatsNew)
 	// Gated the same way as POST /settings: reachable unauthenticated only during

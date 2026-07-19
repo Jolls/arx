@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.24] - 2026-07-19
+### Security
+- `GET /settings` now gated behind `RequireAuthOnceConnected` (same pattern as the POST sibling from [#748](https://github.com/Jolls/arx-legacy/issues/748)) so an unauthenticated caller on a connected instance can no longer load the settings form pre-filled with `db_server`, `db_user`, and the configured filesystem roots ([#781](https://github.com/Jolls/arx-legacy/issues/781))
+
 ## [0.6.23] - 2026-07-19
 ### Security
 - Security-hardening batch (epic [#719](https://github.com/Jolls/arx-legacy/issues/719)): the `SettingsSave` DB swap now stores an immutable `{db, dialect}` snapshot through an `atomic.Pointer` so a concurrent request can no longer read a torn `h.db`/`h.dialect` pair or use a handle mid-close (the wider `cfg`/`companyLogo`/`partCategories`/`schemaMismatch` mutation race is deferred as a follow-up); the native folder/file browse endpoints (`/api/browse-folder`, `/api/browse-file`) are gated behind `RequireAuthOnceConnected` so an unauthenticated caller on a connected instance can't spawn local dialogs; CSRF verification uses a constant-time compare and the token is rotated on login/logout; a 7-day session idle timeout logs out abandoned sessions independent of the cookie's absolute lifetime; failed logins are throttled per username (10 fails → 1-minute cooldown, counter resets after the window, map bounded against unbounded growth); and the Postgres DSN now forces `sslmode=require` instead of `prefer` so a plaintext fallback can never be silently used ([#757](https://github.com/Jolls/arx-legacy/issues/757))
