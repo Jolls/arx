@@ -16,10 +16,12 @@ CREATE TABLE inventory_transaction (
   note        TEXT,
   po_line_id  INTEGER       NULL,                                                        -- FK to po_line.id for receipts (#269).
   lot_id      INTEGER       NULL,                                                        -- FK to lot.id (#676): lot touched by this movement; NULL if part not lot-tracked.
+  build_id    INTEGER       NULL,                                                        -- FK to build.id (#677): build event that produced this row; NULL otherwise.
   created_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE inventory_transaction ADD CONSTRAINT FK_inv_txn_PN      FOREIGN KEY (part_id)    REFERENCES part (id);
 ALTER TABLE inventory_transaction ADD CONSTRAINT FK_inv_txn_po_line FOREIGN KEY (po_line_id) REFERENCES po_line (id);
 -- FK_inv_txn_lot (lot_id → lot.id) is added in SQL/postgres/lot.sql, after lot exists.
+-- FK_inv_txn_build (build_id → build.id) is added in SQL/postgres/build.sql, after build exists.
 CREATE INDEX IX_inv_txn_part ON inventory_transaction (part_id, txn_date);

@@ -93,7 +93,7 @@ Parents before children (each file adds its outgoing FKs, so the referenced
 table must already exist): `uom`, `contact`, `company_attachment`, `company`,
 `part`, `mfg_part`, `supplier_part`, `price`, `bom`, `part_attachment`,
 `purchase_order` (creates `po_number_seq` + `purchase_order_history`), `po_line`,
-`inventory_transaction`, `form`, `form_row`, `form_record`, `result`,
-`form_row_history`, `form_events`, `record_events`,
+`inventory_transaction`, `build`, `lot`, `unit`, `form`, `form_row`, `form_record`,
+`result`, `genealogy`, `form_row_history`, `form_events`, `record_events`,
 `record_event_results`, `app_config`, `named_queries`, `users`, `logs`,
 `release_notes`. Run `triggers.sql` **last**, after every table above exists.

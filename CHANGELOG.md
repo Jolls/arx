@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.21] - 2026-07-18
+### Fixed
+- Postgres-readiness batch (epic [#719](https://github.com/Jolls/arx-legacy/issues/719)): ported the lot/build/inventory schema to `SQL/postgres/*` (missing `inventory_transaction.build_id` + FK, `lot.lot_description`, and a `README.md` run-order bug that listed `form_record` before `unit` despite depending on it) and routed the remaining SQL-Server-only outlier SQL through the `arxlib/db` dialect seam: `POAddSuggestions`'s `IF NOT EXISTS...INSERT` rewritten as a portable `INSERT...SELECT...WHERE NOT EXISTS`, `RFQCompareSave`'s `UPDATE...FROM...OUTER APPLY` rewritten as a portable correlated subquery, inline `BIT` literals in `RFQConvert`/`CreateRecord`/`DuplicateRecord`/`CreateForm`/`CreateDuplicate` replaced with `dialect.BoolLiteral`, and `copyFormSteps` switched from a raw `*sql.Tx` (bypassing `dialect.Rewrite`/DEBUG logging, and reading its source outside the transaction it was handed) to the `*txLogger` wrapper via `h.beginTx` (H4, M1-M5, [#753](https://github.com/Jolls/arx-legacy/issues/753), [#755](https://github.com/Jolls/arx-legacy/issues/755))
+
 ## [0.6.19] - 2026-07-18
 ### Fixed
 - Unified the leaf-cost rule between Roll Up Cost and the BOM tab/CSV export, and stopped storing blank preferred-price form fields as `0` instead of `NULL` (H1, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). Roll Up Cost used a looser rule (`preferredPrice.Valid` alone) than `bomLeafCost`'s `Valid && > 0` check, so a leaf whose preferred price was stored as `0.00` rolled up as `$0` while the BOM tab/CSV fell back to `current_cost` for the same leaf, silently understating assembly cost. `rollupCost` now calls the shared `bomLeafCost` helper, and `PriceCreate`/`PriceUpdate` now use `nullableFloat` so a blank price/pack-size field stores `NULL` rather than `0` ([#760](https://github.com/Jolls/arx-legacy/issues/760))
