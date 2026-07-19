@@ -122,7 +122,10 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Post("/login", h.LoginPost)
 	r.Post("/logout", h.Logout)
 	r.Get("/settings", h.Settings)
-	r.Post("/settings", h.SettingsSave)
+	// POST /settings must stay reachable during first-run setup (h.db == nil) but
+	// requires a logged-in user once a database is connected, so an unauthenticated
+	// caller can't re-point the connection and exfiltrate the stored password (#748).
+	r.With(h.RequireAuthOnceConnected).Post("/settings", h.SettingsSave)
 	r.Get("/whats-new", h.WhatsNew)
 	r.Get("/api/browse-folder", h.APIBrowseFolder)
 	r.Get("/api/browse-file", h.APIBrowseFile)

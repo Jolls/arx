@@ -295,6 +295,28 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAuthOnceConnected gates a route that must stay reachable during
+// first-run setup (h.db == nil) but requires a logged-in user once a database
+// is connected. Used for POST /settings so an unauthenticated caller can't
+// rewrite the DB connection and exfiltrate the stored password after setup
+// (#748). Unlike RequireAuth it does not redirect on schemaMismatch: an admin
+// must still be able to re-point a mis-connected DB via settings, and login
+// stays reachable under a schema mismatch.
+func (h *Handler) RequireAuthOnceConnected(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.db == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		r2, u := h.withUser(r)
+		if u == nil {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		next.ServeHTTP(w, r2)
+	})
+}
+
 // fileServingPrefixes are routes that only ever serve static assets or local
 // files from disk — they never touch the DB, so profileRequest skips them
 // entirely instead of logging a guaranteed "0 round trips" line every time.
