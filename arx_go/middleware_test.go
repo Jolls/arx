@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	arxbase "arx/arxlib/config"
 )
@@ -86,6 +87,65 @@ func TestRequireAuth_RedirectsOnSchemaMismatch(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); loc != "/login" {
 		t.Errorf("Location = %q, want /login", loc)
+	}
+}
+
+func TestRequireAuthOnceConnected_AllowsFirstRun(t *testing.T) {
+	h := testHandler() // db == nil
+
+	var reached bool
+	req := httptest.NewRequest(http.MethodPost, "/settings", nil)
+	rec := httptest.NewRecorder()
+	h.RequireAuthOnceConnected(sentinel(&reached)).ServeHTTP(rec, req)
+
+	if !reached {
+		t.Error("next handler did not run; first-run POST /settings must be reachable while db == nil")
+	}
+}
+
+func TestRequireAuthOnceConnected_RedirectsWhenConnectedAndAnonymous(t *testing.T) {
+	h := testHandlerWithDB() // db != nil, no session user
+
+	var reached bool
+	req := httptest.NewRequest(http.MethodPost, "/settings", nil)
+	rec := httptest.NewRecorder()
+	h.RequireAuthOnceConnected(sentinel(&reached)).ServeHTTP(rec, req)
+
+	if reached {
+		t.Error("next handler ran; expected redirect to /login (the password-exfil path must be blocked)")
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/login" {
+		t.Errorf("Location = %q, want /login", loc)
+	}
+}
+
+func TestRequireAuthOnceConnected_AllowsLoggedInUser(t *testing.T) {
+	h := testHandlerWithDB() // db != nil
+	// Seed the user cache so withUser resolves without dialing the DB.
+	h.userCache[7] = &userCacheEntry{user: &User{ID: 7}, expires: time.Now().Add(time.Minute)}
+
+	// Build a signed session cookie carrying user_id=7.
+	seed := httptest.NewRequest(http.MethodPost, "/settings", nil)
+	seedRec := httptest.NewRecorder()
+	sess := h.session(seed)
+	sess.Values["user_id"] = 7
+	if err := sess.Save(seed, seedRec); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	var reached bool
+	req := httptest.NewRequest(http.MethodPost, "/settings", nil)
+	for _, c := range seedRec.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.RequireAuthOnceConnected(sentinel(&reached)).ServeHTTP(rec, req)
+
+	if !reached {
+		t.Errorf("next handler did not run; a logged-in user must reach POST /settings (status %d)", rec.Code)
 	}
 }
 

@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.15] - 2026-07-18
+### Security
+- Gated the main `POST /settings` save behind login once a database is connected (C1, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). The route stayed in the always-accessible block for first-run setup, so with a DB already connected an unauthenticated caller could submit a blank password with an attacker-controlled `db_server`; the handler fell back to the stored password (`firstNonEmpty(pw, cfg.DBPassword)`) and dialed the attacker's server, exfiltrating it. A new `RequireAuthOnceConnected` middleware lets `POST /settings` through only while `h.db == nil` (first-run) and requires a logged-in user otherwise; it intentionally skips the schema-mismatch redirect so an admin can still re-point a mis-connected DB ([#748](https://github.com/Jolls/arx-legacy/issues/748))
+
 ## [0.6.14] - 2026-07-18
 ### Added
 - Formalized three previously-inferred value sets as `VARCHAR`+`CHECK` "enum" columns (traceability epic slice 7): `lot.source` (`purchase|build|adjust`, nullable — no neutral resting source, backfilled by inference from `po_line_id`/owning build), `form.form_type` (`inspection|test|calibration|checklist|batch record`, `NOT NULL DEFAULT 'test'` — the kind of quality document, orthogonal to `record_types`; `batch record` is a `form_type` value not a `record_types` token, Q10), and `form_row.granularity` (`lot|unit`, `NOT NULL DEFAULT 'unit'` — per-unit vs per-lot check). Also promoted `form.part_number_id` from a bare logical reference to a real FK (`FK_form_part`, §4.4). Additive and inert until a later slice reads these columns, so `ExpectedSchemaVersion` is deliberately unchanged; ships DDL for both SQL Server and Postgres, the guarded migration `SQL/migrations/migrate_744_enum_formalization.sql`, seed fixture backfill, and schema docs ([#744](https://github.com/Jolls/arx-legacy/issues/744))
