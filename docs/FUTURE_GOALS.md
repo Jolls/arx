@@ -59,7 +59,10 @@ Many FK and NOT NULL constraints deferred at table creation. Should be applied i
 ### ~~4. `Tests` table rename → `test_definition` (#215)~~
 ~~The name `Tests` is ambiguous alongside Go's `_test.go` convention. Rename early to avoid compounding rename debt. Affects both apps, `cfg.StepsTable()`, DDL files, CLAUDE.md.~~ **Done in PR #308.**
 
-### 5. `price.is_preferred` flag (#223)
+### 5. Least-privilege app DB login (#751)
+Required before: named queries can be considered safe against arbitrary data access (#719 epic). The current `isSafeQuery` keyword blacklist ([named_query.go:20](../arx_go/named_query.go#L20)) is defense-in-depth only — real fix is a SQL Server login with `SELECT`-only rights on the tables named queries are allowed to touch, no cross-DB access to `ArxProd`, no `OPENROWSET`. #625-adjacent: revisit alongside the Postgres dialect work since the login/grants model may need to be re-derived per-engine.
+
+### 6. `price.is_preferred` flag (#223)
 Required before: BOM cost rollup UI (ENG-3 #280, RPT-4 #285). The current `PN.price_id` pointer is stale and unmanaged; replace with `is_preferred BIT` + filtered unique index.
 
 Once `is_preferred` exists and all parts (including MFG/RAW/ASM via your own company as supplier) have `price` rows, `PNCurrentCost` becomes fully redundant and can be dropped. Migration path: backfill `price` rows from `PNCurrentCost` values, verify rollup results match, then `ALTER TABLE PN DROP COLUMN PNCurrentCost`.
