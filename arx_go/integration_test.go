@@ -1831,3 +1831,45 @@ func TestIntegration_RecordLinkageSave(t *testing.T) {
 		t.Errorf("rejected save changed lot_id to %d, want unchanged %d", gotLot, goodLot)
 	}
 }
+
+// TestIntegration_UserAdminRequiresAdmin verifies the user-management endpoints
+// reject a non-admin session with 403 (issue #750 privilege-escalation gate) —
+// before this fix they were reachable by any logged-in user. Handlers are called
+// directly (no RequireAuth middleware), so the session user is injected on the
+// request context exactly as RequireAuth would, and requireAdmin short-circuits
+// with 403 before any DB write, so the test mutates nothing.
+func TestIntegration_UserAdminRequiresAdmin(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	nonAdmin := &User{ID: 8002, Username: "tester"} // seed tester, is_admin = 0
+
+	// userReq builds a POST carrying both the {userID} route param and the
+	// non-admin session user on the context.
+	userReq := func(target string) *http.Request {
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("userID", "8002")
+		req := postForm(target, url.Values{})
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		return req.WithContext(context.WithValue(req.Context(), ctxUserKey, nonAdmin))
+	}
+
+	cases := []struct {
+		name    string
+		handler http.HandlerFunc
+	}{
+		{"create", h.SettingsUsersCreate},
+		{"reset-password", h.SettingsUsersResetPassword},
+		{"toggle-active", h.SettingsUsersToggleActive},
+		{"toggle-approve", h.SettingsUsersToggleApprove},
+		{"toggle-approve-records", h.SettingsUsersToggleApproveRecords},
+		{"toggle-admin", h.SettingsUsersToggleAdmin},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			tc.handler(rec, userReq("/settings/users"))
+			assertStatus(t, tc.name+" non-admin", rec, http.StatusForbidden)
+		})
+	}
+}
