@@ -199,7 +199,8 @@ func diffSnapshot(curr, prev []models.RecordResultSnapshot) []models.SnapshotDif
 			switch {
 			case !ok:
 				status = "added"
-			case row.Result != p.Result || row.Comment != p.Comment || !boolPtrEqual(row.PassFail, p.PassFail):
+			case row.Result != p.Result || row.Comment != p.Comment || !boolPtrEqual(row.PassFail, p.PassFail) ||
+				row.Specification != p.Specification || row.SpecUnits != p.SpecUnits || row.Parameter != p.Parameter:
 				status = "changed"
 			}
 		}
