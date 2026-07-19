@@ -6,7 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.16] - 2026-07-18
+## [0.6.17] - 2026-07-18
+### Security
+- Gated the five user-admin endpoints and the Settings → Users management section behind a new `users.is_admin` flag (C3, epic [#719](https://github.com/Jolls/arx-legacy/issues/719)). They were protected only by `RequireAuth`, so any logged-in user could self-grant `can_approve_po`/`can_approve_records`, reset any user's password with no old-password check, or deactivate other accounts — a privilege-escalation hole with no admin/role concept in `users`. Added `is_admin BIT` (bootstrap first-run user is created as admin; the guarded migration `SQL/migrations/migrate_750_users_is_admin.sql` backfills existing active users so nobody is locked out), a `requireAdmin` gate on all five handlers plus the new admin-only `POST /settings/users/{id}/toggle-admin` (which can't strip your own admin rights), and hid the Users tab/panel from non-admins ([#750](https://github.com/Jolls/arx-legacy/issues/750))
 ### Fixed
 - Record-history diff now flags a step's `specification`/`spec_units`/`parameter` as changed between Complete-event snapshots, not just `result`/`comment`/`pass_fail`. Resyncing an unlocked record pulls those fields from the live form definition, so a complete → unlock → resync → complete cycle could shift a step's acceptance criteria while the history view silently reported it as "unchanged" (H7, epic [#719](https://github.com/Jolls/arx-legacy/issues/719), [#779](https://github.com/Jolls/arx-legacy/issues/779))
 

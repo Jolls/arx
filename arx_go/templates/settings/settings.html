@@ -30,7 +30,7 @@
         {{if and .Connected .CurrentUser}}
         <a href="#named-queries" class="sub-tab" data-tab="named-queries">Named Queries</a>
         {{end}}
-        {{if and .Connected .CurrentUser}}
+        {{if and .Connected .CurrentUser .CurrentUser.IsAdmin}}
         <a href="#users" class="sub-tab" data-tab="users">Users</a>
         {{end}}
         {{if and .Connected .CurrentUser}}
@@ -535,7 +535,7 @@
     {{end}}
 
     <!-- ── Users tab ────────────────────────────────────────────────────── -->
-    {{if and .Connected .CurrentUser}}
+    {{if and .Connected .CurrentUser .CurrentUser.IsAdmin}}
     <div class="settings-tab-panel" id="tab-users">
 
     <div class="detail-section">
@@ -553,6 +553,7 @@
                     <th class="text-center">Active</th>
                     <th class="text-center"><span data-bs-toggle="tooltip" title="May approve or reject purchase orders">PO Approver</span></th>
                     <th class="text-center"><span data-bs-toggle="tooltip" title="May approve test records and unlock approved ones">TR Reviewer</span></th>
+                    <th class="text-center"><span data-bs-toggle="tooltip" title="May manage user accounts (create, reset passwords, toggle rights)">Admin</span></th>
                     <th></th>
                 </tr>
             </thead>
@@ -569,6 +570,9 @@
                     </td>
                     <td class="text-center">
                         {{if .CanApproveRecords}}<span class="text-success">&#10003;</span>{{else}}<span class="text-muted">&#10007;</span>{{end}}
+                    </td>
+                    <td class="text-center">
+                        {{if .IsAdmin}}<span class="text-success">&#10003;</span>{{else}}<span class="text-muted">&#10007;</span>{{end}}
                     </td>
                     <td class="d-flex gap-1 flex-wrap">
                         <form method="post" action="/settings/users/{{.ID}}/password" class="m-0"
@@ -590,6 +594,14 @@
                                 {{if .CanApproveRecords}}Revoke TR reviewer{{else}}Make TR reviewer{{end}}
                             </button>
                         </form>
+                        {{if ne .ID $.CurrentUser.ID}}
+                        <form method="post" action="/settings/users/{{.ID}}/toggle-admin" class="m-0">
+                            <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
+                            <button type="submit" class="btn btn-secondary btn-sm">
+                                {{if .IsAdmin}}Revoke admin{{else}}Make admin{{end}}
+                            </button>
+                        </form>
+                        {{end}}
                         <form method="post" action="/settings/users/{{.ID}}/toggle-active" class="m-0">
                             <input type="hidden" name="csrf_token" value="{{$.CsrfToken}}">
                             <button type="submit" class="btn btn-secondary btn-sm">
@@ -599,7 +611,7 @@
                     </td>
                 </tr>
             {{else}}
-                <tr><td colspan="6" class="text-muted">No users yet.</td></tr>
+                <tr><td colspan="7" class="text-muted">No users yet.</td></tr>
             {{end}}
             </tbody>
         </table>

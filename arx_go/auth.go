@@ -28,6 +28,8 @@ type User struct {
 	DisplayName       string
 	CanApprovePO      bool
 	CanApproveRecords bool
+	// IsAdmin gates the user-management endpoints (issue #750).
+	IsAdmin bool
 	// Per-user PO defaults (issue #463); 0 = unset, falls back to global config.
 	DefaultPOContactID  int
 	DefaultPOReceiverID int
@@ -45,9 +47,9 @@ func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var defContact, defReceiver sql.NullInt64
 	var accentColor, defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, can_approve_po, can_approve_records, default_po_contact_id, default_po_receiver_id, accent_color, default_route FROM %s WHERE id = @p1 AND is_active = %s`,
+		`SELECT id, username, display_name, can_approve_po, can_approve_records, is_admin, default_po_contact_id, default_po_receiver_id, accent_color, default_route FROM %s WHERE id = @p1 AND is_active = %s`,
 		h.cfg.UsersTable(), h.dialect.BoolLiteral(true)), id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &defContact, &defReceiver, &accentColor, &defaultRoute)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &u.IsAdmin, &defContact, &defReceiver, &accentColor, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -196,7 +198,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login?error=all+fields+required", http.StatusSeeOther)
 			return
 		}
-		if err := h.createUser(r.Context(), username, displayName, password); err != nil {
+		if err := h.createUser(r.Context(), username, displayName, password, true); err != nil {
 			http.Redirect(w, r, "/login?error=could+not+create+user", http.StatusSeeOther)
 			return
 		}
@@ -256,20 +258,22 @@ func (h *Handler) saveSessionUser(w http.ResponseWriter, r *http.Request, u *Use
 
 // --- User creation / management ---
 
-func (h *Handler) createUser(ctx context.Context, username, displayName, password string) error {
+// createUser inserts a user. admin seeds is_admin — true only for the first-run
+// bootstrap user (issue #750); users added later via Settings start non-admin.
+func (h *Handler) createUser(ctx context.Context, username, displayName, password string, admin bool) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 	_, err = h.execContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (username, display_name, password_hash) VALUES (@p1, @p2, @p3)`,
-		h.cfg.UsersTable()), username, displayName, string(hash))
+		`INSERT INTO %s (username, display_name, password_hash, is_admin) VALUES (@p1, @p2, @p3, @p4)`,
+		h.cfg.UsersTable()), username, displayName, string(hash), admin)
 	return err
 }
 
 func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, is_active, can_approve_po, can_approve_records FROM %s ORDER BY username`,
+		`SELECT id, username, display_name, is_active, can_approve_po, can_approve_records, is_admin FROM %s ORDER BY username`,
 		h.cfg.UsersTable()))
 	if err != nil {
 		return nil, err
@@ -279,8 +283,8 @@ func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 	for rows.Next() {
 		var id int
 		var username, displayName string
-		var isActive, canApprovePO, canApproveRecords bool
-		if err := rows.Scan(&id, &username, &displayName, &isActive, &canApprovePO, &canApproveRecords); err != nil {
+		var isActive, canApprovePO, canApproveRecords, isAdmin bool
+		if err := rows.Scan(&id, &username, &displayName, &isActive, &canApprovePO, &canApproveRecords, &isAdmin); err != nil {
 			return nil, err
 		}
 		out = append(out, map[string]any{
@@ -290,13 +294,28 @@ func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 			"IsActive":          isActive,
 			"CanApprovePO":      canApprovePO,
 			"CanApproveRecords": canApproveRecords,
+			"IsAdmin":           isAdmin,
 		})
 	}
 	return out, rows.Err()
 }
 
+// requireAdmin writes a 403 and returns false unless the session user is an
+// admin. Every user-management endpoint gates on it so a non-admin can't
+// self-grant rights, reset passwords, or deactivate others (issue #750).
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if cu := h.currentUser(r); cu != nil && cu.IsAdmin {
+		return true
+	}
+	http.Error(w, "forbidden", http.StatusForbidden)
+	return false
+}
+
 // POST /settings/users — create a new user.
 func (h *Handler) SettingsUsersCreate(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
@@ -308,7 +327,7 @@ func (h *Handler) SettingsUsersCreate(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings?tab=users&error=all+fields+required", http.StatusSeeOther)
 		return
 	}
-	if err := h.createUser(r.Context(), username, displayName, password); err != nil {
+	if err := h.createUser(r.Context(), username, displayName, password, false); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+create+user", http.StatusSeeOther)
 		return
 	}
@@ -317,6 +336,9 @@ func (h *Handler) SettingsUsersCreate(w http.ResponseWriter, r *http.Request) {
 
 // POST /settings/users/{userID}/password — reset a user's password.
 func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
@@ -347,6 +369,9 @@ func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Requ
 
 // POST /settings/users/{userID}/toggle-active — toggle is_active.
 func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -368,6 +393,9 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 
 // POST /settings/users/{userID}/toggle-approve — toggle can_approve_po (PO approver, #267).
 func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -385,6 +413,9 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 
 // POST /settings/users/{userID}/toggle-approve-records — toggle can_approve_records (TR reviewer, #249).
 func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -393,6 +424,32 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET can_approve_records = %s, updated_at = GETDATE() WHERE id = @p1`,
 		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("can_approve_records")), id); err != nil {
+		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
+		return
+	}
+	h.invalidateUserCache(id)
+	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+}
+
+// POST /settings/users/{userID}/toggle-admin — toggle is_admin (issue #750).
+// An admin can't remove their own admin rights, mirroring the self-deactivate
+// guard, so the last admin can't accidentally lock everyone out of user admin.
+func (h *Handler) SettingsUsersToggleAdmin(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if cu := h.currentUser(r); cu != nil && cu.ID == id {
+		http.Redirect(w, r, "/settings?tab=users&error=cannot+remove+your+own+admin+rights", http.StatusSeeOther)
+		return
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET is_admin = %s, updated_at = GETDATE() WHERE id = @p1`,
+		h.cfg.UsersTable(), h.dialect.ToggleBoolExpr("is_admin")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
