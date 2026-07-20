@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- Settings' folder/file Browse… dialogs opened without an owner window, so they could appear behind Arx.exe with no taskbar entry and hang indefinitely waiting for a click nobody could make; the PowerShell picker now uses a topmost invisible owner form so the dialog always comes to the foreground
 
 ## [0.6.24] - 2026-07-19
 ### Security
