@@ -13,9 +13,10 @@ import (
 func BrowseFolderContext(ctx context.Context) string {
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 		`Add-Type -AssemblyName System.Windows.Forms; `+
+			`$o = New-Object System.Windows.Forms.Form -Property @{TopMost=$true}; `+
 			`$d = New-Object System.Windows.Forms.FolderBrowserDialog; `+
 			`$d.Description = 'Select folder'; `+
-			`if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath } else { '' }`)
+			`if ($d.ShowDialog($o) -eq 'OK') { $d.SelectedPath } else { '' }`)
 	hideWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
@@ -37,9 +38,10 @@ func BrowseFolder() string {
 func BrowseFileContext(ctx context.Context) string {
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 		`Add-Type -AssemblyName System.Windows.Forms; `+
+			`$o = New-Object System.Windows.Forms.Form -Property @{TopMost=$true}; `+
 			`$d = New-Object System.Windows.Forms.OpenFileDialog; `+
 			`$d.Title = 'Select file'; `+
-			`if ($d.ShowDialog() -eq 'OK') { $d.FileName } else { '' }`)
+			`if ($d.ShowDialog($o) -eq 'OK') { $d.FileName } else { '' }`)
 	hideWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
