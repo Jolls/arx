@@ -415,6 +415,13 @@ BEGIN TRY
     -- slice 8 read-swap; is_lot_tracked keeps driving reads until then.
     UPDATE dbo.part SET tracking_mode = 'lot' WHERE id IN (3007, 3012, 3013);
 
+    -- Serial coverage for slice 8 (#745): 3013 → lot_serial (its unit 8501 carries BOTH a lot
+    -- and a build), 3005 → serial (its unit 8503 is build-only). TracksLots('serial') is false,
+    -- so 3005 stays un-lot-tracked and the #675 app build test is unaffected; is_lot_tracked
+    -- stays in sync (3013 already 1; 3005 stays 0 — serial does not imply lot control).
+    UPDATE dbo.part SET tracking_mode = 'lot_serial' WHERE id = 3013;
+    UPDATE dbo.part SET tracking_mode = 'serial'     WHERE id = 3005;
+
     -- 8301: purchased lot of 3007, received against po_line 5504 (PO 5003); lot_number
     --       defaults to the lot's own id (#687), vendor_lot_number is the supplier's
     --       own batch ID, lot_description records the PO as provenance.
@@ -440,8 +447,9 @@ BEGIN TRY
     -- 8402/8403 (#737): 3013's lot 8306 consumed 1 unit each of 8302 (bom line 3910) and
     --       8303 (bom line 3911) — two parents into one child (branching), and a second
     --       level on top of 8401 (8301→8302→8306), so a recursive trace from 8306 resolves
-    --       back through BOTH raw lots (8301 via 8302, and 8303 directly). Lot->lot tree
-    --       (unit columns NULL after the slice-4 widening) for the future traceability view (epic #736 slice 9).
+    --       back through BOTH raw lots (8301 via 8302, and 8303 directly). These three are
+    --       lot->lot edges (unit columns NULL); the unit-endpoint edges 8404/8405 are added
+    --       after the unit rows below (their FKs reference dbo.unit, which does not exist yet).
     SET IDENTITY_INSERT dbo.genealogy ON;
     INSERT INTO dbo.genealogy (id, parent_lot_id, child_lot_id, qty_consumed) VALUES
         (8401, 8301, 8302, 1),
@@ -476,6 +484,18 @@ BEGIN TRY
         (8502, 3007, 8301, NULL, 'SN-3007-A1',  '2026-05-15T00:00:00', 1),
         (8503, 3005, NULL, 8201, 'SN-3005-001', '2026-05-25T00:00:00', 1);
     SET IDENTITY_INSERT dbo.unit OFF;
+
+    -- 8404/8405 (#746): unit-endpoint genealogy edges — inserted here (not with the lot->lot
+    -- edges above) because their FKs reference dbo.unit, which is created just above. They give
+    -- final-tested serial 8501 (a unit of top assembly 3013) a MIXED as-built ancestry: parent
+    -- UNIT 8503 (serialized sub-assembly of 3005) AND parent raw LOT 8301, so the per-serial
+    -- traceability walk (slice 9) resolves both a unit parent and a lot parent. Exercises the
+    -- widened genealogy's unit columns and the exactly-one-parent/exactly-one-child CHECK.
+    SET IDENTITY_INSERT dbo.genealogy ON;
+    INSERT INTO dbo.genealogy (id, parent_lot_id, parent_unit_id, child_lot_id, child_unit_id, qty_consumed) VALUES
+        (8404, NULL, 8503, NULL, 8501, 1),
+        (8405, 8301, NULL, NULL, 8501, 2);
+    SET IDENTITY_INSERT dbo.genealogy OFF;
 
     -- ============================================================
     -- 11. Test records — form, form_row, form_record, result,
@@ -541,7 +561,12 @@ BEGIN TRY
         (7010, 6001, 3012, '2026-07-10', '7010', 'ASM-1002', 'Sub-Assembly',  '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8302, 8202, NULL, '2020-01-01T00:00:00', '2026-07-10T00:00:00'), -- WIP, lot-tracked part → lot 8302 + build 8202 (#677)
         (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Widget Assembly','6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, 8201, 8503, '2020-01-01T00:00:00', '2026-07-11T00:00:00'), -- WIP, non-lot-tracked assembly → build 8201 only (#677); unit 8503 under test (#742, Q8 — denormalized lot/build equal the unit's)
         (7012, 6001, 3007, '2026-05-16', '7012', 'RAW-1002', 'Stainless Steel Bar Stock', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8301, NULL, 8502, '2020-01-01T00:00:00', '2026-05-16T00:00:00'), -- WIP, Incoming Inspection: lot 8301 → build_id NULL (#737 PRE-state row; reuses form 6001 purely to cover the receipt-not-yet-consumed case, not a realistic electrical test on bar stock); unit 8502 under test (#742, Q8)
-        (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Widget Deluxe Assembly', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8306, 8203, 8501, '2020-01-01T00:00:00', '2026-05-31T00:00:00'); -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0); unit 8501 under test (#742, Q8)
+        (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Widget Deluxe Assembly', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8306, 8203, 8501, '2020-01-01T00:00:00', '2026-05-31T00:00:00'), -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0); unit 8501 under test (#742, Q8)
+        -- Retest of unit 8501 (#745): a SECOND form_record pointing at the SAME unit — the
+        -- retest-as-same-unit case. serial_number matches unit 8501's ('SN-3013-001') and
+        -- unit_id is reused; lot_id/build_id are NULL (the slice-8 write-shape: provenance is
+        -- read THROUGH the unit, Q8), so this row also exercises loadRecordTrace's read-through.
+        (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Widget Deluxe Assembly', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', 0, 0, 1, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00');
     SET IDENTITY_INSERT dbo.form_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what
@@ -599,7 +624,13 @@ BEGIN TRY
         (7145, 7013, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7146, 7013, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7147, 7013, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
-        (7148, 7013, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00');
+        (7148, 7013, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
+        -- 7014 (#745) is the retest of unit 8501 — WIP with empty results; includes the
+        -- Re-Test-only step 6108 and skips archived 6104, matching a fresh Re-Test snapshot.
+        (7149, 7014, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7150, 7014, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7151, 7014, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7152, 7014, 6108, NULL, NULL,   'Retest Voltage Check',  'Re-measure output', 'V', '4.75', NULL, '5.25','range', 0, '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.result OFF;
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).

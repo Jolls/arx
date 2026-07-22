@@ -22,7 +22,8 @@ type Part struct {
 	PrimaryAttachmentID int
 	StockOnHand         float64
 	ReorderMin          *float64 // reorder point (#273); nil = none set, never flagged below-min
-	IsLotTracked        bool     // lot/batch control (#676); receipt/build create a lot row when true
+	IsLotTracked        bool     // DEPRECATED (#745): derived from TrackingMode; kept in sync for back-compat until a later cleanup slice drops the column. Read TrackingMode / TracksLots / TracksSerials for new logic.
+	TrackingMode        string   // lot/serial control (#743): none|lot|serial|lot_serial; drives reads as of slice 8 (#745)
 	CurrentCost         float64
 	LastRollupCost      float64
 	LastRollupAt        *time.Time
@@ -147,6 +148,18 @@ func (p Part) ShowBuild() bool { return p.HasBOM && p.ShowInventory() }
 // ShowLots reports whether the Lots subtab applies: the part is lot/batch
 // controlled (#676), so it has (or will have) lot rows to list and trace.
 func (p Part) ShowLots() bool { return p.IsLotTracked }
+
+// ShowUnits reports whether the Units subtab applies: the part is serial-tracked
+// (#736 slice 9), so it has (or will have) serialized unit rows to list and trace.
+func (p Part) ShowUnits() bool { return TracksSerials(p.TrackingMode) }
+
+// TracksLots reports whether a tracking_mode value implies lot/batch control:
+// receipt/build create a lot row. Replaces the is_lot_tracked read (#745).
+func TracksLots(mode string) bool { return mode == "lot" || mode == "lot_serial" }
+
+// TracksSerials reports whether a tracking_mode value implies serialized units:
+// a unit row is created lazily at test time (#745, Q5).
+func TracksSerials(mode string) bool { return mode == "serial" || mode == "lot_serial" }
 
 // BelowReorder reports whether on-hand stock has dropped below the part's reorder
 // point (#273). False when no reorder point is set (ReorderMin == nil).

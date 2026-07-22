@@ -76,13 +76,14 @@
                        value="{{if .Part.ReorderMin}}{{printf "%g" (deref .Part.ReorderMin)}}{{end}}">
             </div>
             <div class="detail-row">
-                <label class="form-label" data-bs-toggle="tooltip"
-                       title="When on, goods receipt and builds create a lot (batch) record for this part, capturing vendor lot numbers and build genealogy.">Lot Control</label>
-                <div class="form-checkbox-row">
-                    <input type="checkbox" id="is_lot_tracked" name="is_lot_tracked" value="1"
-                           {{if .Part.IsLotTracked}}checked{{end}}>
-                    <label for="is_lot_tracked">Batch / lot controlled</label>
-                </div>
+                <label for="tracking_mode" class="form-label" data-bs-toggle="tooltip"
+                       title="None: no lot/serial tracking. Lot: goods receipt and builds create a lot (batch) record. Serial: each unit gets a serialized instance at test time. Lot &amp; Serial: both.">Traceability</label>
+                <select id="tracking_mode" name="tracking_mode" class="form-select">
+                    <option value="none"{{if eq .Part.TrackingMode "none"}} selected{{end}}>None</option>
+                    <option value="lot"{{if eq .Part.TrackingMode "lot"}} selected{{end}}>Lot / batch controlled</option>
+                    <option value="serial"{{if eq .Part.TrackingMode "serial"}} selected{{end}}>Serial (unit tracked)</option>
+                    <option value="lot_serial"{{if eq .Part.TrackingMode "lot_serial"}} selected{{end}}>Lot &amp; Serial</option>
+                </select>
             </div>
             <div class="detail-row">
                 <label for="PNReqBy" class="form-label">Requested By</label>

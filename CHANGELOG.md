@@ -4,9 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.25] - 2026-07-22
+### Added
+- Serialized-unit create/render logic (traceability epic [#736](https://github.com/Jolls/arx-legacy/issues/736), slice 8): parts now carry a `none | lot | serial | lot_serial` tracking mode (replacing the lot-only checkbox); testing a serial/lot_serial part mints a `unit` row with provenance from the linked lot/build, retests reuse the same unit, unit-level records carry `unit_id` and read lot/build through the unit, and a build's history shows a "Tested N / qty" completeness column ([#745](https://github.com/Jolls/arx-legacy/issues/745))
+- Build/lot/unit traceability view (slice 9): a read-only Units subtab and a per-serial genealogy "birth certificate" that walks the unified lot+unit `genealogy` edge table (seeded from the unit and its lot) to show a unit's as-built components; the existing lot trace now renders unit endpoints too ([#746](https://github.com/Jolls/arx-legacy/issues/746))
+- Embedded build-at-test-time UX (slice 10): the "Build this unit" affordance on a test record now expands an inline BOM/lot panel that builds one unit and links it to the record in one transactional save, instead of navigating to the Build tab and back ([#747](https://github.com/Jolls/arx-legacy/issues/747))
 ### Fixed
 - Settings' folder/file Browse… dialogs opened without an owner window, so they could appear behind Arx.exe with no taskbar entry and hang indefinitely waiting for a click nobody could make; the PowerShell picker now uses a topmost invisible owner form so the dialog always comes to the foreground
+- The `max_subbatch_result` named query's `spec_nom` usage sites still passed `@test_id` after the [#769](https://github.com/Jolls/arx-legacy/issues/769) column rename to `@form_row_id`, failing at runtime with "Must declare the scalar variable '@form_row_id'"; a migration rewrites the stored `spec_nom` text in `form_row` and `result`
 
 ## [0.6.24] - 2026-07-19
 ### Security

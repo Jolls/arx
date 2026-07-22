@@ -1911,7 +1911,7 @@ func (h *Handler) fetchPOItems(r *http.Request, num string) ([]models.PurchaseOr
 		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
 		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id, pol.lead_time_days,
 		       pol.received_qty, pol.date_received,
-		       p.is_lot_tracked,
+		       p.tracking_mode,
 		       fil.id, fil.file_name, fil.category
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
@@ -1930,17 +1930,17 @@ func (h *Handler) fetchPOItems(r *http.Request, num string) ([]models.PurchaseOr
 		var partNumber, rev, desc, vendorPN sql.NullString
 		var polpnid, leadTime sql.NullInt64
 		var dateReceived sql.NullTime
-		var isLotTracked sql.NullBool
+		var trackingMode sql.NullString
 		var filID sql.NullInt64
 		var filFileName, filCategory sql.NullString
 		if err := rows.Scan(&item.ID, &item.LineNumber, &partNumber, &rev, &desc,
 			&item.Qty, &item.UnitCost, &vendorPN, &polpnid, &leadTime,
 			&item.ReceivedQty, &dateReceived,
-			&isLotTracked,
+			&trackingMode,
 			&filID, &filFileName, &filCategory); err != nil {
 			return nil, err
 		}
-		item.IsLotTracked = isLotTracked.Bool
+		item.IsLotTracked = models.TracksLots(trackingMode.String)
 		item.PartNumberSnapshot = partNumber.String
 		item.RevisionSnapshot = rev.String
 		item.Description = desc.String
