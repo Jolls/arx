@@ -1,13 +1,8 @@
-
-INVENTREE_REFERENCE.md
 CLAUDE.md
 .env
-config/local.json
-arx_go/config/local*.json
 arx_go/Arx.exe
 .claude/
-docs/plans/412-unprivate-repo-scrub.md
-docs/security-review-*.local.md
-arx_go/config/LOCAL-IntTesting.txt
 arx_go/Arx.exe~
+*.local.*
+*local*.json
 /local/
