@@ -30,13 +30,13 @@ Both migrations in this branch are pinned to ArxDev via `USE ArxDev;` and must b
 re-pointed to ArxProd by a human (change that one line; never run by an agent). Both are
 idempotent/single-batch.
 
-- [ ] **Prerequisite:** confirm the epic's slices 0–7 schema is already on ArxProd —
+- [x] **Prerequisite:** confirm the epic's slices 0–7 schema is already on ArxProd —
       `unit` table (#740), `genealogy` widening (#741), `form_record.unit_id` (#742),
       `part.tracking_mode` (#743), enum CHECKs (#744). Slices 8–10 code assumes all of it.
       If any is missing, apply those migrations first, in order.
-- [ ] `SQL/migrations/migrate_746_genealogy_trace_indexes.sql` — covering indexes on
+- [x] `SQL/migrations/migrate_746_genealogy_trace_indexes.sql` — covering indexes on
       `genealogy` (perf only, no behavior change). Change `USE ArxDev` → `USE ArxProd`.
-- [ ] `SQL/migrations/migrate_max_subbatch_result_param_rename.sql` — rewrites the
+- [x] `SQL/migrations/migrate_max_subbatch_result_param_rename.sql` — rewrites the
       `max_subbatch_result(@test_id=…)` usage sites in `form_row.spec_nom` / `result.spec_nom`
       to `@form_row_id=` (the #769 rename patched the named_query row but not these usage
       sites, so they fail at runtime). Change `USE ArxDev` → `USE ArxProd`.
