@@ -183,53 +183,65 @@ func (h *Handler) fetchLotRow(ctx context.Context, lotID int) (LotRow, bool, err
 	return lr, true, nil
 }
 
-// LotTraceNode is one lot in a genealogy trace, flattened with Depth for indented
-// rendering. Qty is qty_consumed on the edge connecting this node to its
-// predecessor (how much of a parent lot fed the child that led here).
-type LotTraceNode struct {
+// TraceNode is one lot OR unit in a genealogy trace (#746), flattened with Depth for
+// indented rendering. NodeType ("lot"|"unit") says which; Number holds the lot_number
+// or the unit's serial_number accordingly. Qty is qty_consumed on the edge connecting
+// this node to its predecessor (how much of a parent fed the child that led here).
+type TraceNode struct {
+	NodeType    string // "lot" | "unit"
 	ID          int
-	LotNumber   string
-	VendorLot   string
+	Number      string // lot.lot_number or unit.serial_number, per NodeType
+	VendorLot   string // lot nodes only; "" for unit nodes
 	PartID      int
 	PartNumber  string
 	PartTitle   string
-	IsVendorLot bool // po_line_id set → a purchased raw/vendor lot (a genealogy leaf)
+	IsVendorLot bool // lot nodes only: po_line_id set → a purchased raw/vendor lot (a genealogy leaf)
 	Qty         float64
 	Depth       int
 }
 
-// lotNeighbors returns the immediate parent (ancestors) or child (descendants)
-// lots of one lot in the genealogy. It fully drains its cursor before returning so
-// the caller can recurse without exhausting the connection pool.
-//
-// Lot endpoints only: the inner JOIN on g.parent_lot_id/child_lot_id silently skips
-// any edge with a unit endpoint (those lot columns NULL). Correct today — every
-// genealogy row is lot→lot — but slice 8 (#736), which starts writing unit endpoints,
-// must generalize this walk (union the unit joins) or the trace will under-report.
-func (h *Handler) lotNeighbors(ctx context.Context, lotID int, ancestors bool) ([]LotTraceNode, error) {
-	joinCol, whereCol := "parent_lot_id", "child_lot_id"
+// IsUnit reports whether this node is a serialized unit (vs a lot) — for templates.
+func (n TraceNode) IsUnit() bool { return n.NodeType == "unit" }
+
+// traceNeighbors returns the immediate parent (ancestors) or child (descendants)
+// nodes — lot OR unit — of one node in the genealogy (#746). The exactly-one-parent /
+// exactly-one-child CHECK (Q11) guarantees each edge has precisely one parent FK and
+// one child FK set, so the far endpoint is found by joining against lot and unit
+// separately and unioning. It fully drains its cursor before returning so the caller
+// can recurse without exhausting the connection pool.
+func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, ancestors bool) ([]TraceNode, error) {
+	// filterCol selects edges where THIS node is the near endpoint; joinPrefix names
+	// the FAR endpoint's columns. Ancestors walk child→parent; descendants parent→child.
+	filterCol, joinPrefix := "child_"+nodeType+"_id", "parent"
 	if !ancestors {
-		joinCol, whereCol = "child_lot_id", "parent_lot_id"
+		filterCol, joinPrefix = "parent_"+nodeType+"_id", "child"
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT l.id, l.lot_number, l.vendor_lot_number, l.po_line_id,
+		SELECT 'lot' AS node_type, l.id, l.lot_number, l.vendor_lot_number, l.po_line_id,
 		       p.id, p.part_number, p.title, g.qty_consumed
-		FROM %s g
-		JOIN %s l ON l.id = g.%s
-		JOIN %s p ON p.id = l.part_id
-		WHERE g.%s = @p1
-		ORDER BY l.id
-	`, h.cfg.GenealogyTable(), h.cfg.LotTable(), joinCol, h.cfg.PartsTable(), whereCol), lotID)
+		FROM %[1]s g
+		JOIN %[2]s l ON l.id = g.%[3]s_lot_id
+		JOIN %[4]s p ON p.id = l.part_id
+		WHERE g.%[5]s = @p1
+		UNION ALL
+		SELECT 'unit' AS node_type, u.id, u.serial_number, NULL, NULL,
+		       p.id, p.part_number, p.title, g.qty_consumed
+		FROM %[1]s g
+		JOIN %[6]s u ON u.id = g.%[3]s_unit_id
+		JOIN %[4]s p ON p.id = u.part_id
+		WHERE g.%[5]s = @p1
+		ORDER BY 1, 2
+	`, h.cfg.GenealogyTable(), h.cfg.LotTable(), joinPrefix, h.cfg.PartsTable(), filterCol, h.cfg.UnitTable()), id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []LotTraceNode
+	var out []TraceNode
 	for rows.Next() {
-		var n LotTraceNode
+		var n TraceNode
 		var vendorLot, partNumber, partTitle sql.NullString
 		var poLineID sql.NullInt64
-		if err := rows.Scan(&n.ID, &n.LotNumber, &vendorLot, &poLineID,
+		if err := rows.Scan(&n.NodeType, &n.ID, &n.Number, &vendorLot, &poLineID,
 			&n.PartID, &partNumber, &partTitle, &n.Qty); err != nil {
 			return nil, err
 		}
@@ -242,32 +254,58 @@ func (h *Handler) lotNeighbors(ctx context.Context, lotID int, ancestors bool) (
 	return out, rows.Err()
 }
 
-// lotTrace walks the genealogy table from rootID and returns the reachable lots flattened
-// depth-first (ancestors=parents down to raw vendor lots, or descendants=children).
-// A visited set guards against cycles, so each lot's subtree is expanded once.
-func (h *Handler) lotTrace(ctx context.Context, rootID int, ancestors bool) ([]LotTraceNode, error) {
-	var out []LotTraceNode
-	visited := map[int]bool{rootID: true}
-	var walk func(id, depth int) error
-	walk = func(id, depth int) error {
-		neighbors, err := h.lotNeighbors(ctx, id, ancestors)
+// traceRoot is one starting node (a lot or a unit) for a genealogy walk.
+type traceRoot struct {
+	id       int
+	nodeType string // "lot" | "unit"
+}
+
+// genealogyTrace walks the genealogy table from a single root — see genealogyTraceRoots.
+func (h *Handler) genealogyTrace(ctx context.Context, rootID int, rootType string, ancestors bool) ([]TraceNode, error) {
+	return h.genealogyTraceRoots(ctx, []traceRoot{{rootID, rootType}}, ancestors)
+}
+
+// genealogyTraceRoots walks the genealogy table from one or more roots and returns the
+// reachable lot/unit nodes flattened depth-first (ancestors=parents down to raw vendor
+// lots / root units, or descendants=children). A single visited set is shared across
+// all roots so a node reachable from several roots is expanded once. It is keyed by
+// (NodeType, ID): lot and unit id spaces are independent, so a bare int key would
+// falsely conflate a lot and a unit that share the same id. Multiple roots let a unit
+// be traced together with its lot (#746): a lot_serial unit's as-built components are
+// its lot's, so its birth certificate seeds from both the unit and the lot it belongs to.
+func (h *Handler) genealogyTraceRoots(ctx context.Context, roots []traceRoot, ancestors bool) ([]TraceNode, error) {
+	type key struct {
+		nodeType string
+		id       int
+	}
+	var out []TraceNode
+	visited := map[key]bool{}
+	for _, rt := range roots {
+		visited[key{rt.nodeType, rt.id}] = true
+	}
+	var walk func(id int, nodeType string, depth int) error
+	walk = func(id int, nodeType string, depth int) error {
+		neighbors, err := h.traceNeighbors(ctx, id, nodeType, ancestors)
 		if err != nil {
 			return err
 		}
 		for _, n := range neighbors {
 			n.Depth = depth
 			out = append(out, n)
-			if !visited[n.ID] {
-				visited[n.ID] = true
-				if err := walk(n.ID, depth+1); err != nil {
+			k := key{n.NodeType, n.ID}
+			if !visited[k] {
+				visited[k] = true
+				if err := walk(n.ID, n.NodeType, depth+1); err != nil {
 					return err
 				}
 			}
 		}
 		return nil
 	}
-	if err := walk(rootID, 0); err != nil {
-		return nil, err
+	for _, rt := range roots {
+		if err := walk(rt.id, rt.nodeType, 0); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
@@ -314,12 +352,12 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Lot not found for this part")
 		return
 	}
-	ancestors, err := h.lotTrace(r.Context(), lotID, true)
+	ancestors, err := h.genealogyTrace(r.Context(), lotID, "lot", true)
 	if err != nil {
 		h.renderError(w, r, "Error tracing lot ancestry: "+err.Error())
 		return
 	}
-	descendants, err := h.lotTrace(r.Context(), lotID, false)
+	descendants, err := h.genealogyTrace(r.Context(), lotID, "lot", false)
 	if err != nil {
 		h.renderError(w, r, "Error tracing lot descendants: "+err.Error())
 		return

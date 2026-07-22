@@ -74,7 +74,14 @@ type TestRecord struct {
 	FormRevision     *int   // snapshot of form.Revision at record creation; nil for pre-#260 records or legacy data
 	LotID            *int   // lot the tested unit belongs to (#677); nil when the part is not lot-tracked or unlinked
 	BuildID          *int   // build that produced the tested unit (#677); nil when not built or unlinked
+	UnitID           *int   // the one serialized unit under test (#742, Q8); nil for whole-lot/batch records
+	UnitSerial       string // joined from unit.serial_number when UnitID is set; display only
 }
+
+// IsUnitLevel reports whether this record covers one specific serialized unit
+// (unit testing) rather than a whole lot/batch (#745). Structural — a record is
+// unit-level because unit_id is set, not because of any flag (design §2/Q8).
+func (r TestRecord) IsUnitLevel() bool { return r.UnitID != nil }
 
 // OrderedTestIDs parses TestOrder into a slice of integer step IDs.
 func (r *TestRecord) OrderedTestIDs() []int {

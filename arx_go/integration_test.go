@@ -1645,16 +1645,16 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 		t.Errorf("component %d issue lot_id = %d, want %d (the consumed lot)", trackedComp, issueLot, compLot)
 	}
 
-	// The Lots-view genealogy walk (lot.go lotTrace) resolves the output lot back to
-	// its raw vendor lot — the #676 "trace an output lot back to raw vendor lots"
-	// acceptance criterion. Seed lot 8301 has a po_line_id, so it flags as a vendor lot.
-	ancestors, err := h.lotTrace(ctx, outputLotID, true)
+	// The generalized genealogy walk (lot.go genealogyTrace) resolves the output lot
+	// back to its raw vendor lot — the #676 "trace an output lot back to raw vendor
+	// lots" acceptance criterion. Seed lot 8301 has a po_line_id, so it flags as vendor.
+	ancestors, err := h.genealogyTrace(ctx, outputLotID, "lot", true)
 	if err != nil {
-		t.Fatalf("lotTrace ancestors: %v", err)
+		t.Fatalf("genealogyTrace ancestors: %v", err)
 	}
 	foundVendorLot := false
 	for _, a := range ancestors {
-		if a.ID == compLot {
+		if a.NodeType == "lot" && a.ID == compLot {
 			foundVendorLot = true
 			if !a.IsVendorLot {
 				t.Errorf("traced ancestor lot %d not flagged as a raw vendor lot", compLot)
@@ -1662,7 +1662,7 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 		}
 	}
 	if !foundVendorLot {
-		t.Errorf("lotTrace(%d) ancestors did not resolve back to raw vendor lot %d", outputLotID, compLot)
+		t.Errorf("genealogyTrace(%d) ancestors did not resolve back to raw vendor lot %d", outputLotID, compLot)
 	}
 }
 
@@ -1830,6 +1830,252 @@ func TestIntegration_RecordLinkageSave(t *testing.T) {
 	}
 	if gotLot != goodLot {
 		t.Errorf("rejected save changed lot_id to %d, want unchanged %d", gotLot, goodLot)
+	}
+}
+
+// TestIntegration_SerialUnitCreationAndRetest verifies slice 8 (#745): saving a
+// serial/lot_serial part's record mints a unit lazily with provenance from the
+// picked lot/build, points the record at it via unit_id (leaving lot_id/build_id
+// NULL per the Q8 FK-consistency invariant), and a retest — a second record with
+// the same serial — re-links the SAME unit rather than creating a duplicate.
+func TestIntegration_SerialUnitCreationAndRetest(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	rt := h.cfg.RecordsTable()
+	ut := h.cfg.UnitTable()
+
+	const testedPart = 3013 // ASM-1003, tracking_mode lot_serial in seed
+	const provLot = 8306    // a lot of 3013
+	const provBuild = 8203  // a build of 3013
+	serial := smokeUniq("SN-IT")
+
+	// Two records sharing one serial: the original test and a retest.
+	mkRecord := func() int {
+		var id int
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active)
+			 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 0, 1)`, rt),
+			testedPart, serial).Scan(&id); err != nil {
+			t.Fatalf("seed record: %v", err)
+		}
+		return id
+	}
+	rec1 := mkRecord()
+	rec2 := mkRecord()
+	var unitID int
+	defer func() {
+		// Records reference the unit via unit_id FK — delete them before the unit.
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id IN (@p1,@p2)`, rt), rec1, rec2)
+		if unitID != 0 {
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, ut), unitID)
+		}
+	}()
+
+	save := func(recID int) {
+		req := withID(postForm(fmt.Sprintf("/records/%d/edit", recID), url.Values{
+			"lot_id":   {strconv.Itoa(provLot)},
+			"build_id": {strconv.Itoa(provBuild)},
+		}), recID)
+		rr := httptest.NewRecorder()
+		h.SaveResults(rr, req)
+		assertStatus(t, "SaveResults(serial)", rr, http.StatusSeeOther)
+	}
+	save(rec1)
+
+	// Record 1: unit_id set, lot_id/build_id NULL (Q8 — read through the unit).
+	var gotUnit, gotLot, gotBuild sql.NullInt64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT unit_id, lot_id, build_id FROM %s WHERE id = @p1`, rt), rec1).
+		Scan(&gotUnit, &gotLot, &gotBuild); err != nil {
+		t.Fatalf("read record 1 (ArxDev may need reseed): %v", err)
+	}
+	if !gotUnit.Valid {
+		t.Fatal("record 1 unit_id not set after serial save")
+	}
+	if gotLot.Valid || gotBuild.Valid {
+		t.Errorf("record 1 lot_id/build_id should be NULL (Q8), got lot=%v build=%v", gotLot, gotBuild)
+	}
+	unitID = int(gotUnit.Int64)
+
+	// The unit carries the provenance and the record's serial.
+	var uLot, uBuild sql.NullInt64
+	var uSerial string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT lot_id, build_id, serial_number FROM %s WHERE id = @p1`, ut), unitID).
+		Scan(&uLot, &uBuild, &uSerial); err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	if uSerial != serial {
+		t.Errorf("unit serial = %q, want %q", uSerial, serial)
+	}
+	if int(uLot.Int64) != provLot || int(uBuild.Int64) != provBuild {
+		t.Errorf("unit provenance lot=%v build=%v, want %d/%d", uLot, uBuild, provLot, provBuild)
+	}
+
+	// Retest (record 2, same serial): re-links the SAME unit, no duplicate row.
+	save(rec2)
+	var gotUnit2 sql.NullInt64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT unit_id FROM %s WHERE id = @p1`, rt), rec2).Scan(&gotUnit2); err != nil {
+		t.Fatalf("read record 2: %v", err)
+	}
+	if int(gotUnit2.Int64) != unitID {
+		t.Errorf("retest linked unit %d, want same unit %d", gotUnit2.Int64, unitID)
+	}
+	var unitCount int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE part_id = @p1 AND serial_number = @p2`, ut), testedPart, serial).
+		Scan(&unitCount); err != nil {
+		t.Fatalf("count units: %v", err)
+	}
+	if unitCount != 1 {
+		t.Errorf("unit count for (part,serial) = %d, want 1 (retest must not duplicate)", unitCount)
+	}
+}
+
+// TestIntegration_UnitGenealogyTrace verifies slice 9 (#746): the generalized walk
+// resolves a serialized unit's mixed lot+unit ancestry from the genealogy edge table.
+// Seed unit 8501 (top assembly 3013) has a unit parent (8503) and a lot parent (8301)
+// via genealogy edges 8404/8405 — the walk must surface both, tagged by node type.
+func TestIntegration_UnitGenealogyTrace(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const rootUnit = 8501 // serial of 3013, seeded with unit+lot parents
+	const parentUnit = 8503
+	const parentLot = 8301
+
+	ancestors, err := h.genealogyTrace(ctx, rootUnit, "unit", true)
+	if err != nil {
+		t.Fatalf("genealogyTrace unit ancestors (ArxDev may need reseed): %v", err)
+	}
+	var sawUnitParent, sawLotParent bool
+	for _, a := range ancestors {
+		if a.NodeType == "unit" && a.ID == parentUnit {
+			sawUnitParent = true
+		}
+		if a.NodeType == "lot" && a.ID == parentLot {
+			sawLotParent = true
+			if !a.IsVendorLot {
+				t.Errorf("parent lot %d not flagged as vendor lot", parentLot)
+			}
+		}
+	}
+	if !sawUnitParent {
+		t.Errorf("unit %d ancestry missing unit parent %d", rootUnit, parentUnit)
+	}
+	if !sawLotParent {
+		t.Errorf("unit %d ancestry missing lot parent %d", rootUnit, parentLot)
+	}
+}
+
+// TestIntegration_BuildAtTestTime verifies slice 10 (#747): saving a record with the
+// inline build panel (build_panel=1) builds ONE unit of the part in the same
+// transaction — consuming components, receiving output — and links the record to the
+// resulting build via a minted unit (Q8: lot/build NULL on the record, carried on the
+// unit). Part 3013 (lot_serial) consumes lot-tracked components 3012 (lot 8302) and
+// 3007 (lot 8301) per its seed BOM.
+func TestIntegration_BuildAtTestTime(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	rt := h.cfg.RecordsTable()
+	ut := h.cfg.UnitTable()
+	bt := h.cfg.BuildTable()
+	lt := h.cfg.LotTable()
+	lg := h.cfg.GenealogyTable()
+	inv := h.cfg.InventoryTxnTable()
+	pn := h.cfg.PartsTable()
+
+	const testedPart = 3013
+	const comp1, comp1Lot = 3012, 8302
+	const comp2, comp2Lot = 3007, 8301
+	const seedMaxBuild = 8203 // highest seeded build id for 3013
+	serial := smokeUniq("BAT")
+
+	var recordID, buildID, unitID, outputLotID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 0, 1)`, rt),
+		testedPart, serial).Scan(&recordID); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+	defer func() {
+		// FK-ordered teardown: record (→unit) → unit → genealogy(→output lot) →
+		// ledger(→build) → build → output lot; then restore consumed stock.
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, rt), recordID)
+		if unitID != 0 {
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, ut), unitID)
+		}
+		if buildID != 0 {
+			if outputLotID == 0 {
+				_ = h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT ISNULL(output_lot_id,0) FROM %s WHERE id=@p1`, bt), buildID).Scan(&outputLotID)
+			}
+			if outputLotID != 0 {
+				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE child_lot_id = @p1`, lg), outputLotID)
+			}
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE note = @p1`, inv), fmt.Sprintf("Build #%d", buildID))
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, bt), buildID)
+			if outputLotID != 0 {
+				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, lt), outputLotID)
+			}
+		}
+		for _, id := range []int{comp1, comp2, testedPart} {
+			smokeExec(ctx, h, fmt.Sprintf(
+				`UPDATE %s SET stock_on_hand = (SELECT ISNULL(SUM(qty),0) FROM %s WHERE part_id=@p1) WHERE id=@p1`, pn, inv), id)
+		}
+	}()
+
+	req := withID(postForm(fmt.Sprintf("/records/%d/edit", recordID), url.Values{
+		"build_panel":                 {"1"},
+		fmt.Sprintf("lot[%d]", comp1): {strconv.Itoa(comp1Lot)},
+		fmt.Sprintf("lot[%d]", comp2): {strconv.Itoa(comp2Lot)},
+	}), recordID)
+	rec := httptest.NewRecorder()
+	h.SaveResults(rec, req)
+	assertStatus(t, "SaveResults(build_panel)", rec, http.StatusSeeOther)
+
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, bt), testedPart).Scan(&buildID); err != nil {
+		t.Fatalf("find build (ArxDev may need reseed): %v", err)
+	}
+	if buildID <= seedMaxBuild {
+		t.Fatalf("no new build created for %d (max id %d)", testedPart, buildID)
+	}
+	_ = h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT ISNULL(output_lot_id,0) FROM %s WHERE id=@p1`, bt), buildID).Scan(&outputLotID)
+
+	// Record points at a minted unit; lot/build NULL on the record (Q8).
+	var gotUnit, gotLot, gotBuild sql.NullInt64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT unit_id, lot_id, build_id FROM %s WHERE id=@p1`, rt), recordID).
+		Scan(&gotUnit, &gotLot, &gotBuild); err != nil {
+		t.Fatalf("read record: %v", err)
+	}
+	if !gotUnit.Valid {
+		t.Fatal("record unit_id not set after build-at-test-time")
+	}
+	if gotLot.Valid || gotBuild.Valid {
+		t.Errorf("record lot/build should be NULL (Q8), got lot=%v build=%v", gotLot, gotBuild)
+	}
+	unitID = int(gotUnit.Int64)
+
+	// The minted unit carries the new build as provenance.
+	var uBuild sql.NullInt64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT build_id FROM %s WHERE id=@p1`, ut), unitID).Scan(&uBuild); err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	if int(uBuild.Int64) != buildID {
+		t.Errorf("unit build_id=%v, want new build %d", uBuild, buildID)
+	}
+
+	// Both lot-tracked components were issued against the build.
+	var issues int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE note=@p1 AND qty < 0`, inv),
+		fmt.Sprintf("Build #%d", buildID)).Scan(&issues); err != nil {
+		t.Fatalf("count issues: %v", err)
+	}
+	if issues < 2 {
+		t.Errorf("component issues for build = %d, want >= 2 (3012 + 3007)", issues)
 	}
 }
 

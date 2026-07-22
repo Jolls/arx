@@ -28,7 +28,9 @@ ALTER TABLE genealogy ADD CONSTRAINT FK_gen_parent_lot  FOREIGN KEY (parent_lot_
 ALTER TABLE genealogy ADD CONSTRAINT FK_gen_parent_unit FOREIGN KEY (parent_unit_id) REFERENCES unit (id);
 ALTER TABLE genealogy ADD CONSTRAINT FK_gen_child_lot   FOREIGN KEY (child_lot_id)   REFERENCES lot (id);
 ALTER TABLE genealogy ADD CONSTRAINT FK_gen_child_unit  FOREIGN KEY (child_unit_id)  REFERENCES unit (id);
-CREATE INDEX IX_gen_parent_lot  ON genealogy (parent_lot_id);
-CREATE INDEX IX_gen_parent_unit ON genealogy (parent_unit_id);
-CREATE INDEX IX_gen_child_lot   ON genealogy (child_lot_id);
-CREATE INDEX IX_gen_child_unit  ON genealogy (child_unit_id);
+-- Covering indexes (#746): INCLUDE the far endpoints + qty_consumed so the recursive
+-- lot+unit genealogy walk (arx_go/lot.go traceNeighbors) seeks without a heap fetch.
+CREATE INDEX IX_gen_parent_lot  ON genealogy (parent_lot_id)  INCLUDE (child_lot_id, child_unit_id, qty_consumed);
+CREATE INDEX IX_gen_parent_unit ON genealogy (parent_unit_id) INCLUDE (child_lot_id, child_unit_id, qty_consumed);
+CREATE INDEX IX_gen_child_lot   ON genealogy (child_lot_id)   INCLUDE (parent_lot_id, parent_unit_id, qty_consumed);
+CREATE INDEX IX_gen_child_unit  ON genealogy (child_unit_id)  INCLUDE (parent_lot_id, parent_unit_id, qty_consumed);

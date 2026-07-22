@@ -14,11 +14,12 @@ import (
 
 // BuildView is one past-build row for the Build tab's history table.
 type BuildView struct {
-	ID       int
-	Qty      float64
-	Date     string
-	Username string
-	Note     string
+	ID          int
+	Qty         float64
+	Date        string
+	Username    string
+	Note        string
+	TestedCount int // # of serialized units created for this build so far (#745, Q6 completeness numerator; denominator is Qty)
 }
 
 // BuildOption is one past build of a part, offered when linking a test record to
@@ -102,7 +103,7 @@ type buildComponent struct {
 // always draws from a specific lot regardless of whether the output is lot-tracked.
 func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]buildComponent, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT b.component_part_id, p.part_number, p.title, p.category, b.qty, p.stock_on_hand, p.is_lot_tracked
+		SELECT b.component_part_id, p.part_number, p.title, p.category, b.qty, p.stock_on_hand, p.tracking_mode
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
 		WHERE b.parent_part_id = @p1
 		ORDER BY b.line_number
@@ -113,9 +114,8 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 	var comps []buildComponent
 	for rows.Next() {
 		var c buildComponent
-		var title sql.NullString
-		var isLotTracked sql.NullBool
-		if err := rows.Scan(&c.PartID, &c.PartNumber, &title, &c.Category, &c.QtyPer, &c.StockOnHand, &isLotTracked); err != nil {
+		var title, trackingMode sql.NullString
+		if err := rows.Scan(&c.PartID, &c.PartNumber, &title, &c.Category, &c.QtyPer, &c.StockOnHand, &trackingMode); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -123,7 +123,7 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 			continue // non-stocked line (labor/doc/…) — not consumed from stock.
 		}
 		c.Title = title.String
-		c.IsLotTracked = isLotTracked.Bool
+		c.IsLotTracked = models.TracksLots(trackingMode.String)
 		comps = append(comps, c)
 	}
 	rows.Close()
@@ -157,10 +157,13 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// tested_count is the # of serialized units created for each build so far —
+	// the Q6 completeness numerator (#745); the denominator is the build qty.
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, qty, build_date, username, note
-		FROM %s WHERE part_id = @p1 ORDER BY build_date DESC, id DESC
-	`, h.cfg.BuildTable()), id)
+		SELECT b.id, b.qty, b.build_date, b.username, b.note,
+		       (SELECT COUNT(*) FROM %s u WHERE u.build_id = b.id) AS tested_count
+		FROM %s b WHERE b.part_id = @p1 ORDER BY b.build_date DESC, b.id DESC
+	`, h.cfg.UnitTable(), h.cfg.BuildTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving builds: "+err.Error())
 		return
@@ -171,7 +174,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		var b BuildView
 		var username, note sql.NullString
 		var date sql.NullTime
-		if err := rows.Scan(&b.ID, &b.Qty, &date, &username, &note); err != nil {
+		if err := rows.Scan(&b.ID, &b.Qty, &date, &username, &note, &b.TestedCount); err != nil {
 			h.renderError(w, r, "Error reading builds: "+err.Error())
 			return
 		}
@@ -210,6 +213,143 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// bomLine is one BOM component line of an output part, loaded for a build: how much
+// per assembly, its category (to skip non-stocked lines), and whether it's lot-tracked
+// (so a specific lot must be consumed). Shared by the standalone Build tab and the
+// build-at-test-time inline panel (#747).
+type bomLine struct {
+	componentPartID int
+	partNumber      string
+	qty             float64
+	category        string
+	isLotTracked    bool
+}
+
+// loadBuildLines returns the output part's BOM component lines for a build (#747
+// extraction). Empty result (nil error) when the part has no BOM.
+func (h *Handler) loadBuildLines(ctx context.Context, partID int) ([]bomLine, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT b.component_part_id, p.part_number, b.qty, p.category, p.tracking_mode
+		FROM %s b JOIN %s p ON b.component_part_id = p.id
+		WHERE b.parent_part_id = @p1
+	`, h.cfg.BOMTable(), h.cfg.PartsTable()), partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var lines []bomLine
+	for rows.Next() {
+		var l bomLine
+		var trackingMode sql.NullString
+		if err := rows.Scan(&l.componentPartID, &l.partNumber, &l.qty, &l.category, &trackingMode); err != nil {
+			return nil, err
+		}
+		l.isLotTracked = models.TracksLots(trackingMode.String)
+		lines = append(lines, l)
+	}
+	return lines, rows.Err()
+}
+
+// collectLotPicks gathers the selected lot per stocked lot-tracked component from the
+// form field lot[<componentPartID>]. The returned string is a user-facing error
+// message naming the first component missing a pick ("" when every pick is present);
+// each lot's belongs-to-part validity is re-checked inside performBuild.
+func (h *Handler) collectLotPicks(r *http.Request, lines []bomLine) (map[int]int, string) {
+	lotPicks := map[int]int{}
+	for _, l := range lines {
+		if !l.isLotTracked || !models.TabsForCategory(h.partCategories, l.category).Inventory {
+			continue
+		}
+		lotID, err := strconv.Atoi(fv(r, fmt.Sprintf("lot[%d]", l.componentPartID)))
+		if err != nil || lotID <= 0 {
+			return nil, fmt.Sprintf("Select a lot to consume for lot-controlled component %s.", l.partNumber)
+		}
+		lotPicks[l.componentPartID] = lotID
+	}
+	return lotPicks, ""
+}
+
+// performBuild writes one build inside an already-open transaction (#747 extraction of
+// the Build tab's core, so build-at-test-time reuses the exact same
+// consumption/receipt/genealogy path): records the build event, creates the output lot
+// when the output part is lot-tracked, issues each stocked component (qty per assembly
+// × qty, recording the picked lot and — into a lot-tracked output — a genealogy edge),
+// and receipts the built quantity. Returns the new build id and (when lot-tracked) the
+// output lot id. It does NOT begin/commit the tx or touch any test record — the caller
+// owns those, so the same helper serves both the standalone build and the record save.
+func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, outputLotTracked bool, qty float64, buildDate time.Time, note string, lines []bomLine, lotPicks map[int]int) (buildID, outputLotID int, err error) {
+	// Record the build event first so its id can label the ledger rows and output lot.
+	insertBuild := h.dia().InsertReturningID(h.cfg.BuildTable(),
+		`part_id, output_lot_id, qty, build_date, username, note, created_at`,
+		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`, false)
+	if err = tx.QueryRowContext(r.Context(), insertBuild,
+		partID, nil, qty, buildDate, h.actorName(r), nullableText(note), time.Now()).Scan(&buildID); err != nil {
+		return 0, 0, fmt.Errorf("recording build: %w", err)
+	}
+
+	// Lot-tracked output (#676): create the produced lot and link the build to it.
+	if outputLotTracked {
+		outputLotID, err = h.createLot(r.Context(), tx, partID,
+			lotCreateArgs{Description: fmt.Sprintf("Build #%d", buildID)}, nil)
+		if err != nil {
+			return 0, 0, fmt.Errorf("creating output lot: %w", err)
+		}
+		if _, err = tx.ExecContext(r.Context(), fmt.Sprintf(
+			`UPDATE %s SET output_lot_id = @p1 WHERE id = @p2`, h.cfg.BuildTable()), outputLotID, buildID); err != nil {
+			return 0, 0, fmt.Errorf("linking output lot: %w", err)
+		}
+	}
+
+	ledgerNote := fmt.Sprintf("Build #%d", buildID)
+	if note != "" {
+		ledgerNote += " — " + note
+	}
+
+	// Consume each stocked component: issue (qty per assembly × build qty). Shortages
+	// go negative (matching manual adjustments). Non-stocked lines (OPS/TOOL/SVC/DOC)
+	// draw no stock, so no ledger row.
+	for _, l := range lines {
+		if !models.TabsForCategory(h.partCategories, l.category).Inventory {
+			continue
+		}
+		consumed := l.qty * qty
+		if consumed == 0 {
+			continue // degenerate BOM line (qty 0) — nothing to issue.
+		}
+		var lotID *int
+		if l.isLotTracked {
+			picked := lotPicks[l.componentPartID]
+			okLot, lerr := h.lotBelongsToPart(r.Context(), tx, picked, l.componentPartID)
+			if lerr != nil {
+				return 0, 0, fmt.Errorf("validating component lot: %w", lerr)
+			}
+			if !okLot {
+				return 0, 0, fmt.Errorf("selected lot is not an active lot of component %s", l.partNumber)
+			}
+			lotID = &picked
+		}
+		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", -consumed, buildDate, "", ledgerNote, nil, lotID, &buildID); err != nil {
+			return 0, 0, fmt.Errorf("issuing component stock: %w", err)
+		}
+		if outputLotTracked && l.isLotTracked {
+			if err := h.recordGenealogy(r.Context(), tx, *lotID, outputLotID, consumed); err != nil {
+				return 0, 0, fmt.Errorf("recording lot genealogy: %w", err)
+			}
+		}
+	}
+
+	// Produce the output part: receipt of the built quantity, stamped with the output
+	// lot when the output part is lot-tracked.
+	var outputLotArg *int
+	if outputLotTracked {
+		outputLotArg = &outputLotID
+	}
+	if err := h.recordInventoryTxn(r, tx, partID, "receipt", qty, buildDate, "", ledgerNote, nil, outputLotArg, &buildID); err != nil {
+		return 0, 0, fmt.Errorf("receiving built stock: %w", err)
+	}
+	return buildID, outputLotID, nil
+}
+
 // ── PartBuildCreate — POST /part/{id}/build ──────────────────────────────────
 
 func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
@@ -239,59 +379,19 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		buildDate = &now
 	}
 
-	// Load the output part's BOM component lines with each component's category and
-	// lot-tracking. No lines → nothing to build.
-	type bomLine struct {
-		componentPartID int
-		partNumber      string
-		qty             float64
-		category        string
-		isLotTracked    bool
-	}
-	bomRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT b.component_part_id, p.part_number, b.qty, p.category, p.is_lot_tracked
-		FROM %s b JOIN %s p ON b.component_part_id = p.id
-		WHERE b.parent_part_id = @p1
-	`, h.cfg.BOMTable(), h.cfg.PartsTable()), partID)
+	lines, err := h.loadBuildLines(r.Context(), partID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
-	var lines []bomLine
-	for bomRows.Next() {
-		var l bomLine
-		var isLotTracked sql.NullBool
-		if err := bomRows.Scan(&l.componentPartID, &l.partNumber, &l.qty, &l.category, &isLotTracked); err != nil {
-			bomRows.Close()
-			h.renderError(w, r, "Error reading BOM: "+err.Error())
-			return
-		}
-		l.isLotTracked = isLotTracked.Bool
-		lines = append(lines, l)
-	}
-	bomRows.Close()
 	if len(lines) == 0 {
 		h.renderError(w, r, "This part has no BOM, so there is nothing to build.")
 		return
 	}
-
-	// Every stocked lot-tracked component must have a valid active lot selected —
-	// independent of whether the output is lot-tracked, since consuming a lot-tracked
-	// component always draws from a specific lot. The picked lot is recorded on the
-	// component's issue ledger row (inventory_transaction.lot_id), and — when the
-	// output part is also lot-tracked — additionally as a genealogy edge into the
-	// output lot. Validate the picks up front, before writing anything.
-	lotPicks := map[int]int{} // componentPartID → selected lot id
-	for _, l := range lines {
-		if !l.isLotTracked || !models.TabsForCategory(h.partCategories, l.category).Inventory {
-			continue
-		}
-		lotID, err := strconv.Atoi(fv(r, fmt.Sprintf("lot[%d]", l.componentPartID)))
-		if err != nil || lotID <= 0 {
-			h.renderError(w, r, fmt.Sprintf("Select a lot to consume for lot-controlled component %s.", l.partNumber))
-			return
-		}
-		lotPicks[l.componentPartID] = lotID
+	lotPicks, pickErr := h.collectLotPicks(r, lines)
+	if pickErr != "" {
+		h.renderError(w, r, pickErr)
+		return
 	}
 
 	tx, err := h.beginTx(r.Context())
@@ -306,105 +406,20 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Record the build event first so its id can label the ledger rows and output lot.
-	var buildID int
-	insertBuild := h.dia().InsertReturningID(h.cfg.BuildTable(),
-		`part_id, output_lot_id, qty, build_date, username, note, created_at`,
-		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`,
-		false)
-	if err := tx.QueryRowContext(r.Context(), insertBuild,
-		partID, nil, qty, *buildDate, h.actorName(r), nullableText(note), time.Now(),
-	).Scan(&buildID); err != nil {
+	buildID, outputLotID, err := h.performBuild(r, tx, partID, outputLotTracked, qty, *buildDate, note, lines, lotPicks)
+	if err != nil {
 		h.renderError(w, r, "Error recording build: "+err.Error())
-		return
-	}
-
-	// Lot-tracked output (#676): create the produced lot and link the build to it.
-	// lot_number auto-defaults to the lot's own id (#687); lot_description records
-	// the build as provenance.
-	var outputLotID int
-	if outputLotTracked {
-		outputLotID, err = h.createLot(r.Context(), tx, partID,
-			lotCreateArgs{Description: fmt.Sprintf("Build #%d", buildID)}, nil)
-		if err != nil {
-			h.renderError(w, r, "Error creating output lot: "+err.Error())
-			return
-		}
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET output_lot_id = @p1 WHERE id = @p2`, h.cfg.BuildTable()),
-			outputLotID, buildID); err != nil {
-			h.renderError(w, r, "Error linking output lot: "+err.Error())
-			return
-		}
-	}
-
-	ledgerNote := fmt.Sprintf("Build #%d", buildID)
-	if note != "" {
-		ledgerNote += " — " + note
-	}
-
-	// Consume each component: issue (qty per assembly × build qty). Shortages are
-	// allowed to go negative, matching manual stock adjustments (#675 scope).
-	// Skip components whose category is not inventory-tracked (OPS labor, TOOL,
-	// SVC, DOC, …) — they are not drawn from stock, so no ledger row is written.
-	for _, l := range lines {
-		if !models.TabsForCategory(h.partCategories, l.category).Inventory {
-			continue
-		}
-		consumed := l.qty * qty
-		if consumed == 0 {
-			continue // degenerate BOM line (qty 0) — nothing to issue.
-		}
-		// Lot-tracked component: validate the picked lot and record it on the issue.
-		var lotID *int
-		if l.isLotTracked {
-			picked := lotPicks[l.componentPartID]
-			okLot, err := h.lotBelongsToPart(r.Context(), tx, picked, l.componentPartID)
-			if err != nil {
-				h.renderError(w, r, "Error validating component lot: "+err.Error())
-				return
-			}
-			if !okLot {
-				h.renderError(w, r, fmt.Sprintf("Selected lot is not an active lot of component %s.", l.partNumber))
-				return
-			}
-			lotID = &picked
-		}
-		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", -consumed, *buildDate, "", ledgerNote, nil, lotID, &buildID); err != nil {
-			h.renderError(w, r, "Error issuing component stock: "+err.Error())
-			return
-		}
-		// When the output part is lot-tracked too, additionally link the consumed
-		// component lot to the output lot as a genealogy edge (#676).
-		if outputLotTracked && l.isLotTracked {
-			if err := h.recordGenealogy(r.Context(), tx, *lotID, outputLotID, consumed); err != nil {
-				h.renderError(w, r, "Error recording lot genealogy: "+err.Error())
-				return
-			}
-		}
-	}
-
-	// Produce the output part: receipt of the built quantity, stamped with the output
-	// lot when the output part is lot-tracked.
-	var outputLotArg *int
-	if outputLotTracked {
-		outputLotArg = &outputLotID
-	}
-	if err := h.recordInventoryTxn(r, tx, partID, "receipt", qty, *buildDate, "", ledgerNote, nil, outputLotArg, &buildID); err != nil {
-		h.renderError(w, r, "Error receiving built stock: "+err.Error())
 		return
 	}
 
 	// #677: when this build was launched from a test record ("Build this unit"),
 	// link the record to the build (and its output lot, if any) in the same tx so
-	// the tested unit traces back to what it consumed. A stale/forged return_record
-	// (or one whose part doesn't match) is skipped silently — it must never block a
-	// build.
+	// the tested unit traces back to what it consumed. A stale/forged/locked
+	// return_record (or one whose part doesn't match) is skipped silently — it must
+	// never block a build.
 	linkedRecord := 0
 	if rr := fv(r, "return_record"); rr != "" {
 		if recID, convErr := strconv.Atoi(rr); convErr == nil {
-			// Only link a WIP record of this same part; a stale/forged/locked
-			// return_record is skipped silently — it must never block the build.
 			var recPart int
 			var recLocked bool
 			err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
@@ -412,8 +427,8 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 				Scan(&recPart, &recLocked)
 			if err == nil && recPart == partID && !recLocked {
 				var lotArg interface{}
-				if outputLotArg != nil {
-					lotArg = *outputLotArg
+				if outputLotTracked {
+					lotArg = outputLotID
 				}
 				if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 					`UPDATE %s SET lot_id = @p1, build_id = @p2, updated_at = GETDATE() WHERE id = @p3`,

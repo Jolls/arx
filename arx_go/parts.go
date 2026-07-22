@@ -27,21 +27,22 @@ import (
 
 func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, error) {
 	var p models.Part
-	var partNumber, title, category sql.NullString
-	var hasBOM, isLotTracked sql.NullBool
+	var partNumber, title, category, trackingMode sql.NullString
+	var hasBOM sql.NullBool
 	var filIDPrimary sql.NullInt64
 	var stockOnHand sql.NullFloat64
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, title, category, `+hasOwnBOMExpr+`, primary_attachment_id, stock_on_hand, is_lot_tracked FROM %s p WHERE id = @p1`,
+		`SELECT id, part_number, title, category, `+hasOwnBOMExpr+`, primary_attachment_id, stock_on_hand, tracking_mode FROM %s p WHERE id = @p1`,
 		h.cfg.BOMTable(), "p.id", h.cfg.PartsTable(),
-	), id).Scan(&p.ID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand, &isLotTracked)
+	), id).Scan(&p.ID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode)
 	p.PartNumber = partNumber.String
 	p.Title = title.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
 	p.PrimaryAttachmentID = int(filIDPrimary.Int64)
 	p.StockOnHand = stockOnHand.Float64
-	p.IsLotTracked = isLotTracked.Bool
+	p.TrackingMode = trackingMode.String
+	p.IsLotTracked = models.TracksLots(trackingMode.String)
 	return p, err
 }
 
@@ -74,6 +75,8 @@ func tabVisible(p models.Part, subTab string) bool {
 		return p.ShowBuild()
 	case "lots":
 		return p.ShowLots()
+	case "units":
+		return p.ShowUnits()
 	case "orders":
 		return p.ShowOrders()
 	case "transactions":
@@ -227,8 +230,9 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		status, reqBy, notes                          sql.NullString
 		user1, user2, user3, user4, user5             sql.NullString
 		user6, user7, user8, user9, user10            sql.NullString
+		trackingMode                                  sql.NullString
 		pnDate, pnDateModified, lastRollupAt          sql.NullTime
-		active, hasBOM, isLotTracked                  sql.NullBool
+		active, hasBOM                                sql.NullBool
 		filIDPrimary, filLinks, poLinks               sql.NullInt64
 		currentCost, lastRollupCost                   sql.NullFloat64
 		stockOnHand, reorderMin                       sql.NullFloat64
@@ -239,7 +243,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
-		       uom_id, stock_on_hand, reorder_min, is_lot_tracked,
+		       uom_id, stock_on_hand, reorder_min, tracking_mode,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
@@ -248,7 +252,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
 		&currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
-		&unitID, &stockOnHand, &reorderMin, &isLotTracked,
+		&unitID, &stockOnHand, &reorderMin, &trackingMode,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -278,7 +282,8 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		p.ReorderMin = &v
 	}
 	p.CurrentCost = currentCost.Float64
-	p.IsLotTracked = isLotTracked.Bool
+	p.TrackingMode = trackingMode.String
+	p.IsLotTracked = models.TracksLots(trackingMode.String)
 	p.LastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {
 		p.LastRollupAt = &lastRollupAt.Time
@@ -483,16 +488,17 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
+	mode := trackingModeFromForm(r)
 	var newID int
 	insertPart := h.dia().InsertReturningID(h.cfg.PartsTable(),
 		`part_number, revision, title, detail, category,
 		 release_status, is_active, requested_by, notes, created_date, modified_date,
 		 uom_id, current_cost, reorder_min,
 		 user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
-		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, is_lot_tracked`,
+		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, is_lot_tracked, tracking_mode`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
 		 @p12,@p13,@p14,
-		 @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25`,
+		 @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26`,
 		false)
 	err := h.queryRowContext(r.Context(), insertPart,
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
@@ -501,7 +507,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
-		fv(r, "is_lot_tracked") == "1",
+		models.TracksLots(mode), mode,
 	).Scan(&newID)
 	if err != nil {
 		units, _ := h.fetchUnits(r.Context())
@@ -591,6 +597,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	mode := trackingModeFromForm(r)
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
 		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5,
@@ -598,8 +605,8 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		  uom_id=@p11, current_cost=@p12, reorder_min=@p13,
 		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
 		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23,
-		  is_lot_tracked=@p24
-		WHERE id=@p25
+		  is_lot_tracked=@p24, tracking_mode=@p25
+		WHERE id=@p26
 	`, h.cfg.PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
@@ -607,7 +614,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
-		fv(r, "is_lot_tracked") == "1",
+		models.TracksLots(mode), mode,
 		id,
 	)
 	if err != nil {
@@ -647,8 +654,21 @@ func releaseStatusOrUnderReview(s string) string {
 	return "U"
 }
 
+// trackingModeFromForm reads the tracking_mode form value, defaulting to "none"
+// and clamping to the four valid values so the CK_part_number_tracking_mode CHECK
+// can never be violated by an unexpected submission (#745).
+func trackingModeFromForm(r *http.Request) string {
+	switch fv(r, "tracking_mode") {
+	case "lot", "serial", "lot_serial":
+		return fv(r, "tracking_mode")
+	default:
+		return "none"
+	}
+}
+
 // partFromForm rebuilds a Part struct from POST form values (for re-displaying on error).
 func partFromForm(r *http.Request) models.Part {
+	mode := trackingModeFromForm(r)
 	p := models.Part{
 		PartNumber: fv(r, "part_number"), Revision: fv(r, "revision"),
 		Title: fv(r, "title"), Detail: fv(r, "detail"), Category: fv(r, "category"),
@@ -658,7 +678,8 @@ func partFromForm(r *http.Request) models.Part {
 		UserField4: fv(r, "user_field_4"), UserField5: fv(r, "user_field_5"), UserField6: fv(r, "user_field_6"),
 		UserField7: fv(r, "user_field_7"), UserField8: fv(r, "user_field_8"), UserField9: fv(r, "user_field_9"),
 		UserField10:  fv(r, "user_field_10"),
-		IsLotTracked: fv(r, "is_lot_tracked") == "1",
+		TrackingMode: mode,
+		IsLotTracked: models.TracksLots(mode),
 	}
 	if v := fv(r, "current_cost"); v != "" {
 		if c, err := strconv.ParseFloat(v, 64); err == nil {
@@ -686,21 +707,22 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		status, reqBy, notes                          sql.NullString
 		user1, user2, user3, user4, user5             sql.NullString
 		user6, user7, user8, user9, user10            sql.NullString
-		active, hasBOM, isLotTracked                  sql.NullBool
+		trackingMode                                  sql.NullString
+		active, hasBOM                                sql.NullBool
 		unitID                                        sql.NullInt64
 		currentCost, reorderMin                       sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
 		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr+`,
 		       release_status, is_active, requested_by, notes,
-		       uom_id, current_cost, reorder_min, is_lot_tracked,
+		       uom_id, current_cost, reorder_min, tracking_mode,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
 	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
 		&p.ID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
-		&unitID, &currentCost, &reorderMin, &isLotTracked,
+		&unitID, &currentCost, &reorderMin, &trackingMode,
 		&user1, &user2, &user3, &user4, &user5,
 		&user6, &user7, &user8, &user9, &user10,
 	)
@@ -712,7 +734,8 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		v := reorderMin.Float64
 		p.ReorderMin = &v
 	}
-	p.IsLotTracked = isLotTracked.Bool
+	p.TrackingMode = trackingMode.String
+	p.IsLotTracked = models.TracksLots(trackingMode.String)
 	p.PartNumber = partNumber.String
 	p.Revision = revision.String
 	p.Title = title.String

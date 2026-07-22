@@ -29,7 +29,9 @@ ALTER TABLE dbo.genealogy ADD CONSTRAINT FK_gen_parent_lot  FOREIGN KEY (parent_
 ALTER TABLE dbo.genealogy ADD CONSTRAINT FK_gen_parent_unit FOREIGN KEY (parent_unit_id) REFERENCES dbo.unit (id);
 ALTER TABLE dbo.genealogy ADD CONSTRAINT FK_gen_child_lot   FOREIGN KEY (child_lot_id)   REFERENCES dbo.lot (id);
 ALTER TABLE dbo.genealogy ADD CONSTRAINT FK_gen_child_unit  FOREIGN KEY (child_unit_id)  REFERENCES dbo.unit (id);
-CREATE INDEX IX_gen_parent_lot  ON dbo.genealogy (parent_lot_id);
-CREATE INDEX IX_gen_parent_unit ON dbo.genealogy (parent_unit_id);
-CREATE INDEX IX_gen_child_lot   ON dbo.genealogy (child_lot_id);
-CREATE INDEX IX_gen_child_unit  ON dbo.genealogy (child_unit_id);
+-- Covering indexes (#746): INCLUDE the far endpoints + qty_consumed so the recursive
+-- lot+unit genealogy walk (arx_go/lot.go traceNeighbors) seeks without a key lookup.
+CREATE INDEX IX_gen_parent_lot  ON dbo.genealogy (parent_lot_id)  INCLUDE (child_lot_id, child_unit_id, qty_consumed);
+CREATE INDEX IX_gen_parent_unit ON dbo.genealogy (parent_unit_id) INCLUDE (child_lot_id, child_unit_id, qty_consumed);
+CREATE INDEX IX_gen_child_lot   ON dbo.genealogy (child_lot_id)   INCLUDE (parent_lot_id, parent_unit_id, qty_consumed);
+CREATE INDEX IX_gen_child_unit  ON dbo.genealogy (child_unit_id)  INCLUDE (parent_lot_id, parent_unit_id, qty_consumed);

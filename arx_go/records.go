@@ -1180,12 +1180,12 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
-		       lot_id, build_id
+		       lot_id, build_id, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
-			&record.LotID, &record.BuildID)
+			&record.LotID, &record.BuildID, &record.UnitID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1622,13 +1622,15 @@ func (h *Handler) materializeRecordSteps(ctx context.Context, tx *txLogger, reco
 type RecordTrace struct {
 	PartID        int
 	IsLotTracked  bool
-	Buildable     bool          // the record's part has a BOM → offer "Build this unit"
-	LinkedLot     *LotRow       // currently linked lot, nil if none
-	LinkedBuild   *BuildOption  // currently linked build, nil if none
-	SelectedLot   int           // record.LotID (0 = none) — for the picker's selected option
-	SelectedBuild int           // record.BuildID (0 = none)
-	Lots          []LotOption   // active lots to pick (editable view only)
-	Builds        []BuildOption // builds to pick (editable view only)
+	TracksSerials bool             // the record's part is serial/lot_serial → tested records mint a unit (#745)
+	Buildable     bool             // the record's part has a BOM → offer "Build this unit"
+	LinkedLot     *LotRow          // currently linked lot, nil if none
+	LinkedBuild   *BuildOption     // currently linked build, nil if none
+	SelectedLot   int              // record.LotID (0 = none) — for the picker's selected option
+	SelectedBuild int              // record.BuildID (0 = none)
+	Lots          []LotOption      // active lots to pick (editable view only)
+	Builds        []BuildOption    // builds to pick (editable view only)
+	Components    []buildComponent // BOM lines for the inline build-at-test-time panel (#747; editable + Buildable)
 }
 
 // loadRecordTrace builds the traceability view for a record's tested part (#677).
@@ -1639,40 +1641,61 @@ func (h *Handler) loadRecordTrace(ctx context.Context, record *models.TestRecord
 		return nil, nil
 	}
 	t := &RecordTrace{PartID: record.PartNumberID}
-	if record.LotID != nil {
-		t.SelectedLot = *record.LotID
+	// A unit-level record carries its provenance on the unit, not the form_record
+	// (#745, Q8): lot_id/build_id are left NULL and read through the unit. Resolve the
+	// effective lot/build here so the picker shows them selected and re-submits them —
+	// without this, re-saving a serial record would clear its unit link.
+	lotID, buildID := record.LotID, record.BuildID
+	if record.UnitID != nil {
+		var ulot, ubuild sql.NullInt64
+		if err := h.queryRowContext(ctx, fmt.Sprintf(
+			`SELECT lot_id, build_id FROM %s WHERE id = @p1`, h.cfg.UnitTable()), *record.UnitID).Scan(&ulot, &ubuild); err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		if ulot.Valid {
+			v := int(ulot.Int64)
+			lotID = &v
+		}
+		if ubuild.Valid {
+			v := int(ubuild.Int64)
+			buildID = &v
+		}
 	}
-	if record.BuildID != nil {
-		t.SelectedBuild = *record.BuildID
+	if lotID != nil {
+		t.SelectedLot = *lotID
+	}
+	if buildID != nil {
+		t.SelectedBuild = *buildID
 	}
 
 	// The tested part's lot-tracking + whether it has a BOM (is buildable).
 	// part_id is a logical reference with no FK, so a stale id may not resolve —
 	// treat that as simply having no trace rather than failing the whole page.
-	var isLotTracked sql.NullBool
+	var trackingMode sql.NullString
 	var bomCount int
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT p.is_lot_tracked, (SELECT COUNT(*) FROM %s b WHERE b.parent_part_id = p.id)
+		SELECT p.tracking_mode, (SELECT COUNT(*) FROM %s b WHERE b.parent_part_id = p.id)
 		FROM %s p WHERE p.id = @p1`, h.cfg.BOMTable(), h.cfg.PartsTable()), record.PartNumberID).
-		Scan(&isLotTracked, &bomCount)
+		Scan(&trackingMode, &bomCount)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	t.IsLotTracked = isLotTracked.Bool
+	t.IsLotTracked = models.TracksLots(trackingMode.String)
+	t.TracksSerials = models.TracksSerials(trackingMode.String)
 	t.Buildable = bomCount > 0
 
-	if record.LotID != nil {
-		if lr, found, err := h.fetchLotRow(ctx, *record.LotID); err != nil {
+	if lotID != nil {
+		if lr, found, err := h.fetchLotRow(ctx, *lotID); err != nil {
 			return nil, err
 		} else if found {
 			t.LinkedLot = &lr
 		}
 	}
-	if record.BuildID != nil {
-		b, err := h.fetchBuildOption(ctx, *record.BuildID)
+	if buildID != nil {
+		b, err := h.fetchBuildOption(ctx, *buildID)
 		if err != nil {
 			return nil, err
 		}
@@ -1698,6 +1721,15 @@ func (h *Handler) loadRecordTrace(ctx context.Context, record *models.TestRecord
 			return nil, err
 		}
 		t.Builds = builds
+		// #747: BOM components for the inline "build this unit" panel — only when the
+		// part is actually buildable (has a BOM).
+		if t.Buildable {
+			comps, err := h.loadBuildComponents(ctx, record.PartNumberID)
+			if err != nil {
+				return nil, err
+			}
+			t.Components = comps
+		}
 	}
 	return t, nil
 }
@@ -1748,6 +1780,32 @@ func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildA
 	return lotArg, buildArg, nil
 }
 
+// upsertUnitForRecord finds or lazily creates the serialized unit a serial/lot_serial
+// part's test record refers to (#745, Q5). The (part_id, serial) pair uniquely
+// identifies the unit, so a retest — a second record with the same serial — re-links
+// the existing unit rather than minting a duplicate. Provenance (buildID, lotID; each
+// an int or nil, as returned by recordLinkageArgs) is set only on creation; at least
+// one must be non-nil or the INSERT would violate CK_unit_provenance, so the caller
+// must skip the upsert when both are nil. tx-accepting so a build-at-test-time save
+// (#747) can mint the unit in the same transaction as the build.
+func (h *Handler) upsertUnitForRecord(ctx context.Context, tx *txLogger, partID int, serial string, buildID, lotID interface{}) (int, error) {
+	var unitID int
+	err := tx.QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE part_id = @p1 AND serial_number = @p2`, h.cfg.UnitTable()), partID, serial).Scan(&unitID)
+	if err == nil {
+		return unitID, nil // existing unit (retest / re-save) — reuse, never duplicate
+	}
+	if err != sql.ErrNoRows {
+		return 0, err
+	}
+	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
+		`part_id, serial_number, build_id, lot_id`, `@p1,@p2,@p3,@p4`, false)
+	if err := tx.QueryRowContext(ctx, insertUnit, partID, serial, buildID, lotID).Scan(&unitID); err != nil {
+		return 0, err
+	}
+	return unitID, nil
+}
+
 // EditRecord — GET /records/{id}/edit
 func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -1760,12 +1818,12 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
-		       lot_id, build_id
+		       lot_id, build_id, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
-			&record.LotID, &record.BuildID)
+			&record.LotID, &record.BuildID, &record.UnitID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -2014,11 +2072,11 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	var src models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&src.ID, &src.FormID, &src.PartNumberID, &src.SerialNumber, &src.SerialNumberPN,
 			&src.SerialNumberDesc, &src.RecordDate, &src.Comments,
-			&src.InstrumentType, &src.IsLocked, &src.IsApproved, &src.IsActive, &src.TestOrder)
+			&src.InstrumentType, &src.IsLocked, &src.IsApproved, &src.IsActive, &src.TestOrder, &src.UnitID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -2052,15 +2110,17 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var newID int
 	// record_date is set to now — a duplicate is a fresh re-test, dated the day it's made.
+	// unit_id is carried over unchanged: a retest points at the SAME serialized unit as
+	// the source record (#745, design §2/§5), never a new unit row.
 	insertDupRecord := h.dia().InsertReturningID(h.cfg.RecordsTable(),
 		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
-		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision`,
-		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),%s,%s,%s,@p9`,
+		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision, unit_id`,
+		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),%s,%s,%s,@p9,@p10`,
 			h.dia().BoolLiteral(true), h.dia().BoolLiteral(false), h.dia().BoolLiteral(false)),
 		false)
 	err = tx.QueryRowContext(r.Context(), insertDupRecord,
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
-		src.Comments, src.InstrumentType, src.TestOrder, formRevision).Scan(&newID)
+		src.Comments, src.InstrumentType, src.TestOrder, formRevision, src.UnitID).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2272,11 +2332,13 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       unit_id, build_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
 			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
-			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder)
+			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
+			&record.UnitID, &record.BuildID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -2446,34 +2508,109 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// #745: a serial/lot_serial part mints (or, on retest, re-links) the serialized
+	// unit this record refers to when saved with provenance (a picked build or lot).
+	// The record then points at the unit via unit_id and leaves lot_id/build_id NULL —
+	// lot/build are read through the unit (Q8 FK-consistency invariant).
+	var trackingMode string
+	if e := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT tracking_mode FROM %s WHERE id = @p1`, h.cfg.PartsTable()), record.PartNumberID).Scan(&trackingMode); e != nil && e != sql.ErrNoRows {
+		http.Error(w, "could not read part tracking mode: "+e.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var rd *time.Time
 	if rdStr := r.FormValue("record_date"); rdStr != "" {
-		var rd time.Time
-		var parseErr error
-		if rd, parseErr = time.Parse("2006-01-02T15:04", rdStr); parseErr != nil {
-			rd, parseErr = time.Parse("2006-01-02", rdStr)
+		if t, e := time.Parse("2006-01-02T15:04", rdStr); e == nil {
+			rd = &t
+		} else if t, e := time.Parse("2006-01-02", rdStr); e == nil {
+			rd = &t
 		}
-		if parseErr == nil {
-			if _, err := h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, updated_at=GETDATE() WHERE id=@p6",
-				h.cfg.RecordsTable()), rd, comments, instrumentType, lotArg, buildArg, recordID); err != nil {
-				http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-		} else {
-			if _, err := h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, updated_at=GETDATE() WHERE id=@p5",
-				h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID); err != nil {
-				http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-	} else {
-		if _, err := h.execContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, updated_at=GETDATE() WHERE id=@p5",
-			h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, recordID); err != nil {
-			http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// #747: build-at-test-time. When the inline build panel was submitted, build ONE
+	// unit's worth of this part in the same transaction (single-unit — the record IS
+	// the unit under test) and use the new build (and its output lot) as the unit's
+	// provenance below. Both build workflows converge on the same end state: the
+	// standalone Build tab (build-first) and this test-time build.
+	if fv(r, "build_panel") == "1" {
+		// Don't re-build a record already linked to a build/unit — a second build would
+		// silently re-consume stock and orphan itself (the unit upsert reuses the
+		// existing unit by serial and would not reference the new build).
+		if record.UnitID != nil || record.BuildID != nil {
+			http.Error(w, "This record is already linked to a build.", http.StatusBadRequest)
 			return
 		}
+		// A serial/lot_serial part must carry a serial before building — otherwise the
+		// unit can't be minted and the build would consume stock for a unit that never
+		// exists, landing lot/build straight on the record (violating Q8).
+		if models.TracksSerials(trackingMode) && record.SerialNumber == "" {
+			http.Error(w, "Enter a serial number before building this unit.", http.StatusBadRequest)
+			return
+		}
+		outputLotTracked := models.TracksLots(trackingMode)
+		lines, lerr := h.loadBuildLines(r.Context(), record.PartNumberID)
+		if lerr != nil {
+			http.Error(w, "could not load BOM: "+lerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(lines) == 0 {
+			http.Error(w, "This part has no BOM, so there is nothing to build.", http.StatusBadRequest)
+			return
+		}
+		lotPicks, pickErr := h.collectLotPicks(r, lines)
+		if pickErr != "" {
+			http.Error(w, pickErr, http.StatusBadRequest)
+			return
+		}
+		buildDate := time.Now()
+		if rd != nil {
+			buildDate = *rd
+		}
+		bID, outLot, berr := h.performBuild(r, tx, record.PartNumberID, outputLotTracked, 1, buildDate, "", lines, lotPicks)
+		if berr != nil {
+			http.Error(w, "could not build: "+berr.Error(), http.StatusInternalServerError)
+			return
+		}
+		buildArg = bID // the new build is this unit's provenance, overriding any dropdown pick
+		if outputLotTracked {
+			lotArg = outLot
+		}
+	}
+
+	var unitArg interface{}
+	if models.TracksSerials(trackingMode) && record.SerialNumber != "" && (buildArg != nil || lotArg != nil) {
+		uid, uerr := h.upsertUnitForRecord(r.Context(), tx, record.PartNumberID, record.SerialNumber, buildArg, lotArg)
+		if uerr != nil {
+			http.Error(w, "could not record unit: "+uerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		unitArg = uid
+		lotArg, buildArg = nil, nil // Q8: provenance lives on the unit, not the record
+	}
+	if rd != nil {
+		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
+			"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, unit_id=@p6, updated_at=GETDATE() WHERE id=@p7",
+			h.cfg.RecordsTable()), *rd, comments, instrumentType, lotArg, buildArg, unitArg, recordID)
+	} else {
+		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
+			"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, unit_id=@p5, updated_at=GETDATE() WHERE id=@p6",
+			h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, unitArg, recordID)
+	}
+	if err != nil {
+		http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
