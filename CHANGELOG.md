@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.27] - 2026-07-24
+### Added
+- Integration/unit test coverage for auth middleware composition, login lockout, and idle-timeout — `buildRouter`'s real route table is now walked and asserted to require auth on every non-public route ([#802](https://github.com/Jolls/arx-legacy/issues/802))
+- Integration test coverage for named-query execution (`runNamedQuery`/`execQuery`), including a regression test reproducing the stale-`spec_nom`-param-rename production incident ([#807](https://github.com/Jolls/arx-legacy/issues/807))
+- Integration test coverage for `POReceive`/`POStatusTransition`/`POApprovalAction` end-to-end (partial/full receiving, lot creation, status transitions, approval workflow) ([#803](https://github.com/Jolls/arx-legacy/issues/803))
+- Integration test coverage for the RFQ award/convert flow (`RFQNew`/`RFQAddSupplier`/`RFQCompare`/`RFQCompareSave`/`RFQConvert`) ([#812](https://github.com/Jolls/arx-legacy/issues/812))
+
 ## [0.6.26] - 2026-07-24
 ### Fixed
 - BOM view's lazily-expanded sub-assembly rows linked to `/part/undefined` and showed a blank quantity — the JS row builder read stale field names (`PLPartID`/`PLQty`) that don't match the API's `ComponentPartID`/`Qty` ([#795](https://github.com/Jolls/arx-legacy/issues/795))

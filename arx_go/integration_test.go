@@ -2567,3 +2567,840 @@ func TestIntegration_SettingsUsersToggleAdmin_CannotRemoveOwnAdmin(t *testing.T)
 		t.Error("admin is_admin changed despite the self-remove guard")
 	}
 }
+
+// TestIntegration_RunNamedQuery_SingleResult exercises the "single" result-type
+// path against a self-created part + primary attachment fixture, rather than
+// relying on seeded rows that could drift.
+func TestIntegration_RunNamedQuery_SingleResult(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	pn := fmt.Sprintf("ITEST-807-%d", time.Now().UnixNano())
+	var partID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, title, is_active) OUTPUT INSERTED.id VALUES (@p1, @p2, 1)`,
+		h.cfg.PartsTable()), pn, "807 test part",
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.PartsTable()), partID)
+
+	var attID int
+	insertAtt := h.dia().InsertReturningID(h.cfg.AttachmentsTable(),
+		"part_id, file_name, category, sort_order, is_active", "@p1, @p2, @p3, 1, 1", true)
+	if err := h.DB().QueryRowContext(ctx, insertAtt, partID, "drawing.pdf", "Drawing").Scan(&attID); err != nil {
+		t.Fatalf("seed attachment: %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.AttachmentsTable()), attID)
+
+	if _, err := h.execContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET primary_attachment_id=@p1 WHERE id=@p2`, h.cfg.PartsTable()), attID, partID); err != nil {
+		t.Fatalf("set primary attachment: %v", err)
+	}
+
+	qr, err := h.runNamedQuery(ctx, fmt.Sprintf("query:pn_primary_attachment(@pn=%s)", pn))
+	if err != nil {
+		t.Fatalf("runNamedQuery: %v", err)
+	}
+	if qr.ResultType != "single" {
+		t.Errorf("ResultType = %q, want single", qr.ResultType)
+	}
+	if len(qr.Rows) != 1 {
+		t.Fatalf("Rows = %d, want 1", len(qr.Rows))
+	}
+	if qr.Rows[0].Value != "drawing.pdf" || qr.Rows[0].Label != "Drawing" {
+		t.Errorf("row = %+v, want {Value:drawing.pdf Label:Drawing}", qr.Rows[0])
+	}
+}
+
+// TestIntegration_RunNamedQuery_ListResult_MultiColumn exercises the "list"
+// multi-row/2-column path against the seeded vendor_pns_for_pn named query and
+// po_line fixtures (5501/5502/5505, part_number_snapshot RAW-1001).
+func TestIntegration_RunNamedQuery_ListResult_MultiColumn(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	qr, err := h.runNamedQuery(ctx, "query:vendor_pns_for_pn(@pn=RAW-1001)")
+	if err != nil {
+		t.Fatalf("runNamedQuery: %v", err)
+	}
+	if qr.ResultType != "list" {
+		t.Errorf("ResultType = %q, want list", qr.ResultType)
+	}
+	if len(qr.Rows) < 1 {
+		t.Fatal("Rows is empty, want at least 1 (seeded po_line rows for RAW-1001)")
+	}
+	for _, row := range qr.Rows {
+		if row.Value == row.Label {
+			t.Errorf("row %+v: Value == Label, want distinct vendor_part_number/description columns", row)
+		}
+	}
+}
+
+// TestIntegration_RunNamedQuery_NoRowsIsNotError confirms zero matches is
+// success (empty Rows), not an error.
+func TestIntegration_RunNamedQuery_NoRowsIsNotError(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	qr, err := h.runNamedQuery(ctx, "query:parts_matching(@pattern=ZZZ-NO-MATCH-%)")
+	if err != nil {
+		t.Fatalf("runNamedQuery: %v", err)
+	}
+	if len(qr.Rows) != 0 {
+		t.Errorf("Rows = %d, want 0", len(qr.Rows))
+	}
+}
+
+// TestIntegration_RunNamedQuery_UnknownName confirms an unregistered name
+// surfaces a "not found" error.
+func TestIntegration_RunNamedQuery_UnknownName(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := h.runNamedQuery(ctx, "query:does_not_exist_xyz(@x=1)")
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("err = %v, want error containing \"not found\"", err)
+	}
+}
+
+// TestIntegration_RunNamedQuery_StaleSpecNomParamRename is the regression test
+// for the production incident documented in
+// SQL/migrations/migrate_max_subbatch_result_param_rename.sql: a named_queries
+// row's stored SQL was renamed to a new param name, but a spec_nom usage string
+// elsewhere still referenced the old name. parseQuerySpec builds its param map
+// from the spec_nom text, not from named_queries.params, so this produces a
+// runtime "Must declare the scalar variable" error rather than being caught at
+// parse time. This test reproduces that failure mode directly against a
+// throwaway named_queries row (not the real max_subbatch_result row).
+func TestIntegration_RunNamedQuery_StaleSpecNomParamRename(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	name := fmt.Sprintf("itest_stale_param_%d", time.Now().UnixNano())
+	if _, err := h.execContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (name, sql, params, result_type, is_active) VALUES (@p1, @p2, @p3, 'single', 1)`,
+		h.cfg.NamedQueriesTable()), name, "SELECT 1 AS val WHERE @new_param = @new_param", "new_param",
+	); err != nil {
+		t.Fatalf("seed named_queries row: %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE name=@p1", h.cfg.NamedQueriesTable()), name)
+
+	_, err := h.runNamedQuery(ctx, fmt.Sprintf("query:%s(@old_param=1)", name))
+	if err == nil {
+		t.Fatal("expected an error from the stale param-name mismatch, got nil")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "declare the scalar variable") {
+		t.Errorf("err = %v, want an error containing \"declare the scalar variable\"", err)
+	}
+}
+
+// TestIntegration_APINamedQuery_EndToEnd covers the HTTP handler wrapper's
+// happy path against a seeded named query.
+func TestIntegration_APINamedQuery_EndToEnd(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/named-query?spec="+url.QueryEscape("query:parts_matching(@pattern=RAW-%)"), nil)
+	rec := httptest.NewRecorder()
+	h.APINamedQuery(rec, req)
+
+	assertStatus(t, "APINamedQuery", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), `"rows"`) {
+		t.Errorf("body missing \"rows\" key: %s", rec.Body.String())
+	}
+}
+
+// seedPOLine inserts one po_line row directly for a PO created via
+// seedThrowawayPO and returns its new id.
+func seedPOLine(t *testing.T, h *Handler, ctx context.Context, poID, partID int, partNumber string, qty, unitCost float64) int {
+	t.Helper()
+	var id int
+	insert := h.dia().InsertReturningID(h.cfg.POLineTable(),
+		"po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, received_qty",
+		"@p1, @p2, 'A', @p3, 1, 'test line', @p4, @p5, 0", true)
+	if err := h.DB().QueryRowContext(ctx, insert, poID, partNumber, partID, qty, unitCost).Scan(&id); err != nil {
+		t.Fatalf("seedPOLine: %v", err)
+	}
+	return id
+}
+
+// setPOStatus force-sets a PO's status/approval_status directly for test
+// setup, bypassing the audited transition path.
+func setPOStatus(t *testing.T, h *Handler, ctx context.Context, poID int, status, approval string) {
+	t.Helper()
+	if _, err := h.execContext(ctx, fmt.Sprintf(
+		"UPDATE %s SET status=@p1, approval_status=@p2 WHERE ID=@p3", h.cfg.POTable()),
+		status, approval, poID); err != nil {
+		t.Fatalf("setPOStatus: %v", err)
+	}
+}
+
+// approverCtx injects an authorized-approver *User onto the request context,
+// mirroring adminCtx above but with CanApprovePO set instead of IsAdmin.
+func approverCtx(req *http.Request) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), ctxUserKey, &User{ID: 8001, Username: "admin", CanApprovePO: true}))
+}
+
+func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
+	defer poCleanup()
+	numID, err := strconv.Atoi(poNumber)
+	if err != nil {
+		t.Fatalf("PO number %q not numeric: %v", poNumber, err)
+	}
+
+	// Rejected transition: draft -> sent must go through open first, and must
+	// not write a history row or change status.
+	histBefore := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POHistoryTable(), poID))
+	rec := httptest.NewRecorder()
+	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"sent"}}), numID))
+	assertStatus(t, "draft->sent rejected", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "Cannot change status") {
+		t.Errorf("draft->sent: expected rejection message in body, got: %s", rec.Body.String())
+	}
+	var statusAfterReject string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).
+		Scan(&statusAfterReject); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if statusAfterReject != "draft" {
+		t.Errorf("draft->sent rejected: status = %q, want unchanged draft", statusAfterReject)
+	}
+	histAfterReject := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POHistoryTable(), poID))
+	if histAfterReject != histBefore {
+		t.Errorf("draft->sent rejected: history rows = %d, want unchanged %d", histAfterReject, histBefore)
+	}
+
+	// Allowed transition: draft -> open.
+	rec = httptest.NewRecorder()
+	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"open"}}), numID))
+	assert302(t, "draft->open", rec)
+
+	var status string
+	var isActive bool
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf("SELECT status, is_active FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+	).Scan(&status, &isActive); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "open" || !isActive {
+		t.Errorf("draft->open: got status=%q is_active=%v, want open/true", status, isActive)
+	}
+
+	var fromStatus, toStatus, changedBy string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 from_status, to_status, changed_by FROM %s WHERE po_id=@p1 AND event_type='status' ORDER BY id DESC`,
+		h.cfg.POHistoryTable()), poID,
+	).Scan(&fromStatus, &toStatus, &changedBy); err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if fromStatus != "draft" || toStatus != "open" || changedBy == "" {
+		t.Errorf("history row = {from:%q to:%q by:%q}, want {draft open <non-empty>}", fromStatus, toStatus, changedBy)
+	}
+
+	// sent -> closed sets date_closed; closed -> open (reopen) clears it.
+	setPOStatus(t, h, ctx, poID, "sent", "approved")
+	rec = httptest.NewRecorder()
+	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"closed"}}), numID))
+	assert302(t, "sent->closed", rec)
+	var dateClosed sql.NullTime
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+	).Scan(&status, &dateClosed); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "closed" || !dateClosed.Valid {
+		t.Errorf("sent->closed: got status=%q date_closed.Valid=%v, want closed/true", status, dateClosed.Valid)
+	}
+
+	rec = httptest.NewRecorder()
+	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"open"}}), numID))
+	assert302(t, "closed->open reopen", rec)
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+	).Scan(&status, &dateClosed); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "open" || dateClosed.Valid {
+		t.Errorf("closed->open reopen: got status=%q date_closed.Valid=%v, want open/false (cleared)", status, dateClosed.Valid)
+	}
+}
+
+func TestIntegration_POStatusTransition_ApprovalGateForSent(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
+	defer poCleanup()
+	numID, _ := strconv.Atoi(poNumber)
+
+	setPOStatus(t, h, ctx, poID, "open", "pending")
+
+	rec := httptest.NewRecorder()
+	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"sent"}}), numID))
+	assertStatus(t, "open->sent without approval", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "must be approved") {
+		t.Errorf("open->sent without approval: expected approval-gate message, got: %s", rec.Body.String())
+	}
+	var status string
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&status)
+	if status != "open" {
+		t.Errorf("open->sent without approval: status = %q, want unchanged open", status)
+	}
+
+	setPOStatus(t, h, ctx, poID, "open", "approved")
+	rec = httptest.NewRecorder()
+	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"sent"}}), numID))
+	assert302(t, "open->sent with approval", rec)
+}
+
+func TestIntegration_POStatusTransition_CancelClearsApproval(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
+	defer poCleanup()
+	numID, _ := strconv.Atoi(poNumber)
+
+	setPOStatus(t, h, ctx, poID, "open", "approved")
+	rec := httptest.NewRecorder()
+	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"cancelled"}}), numID))
+	assert302(t, "open->cancelled", rec)
+
+	var status, approval string
+	h.DB().QueryRowContext(ctx,
+		fmt.Sprintf("SELECT status, approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+	).Scan(&status, &approval)
+	if status != "cancelled" || approval != "not_submitted" {
+		t.Errorf("cancel: got status=%q approval=%q, want cancelled/not_submitted", status, approval)
+	}
+
+	var resetAction string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 action FROM %s WHERE po_id=@p1 AND event_type='approval' ORDER BY id DESC`,
+		h.cfg.POHistoryTable()), poID,
+	).Scan(&resetAction); err != nil {
+		t.Fatalf("read reset history: %v", err)
+	}
+	if resetAction != "reset" {
+		t.Errorf("cancel: last approval history action = %q, want reset", resetAction)
+	}
+}
+
+func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
+	defer poCleanup()
+	numID, _ := strconv.Atoi(poNumber)
+
+	lineID := seedPOLine(t, h, ctx, poID, 3001, "RAW-1001", 10, 2.50) // not lot-tracked
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg.InventoryTxnTable()), lineID)
+	// stock_on_hand is app-maintained, not reversed by deleting the ledger row above —
+	// restore it explicitly so this test doesn't leak +10 onto part 3001.
+	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 10 WHERE id = 3001", h.cfg.PartsTable()))
+	setPOStatus(t, h, ctx, poID, "sent", "approved")
+
+	// Partial receipt: 4 of 10.
+	rec := httptest.NewRecorder()
+	h.POReceive(rec, withID(postForm("/po/{id}/receive", url.Values{
+		fmt.Sprintf("recv[%d]", lineID): {"4"},
+	}), numID))
+	assert302(t, "partial receive", rec)
+
+	var status string
+	var receivedQty float64
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&status)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=@p1", h.cfg.POLineTable()), lineID).Scan(&receivedQty)
+	if status != "partially_received" {
+		t.Errorf("after partial receive: PO status = %q, want partially_received", status)
+	}
+	if receivedQty != 4 {
+		t.Errorf("after partial receive: line received_qty = %v, want 4", receivedQty)
+	}
+	invAfterPartial := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg.InventoryTxnTable(), lineID))
+	if invAfterPartial != 1 {
+		t.Fatalf("after partial receive: inventory_transaction rows for line = %d, want 1", invAfterPartial)
+	}
+	var txnType, reference string
+	var txnQty float64
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 txn_type, qty, reference FROM %s WHERE po_line_id=@p1 ORDER BY id DESC`,
+		h.cfg.InventoryTxnTable()), lineID,
+	).Scan(&txnType, &txnQty, &reference)
+	if txnType != "receipt" || txnQty != 4 || reference != poNumber {
+		t.Errorf("inventory_transaction row = {type:%q qty:%v ref:%q}, want {receipt 4 %q}", txnType, txnQty, reference, poNumber)
+	}
+
+	// Full receipt: remaining 6 of 10 -> closed.
+	rec = httptest.NewRecorder()
+	h.POReceive(rec, withID(postForm("/po/{id}/receive", url.Values{
+		fmt.Sprintf("recv[%d]", lineID): {"6"},
+	}), numID))
+	assert302(t, "final receive", rec)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&status)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=@p1", h.cfg.POLineTable()), lineID).Scan(&receivedQty)
+	if status != "closed" {
+		t.Errorf("after full receive: PO status = %q, want closed", status)
+	}
+	if receivedQty != 10 {
+		t.Errorf("after full receive: line received_qty = %v, want 10", receivedQty)
+	}
+	invAfterFull := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg.InventoryTxnTable(), lineID))
+	if invAfterFull != 2 {
+		t.Errorf("after full receive: inventory_transaction rows for line = %d, want 2", invAfterFull)
+	}
+
+	partialEvent := countRows(t, h, ctx, fmt.Sprintf(
+		"%s WHERE po_id=%d AND event_type='status' AND from_status='sent' AND to_status='partially_received'",
+		h.cfg.POHistoryTable(), poID))
+	closedEvent := countRows(t, h, ctx, fmt.Sprintf(
+		"%s WHERE po_id=%d AND event_type='status' AND from_status='partially_received' AND to_status='closed'",
+		h.cfg.POHistoryTable(), poID))
+	if partialEvent != 1 || closedEvent != 1 {
+		t.Errorf("PO_history status events: sent->partially_received=%d, partially_received->closed=%d, want 1 each", partialEvent, closedEvent)
+	}
+}
+
+func TestIntegration_POReceive_CreatesLotForLotTrackedPart(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
+	defer poCleanup()
+	numID, _ := strconv.Atoi(poNumber)
+
+	lineID := seedPOLine(t, h, ctx, poID, 3007, "RAW-1002", 5, 4.10) // tracking_mode = 'lot'
+	// stock_on_hand is app-maintained, not reversed by deleting the ledger row below —
+	// restore it explicitly so this test doesn't leak +5 onto part 3007.
+	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 5 WHERE id = 3007", h.cfg.PartsTable()))
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg.LotTable()), lineID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg.InventoryTxnTable()), lineID)
+	setPOStatus(t, h, ctx, poID, "sent", "approved")
+
+	rec := httptest.NewRecorder()
+	h.POReceive(rec, withID(postForm("/po/{id}/receive", url.Values{
+		fmt.Sprintf("recv[%d]", lineID): {"5"},
+		fmt.Sprintf("vlot[%d]", lineID): {"VENDOR-LOT-803"},
+	}), numID))
+	assert302(t, "lot-tracked receive", rec)
+
+	var lotID int
+	var lotDesc, vendorLot string
+	var lotPOLineID sql.NullInt64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 id, lot_description, vendor_lot_number, po_line_id FROM %s WHERE po_line_id=@p1 ORDER BY id DESC`,
+		h.cfg.LotTable()), lineID,
+	).Scan(&lotID, &lotDesc, &vendorLot, &lotPOLineID); err != nil {
+		t.Fatalf("read created lot: %v", err)
+	}
+	wantDesc := "PO " + poNumber
+	if lotDesc != wantDesc || vendorLot != "VENDOR-LOT-803" || !lotPOLineID.Valid || int(lotPOLineID.Int64) != lineID {
+		t.Errorf("lot row = {desc:%q vendorLot:%q poLineID:%v}, want {%q VENDOR-LOT-803 %d}",
+			lotDesc, vendorLot, lotPOLineID, wantDesc, lineID)
+	}
+
+	var invLotID sql.NullInt64
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 lot_id FROM %s WHERE po_line_id=@p1 ORDER BY id DESC`, h.cfg.InventoryTxnTable()), lineID,
+	).Scan(&invLotID)
+	if !invLotID.Valid || int(invLotID.Int64) != lotID {
+		t.Errorf("inventory_transaction.lot_id = %v, want %d", invLotID, lotID)
+	}
+}
+
+func TestIntegration_POReceive_RejectsWrongStatus(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	_, poNumber, poCleanup := seedThrowawayPO(t, h, ctx) // status=draft
+	defer poCleanup()
+	numID, _ := strconv.Atoi(poNumber)
+
+	rec := httptest.NewRecorder()
+	h.POReceive(rec, withID(postForm("/po/{id}/receive", url.Values{"recv[1]": {"1"}}), numID))
+	assertStatus(t, "receive on draft PO", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "Only a sent or partially-received PO") {
+		t.Errorf("receive on draft PO: expected rejection message, got: %s", rec.Body.String())
+	}
+}
+
+func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
+	h, hcleanup := liveHandler(t)
+	defer hcleanup()
+	ctx := context.Background()
+
+	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx) // approval_status=not_submitted
+	defer poCleanup()
+	numID, _ := strconv.Atoi(poNumber)
+
+	rec := httptest.NewRecorder()
+	h.POApprovalAction(rec, withID(postForm("/po/{id}/approval", url.Values{"action": {"submit"}}), numID))
+	assert302(t, "submit", rec)
+	var approval string
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	if approval != "pending" {
+		t.Errorf("after submit: approval_status = %q, want pending", approval)
+	}
+
+	// Reject without an authorized approver on the request context must be rejected.
+	rec = httptest.NewRecorder()
+	h.POApprovalAction(rec, withID(postForm("/po/{id}/approval", url.Values{"action": {"reject"}, "note": {"needs rework"}}), numID))
+	assertStatus(t, "reject without approver", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "not authorized") {
+		t.Errorf("reject without approver: expected authorization error, got: %s", rec.Body.String())
+	}
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	if approval != "pending" {
+		t.Errorf("after unauthorized reject: approval_status = %q, want unchanged pending", approval)
+	}
+
+	// Reject as an authorized approver.
+	rec = httptest.NewRecorder()
+	h.POApprovalAction(rec, approverCtx(withID(postForm("/po/{id}/approval",
+		url.Values{"action": {"reject"}, "note": {"needs rework"}}), numID)))
+	assert302(t, "reject as approver", rec)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	if approval != "rejected" {
+		t.Errorf("after reject: approval_status = %q, want rejected", approval)
+	}
+	var lastAction, lastNote string
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 action, note FROM %s WHERE po_id=@p1 AND event_type='approval' ORDER BY id DESC`,
+		h.cfg.POHistoryTable()), poID,
+	).Scan(&lastAction, &lastNote)
+	if lastAction != "rejected" || lastNote != "needs rework" {
+		t.Errorf("history row = {action:%q note:%q}, want {rejected \"needs rework\"}", lastAction, lastNote)
+	}
+
+	// Resubmit after reject -> pending, then approve -> approved.
+	rec = httptest.NewRecorder()
+	h.POApprovalAction(rec, withID(postForm("/po/{id}/approval", url.Values{"action": {"submit"}}), numID))
+	assert302(t, "resubmit after reject", rec)
+
+	rec = httptest.NewRecorder()
+	h.POApprovalAction(rec, approverCtx(withID(postForm("/po/{id}/approval", url.Values{"action": {"approve"}}), numID)))
+	assert302(t, "approve as approver", rec)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	if approval != "approved" {
+		t.Errorf("after approve: approval_status = %q, want approved", approval)
+	}
+}
+
+// withGroupParam injects a chi route context carrying the given "group" URL
+// parameter — RFQCompare/RFQCompareSave key off "group", unlike withID's "id".
+func withGroupParam(req *http.Request, group string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("group", group)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+// seedRFQQuote creates one RFQ quote (a purchase_order with status 'rfq') for
+// the given supplier, with one line for part 3001 (RAW-1001). groupID == 0
+// creates the first quote in a new group; a non-zero groupID joins that
+// existing group as an additional supplier's quote. Returns the new quote's
+// PO id and number.
+func seedRFQQuote(t *testing.T, h *Handler, ctx context.Context, supplierID, groupID int, qty, unitCost float64) (id int, number string) {
+	t.Helper()
+	savedRoot := h.cfg.POFolderRoot
+	h.cfg.POFolderRoot = ""
+	defer func() { h.cfg.POFolderRoot = savedRoot }()
+
+	supplierName := "Acme Fasteners"
+	if supplierID == 1002 {
+		supplierName = "Precision Machining Co"
+	}
+	vals := url.Values{
+		"rfq":                         {"1"},
+		"supplier_id":                 {strconv.Itoa(supplierID)},
+		"supplier_name":               {supplierName},
+		"new_pol[0][POLItem]":         {"1"},
+		"new_pol[0][POLPNPartNumber]": {"RAW-1001"},
+		"new_pol[0][POLDesc]":         {"Aluminum Stock 6061"},
+		"new_pol[0][POLQty]":          {fmt.Sprintf("%g", qty)},
+		"new_pol[0][POLCost]":         {fmt.Sprintf("%g", unitCost)},
+		"new_pol[0][POLPNID]":         {"3001"},
+	}
+	if groupID != 0 {
+		vals.Set("rfq_group_id", strconv.Itoa(groupID))
+	}
+
+	rec := httptest.NewRecorder()
+	h.POCreate(rec, postForm("/pos", vals))
+	loc := rec.Header().Get("Location")
+	number = strings.TrimSuffix(strings.TrimPrefix(loc, "/po/"), "?suggest_links=1")
+	if number == "" || number == loc {
+		t.Fatalf("could not parse RFQ quote number from Location %q", loc)
+	}
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg.POTable()), number,
+	).Scan(&id); err != nil {
+		t.Fatalf("look up created RFQ quote id: %v", err)
+	}
+	return id, number
+}
+
+// cleanupPO deletes po_line/purchase_order_history/purchase_order rows for
+// the given PO id — the same cleanup seedThrowawayPO uses, exposed here for
+// tests that manage several PO ids directly (RFQ groups, converted POs).
+func cleanupPO(ctx context.Context, h *Handler, id int) {
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POLineTable()), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POHistoryTable()), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg.POTable()), id)
+}
+
+func TestIntegration_RFQNew_RendersRFQForm(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/rfqs/new", nil)
+	rec := httptest.NewRecorder()
+	h.RFQNew(rec, req)
+
+	assertStatus(t, "RFQNew", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "New Request for Quotation") {
+		t.Errorf("body missing RFQ marker text: %s", rec.Body.String())
+	}
+}
+
+func TestIntegration_RFQAddSupplier_ClonesLinesBlanksSupplier(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	quoteID, quoteNumber := seedRFQQuote(t, h, ctx, 1001, 0, 10, 2.50)
+	defer cleanupPO(ctx, h, quoteID)
+
+	req := httptest.NewRequest(http.MethodGet, "/rfq/{id}/add-supplier", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", quoteNumber)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rec := httptest.NewRecorder()
+	h.RFQAddSupplier(rec, req)
+
+	assertStatus(t, "RFQAddSupplier", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), `value="RAW-1001"`) {
+		t.Errorf("body missing cloned part number: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `value="1001"`) {
+		t.Error("body still carries the source supplier_id (1001); expected it blanked")
+	}
+}
+
+func TestIntegration_RFQCompare_BuildsGridWithBestMarkers(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	acmeID, _ := seedRFQQuote(t, h, ctx, 1001, 0, 10, 2.75)         // Acme, total 27.50
+	defer cleanupPO(ctx, h, acmeID)
+	pmcID, _ := seedRFQQuote(t, h, ctx, 1002, acmeID, 10, 2.40)     // Precision, total 24.00 (cheaper)
+	defer cleanupPO(ctx, h, pmcID)
+
+	req := withGroupParam(httptest.NewRequest(http.MethodGet, "/rfq/{group}/compare", nil), strconv.Itoa(acmeID))
+	rec := httptest.NewRecorder()
+	h.RFQCompare(rec, req)
+
+	assertStatus(t, "RFQCompare", rec, http.StatusOK)
+	body := rec.Body.String()
+	if !strings.Contains(body, "Acme Fasteners") || !strings.Contains(body, "Precision Machining Co") {
+		t.Errorf("body missing one of the two supplier names: %s", body)
+	}
+	if !strings.Contains(body, "Lowest") {
+		t.Errorf("body missing the \"Lowest\" best-quote marker: %s", body)
+	}
+}
+
+func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	quoteID, _ := seedRFQQuote(t, h, ctx, 1001, 0, 10, 0) // unquoted line, cost 0
+	defer cleanupPO(ctx, h, quoteID)
+
+	var lineID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		"SELECT id FROM %s WHERE po_id=@p1", h.cfg.POLineTable()), quoteID,
+	).Scan(&lineID); err != nil {
+		t.Fatalf("look up seeded line id: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.RFQCompareSave(rec, withGroupParam(postForm("/rfq/{group}/compare", url.Values{
+		fmt.Sprintf("cost_%d", lineID): {"3.25"},
+		fmt.Sprintf("lead_%d", lineID): {"14"},
+	}), strconv.Itoa(quoteID)))
+	assert302(t, "RFQCompareSave", rec)
+	if loc := rec.Header().Get("Location"); loc != fmt.Sprintf("/rfq/%d/compare", quoteID) {
+		t.Errorf("Location = %q, want /rfq/%d/compare", loc, quoteID)
+	}
+
+	var unitCost float64
+	var leadDays sql.NullInt64
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		"SELECT unit_cost, lead_time_days FROM %s WHERE id=@p1", h.cfg.POLineTable()), lineID,
+	).Scan(&unitCost, &leadDays)
+	if unitCost != 3.25 {
+		t.Errorf("unit_cost = %v, want 3.25", unitCost)
+	}
+	if !leadDays.Valid || leadDays.Int64 != 14 {
+		t.Errorf("lead_time_days = %v, want 14", leadDays)
+	}
+
+	var totalCost float64
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		"SELECT total_cost FROM %s WHERE ID=@p1", h.cfg.POTable()), quoteID,
+	).Scan(&totalCost)
+	if totalCost != 32.50 { // 10 qty * 3.25
+		t.Errorf("total_cost = %v, want 32.50", totalCost)
+	}
+}
+
+// withIDStr injects a chi route context carrying the given "id" URL parameter
+// as a literal string — unlike withID, which only handles numeric PO numbers,
+// RFQ quote numbers (e.g. "5010R1") aren't numeric.
+func withIDStr(req *http.Request, id string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	savedRoot := h.cfg.POFolderRoot
+	h.cfg.POFolderRoot = ""
+	defer func() { h.cfg.POFolderRoot = savedRoot }()
+
+	acmeID, _ := seedRFQQuote(t, h, ctx, 1001, 0, 10, 2.75)             // Acme, total 27.50
+	pmcID, pmcNumber := seedRFQQuote(t, h, ctx, 1002, acmeID, 10, 2.40) // Precision, total 24.00 (winner)
+	base := rfqBaseNumber(pmcNumber)
+
+	rec := httptest.NewRecorder()
+	h.RFQConvert(rec, withIDStr(postForm("/rfq/{id}/convert", url.Values{}), pmcNumber))
+	assert302(t, "RFQConvert", rec)
+	if loc := rec.Header().Get("Location"); loc != "/po/"+base {
+		t.Errorf("Location = %q, want /po/%s", loc, base)
+	}
+
+	var newID int
+	if err := h.DB().QueryRowContext(ctx,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg.POTable()), base,
+	).Scan(&newID); err != nil {
+		t.Fatalf("look up converted PO: %v", err)
+	}
+	defer cleanupPO(ctx, h, newID)
+	defer cleanupPO(ctx, h, acmeID)
+	defer cleanupPO(ctx, h, pmcID)
+
+	var newStatus string
+	var newSupplierID sql.NullInt64
+	var newGroupID sql.NullInt64
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		"SELECT status, supplier_id, rfq_group_id FROM %s WHERE ID=@p1", h.cfg.POTable()), newID,
+	).Scan(&newStatus, &newSupplierID, &newGroupID)
+	if newStatus != "draft" {
+		t.Errorf("new PO status = %q, want draft", newStatus)
+	}
+	if !newSupplierID.Valid || int(newSupplierID.Int64) != 1002 {
+		t.Errorf("new PO supplier_id = %v, want 1002", newSupplierID)
+	}
+	if newGroupID.Valid {
+		t.Errorf("new PO rfq_group_id = %v, want NULL", newGroupID)
+	}
+	newLines := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), newID))
+	if newLines != 1 {
+		t.Errorf("new PO line count = %d, want 1", newLines)
+	}
+
+	var pmcStatus, pmcActive string
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		"SELECT status, CAST(is_active AS VARCHAR) FROM %s WHERE ID=@p1", h.cfg.POTable()), pmcID,
+	).Scan(&pmcStatus, &pmcActive)
+	if pmcStatus != "closed" {
+		t.Errorf("awarded quote status = %q, want closed", pmcStatus)
+	}
+
+	var acmeStatus string
+	h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		"SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), acmeID,
+	).Scan(&acmeStatus)
+	if acmeStatus != "cancelled" {
+		t.Errorf("sibling quote status = %q, want cancelled", acmeStatus)
+	}
+
+	newPOHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POHistoryTable(), newID))
+	if newPOHistory != 1 {
+		t.Errorf("new PO history rows = %d, want 1 (draft creation)", newPOHistory)
+	}
+	pmcHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='closed'", h.cfg.POHistoryTable(), pmcID))
+	if pmcHistory != 1 {
+		t.Errorf("awarded quote history 'closed' rows = %d, want 1", pmcHistory)
+	}
+	acmeHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='cancelled'", h.cfg.POHistoryTable(), acmeID))
+	if acmeHistory != 1 {
+		t.Errorf("sibling quote history 'cancelled' rows = %d, want 1", acmeHistory)
+	}
+}
+
+func TestIntegration_RFQConvert_RejectsNonRFQStatus(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, poNumber, poCleanup := seedThrowawayPO(t, h, ctx) // status=draft, not an RFQ
+	defer poCleanup()
+
+	rec := httptest.NewRecorder()
+	h.RFQConvert(rec, withIDStr(postForm("/rfq/{id}/convert", url.Values{}), poNumber))
+	assertStatus(t, "RFQConvert on non-RFQ", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "Only an RFQ can be converted to a PO.") {
+		t.Errorf("expected rejection message, got: %s", rec.Body.String())
+	}
+}
+
+func TestIntegration_RFQConvert_RejectsWhenBaseNumberTaken(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	quoteID, quoteNumber := seedRFQQuote(t, h, ctx, 1001, 0, 10, 2.50)
+	defer cleanupPO(ctx, h, quoteID)
+	base := rfqBaseNumber(quoteNumber)
+
+	// Manufacture the collision: insert a placeholder PO at the bare base number
+	// the convert would try to claim.
+	collisionID, _, collisionCleanup := seedThrowawayPO(t, h, ctx)
+	defer collisionCleanup()
+	if _, err := h.execContext(ctx, fmt.Sprintf(
+		"UPDATE %s SET number=@p1 WHERE ID=@p2", h.cfg.POTable()), base, collisionID); err != nil {
+		t.Fatalf("force collision PO number: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.RFQConvert(rec, withIDStr(postForm("/rfq/{id}/convert", url.Values{}), quoteNumber))
+	assertStatus(t, "RFQConvert with base number taken", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "already in use") {
+		t.Errorf("expected \"already in use\" rejection, got: %s", rec.Body.String())
+	}
+}
