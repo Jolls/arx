@@ -649,15 +649,15 @@ function buildBOMSubRow(item, num) {
     tr.className = 'bom-sub-row'
     tr.dataset.item = num
     var toggle = item.ChildHasBOM
-        ? '<button type="button" class="bom-expand-toggle" data-part-id="' + item.PLPartID + '" data-item="' + num + '" aria-expanded="false" onclick="toggleBOMRow(this)">&#9656;</button> '
+        ? '<button type="button" class="bom-expand-toggle" data-part-id="' + item.ComponentPartID + '" data-item="' + num + '" aria-expanded="false" onclick="toggleBOMRow(this)">&#9656;</button> '
         : ''
     tr.innerHTML =
         '<td data-col="col-item" style="--bom-depth:' + depth + '">' + toggle + num + '</td>' +
-        '<td data-col="col-pn"><a href="/part/' + item.PLPartID + '" class="part-number-link">' + escHtml(item.PartNumber) + '</a></td>' +
+        '<td data-col="col-pn"><a href="/part/' + item.ComponentPartID + '" class="part-number-link">' + escHtml(item.PartNumber) + '</a></td>' +
         '<td data-col="col-title">' + escHtml(item.Title) + '</td>' +
         '<td data-col="col-rev">' + escHtml(item.Revision) + '</td>' +
         '<td data-col="col-cat">' + escHtml(item.Category) + '</td>' +
-        '<td data-col="col-qty" class="text-end">' + formatBOMQty(item.PLQty) + '</td>' +
+        '<td data-col="col-qty" class="text-end">' + formatBOMQty(item.Qty) + '</td>' +
         '<td data-col="col-unit-cost" class="text-end">' + formatBOMCost(item.LineUnitCost) + '</td>' +
         '<td data-col="col-ext-cost" class="text-end">' + formatBOMCost(item.LineExtCost) + '</td>' +
         '<td data-col="col-source">' + bomSourceBadge(item.CostSource) + '</td>' +

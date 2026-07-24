@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.26] - 2026-07-24
+### Fixed
+- BOM view's lazily-expanded sub-assembly rows linked to `/part/undefined` and showed a blank quantity — the JS row builder read stale field names (`PLPartID`/`PLQty`) that don't match the API's `ComponentPartID`/`Qty` ([#795](https://github.com/Jolls/arx-legacy/issues/795))
+### Changed
+- Dropped unnecessary single-letter table aliases (`p.`, `f.`) from the `bom_pn_by_item`, `pn_primary_attachment`, and `form_primary_attachment` named queries ([#794](https://github.com/Jolls/arx-legacy/issues/794))
+- Documented an orphan-check requirement for future FK-promotion migrations, after `migrate_742` failed on ArxProd due to pre-mating orphan rows ArxDev's seed never surfaced ([#775](https://github.com/Jolls/arx-legacy/issues/775))
+
 ## [0.6.25] - 2026-07-22
 ### Added
 - Serialized-unit create/render logic (traceability epic [#736](https://github.com/Jolls/arx-legacy/issues/736), slice 8): parts now carry a `none | lot | serial | lot_serial` tracking mode (replacing the lot-only checkbox); testing a serial/lot_serial part mints a `unit` row with provenance from the linked lot/build, retests reuse the same unit, unit-level records carry `unit_id` and read lot/build through the unit, and a build's history shows a "Tested N / qty" completeness column ([#745](https://github.com/Jolls/arx-legacy/issues/745))
