@@ -45,6 +45,10 @@ type Handler struct {
 	companyLogo    string
 	partCategories []models.Category
 
+	// connectDB opens a new DB connection; defaults to arxdb.Connect in New().
+	// Overridable in tests so SettingsSave's failure path needs no real dial.
+	connectDB func(engine, dsn string) (*sql.DB, arxdb.Dialect, error)
+
 	routeMu    sync.Mutex
 	routeStats map[int]*routeAccumulator
 
@@ -92,6 +96,7 @@ func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS,
 		routeStats:    make(map[int]*routeAccumulator),
 		userCache:     make(map[int]*userCacheEntry),
 		loginAttempts: make(map[string]*loginAttempt),
+		connectDB:     arxdb.Connect,
 	}
 	h.conn.Store(&dbConn{db: db, dialect: dialect})
 	return h
