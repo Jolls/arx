@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -144,10 +145,23 @@ func (h *Handler) execQuery(ctx context.Context, sqlText, resultType string, par
 		return QueryResult{}, fmt.Errorf("query must be a plain SELECT statement")
 	}
 
-	args := make([]any, 0, len(params))
-	for k, v := range params {
-		args = append(args, sql.Named(k, v))
+	// Build args in a deterministic order (not map iteration order, which is
+	// randomized) from the caller-supplied params only — a query token with no
+	// matching entry gets no bound arg, so a stale/renamed param name still
+	// fails at the driver instead of silently binding an empty string (see
+	// TestIntegration_RunNamedQuery_StaleSpecNomParamRename). Postgres binds
+	// parameters positionally and has no @name placeholder syntax, so the query
+	// text is rewritten to match this same order.
+	names := make([]string, 0, len(params))
+	for name := range params {
+		names = append(names, name)
 	}
+	sort.Strings(names)
+	args := make([]any, len(names))
+	for i, name := range names {
+		args[i] = sql.Named(name, params[name])
+	}
+	sqlText = h.dia().RewriteNamedParams(sqlText, names)
 
 	rows, err := h.queryContext(ctx, sqlText, args...)
 	if err != nil {

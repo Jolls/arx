@@ -2286,10 +2286,7 @@ func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
 	}
-	archived := 0
-	if r.FormValue("archived") == "1" {
-		archived = 1
-	}
+	archived := r.FormValue("archived") == "1"
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {

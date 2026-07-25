@@ -186,7 +186,7 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 		       sp.lead_time, sp.min_increment, sp.uom_id,
 		       c.name AS supplier_name,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
-		       CASE WHEN sp.uom_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
+		       %s AS unit_is_explicit
 		FROM %s sp
 		JOIN %s c  ON sp.supplier_id = c.id
 		LEFT JOIN %s pu ON sp.uom_id   = pu.uom_id
@@ -194,7 +194,7 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 		LEFT JOIN %s bu ON p.uom_id    = bu.uom_id
 		WHERE sp.part_id = @p1
 		ORDER BY c.name, sp.supplier_pn
-	`, sp, co, ut, pn, ut), partID)
+	`, h.dia().BoolFromCondition("sp.uom_id IS NOT NULL"), sp, co, ut, pn, ut), partID)
 	if err != nil {
 		return nil, err
 	}
