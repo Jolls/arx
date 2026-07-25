@@ -89,6 +89,60 @@ func assertStatus(t *testing.T, label string, rec *httptest.ResponseRecorder, wa
 	}
 }
 
+// assertFloatEqual compares two floats with a small tolerance — rollupCost's
+// running-total sum accumulates float64 rounding error (e.g. 27.229999999999997
+// instead of 27.23) that an exact != comparison would wrongly flag as a bug.
+func assertFloatEqual(t *testing.T, label string, got, want float64) {
+	t.Helper()
+	const epsilon = 0.0001
+	diff := got - want
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > epsilon {
+		t.Errorf("%s: got %v, want %v", label, got, want)
+	}
+}
+
+// seedCyclePair inserts a throwaway two-part BOM cycle (A's BOM contains B, B's
+// BOM contains A) — a scenario the static seed data deliberately doesn't have —
+// and returns both part IDs plus a cleanup func that deletes the bom and part
+// rows. Shared by tests that need to prove path-scoped cycle detection actually
+// trips instead of recursing forever.
+func seedCyclePair(t *testing.T, h *Handler, ctx context.Context) (idA, idB int, cleanup func()) {
+	t.Helper()
+	pn := h.cfg.PartsTable()
+	pl := h.cfg.BOMTable()
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number) OUTPUT INSERTED.id VALUES (@p1)`, pn),
+		"ITEST-CYCLE-A-"+suffix).Scan(&idA); err != nil {
+		t.Fatalf("seed part A: %v", err)
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number) OUTPUT INSERTED.id VALUES (@p1)`, pn),
+		"ITEST-CYCLE-B-"+suffix).Scan(&idB); err != nil {
+		t.Fatalf("seed part B: %v", err)
+	}
+	cleanup = func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id IN (@p1,@p2)`, pl), idA, idB)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id IN (@p1,@p2)`, pn), idA, idB)
+	}
+
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (parent_part_id, component_part_id, qty) VALUES (@p1,@p2,1)`, pl), idA, idB); err != nil {
+		cleanup()
+		t.Fatalf("seed bom A->B: %v", err)
+	}
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (parent_part_id, component_part_id, qty) VALUES (@p1,@p2,1)`, pl), idB, idA); err != nil {
+		cleanup()
+		t.Fatalf("seed bom B->A: %v", err)
+	}
+	return idA, idB, cleanup
+}
+
 // TestIntegration_PartLifecycle exercises the full part + attachment round-trip
 // against the ArxDev database:
 //
@@ -853,34 +907,9 @@ func TestIntegration_BuildCostCycleDetection(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	pn := h.cfg.PartsTable()
-	pl := h.cfg.BOMTable()
-	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 
-	var idA, idB int
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number) OUTPUT INSERTED.id VALUES (@p1)`, pn),
-		"ITEST-CYCLE-A-"+suffix).Scan(&idA); err != nil {
-		t.Fatalf("seed part A: %v", err)
-	}
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number) OUTPUT INSERTED.id VALUES (@p1)`, pn),
-		"ITEST-CYCLE-B-"+suffix).Scan(&idB); err != nil {
-		t.Fatalf("seed part B: %v", err)
-	}
-	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id IN (@p1,@p2)`, pl), idA, idB)
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id IN (@p1,@p2)`, pn), idA, idB)
-	}()
-
-	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (parent_part_id, component_part_id, qty) VALUES (@p1,@p2,1)`, pl), idA, idB); err != nil {
-		t.Fatalf("seed bom A->B: %v", err)
-	}
-	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (parent_part_id, component_part_id, qty) VALUES (@p1,@p2,1)`, pl), idB, idA); err != nil {
-		t.Fatalf("seed bom B->A: %v", err)
-	}
+	idA, _, cyclesCleanup := seedCyclePair(t, h, ctx)
+	defer cyclesCleanup()
 
 	res, err := h.buildCost(ctx, idA, 10)
 	if err != nil {
@@ -1002,6 +1031,178 @@ func TestIntegration_BuildCostDoesNotWriteRollup(t *testing.T) {
 	if beforeCost12 != afterCost12 || beforeAt12 != afterAt12 {
 		t.Errorf("part 3012 last_rollup_cost/at changed: before {%v %v}, after {%v %v} — buildCost must be read-only",
 			beforeCost12, beforeAt12, afterCost12, afterAt12)
+	}
+}
+
+// TestIntegration_RollupCostNested covers both the flat-BOM case (3012, whose
+// BOM has no sub-assemblies of its own) and the nested case (3005, which
+// recurses into 3012) in one test against the static seed. Also exercises
+// every leaf-cost fallback path: 3002's preferred_price is the MIN across all
+// active price tiers for its default supplier (rollupCost's leaf-cost query is
+// not qty-tier-aware, unlike buildCost — a legacy quirk, asserted here as
+// documented behavior, not fixed), 3003/3007 fall back to current_cost (no
+// price rows), and 3006 (labor, no default_supplier_id) also falls back to
+// current_cost.
+func TestIntegration_RollupCostNested(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	res12, err := h.rollupCost(ctx, 3012, map[int]bool{}, map[int]rollupResult{})
+	if err != nil {
+		t.Fatalf("rollupCost(3012): %v", err)
+	}
+	if res12.cycle {
+		t.Error("rollupCost(3012): cycle = true, want false")
+	}
+	assertFloatEqual(t, "rollupCost(3012) cost", res12.cost, 9.19)
+
+	res5, err := h.rollupCost(ctx, 3005, map[int]bool{}, map[int]rollupResult{})
+	if err != nil {
+		t.Fatalf("rollupCost(3005): %v", err)
+	}
+	if res5.cycle {
+		t.Error("rollupCost(3005): cycle = true, want false")
+	}
+	assertFloatEqual(t, "rollupCost(3005) cost", res5.cost, 27.23)
+}
+
+// TestIntegration_RollupCostMemoization proves a shared memo map is reused
+// rather than recomputed: pre-seeding memo[3012] with a sentinel value and
+// rolling up 3005 (which references 3012 via line 3907) must return the
+// sentinel unchanged instead of re-querying and recomputing 3012's real cost.
+func TestIntegration_RollupCostMemoization(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	memo := map[int]rollupResult{3012: {cost: 999, cycle: false}}
+	res, err := h.rollupCost(ctx, 3005, map[int]bool{}, memo)
+	if err != nil {
+		t.Fatalf("rollupCost(3005) with poisoned memo: %v", err)
+	}
+	// 0.06 (screw) + 0.48 (o-ring) + 17.50 (labor) + 999 (poisoned 3012) = 1017.04
+	assertFloatEqual(t, "rollupCost(3005) with poisoned memo[3012]=999 (memo entry must be reused, not recomputed)", res.cost, 1017.04)
+}
+
+// TestIntegration_RollupCostCycleDetection mirrors
+// TestIntegration_BuildCostCycleDetection but exercises rollupCost directly.
+func TestIntegration_RollupCostCycleDetection(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	idA, _, cleanupCycle := seedCyclePair(t, h, ctx)
+	defer cleanupCycle()
+
+	res, err := h.rollupCost(ctx, idA, map[int]bool{}, map[int]rollupResult{})
+	if err != nil {
+		t.Fatalf("rollupCost(cycle): %v", err)
+	}
+	if !res.cycle {
+		t.Error("rollupCost(cycle): cycle = false, want true for a self-referencing BOM")
+	}
+}
+
+// TestIntegration_PartRollupCostHandler exercises the full HTTP handler
+// (success path): computes the rollup for 3005 and asserts it writes
+// last_rollup_cost/last_rollup_at back to every visited assembly (root 3005
+// AND nested sub-assembly 3012) using one shared timestamp. Mutates static
+// seed data — restores both parts' original values via defer.
+func TestIntegration_PartRollupCostHandler(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	pn := h.cfg.PartsTable()
+
+	readRollup := func(id int) (sql.NullFloat64, sql.NullTime) {
+		var cost sql.NullFloat64
+		var at sql.NullTime
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id=@p1`, pn), id).Scan(&cost, &at); err != nil {
+			t.Fatalf("read last_rollup_cost for part %d: %v", id, err)
+		}
+		return cost, at
+	}
+
+	beforeCost5, beforeAt5 := readRollup(3005)
+	beforeCost12, beforeAt12 := readRollup(3012)
+	defer func() {
+		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+			`UPDATE %s SET last_rollup_cost=@p1, last_rollup_at=@p2 WHERE id=@p3`, pn),
+			beforeCost5, beforeAt5, 3005); err != nil {
+			t.Errorf("restore part 3005 last_rollup_cost/at: %v", err)
+		}
+		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+			`UPDATE %s SET last_rollup_cost=@p1, last_rollup_at=@p2 WHERE id=@p3`, pn),
+			beforeCost12, beforeAt12, 3012); err != nil {
+			t.Errorf("restore part 3012 last_rollup_cost/at: %v", err)
+		}
+	}()
+
+	req := withID(httptest.NewRequest(http.MethodPost, "/part/3005/rollup-cost", nil), 3005)
+	rec := httptest.NewRecorder()
+	h.PartRollupCost(rec, req)
+	assertStatus(t, "PartRollupCost(3005)", rec, http.StatusSeeOther)
+
+	afterCost5, afterAt5 := readRollup(3005)
+	afterCost12, afterAt12 := readRollup(3012)
+
+	if !afterCost5.Valid {
+		t.Error("part 3005 last_rollup_cost after = NULL, want a value")
+	} else {
+		assertFloatEqual(t, "part 3005 last_rollup_cost after", afterCost5.Float64, 27.23)
+	}
+	if !afterCost12.Valid {
+		t.Error("part 3012 last_rollup_cost after = NULL, want a value")
+	} else {
+		assertFloatEqual(t, "part 3012 last_rollup_cost after", afterCost12.Float64, 9.19)
+	}
+	if !afterAt5.Valid || !afterAt12.Valid {
+		t.Fatalf("last_rollup_at not set: 3005=%v 3012=%v", afterAt5, afterAt12)
+	}
+	if afterAt5.Time != afterAt12.Time {
+		t.Errorf("last_rollup_at differs between 3005 (%v) and 3012 (%v), want a single shared timestamp", afterAt5.Time, afterAt12.Time)
+	}
+	if afterAt5.Time.Equal(beforeAt5.Time) {
+		t.Error("last_rollup_at for 3005 did not change")
+	}
+}
+
+// TestIntegration_PartRollupCostHandlerCycleDoesNotWrite verifies the handler
+// rejects a cyclic BOM without writing anything — the transaction must never
+// commit when rollupCost reports a cycle.
+func TestIntegration_PartRollupCostHandlerCycleDoesNotWrite(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	pn := h.cfg.PartsTable()
+
+	idA, idB, cleanupCycle := seedCyclePair(t, h, ctx)
+	defer cleanupCycle()
+
+	readRollup := func(id int) sql.NullFloat64 {
+		var cost sql.NullFloat64
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT last_rollup_cost FROM %s WHERE id=@p1`, pn), id).Scan(&cost); err != nil {
+			t.Fatalf("read last_rollup_cost for part %d: %v", id, err)
+		}
+		return cost
+	}
+
+	req := withID(httptest.NewRequest(http.MethodPost, fmt.Sprintf("/part/%d/rollup-cost", idA), nil), idA)
+	rec := httptest.NewRecorder()
+	h.PartRollupCost(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "BOM contains a cycle") {
+		t.Errorf("PartRollupCost(cycle): body = %q, want it to mention \"BOM contains a cycle\"", rec.Body.String())
+	}
+
+	if costA := readRollup(idA); costA.Valid {
+		t.Errorf("part %d last_rollup_cost = %v after cycle rejection, want still NULL — transaction must not have committed", idA, costA)
+	}
+	if costB := readRollup(idB); costB.Valid {
+		t.Errorf("part %d last_rollup_cost = %v after cycle rejection, want still NULL — transaction must not have committed", idB, costB)
 	}
 }
 

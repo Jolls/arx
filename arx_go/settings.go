@@ -14,7 +14,6 @@ import (
 	"time"
 
 	arxbase "arx/arxlib/config"
-	arxdb "arx/arxlib/db"
 )
 
 // landingPreset is one selectable landing-page option (issue #282): a major
@@ -61,6 +60,17 @@ func sanitizeLandingRoute(raw string) (string, bool) {
 		return "", false
 	}
 	return ri, true
+}
+
+// selectConnectPassword picks the password SettingsSave connects with: in test
+// mode, a freshly-posted test password wins, falling back through the stored
+// test password and the prod password/stored-prod-password (mirrors
+// Base.activePassword); in prod mode, only the prod posted/stored pair applies.
+func selectConnectPassword(testMode bool, testPosted, storedTest, posted, storedDB string) string {
+	if testMode {
+		return firstNonEmpty(testPosted, storedTest, posted, storedDB)
+	}
+	return firstNonEmpty(posted, storedDB)
 }
 
 // firstNonEmpty returns the first non-empty string in vals, or "" if all are empty.
@@ -430,18 +440,13 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	// then the stored one. This lets test-mode toggles take effect immediately
 	// without re-entering credentials. In test mode the test password wins and
 	// falls back to the prod password when unset (mirrors Base.activePassword).
-	var connectWith string
-	if h.cfg.TestMode {
-		connectWith = firstNonEmpty(testPassword, h.cfg.TestDBPassword, password, h.cfg.DBPassword)
-	} else {
-		connectWith = firstNonEmpty(password, h.cfg.DBPassword)
-	}
+	connectWith := selectConnectPassword(h.cfg.TestMode, testPassword, h.cfg.TestDBPassword, password, h.cfg.DBPassword)
 
 	var connErr string
 	dbSwapped := false
 	if connectWith != "" {
 		dsn := h.cfg.BuildDSN(connectWith)
-		newDB, newDialect, err := arxdb.Connect(h.cfg.DBEngine(), dsn)
+		newDB, newDialect, err := h.connectDB(h.cfg.DBEngine(), dsn)
 		if err != nil {
 			connErr = err.Error()
 		} else {

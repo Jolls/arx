@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.28] - 2026-07-24
+### Added
+- Integration test coverage for `rollupCost`/`PartRollupCost` (legacy BOM cost rollup): nested/flat rollup, memoization, cycle detection, and the handler's write-back transaction ([#804](https://github.com/Jolls/arx-legacy/issues/804))
+- Test coverage for `SettingsSave`'s DB connection/secrets swap: connect success/failure, password precedence, field clear-vs-preserve semantics, and the test-mode-swap forced relogin ([#805](https://github.com/Jolls/arx-legacy/issues/805))
+- End-to-end test coverage for `config.Load`'s `.env` → env vars → `local.json` precedence chain ([#810](https://github.com/Jolls/arx-legacy/issues/810))
+- Test coverage for `migrateLegacy` (pre-#422 two-app config merge) ([#819](https://github.com/Jolls/arx-legacy/issues/819))
+### Changed
+- Extracted `connectDB`/`selectConnectPassword` seams from `SettingsSave` to make the connect-failure path and password precedence unit-testable without a real DB dial (part of #805)
+
 ## [0.6.27] - 2026-07-24
 ### Added
 - Integration/unit test coverage for auth middleware composition, login lockout, and idle-timeout — `buildRouter`'s real route table is now walked and asserted to require auth on every non-public route ([#802](https://github.com/Jolls/arx-legacy/issues/802))
