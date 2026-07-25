@@ -10,6 +10,7 @@ CREATE TABLE users (
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
     can_approve_po BOOLEAN     NOT NULL DEFAULT FALSE,  -- may approve/reject POs (#267).
     can_approve_records BOOLEAN NOT NULL DEFAULT FALSE, -- may approve/unlock records (#249).
+    is_admin      BOOLEAN      NOT NULL DEFAULT FALSE,  -- may manage user accounts (create/reset/deactivate/grant) (#750).
     default_po_contact_id  INTEGER NULL,               -- per-user default PO receiver contact (#463).
     default_po_receiver_id INTEGER NULL,               -- per-user default PO receiver company (#463).
     accent_color  VARCHAR(20)  NULL,                   -- per-user UI accent theme key (#537).

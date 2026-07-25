@@ -355,14 +355,14 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		       pn.part_number, pn.title, pn.revision, pn.category,
 		       sp.uom_id,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
-		       CASE WHEN sp.uom_id IS NOT NULL THEN 1 ELSE 0 END AS unit_is_explicit
+		       %s AS unit_is_explicit
 		FROM %s sp
 		JOIN %s pn ON sp.part_id = pn.id
 		LEFT JOIN %s pu ON sp.uom_id   = pu.uom_id   -- explicit purchase unit
 		LEFT JOIN %s bu ON pn.uom_id   = bu.uom_id   -- base unit fallback
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`, sp, pn, ut, ut), id)
+	`, h.dia().BoolFromCondition("sp.uom_id IS NOT NULL"), sp, pn, ut, ut), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving linked parts: "+err.Error())
 		return

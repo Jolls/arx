@@ -187,3 +187,34 @@ func TestNextSequenceValueExpr(t *testing.T) {
 		t.Errorf("postgres NextSequenceValueExpr: got %q, want %q", got, "nextval('po_number_seq')")
 	}
 }
+
+func TestBoolFromCondition(t *testing.T) {
+	// SQL Server has no boolean expression type, so the condition must be
+	// wrapped in CASE and cast to BIT, byte-for-byte with the prior inline text.
+	ss := NewSQLServerDialect()
+	if got := ss.BoolFromCondition("a > b"); got != "CAST(CASE WHEN a > b THEN 1 ELSE 0 END AS BIT)" {
+		t.Errorf("sqlserver BoolFromCondition: got %q, want %q", got, "CAST(CASE WHEN a > b THEN 1 ELSE 0 END AS BIT)")
+	}
+	// Postgres yields the condition's boolean value directly.
+	pg := NewPostgresDialect()
+	if got := pg.BoolFromCondition("a > b"); got != "(a > b)" {
+		t.Errorf("postgres BoolFromCondition: got %q, want %q", got, "(a > b)")
+	}
+}
+
+func TestRewriteNamedParams(t *testing.T) {
+	q := "SELECT * FROM t WHERE pn = @pn AND item = @item AND pn2 = @pn"
+	names := []string{"pn", "item"}
+
+	// SQL Server accepts @name tokens directly (matched by name, not position).
+	if got := NewSQLServerDialect().RewriteNamedParams(q, names); got != q {
+		t.Errorf("sqlserver RewriteNamedParams: got %q, want unchanged %q", got, q)
+	}
+
+	// Postgres has no @name syntax; each token is rewritten to its 1-based
+	// position in names, including repeated occurrences of the same name.
+	want := "SELECT * FROM t WHERE pn = $1 AND item = $2 AND pn2 = $1"
+	if got := NewPostgresDialect().RewriteNamedParams(q, names); got != want {
+		t.Errorf("postgres RewriteNamedParams: got %q, want %q", got, want)
+	}
+}

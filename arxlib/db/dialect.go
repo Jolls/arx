@@ -45,6 +45,22 @@ type Dialect interface {
 	// the PO-number sequence. SQL Server uses `NEXT VALUE FOR <seq>`; Postgres
 	// uses `nextval('<seq>')`.
 	NextSequenceValueExpr(seqName string) string
+	// BoolFromCondition renders a SELECT-list expression that yields a boolean
+	// value from a boolean-valued SQL condition, for scanning into a Go bool /
+	// sql.NullBool. SQL Server has no boolean expression type, so the condition
+	// must be wrapped in CASE and cast to BIT; Postgres yields the condition's
+	// boolean value directly.
+	BoolFromCondition(cond string) string
+	// RewriteNamedParams rewrites @name placeholder tokens in query (stored
+	// named-query SQL text) to the engine's native placeholder convention, given
+	// orderedNames — the distinct param names in the exact order the caller will
+	// bind args in (not necessarily their order of appearance in query; a name
+	// with no entry in orderedNames is left as literal @name text, so a stale or
+	// renamed param still fails instead of silently matching). SQL Server accepts
+	// @name tokens directly (bound via go-mssqldb's named-argument matching), so
+	// this is a no-op; Postgres has no @name placeholder syntax and binds
+	// positionally, so each @name is rewritten to $<position>.
+	RewriteNamedParams(query string, orderedNames []string) string
 }
 
 type sqlServerDialect struct{}
@@ -121,6 +137,15 @@ func (sqlServerDialect) ToggleBoolExpr(column string) string { return "1 - " + c
 func (sqlServerDialect) NextSequenceValueExpr(string) string {
 	return "NEXT VALUE FOR dbo.PO_Number_Seq"
 }
+
+func (sqlServerDialect) BoolFromCondition(cond string) string {
+	return "CAST(CASE WHEN " + cond + " THEN 1 ELSE 0 END AS BIT)"
+}
+
+// RewriteNamedParams is a no-op: go-mssqldb matches @name tokens in query text
+// to sql.Named-equivalent args by name, not position, so SQL Server needs no
+// rewrite here.
+func (sqlServerDialect) RewriteNamedParams(query string, _ []string) string { return query }
 
 // pgPlaceholder matches the @pN parameter markers the app emits (go-mssqldb's
 // numbering convention) so the Postgres dialect can rewrite them to $N.
@@ -219,4 +244,27 @@ func (postgresDialect) ToggleBoolExpr(column string) string { return "NOT " + co
 // lowercase sequence name created by SQL/postgres/purchase_order.sql.
 func (postgresDialect) NextSequenceValueExpr(seqName string) string {
 	return fmt.Sprintf("nextval('%s')", seqName)
+}
+
+func (postgresDialect) BoolFromCondition(cond string) string { return "(" + cond + ")" }
+
+// namedParamToken matches a single @name token, for RewriteNamedParams to
+// replace with its $<position> equivalent.
+var namedParamToken = regexp.MustCompile(`@(\w+)`)
+
+// RewriteNamedParams replaces each @name token with $<position> per its index
+// in orderedNames (1-based, matching Postgres placeholder numbering), since
+// Postgres has no @name placeholder syntax and binds positionally.
+func (postgresDialect) RewriteNamedParams(query string, orderedNames []string) string {
+	pos := make(map[string]int, len(orderedNames))
+	for i, name := range orderedNames {
+		pos[name] = i + 1
+	}
+	return namedParamToken.ReplaceAllStringFunc(query, func(tok string) string {
+		name := tok[1:]
+		if p, ok := pos[name]; ok {
+			return fmt.Sprintf("$%d", p)
+		}
+		return tok
+	})
 }

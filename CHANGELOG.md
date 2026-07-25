@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.29] - 2026-07-25
+### Added
+- Postgres port of `SQL/seed_test_data.sql` and `SQL/seed_company_logo.sql` (`SQL/postgres/`) — the synthetic ArxDev reference dataset now has a Postgres-native equivalent ([#829](https://github.com/Jolls/arx-legacy/issues/829))
+- `Dialect.BoolFromCondition` and `Dialect.RewriteNamedParams` helpers, closing the remaining SQL Server-only boolean-idiom and named-parameter gaps in `arx_go`'s BOM cost rollup and named-query execution paths ahead of Postgres integration ([#831](https://github.com/Jolls/arx-legacy/issues/831), [#830](https://github.com/Jolls/arx-legacy/issues/830))
+- Postgres translation of the 9 seeded `named_queries` rows ([#830](https://github.com/Jolls/arx-legacy/issues/830))
+### Fixed
+- `named_query.go`'s `execQuery` built driver args by iterating a Go map in random order — harmless on SQL Server but silently broken on Postgres (positional binding, no `@name` placeholder syntax); args are now built deterministically from the params map ([#830](https://github.com/Jolls/arx-legacy/issues/830))
+- `SQL/postgres/users.sql` was missing the `is_admin` column present in `SQL/users.sql` since #750 ([#829](https://github.com/Jolls/arx-legacy/issues/829))
+
 ## [0.6.28] - 2026-07-24
 ### Added
 - Integration test coverage for `rollupCost`/`PartRollupCost` (legacy BOM cost rollup): nested/flat rollup, memoization, cycle detection, and the handler's write-back transaction ([#804](https://github.com/Jolls/arx-legacy/issues/804))

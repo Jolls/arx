@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	arxdb "arx/arxlib/db"
 	"arx/arxlib/urlutil"
 )
 
@@ -32,8 +33,8 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	var filIDPrimary sql.NullInt64
 	var stockOnHand sql.NullFloat64
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, title, category, `+hasOwnBOMExpr+`, primary_attachment_id, stock_on_hand, tracking_mode FROM %s p WHERE id = @p1`,
-		h.cfg.BOMTable(), "p.id", h.cfg.PartsTable(),
+		`SELECT id, part_number, title, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode FROM %s p WHERE id = @p1`,
+		h.cfg.PartsTable(),
 	), id).Scan(&p.ID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode)
 	p.PartNumber = partNumber.String
 	p.Title = title.String
@@ -171,10 +172,10 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		SELECT id, part_number, revision, title, detail,
 		       requested_by, created_date, category, modified_date, is_active,
 		       attachment_count, po_line_count,
-		       CAST(CASE WHEN reorder_min IS NOT NULL AND stock_on_hand < reorder_min THEN 1 ELSE 0 END AS BIT),
+		       %s,
 		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = %s AND a.category = @p1)
 		FROM %s p ORDER BY part_number
-	`, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg.PartsTable()), thumbnailCategory)
+	`, h.dia().BoolFromCondition("reorder_min IS NOT NULL AND stock_on_hand < reorder_min"), h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg.PartsTable()), thumbnailCategory)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -239,7 +240,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		unitID                                        sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr+`,
+		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
@@ -247,7 +248,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
-	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
+	`, h.cfg.PartsTable()), id).Scan(
 		&p.ID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
@@ -713,13 +714,13 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		currentCost, reorderMin                       sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr+`,
+		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       uom_id, current_cost, reorder_min, tracking_mode,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
-	`, h.cfg.BOMTable(), "p.id", h.cfg.PartsTable()), id).Scan(
+	`, h.cfg.PartsTable()), id).Scan(
 		&p.ID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&unitID, &currentCost, &reorderMin, &trackingMode,
@@ -792,13 +793,13 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
 		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT),
+		       %s,
 		       pn.attachment_count, pn.po_line_count
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
 		ORDER BY pl.line_number
-	`, prc, h.dia().BoolLiteral(true), pl, pl, pn), partID)
+	`, prc, h.dia().BoolLiteral(true), hasOwnBOMExpr(h.dia(), pl, "pn.id"), pl, pn), partID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1090,9 +1091,12 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 // ── BOM cost rollup ──────────────────────────────────────────────────────────
 
 // hasOwnBOMExpr is the "does this part have its own BOM" EXISTS check shared by
-// rollupCost and aggregateLeafQty — both walk the same bom table shape to decide
-// whether to recurse into a sub-assembly or treat a component as a leaf.
-const hasOwnBOMExpr = "CAST(CASE WHEN EXISTS(SELECT 1 FROM %[1]s c WHERE c.parent_part_id = %[2]s) THEN 1 ELSE 0 END AS BIT)"
+// getPart, rollupCost and aggregateLeafQty — both walk the same bom table shape
+// to decide whether to recurse into a sub-assembly or treat a component as a leaf.
+func hasOwnBOMExpr(d arxdb.Dialect, bomTable, parentIDCol string) string {
+	return d.BoolFromCondition(fmt.Sprintf(
+		"EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = %s)", bomTable, parentIDCol))
+}
 
 type rollupResult struct {
 	cost  float64
@@ -1113,7 +1117,7 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	defer delete(visited, pnid)
 
 	pl, pn, pr := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
-	hasBOM := fmt.Sprintf(hasOwnBOMExpr, pl, "pn.id")
+	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pn.id")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, pn.current_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
@@ -1263,7 +1267,7 @@ func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty floa
 	defer delete(visited, pnid)
 
 	pl := h.cfg.BOMTable()
-	hasBOM := fmt.Sprintf(hasOwnBOMExpr, pl, "pl.component_part_id")
+	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pl.component_part_id")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, %s
 		FROM %s pl
@@ -2357,12 +2361,12 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
 		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
-		       CAST(CASE WHEN EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = pn.id) THEN 1 ELSE 0 END AS BIT)
+		       %s
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
 		ORDER BY pl.line_number
-	`, prc, h.dia().BoolLiteral(true), pl, pl, pn), id)
+	`, prc, h.dia().BoolLiteral(true), hasOwnBOMExpr(h.dia(), pl, "pn.id"), pl, pn), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
