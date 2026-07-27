@@ -500,10 +500,31 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		name := buildAttachmentFileName(p.PartNumber, rev, p.Title, spec.category, ".png")
-		finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ".png", data)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
+
+		var oldFileNS sql.NullString
+		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+			`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s`,
+			h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
+		), id, spec.category).Scan(&oldFileNS); err != nil && err != sql.ErrNoRows {
+			writeJSONError(w, http.StatusInternalServerError, "Error loading existing attachment: "+err.Error())
 			return
+		}
+
+		// Regenerating produces the same name as last time (same part/rev/title/
+		// category), so replace that file in place rather than writing a fresh
+		// "(2)"-suffixed copy and deleting the original out from under it (#839).
+		finalName := name
+		if urlutil.IsLocalFile(oldFileNS.String) && strings.EqualFold(urlutil.StripLocalPrefix(oldFileNS.String), name) {
+			if err := replaceDocControlData(h.cfg.DocControlRoot, name, data); err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
+				return
+			}
+		} else {
+			finalName, err = writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ".png", data)
+			if err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
+				return
+			}
 		}
 		if err := h.upsertGeneratedAttachment(r.Context(), id, rev, spec.category, "LOCAL:"+finalName); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Error saving attachment: "+err.Error())

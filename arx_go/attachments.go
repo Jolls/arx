@@ -237,6 +237,32 @@ func replaceLocalFile(root, name, src string) error {
 	return nil
 }
 
+// replaceDocControlData writes data into <root>/<name>, keeping name intact
+// even if the write fails: it writes to a temporary sibling file first and
+// only removes the existing file and swaps the temp file into place once the
+// write has fully succeeded. Mirrors replaceLocalFile's copy-then-swap for
+// byte data instead of a source file on disk.
+func replaceDocControlData(root, name string, data []byte) error {
+	tmpName := name + ".tmp_replace"
+	existed, err := writeIntoDocControl(root, tmpName, data)
+	if err != nil {
+		return err
+	}
+	if existed {
+		return fmt.Errorf("a temporary file %q already exists; please try again", tmpName)
+	}
+	tmpPath := filepath.Join(root, tmpName)
+	target := filepath.Join(root, name)
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, target); err != nil {
+		return err
+	}
+	return nil
+}
+
 // deleteAttachmentFileIfUnshared removes root/<strippedName> unless another
 // active row in table still has fullFileName (e.g. via the "Link to existing
 // file" import flow), in which case the file is left in place for that row.

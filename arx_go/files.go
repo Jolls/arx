@@ -87,6 +87,11 @@ func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition",
 			mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(path)}))
 	}
+	// Force revalidation on every request: an attachment's stored name (and
+	// therefore this URL) stays the same when the underlying file is
+	// replaced via Edit, so without this a browser can serve the old PDF
+	// straight from cache and the replace looks like it silently failed (#839).
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, path)
 }
 
@@ -125,6 +130,9 @@ func (h *Handler) ServeSupplierFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition",
 			mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(path)}))
 	}
+	// See ServeLocalFile: force revalidation so a replaced file isn't served
+	// stale from the browser cache under its unchanged URL (#839).
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, path)
 }
 

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-07-27
+### Fixed
+- Editing a part attachment to import a replacement PDF appeared not to reimport the file — the attachment's `LOCAL:` URL stays the same on replace, and the browser could serve the old PDF from cache without revalidating; doc-control file routes now send `Cache-Control: no-cache` ([#839](https://github.com/Jolls/arx-legacy/issues/839))
+- Regenerating a part's PDF thumbnail/preview images left a `(2)`-suffixed file behind instead of replacing the original in place, since the write raced the not-yet-deleted original under the same name; the generated images now overwrite the existing file directly when the name is unchanged ([#839](https://github.com/Jolls/arx-legacy/issues/839))
+
 ## [0.7.2] - 2026-07-27
 ### Fixed
 - The native Browse file/folder picker (part attachments, Settings) could open behind other windows — its owner form was never realized before `ShowDialog`, so `TopMost` wasn't reliably applied; the owner is now shown (invisibly, zero-opacity) before the dialog opens
