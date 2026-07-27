@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-07-27
+### Fixed
+- PDF attachment thumbnails failed to render with `pdfium instance: could not instantiate webassembly module: GetFileType /dev/stdout: The handle is invalid` — go-pdfium's wasm module defaulted its WASI stdout/stderr to `os.Stdout`/`os.Stderr`, which are invalid handles under Arx's `-H windowsgui` build; now explicitly discarded ([#837](https://github.com/Jolls/arx-legacy/issues/837))
+
 ## [0.7.0] - 2026-07-27
 ### Added
 - Traceability data model v0.7 (epic [#736](https://github.com/Jolls/arx-legacy/issues/736)): Part → Lot → Unit three-tier identity is complete and verified end-to-end against ArxProd. Parts carry a `none | lot | serial | lot_serial` tracking mode; serialized units are real rows with provenance (lot/build), a unified `genealogy` edge table covers both lot and unit endpoints, and a build/lot/unit traceability view (including a per-serial "birth certificate") and embedded build-at-test-time UX ship with it.

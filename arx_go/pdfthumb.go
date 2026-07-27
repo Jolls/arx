@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"sync"
 	"time"
 
@@ -34,7 +35,13 @@ func getPdfiumPool() (pdfium.Pool, error) {
 	if pdfiumPool != nil {
 		return pdfiumPool, nil
 	}
-	pool, err := webassembly.Init(webassembly.Config{MinIdle: 1, MaxIdle: 1, MaxTotal: 1})
+	// Stdout/Stderr must be set explicitly: go-pdfium defaults them to os.Stdout/os.Stderr,
+	// which wazero wires into the wasm module's WASI stdio. Under -H windowsgui (no console)
+	// those are invalid handles, and wazero's instantiation-time GetFileType check on them fails.
+	pool, err := webassembly.Init(webassembly.Config{
+		MinIdle: 1, MaxIdle: 1, MaxTotal: 1,
+		Stdout: io.Discard, Stderr: io.Discard,
+	})
 	if err != nil {
 		return nil, err
 	}
