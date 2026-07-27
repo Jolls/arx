@@ -1,3 +1,33 @@
+Arx v0.7.0 — July 2026
+========================
+
+NEW FEATURES
+
+  Serialized Unit Tracking
+  Parts can now be marked None, Lot, Serial, or Lot & Serial tracked.
+  Testing a serial-tracked part creates a real, traceable unit carrying
+  its lot and build history; retesting the same serial reuses that
+  unit instead of creating a duplicate.
+
+  Build & Unit Traceability View
+  A new Units tab on a build shows every serialized unit produced, and
+  each unit has a "birth certificate" page tracing its as-built
+  components back through its lot and build — in both directions, from
+  raw materials up or from a finished unit down.
+
+  Build-at-Test-Time
+  Testing a serial or lot-and-serial part now offers an inline panel
+  to build the unit right from the test record, instead of leaving the
+  page to use the Build tab first.
+
+BUG FIXES
+
+  Fixed Settings folder/file Browse dialogs sometimes opening behind
+  the main Arx window with no way to click them.
+
+  Fixed BOM view rows for lazily-expanded sub-assemblies linking to a
+  broken part page and showing a blank quantity.
+
 Arx v0.6.24 — July 2026
 ========================
 
