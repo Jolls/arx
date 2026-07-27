@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-07-27
+### Fixed
+- The native Browse file/folder picker (part attachments, Settings) could open behind other windows — its owner form was never realized before `ShowDialog`, so `TopMost` wasn't reliably applied; the owner is now shown (invisibly, zero-opacity) before the dialog opens
+
 ## [0.7.1] - 2026-07-27
 ### Fixed
 - PDF attachment thumbnails failed to render with `pdfium instance: could not instantiate webassembly module: GetFileType /dev/stdout: The handle is invalid` — go-pdfium's wasm module defaulted its WASI stdout/stderr to `os.Stdout`/`os.Stderr`, which are invalid handles under Arx's `-H windowsgui` build; now explicitly discarded ([#837](https://github.com/Jolls/arx-legacy/issues/837))

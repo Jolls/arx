@@ -13,10 +13,14 @@ import (
 func BrowseFolderContext(ctx context.Context) string {
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 		`Add-Type -AssemblyName System.Windows.Forms; `+
-			`$o = New-Object System.Windows.Forms.Form -Property @{TopMost=$true}; `+
+			`$o = New-Object System.Windows.Forms.Form -Property @{TopMost=$true; ShowInTaskbar=$false; FormBorderStyle='None'; StartPosition='Manual'; Left=-32000; Top=-32000; Width=1; Height=1; Opacity=0}; `+
+			`$o.Add_Shown({$o.Activate()}); `+
+			`$o.Show() | Out-Null; `+
 			`$d = New-Object System.Windows.Forms.FolderBrowserDialog; `+
 			`$d.Description = 'Select folder'; `+
-			`if ($d.ShowDialog($o) -eq 'OK') { $d.SelectedPath } else { '' }`)
+			`$r = $d.ShowDialog($o); `+
+			`$o.Close(); `+
+			`if ($r -eq 'OK') { $d.SelectedPath } else { '' }`)
 	hideWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
@@ -38,10 +42,14 @@ func BrowseFolder() string {
 func BrowseFileContext(ctx context.Context) string {
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 		`Add-Type -AssemblyName System.Windows.Forms; `+
-			`$o = New-Object System.Windows.Forms.Form -Property @{TopMost=$true}; `+
+			`$o = New-Object System.Windows.Forms.Form -Property @{TopMost=$true; ShowInTaskbar=$false; FormBorderStyle='None'; StartPosition='Manual'; Left=-32000; Top=-32000; Width=1; Height=1; Opacity=0}; `+
+			`$o.Add_Shown({$o.Activate()}); `+
+			`$o.Show() | Out-Null; `+
 			`$d = New-Object System.Windows.Forms.OpenFileDialog; `+
 			`$d.Title = 'Select file'; `+
-			`if ($d.ShowDialog($o) -eq 'OK') { $d.FileName } else { '' }`)
+			`$r = $d.ShowDialog($o); `+
+			`$o.Close(); `+
+			`if ($r -eq 'OK') { $d.FileName } else { '' }`)
 	hideWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
