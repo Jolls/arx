@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6] - 2026-07-28
+### Added
+- Integration test coverage for attachment resolve/delete/primary-attachment logic (`resolveAttachmentFileInput`/`deleteAttachmentFileIfUnshared`/`setPrimaryAttachment`) ([#809](https://github.com/Jolls/arx-legacy/issues/809))
+- Test coverage for `api.go`'s attachment-paste/thumbnail handlers (`APIPartAttachmentName`/`APIPartPasteAttachment`/`APIPartPasteAttachmentReplace`/`APIPartGenerateThumbnail`/`upsertGeneratedAttachment`/`decodePastedImage`), including the previously-untested paste-result-image write path ([#821](https://github.com/Jolls/arx-legacy/issues/821))
+- Integration test coverage for the Reports family beyond the 3 dashboard cards (Spend/OnTime/CycleTime/DataQuality queries, handlers, and CSV exports) ([#815](https://github.com/Jolls/arx-legacy/issues/815))
+- Integration test coverage for the `ReportsDashboard` page handler assembly ([#816](https://github.com/Jolls/arx-legacy/issues/816))
+- Integration test coverage for Contacts/Suppliers/MfgParts/SupplierPart edit/update/detail handlers ([#817](https://github.com/Jolls/arx-legacy/issues/817))
+
 ## [0.7.5] - 2026-07-27
 ### Added
 - Integration test coverage for the record lock/approve state machine (`LockRecord`/`ApproveRecord`/`UnlockRecord`/`BulkLockRecords`) and the completion-audit snapshot chain it drives ([#806](https://github.com/Jolls/arx-legacy/issues/806))
