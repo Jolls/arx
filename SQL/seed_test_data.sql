@@ -109,35 +109,42 @@ BEGIN TRY
         ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
-    -- keep the two in sync. Identity-assigned (looked up by unique `name`, not by id).
-    INSERT INTO dbo.named_queries (name, description, sql, params, result_type, created_at, updated_at) VALUES
-        ('fil_category_for_pn', 'Comments of active Attachments for a given part number',
+    -- keep the two in sync. Looked up by unique `name`, not by id, but pinned to fixed low
+    -- ids (1-9, like every other table's fixed-id block) so the trailing
+    -- `DBCC CHECKIDENT (..., RESEED, 99)` below reliably keeps ad-hoc/test inserts (e.g.
+    -- integration tests that create a throwaway named_queries row) clear of this block —
+    -- an auto-incremented insert here would land wherever the table's identity counter
+    -- happened to be from accumulated history, not a predictable low number (#801 follow-up).
+    SET IDENTITY_INSERT dbo.named_queries ON;
+    INSERT INTO dbo.named_queries (id, name, description, sql, params, result_type, created_at, updated_at) VALUES
+        (1, 'fil_category_for_pn', 'Comments of active Attachments for a given part number',
          'SELECT comment FROM part_attachment WHERE part_id = (SELECT id FROM part WHERE part_number = @pn) AND is_active = 1',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
-        ('parts_matching', 'Part numbers matching a LIKE pattern (caller supplies wildcards)',
+        (2, 'parts_matching', 'Part numbers matching a LIKE pattern (caller supplies wildcards)',
          'SELECT part_number FROM part WHERE part_number LIKE @pattern AND is_active = 1 ORDER BY part_number DESC',
          'pattern', 'list', GETDATE(), '2020-01-01T00:00:00'),
-        ('pos_for_pn', 'PO numbers where a line item part number prefix matches (active = not soft-deleted)',
+        (3, 'pos_for_pn', 'PO numbers where a line item part number prefix matches (active = not soft-deleted)',
          'SELECT purchase_order.number FROM po_line LEFT JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE po_line.part_number_snapshot LIKE @pn + ''%'' ORDER BY po_line.po_id DESC',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
-        ('bom_pn_by_item', 'Part number at a specific BOM item position for a given parent assembly PN',
+        (4, 'bom_pn_by_item', 'Part number at a specific BOM item position for a given parent assembly PN',
          'SELECT part_number, title FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
          'pn, item', 'list', GETDATE(), '2020-01-01T00:00:00'),
-        ('pn_primary_attachment', 'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
+        (5, 'pn_primary_attachment', 'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
          'SELECT TOP 1 part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.part_number = @pn AND part_attachment.is_active = 1 ORDER BY CASE WHEN part.primary_attachment_id > 0 AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC',
          'pn', 'single', GETDATE(), '2020-01-01T00:00:00'),
-        ('form_primary_attachment', 'Primary attachment for the form''s own part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
+        (6, 'form_primary_attachment', 'Primary attachment for the form''s own part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
          'SELECT TOP 1 part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.id = @pnid AND part_attachment.is_active = 1 ORDER BY CASE WHEN part.primary_attachment_id > 0 AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC',
          'pnid', 'single', GETDATE(), '2020-01-01T00:00:00'),
-        ('recent_serial_numbers_for_form', 'Most recent 20 serial numbers tested against a given form (active records only, newest first). Use a literal form_id to reference a different form than the current one.',
+        (7, 'recent_serial_numbers_for_form', 'Most recent 20 serial numbers tested against a given form (active records only, newest first). Use a literal form_id to reference a different form than the current one.',
          'SELECT TOP 20 serial_number FROM form_record WHERE form_id = @form_id AND is_active = 1 ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC',
          'form_id', 'multi', GETDATE(), '2020-01-01T00:00:00'),
-        ('max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
+        (8, 'max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
          'SELECT MAX(TRY_CAST(r.result AS INT)) FROM result r JOIN form_record tr ON r.form_record_id = tr.id WHERE r.form_row_id = @form_row_id AND tr.is_active = 1 AND CAST(tr.record_date AS DATE) <= CONVERT(DATE, @record_date, 101)',
          'form_row_id, record_date', 'single', GETDATE(), '2020-01-01T00:00:00'),
-        ('vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
+        (9, 'vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
          'SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' + @pn + ''%'' ORDER BY po_id DESC',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00');
+    SET IDENTITY_INSERT dbo.named_queries OFF;
 
     -- ============================================================
     -- 3. Users
