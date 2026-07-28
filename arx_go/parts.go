@@ -401,6 +401,19 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		recentTxns = h.recentPartTxns(r.Context(), id, 5)
 	}
 
+	var recentLots []LotRow
+	var lotCount int
+	if p.ShowLots() {
+		recentLots, _ = h.recentPartLots(r.Context(), p.ID, 5)
+		lotCount, _ = h.lotCountForPart(r.Context(), p.ID)
+	}
+	var recentUnits []UnitRow
+	var unitCount int
+	if p.ShowUnits() {
+		recentUnits, _ = h.recentPartUnits(r.Context(), p.ID, 5)
+		unitCount, _ = h.unitCountForPart(r.Context(), p.ID)
+	}
+
 	var priceJSON template.JS
 	var hasPriceData bool
 	if p.ShowPricing() {
@@ -422,6 +435,10 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		"RollupSignificant": rollupSignificant,
 		"RecentPOs":         recentPOs,
 		"RecentTxns":        recentTxns,
+		"RecentLots":        recentLots,
+		"LotCount":          lotCount,
+		"RecentUnits":       recentUnits,
+		"UnitCount":         unitCount,
 		"PriceDataJSON":     priceJSON,
 		"HasPriceData":      hasPriceData,
 	})
