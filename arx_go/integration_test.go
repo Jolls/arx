@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -63,6 +64,31 @@ func withIDAndAttID(req *http.Request, id, attID int) *http.Request {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", strconv.Itoa(id))
 	rctx.URLParams.Add("attID", strconv.Itoa(attID))
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+// withIDAndTestID injects chi route params "id" and "testID" (used by ArchiveStep's
+// POST /forms/{id}/tests/{testID}/archive route).
+func withIDAndTestID(req *http.Request, id, testID int) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", strconv.Itoa(id))
+	rctx.URLParams.Add("testID", strconv.Itoa(testID))
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+// withIDAndLotID injects chi route params for both "id" and "lotID".
+func withIDAndLotID(req *http.Request, id, lotID int) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", strconv.Itoa(id))
+	rctx.URLParams.Add("lotID", strconv.Itoa(lotID))
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+// withIDAndUnitID injects chi route params for both "id" and "unitID".
+func withIDAndUnitID(req *http.Request, id, unitID int) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", strconv.Itoa(id))
+	rctx.URLParams.Add("unitID", strconv.Itoa(unitID))
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
@@ -3603,5 +3629,1043 @@ func TestIntegration_RFQConvert_RejectsWhenBaseNumberTaken(t *testing.T) {
 	assertStatus(t, "RFQConvert with base number taken", rec, http.StatusOK)
 	if !strings.Contains(rec.Body.String(), "already in use") {
 		t.Errorf("expected \"already in use\" rejection, got: %s", rec.Body.String())
+	}
+}
+
+// Read-only — no cleanup. Covers PartUnits + unitsForPart + scanUnitRow + unitRowSelect.
+func TestIntegration_PartUnitsHandler(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	// Success: 3013 (lot_serial) lists its seeded unit with part/lot join fields.
+	req := withID(httptest.NewRequest(http.MethodGet, "/part/3013/units", nil), 3013)
+	rec := httptest.NewRecorder()
+	h.PartUnits(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PartUnits(3013): status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"SN-3013-001", "ASM-1003", "8306"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PartUnits(3013): body missing %q", want)
+		}
+	}
+
+	// Tab not applicable: 3004 is not serial/lot_serial tracked.
+	req2 := withID(httptest.NewRequest(http.MethodGet, "/part/3004/units", nil), 3004)
+	rec2 := httptest.NewRecorder()
+	h.PartUnits(rec2, req2)
+	if !strings.Contains(rec2.Body.String(), "does not apply") {
+		t.Errorf("PartUnits(3004): expected tab-not-applicable error, got body: %s", rec2.Body.String())
+	}
+}
+
+// Read-only — no cleanup. Covers PartUnitTrace + fetchUnitRow + genealogy wiring.
+func TestIntegration_PartUnitTraceHandler(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	// Success: unit 8501 belongs to part 3013, has both lot 8306 and build 8203.
+	req := withIDAndUnitID(httptest.NewRequest(http.MethodGet, "/part/3013/units/8501", nil), 3013, 8501)
+	rec := httptest.NewRecorder()
+	h.PartUnitTrace(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PartUnitTrace(3013,8501): status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"SN-3013-001", "8306", "8203"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PartUnitTrace(3013,8501): body missing %q", want)
+		}
+	}
+
+	// Invalid unitID: non-numeric route param.
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "3013")
+	rctx.URLParams.Add("unitID", "abc")
+	badReq := httptest.NewRequest(http.MethodGet, "/part/3013/units/abc", nil).
+		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	badRec := httptest.NewRecorder()
+	h.PartUnitTrace(badRec, badReq)
+	if !strings.Contains(badRec.Body.String(), "Invalid unit id") {
+		t.Errorf("PartUnitTrace(3013,abc): expected \"Invalid unit id\", got body: %s", badRec.Body.String())
+	}
+
+	// Unit belongs to a different part than the URL's {id}: 8502 is part 3007's unit,
+	// requested under part 3013.
+	wrongPartReq := withIDAndUnitID(httptest.NewRequest(http.MethodGet, "/part/3013/units/8502", nil), 3013, 8502)
+	wrongPartRec := httptest.NewRecorder()
+	h.PartUnitTrace(wrongPartRec, wrongPartReq)
+	if !strings.Contains(wrongPartRec.Body.String(), "Unit not found for this part") {
+		t.Errorf("PartUnitTrace(3013,8502): expected \"Unit not found for this part\", got body: %s", wrongPartRec.Body.String())
+	}
+
+	// Nonexistent unit id.
+	missingReq := withIDAndUnitID(httptest.NewRequest(http.MethodGet, "/part/3013/units/999999", nil), 3013, 999999)
+	missingRec := httptest.NewRecorder()
+	h.PartUnitTrace(missingRec, missingReq)
+	if !strings.Contains(missingRec.Body.String(), "Unit not found for this part") {
+		t.Errorf("PartUnitTrace(3013,999999): expected \"Unit not found for this part\", got body: %s", missingRec.Body.String())
+	}
+}
+
+// Read-only, uses seeded form 6001 (steps 6101-6108, step 6104 archived). No cleanup needed.
+func TestIntegration_FormDef_RendersStepsAndArchivedToggle(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.FormDef(rec, withID(httptest.NewRequest(http.MethodGet, "/forms/6001/def", nil), 6001))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("FormDef(6001): status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Show archived", "Insulation Resistance", "Output Voltage", "Current Draw"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("FormDef(6001): body missing %q", want)
+		}
+	}
+	// Step 6108's hide_formula is "{record.type}!=Re-Test"; with no record context the
+	// {record.type} token stays unresolved, so the "!=" comparison (unresolved-token !=
+	// "Re-Test") evaluates true and the step is hidden — unlike an "=" formula, where an
+	// unresolved token can never match and the step stays shown. This asymmetry is
+	// existing evaluateHide behavior (see TestEvaluateHide), not something this test
+	// should try to change.
+	if strings.Contains(body, "Retest Voltage Check") {
+		t.Errorf("FormDef(6001): body unexpectedly contains \"Retest Voltage Check\" (step 6108 should be hidden — unresolved \"!=\" token)")
+	}
+}
+
+// Seeds a throwaway part/form/form_row, forces a deterministic same-day form_row_history
+// row via a raw UPDATE, then verifies FormDefHistory returns the PRE-change snapshot value.
+func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var partID int
+	partNumber := "ITEST-FDH-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+
+	var testID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type, parameter, spec_max) OUTPUT INSERTED.id VALUES (@p1, 0, 'Historical Step', '100')`,
+		h.cfg.StepsTable()), formID,
+	).Scan(&testID); err != nil {
+		t.Fatalf("seed form_row: %v", err)
+	}
+
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+	}()
+
+	// Raw UPDATE triggers trg_form_row_history, snapshotting the OLD spec_max='100'.
+	// trg_form_row_history requires changed_by (NOT NULL), populated from CONTEXT_INFO —
+	// a tx + setAuditUser is required, same as the production SaveFormDef/ArchiveStep path.
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	h.setAuditUser(ctx, tx, "itest")
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET spec_max='150' WHERE id=@p1`, h.cfg.StepsTable()), testID); err != nil {
+		tx.Rollback()
+		t.Fatalf("update form_row: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit form_row update: %v", err)
+	}
+
+	today := time.Now().Format("2006-01-02")
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/forms/%d/def/history?at=%s", formID, today), nil)
+	h.FormDefHistory(rec, withID(req, formID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("FormDefHistory(at=today): status %d, want 200", rec.Code)
+	}
+
+	var resp struct {
+		Steps []struct {
+			ID      int    `json:"id"`
+			SpecMax string `json:"spec_max"`
+			Changed bool   `json:"changed"`
+		} `json:"steps"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Steps) != 1 {
+		t.Fatalf("len(Steps) = %d, want 1", len(resp.Steps))
+	}
+	if resp.Steps[0].ID != testID {
+		t.Errorf("Steps[0].ID = %d, want %d", resp.Steps[0].ID, testID)
+	}
+	if !resp.Steps[0].Changed {
+		t.Errorf("Steps[0].Changed = false, want true")
+	}
+	if resp.Steps[0].SpecMax != "100" {
+		t.Errorf("Steps[0].SpecMax = %q, want %q (pre-change value)", resp.Steps[0].SpecMax, "100")
+	}
+
+	// No history that day (yesterday) — falls back to the CURRENT form_row value.
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/forms/%d/def/history?at=%s", formID, yesterday), nil)
+	h.FormDefHistory(rec2, withID(req2, formID))
+	var resp2 struct {
+		Steps []struct {
+			ID      int    `json:"id"`
+			SpecMax string `json:"spec_max"`
+			Changed bool   `json:"changed"`
+		} `json:"steps"`
+	}
+	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp2.Steps) != 1 {
+		t.Fatalf("len(Steps) = %d, want 1", len(resp2.Steps))
+	}
+	if resp2.Steps[0].Changed {
+		t.Errorf("Steps[0].Changed = true, want false (no history yesterday)")
+	}
+	if resp2.Steps[0].SpecMax != "150" {
+		t.Errorf("Steps[0].SpecMax = %q, want %q (current value)", resp2.Steps[0].SpecMax, "150")
+	}
+}
+
+// Read-only, uses seeded form 6001. No cleanup needed.
+func TestIntegration_EditFormDef_ShowsRawUnsubstitutedValues(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.EditFormDef(rec, withID(httptest.NewRequest(http.MethodGet, "/forms/6001/def/edit", nil), 6001))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("EditFormDef(6001): status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "query:recent_serial_numbers_for_form(@form_id={form.id})") {
+		t.Errorf("EditFormDef(6001): body missing raw unresolved token for step 6107's spec_nom")
+	}
+	if !strings.Contains(body, "Show archived") {
+		t.Errorf("EditFormDef(6001): body missing \"Show archived\"")
+	}
+}
+
+// Seeds a throwaway part/form/two form_row steps; POSTs a change to stepA only (stepB's
+// submitted values equal its original_* values, so it must be left untouched), plus a
+// new row and a reordered step_order.
+func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var partID int
+	partNumber := "ITEST-SFD-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+
+	var stepAID, stepBID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Old A')`,
+		h.cfg.StepsTable()), formID,
+	).Scan(&stepAID); err != nil {
+		t.Fatalf("seed stepA: %v", err)
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Keep B')`,
+		h.cfg.StepsTable()), formID,
+	).Scan(&stepBID); err != nil {
+		t.Fatalf("seed stepB: %v", err)
+	}
+	// Sentinel updated_at for stepB — must survive untouched (proves the skip branch).
+	// trg_form_row_history requires changed_by (NOT NULL) from CONTEXT_INFO — set it via
+	// a tx, same as the production SaveFormDef/ArchiveStep path.
+	sentinelTx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	h.setAuditUser(ctx, sentinelTx, "itest")
+	if _, err := sentinelTx.ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET updated_at='2020-01-01T00:00:00' WHERE id=@p1`, h.cfg.StepsTable()), stepBID); err != nil {
+		sentinelTx.Rollback()
+		t.Fatalf("set stepB sentinel updated_at: %v", err)
+	}
+	if err := sentinelTx.Commit(); err != nil {
+		t.Fatalf("commit stepB sentinel update: %v", err)
+	}
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()),
+		fmt.Sprintf("%d,%d", stepAID, stepBID), formID); err != nil {
+		t.Fatalf("set form test_order: %v", err)
+	}
+
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
+			h.cfg.FormRowHistoryTable(), h.cfg.StepsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.StepsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+	}()
+
+	vals := url.Values{
+		fmt.Sprintf("original_parameter_%d", stepAID): {"anything-A-orig"},
+		fmt.Sprintf("parameter_%d", stepAID):           {"Updated Parameter"},
+		fmt.Sprintf("original_parameter_%d", stepBID):  {"same"},
+		fmt.Sprintf("parameter_%d", stepBID):            {"same"},
+		"step_order":               {fmt.Sprintf("%d,new_0,%d", stepBID, stepAID)},
+		"new_row[0][type]":         {"0"},
+		"new_row[0][parameter]":    {"New Step"},
+	}
+	rec := httptest.NewRecorder()
+	h.SaveFormDef(rec, adminCtx(withID(postForm(fmt.Sprintf("/forms/%d/def/edit", formID), vals), formID)))
+	assertStatus(t, "SaveFormDef", rec, http.StatusSeeOther)
+
+	var gotParamA string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT parameter FROM %s WHERE id=@p1`, h.cfg.StepsTable()), stepAID,
+	).Scan(&gotParamA); err != nil {
+		t.Fatalf("select stepA: %v", err)
+	}
+	if gotParamA != "Updated Parameter" {
+		t.Errorf("stepA.parameter = %q, want %q", gotParamA, "Updated Parameter")
+	}
+
+	var gotParamB, gotUpdatedAtB string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT parameter, CONVERT(varchar, updated_at, 120) FROM %s WHERE id=@p1`, h.cfg.StepsTable()), stepBID,
+	).Scan(&gotParamB, &gotUpdatedAtB); err != nil {
+		t.Fatalf("select stepB: %v", err)
+	}
+	if gotParamB != "Keep B" {
+		t.Errorf("stepB.parameter = %q, want unchanged %q", gotParamB, "Keep B")
+	}
+	if gotUpdatedAtB != "2020-01-01 00:00:00" {
+		t.Errorf("stepB.updated_at = %q, want unchanged sentinel %q", gotUpdatedAtB, "2020-01-01 00:00:00")
+	}
+
+	var newStepID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE form_id=@p1 AND parameter='New Step'`, h.cfg.StepsTable()), formID,
+	).Scan(&newStepID); err != nil {
+		t.Fatalf("select new step: %v", err)
+	}
+
+	var gotOrder string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT test_order FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID,
+	).Scan(&gotOrder); err != nil {
+		t.Fatalf("select form test_order: %v", err)
+	}
+	wantOrder := fmt.Sprintf("%d,%d,%d", stepBID, newStepID, stepAID)
+	if gotOrder != wantOrder {
+		t.Errorf("form.test_order = %q, want %q", gotOrder, wantOrder)
+	}
+}
+
+// Seeds a throwaway part/form/form_row (archived=0), toggles archived on then off.
+func TestIntegration_ArchiveStep_TogglesArchivedFlag(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, formID, testID := seedThrowawayForm(t, h, ctx, "ITEST-AS")
+	defer cleanupThrowawayForm(ctx, h, partID, formID, testID)
+
+	rec := httptest.NewRecorder()
+	h.ArchiveStep(rec, adminCtx(withIDAndTestID(
+		postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {"1"}}),
+		formID, testID)))
+	assertStatus(t, "ArchiveStep (archive)", rec, http.StatusSeeOther)
+	if got := rec.Header().Get("Location"); got != fmt.Sprintf("/forms/%d/def/edit", formID) {
+		t.Errorf("Location = %q, want %q", got, fmt.Sprintf("/forms/%d/def/edit", formID))
+	}
+
+	var archived bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT archived FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+	).Scan(&archived); err != nil {
+		t.Fatalf("select archived: %v", err)
+	}
+	if !archived {
+		t.Errorf("archived = false after archive, want true")
+	}
+
+	rec2 := httptest.NewRecorder()
+	h.ArchiveStep(rec2, adminCtx(withIDAndTestID(
+		postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {"0"}}),
+		formID, testID)))
+	assertStatus(t, "ArchiveStep (unarchive)", rec2, http.StatusSeeOther)
+
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT archived FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+	).Scan(&archived); err != nil {
+		t.Fatalf("select archived: %v", err)
+	}
+	if archived {
+		t.Errorf("archived = true after unarchive, want false")
+	}
+}
+
+// The key regression test #813 calls out: archiving a step must never alter a locked
+// record's frozen test_order/form_revision snapshot.
+func TestIntegration_ArchiveStep_DoesNotAlterLockedRecordSnapshot(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, formID, testID := seedThrowawayForm(t, h, ctx, "ITEST-ASL")
+	recordID := seedLockedFormRecord(t, h, ctx, formID, testID)
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID)
+		cleanupThrowawayForm(ctx, h, partID, formID, testID)
+	}()
+
+	var beforeOrder string
+	var beforeRev sql.NullInt32
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+	).Scan(&beforeOrder, &beforeRev); err != nil {
+		t.Fatalf("select before: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.ArchiveStep(rec, adminCtx(withIDAndTestID(
+		postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {"1"}}),
+		formID, testID)))
+	assertStatus(t, "ArchiveStep", rec, http.StatusSeeOther)
+
+	var afterOrder string
+	var afterRev sql.NullInt32
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+	).Scan(&afterOrder, &afterRev); err != nil {
+		t.Fatalf("select after: %v", err)
+	}
+	if afterOrder != beforeOrder {
+		t.Errorf("locked record test_order changed: before=%q after=%q", beforeOrder, afterOrder)
+	}
+	if afterRev != beforeRev {
+		t.Errorf("locked record form_revision changed: before=%v after=%v", beforeRev, afterRev)
+	}
+
+	var archived bool
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT archived FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+	).Scan(&archived); err != nil {
+		t.Fatalf("select archived: %v", err)
+	}
+	if !archived {
+		t.Errorf("archived = false, want true (sanity check the action ran)")
+	}
+}
+
+// Same regression property as above, exercised via SaveFormDef instead of ArchiveStep.
+func TestIntegration_SaveFormDef_DoesNotAlterLockedRecordSnapshot(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, formID, testID := seedThrowawayForm(t, h, ctx, "ITEST-SFDL")
+	recordID := seedLockedFormRecord(t, h, ctx, formID, testID)
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID)
+		cleanupThrowawayForm(ctx, h, partID, formID, testID)
+	}()
+
+	var beforeOrder string
+	var beforeRev sql.NullInt32
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+	).Scan(&beforeOrder, &beforeRev); err != nil {
+		t.Fatalf("select before: %v", err)
+	}
+
+	vals := url.Values{
+		fmt.Sprintf("original_parameter_%d", testID): {"anything-orig"},
+		fmt.Sprintf("parameter_%d", testID):           {"Updated Parameter"},
+	}
+	rec := httptest.NewRecorder()
+	h.SaveFormDef(rec, adminCtx(withID(postForm(fmt.Sprintf("/forms/%d/def/edit", formID), vals), formID)))
+	assertStatus(t, "SaveFormDef", rec, http.StatusSeeOther)
+
+	var gotParam string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT parameter FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+	).Scan(&gotParam); err != nil {
+		t.Fatalf("select step: %v", err)
+	}
+	if gotParam != "Updated Parameter" {
+		t.Errorf("step.parameter = %q, want %q (sanity check the save happened)", gotParam, "Updated Parameter")
+	}
+
+	var afterOrder string
+	var afterRev sql.NullInt32
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+	).Scan(&afterOrder, &afterRev); err != nil {
+		t.Fatalf("select after: %v", err)
+	}
+	if afterOrder != beforeOrder {
+		t.Errorf("locked record test_order changed: before=%q after=%q", beforeOrder, afterOrder)
+	}
+	if afterRev != beforeRev {
+		t.Errorf("locked record form_revision changed: before=%v after=%v", beforeRev, afterRev)
+	}
+}
+
+// seedThrowawayForm creates a throwaway part + form + one data-row form_row (not
+// archived), returning the ids. Shared by the ArchiveStep/SaveFormDef locked-snapshot
+// tests above.
+func seedThrowawayForm(t *testing.T, h *Handler, ctx context.Context, label string) (partID, formID, testID int) {
+	t.Helper()
+	partNumber := label + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&partID); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, type, parameter, archived) OUTPUT INSERTED.id VALUES (@p1, 0, 'Step', 0)`,
+		h.cfg.StepsTable()), formID,
+	).Scan(&testID); err != nil {
+		t.Fatalf("seed form_row: %v", err)
+	}
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()), strconv.Itoa(testID), formID); err != nil {
+		t.Fatalf("set form test_order: %v", err)
+	}
+	return partID, formID, testID
+}
+
+// cleanupThrowawayForm deletes the rows created by seedThrowawayForm, best-effort.
+func cleanupThrowawayForm(ctx context.Context, h *Handler, partID, formID, testID int) {
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID)
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+}
+
+// seedLockedFormRecord inserts one locked form_record under formID with a frozen
+// test_order/form_revision snapshot, returning the new record id.
+func seedLockedFormRecord(t *testing.T, h *Handler, ctx context.Context, formID, testID int) int {
+	t.Helper()
+	var recordID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, record_date, serial_number, is_active, is_locked, test_order, form_revision)
+		 OUTPUT INSERTED.id VALUES (@p1, '2026-07-01', '1', 1, 1, @p2, 1)`,
+		h.cfg.RecordsTable()), formID, strconv.Itoa(testID),
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed locked form_record: %v", err)
+	}
+	return recordID
+}
+
+// Read-only — no cleanup. Covers lotsForPart + scanLotRow + lotRowSelect + PartLots.
+func TestIntegration_LotsForPart(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	lots, err := h.lotsForPart(ctx, 3007)
+	if err != nil {
+		t.Fatalf("lotsForPart(3007): %v", err)
+	}
+	if len(lots) != 2 {
+		t.Fatalf("lotsForPart(3007): len = %d, want 2", len(lots))
+	}
+	// Newest first: 8303 (2026-05-22) before 8301 (2026-05-15).
+	if lots[0].ID != 8303 || lots[1].ID != 8301 {
+		t.Fatalf("lotsForPart(3007) order = [%d,%d], want [8303,8301]", lots[0].ID, lots[1].ID)
+	}
+	for _, lr := range lots {
+		if lr.PartID != 3007 || lr.PartNumber != "RAW-1002" {
+			t.Errorf("lot %d: PartID=%d PartNumber=%q, want 3007/RAW-1002", lr.ID, lr.PartID, lr.PartNumber)
+		}
+	}
+	if lots[1].VendorLot != "SS304-LOT-0088" {
+		t.Errorf("lot 8301.VendorLot = %q, want %q", lots[1].VendorLot, "SS304-LOT-0088")
+	}
+	if lots[1].LotDescription != "PO 5003" {
+		t.Errorf("lot 8301.LotDescription = %q, want %q", lots[1].LotDescription, "PO 5003")
+	}
+	if lots[0].VendorLot != "" {
+		t.Errorf("lot 8303.VendorLot = %q, want \"\" (NULL)", lots[0].VendorLot)
+	}
+	if lots[0].LotDescription != "Cycle count - unlabeled found lot" {
+		t.Errorf("lot 8303.LotDescription = %q, want %q", lots[0].LotDescription, "Cycle count - unlabeled found lot")
+	}
+
+	empty, err := h.lotsForPart(ctx, 3099999)
+	if err != nil {
+		t.Fatalf("lotsForPart(no lots): %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("lotsForPart(no lots): len = %d, want 0", len(empty))
+	}
+
+	rec := httptest.NewRecorder()
+	h.PartLots(rec, withID(httptest.NewRequest(http.MethodGet, "/part/3007/lots", nil), 3007))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PartLots(3007): status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"8301", "8303", "RAW-1002"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PartLots(3007): body missing %q", want)
+		}
+	}
+
+	rec2 := httptest.NewRecorder()
+	h.PartLots(rec2, withID(httptest.NewRequest(http.MethodGet, "/part/3005/lots", nil), 3005))
+	if !strings.Contains(rec2.Body.String(), "does not apply to") {
+		t.Errorf("PartLots(3005, not lot-tracked): expected tab-not-applicable error, got body: %s", rec2.Body.String())
+	}
+}
+
+// Read-only — no cleanup. Covers fetchLotRow directly.
+func TestIntegration_FetchLotRow(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	lr, found, err := h.fetchLotRow(ctx, 8301)
+	if err != nil {
+		t.Fatalf("fetchLotRow(8301): %v", err)
+	}
+	if !found {
+		t.Fatalf("fetchLotRow(8301): found = false, want true")
+	}
+	if lr.PartID != 3007 || lr.LotNumber != "8301" || !lr.IsActive {
+		t.Errorf("fetchLotRow(8301) = %+v, want PartID=3007 LotNumber=8301 IsActive=true", lr)
+	}
+
+	_, found2, err := h.fetchLotRow(ctx, 999999999)
+	if err != nil {
+		t.Fatalf("fetchLotRow(nonexistent): %v", err)
+	}
+	if found2 {
+		t.Errorf("fetchLotRow(nonexistent): found = true, want false")
+	}
+}
+
+// The shared guard test — the ONE place lotBelongsToPart is exercised directly.
+// PartLotTrace/LotEdit/LotUpdate and PartStockAdjust below reuse this guard's wiring
+// without re-deriving its true/false logic.
+func TestIntegration_LotBelongsToPart(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var inactiveLotID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) OUTPUT INSERTED.id VALUES (@p1, 'ITEST-INACTIVE', 'itest inactive lot', 0)`,
+		h.cfg.LotTable()), 3007,
+	).Scan(&inactiveLotID); err != nil {
+		t.Fatalf("seed inactive lot: %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.LotTable()), inactiveLotID)
+
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	defer tx.Rollback()
+
+	if ok, err := h.lotBelongsToPart(ctx, tx, 8301, 3007); err != nil || !ok {
+		t.Errorf("lotBelongsToPart(8301,3007) = %v,%v, want true,nil", ok, err)
+	}
+	if ok, err := h.lotBelongsToPart(ctx, tx, 8301, 3012); err != nil || ok {
+		t.Errorf("lotBelongsToPart(8301,3012) = %v,%v, want false,nil (wrong part)", ok, err)
+	}
+	if ok, err := h.lotBelongsToPart(ctx, tx, 999999999, 3007); err != nil || ok {
+		t.Errorf("lotBelongsToPart(nonexistent,3007) = %v,%v, want false,nil", ok, err)
+	}
+	if ok, err := h.lotBelongsToPart(ctx, tx, inactiveLotID, 3007); err != nil || ok {
+		t.Errorf("lotBelongsToPart(inactive,3007) = %v,%v, want false,nil (inactive)", ok, err)
+	}
+}
+
+// Covers PartLotTrace + genealogy wiring for lots + the lot-not-found/wrong-part guards.
+func TestIntegration_PartLotTrace(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.PartLotTrace(rec, withIDAndLotID(httptest.NewRequest(http.MethodGet, "/part/3013/lots/8306", nil), 3013, 8306))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PartLotTrace(3013,8306): status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"8302", "8303", "8301", "ASM-1002", "RAW-1002"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PartLotTrace(3013,8306): body missing %q", want)
+		}
+	}
+
+	wrongPartRec := httptest.NewRecorder()
+	h.PartLotTrace(wrongPartRec, withIDAndLotID(httptest.NewRequest(http.MethodGet, "/part/3012/lots/8301", nil), 3012, 8301))
+	if !strings.Contains(wrongPartRec.Body.String(), "Lot not found for this part") {
+		t.Errorf("PartLotTrace(3012,8301, wrong part): expected \"Lot not found for this part\", got body: %s", wrongPartRec.Body.String())
+	}
+
+	missingRec := httptest.NewRecorder()
+	h.PartLotTrace(missingRec, withIDAndLotID(httptest.NewRequest(http.MethodGet, "/part/3007/lots/999999999", nil), 3007, 999999999))
+	if !strings.Contains(missingRec.Body.String(), "Lot not found for this part") {
+		t.Errorf("PartLotTrace(3007,999999999): expected \"Lot not found for this part\", got body: %s", missingRec.Body.String())
+	}
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "3007")
+	rctx.URLParams.Add("lotID", "abc")
+	badReq := httptest.NewRequest(http.MethodGet, "/part/3007/lots/abc", nil).
+		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	badRec := httptest.NewRecorder()
+	h.PartLotTrace(badRec, badReq)
+	if !strings.Contains(badRec.Body.String(), "Invalid lot id") {
+		t.Errorf("PartLotTrace(3007,abc): expected \"Invalid lot id\", got body: %s", badRec.Body.String())
+	}
+
+	tabRec := httptest.NewRecorder()
+	h.PartLotTrace(tabRec, withIDAndLotID(httptest.NewRequest(http.MethodGet, "/part/3005/lots/1", nil), 3005, 1))
+	if !strings.Contains(tabRec.Body.String(), "does not apply to") {
+		t.Errorf("PartLotTrace(3005, not lot-tracked): expected tab-not-applicable error, got body: %s", tabRec.Body.String())
+	}
+}
+
+// Covers LotEdit (GET) and LotUpdate (POST) together — Update's happy path is verified
+// by re-fetching the throwaway lot after the call.
+func TestIntegration_LotEditAndUpdate(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	rec := httptest.NewRecorder()
+	h.LotEdit(rec, withIDAndLotID(httptest.NewRequest(http.MethodGet, "/part/3007/lots/8301/edit", nil), 3007, 8301))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("LotEdit(3007,8301): status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"8301", "PO 5003", "SS304-LOT-0088"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("LotEdit(3007,8301): body missing %q", want)
+		}
+	}
+
+	wrongPartRec := httptest.NewRecorder()
+	h.LotEdit(wrongPartRec, withIDAndLotID(httptest.NewRequest(http.MethodGet, "/part/3012/lots/8301/edit", nil), 3012, 8301))
+	if !strings.Contains(wrongPartRec.Body.String(), "Lot not found for this part") {
+		t.Errorf("LotEdit(3012,8301, wrong part): expected \"Lot not found for this part\", got body: %s", wrongPartRec.Body.String())
+	}
+
+	// LotUpdate happy path — a throwaway lot, not one of the shared seed lots.
+	var throwawayLotID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) OUTPUT INSERTED.id VALUES (@p1, 'ITEST-LOTUPD', 'orig desc', 1)`,
+		h.cfg.LotTable()), 3007,
+	).Scan(&throwawayLotID); err != nil {
+		t.Fatalf("seed throwaway lot: %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.LotTable()), throwawayLotID)
+
+	updateRec := httptest.NewRecorder()
+	h.LotUpdate(updateRec, withIDAndLotID(postForm(fmt.Sprintf("/part/3007/lots/%d", throwawayLotID), url.Values{
+		"lot_description": {"new desc"}, "vendor_lot": {"NEWVENDOR123"},
+	}), 3007, throwawayLotID))
+	assert302(t, "LotUpdate", updateRec)
+
+	var gotDesc, gotVendor string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT lot_description, vendor_lot_number FROM %s WHERE id=@p1`, h.cfg.LotTable()), throwawayLotID,
+	).Scan(&gotDesc, &gotVendor); err != nil {
+		t.Fatalf("select updated lot: %v", err)
+	}
+	if gotDesc != "new desc" || gotVendor != "NEWVENDOR123" {
+		t.Errorf("lot after update: desc=%q vendor=%q, want %q/%q", gotDesc, gotVendor, "new desc", "NEWVENDOR123")
+	}
+
+	// Wrong-part guard: POST against the throwaway lot but under a different part id.
+	wrongUpdateRec := httptest.NewRecorder()
+	h.LotUpdate(wrongUpdateRec, withIDAndLotID(postForm(fmt.Sprintf("/part/3012/lots/%d", throwawayLotID), url.Values{
+		"lot_description": {"hacked desc"}, "vendor_lot": {"HACKED"},
+	}), 3012, throwawayLotID))
+	if !strings.Contains(wrongUpdateRec.Body.String(), "Lot not found for this part") {
+		t.Errorf("LotUpdate(wrong part): expected \"Lot not found for this part\", got body: %s", wrongUpdateRec.Body.String())
+	}
+	var afterDesc string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT lot_description FROM %s WHERE id=@p1`, h.cfg.LotTable()), throwawayLotID,
+	).Scan(&afterDesc); err != nil {
+		t.Fatalf("select lot after wrong-part update: %v", err)
+	}
+	if afterDesc != "new desc" {
+		t.Errorf("lot_description after wrong-part update = %q, want unchanged %q (guard should block the write)", afterDesc, "new desc")
+	}
+
+	// Invalid lotID: non-numeric route param.
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "3007")
+	rctx.URLParams.Add("lotID", "abc")
+	badReq := postForm("/part/3007/lots/abc", url.Values{}).
+		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	badRec := httptest.NewRecorder()
+	h.LotUpdate(badRec, badReq)
+	if !strings.Contains(badRec.Body.String(), "Invalid lot id") {
+		t.Errorf("LotUpdate(abc): expected \"Invalid lot id\", got body: %s", badRec.Body.String())
+	}
+
+	tabRec := httptest.NewRecorder()
+	h.LotUpdate(tabRec, withIDAndLotID(postForm("/part/3005/lots/1", url.Values{}), 3005, 1))
+	if !strings.Contains(tabRec.Body.String(), "does not apply to") {
+		t.Errorf("LotUpdate(3005, not lot-tracked): expected tab-not-applicable error, got body: %s", tabRec.Body.String())
+	}
+}
+
+// Read-only — no cleanup. Covers AllLots.
+func TestIntegration_AllLots(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.AllLots(rec, httptest.NewRequest(http.MethodGet, "/lots", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("AllLots: status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"8301", "8302", "8303", "8306", "RAW-1002", "ASM-1003"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("AllLots: body missing %q", want)
+		}
+	}
+}
+
+// Covers PartStockAdjust, reusing the lotBelongsToPart guard already proven above —
+// only asserts the handler wires it correctly, not the guard's own true/false logic.
+func TestIntegration_PartStockAdjust(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Non-lot-tracked happy path: part 3002 (BUY-1001) is never marked lot-tracked in
+	// the seed, and BUY is a stockable category so ShowInventory()/requireTab("transactions")
+	// pass regardless of pre-existing ledger activity.
+	const nonLotTrackedPart = 3002
+	var stockBefore float64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), nonLotTrackedPart,
+	).Scan(&stockBefore); err != nil {
+		t.Fatalf("select stock_on_hand before: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	h.PartStockAdjust(rec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", nonLotTrackedPart), url.Values{
+		"qty": {"5"}, "reason": {"itest count correction"}, "txn_date": {"2026-07-01"},
+	}), nonLotTrackedPart))
+	assert302(t, "PartStockAdjust (non-lot-tracked)", rec)
+
+	var txnID int
+	var stockAfter float64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), nonLotTrackedPart,
+	).Scan(&stockAfter); err != nil {
+		t.Fatalf("select stock_on_hand after: %v", err)
+	}
+	if stockAfter != stockBefore+5 {
+		t.Errorf("stock_on_hand after = %v, want %v (before %v + 5)", stockAfter, stockBefore+5, stockBefore)
+	}
+	var qty float64
+	var note string
+	var lotIDNull sql.NullInt64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 id, qty, note, lot_id FROM %s WHERE part_id=@p1 AND txn_type='adjustment' ORDER BY id DESC`,
+		h.cfg.InventoryTxnTable()), nonLotTrackedPart,
+	).Scan(&txnID, &qty, &note, &lotIDNull); err != nil {
+		t.Fatalf("select new ledger row: %v", err)
+	}
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.InventoryTxnTable()), txnID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=@p1 WHERE id=@p2`, h.cfg.PartsTable()), stockBefore, nonLotTrackedPart)
+	}()
+	if qty != 5 || note != "itest count correction" || lotIDNull.Valid {
+		t.Errorf("ledger row: qty=%v note=%q lot_id.Valid=%v, want 5/\"itest count correction\"/false", qty, note, lotIDNull.Valid)
+	}
+
+	// Missing/zero qty.
+	zeroRec := httptest.NewRecorder()
+	h.PartStockAdjust(zeroRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", nonLotTrackedPart), url.Values{
+		"qty": {"0"}, "reason": {"x"},
+	}), nonLotTrackedPart))
+	if !strings.Contains(zeroRec.Body.String(), "Enter a non-zero quantity") {
+		t.Errorf("PartStockAdjust(qty=0): expected \"Enter a non-zero quantity\", got body: %s", zeroRec.Body.String())
+	}
+
+	// Missing reason.
+	noReasonRec := httptest.NewRecorder()
+	h.PartStockAdjust(noReasonRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", nonLotTrackedPart), url.Values{
+		"qty": {"5"},
+	}), nonLotTrackedPart))
+	if !strings.Contains(noReasonRec.Body.String(), "A reason is required") {
+		t.Errorf("PartStockAdjust(no reason): expected \"A reason is required\", got body: %s", noReasonRec.Body.String())
+	}
+
+	// Lot-tracked, pick an existing active lot (3007, lot 8301).
+	const lotTrackedPart = 3007
+	var lotStockBefore float64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart,
+	).Scan(&lotStockBefore); err != nil {
+		t.Fatalf("select stock_on_hand before (lot-tracked): %v", err)
+	}
+	pickRec := httptest.NewRecorder()
+	h.PartStockAdjust(pickRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", lotTrackedPart), url.Values{
+		"qty": {"3"}, "reason": {"itest"}, "lot_id": {"8301"},
+	}), lotTrackedPart))
+	assert302(t, "PartStockAdjust (existing lot)", pickRec)
+
+	var pickTxnID int
+	var pickLotID int64
+	var lotStockAfter float64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart,
+	).Scan(&lotStockAfter); err != nil {
+		t.Fatalf("select stock_on_hand after (lot-tracked): %v", err)
+	}
+	if lotStockAfter != lotStockBefore+3 {
+		t.Errorf("stock_on_hand (lot-tracked) after = %v, want %v", lotStockAfter, lotStockBefore+3)
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 id, lot_id FROM %s WHERE part_id=@p1 AND txn_type='adjustment' ORDER BY id DESC`,
+		h.cfg.InventoryTxnTable()), lotTrackedPart,
+	).Scan(&pickTxnID, &pickLotID); err != nil {
+		t.Fatalf("select new ledger row (lot-tracked): %v", err)
+	}
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.InventoryTxnTable()), pickTxnID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=@p1 WHERE id=@p2`, h.cfg.PartsTable()), lotStockBefore, lotTrackedPart)
+	}()
+	if pickLotID != 8301 {
+		t.Errorf("ledger row lot_id = %d, want 8301", pickLotID)
+	}
+
+	// Lot-tracked, lot belongs to a DIFFERENT part (guard from TestIntegration_LotBelongsToPart).
+	wrongLotRec := httptest.NewRecorder()
+	h.PartStockAdjust(wrongLotRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", lotTrackedPart), url.Values{
+		"qty": {"3"}, "reason": {"itest"}, "lot_id": {"8302"},
+	}), lotTrackedPart))
+	if !strings.Contains(wrongLotRec.Body.String(), "Selected lot is not an active lot of this part") {
+		t.Errorf("PartStockAdjust(wrong-part lot): expected guard message, got body: %s", wrongLotRec.Body.String())
+	}
+	var afterWrongLotStock float64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart,
+	).Scan(&afterWrongLotStock); err != nil {
+		t.Fatalf("select stock_on_hand after wrong-lot attempt: %v", err)
+	}
+	if afterWrongLotStock != lotStockAfter {
+		t.Errorf("stock_on_hand changed after blocked wrong-lot adjustment: before=%v after=%v", lotStockAfter, afterWrongLotStock)
+	}
+
+	// Both lot_id and new_lot_number set.
+	bothRec := httptest.NewRecorder()
+	h.PartStockAdjust(bothRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", lotTrackedPart), url.Values{
+		"qty": {"1"}, "reason": {"itest"}, "lot_id": {"8301"}, "new_lot_number": {"ITEST-BOTH"},
+	}), lotTrackedPart))
+	if !strings.Contains(bothRec.Body.String(), "Choose an existing lot or enter a new lot number, not both") {
+		t.Errorf("PartStockAdjust(both lot_id+new_lot_number): expected guard message, got body: %s", bothRec.Body.String())
+	}
+
+	// Neither lot_id nor new_lot_number set.
+	neitherRec := httptest.NewRecorder()
+	h.PartStockAdjust(neitherRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", lotTrackedPart), url.Values{
+		"qty": {"1"}, "reason": {"itest"},
+	}), lotTrackedPart))
+	if !strings.Contains(neitherRec.Body.String(), "select a lot or enter a new lot number") {
+		t.Errorf("PartStockAdjust(no lot fields): expected guard message, got body: %s", neitherRec.Body.String())
+	}
+
+	// new_lot_number creates a brand-new lot inline.
+	newLotNumber := "ITEST-NEWLOT-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	newLotRec := httptest.NewRecorder()
+	h.PartStockAdjust(newLotRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", lotTrackedPart), url.Values{
+		"qty": {"2"}, "reason": {"itest new lot"}, "new_lot_number": {newLotNumber},
+	}), lotTrackedPart))
+	assert302(t, "PartStockAdjust (new lot)", newLotRec)
+
+	var newLotID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE part_id=@p1 AND lot_number=@p2`, h.cfg.LotTable()), lotTrackedPart, newLotNumber,
+	).Scan(&newLotID); err != nil {
+		t.Fatalf("select new lot: %v", err)
+	}
+	var newLotDesc string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT lot_description FROM %s WHERE id=@p1`, h.cfg.LotTable()), newLotID,
+	).Scan(&newLotDesc); err != nil {
+		t.Fatalf("select new lot description: %v", err)
+	}
+	if newLotDesc != "Manual entry" {
+		t.Errorf("new lot description = %q, want %q", newLotDesc, "Manual entry")
+	}
+	var newLotTxnID int
+	var newLotTxnLotID int64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT TOP 1 id, lot_id FROM %s WHERE part_id=@p1 AND txn_type='adjustment' ORDER BY id DESC`,
+		h.cfg.InventoryTxnTable()), lotTrackedPart,
+	).Scan(&newLotTxnID, &newLotTxnLotID); err != nil {
+		t.Fatalf("select new-lot ledger row: %v", err)
+	}
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.InventoryTxnTable()), newLotTxnID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.LotTable()), newLotID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=stock_on_hand-2 WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart)
+	}()
+	if int(newLotTxnLotID) != newLotID {
+		t.Errorf("new-lot ledger row lot_id = %d, want %d", newLotTxnLotID, newLotID)
+	}
+
+	// Invalid lot_id (non-numeric).
+	invalidLotRec := httptest.NewRecorder()
+	h.PartStockAdjust(invalidLotRec, withID(postForm(fmt.Sprintf("/part/%d/adjust-stock", lotTrackedPart), url.Values{
+		"qty": {"1"}, "reason": {"itest"}, "lot_id": {"abc"},
+	}), lotTrackedPart))
+	if !strings.Contains(invalidLotRec.Body.String(), "Invalid lot selection") {
+		t.Errorf("PartStockAdjust(invalid lot_id): expected \"Invalid lot selection\", got body: %s", invalidLotRec.Body.String())
 	}
 }

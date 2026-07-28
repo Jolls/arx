@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-07-27
+### Added
+- Integration test coverage for the record lock/approve state machine (`LockRecord`/`ApproveRecord`/`UnlockRecord`/`BulkLockRecords`) and the completion-audit snapshot chain it drives ([#806](https://github.com/Jolls/arx-legacy/issues/806))
+- Integration test coverage for form definition CRUD + history (`SaveFormDef`/`EditFormDef`/`ArchiveStep`/`FormDefHistory`), including regression tests that archiving/editing a form def never alters an already-locked record's frozen snapshot ([#813](https://github.com/Jolls/arx-legacy/issues/813))
+- Integration test coverage for lot handlers and manual stock adjustment (`PartLots`/`PartLotTrace`/`LotEdit`/`LotUpdate`/`AllLots`/`PartStockAdjust`) ([#808](https://github.com/Jolls/arx-legacy/issues/808))
+- Integration test coverage for unit read/trace handlers (`PartUnits`/`PartUnitTrace`) ([#814](https://github.com/Jolls/arx-legacy/issues/814))
+
 ## [0.7.4] - 2026-07-27
 ### Added
 - Part detail dashboard now shows Lots/Units cards (total count + 5 most recent) for lot- and serial-tracked parts ([#798](https://github.com/Jolls/arx-legacy/issues/798))
