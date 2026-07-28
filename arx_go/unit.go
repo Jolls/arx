@@ -99,6 +99,42 @@ func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, erro
 	return out, rows.Err()
 }
 
+// recentPartUnits returns the most recent units for a part, newest first, capped
+// at limit, for the Part dashboard "Units" card (#798).
+func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([]UnitRow, error) {
+	top, limitClause := h.topLimit("@p2")
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT %su.id, u.serial_number, u.part_id, p.part_number, p.title,
+		       u.lot_id, l.lot_number, u.build_id, u.is_active, u.created_at
+		FROM %s u
+		JOIN %s p ON p.id = u.part_id
+		LEFT JOIN %s l ON l.id = u.lot_id
+		WHERE u.part_id = @p1 ORDER BY u.created_at DESC, u.id DESC
+	`+limitClause, top, h.cfg.UnitTable(), h.cfg.PartsTable(), h.cfg.LotTable()), partID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UnitRow
+	for rows.Next() {
+		ur, err := scanUnitRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ur)
+	}
+	return out, rows.Err()
+}
+
+// unitCountForPart returns the total number of units for a part, for the Part
+// dashboard "Units" card (#798).
+func (h *Handler) unitCountForPart(ctx context.Context, partID int) (int, error) {
+	var count int
+	err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg.UnitTable()), partID).Scan(&count)
+	return count, err
+}
+
 // fetchUnitRow loads a single unit for the trace header. ok=false (nil error) when
 // the unit does not exist.
 func (h *Handler) fetchUnitRow(ctx context.Context, unitID int) (UnitRow, bool, error) {

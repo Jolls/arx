@@ -170,6 +170,41 @@ func (h *Handler) lotsForPart(ctx context.Context, partID int) ([]LotRow, error)
 	return out, rows.Err()
 }
 
+// recentPartLots returns the most recent lots for a part, newest first, capped
+// at limit, for the Part dashboard "Lots" card (#798).
+func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]LotRow, error) {
+	top, limitClause := h.topLimit("@p2")
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT %sl.id, l.lot_number, l.vendor_lot_number, l.part_id,
+		       p.part_number, p.title, l.lot_description, l.created_at, l.is_active
+		FROM %s l
+		JOIN %s p ON p.id = l.part_id
+		WHERE l.part_id = @p1 ORDER BY l.created_at DESC, l.id DESC
+	`+limitClause, top, h.cfg.LotTable(), h.cfg.PartsTable()), partID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LotRow
+	for rows.Next() {
+		lr, err := scanLotRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lr)
+	}
+	return out, rows.Err()
+}
+
+// lotCountForPart returns the total number of lots for a part, for the Part
+// dashboard "Lots" card (#798).
+func (h *Handler) lotCountForPart(ctx context.Context, partID int) (int, error) {
+	var count int
+	err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg.LotTable()), partID).Scan(&count)
+	return count, err
+}
+
 // fetchLotRow loads a single lot for the genealogy trace header. ok=false (nil
 // error) when the lot does not exist.
 func (h *Handler) fetchLotRow(ctx context.Context, lotID int) (LotRow, bool, error) {
