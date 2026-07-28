@@ -344,12 +344,17 @@ BEGIN TRY
 
     -- lead_time_days is captured per line on the RFQ comparison grid (#270); set on the
     -- in-flight quote lines so the grid renders differing price + lead time per supplier.
+    -- 5504 also carries lead_time_days (#815) so it's the one seed row with lead_time_days,
+    -- date_received, and its PO's date_ordered all set — the On-Time Delivery report
+    -- (queryOnTimeDelivery) needs at least one such row to exercise its on-time-% math;
+    -- quoted 50 days against 2026-04-01 date_ordered vs. actual 2026-05-15 date_received
+    -- means it arrived 6 days early (on time).
     SET IDENTITY_INSERT dbo.po_line ON;
     INSERT INTO dbo.po_line (id, po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, vendor_part_number, lead_time_days, received_qty, date_received) VALUES
         (5501, 5001, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       10,  2.50,  'ACME-AL6061', NULL, 0,  NULL),
         (5502, 5002, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       20,  2.50,  'ACME-AL6061', NULL, 0,  NULL),
         (5503, 5002, 'BUY-1001', 'A', 3002, 2, 'M3x8 SHCS',                 200, 0.05,  'PMC-M3X8',    NULL, 0,  NULL),
-        (5504, 5003, 'RAW-1002', 'A', 3007, 1, 'Stainless Steel Bar Stock', 50,  4.10,  'ACME-SS304',  NULL, 20, '2026-05-15'),
+        (5504, 5003, 'RAW-1002', 'A', 3007, 1, 'Stainless Steel Bar Stock', 50,  4.10,  'ACME-SS304',  50,   20, '2026-05-15'),
         (5505, 5004, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       10,  2.50,  'ACME-AL6061', NULL, 10, '2026-01-18'),
         (5506, 5008, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.048, 'PMC-M3X8',    NULL, 0,  NULL),
         (5511, 5010, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.055, 'ACME-M3X8',   14,   0,  NULL),

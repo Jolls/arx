@@ -5,12 +5,17 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +26,7 @@ import (
 
 	arxbase "arx/arxlib/config"
 	arxdb "arx/arxlib/db"
+	"arx/arxlib/urlutil"
 )
 
 // liveHandler opens a real DB connection to ArxDev and returns a Handler plus a
@@ -1530,6 +1536,36 @@ func TestIntegration_DashboardBelowReorderParts(t *testing.T) {
 	if found.StockOnHand != 16 || found.ReorderMin != 25 {
 		t.Errorf("dashboardBelowReorderParts: part 3007 = {on-hand %g, min %g}, want {16, 25} (ArxDev may need reseeding)",
 			found.StockOnHand, found.ReorderMin)
+	}
+}
+
+// TestIntegration_ReportsDashboard_RendersAllCards exercises ReportsDashboard's
+// page-handler assembly — the actual page handler that assembles all dashboard
+// cards and renders the template — which no test previously invoked, even
+// though 3 of its underlying card queries are individually integration-tested
+// (#816).
+func TestIntegration_ReportsDashboard_RendersAllCards(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.ReportsDashboard(rec, httptest.NewRequest(http.MethodGet, "/reports", nil))
+
+	assertStatus(t, "ReportsDashboard", rec, http.StatusOK)
+	body := rec.Body.String()
+	for _, want := range []string{
+		"Open POs",
+		"POs Received This Month",
+		"Recent Activity",
+		"Top Failing Steps",
+		"Lowest Yield Forms",
+		"Stale WIP Records",
+		"POs Pending Approval",
+		"Below Reorder Point",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("ReportsDashboard: body missing %q", want)
+		}
 	}
 }
 
@@ -4667,5 +4703,1498 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	}), lotTrackedPart))
 	if !strings.Contains(invalidLotRec.Body.String(), "Invalid lot selection") {
 		t.Errorf("PartStockAdjust(invalid lot_id): expected \"Invalid lot selection\", got body: %s", invalidLotRec.Body.String())
+	}
+}
+
+// TestIntegration_ResolveAttachmentFileInput exercises resolveAttachmentFileInput's
+// manual-link, import, move, collision, link-existing, replace-in-place, and
+// part-not-found branches (#809).
+
+// seedThrowawayPart inserts a throwaway ITEST-prefixed part row (raw SQL, no
+// handler round-trip) and returns its id, its part_number, and a cleanup that
+// hard-deletes it. Shared by the #809/#821 attachment tests below, which all
+// need a real part row but not the full PartsCreate handler flow that
+// smoke_post_test.go's seedPart drives.
+func seedThrowawayPart(t *testing.T, h *Handler, ctx context.Context, issue string) (id int, partNumber string, cleanup func()) {
+	t.Helper()
+	partNumber = "ITEST-" + issue + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
+		h.cfg.PartsTable()), partNumber,
+	).Scan(&id); err != nil {
+		t.Fatalf("seed part: %v", err)
+	}
+	return id, partNumber, func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), id)
+	}
+}
+
+// seedThrowawayAttachment inserts a throwaway part_attachment row (via
+// SCOPE_IDENTITY() — OUTPUT INSERTED is blocked on this trigger-bearing table)
+// and returns its id and a cleanup that hard-deletes it. Shared by the
+// #809/#821 attachment tests below.
+func seedThrowawayAttachment(t *testing.T, h *Handler, ctx context.Context, partID int, fileName, category string) (id int, cleanup func()) {
+	t.Helper()
+	if err := h.DB().QueryRowContext(ctx, h.dia().InsertReturningID(
+		h.cfg.AttachmentsTable(), "part_id, file_name, category, sort_order", "@p1,@p2,@p3,1", true,
+	), partID, fileName, category).Scan(&id); err != nil {
+		t.Fatalf("seed part_attachment: %v", err)
+	}
+	return id, func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), id)
+	}
+}
+
+// tempDocControlRoot points h.cfg.DocControlRoot at a fresh t.TempDir() and
+// returns the path, so file-writing #809/#821 attachment tests never touch
+// the real doc-control tree. No restore is needed: t.TempDir() is unique per
+// call and every subtest that needs a non-empty DocControlRoot calls this
+// (or sets its own value, e.g. "") before relying on it.
+func tempDocControlRoot(t *testing.T, h *Handler) string {
+	t.Helper()
+	dir := t.TempDir()
+	h.cfg.DocControlRoot = dir
+	return dir
+}
+
+func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, partNumber, partCleanup := seedThrowawayPart(t, h, ctx, "809")
+	defer partCleanup()
+	partIDStr := strconv.Itoa(partID)
+	wantName := buildAttachmentFileName(partNumber, "A", "Integration Test Part", "Datasheet", ".txt")
+
+	t.Run("manual_filfilename_no_import", func(t *testing.T) {
+		req := postForm("/x", url.Values{"FILFileName": {"http://example.com/foo.pdf"}})
+		result := h.resolveAttachmentFileInput(ctx, req, "999999999", "A", "Datasheet", "", "")
+		if result.FileName != urlutil.NormalizeLink("http://example.com/foo.pdf") {
+			t.Errorf("FileName = %q, want normalized manual link", result.FileName)
+		}
+		if result.MoveSrc != "" || result.Collision != nil || result.ErrMsg != "" {
+			t.Errorf("unexpected side fields: %+v", result)
+		}
+	})
+
+	t.Run("doc_control_root_not_configured", func(t *testing.T) {
+		orig := h.cfg.DocControlRoot
+		h.cfg.DocControlRoot = ""
+		defer func() { h.cfg.DocControlRoot = orig }()
+		req := postForm("/x", url.Values{"source_path": {`C:\some\path.txt`}})
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		if result.ErrMsg != "DOC_CONTROL_ROOT is not configured; cannot import files." {
+			t.Errorf("ErrMsg = %q", result.ErrMsg)
+		}
+	})
+
+	t.Run("fresh_import_copy", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		srcFile := filepath.Join(t.TempDir(), "test.txt")
+		if err := os.WriteFile(srcFile, []byte("hello world"), 0644); err != nil {
+			t.Fatalf("write src file: %v", err)
+		}
+		req := postForm("/x", url.Values{"source_path": {srcFile}})
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		if result.ErrMsg != "" {
+			t.Fatalf("unexpected ErrMsg: %s", result.ErrMsg)
+		}
+		if result.FileName != "LOCAL:"+wantName {
+			t.Errorf("FileName = %q, want %q", result.FileName, "LOCAL:"+wantName)
+		}
+		if result.MoveSrc != "" {
+			t.Errorf("MoveSrc = %q, want empty", result.MoveSrc)
+		}
+		gotBytes, err := os.ReadFile(filepath.Join(docRoot, wantName))
+		if err != nil {
+			t.Fatalf("read copied file: %v", err)
+		}
+		if string(gotBytes) != "hello world" {
+			t.Errorf("copied file contents = %q, want %q", gotBytes, "hello world")
+		}
+	})
+
+	t.Run("move_mode", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		srcFile := filepath.Join(t.TempDir(), "test.txt")
+		if err := os.WriteFile(srcFile, []byte("hello world"), 0644); err != nil {
+			t.Fatalf("write src file: %v", err)
+		}
+		req := postForm("/x", url.Values{"source_path": {srcFile}, "move_source": {"1"}})
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		if result.ErrMsg != "" {
+			t.Fatalf("unexpected ErrMsg: %s", result.ErrMsg)
+		}
+		if result.MoveSrc != srcFile {
+			t.Errorf("MoveSrc = %q, want %q", result.MoveSrc, srcFile)
+		}
+	})
+
+	t.Run("import_collision", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		srcFile := filepath.Join(t.TempDir(), "test.txt")
+		if err := os.WriteFile(srcFile, []byte("new bytes"), 0644); err != nil {
+			t.Fatalf("write src file: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(docRoot, wantName), []byte("original bytes"), 0644); err != nil {
+			t.Fatalf("pre-create target: %v", err)
+		}
+		req := postForm("/x", url.Values{"source_path": {srcFile}})
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		if result.Collision == nil {
+			t.Fatalf("expected Collision, got nil (result=%+v)", result)
+		}
+		if result.Collision["Name"] != wantName || result.Collision["SourcePath"] != srcFile {
+			t.Errorf("Collision = %+v, want Name=%q SourcePath=%q", result.Collision, wantName, srcFile)
+		}
+		if result.FileName != "" || result.MoveSrc != "" {
+			t.Errorf("expected empty FileName/MoveSrc on collision, got %+v", result)
+		}
+		gotBytes, err := os.ReadFile(filepath.Join(docRoot, wantName))
+		if err != nil {
+			t.Fatalf("read target: %v", err)
+		}
+		if string(gotBytes) != "original bytes" {
+			t.Errorf("target file was modified: got %q, want %q", gotBytes, "original bytes")
+		}
+	})
+
+	t.Run("link_existing_skips_copy", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		srcFile := filepath.Join(t.TempDir(), "test.txt")
+		if err := os.WriteFile(srcFile, []byte("hello"), 0644); err != nil {
+			t.Fatalf("write src file: %v", err)
+		}
+		req := postForm("/x", url.Values{"source_path": {srcFile}, "link_existing": {"1"}})
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		if result.FileName != "LOCAL:"+wantName {
+			t.Errorf("FileName = %q, want %q", result.FileName, "LOCAL:"+wantName)
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, wantName)); !os.IsNotExist(err) {
+			t.Errorf("expected no file created at %s, stat err = %v", wantName, err)
+		}
+	})
+
+	t.Run("replace_name_uses_replace_local_file", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		srcFile := filepath.Join(t.TempDir(), "test.txt")
+		if err := os.WriteFile(srcFile, []byte("new bytes"), 0644); err != nil {
+			t.Fatalf("write src file: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(docRoot, wantName), []byte("old bytes"), 0644); err != nil {
+			t.Fatalf("pre-create target: %v", err)
+		}
+		req := postForm("/x", url.Values{"source_path": {srcFile}})
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", wantName)
+		if result.Collision != nil {
+			t.Errorf("expected no Collision, got %+v", result.Collision)
+		}
+		if result.FileName != "LOCAL:"+wantName {
+			t.Errorf("FileName = %q, want %q", result.FileName, "LOCAL:"+wantName)
+		}
+		gotBytes, err := os.ReadFile(filepath.Join(docRoot, wantName))
+		if err != nil {
+			t.Fatalf("read target: %v", err)
+		}
+		if string(gotBytes) != "new bytes" {
+			t.Errorf("target file contents = %q, want %q (should be swapped in place)", gotBytes, "new bytes")
+		}
+	})
+
+	t.Run("part_not_found", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		req := postForm("/x", url.Values{"source_path": {`C:\some\path.txt`}})
+		result := h.resolveAttachmentFileInput(ctx, req, "99999999999999999999", "A", "Datasheet", "", "")
+		if !strings.HasPrefix(result.ErrMsg, "Error loading part: ") {
+			t.Errorf("ErrMsg = %q, want prefix %q", result.ErrMsg, "Error loading part: ")
+		}
+	})
+}
+
+// TestIntegration_DeleteAttachmentFileIfUnshared exercises the shared-attachment
+// consolidation-on-delete check for both the part_attachment and company_attachment
+// tables (#809) — in particular the orphan-risk case: a file still referenced by
+// another active row must survive deletion of this row's reference to it.
+func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	seedPart := func(t *testing.T) (partID int, cleanup func()) {
+		id, _, cl := seedThrowawayPart(t, h, ctx, "809")
+		return id, cl
+	}
+	seedAttachment := func(t *testing.T, partID int, fileName string) (attID int, cleanup func()) {
+		return seedThrowawayAttachment(t, h, ctx, partID, fileName, "Test")
+	}
+
+	t.Run("not_shared_removes_file", func(t *testing.T) {
+		docRoot := t.TempDir()
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		const name = "unshared.txt"
+		attID, cleanupAtt := seedAttachment(t, partID, "LOCAL:"+name)
+		defer cleanupAtt()
+		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
+			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
+			t.Errorf("expected file removed, stat err = %v", err)
+		}
+	})
+
+	t.Run("shared_preserves_file", func(t *testing.T) {
+		docRoot := t.TempDir()
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		const name = "shared.txt"
+		att1, cleanup1 := seedAttachment(t, partID, "LOCAL:"+name)
+		defer cleanup1()
+		_, cleanup2 := seedAttachment(t, partID, "LOCAL:"+name)
+		defer cleanup2()
+		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
+			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, name)); err != nil {
+			t.Errorf("expected file preserved (still shared), stat err = %v", err)
+		}
+	})
+
+	t.Run("inactive_sharer_does_not_count", func(t *testing.T) {
+		docRoot := t.TempDir()
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		const name = "inactive-sharer.txt"
+		att1, cleanup1 := seedAttachment(t, partID, "LOCAL:"+name)
+		defer cleanup1()
+		att2, cleanup2 := seedAttachment(t, partID, "LOCAL:"+name)
+		defer cleanup2()
+		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET is_active=0 WHERE id=@p1`, h.cfg.AttachmentsTable()), att2); err != nil {
+			t.Fatalf("soft-delete second row: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
+			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
+			t.Errorf("expected file removed (inactive sharer shouldn't count), stat err = %v", err)
+		}
+	})
+
+	t.Run("already_gone_file_not_error", func(t *testing.T) {
+		docRoot := t.TempDir()
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		const name = "never-existed.txt"
+		attID, cleanupAtt := seedAttachment(t, partID, "LOCAL:"+name)
+		defer cleanupAtt()
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
+			t.Errorf("expected nil error for already-gone file, got %v", err)
+		}
+	})
+
+	t.Run("table_agnostic_supplier_side", func(t *testing.T) {
+		docRoot := t.TempDir()
+		supplierName := "ITEST-809-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		var supplierID int
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()), supplierName,
+		).Scan(&supplierID); err != nil {
+			t.Fatalf("seed company: %v", err)
+		}
+		const name = "supplier-file.txt"
+		var attID int
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (supplier_id, file_path) OUTPUT INSERTED.supplier_attachment_id VALUES (@p1,@p2)`,
+			h.cfg.CompanyAttachmentsTable()), supplierID, "LOCAL:"+name,
+		).Scan(&attID); err != nil {
+			t.Fatalf("seed company_attachment: %v", err)
+		}
+		defer func() {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), attID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
+		}()
+		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path", attID, "LOCAL:"+name, docRoot, name); err != nil {
+			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
+			t.Errorf("expected file removed, stat err = %v", err)
+		}
+	})
+}
+
+// TestIntegration_SetPrimaryAttachment exercises setPrimaryAttachment's set/clear
+// logic for both the part and supplier (company) primary-attachment pointer (#809).
+func TestIntegration_SetPrimaryAttachment(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	t.Run("set_and_clear_on_part", func(t *testing.T) {
+		partID, _, partCleanup := seedThrowawayPart(t, h, ctx, "809")
+		defer partCleanup()
+		attID, attCleanup := seedThrowawayAttachment(t, h, ctx, partID, "LOCAL:primary-test.txt", "Test")
+		defer attCleanup()
+
+		if err := h.setPrimaryAttachment(ctx, h.cfg.PartsTable(), "id", "primary_attachment_id", partID, attID); err != nil {
+			t.Fatalf("setPrimaryAttachment(set): %v", err)
+		}
+		var gotPrimary sql.NullInt64
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID).Scan(&gotPrimary); err != nil {
+			t.Fatalf("select primary_attachment_id: %v", err)
+		}
+		if !gotPrimary.Valid || int(gotPrimary.Int64) != attID {
+			t.Errorf("primary_attachment_id = %+v, want %d", gotPrimary, attID)
+		}
+
+		if err := h.setPrimaryAttachment(ctx, h.cfg.PartsTable(), "id", "primary_attachment_id", partID, nil); err != nil {
+			t.Fatalf("setPrimaryAttachment(clear): %v", err)
+		}
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID).Scan(&gotPrimary); err != nil {
+			t.Fatalf("select primary_attachment_id after clear: %v", err)
+		}
+		if gotPrimary.Valid {
+			t.Errorf("primary_attachment_id = %+v after clear, want NULL", gotPrimary)
+		}
+	})
+
+	t.Run("set_on_supplier", func(t *testing.T) {
+		supplierName := "ITEST-809-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		var supplierID int
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()), supplierName,
+		).Scan(&supplierID); err != nil {
+			t.Fatalf("seed company: %v", err)
+		}
+		var attID int
+		defer func() {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), attID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
+		}()
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (supplier_id, file_path) OUTPUT INSERTED.supplier_attachment_id VALUES (@p1,@p2)`,
+			h.cfg.CompanyAttachmentsTable()), supplierID, "LOCAL:supplier-primary-test.txt",
+		).Scan(&attID); err != nil {
+			t.Fatalf("seed company_attachment: %v", err)
+		}
+
+		if err := h.setPrimaryAttachment(ctx, h.cfg.CompanyTable(), "id", "primary_attachment_id", supplierID, attID); err != nil {
+			t.Fatalf("setPrimaryAttachment: %v", err)
+		}
+		var gotPrimary sql.NullInt64
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID).Scan(&gotPrimary); err != nil {
+			t.Fatalf("select primary_attachment_id: %v", err)
+		}
+		if !gotPrimary.Valid || int(gotPrimary.Int64) != attID {
+			t.Errorf("primary_attachment_id = %+v, want %d", gotPrimary, attID)
+		}
+	})
+
+	t.Run("noop_on_nonexistent_parent", func(t *testing.T) {
+		if err := h.setPrimaryAttachment(ctx, h.cfg.PartsTable(), "id", "primary_attachment_id", 999999999, nil); err != nil {
+			t.Errorf("expected nil error for nonexistent parentID, got %v", err)
+		}
+	})
+}
+
+// TestIntegration_APIPartAttachmentName exercises the attachment-name preview
+// endpoint's happy path and part-not-found guard (#821).
+func TestIntegration_APIPartAttachmentName(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, partNumber, partCleanup := seedThrowawayPart(t, h, ctx, "821")
+	defer partCleanup()
+
+	t.Run("happy_path", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet,
+			fmt.Sprintf("/api/part/%d/attachment-name?rev=B&category=Drawing&ext=.pdf", partID), nil)
+		rec := httptest.NewRecorder()
+		h.APIPartAttachmentName(rec, withID(req, partID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		want := buildAttachmentFileName(partNumber, "B", "Integration Test Part", "Drawing", ".pdf")
+		if body.Name != want {
+			t.Errorf("name = %q, want %q", body.Name, want)
+		}
+	})
+
+	t.Run("part_not_found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/part/999999999/attachment-name", nil)
+		rec := httptest.NewRecorder()
+		h.APIPartAttachmentName(rec, withID(req, 999999999))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestIntegration_APIPartPasteAttachment exercises the clipboard-paste-as-new-
+// attachment endpoint: happy path (file write + row insert), config guard,
+// decode-error guard, part-not-found guard, and the non-numeric order_id
+// leaving sort_order NULL (#821).
+func TestIntegration_APIPartPasteAttachment(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+	// seedPart wraps seedThrowawayPart with an extra cleanup step: the
+	// APIPartPasteAttachment calls below create their own part_attachment row
+	// via the handler (not via seedThrowawayAttachment), so it must be swept up
+	// by part_id alongside the part itself.
+	seedPart := func(t *testing.T) (partID int, partNumber string, cleanup func()) {
+		id, num, partCleanup := seedThrowawayPart(t, h, ctx, "821")
+		return id, num, func() {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			partCleanup()
+		}
+	}
+
+	postPaste := func(partID int, jsonBody string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/part/%d/paste-attachment", partID), strings.NewReader(jsonBody))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.APIPartPasteAttachment(rec, withID(req, partID))
+		return rec
+	}
+
+	t.Run("happy_path", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, partNumber, cleanupPart := seedPart(t)
+		defer cleanupPart()
+
+		rec := postPaste(partID, fmt.Sprintf(`{"image_data":%q,"rev":"B","order_id":"3","comment":"note"}`, tinyPNG))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			OK bool `json:"ok"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || !resp.OK {
+			t.Fatalf("response = %s, want ok:true", rec.Body.String())
+		}
+
+		wantName := buildAttachmentFileName(partNumber, "B", "Integration Test Part", "Photo", ".png")
+		if _, err := os.Stat(filepath.Join(h.cfg.DocControlRoot, wantName)); err != nil {
+			t.Fatalf("expected file at %s, stat err = %v", wantName, err)
+		}
+
+		var fileName, category, comment sql.NullString
+		var sortOrder sql.NullInt64
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT file_name, category, comment, sort_order FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID,
+		).Scan(&fileName, &category, &comment, &sortOrder); err != nil {
+			t.Fatalf("select attachment row: %v", err)
+		}
+		if fileName.String != "LOCAL:"+wantName {
+			t.Errorf("file_name = %q, want %q", fileName.String, "LOCAL:"+wantName)
+		}
+		if category.String != "Photo" {
+			t.Errorf("category = %q, want %q", category.String, "Photo")
+		}
+		if comment.String != "note" {
+			t.Errorf("comment = %q, want %q", comment.String, "note")
+		}
+		if !sortOrder.Valid || sortOrder.Int64 != 3 {
+			t.Errorf("sort_order = %+v, want 3", sortOrder)
+		}
+	})
+
+	t.Run("doc_control_root_not_configured", func(t *testing.T) {
+		orig := h.cfg.DocControlRoot
+		h.cfg.DocControlRoot = ""
+		defer func() { h.cfg.DocControlRoot = orig }()
+		partID, _, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		rec := postPaste(partID, fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("malformed_image_data", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, _, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		rec := postPaste(partID, `{"image_data":"not-a-data-url"}`)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("part_not_found", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		rec := postPaste(999999999, fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("non_numeric_order_id", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, _, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		rec := postPaste(partID, fmt.Sprintf(`{"image_data":%q,"order_id":"abc"}`, tinyPNG))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		var sortOrder sql.NullInt64
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT sort_order FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID,
+		).Scan(&sortOrder); err != nil {
+			t.Fatalf("select attachment row: %v", err)
+		}
+		if sortOrder.Valid {
+			t.Errorf("sort_order = %+v, want NULL", sortOrder)
+		}
+	})
+}
+
+// TestIntegration_APIPartPasteAttachmentReplace exercises the clipboard-paste-
+// replace endpoint: happy path (old file deleted, new file written, row
+// updated), the shared-old-file soft-warning path, and its guard clauses (#821).
+func TestIntegration_APIPartPasteAttachmentReplace(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+	seedPart := func(t *testing.T) (partID int, cleanup func()) {
+		id, _, partCleanup := seedThrowawayPart(t, h, ctx, "821")
+		return id, func() {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			partCleanup()
+		}
+	}
+	seedAttachment := func(t *testing.T, partID int, fileName string) int {
+		id, _ := seedThrowawayAttachment(t, h, ctx, partID, fileName, "Photo")
+		return id
+	}
+
+	postReplace := func(partID, attID int, jsonBody string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/part/%d/attachments/%d/paste-attachment", partID, attID), strings.NewReader(jsonBody))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.APIPartPasteAttachmentReplace(rec, withIDAndAttID(req, partID, attID))
+		return rec
+	}
+
+	t.Run("happy_path", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		const oldName = "old-file.png"
+		if _, err := writeIntoDocControl(docRoot, oldName, []byte("old bytes")); err != nil {
+			t.Fatalf("seed old file: %v", err)
+		}
+		attID := seedAttachment(t, partID, "LOCAL:"+oldName)
+
+		rec := postReplace(partID, attID, fmt.Sprintf(`{"image_data":%q,"rev":"C","order_id":"2","comment":"new note"}`, tinyPNG))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "warning") {
+			t.Errorf("unexpected warning in response: %s", rec.Body.String())
+		}
+
+		var fileName, category, comment, rev sql.NullString
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT file_name, category, comment, part_revision FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attID,
+		).Scan(&fileName, &category, &comment, &rev); err != nil {
+			t.Fatalf("select attachment row: %v", err)
+		}
+		if fileName.String == "LOCAL:"+oldName {
+			t.Errorf("file_name unchanged, want updated")
+		}
+		if category.String != "Photo" || comment.String != "new note" || rev.String != "C" {
+			t.Errorf("row = category=%q comment=%q rev=%q, want Photo/new note/C", category.String, comment.String, rev.String)
+		}
+
+		if _, err := os.Stat(filepath.Join(docRoot, oldName)); !os.IsNotExist(err) {
+			t.Errorf("expected old file removed, stat err = %v", err)
+		}
+		newName := strings.TrimPrefix(fileName.String, "LOCAL:")
+		if _, err := os.Stat(filepath.Join(docRoot, newName)); err != nil {
+			t.Errorf("expected new file at %s, stat err = %v", newName, err)
+		}
+	})
+
+	// deleteAttachmentFileIfUnshared treats "still shared" as success (nil error,
+	// file left in place) — the response's "warning" key only fires when that
+	// call returns an actual error (e.g. a permission failure removing the file),
+	// which sharing is not. So a shared old file is a plain {"ok":true} response;
+	// the file being preserved on disk is the meaningful assertion here.
+	t.Run("shared_old_file_preserved", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		const sharedName = "shared-file.png"
+		if _, err := writeIntoDocControl(docRoot, sharedName, []byte("shared bytes")); err != nil {
+			t.Fatalf("seed shared file: %v", err)
+		}
+		attID := seedAttachment(t, partID, "LOCAL:"+sharedName)
+		seedAttachment(t, partID, "LOCAL:"+sharedName) // second row sharing the same file
+
+		rec := postReplace(partID, attID, fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "warning") {
+			t.Errorf("unexpected warning in response: %s", rec.Body.String())
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, sharedName)); err != nil {
+			t.Errorf("expected shared old file preserved, stat err = %v", err)
+		}
+	})
+
+	t.Run("invalid_attID", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/part/%d/attachments/abc/paste-attachment", partID),
+			strings.NewReader(fmt.Sprintf(`{"image_data":%q}`, tinyPNG)))
+		req.Header.Set("Content-Type", "application/json")
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", strconv.Itoa(partID))
+		rctx.URLParams.Add("attID", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.APIPartPasteAttachmentReplace(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("doc_control_root_not_configured", func(t *testing.T) {
+		orig := h.cfg.DocControlRoot
+		h.cfg.DocControlRoot = ""
+		defer func() { h.cfg.DocControlRoot = orig }()
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		rec := postReplace(partID, 1, fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("attachment_not_found", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		rec := postReplace(partID, 999999999, fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("malformed_image_data", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		attID := seedAttachment(t, partID, "LOCAL:some-file.png")
+		rec := postReplace(partID, attID, `{"image_data":"not-a-data-url"}`)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestIntegration_APIPartGenerateThumbnail exercises real end-to-end PDF-to-PNG
+// thumbnail generation (PDFium runs as embedded WASM, no external binary
+// needed) against a minimal hand-built one-page PDF: happy path, the #839
+// re-run-in-place behavior, and every guard clause (#821).
+func TestIntegration_APIPartGenerateThumbnail(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Minimal valid one-page PDF (200x300pt MediaBox, no content stream). PDFium's
+	// recovery parser rebuilds the object table by scanning for "N G obj" markers
+	// when the (deliberately absent/invalid) xref can't be parsed directly.
+	minimalPDF := []byte("%PDF-1.1\n" +
+		"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
+		"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+		"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 300]>>endobj\n" +
+		"trailer<</Size 4/Root 1 0 R>>\nstartxref\n0\n%%EOF")
+
+	seedPart := func(t *testing.T) (partID int, cleanup func()) {
+		id, _, partCleanup := seedThrowawayPart(t, h, ctx, "821")
+		return id, func() {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			partCleanup()
+		}
+	}
+	seedAttachment := func(t *testing.T, partID int, fileName, category string) int {
+		id, _ := seedThrowawayAttachment(t, h, ctx, partID, fileName, category)
+		return id
+	}
+
+	postThumbnail := func(partID, attID int) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/part/%d/attachments/%d/generate-thumbnail", partID, attID), nil)
+		rec := httptest.NewRecorder()
+		h.APIPartGenerateThumbnail(rec, withIDAndAttID(req, partID, attID))
+		return rec
+	}
+
+	type generatedRow struct {
+		id       int
+		fileName string
+	}
+	checkGenerated := func(t *testing.T, docRoot string, partID int, wantMaxPx map[string]int) map[string]generatedRow {
+		t.Helper()
+		rows, err := h.DB().QueryContext(ctx, fmt.Sprintf(
+			`SELECT id, category, file_name FROM %s WHERE part_id=@p1 AND category IN (@p2,@p3) AND is_active=%s`,
+			h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), partID, previewCategory, thumbnailCategory)
+		if err != nil {
+			t.Fatalf("query generated rows: %v", err)
+		}
+		defer rows.Close()
+		out := map[string]generatedRow{}
+		for rows.Next() {
+			var id int
+			var category, fileName string
+			if err := rows.Scan(&id, &category, &fileName); err != nil {
+				t.Fatalf("scan generated row: %v", err)
+			}
+			out[category] = generatedRow{id, fileName}
+		}
+		for _, cat := range []string{previewCategory, thumbnailCategory} {
+			row, ok := out[cat]
+			if !ok {
+				t.Fatalf("no %s row created", cat)
+			}
+			name := strings.TrimPrefix(row.fileName, "LOCAL:")
+			f, err := os.Open(filepath.Join(docRoot, name))
+			if err != nil {
+				t.Fatalf("open %s file: %v", cat, err)
+			}
+			img, err := png.Decode(f)
+			f.Close()
+			if err != nil {
+				t.Fatalf("decode %s image: %v", cat, err)
+			}
+			b := img.Bounds()
+			longEdge := b.Dx()
+			if b.Dy() > longEdge {
+				longEdge = b.Dy()
+			}
+			if longEdge > wantMaxPx[cat] {
+				t.Errorf("%s long edge = %d, want <= %d", cat, longEdge, wantMaxPx[cat])
+			}
+		}
+		return out
+	}
+
+	t.Run("happy_path_and_rerun_in_place", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		const pdfName = "source.pdf"
+		if _, err := writeIntoDocControl(docRoot, pdfName, minimalPDF); err != nil {
+			t.Fatalf("seed pdf file: %v", err)
+		}
+		attID := seedAttachment(t, partID, "LOCAL:"+pdfName, "Drawing")
+
+		rec := postThumbnail(partID, attID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		wantMaxPx := map[string]int{previewCategory: 800, thumbnailCategory: 250}
+		first := checkGenerated(t, docRoot, partID, wantMaxPx)
+
+		// Re-run in place (#839): same two row ids reused, files overwritten with the same names.
+		rec = postThumbnail(partID, attID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("second run status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		second := checkGenerated(t, docRoot, partID, wantMaxPx)
+		for _, cat := range []string{previewCategory, thumbnailCategory} {
+			if second[cat].id != first[cat].id {
+				t.Errorf("%s: row id changed on re-run: %d -> %d, want same id reused", cat, first[cat].id, second[cat].id)
+			}
+			if second[cat].fileName != first[cat].fileName {
+				t.Errorf("%s: file_name changed on re-run: %q -> %q, want same name reused", cat, first[cat].fileName, second[cat].fileName)
+			}
+		}
+	})
+
+	t.Run("invalid_attID", func(t *testing.T) {
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/part/%d/attachments/abc/generate-thumbnail", partID), nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", strconv.Itoa(partID))
+		rctx.URLParams.Add("attID", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.APIPartGenerateThumbnail(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("doc_control_root_not_configured", func(t *testing.T) {
+		orig := h.cfg.DocControlRoot
+		h.cfg.DocControlRoot = ""
+		defer func() { h.cfg.DocControlRoot = orig }()
+		rec := postThumbnail(1, 1)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("attachment_not_found", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		rec := postThumbnail(partID, 999999999)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("source_not_local_pdf", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+
+		urlAttID := seedAttachment(t, partID, "https://example.com/spec.pdf", "Drawing")
+		rec := postThumbnail(partID, urlAttID)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("URL source: status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+
+		txtAttID := seedAttachment(t, partID, "LOCAL:notes.txt", "Drawing")
+		rec = postThumbnail(partID, txtAttID)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("non-PDF local source: status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("local_pdf_missing_on_disk", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		attID := seedAttachment(t, partID, "LOCAL:missing.pdf", "Drawing")
+		rec := postThumbnail(partID, attID)
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("status = %d, want 500. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestIntegration_UpsertGeneratedAttachment exercises upsertGeneratedAttachment's
+// find-or-create semantics directly, isolated from the PDF render pipeline (#821).
+func TestIntegration_UpsertGeneratedAttachment(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	seedPart := func(t *testing.T) (partID int, cleanup func()) {
+		id, _, partCleanup := seedThrowawayPart(t, h, ctx, "821")
+		return id, func() {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			partCleanup()
+		}
+	}
+	seedAttachment := func(t *testing.T, partID int, fileName, category string) int {
+		id, _ := seedThrowawayAttachment(t, h, ctx, partID, fileName, category)
+		return id
+	}
+
+	t.Run("insert_path", func(t *testing.T) {
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		partIDStr := strconv.Itoa(partID)
+
+		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "A", thumbnailCategory, "LOCAL:new.png"); err != nil {
+			t.Fatalf("upsertGeneratedAttachment: %v", err)
+		}
+		var fileName string
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2`, h.cfg.AttachmentsTable()), partID, thumbnailCategory,
+		).Scan(&fileName); err != nil {
+			t.Fatalf("select inserted row: %v", err)
+		}
+		if fileName != "LOCAL:new.png" {
+			t.Errorf("file_name = %q, want %q", fileName, "LOCAL:new.png")
+		}
+	})
+
+	t.Run("update_path_not_shared", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		partIDStr := strconv.Itoa(partID)
+		const oldName = "old-thumb.png"
+		if _, err := writeIntoDocControl(docRoot, oldName, []byte("old")); err != nil {
+			t.Fatalf("seed old file: %v", err)
+		}
+		attID := seedAttachment(t, partID, "LOCAL:"+oldName, thumbnailCategory)
+
+		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "B", thumbnailCategory, "LOCAL:new-thumb.png"); err != nil {
+			t.Fatalf("upsertGeneratedAttachment: %v", err)
+		}
+		var gotID int
+		var fileName string
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`SELECT id, file_name FROM %s WHERE part_id=@p1 AND category=@p2`, h.cfg.AttachmentsTable()), partID, thumbnailCategory,
+		).Scan(&gotID, &fileName); err != nil {
+			t.Fatalf("select updated row: %v", err)
+		}
+		if gotID != attID {
+			t.Errorf("row id changed: got %d, want %d (same row updated in place)", gotID, attID)
+		}
+		if fileName != "LOCAL:new-thumb.png" {
+			t.Errorf("file_name = %q, want %q", fileName, "LOCAL:new-thumb.png")
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, oldName)); !os.IsNotExist(err) {
+			t.Errorf("expected old file removed, stat err = %v", err)
+		}
+	})
+
+	t.Run("update_path_shared_old_file_preserved", func(t *testing.T) {
+		docRoot := tempDocControlRoot(t, h)
+		partID, cleanupPart := seedPart(t)
+		defer cleanupPart()
+		partIDStr := strconv.Itoa(partID)
+		const sharedName = "shared-thumb.png"
+		if _, err := writeIntoDocControl(docRoot, sharedName, []byte("shared")); err != nil {
+			t.Fatalf("seed shared file: %v", err)
+		}
+		seedAttachment(t, partID, "LOCAL:"+sharedName, thumbnailCategory)
+		seedAttachment(t, partID, "LOCAL:"+sharedName, "Photo") // unrelated row sharing the same filename
+
+		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "C", thumbnailCategory, "LOCAL:fresh-thumb.png"); err != nil {
+			t.Fatalf("upsertGeneratedAttachment: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(docRoot, sharedName)); err != nil {
+			t.Errorf("expected shared old file preserved, stat err = %v", err)
+		}
+	})
+}
+
+// TestIntegration_PasteResultImageWrite covers APIRecordPasteResultImage's
+// actual write path (filename returned, file written with correct bytes) and
+// its decode-error guard, which TestIntegration_PasteResultImageGuards
+// explicitly does not reach — that test only exercises the not-found/locked
+// guards that return before any filesystem write (#821).
+func TestIntegration_PasteResultImageWrite(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	h.cfg.ImageRoot = t.TempDir()
+
+	const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+	partID, partNumber, partCleanup := seedThrowawayPart(t, h, ctx, "821")
+	defer partCleanup()
+
+	var formID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+	}()
+
+	const serial = "ITEST-821-UNLOCKED"
+	var recordID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, is_locked, is_active)
+		 OUTPUT INSERTED.id VALUES (@p1, @p2, '', '', 0, 1)`, h.cfg.RecordsTable()), formID, serial,
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed unlocked form_record: %v", err)
+	}
+
+	postPasteImage := func(jsonBody string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/record/%d/step/1/paste-image", recordID),
+			strings.NewReader(jsonBody))
+		req.Header.Set("Content-Type", "application/json")
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", strconv.Itoa(recordID))
+		rctx.URLParams.Add("tid", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.APIRecordPasteResultImage(rec, req)
+		return rec
+	}
+
+	t.Run("happy_path", func(t *testing.T) {
+		rec := postPasteImage(fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			OK       bool   `json:"ok"`
+			Filename string `json:"filename"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || !resp.OK {
+			t.Fatalf("response = %s, want ok:true", rec.Body.String())
+		}
+		re := regexp.MustCompile(fmt.Sprintf(`^SN%s_rID%d_tID1_\d{8}_\d{6}\.png$`, serial, recordID))
+		if !re.MatchString(resp.Filename) {
+			t.Errorf("filename = %q, want to match %s", resp.Filename, re.String())
+		}
+		gotBytes, err := os.ReadFile(filepath.Join(h.cfg.ImageRoot, sanitizeFileNamePart(partNumber), resp.Filename))
+		if err != nil {
+			t.Fatalf("read written image: %v", err)
+		}
+		wantBytes, _ := base64.StdEncoding.DecodeString(strings.SplitN(tinyPNG, ",", 2)[1])
+		if string(gotBytes) != string(wantBytes) {
+			t.Errorf("written image bytes mismatch")
+		}
+	})
+
+	t.Run("malformed_image_data", func(t *testing.T) {
+		rec := postPasteImage(`{"image_data":"not-a-data-url"}`)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// csvRowsContain reports whether rows contains a row exactly equal to want.
+func csvRowsContain(rows [][]string, want []string) bool {
+	for _, row := range rows {
+		if len(row) != len(want) {
+			continue
+		}
+		match := true
+		for i := range row {
+			if row[i] != want[i] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
+// TestIntegration_QuerySpendBySupplier verifies querySpendBySupplier's
+// aggregation and descending sort against pinned seed po_line/purchase_order
+// rows (#815).
+func TestIntegration_QuerySpendBySupplier(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rows, err := h.querySpendBySupplier(context.Background(), reportDateRange{})
+	if err != nil {
+		t.Fatalf("querySpendBySupplier: %v", err)
+	}
+	byName := map[string]float64{}
+	var order []string
+	for _, row := range rows {
+		byName[row.SupplierName] = row.TotalSpend
+		order = append(order, row.SupplierName)
+	}
+	assertFloatEqual(t, "Acme Fasteners total spend", byName["Acme Fasteners"], 282.50)
+	assertFloatEqual(t, "Precision Machining Co total spend", byName["Precision Machining Co"], 108.00)
+
+	acmeIdx, precisionIdx := -1, -1
+	for i, name := range order {
+		if name == "Acme Fasteners" {
+			acmeIdx = i
+		}
+		if name == "Precision Machining Co" {
+			precisionIdx = i
+		}
+	}
+	if acmeIdx == -1 || precisionIdx == -1 || acmeIdx > precisionIdx {
+		t.Errorf("expected Acme Fasteners before Precision Machining Co in descending spend order, got %v", order)
+	}
+}
+
+// TestIntegration_QuerySpendByPart verifies querySpendByPart's aggregation
+// and descending sort against pinned seed po_line rows (#815).
+func TestIntegration_QuerySpendByPart(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rows, err := h.querySpendByPart(context.Background(), reportDateRange{})
+	if err != nil {
+		t.Fatalf("querySpendByPart: %v", err)
+	}
+	byPart := map[string]float64{}
+	var order []string
+	for _, row := range rows {
+		byPart[row.PartNumber] = row.TotalSpend
+		order = append(order, row.PartNumber)
+	}
+	assertFloatEqual(t, "RAW-1002 total spend", byPart["RAW-1002"], 205.00)
+	assertFloatEqual(t, "RAW-1001 total spend", byPart["RAW-1001"], 100.00)
+	assertFloatEqual(t, "BUY-1001 total spend", byPart["BUY-1001"], 85.50)
+
+	want := []string{"RAW-1002", "RAW-1001", "BUY-1001"}
+	idx := map[string]int{}
+	for i, name := range order {
+		idx[name] = i
+	}
+	for i := 1; i < len(want); i++ {
+		if idx[want[i-1]] >= idx[want[i]] {
+			t.Errorf("expected %v in descending spend order, got %v", want, order)
+			break
+		}
+	}
+}
+
+// TestIntegration_QueryOnTimeDelivery verifies queryOnTimeDelivery's on-time
+// percentage and avg-days-late math against the one seed po_line row
+// (5504, part of PO 5003/Acme Fasteners) that has lead_time_days,
+// date_received, and its PO's date_ordered all set (#815). Requires ArxDev
+// reseeded with the lead_time_days=50 addition to po_line 5504 in
+// SQL/seed_test_data.sql — until reseeded this test fails against the old
+// (lead_time_days IS NULL) row.
+func TestIntegration_QueryOnTimeDelivery(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rows, err := h.queryOnTimeDelivery(context.Background(), reportDateRange{})
+	if err != nil {
+		t.Fatalf("queryOnTimeDelivery: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1 (rows=%+v)", len(rows), rows)
+	}
+	row := rows[0]
+	if row.SupplierName != "Acme Fasteners" {
+		t.Errorf("SupplierName = %q, want %q", row.SupplierName, "Acme Fasteners")
+	}
+	if row.TotalLines != 1 {
+		t.Errorf("TotalLines = %d, want 1", row.TotalLines)
+	}
+	if row.OnTimeLines != 1 {
+		t.Errorf("OnTimeLines = %d, want 1", row.OnTimeLines)
+	}
+	assertFloatEqual(t, "OnTimePct", row.OnTimePct, 100.0)
+	assertFloatEqual(t, "AvgDaysLate", row.AvgDaysLate, -6.0)
+}
+
+// TestIntegration_QueryPOCycleTime verifies queryPOCycleTime's LEAD-paired
+// stage-duration math against the one seed purchase_order_history pair
+// (5801 draft -> 5804 open, PO 5002) that has both an entry and an exit (#815).
+func TestIntegration_QueryPOCycleTime(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rows, err := h.queryPOCycleTime(context.Background(), reportDateRange{})
+	if err != nil {
+		t.Fatalf("queryPOCycleTime: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1 (rows=%+v)", len(rows), rows)
+	}
+	row := rows[0]
+	if row.Stage != "draft" {
+		t.Errorf("Stage = %q, want %q", row.Stage, "draft")
+	}
+	if row.POCount != 1 {
+		t.Errorf("POCount = %d, want 1", row.POCount)
+	}
+	assertFloatEqual(t, "AvgDays", row.AvgDays, 3.0)
+}
+
+// TestIntegration_QueryDataQualityParts verifies the three data-quality gap
+// queries against pinned seed part rows (#815).
+func TestIntegration_QueryDataQualityParts(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	containsPN := func(rows []dataQualityPartRow, pn string) bool {
+		for _, r := range rows {
+			if r.PartNumber == pn {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("no_attachments", func(t *testing.T) {
+		rows, err := h.queryPartsNoAttachments(ctx)
+		if err != nil {
+			t.Fatalf("queryPartsNoAttachments: %v", err)
+		}
+		for _, want := range []string{"BUY-1002", "BUY-1003", "ASM-1001", "ASM-1002", "ASM-1003"} {
+			if !containsPN(rows, want) {
+				t.Errorf("expected %s present, rows=%+v", want, rows)
+			}
+		}
+		for _, notWant := range []string{"BUY-1001", "BUY-1004"} {
+			if containsPN(rows, notWant) {
+				t.Errorf("expected %s absent, rows=%+v", notWant, rows)
+			}
+		}
+	})
+
+	t.Run("missing_default_supplier", func(t *testing.T) {
+		rows, err := h.queryPartsMissingDefaultSupplier(ctx)
+		if err != nil {
+			t.Fatalf("queryPartsMissingDefaultSupplier: %v", err)
+		}
+		if len(rows) != 1 || rows[0].PartNumber != "BUY-1003" {
+			t.Errorf("rows = %+v, want exactly one row for BUY-1003", rows)
+		}
+	})
+
+	t.Run("stale_rollup", func(t *testing.T) {
+		rows, err := h.queryPartsStaleRollup(ctx)
+		if err != nil {
+			t.Fatalf("queryPartsStaleRollup: %v", err)
+		}
+		if !containsPN(rows, "RAW-1002") {
+			t.Errorf("expected RAW-1002 present, rows=%+v", rows)
+		}
+		for _, notWant := range []string{"ASM-1001", "ASM-1002"} {
+			if containsPN(rows, notWant) {
+				t.Errorf("expected %s absent (has a rollup), rows=%+v", notWant, rows)
+			}
+		}
+	})
+}
+
+// TestIntegration_ReportsHandlers_EndToEnd exercises ReportsSpend, ReportsOnTime,
+// ReportsCycleTime, and ReportsDataQuality's page-handler assembly (query +
+// template render), asserting a clean 200 with no renderError output (#815).
+func TestIntegration_ReportsHandlers_EndToEnd(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	cases := []struct {
+		name   string
+		fn     http.HandlerFunc
+		target string
+	}{
+		{"ReportsSpend", h.ReportsSpend, "/reports/spend?range=custom"},
+		{"ReportsOnTime", h.ReportsOnTime, "/reports/on-time?range=custom"},
+		{"ReportsCycleTime", h.ReportsCycleTime, "/reports/cycle-time?range=custom"},
+		{"ReportsDataQuality", h.ReportsDataQuality, "/reports/data-quality"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, c.target, nil)
+			rec := httptest.NewRecorder()
+			c.fn(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), "Error loading") {
+				t.Errorf("response body contains an error: %s", rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestIntegration_ReportsSpendBySupplierExportCSV verifies the spend-by-supplier
+// CSV export's header and a pinned data row (#815).
+func TestIntegration_ReportsSpendBySupplierExportCSV(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	req := httptest.NewRequest(http.MethodGet, "/reports/spend/export-suppliers.csv?range=custom", nil)
+	rec := httptest.NewRecorder()
+	h.ReportsSpendBySupplierExportCSV(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV: %v", err)
+	}
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Supplier", "Total Spend"}) {
+		t.Fatalf("header row = %v, want [Supplier Total Spend]", records)
+	}
+	if !csvRowsContain(records[1:], []string{"Acme Fasteners", "282.50"}) {
+		t.Errorf("rows = %v, want to contain [Acme Fasteners 282.50]", records[1:])
+	}
+}
+
+// TestIntegration_ReportsSpendByPartExportCSV verifies the spend-by-part CSV
+// export's header and a pinned data row (#815).
+func TestIntegration_ReportsSpendByPartExportCSV(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	req := httptest.NewRequest(http.MethodGet, "/reports/spend/export-parts.csv?range=custom", nil)
+	rec := httptest.NewRecorder()
+	h.ReportsSpendByPartExportCSV(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV: %v", err)
+	}
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Total Spend"}) {
+		t.Fatalf("header row = %v, want [Part Number Title Total Spend]", records)
+	}
+	if !csvRowsContain(records[1:], []string{"RAW-1002", "Stainless Steel Bar Stock", "205.00"}) {
+		t.Errorf("rows = %v, want to contain RAW-1002/Stainless Steel Bar Stock/205.00", records[1:])
+	}
+}
+
+// TestIntegration_ReportsOnTimeExportCSV verifies the on-time delivery CSV
+// export's header and pinned data row (#815). Requires the same ArxDev reseed
+// as TestIntegration_QueryOnTimeDelivery.
+func TestIntegration_ReportsOnTimeExportCSV(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	req := httptest.NewRequest(http.MethodGet, "/reports/on-time/export.csv?range=custom", nil)
+	rec := httptest.NewRecorder()
+	h.ReportsOnTimeExportCSV(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV: %v", err)
+	}
+	wantHeader := []string{"Supplier", "Total Lines", "On-Time Lines", "On-Time %", "Avg Days Late"}
+	if len(records) == 0 || !csvRowsContain(records[:1], wantHeader) {
+		t.Fatalf("header row = %v, want %v", records, wantHeader)
+	}
+	if !csvRowsContain(records[1:], []string{"Acme Fasteners", "1", "1", "100.0", "-6.0"}) {
+		t.Errorf("rows = %v, want to contain [Acme Fasteners 1 1 100.0 -6.0]", records[1:])
+	}
+}
+
+// TestIntegration_ReportsCycleTimeExportCSV verifies the PO cycle time CSV
+// export's header and pinned data row (#815).
+func TestIntegration_ReportsCycleTimeExportCSV(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	req := httptest.NewRequest(http.MethodGet, "/reports/cycle-time/export.csv?range=custom", nil)
+	rec := httptest.NewRecorder()
+	h.ReportsCycleTimeExportCSV(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV: %v", err)
+	}
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Stage", "PO Count", "Avg Days"}) {
+		t.Fatalf("header row = %v, want [Stage PO Count Avg Days]", records)
+	}
+	if !csvRowsContain(records[1:], []string{"draft", "1", "3.0"}) {
+		t.Errorf("rows = %v, want to contain [draft 1 3.0]", records[1:])
+	}
+}
+
+// TestIntegration_ReportsDataQualityNoAttachmentsExportCSV verifies the
+// missing-attachments CSV export's header and a pinned data row (#815).
+func TestIntegration_ReportsDataQualityNoAttachmentsExportCSV(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	req := httptest.NewRequest(http.MethodGet, "/reports/data-quality/export-no-attachments.csv", nil)
+	rec := httptest.NewRecorder()
+	h.ReportsDataQualityNoAttachmentsExportCSV(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV: %v", err)
+	}
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Category"}) {
+		t.Fatalf("header row = %v, want [Part Number Title Category]", records)
+	}
+	found := false
+	for _, row := range records[1:] {
+		if len(row) > 0 && row[0] == "BUY-1002" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("rows = %v, want a row starting with BUY-1002", records[1:])
+	}
+}
+
+// TestIntegration_ReportsDataQualityMissingSupplierExportCSV verifies the
+// missing-default-supplier CSV export's header and its single data row (#815).
+func TestIntegration_ReportsDataQualityMissingSupplierExportCSV(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	req := httptest.NewRequest(http.MethodGet, "/reports/data-quality/export-missing-supplier.csv", nil)
+	rec := httptest.NewRecorder()
+	h.ReportsDataQualityMissingSupplierExportCSV(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV: %v", err)
+	}
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Category"}) {
+		t.Fatalf("header row = %v, want [Part Number Title Category]", records)
+	}
+	dataRows := records[1:]
+	if len(dataRows) != 1 || len(dataRows[0]) == 0 || dataRows[0][0] != "BUY-1003" {
+		t.Errorf("data rows = %v, want exactly one row starting with BUY-1003", dataRows)
+	}
+}
+
+// TestIntegration_ReportsDataQualityStaleRollupExportCSV verifies the
+// no/stale-rollup CSV export's header and a pinned data row (#815).
+func TestIntegration_ReportsDataQualityStaleRollupExportCSV(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	req := httptest.NewRequest(http.MethodGet, "/reports/data-quality/export-stale-rollup.csv", nil)
+	rec := httptest.NewRecorder()
+	h.ReportsDataQualityStaleRollupExportCSV(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV: %v", err)
+	}
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Category"}) {
+		t.Fatalf("header row = %v, want [Part Number Title Category]", records)
+	}
+	found := false
+	for _, row := range records[1:] {
+		if len(row) > 0 && row[0] == "RAW-1002" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("rows = %v, want a row starting with RAW-1002", records[1:])
 	}
 }
