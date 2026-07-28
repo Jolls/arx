@@ -3720,10 +3720,19 @@ func TestIntegration_FormDef_RendersStepsAndArchivedToggle(t *testing.T) {
 		t.Fatalf("FormDef(6001): status %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Show archived", "Insulation Resistance", "Retest Voltage Check", "Output Voltage", "Current Draw"} {
+	for _, want := range []string{"Show archived", "Insulation Resistance", "Output Voltage", "Current Draw"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("FormDef(6001): body missing %q", want)
 		}
+	}
+	// Step 6108's hide_formula is "{record.type}!=Re-Test"; with no record context the
+	// {record.type} token stays unresolved, so the "!=" comparison (unresolved-token !=
+	// "Re-Test") evaluates true and the step is hidden — unlike an "=" formula, where an
+	// unresolved token can never match and the step stays shown. This asymmetry is
+	// existing evaluateHide behavior (see TestEvaluateHide), not something this test
+	// should try to change.
+	if strings.Contains(body, "Retest Voltage Check") {
+		t.Errorf("FormDef(6001): body unexpectedly contains \"Retest Voltage Check\" (step 6108 should be hidden — unresolved \"!=\" token)")
 	}
 }
 
@@ -3768,9 +3777,20 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	}()
 
 	// Raw UPDATE triggers trg_form_row_history, snapshotting the OLD spec_max='100'.
-	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+	// trg_form_row_history requires changed_by (NOT NULL), populated from CONTEXT_INFO —
+	// a tx + setAuditUser is required, same as the production SaveFormDef/ArchiveStep path.
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	h.setAuditUser(ctx, tx, "itest")
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
 		`UPDATE %s SET spec_max='150' WHERE id=@p1`, h.cfg.StepsTable()), testID); err != nil {
+		tx.Rollback()
 		t.Fatalf("update form_row: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit form_row update: %v", err)
 	}
 
 	today := time.Now().Format("2006-01-02")
@@ -3889,9 +3909,20 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 		t.Fatalf("seed stepB: %v", err)
 	}
 	// Sentinel updated_at for stepB — must survive untouched (proves the skip branch).
-	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+	// trg_form_row_history requires changed_by (NOT NULL) from CONTEXT_INFO — set it via
+	// a tx, same as the production SaveFormDef/ArchiveStep path.
+	sentinelTx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	h.setAuditUser(ctx, sentinelTx, "itest")
+	if _, err := sentinelTx.ExecContext(ctx, fmt.Sprintf(
 		`UPDATE %s SET updated_at='2020-01-01T00:00:00' WHERE id=@p1`, h.cfg.StepsTable()), stepBID); err != nil {
+		sentinelTx.Rollback()
 		t.Fatalf("set stepB sentinel updated_at: %v", err)
+	}
+	if err := sentinelTx.Commit(); err != nil {
+		t.Fatalf("commit stepB sentinel update: %v", err)
 	}
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
 		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()),
@@ -3917,7 +3948,7 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 		"new_row[0][parameter]":    {"New Step"},
 	}
 	rec := httptest.NewRecorder()
-	h.SaveFormDef(rec, withID(postForm(fmt.Sprintf("/forms/%d/def/edit", formID), vals), formID))
+	h.SaveFormDef(rec, adminCtx(withID(postForm(fmt.Sprintf("/forms/%d/def/edit", formID), vals), formID)))
 	assertStatus(t, "SaveFormDef", rec, http.StatusSeeOther)
 
 	var gotParamA string
@@ -3972,9 +4003,9 @@ func TestIntegration_ArchiveStep_TogglesArchivedFlag(t *testing.T) {
 	defer cleanupThrowawayForm(ctx, h, partID, formID, testID)
 
 	rec := httptest.NewRecorder()
-	h.ArchiveStep(rec, withIDAndTestID(
+	h.ArchiveStep(rec, adminCtx(withIDAndTestID(
 		postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {"1"}}),
-		formID, testID))
+		formID, testID)))
 	assertStatus(t, "ArchiveStep (archive)", rec, http.StatusSeeOther)
 	if got := rec.Header().Get("Location"); got != fmt.Sprintf("/forms/%d/def/edit", formID) {
 		t.Errorf("Location = %q, want %q", got, fmt.Sprintf("/forms/%d/def/edit", formID))
@@ -3991,9 +4022,9 @@ func TestIntegration_ArchiveStep_TogglesArchivedFlag(t *testing.T) {
 	}
 
 	rec2 := httptest.NewRecorder()
-	h.ArchiveStep(rec2, withIDAndTestID(
+	h.ArchiveStep(rec2, adminCtx(withIDAndTestID(
 		postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {"0"}}),
-		formID, testID))
+		formID, testID)))
 	assertStatus(t, "ArchiveStep (unarchive)", rec2, http.StatusSeeOther)
 
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
@@ -4029,9 +4060,9 @@ func TestIntegration_ArchiveStep_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 	}
 
 	rec := httptest.NewRecorder()
-	h.ArchiveStep(rec, withIDAndTestID(
+	h.ArchiveStep(rec, adminCtx(withIDAndTestID(
 		postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {"1"}}),
-		formID, testID))
+		formID, testID)))
 	assertStatus(t, "ArchiveStep", rec, http.StatusSeeOther)
 
 	var afterOrder string
@@ -4085,7 +4116,7 @@ func TestIntegration_SaveFormDef_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 		fmt.Sprintf("parameter_%d", testID):           {"Updated Parameter"},
 	}
 	rec := httptest.NewRecorder()
-	h.SaveFormDef(rec, withID(postForm(fmt.Sprintf("/forms/%d/def/edit", formID), vals), formID))
+	h.SaveFormDef(rec, adminCtx(withID(postForm(fmt.Sprintf("/forms/%d/def/edit", formID), vals), formID)))
 	assertStatus(t, "SaveFormDef", rec, http.StatusSeeOther)
 
 	var gotParam string
