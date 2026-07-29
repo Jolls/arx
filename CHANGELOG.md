@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.10] - 2026-07-29
+### Fixed
+- Postgres reference DDL (`SQL/postgres/`) had fallen behind `SQL/`: `users.sql` was missing the `timezone` column from #847, and `app_config.sql` seeded a stale `schema_version` ('6' instead of '8') on both dialects
+
 ## [0.7.9] - 2026-07-29
 ### Added
 - Test coverage for `arxlib/folderpick` (context cancellation/timeout paths) ([#822](https://github.com/Jolls/arx-legacy/issues/822))
