@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"time"
+	_ "time/tzdata" // embed the IANA tz database: time.LoadLocation must work on machines with no Go toolchain (#847)
 
 	"github.com/getlantern/systray"
 	"github.com/go-chi/chi/v5"
@@ -165,6 +166,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/settings/preferences", h.SettingsPreferencesSave)
 		r.Post("/settings/accent-color", h.SettingsAccentColorSave)
 		r.Post("/settings/default-route", h.SettingsDefaultRouteSave)
+		r.Post("/settings/timezone", h.SettingsTimezoneSave)
 
 		// Data backup
 		r.Get("/settings/backup", h.SettingsBackup)

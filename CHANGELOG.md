@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.8] - 2026-07-29
+### Added
+- Per-user timezone preference (Settings → My Preferences), used to convert UTC audit timestamps into the user's local calendar day ([#847](https://github.com/Jolls/arx-legacy/issues/847))
+
+### Fixed
+- Form-definition history bucketed audit timestamps by UTC calendar day, so edits made in the evening local time were attributed to the next day and the pre-change snapshot silently fell back to current values; timestamps are now bucketed in each user's timezone ([#847](https://github.com/Jolls/arx-legacy/issues/847))
+
 ## [0.7.7] - 2026-07-28
 ### Added
 - Test coverage for `pdfthumb.go`'s PDF render/pool/PNG-encode path (`renderPDFFirstPage`/`getPdfiumPool`/`encodePNG`) ([#818](https://github.com/Jolls/arx-legacy/issues/818))

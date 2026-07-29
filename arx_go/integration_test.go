@@ -2458,6 +2458,14 @@ func adminCtx(req *http.Request) *http.Request {
 	return req.WithContext(context.WithValue(req.Context(), ctxUserKey, &User{ID: 8001, Username: "admin", IsAdmin: true}))
 }
 
+// userCtxTZ returns req with a user carrying an explicit timezone on the context,
+// so timezone-sensitive handlers (#847) are deterministic regardless of where the
+// test process or the DB server thinks "today" is.
+func userCtxTZ(req *http.Request, tz string) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), ctxUserKey,
+		&User{ID: 8001, Username: "admin", IsAdmin: true, Timezone: tz}))
+}
+
 // withUserID injects a chi route context carrying the given "userID" URL
 // parameter — the SettingsUsers* handlers read chi.URLParam(r, "userID"),
 // unlike withID's "id" param used elsewhere in this file.
@@ -3829,10 +3837,20 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 		t.Fatalf("commit form_row update: %v", err)
 	}
 
-	today := time.Now().Format("2006-01-02")
+	// The trigger stamps changed_at with GETDATE() = UTC on Azure SQL. Ask for the day
+	// that UTC "now" falls on *in the user's zone*, which is what a real user's browser
+	// would request, and pin that zone on the request context (#847). Deriving the
+	// expected day from time.Now().UTC() rather than the test host's local clock keeps
+	// this deterministic no matter where the test runs.
+	const testTZ = "America/Los_Angeles"
+	loc, err := time.LoadLocation(testTZ)
+	if err != nil {
+		t.Fatalf("LoadLocation(%s): %v", testTZ, err)
+	}
+	today := time.Now().UTC().In(loc).Format("2006-01-02")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/forms/%d/def/history?at=%s", formID, today), nil)
-	h.FormDefHistory(rec, withID(req, formID))
+	h.FormDefHistory(rec, userCtxTZ(withID(req, formID), testTZ))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("FormDefHistory(at=today): status %d, want 200", rec.Code)
 	}
@@ -3860,11 +3878,11 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 		t.Errorf("Steps[0].SpecMax = %q, want %q (pre-change value)", resp.Steps[0].SpecMax, "100")
 	}
 
-	// No history that day (yesterday) — falls back to the CURRENT form_row value.
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	// No history that day (yesterday, in the same zone) — falls back to the CURRENT form_row value.
+	yesterday := time.Now().UTC().In(loc).AddDate(0, 0, -1).Format("2006-01-02")
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/forms/%d/def/history?at=%s", formID, yesterday), nil)
-	h.FormDefHistory(rec2, withID(req2, formID))
+	h.FormDefHistory(rec2, userCtxTZ(withID(req2, formID), testTZ))
 	var resp2 struct {
 		Steps []struct {
 			ID      int    `json:"id"`
