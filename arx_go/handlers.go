@@ -280,6 +280,58 @@ func (h *Handler) accentThemeClass(r *http.Request) string {
 	return "theme-" + u.AccentColor
 }
 
+// defaultTimezone is the fallback IANA zone when a user is absent or carries an
+// empty/unrecognized value (issue #847). Matches the migration's backfill.
+const defaultTimezone = "America/Los_Angeles"
+
+// timezoneOption is one preset timezone offered in Settings (#847).
+type timezoneOption struct {
+	Key   string // stored IANA identifier, e.g. "America/Los_Angeles"
+	Label string // shown in the UI
+}
+
+// commonTimezones are the timezone choices offered in Settings, in display
+// order. Deliberately a short curated list (US shop floors plus UTC), not the
+// full IANA database — a closed list keeps validation trivial and the dropdown
+// usable. Add entries here as needed.
+var commonTimezones = []timezoneOption{
+	{"America/Los_Angeles", "Pacific (Los Angeles)"},
+	{"America/Denver", "Mountain (Denver)"},
+	{"America/Phoenix", "Arizona (Phoenix, no DST)"},
+	{"America/Chicago", "Central (Chicago)"},
+	{"America/New_York", "Eastern (New York)"},
+	{"America/Anchorage", "Alaska (Anchorage)"},
+	{"Pacific/Honolulu", "Hawaii (Honolulu)"},
+	{"UTC", "UTC"},
+}
+
+func isValidTimezone(key string) bool {
+	for _, t := range commonTimezones {
+		if t.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// userLocation returns the *time.Location for the logged-in user's timezone
+// preference (issue #847), falling back to defaultTimezone when logged out, unset,
+// or unrecognized — and to time.UTC only if the tz database itself can't be loaded
+// (should not happen: main.go blank-imports time/tzdata so the zone data is
+// compiled into the binary).
+func (h *Handler) userLocation(r *http.Request) *time.Location {
+	tz := defaultTimezone
+	if u := h.currentUser(r); u != nil && isValidTimezone(u.Timezone) {
+		tz = u.Timezone
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		log.Printf("warning: could not load timezone %q: %v", tz, err)
+		return time.UTC
+	}
+	return loc
+}
+
 // appConfigGet reads a single key from app_config.
 func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) {
 	if h.database() == nil {

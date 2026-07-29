@@ -475,31 +475,59 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		step.SpecMax = substituteRefs(step.SpecMax, nil, stepsMap, nil, &form)
 	}
 
-	// Load history timestamps for timeline dots.
+	// Load history timestamps for timeline dots. changed_at is stamped by
+	// trg_form_row_history with GETDATE() = UTC on Azure SQL, so the calendar-day
+	// bucketing happens in Go in the viewing user's timezone (#847) — SQL-side
+	// AT TIME ZONE would need Windows zone names, not the IANA names we store.
 	type HistoryPoint struct {
 		At      time.Time
 		Count   int
 		PctLeft float64 // position along timeline bar (5â€"95%)
 	}
+	loc := h.userLocation(r)
 	hRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT CAST(changed_at AS DATE) AS day, COUNT(DISTINCT form_row_id) AS cnt
+		SELECT changed_at, form_row_id
 		FROM %s
 		WHERE form_row_id IN (SELECT id FROM %s WHERE form_id = @p1)
-		GROUP BY CAST(changed_at AS DATE) ORDER BY day ASC`,
+		ORDER BY changed_at ASC`,
 		h.cfg.FormRowHistoryTable(), h.cfg.StepsTable()), formID)
 	var histPoints []HistoryPoint
 	if err == nil {
 		defer hRows.Close()
+		// Rows arrive ORDER BY changed_at ASC, so same-day rows (keyed by local date in
+		// loc) are contiguous — track only the current day's bucket instead of a map
+		// keyed by day string.
+		type dayBucket struct {
+			day  time.Time
+			key  string
+			rows map[int]bool
+		}
+		var buckets []*dayBucket
+		var current *dayBucket
 		for hRows.Next() {
-			var hp HistoryPoint
-			if err := hRows.Scan(&hp.At, &hp.Count); err != nil {
+			var changedAt time.Time
+			var rowID int
+			if err := hRows.Scan(&changedAt, &rowID); err != nil {
 				log.Printf("FormDef: history scan error: %v", err)
 				break
 			}
-			histPoints = append(histPoints, hp)
+			local := changedAt.In(loc)
+			key := local.Format("2006-01-02")
+			if current == nil || current.key != key {
+				day, err := time.ParseInLocation("2006-01-02", key, loc)
+				if err != nil {
+					continue
+				}
+				current = &dayBucket{day: day, key: key, rows: map[int]bool{}}
+				buckets = append(buckets, current)
+			}
+			current.rows[rowID] = true
 		}
 		if err := hRows.Err(); err != nil {
 			log.Printf("FormDef: history rows error: %v", err)
+		}
+		for _, b := range buckets {
+			histPoints = append(histPoints, HistoryPoint{At: b.day, Count: len(b.rows)})
 		}
 	}
 	// Position dots: earliest â†' 5%, now â†' 95%.
@@ -537,12 +565,18 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
+	// `at` is a calendar day in the viewing user's timezone (#847); changed_at is UTC
+	// (GETDATE() on Azure SQL), so resolve the day to a half-open UTC range in Go rather
+	// than CAST(changed_at AS DATE) — SQL Server's AT TIME ZONE wants Windows zone names,
+	// not the IANA names we store.
 	atStr := r.URL.Query().Get("at")
-	at, err := time.Parse("2006-01-02", atStr)
+	loc := h.userLocation(r)
+	dayStart, err := time.ParseInLocation("2006-01-02", atStr, loc)
 	if err != nil {
 		http.Error(w, "bad at param", http.StatusBadRequest)
 		return
 	}
+	dayEnd := dayStart.AddDate(0, 0, 1)
 
 	type stepState struct {
 		ID            int    `json:"id"`
@@ -576,11 +610,11 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		    SELECT form_row_id, type, parameter, spec_nom, spec_min, spec_max,
 		           spec_units, pf_type, default_result, hide_formula
 		    FROM %s
-		    WHERE CAST(changed_at AS DATE) = CAST(@p2 AS DATE)
+		    WHERE changed_at >= @p2 AND changed_at < @p3
 		) h ON h.form_row_id = t.id
 		WHERE t.form_id = @p1`,
 		h.cfg.StepsTable(), h.cfg.FormRowHistoryTable()),
-		formID, at)
+		formID, dayStart.UTC(), dayEnd.UTC())
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return

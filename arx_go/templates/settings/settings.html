@@ -714,6 +714,26 @@
             </div>
         </div>
     </form>
+
+    <form method="post" action="/settings/timezone">
+        <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+        <div class="detail-section mt-4">
+            <h3>Timezone</h3>
+            <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
+                Your local timezone, for you only. Audit timestamps are recorded in UTC; this
+                controls which calendar day they show up on — for example in the form
+                definition history timeline.
+            </p>
+            <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                <select name="timezone" class="form-select" style="width:auto;"
+                        onchange="this.form.submit()">
+                    {{range .Timezones}}
+                    <option value="{{.Key}}" {{if eq $.Timezone .Key}}selected{{end}}>{{.Label}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+    </form>
     <form method="post" action="/settings/default-route">
         <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
         <div class="detail-section mt-4">

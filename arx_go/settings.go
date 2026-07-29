@@ -150,6 +150,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var poContactID, poReceiverID int
 	accentColor := "blue"
 	landingRoutePref := "/"
+	timezonePref := defaultTimezone
 	if h.database() != nil {
 		if u := h.currentUser(r); u != nil {
 			poContactID = u.DefaultPOContactID
@@ -166,6 +167,9 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 				accentColor = u.AccentColor
 			}
 			landingRoutePref = landingRoute(u)
+			if isValidTimezone(u.Timezone) {
+				timezonePref = u.Timezone
+			}
 		}
 		var err error
 		users, err = h.listUsers(r.Context())
@@ -209,6 +213,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"LandingRoute":          landingRoutePref,
 		"LandingRouteIsCustom":  !isPresetLanding(landingRoutePref),
 		"LandingPresets":        landingPresets,
+		"Timezone":              timezonePref,
+		"Timezones":             commonTimezones,
 		"PartCategories":        h.partCategories,
 		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
 		"PartNumberingPreview":  partNumberingPreview,
@@ -273,6 +279,31 @@ func (h *Handler) SettingsAccentColorSave(w http.ResponseWriter, r *http.Request
 		`UPDATE %s SET accent_color = @p1 WHERE id = @p2`,
 		h.cfg.UsersTable()), color, u.ID); err != nil {
 		log.Printf("warning: could not save accent_color: %v", err)
+	}
+	h.invalidateUserCache(u.ID)
+	http.Redirect(w, r, "/settings#preferences", http.StatusFound)
+}
+
+// SettingsTimezoneSave persists the logged-in user's timezone preference
+// (Settings → My Preferences tab, issue #847). The zone determines which local
+// calendar day a UTC audit timestamp falls on in the form-definition history
+// view. It has its own endpoint so this partial form can't blank the fields the
+// main settings form writes.
+func (h *Handler) SettingsTimezoneSave(w http.ResponseWriter, r *http.Request) {
+	u := h.currentUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	tz := r.FormValue("timezone")
+	if !isValidTimezone(tz) {
+		http.Redirect(w, r, "/settings#preferences", http.StatusFound)
+		return
+	}
+	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET timezone = @p1 WHERE id = @p2`,
+		h.cfg.UsersTable()), tz, u.ID); err != nil {
+		log.Printf("warning: could not save timezone: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
 	http.Redirect(w, r, "/settings#preferences", http.StatusFound)

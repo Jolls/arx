@@ -13,6 +13,7 @@ CREATE TABLE dbo.users (
     default_po_receiver_id INT   NULL,               -- per-user default PO receiver company (issue #463)
     accent_color  VARCHAR(20)   NULL,                -- per-user UI accent theme key, e.g. 'teal' (issue #537)
     default_route VARCHAR(255)  NULL,                -- per-user landing page after login: a same-origin relative path ('/', '/pos', or a custom filtered route like '/?f0=as'); NULL = '/' (issue #282)
+    timezone      VARCHAR(64)   NOT NULL DEFAULT 'America/Los_Angeles',  -- per-user IANA timezone for calendar-day bucketing of UTC audit timestamps (issue #847)
     created_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     updated_at    DATETIME      NOT NULL DEFAULT GETDATE(),
     CONSTRAINT UQ_users_username UNIQUE (username)

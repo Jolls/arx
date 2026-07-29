@@ -38,6 +38,11 @@ type User struct {
 	// Per-user post-login landing page (issue #282); a same-origin relative path
 	// (e.g. "/", "/pos", "/?f0=as"). "" = unset, falls back to "/".
 	DefaultRoute string
+	// Per-user IANA timezone (issue #847), e.g. "America/Los_Angeles"; used to
+	// bucket UTC audit timestamps into the user's local calendar day. NOT NULL in
+	// the DB with a default, but "" (or an unknown zone) falls back to
+	// defaultTimezone.
+	Timezone string
 }
 
 // --- DB helpers ---
@@ -47,9 +52,9 @@ func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var defContact, defReceiver sql.NullInt64
 	var accentColor, defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, can_approve_po, can_approve_records, is_admin, default_po_contact_id, default_po_receiver_id, accent_color, default_route FROM %s WHERE id = @p1 AND is_active = %s`,
+		`SELECT id, username, display_name, can_approve_po, can_approve_records, is_admin, default_po_contact_id, default_po_receiver_id, accent_color, default_route, timezone FROM %s WHERE id = @p1 AND is_active = %s`,
 		h.cfg.UsersTable(), h.dia().BoolLiteral(true)), id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &u.IsAdmin, &defContact, &defReceiver, &accentColor, &defaultRoute)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &u.IsAdmin, &defContact, &defReceiver, &accentColor, &defaultRoute, &u.Timezone)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
