@@ -15,6 +15,7 @@ CREATE TABLE users (
     default_po_receiver_id INTEGER NULL,               -- per-user default PO receiver company (#463).
     accent_color  VARCHAR(20)  NULL,                   -- per-user UI accent theme key (#537).
     default_route VARCHAR(255) NULL,                   -- per-user landing page after login (#282).
+    timezone      VARCHAR(64) NOT NULL DEFAULT 'America/Los_Angeles',  -- per-user IANA timezone for calendar-day bucketing of UTC audit timestamps (#847).
     created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT UQ_users_username UNIQUE (username)
