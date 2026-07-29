@@ -1818,9 +1818,11 @@ func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildA
 // part's test record refers to (#745, Q5). The (part_id, serial) pair uniquely
 // identifies the unit, so a retest — a second record with the same serial — re-links
 // the existing unit rather than minting a duplicate. Provenance (buildID, lotID; each
-// an int or nil, as returned by recordLinkageArgs) is set only on creation; at least
-// one must be non-nil or the INSERT would violate CK_unit_provenance, so the caller
-// must skip the upsert when both are nil. tx-accepting so a build-at-test-time save
+// an int or nil, as returned by recordLinkageArgs) is set only on creation; a
+// test-minted unit should always have at least one set (the Q5 invariant), so the
+// caller skips the upsert when both are nil — an app-level rule only, not a DB CHECK:
+// CK_unit_provenance was dropped by migrate_799_unit_source.sql (#799), since a
+// `manual` unit legitimately has neither. tx-accepting so a build-at-test-time save
 // (#747) can mint the unit in the same transaction as the build.
 func (h *Handler) upsertUnitForRecord(ctx context.Context, tx *txLogger, partID int, serial string, buildID, lotID interface{}) (int, error) {
 	var unitID int
@@ -1833,7 +1835,7 @@ func (h *Handler) upsertUnitForRecord(ctx context.Context, tx *txLogger, partID 
 		return 0, err
 	}
 	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
-		`part_id, serial_number, build_id, lot_id`, `@p1,@p2,@p3,@p4`, false)
+		`part_id, serial_number, build_id, lot_id, source`, `@p1,@p2,@p3,@p4,'test'`, false)
 	if err := tx.QueryRowContext(ctx, insertUnit, partID, serial, buildID, lotID).Scan(&unitID); err != nil {
 		return 0, err
 	}

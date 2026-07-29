@@ -1,0 +1,68 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
+        <li class="breadcrumb-item"><a href="/part/{{.Part.ID}}/units">{{.Part.PartNumber}} Units</a></li>
+        <li class="breadcrumb-item active">{{if .IsNew}}Add Unit{{else}}Edit Unit {{.Unit.SerialNumber}}{{end}}</li>
+    </ol>
+</nav>
+<div class="content">
+    {{template "part_tabs" .}}
+
+    <form method="post" action="{{if .IsNew}}/part/{{.Part.ID}}/units{{else}}/part/{{.Part.ID}}/units/{{.Unit.ID}}{{end}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+        <div class="detail-section">
+            <div class="detail-row">
+                <label for="serial_number" class="form-label">Serial # *</label>
+                {{if .SerialLocked}}
+                <input type="text" id="serial_number" class="form-control" value="{{.Unit.SerialNumber}}" readonly>
+                <div class="form-text">Locked — a completed test record already references this serial.</div>
+                {{else}}
+                <input type="text" id="serial_number" name="serial_number" class="form-control" required
+                       value="{{.Unit.SerialNumber}}">
+                {{end}}
+            </div>
+            {{if .IsNew}}
+            {{if .Lots}}
+            <div class="detail-row">
+                <label for="lot_id" class="form-label">Lot</label>
+                <select id="lot_id" name="lot_id" class="form-select">
+                    <option value="">— none —</option>
+                    {{range .Lots}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+                </select>
+            </div>
+            {{end}}
+            {{if .Builds}}
+            <div class="detail-row">
+                <label for="build_id" class="form-label">Build</label>
+                <select id="build_id" name="build_id" class="form-select">
+                    <option value="">— none —</option>
+                    {{range .Builds}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+                </select>
+            </div>
+            {{end}}
+            {{else}}
+            <div class="detail-row">
+                <div class="form-check">
+                    <input type="checkbox" id="is_active" name="is_active" class="form-check-input" value="1"
+                           {{if .Unit.IsActive}}checked{{end}}>
+                    <label for="is_active" class="form-check-label">Active (uncheck to mark scrapped)</label>
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                {{if .IsNew}}Add Unit{{else}}Save{{end}}
+            </button>
+            {{if .IsNew}}
+            <a href="/part/{{.Part.ID}}/units" class="btn btn-secondary">Cancel</a>
+            {{else}}
+            <a href="/part/{{.Part.ID}}/units/{{.Unit.ID}}" class="btn btn-secondary">Cancel</a>
+            {{end}}
+        </div>
+    </form>
+</div>
+{{end}}

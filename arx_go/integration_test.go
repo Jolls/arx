@@ -2350,6 +2350,161 @@ func TestIntegration_BuildAtTestTime(t *testing.T) {
 	}
 }
 
+// TestIntegration_ManualUnitCreate verifies #799: a unit can be created directly
+// (no test record) with both lot_id and build_id blank — the case the now-dropped
+// CK_unit_provenance CHECK used to reject — and reads back with source = 'manual'.
+func TestIntegration_ManualUnitCreate(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	ut := h.cfg.UnitTable()
+
+	const partID = 3005 // tracking_mode 'serial'
+	serial := smokeUniq("SN-MANUAL")
+
+	var unitID int
+	defer func() {
+		if unitID != 0 {
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, ut), unitID)
+		}
+	}()
+
+	req := withID(postForm(fmt.Sprintf("/part/%d/units", partID), url.Values{
+		"serial_number": {serial},
+	}), partID)
+	rec := httptest.NewRecorder()
+	h.UnitCreate(rec, req)
+	assertStatus(t, "UnitCreate(manual, no lot/build)", rec, http.StatusSeeOther)
+
+	var lotID, buildID sql.NullInt64
+	var source string
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT lot_id, build_id, source FROM %s WHERE part_id = @p1 AND serial_number = @p2`, ut),
+		partID, serial).Scan(&lotID, &buildID, &source); err != nil {
+		t.Fatalf("read created unit (ArxDev may need reseed): %v", err)
+	}
+	if lotID.Valid || buildID.Valid {
+		t.Errorf("manual unit lot_id/build_id should both be NULL, got lot=%v build=%v", lotID, buildID)
+	}
+	if source != "manual" {
+		t.Errorf("manual unit source = %q, want %q", source, "manual")
+	}
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id FROM %s WHERE part_id = @p1 AND serial_number = @p2`, ut), partID, serial).Scan(&unitID); err != nil {
+		t.Fatalf("read created unit id: %v", err)
+	}
+}
+
+// TestIntegration_ManualUnitDuplicateSerial verifies #799: creating a unit with a
+// serial that already exists for the part surfaces the friendly duplicate message
+// (the UQ_unit_serial string-match pattern), not a raw driver error.
+func TestIntegration_ManualUnitDuplicateSerial(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	const partID = 3005
+	const existingSerial = "SN-3005-001" // seed unit 8503's serial
+
+	req := withID(postForm(fmt.Sprintf("/part/%d/units", partID), url.Values{
+		"serial_number": {existingSerial},
+	}), partID)
+	rec := httptest.NewRecorder()
+	h.UnitCreate(rec, req)
+	if !strings.Contains(rec.Body.String(), "already exists") {
+		t.Errorf("UnitCreate(duplicate serial): expected friendly duplicate message, got body: %s", rec.Body.String())
+	}
+	if strings.Contains(strings.ToLower(rec.Body.String()), "uq_unit_serial") {
+		t.Errorf("UnitCreate(duplicate serial): leaked raw constraint name into response: %s", rec.Body.String())
+	}
+}
+
+// TestIntegration_ManualUnitTestedCountUnaffected verifies #799: PartBuild's
+// completeness numerator (TestedCount) is unchanged by adding a manual unit that
+// names an existing build — a back-filled unit was never tested, so it must not
+// inflate the "Tested" count. Build 8203 (part 3013, qty 1) already has seeded
+// unit 8501 (source 'test') as its sole tested unit, so TestedCount is 1 before
+// and after.
+func TestIntegration_ManualUnitTestedCountUnaffected(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	ut := h.cfg.UnitTable()
+
+	const partID = 3013
+	const buildID = 8203
+
+	buildPage := func() string {
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/part/%d/build", partID), nil)
+		rec := httptest.NewRecorder()
+		h.PartBuild(rec, withID(req, partID))
+		assertStatus(t, "PartBuild", rec, http.StatusOK)
+		return rec.Body.String()
+	}
+
+	before := buildPage()
+	if !strings.Contains(before, "1 / 1") {
+		t.Fatalf("PartBuild(3013) before: expected tested count \"1 / 1\" for build %d, got body: %s", buildID, before)
+	}
+
+	serial := smokeUniq("SN-MANUAL-BUILD")
+	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
+		`part_id, build_id, serial_number, source`, `@p1, @p2, @p3, 'manual'`, false)
+	var unitID int
+	if err := h.DB().QueryRowContext(ctx, insertUnit, partID, buildID, serial).Scan(&unitID); err != nil {
+		t.Fatalf("insert manual unit: %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, ut), unitID)
+
+	after := buildPage()
+	if strings.Contains(after, "2 / 1") {
+		t.Errorf("PartBuild(3013) after adding manual unit: tested count inflated to \"2 / 1\", got body: %s", after)
+	}
+	if !strings.Contains(after, "1 / 1") {
+		t.Errorf("PartBuild(3013) after adding manual unit: expected tested count still \"1 / 1\", got body: %s", after)
+	}
+}
+
+// TestIntegration_UnitSerialLocked verifies #799's unitSerialLocked: true once any
+// locked form_record points at the unit, false otherwise. Seed unit 8504 (manual,
+// #799) has no form_record pointing at it at all, covering the false case; a
+// temporary locked record is inserted against seed unit 8501 to cover the true
+// case without disturbing the existing (unlocked) seed records 7013/7014 that
+// also reference 8501.
+func TestIntegration_UnitSerialLocked(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	rt := h.cfg.RecordsTable()
+
+	const lockedUnit = 8501
+	const unlockedUnit = 8504 // manual unit, #799 — no records reference it
+
+	var recID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active, unit_id)
+		 OUTPUT INSERTED.id VALUES (6001, 3013, @p1, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 1, 1, @p2)`, rt),
+		smokeUniq("SN-LOCK"), lockedUnit).Scan(&recID); err != nil {
+		t.Fatalf("seed locked record (ArxDev may need reseed): %v", err)
+	}
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, rt), recID)
+
+	locked, err := h.unitSerialLocked(ctx, lockedUnit)
+	if err != nil {
+		t.Fatalf("unitSerialLocked(%d): %v", lockedUnit, err)
+	}
+	if !locked {
+		t.Errorf("unitSerialLocked(%d) = false, want true (locked record %d points at it)", lockedUnit, recID)
+	}
+
+	unlocked, err := h.unitSerialLocked(ctx, unlockedUnit)
+	if err != nil {
+		t.Fatalf("unitSerialLocked(%d): %v", unlockedUnit, err)
+	}
+	if unlocked {
+		t.Errorf("unitSerialLocked(%d) = true, want false (no record references it)", unlockedUnit)
+	}
+}
+
 // TestIntegration_UserAdminRequiresAdmin verifies the user-management endpoints
 // reject a non-admin session with 403 (issue #750 privilege-escalation gate) —
 // before this fix they were reachable by any logged-in user. Handlers are called
