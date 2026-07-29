@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.9] - 2026-07-29
+### Added
+- Test coverage for `arxlib/folderpick` (context cancellation/timeout paths) ([#822](https://github.com/Jolls/arx-legacy/issues/822))
+- Test coverage for `icon.go`'s ICO byte-encoding logic (`appIcon`/`fallbackIcon`/`buildICO`) ([#823](https://github.com/Jolls/arx-legacy/issues/823))
+- Correctness assertions (status + rendered content) to `TestIntegration_RouteRoundTrips`, previously profiling-only ([#824](https://github.com/Jolls/arx-legacy/issues/824))
+- Template render-data assertions covering one representative page per family (core tab, records, core print, shared standalone), beyond the existing parse-only checks ([#825](https://github.com/Jolls/arx-legacy/issues/825))
+
 ## [0.7.8] - 2026-07-29
 ### Added
 - Per-user timezone preference (Settings → My Preferences), used to convert UTC audit timestamps into the user's local calendar day ([#847](https://github.com/Jolls/arx-legacy/issues/847))
