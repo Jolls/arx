@@ -1332,29 +1332,30 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID, seedFormID = 3005, 3002, 1001, 5002, 6001
 
 	cases := []struct {
-		name   string
-		fn     http.HandlerFunc
-		target string
-		id     int // 0 = no {id} route param
+		name     string
+		fn       http.HandlerFunc
+		target   string
+		id       int    // 0 = no {id} route param
+		wantBody string // substring rec.Body must contain for a correct render
 	}{
-		{"parts list", h.PartsList, "/parts", 0},
+		{"parts list", h.PartsList, "/parts", 0, `id="parts-table"`},
 		// "part detail" passes the literal chi pattern "/part/{id}" as the request URL,
 		// so r.URL.Path never equals "/part/3005" and PartDetail's BOM-redirect guard
 		// is intentionally skipped. This profiles the full non-BOM render path — a real
 		// request for 3005 (which has a BOM) would redirect after 2 queries instead.
-		{"part detail", h.PartDetail, "/part/{id}", seedPartID},
-		{"part BOM", h.PartBOM, "/part/{id}/bom", seedPartID},
-		{"part build-cost", h.PartBuildCost, "/part/{id}/build-cost", seedPartID},
-		{"part price-history", h.PartPriceHistory, "/part/{id}/price-history", seedPriceHistoryPartID},
-		{"part orders", h.PartOrders, "/part/{id}/orders", seedPartID},
-		{"suppliers list", h.SuppliersList, "/suppliers", 0},
-		{"supplier detail", h.SupplierDetail, "/supplier/{id}", seedSupplierID},
-		{"PO list", h.POList, "/pos", 0},
-		{"PO detail", h.PODetail, "/po/{id}", seedPOID},
-		{"contacts list", h.ContactsList, "/contacts", 0},
-		{"records/forms list", h.FormsList, "/records", 0},
-		{"records yield summary", h.RecordsYieldSummary, "/forms/{id}/yield", seedFormID},
-		{"reports yield picker", h.ReportsYieldPicker, "/reports/yield", 0},
+		{"part detail", h.PartDetail, "/part/{id}", seedPartID, "ASM-1001"},
+		{"part BOM", h.PartBOM, "/part/{id}/bom", seedPartID, "ASM-1001"},
+		{"part build-cost", h.PartBuildCost, "/part/{id}/build-cost?qty=1", seedPartID, "ASM-1001"},
+		{"part price-history", h.PartPriceHistory, "/part/{id}/price-history", seedPriceHistoryPartID, "BUY-1001"},
+		{"part orders", h.PartOrders, "/part/{id}/orders", seedPartID, "ASM-1001"},
+		{"suppliers list", h.SuppliersList, "/suppliers", 0, `data-rows-url="/api/suppliers/rows"`},
+		{"supplier detail", h.SupplierDetail, "/supplier/{id}", seedSupplierID, "Acme Fasteners"},
+		{"PO list", h.POList, "/pos", 0, `data-rows-url="/api/pos/rows"`},
+		{"PO detail", h.PODetail, "/po/{id}", seedPOID, "PO #5002"},
+		{"contacts list", h.ContactsList, "/contacts", 0, `data-rows-url="/api/contacts/rows"`},
+		{"records/forms list", h.FormsList, "/records", 0, "FORM-1001"},
+		{"records yield summary", h.RecordsYieldSummary, "/forms/{id}/yield", seedFormID, "FORM-1001"},
+		{"reports yield picker", h.ReportsYieldPicker, "/reports/yield", 0, "FORM-1001"},
 	}
 
 	for _, c := range cases {
@@ -1369,6 +1370,13 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		c.fn(rec, req)
 		t.Logf("[PROFILE] %-20s %-28s %3d round trips  %8s  (status %d)",
 			c.name, c.target, st.count, time.Since(start).Round(time.Millisecond), rec.Code)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: got status %d, want 200. body: %s", c.name, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), c.wantBody) {
+			t.Errorf("%s: body missing expected marker %q", c.name, c.wantBody)
+		}
 	}
 }
 
