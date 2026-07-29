@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.7] - 2026-07-28
+### Added
+- Test coverage for `pdfthumb.go`'s PDF render/pool/PNG-encode path (`renderPDFFirstPage`/`getPdfiumPool`/`encodePNG`) ([#818](https://github.com/Jolls/arx-legacy/issues/818))
+- Test coverage for `categories.go`'s `SettingsCategoriesSave` handler ([#820](https://github.com/Jolls/arx-legacy/issues/820))
+
 ## [0.7.6] - 2026-07-28
 ### Added
 - Integration test coverage for attachment resolve/delete/primary-attachment logic (`resolveAttachmentFileInput`/`deleteAttachmentFileIfUnshared`/`setPrimaryAttachment`) ([#809](https://github.com/Jolls/arx-legacy/issues/809))
