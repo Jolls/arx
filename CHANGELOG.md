@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.11] - 2026-07-29
+### Added
+- Part → Units: "Add Unit" and per-unit "Edit" let a user create or fix a serial with no test record involved — for a pre-existing unit that predates Arx's traceability data ([#799](https://github.com/Jolls/arx-legacy/issues/799))
+
+### Changed
+- `unit.source` (`test`/`manual`) distinguishes a test-minted unit from a manually back-filled one; the Build tab's "Tested" completeness count now excludes manual units so a back-filled serial doesn't inflate it ([#799](https://github.com/Jolls/arx-legacy/issues/799))
+
 ## [0.7.10] - 2026-07-29
 ### Fixed
 - Postgres reference DDL (`SQL/postgres/`) had fallen behind `SQL/`: `users.sql` was missing the `timezone` column from #847, and `app_config.sql` seeded a stale `schema_version` ('6' instead of '8') on both dialects

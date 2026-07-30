@@ -158,10 +158,11 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// tested_count is the # of serialized units created for each build so far —
-	// the Q6 completeness numerator (#745); the denominator is the build qty.
+	// the Q6 completeness numerator (#745); the denominator is the build qty. Manual
+	// units (#799: back-filled, no test record) are excluded — they were never tested.
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT b.id, b.qty, b.build_date, b.username, b.note,
-		       (SELECT COUNT(*) FROM %s u WHERE u.build_id = b.id) AS tested_count
+		       (SELECT COUNT(*) FROM %s u WHERE u.build_id = b.id AND u.source <> 'manual') AS tested_count
 		FROM %s b WHERE b.part_id = @p1 ORDER BY b.build_date DESC, b.id DESC
 	`, h.cfg.UnitTable(), h.cfg.BuildTable()), id)
 	if err != nil {

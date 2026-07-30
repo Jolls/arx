@@ -439,17 +439,23 @@ BEGIN;
     -- ============================================================
     -- 10d. Units (#740): Tier-3 serialized instances — additive/inert until slice 8.
     -- ============================================================
-    -- Three PRE-state rows exercising every branch of the CK_unit_provenance invariant
-    -- (a unit must carry a lot_id OR a build_id):
+    -- Four PRE-state rows. 8501-8503 formerly covered every branch of CK_unit_provenance
+    -- (dropped by #799 — a unit must carry a lot_id OR a build_id); that CHECK is gone, and
+    -- 8504 now proves the branch it forbade (BOTH NULL) is legal:
     --   8501: final-tested serial of top assembly 3013 — BOTH lot 8306 and build 8203 set
     --         (the keystone case: a build-sourced serialized unit that also lives in a lot).
     --   8502: serial of raw 3007 received inside purchased lot 8301 — lot only, build NULL.
     --   8503: serial of assembly 3005 from non-lot-tracked build 8201 — build only, lot NULL.
-    -- serial_number is a string, UNIQUE per part_id (UQ_unit_serial).
-    INSERT INTO unit (id, part_id, lot_id, build_id, serial_number, created_at, is_active) VALUES
-        (8501, 3013, 8306, 8203, 'SN-3013-001', '2026-05-30T00:00:00', TRUE),
-        (8502, 3007, 8301, NULL, 'SN-3007-A1',  '2026-05-15T00:00:00', TRUE),
-        (8503, 3005, NULL, 8201, 'SN-3005-001', '2026-05-25T00:00:00', TRUE);
+    --   8504 (#799): manually back-filled serial of part 3005 — lot_id AND build_id both
+    --         NULL, source = 'manual'. Proves a provenance-less unit is legal and that
+    --         PartBuild's TestedCount completeness numerator ignores manual units.
+    -- serial_number is a string, UNIQUE per part_id (UQ_unit_serial). source (#799) defaults
+    -- to 'test' — every unit here except 8504 was minted from a test record.
+    INSERT INTO unit (id, part_id, lot_id, build_id, serial_number, created_at, is_active, source) VALUES
+        (8501, 3013, 8306, 8203, 'SN-3013-001', '2026-05-30T00:00:00', TRUE, 'test'),
+        (8502, 3007, 8301, NULL, 'SN-3007-A1',  '2026-05-15T00:00:00', TRUE, 'test'),
+        (8503, 3005, NULL, 8201, 'SN-3005-001', '2026-05-25T00:00:00', TRUE, 'test'),
+        (8504, 3005, NULL, NULL, 'SN-3005-MANUAL-1', '2026-07-20T00:00:00', TRUE, 'manual');
 
     -- 8404/8405 (#746): unit-endpoint genealogy edges — inserted here (not with the lot->lot
     -- edges above) because their FKs reference unit, which is created just above. They give

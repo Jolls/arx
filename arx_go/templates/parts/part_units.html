@@ -8,11 +8,15 @@
 <div class="content">
     {{template "part_tabs" .}}
 
-    <p class="text-muted small mb-3">
-        Serialized units of this part. A unit is created when an individual serial is
-        tested. Open a unit to trace its as-built genealogy &mdash; the lots and child
-        units it was made from &mdash; the per-serial "birth certificate."
-    </p>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-muted small mb-0">
+            Serialized units of this part. A unit is usually created when an individual
+            serial is tested, or added directly for a pre-existing serial with no test
+            record. Open a unit to trace its as-built genealogy &mdash; the lots and child
+            units it was made from &mdash; the per-serial "birth certificate."
+        </p>
+        <a href="/part/{{.Part.ID}}/units/new" class="btn btn-primary text-nowrap ms-3">Add Unit</a>
+    </div>
 
     {{if .Units}}
     <div class="table-wrapper">
@@ -22,8 +26,10 @@
                     <th>Serial #</th>
                     <th style="width:140px;">Lot</th>
                     <th style="width:120px;">Build</th>
+                    <th style="width:90px;">Source</th>
                     <th style="width:120px;">Created</th>
                     <th style="width:80px;">Status</th>
+                    <th style="width:60px;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -32,8 +38,10 @@
                     <td><a href="/part/{{$.Part.ID}}/units/{{.ID}}">{{.SerialNumber}}</a></td>
                     <td>{{if .LotID}}<a href="/part/{{$.Part.ID}}/lots/{{.LotIDVal}}">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{if .BuildID}}Build #{{.BuildIDVal}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{if .IsManual}}<span class="badge bg-secondary">manual</span>{{else}}test{{end}}</td>
                     <td>{{.CreatedAt.Format "2006-01-02"}}</td>
                     <td>{{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Scrapped</span>{{end}}</td>
+                    <td><a href="/part/{{$.Part.ID}}/units/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
                 </tr>
                 {{end}}
             </tbody>
@@ -41,7 +49,7 @@
     </div>
     <p class="table-footer-note">{{len .Units}} unit{{if ne (len .Units) 1}}s{{end}}</p>
     {{else}}
-    <p class="no-results">No units yet. A unit is created when an individual serial of this part is tested.</p>
+    <p class="no-results">No units yet. Add one for a pre-existing serial, or test a serial of this part.</p>
     {{end}}
 </div>
 {{end}}

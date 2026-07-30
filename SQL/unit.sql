@@ -8,11 +8,11 @@
 -- denominator. Exists only for parts whose tracking_mode is serial / lot_serial.
 --
 -- lot_id is set for a serialized unit inside a lot (lot_serial); build_id is set for a
--- build-sourced unit. Both are individually nullable, but a unit with BOTH NULL is
--- orphaned and defeats traceability — so CK_unit_provenance enforces at least one is set
--- (the Q5 provenance invariant), backed by app-level assignment at creation. serial_number
--- is a STRING (non-numeric serials allowed), UNIQUE per part_id, editable until the unit's
--- first locked form_record.
+-- build-sourced unit. Both are individually nullable; a test-minted unit always has at
+-- least one set (app-level invariant, Q5), but a `manual` unit (#799: a pre-existing
+-- serial with no test record) may legitimately have neither — source distinguishes the
+-- two paths. serial_number is a STRING (non-numeric serials allowed), UNIQUE per
+-- part_id, editable until the unit's first locked form_record.
 --
 -- Additive/unused until slice 8 wires create/render logic. Requires part, lot, and build
 -- to exist first (FKs below).
@@ -27,7 +27,7 @@ CREATE TABLE unit (
   serial_number  VARCHAR(255)  NOT NULL,                                              -- Serial entered at test time; STRING (non-numeric allowed), UNIQUE per part_id.
   created_at     DATETIME      NOT NULL CONSTRAINT DF_unit_created   DEFAULT GETDATE(),
   is_active      BIT           NOT NULL CONSTRAINT DF_unit_is_active DEFAULT 1,       -- Soft-delete / scrap flag.
-  CONSTRAINT CK_unit_provenance CHECK (lot_id IS NOT NULL OR build_id IS NOT NULL),  -- Provenance invariant (Q5): every unit traces to a lot or a build.
+  source         VARCHAR(10)   NOT NULL CONSTRAINT DF_unit_source DEFAULT 'test' CONSTRAINT CK_unit_source CHECK (source IN ('test', 'manual')), -- How the unit was minted (#799): test (test-record save) or manual (back-filled pre-existing serial, no test record).
   CONSTRAINT UQ_unit_serial     UNIQUE (part_id, serial_number)
 );
 

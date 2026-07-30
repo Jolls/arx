@@ -243,7 +243,11 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/part/{id}/lots/{lotID}/edit", h.LotEdit)
 		r.Post("/part/{id}/lots/{lotID}", h.LotUpdate)
 		r.Get("/part/{id}/units", h.PartUnits)
+		r.Get("/part/{id}/units/new", h.UnitNew) // before {unitID}
+		r.Post("/part/{id}/units", h.UnitCreate)
 		r.Get("/part/{id}/units/{unitID}", h.PartUnitTrace)
+		r.Get("/part/{id}/units/{unitID}/edit", h.UnitEdit)
+		r.Post("/part/{id}/units/{unitID}", h.UnitUpdate)
 		r.Get("/part/{id}/pricing", h.PartPricing)
 		r.Get("/part/{id}/pricing/new", h.PriceNew)
 		r.Post("/part/{id}/pricing", h.PriceCreate)

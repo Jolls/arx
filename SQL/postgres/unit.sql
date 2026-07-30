@@ -5,8 +5,9 @@
 --
 -- Created lazily one at a time at test time (Q5); exists only for serial / lot_serial
 -- tracking_mode. lot_id set for a serialized unit inside a lot, build_id for a build-sourced
--- unit — both individually nullable, but CK_unit_provenance enforces at least one (the Q5
--- provenance invariant). serial_number is a STRING, UNIQUE per part_id.
+-- unit — both individually nullable; a `manual` unit (#799: pre-existing serial, no test
+-- record) may legitimately have neither, distinguished by source. serial_number is a
+-- STRING, UNIQUE per part_id.
 --
 -- Additive/unused until slice 8. Requires part, lot, and build to exist first (FKs below).
 
@@ -20,7 +21,7 @@ CREATE TABLE unit (
   serial_number  VARCHAR(255)  NOT NULL,                        -- Serial entered at test time; STRING (non-numeric allowed), UNIQUE per part_id.
   created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   is_active      BOOLEAN       NOT NULL DEFAULT TRUE,           -- Soft-delete / scrap flag.
-  CONSTRAINT CK_unit_provenance CHECK (lot_id IS NOT NULL OR build_id IS NOT NULL),  -- Provenance invariant (Q5): every unit traces to a lot or a build.
+  source         VARCHAR(10)   NOT NULL DEFAULT 'test' CHECK (source IN ('test', 'manual')), -- How the unit was minted (#799): test (test-record save) or manual (back-filled pre-existing serial, no test record).
   CONSTRAINT UQ_unit_serial     UNIQUE (part_id, serial_number)
 );
 
