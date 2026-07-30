@@ -40,7 +40,7 @@ idempotent/single-batch.
       `max_subbatch_result(@test_id=…)` usage sites in `form_row.spec_nom` / `result.spec_nom`
       to `@form_row_id=` (the #769 rename patched the named_query row but not these usage
       sites, so they fail at runtime). Change `USE ArxDev` → `USE ArxProd`.
-- [ ] After applying, redeploy `Arx.exe` (v0.6.25) so the tracking_mode-aware code and the
+- [x] After applying, redeploy `Arx.exe` (v0.6.25) so the tracking_mode-aware code and the
       renamed-param usage land together.
 
 ## Small improvements / follow-ups (not blocking)
@@ -49,16 +49,16 @@ idempotent/single-batch.
   the unit's lot, so a `serial` part with no output lot (build-only provenance) still shows
   an empty ancestry. Recording component→unit edges for the no-lot case needs a small design
   pass (lot-vs-unit granularity). Track on #736.
-- **`is_lot_tracked` is now dead-for-reads but still written.** A later cleanup slice can drop
-  the column and the sync writes once nothing reads it (deprecation comments in place at
-  `models/part.go` and `SQL/part.sql`).
+- **`is_lot_tracked` is now dead-for-reads but still written.** Filed as
+  [#854](https://github.com/Jolls/arx-legacy/issues/854).
 - **Record *detail* view still hides the lot/build/unit linkage panel** — only the *edit* page
-  re-enabled it (that's where provenance is captured). Consider surfacing linkage read-only on
-  the detail view.
+  re-enabled it (that's where provenance is captured). Filed as
+  [#855](https://github.com/Jolls/arx-legacy/issues/855).
 - **Lot-level completeness deferred.** Only build completeness ("Tested N / qty") is shown; the
-  `lot` table has no quantity column to serve as a denominator. Needs a lot-qty source.
-- **Batch-at-test-time is out of scope** (OQ1 chose single-unit qty=1). If shop flow ever needs
-  building >1 unit at test time, the deferred-receipt design from the slice-10 plan applies.
+  `lot` table has no quantity column to serve as a denominator. Filed as
+  [#856](https://github.com/Jolls/arx-legacy/issues/856).
+- **Batch-at-test-time is out of scope** (OQ1 chose single-unit qty=1). Filed as
+  [#857](https://github.com/Jolls/arx-legacy/issues/857).
 - **RELEASE_NOTES not updated** — hold for the public v0.7.0 milestone release (per-release, not
   per-patch), then write one entry covering the whole traceability epic.
 - **Seed fixture note:** unit 8501 carries both direct genealogy edges (8404/8405) and the
