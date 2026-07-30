@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.12] - 2026-07-29
+### Fixed
+- `/settings` was unreachable to fix a misconfigured or unreachable DB connection: auth was only bypassed when no DB was configured at all, and a connected-but-broken connection also left `/login` itself failing, so there was no way back. `/settings` now bypasses login whenever the connection is genuinely unusable (bad server/auth/connectivity), while a plain schema-version mismatch on an otherwise-working connection still requires login as before. An unauthenticated visit in this state can't reconnect using a previously-stored password — reconnecting requires typing it again ([#852](https://github.com/Jolls/arx-legacy/issues/852))
+
 ## [0.7.11] - 2026-07-29
 ### Added
 - Part → Units: "Add Unit" and per-unit "Edit" let a user create or fix a serial with no test record involved — for a pre-existing unit that predates Arx's traceability data ([#799](https://github.com/Jolls/arx-legacy/issues/799))

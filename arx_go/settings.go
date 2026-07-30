@@ -66,7 +66,13 @@ func sanitizeLandingRoute(raw string) (string, bool) {
 // mode, a freshly-posted test password wins, falling back through the stored
 // test password and the prod password/stored-prod-password (mirrors
 // Base.activePassword); in prod mode, only the prod posted/stored pair applies.
-func selectConnectPassword(testMode bool, testPosted, storedTest, posted, storedDB string) string {
+// allowStored is false for an unauthenticated caller (see SettingsSave): the
+// stored secrets are then ignored entirely, so only a freshly-typed password
+// can produce a connect attempt.
+func selectConnectPassword(testMode, allowStored bool, testPosted, storedTest, posted, storedDB string) string {
+	if !allowStored {
+		storedTest, storedDB = "", ""
+	}
 	if testMode {
 		return firstNonEmpty(testPosted, storedTest, posted, storedDB)
 	}
@@ -183,8 +189,15 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		partNumberingPreview, _ = h.nextBaseNumber(r.Context())
 	}
 
+	connected := h.database() != nil
 	data := map[string]any{
-		"Connected":             h.database() != nil,
+		"Connected": connected,
+		// PasswordOptional: true when a blank db_password field will reuse the
+		// stored password (an authenticated caller, or a working connection
+		// with no dbConnError). An unauthenticated caller during a #852
+		// connection-error bypass must type the password (see SettingsSave).
+		"PasswordOptional":      connected && (h.dbConnError == "" || h.currentUser(r) != nil),
+		"DBConnError":           h.dbConnError,
 		"DBServer":              h.cfg.DBServer,
 		"DBName":                h.cfg.DBName,
 		"DBEngine":              h.cfg.DBEngine(),
@@ -471,7 +484,17 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	// then the stored one. This lets test-mode toggles take effect immediately
 	// without re-entering credentials. In test mode the test password wins and
 	// falls back to the prod password when unset (mirrors Base.activePassword).
-	connectWith := selectConnectPassword(h.cfg.TestMode, testPassword, h.cfg.TestDBPassword, password, h.cfg.DBPassword)
+	//
+	// An unauthenticated caller can only reach this handler because the DB is
+	// unusable — no connection at all, or h.dbConnError set (#852) — so
+	// RequireAuthOnceConnected let the request through without a login. Such a
+	// caller must not be able to point db_server at an arbitrary host and have
+	// the app dial it with the *stored* password: that hands the secret to the
+	// attacker's endpoint, which is exactly what #748 blocked. So the
+	// blank-means-reuse-stored-password convenience is limited to a logged-in
+	// admin; anonymous callers must type the password to trigger any connect.
+	authenticated := h.currentUser(r) != nil
+	connectWith := selectConnectPassword(h.cfg.TestMode, authenticated, testPassword, h.cfg.TestDBPassword, password, h.cfg.DBPassword)
 
 	var connErr string
 	dbSwapped := false
@@ -515,6 +538,15 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !authenticated && connectWith == "" {
+		// No connect was attempted: the other fields are saved, but an
+		// anonymous caller has to supply the password (see above).
+		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
+			"Error": "Settings saved, but not connected: enter your database password to connect.",
+		}))
+		return
+	}
+
 	if testModeChanged && dbSwapped {
 		// Auth is per-database: each DB has its own users table, so the
 		// current session does not identify a real user in the database we
@@ -529,14 +561,11 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.database() != nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
-		"Success": "Settings saved. Enter your database password to connect.",
-	}))
+	// Reaching here means authenticated == true (the unauthenticated,
+	// not-yet-connected case already returned above), which is only possible
+	// when h.database() != nil (RequireAuthOnceConnected only stashes a user
+	// once the connection is usable) — so this is always a redirect home.
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // SettingsPreferencesSave persists the logged-in user's per-user PO defaults

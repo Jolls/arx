@@ -222,21 +222,23 @@ func (c *Config) FormEventsTable() string          { return "form_events" }
 func (c *Config) RecordEventsTable() string        { return "record_events" }
 func (c *Config) RecordEventResultsTable() string  { return "record_event_results" }
 
-// CheckSchemaVersion queries app_config for schema_version and returns "" when it
-// matches ExpectedSchemaVersion, or a non-empty mismatch/error message otherwise.
-// The queryRow argument is the handler's h.queryRowContext wrapper so SQL logging is preserved.
+// CheckSchemaVersion queries app_config for schema_version. connErr is
+// non-empty when the query itself failed (DB unreachable/misconfigured —
+// distinct from a working DB on an old schema). mismatch is non-empty when
+// the query succeeded but returned an unexpected version. The queryRow
+// argument is the handler's h.queryRowContext wrapper so SQL logging is preserved.
 func CheckSchemaVersion(ctx context.Context,
 	queryRow func(context.Context, string, ...any) *sql.Row,
-	appConfigTable string) string {
+	appConfigTable string) (mismatch string, connErr string) {
 	var val string
 	err := queryRow(ctx,
 		`SELECT setting_value FROM `+appConfigTable+` WHERE setting_key = 'schema_version'`,
 	).Scan(&val)
 	if err != nil {
-		return fmt.Sprintf("could not read schema_version (%v)", err)
+		return "", fmt.Sprintf("could not read schema_version (%v)", err)
 	}
 	if val != ExpectedSchemaVersion {
-		return fmt.Sprintf("DB schema v%s, app expects v%s", val, ExpectedSchemaVersion)
+		return fmt.Sprintf("DB schema v%s, app expects v%s", val, ExpectedSchemaVersion), ""
 	}
-	return ""
+	return "", ""
 }

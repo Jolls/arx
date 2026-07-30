@@ -230,7 +230,7 @@ func (h *Handler) noteLoginOK(user string) {
 
 // GET /login
 func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
-	if h.database() == nil {
+	if h.dbUnusable() {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
@@ -256,7 +256,7 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 
 // POST /login
 func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
-	if h.database() == nil {
+	if h.dbUnusable() {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}

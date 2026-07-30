@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -124,24 +125,98 @@ func TestSettingsSave_FieldSemantics(t *testing.T) {
 // uses posted-test, then stored-test, then posted-prod, then stored-prod.
 func TestSelectConnectPassword_Precedence(t *testing.T) {
 	cases := []struct {
-		name                                            string
-		testMode                                        bool
-		testPosted, storedTest, posted, storedDB, want   string
+		name                                          string
+		testMode, allowStored                         bool
+		testPosted, storedTest, posted, storedDB, want string
 	}{
-		{"prod: posted wins", false, "", "", "newpw", "oldpw", "newpw"},
-		{"prod: falls back to stored", false, "", "", "", "oldpw", "oldpw"},
-		{"test: fresh test password wins", true, "newtest", "oldtest", "prodposted", "proddb", "newtest"},
-		{"test: falls back to stored test", true, "", "oldtest", "prodposted", "proddb", "oldtest"},
-		{"test: falls back to posted prod", true, "", "", "prodposted", "proddb", "prodposted"},
-		{"test: falls back to stored prod", true, "", "", "", "proddb", "proddb"},
+		{"prod: posted wins", false, true, "", "", "newpw", "oldpw", "newpw"},
+		{"prod: falls back to stored", false, true, "", "", "", "oldpw", "oldpw"},
+		{"test: fresh test password wins", true, true, "newtest", "oldtest", "prodposted", "proddb", "newtest"},
+		{"test: falls back to stored test", true, true, "", "oldtest", "prodposted", "proddb", "oldtest"},
+		{"test: falls back to posted prod", true, true, "", "", "prodposted", "proddb", "prodposted"},
+		{"test: falls back to stored prod", true, true, "", "", "", "proddb", "proddb"},
+		// allowStored=false (anonymous caller, #852): stored secrets are ignored.
+		{"prod: anonymous ignores stored", false, false, "", "", "", "oldpw", ""},
+		{"prod: anonymous still uses posted", false, false, "", "", "newpw", "oldpw", "newpw"},
+		{"test: anonymous ignores both stored", true, false, "", "oldtest", "", "proddb", ""},
+		{"test: anonymous still uses posted test", true, false, "newtest", "oldtest", "", "proddb", "newtest"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := selectConnectPassword(c.testMode, c.testPosted, c.storedTest, c.posted, c.storedDB)
+			got := selectConnectPassword(c.testMode, c.allowStored, c.testPosted, c.storedTest, c.posted, c.storedDB)
 			if got != c.want {
-				t.Errorf("selectConnectPassword(%v, %q, %q, %q, %q) = %q, want %q",
-					c.testMode, c.testPosted, c.storedTest, c.posted, c.storedDB, got, c.want)
+				t.Errorf("selectConnectPassword(%v, %v, %q, %q, %q, %q) = %q, want %q",
+					c.testMode, c.allowStored, c.testPosted, c.storedTest, c.posted, c.storedDB, got, c.want)
 			}
 		})
+	}
+}
+
+// TestSettingsSave_AnonymousNoStoredPasswordReconnect covers the #852
+// credential-exfiltration case: the auth bypass for a broken connection means
+// an anonymous caller can POST /settings, so a blank db_password must NOT fall
+// back to the stored secret. Otherwise the caller could repoint db_server at a
+// host they control and have the app hand over the real password.
+func TestSettingsSave_AnonymousNoStoredPasswordReconnect(t *testing.T) {
+	cfg := &arxbase.Config{}
+	cfg.DBPassword = "stored-secret"
+	h := isolatedSettingsHandler(t, cfg)
+	h.dbConnError = "could not read schema_version (connection refused)"
+
+	var dialed []string
+	h.connectDB = func(engine, dsn string) (*sql.DB, arxdb.Dialect, error) {
+		dialed = append(dialed, dsn)
+		return nil, nil, errors.New("should not be dialed")
+	}
+
+	vals := url.Values{
+		"db_server":   {"attacker.example.com"},
+		"db_name":     {"ArxDev"},
+		"db_user":     {"sa"},
+		"db_password": {""},
+	}
+	rec := httptest.NewRecorder()
+	h.SettingsSave(rec, postSettings(vals)) // no ctxUserKey on the context: anonymous
+
+	if len(dialed) != 0 {
+		t.Errorf("connectDB called with %v; an anonymous caller must not trigger a reconnect using the stored password", dialed)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "enter your database password") {
+		t.Errorf("body missing the \"enter your database password\" prompt, got: %s", rec.Body.String())
+	}
+}
+
+// TestSettingsSave_AuthenticatedReusesStoredPassword is the counterpart: a
+// logged-in admin keeps today's blank-means-reuse-stored-password convenience.
+func TestSettingsSave_AuthenticatedReusesStoredPassword(t *testing.T) {
+	cfg := &arxbase.Config{}
+	cfg.DBPassword = "stored-secret"
+	h := isolatedSettingsHandler(t, cfg)
+
+	var dialed []string
+	h.connectDB = func(engine, dsn string) (*sql.DB, arxdb.Dialect, error) {
+		dialed = append(dialed, dsn)
+		return nil, nil, errors.New("connection refused")
+	}
+
+	vals := url.Values{
+		"db_server":   {"127.0.0.1:1"},
+		"db_name":     {"ArxDev"},
+		"db_user":     {"sa"},
+		"db_password": {""},
+	}
+	req := postSettings(vals)
+	req = req.WithContext(context.WithValue(req.Context(), ctxUserKey, &User{ID: 8001, Username: "admin", IsAdmin: true}))
+	rec := httptest.NewRecorder()
+	h.SettingsSave(rec, req)
+
+	if len(dialed) != 1 {
+		t.Fatalf("connectDB called %d times, want 1: a logged-in admin's blank password must still reuse the stored one", len(dialed))
+	}
+	if !strings.Contains(dialed[0], "stored-secret") {
+		t.Errorf("DSN %q does not carry the stored password", dialed[0])
 	}
 }

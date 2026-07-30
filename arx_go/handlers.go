@@ -41,6 +41,7 @@ type Handler struct {
 	store          *sessions.CookieStore
 	tmplFS         ioFS.FS
 	schemaMismatch string
+	dbConnError    string
 	releaseNotes   string
 	companyLogo    string
 	partCategories []models.Category
@@ -65,6 +66,13 @@ func (h *Handler) database() *sql.DB {
 		return c.db
 	}
 	return nil
+}
+
+// dbUnusable reports whether there's no DB connection at all, or the
+// connection exists but doesn't actually work (h.dbConnError, #852) — the
+// shared condition every auth-bypass-to-/settings check gates on.
+func (h *Handler) dbUnusable() bool {
+	return h.database() == nil || h.dbConnError != ""
 }
 
 // dia returns the live dialect, or a default SQL Server dialect when not
@@ -226,9 +234,10 @@ func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
 func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 	if h.database() == nil {
 		h.schemaMismatch = ""
+		h.dbConnError = ""
 		return
 	}
-	h.schemaMismatch = arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg.AppConfigTable())
+	h.schemaMismatch, h.dbConnError = arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg.AppConfigTable())
 }
 
 // loadCompanyLogo caches the company logo data URI from app_config on the Handler
@@ -369,11 +378,13 @@ func (h *Handler) CloseDB() {
 	}
 }
 
-// RequireAuth redirects to /settings when no DB is connected, to /login when
-// no user is logged in, and otherwise stashes the user on the request context.
+// RequireAuth redirects to /settings when no DB is connected or the connection
+// itself is unusable (#852), to /login when no user is logged in (including a
+// plain schema-version mismatch on an otherwise-working connection), and
+// otherwise stashes the user on the request context.
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.database() == nil {
+		if h.dbUnusable() {
 			http.Redirect(w, r, "/settings", http.StatusSeeOther)
 			return
 		}
@@ -394,12 +405,14 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 // first-run setup (no DB connected) but requires a logged-in user once a database
 // is connected. Used for POST /settings so an unauthenticated caller can't
 // rewrite the DB connection and exfiltrate the stored password after setup
-// (#748). Unlike RequireAuth it does not redirect on schemaMismatch: an admin
-// must still be able to re-point a mis-connected DB via settings, and login
-// stays reachable under a schema mismatch.
+// (#748). It also bypasses auth when the connection itself is unusable
+// (h.dbConnError != "", #852) — login is impossible against a broken
+// connection, so the admin needs a way back to Settings without one. A plain
+// schema-version mismatch on an otherwise-working connection still requires
+// login: that's the #748 protection, and login still works there.
 func (h *Handler) RequireAuthOnceConnected(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.database() == nil {
+		if h.dbUnusable() {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -516,6 +529,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 	if m, ok := data.(map[string]any); ok {
 		m["AppVersion"] = h.cfg.Version
 		m["SchemaMismatch"] = h.schemaMismatch
+		m["DBConnError"] = h.dbConnError
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
