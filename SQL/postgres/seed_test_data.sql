@@ -189,27 +189,27 @@ BEGIN;
         (3001, 'RAW-1001', 'RAW', 'A', 'Aluminum Stock 6061',        'A', TRUE, 6,  2.50,   1001, NULL, NULL),
         (3002, 'BUY-1001', 'BUY', 'A', 'M3x8 SHCS',                  'A', TRUE, 1,  0.05,   1002, NULL, NULL),
         (3003, 'BUY-1002', 'BUY', 'A', 'O-Ring 2-014',               'A', TRUE, 1,  0.12,   1001, NULL, NULL),
-        (3004, 'MFG-1001', 'MFG', 'B', 'Widget Housing',             'A', TRUE, 1,  0,      NULL, NULL, NULL),
-        (3005, 'ASM-1001', 'ASM', 'A', 'Widget Assembly',            'A', TRUE, 1,  0,      1002, 4.30, CURRENT_TIMESTAMP),
+        (3004, 'MFG-1001', 'MFG', 'B', 'Drone Frame Housing',        'A', TRUE, 1,  0,      NULL, NULL, NULL),
+        (3005, 'ASM-1001', 'ASM', 'A', 'Skyrunner Standard Drone',   'A', TRUE, 1,  0,      1002, 4.30, CURRENT_TIMESTAMP),
         (3006, 'OPS-1001', 'OPS', '',  'Assembler Labor',            'A', TRUE, 1,  35.00,  NULL, NULL, NULL),
         (3007, 'RAW-1002', 'RAW', 'A', 'Stainless Steel Bar Stock',  'A', TRUE, 6,  4.10,   1001, NULL, NULL),
         (3008, 'BUY-1003', 'BUY', '-', 'Prototype Bracket',          'U', TRUE, 1,  0,      NULL, NULL, NULL), -- Under Review
         (3009, 'BUY-1004', 'BUY', 'A', 'Obsolete Retaining Clip',    'D', FALSE, 1,  0.08,   NULL, NULL, NULL), -- Deprecated + inactive
         -- FORM-category parts: FormsList and the new-form part picker filter on category='FORM',
         -- so test form 6001 must hang off one. 3011 is a spare with no form attached (new-form target).
-        (3010, 'FORM-1001','FORM', 'A', 'Widget Housing Test Form',   'A', TRUE, 1,  0,      NULL, NULL, NULL),
+        (3010, 'FORM-1001','FORM', 'A', 'Drone Frame Housing Test Form','A', TRUE, 1,  0,      NULL, NULL, NULL),
         (3011, 'FORM-1002','FORM', 'A', 'Spare Test Form Part',       'A', TRUE, 1,  0,      NULL, NULL, NULL),
         -- Sub-assembly nested inside 3005's BOM (#579): exercises the BOM expand/collapse
         -- toggle and the "rollup" cost-source badge, neither of which any other seeded
         -- assembly-of-assemblies line reaches. last_rollup_cost matches the sum of its own
         -- BOM lines below (2*2.50 + 1*4.10 = 9.10) as if the rollup engine had just run.
-        (3012, 'ASM-1002', 'ASM', 'A', 'Widget Sub-Assembly',        'A', TRUE, 1,  0,      NULL, 9.10,  CURRENT_TIMESTAMP),
+        (3012, 'ASM-1002', 'ASM', 'A', 'Flight Controller Sub-Assembly', 'A', TRUE, 1,  0,      NULL, 9.10,  CURRENT_TIMESTAMP),
         -- Top-level lot-tracked assembly (#737): consumes sub-assembly 3012 AND raw 3007
         -- directly, so its build writes a two-parent genealogy edge into a two-level-deep
         -- chain (8301→8302→8306, plus 8303→8306) — a PRE-state tree for the future
         -- traceability view (epic #736 slice 9) and completes the
         -- receipt→incoming-inspection→build→build→final-test flow (§0 of the plan).
-        (3013, 'ASM-1003', 'ASM', 'A', 'Widget Deluxe Assembly',     'A', TRUE, 1,  0,      NULL, NULL, NULL);
+        (3013, 'ASM-1003', 'ASM', 'A', 'Skyrunner Deluxe Drone',     'A', TRUE, 1,  0,      NULL, NULL, NULL);
 
     -- Fully populated part so the detail card and edit round-trip show detail/notes/user fields.
     UPDATE part SET
@@ -226,7 +226,7 @@ BEGIN;
         (8102, 3004, 'https://example.com/drawings/widget-housing.pdf', 'Drawing', 'B', 1, NULL);
 
     -- ============================================================
-    -- 7. BOM (3005 Widget Assembly = 3002 + 3003 + OPS labor 3006 + sub-assembly 3012)
+    -- 7. BOM (3005 Skyrunner Standard Drone = 3002 + 3003 + OPS labor 3006 + sub-assembly 3012)
     -- ============================================================
     -- Line 3 is an OPS labor line (#465): component 3006's current_cost is an hourly rate
     -- and qty is hours, so the cost rollup includes value-add, not just material.
@@ -513,25 +513,25 @@ BEGIN;
     -- lot-tracked assembly (3005) to its build (8201) only — the build_id-without-lot_id
     -- case that build_id exists to cover. Both are WIP with recent (non-stale) dates.
     INSERT INTO form_record (id, form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, unit_id, updated_at, created_at) VALUES
-        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
-        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
-        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', TRUE, TRUE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
-        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, FALSE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-04T00:00:00'), -- soft-deleted
-        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-05T00:00:00'), -- Complete, pre-#251 style (backfillable)
+        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
+        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
+        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', TRUE, TRUE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
+        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, FALSE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-04T00:00:00'), -- soft-deleted
+        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-05T00:00:00'), -- Complete, pre-#251 style (backfillable)
         -- 7006-7009 span May and July so the Reports > Yield Summary "Group by month" view (#244) has more than one month to show.
-        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-15T00:00:00'), -- Complete, all pass
-        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', TRUE, TRUE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-20T00:00:00'), -- Approved, has a FAIL
-        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-01T00:00:00'), -- Complete, all pass
-        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Widget Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-05T00:00:00'), -- Complete, all pass
+        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-15T00:00:00'), -- Complete, all pass
+        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', TRUE, TRUE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-20T00:00:00'), -- Approved, has a FAIL
+        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-01T00:00:00'), -- Complete, all pass
+        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-05T00:00:00'), -- Complete, all pass
         (7010, 6001, 3012, '2026-07-10', '7010', 'ASM-1002', 'Sub-Assembly',  '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, 8302, 8202, NULL, '2020-01-01T00:00:00', '2026-07-10T00:00:00'), -- WIP, lot-tracked part → lot 8302 + build 8202 (#677)
-        (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Widget Assembly','6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, 8201, 8503, '2020-01-01T00:00:00', '2026-07-11T00:00:00'), -- WIP, non-lot-tracked assembly → build 8201 only (#677); unit 8503 under test (#742, Q8 — denormalized lot/build equal the unit's)
+        (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Skyrunner Standard Drone','6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, 8201, 8503, '2020-01-01T00:00:00', '2026-07-11T00:00:00'), -- WIP, non-lot-tracked assembly → build 8201 only (#677); unit 8503 under test (#742, Q8 — denormalized lot/build equal the unit's)
         (7012, 6001, 3007, '2026-05-16', '7012', 'RAW-1002', 'Stainless Steel Bar Stock', '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, 8301, NULL, 8502, '2020-01-01T00:00:00', '2026-05-16T00:00:00'), -- WIP, Incoming Inspection: lot 8301 → build_id NULL (#737 PRE-state row; reuses form 6001 purely to cover the receipt-not-yet-consumed case, not a realistic electrical test on bar stock); unit 8502 under test (#742, Q8)
-        (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Widget Deluxe Assembly', '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, 8306, 8203, 8501, '2020-01-01T00:00:00', '2026-05-31T00:00:00'), -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0); unit 8501 under test (#742, Q8)
+        (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104', 'New Release', 'ModelA', FALSE, FALSE, TRUE, 1, 8306, 8203, 8501, '2020-01-01T00:00:00', '2026-05-31T00:00:00'), -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0); unit 8501 under test (#742, Q8)
         -- Retest of unit 8501 (#745): a SECOND form_record pointing at the SAME unit — the
         -- retest-as-same-unit case. serial_number matches unit 8501's ('SN-3013-001') and
         -- unit_id is reused; lot_id/build_id are NULL (the slice-8 write-shape: provenance is
         -- read THROUGH the unit, Q8), so this row also exercises loadRecordTrace's read-through.
-        (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Widget Deluxe Assembly', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00');
+        (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00');
 
     -- One materialized row per step per record, headings included (type=1) — matching what
     -- materializeRecordSteps produces for post-#487 records. Grouped by record.
