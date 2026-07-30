@@ -156,6 +156,10 @@ func TestIntegration_SettingsSave_TestModeToggleForcesRelogin(t *testing.T) {
 	for _, c := range seedRec.Result().Cookies() {
 		req.AddCookie(c)
 	}
+	// Stash the session user on the context the way RequireAuthOnceConnected's
+	// withUser does: SettingsSave only reuses the stored password for an
+	// authenticated caller, and this case posts no password (#852).
+	req = req.WithContext(context.WithValue(req.Context(), ctxUserKey, &User{ID: 7, Username: "admin"}))
 	rec := httptest.NewRecorder()
 	h.SettingsSave(rec, req)
 

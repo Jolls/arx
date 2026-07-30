@@ -92,6 +92,60 @@ func TestRequireAuth_RedirectsOnSchemaMismatch(t *testing.T) {
 	}
 }
 
+func TestRequireAuth_RedirectsToSettingsOnConnError(t *testing.T) {
+	h := testHandlerWithDB()
+	h.dbConnError = "could not read schema_version (connection refused)"
+
+	var reached bool
+	req := httptest.NewRequest(http.MethodGet, "/part/1", nil)
+	rec := httptest.NewRecorder()
+	h.RequireAuth(sentinel(&reached)).ServeHTTP(rec, req)
+
+	if reached {
+		t.Error("next handler ran; expected redirect to /settings instead")
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/settings" {
+		t.Errorf("Location = %q, want /settings", loc)
+	}
+}
+
+func TestRequireAuthOnceConnected_AllowsOnConnError(t *testing.T) {
+	h := testHandlerWithDB()
+	h.dbConnError = "could not read schema_version (connection refused)"
+
+	var reached bool
+	req := httptest.NewRequest(http.MethodPost, "/settings", nil)
+	rec := httptest.NewRecorder()
+	h.RequireAuthOnceConnected(sentinel(&reached)).ServeHTTP(rec, req)
+
+	if !reached {
+		t.Error("next handler did not run; /settings must be reachable without login when the connection itself is broken")
+	}
+}
+
+func TestRequireAuthOnceConnected_StillRedirectsOnSchemaMismatchAlone(t *testing.T) {
+	h := testHandlerWithDB()
+	h.schemaMismatch = "DB schema v4, app expects v5" // working connection, just old schema
+
+	var reached bool
+	req := httptest.NewRequest(http.MethodPost, "/settings", nil)
+	rec := httptest.NewRecorder()
+	h.RequireAuthOnceConnected(sentinel(&reached)).ServeHTTP(rec, req)
+
+	if reached {
+		t.Error("next handler ran; a plain schema-version mismatch must still require login (#748 protection)")
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/login" {
+		t.Errorf("Location = %q, want /login", loc)
+	}
+}
+
 func TestRequireAuthOnceConnected_AllowsFirstRun(t *testing.T) {
 	h := testHandler() // db == nil
 

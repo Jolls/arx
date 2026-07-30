@@ -18,6 +18,7 @@ func (h *Handler) renderRecords(w http.ResponseWriter, r *http.Request, page str
 	if m, ok := data.(map[string]any); ok {
 		m["AppVersion"] = h.cfg.Version
 		m["SchemaMismatch"] = h.schemaMismatch
+		m["DBConnError"] = h.dbConnError
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
