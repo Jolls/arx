@@ -1,3 +1,36 @@
+Arx v0.7.13 — July 2026
+========================
+
+NEW FEATURES
+
+  Manual Unit Entry
+  A serialized part's Units list now has "Add Unit" and per-unit "Edit"
+  buttons, so a serial that predates Arx's traceability tracking can be
+  entered or corrected without running it through a test record. The
+  Build tab's completeness count only credits units that came from an
+  actual test, so back-filled serials don't inflate it.
+
+  Lots & Units on the Part Dashboard
+  A lot- or serial-tracked part's detail page now shows Lots and Units
+  cards with a total count and the 5 most recent, without needing to
+  open the Build tab.
+
+BUG FIXES
+
+  Fixed /settings being unreachable when the database connection was
+  broken but still configured — there was previously no way back to
+  fix a bad server, login, or connectivity setting from within the app.
+
+  Fixed PDF attachment thumbnails failing to render in some installs.
+
+  Fixed the Browse file/folder dialog sometimes opening behind the
+  main Arx window with no way to click it.
+
+  Fixed replacing a PDF attachment sometimes still showing the old
+  file due to browser caching, and fixed regenerated thumbnail images
+  occasionally being saved alongside the original instead of
+  replacing it.
+
 Arx v0.7.0 — July 2026
 ========================
 
