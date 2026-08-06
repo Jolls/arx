@@ -18,6 +18,7 @@ CREATE TABLE lot (
   vendor_lot_number  VARCHAR(255)  NULL,                                              -- Supplier's own lot/batch ID (purchased lots); NULL otherwise.
   source             VARCHAR(10)   NULL CONSTRAINT CK_lot_source CHECK (source IN ('purchase', 'build', 'adjust')), -- How the lot originated (#744): purchase (receipt), build (manufactured), adjust (manual/cycle-count). Today inferred from po_line_id / owning build; made explicit. NULL = not yet classified (set going forward in the epic's slice-8 code).
   po_line_id         INT           NULL,                                              -- FK to po_line.id for purchased receipts; NULL for manufactured lots.
+  notes              VARCHAR(MAX)  NULL,                                              -- Free-text batch notes (#872). Rewritten in full on the lot edit page; appended to (server-side, never overwritten) from a test record's edit page.
   created_at         DATETIME      NOT NULL CONSTRAINT DF_lot_created   DEFAULT GETDATE(),
   is_active          BIT           NOT NULL CONSTRAINT DF_lot_is_active DEFAULT 1
 );

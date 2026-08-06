@@ -451,11 +451,13 @@ BEGIN TRY
     --       second tier of the multi-level chain, output of build 8203.
     SET IDENTITY_INSERT dbo.lot ON;
     -- source (#744): purchase (po_line set) / build (build output) / adjust (manual/cycle-count).
-    INSERT INTO dbo.lot (id, part_id, lot_number, lot_description, vendor_lot_number, source, po_line_id, created_at, is_active) VALUES
-        (8301, 3007, '8301', 'PO 5003',                          'SS304-LOT-0088', 'purchase', 5504, '2026-05-15T00:00:00', 1),
-        (8302, 3012, '8302', 'Build #8202',                      NULL,             'build',    NULL, '2026-05-25T00:00:00', 1),
-        (8303, 3007, '8303', 'Cycle count - unlabeled found lot', NULL,            'adjust',   NULL, '2026-05-22T00:00:00', 1),
-        (8306, 3013, '8306', 'Build #8203',                       NULL,            'build',    NULL, '2026-05-30T00:00:00', 1);
+    -- notes (#872): 8302 carries a multi-line note so the truncation/tooltip treatment in the
+    -- lot lists and genealogy tables is exercised without hand-editing rows.
+    INSERT INTO dbo.lot (id, part_id, lot_number, lot_description, vendor_lot_number, source, po_line_id, created_at, is_active, notes) VALUES
+        (8301, 3007, '8301', 'PO 5003',                          'SS304-LOT-0088', 'purchase', 5504, '2026-05-15T00:00:00', 1, 'Vendor CoA on file.'),
+        (8302, 3012, '8302', 'Build #8202',                      NULL,             'build',    NULL, '2026-05-25T00:00:00', 1, '[jolls 2026-05-25] Built from bar stock lot 8301.' + CHAR(13) + CHAR(10) + CHAR(13) + CHAR(10) + '[jolls 2026-05-26] Two housings reworked for finish; both re-inspected and passed.'),
+        (8303, 3007, '8303', 'Cycle count - unlabeled found lot', NULL,            'adjust',   NULL, '2026-05-22T00:00:00', 1, NULL),
+        (8306, 3013, '8306', 'Build #8203',                       NULL,            'build',    NULL, '2026-05-30T00:00:00', 1, NULL);
     SET IDENTITY_INSERT dbo.lot OFF;
 
     -- 8401: 3012's lot 8302 consumed 1 unit of 3007's lot 8301 (bom line 3906, qty 1) — a
@@ -569,26 +571,26 @@ BEGIN TRY
     -- lot-tracked assembly (3005) to its build (8201) only — the build_id-without-lot_id
     -- case that build_id exists to cover. Both are WIP with recent (non-stale) dates.
     SET IDENTITY_INSERT dbo.form_record ON;
-    INSERT INTO dbo.form_record (id, form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, unit_id, updated_at, created_at) VALUES
-        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00'), -- WIP, stale
-        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00'), -- Complete
-        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00'), -- Approved (locked twice — see events)
-        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-04T00:00:00'), -- soft-deleted
-        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-05T00:00:00'), -- Complete, pre-#251 style (backfillable)
+    INSERT INTO dbo.form_record (id, form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, unit_id, updated_at, created_at, notes) VALUES
+        (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00', NULL), -- WIP, stale
+        (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00', NULL), -- Complete
+        (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00', NULL), -- Approved (locked twice — see events)
+        (7004, 6001, 3004, '2026-06-04', '7004', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 0, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-04T00:00:00', NULL), -- soft-deleted
+        (7005, 6001, 3004, '2026-06-05', '7005', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-05T00:00:00', NULL), -- Complete, pre-#251 style (backfillable)
         -- 7006-7009 span May and July so the Reports > Yield Summary "Group by month" view (#244) has more than one month to show.
-        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-15T00:00:00'), -- Complete, all pass
-        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-20T00:00:00'), -- Approved, has a FAIL
-        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-01T00:00:00'), -- Complete, all pass
-        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-05T00:00:00'), -- Complete, all pass
-        (7010, 6001, 3012, '2026-07-10', '7010', 'ASM-1002', 'Sub-Assembly',  '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8302, 8202, NULL, '2020-01-01T00:00:00', '2026-07-10T00:00:00'), -- WIP, lot-tracked part → lot 8302 + build 8202 (#677)
-        (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Skyrunner Standard Drone','6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, 8201, 8503, '2020-01-01T00:00:00', '2026-07-11T00:00:00'), -- WIP, non-lot-tracked assembly → build 8201 only (#677); unit 8503 under test (#742, Q8 — denormalized lot/build equal the unit's)
-        (7012, 6001, 3007, '2026-05-16', '7012', 'RAW-1002', 'Stainless Steel Bar Stock', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8301, NULL, 8502, '2020-01-01T00:00:00', '2026-05-16T00:00:00'), -- WIP, Incoming Inspection: lot 8301 → build_id NULL (#737 PRE-state row; reuses form 6001 purely to cover the receipt-not-yet-consumed case, not a realistic electrical test on bar stock); unit 8502 under test (#742, Q8)
-        (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8306, 8203, 8501, '2020-01-01T00:00:00', '2026-05-31T00:00:00'), -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0); unit 8501 under test (#742, Q8)
+        (7006, 6001, 3004, '2026-05-15', '7006', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-15T00:00:00', NULL), -- Complete, all pass
+        (7007, 6001, 3004, '2026-05-20', '7007', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-05-20T00:00:00', NULL), -- Approved, has a FAIL
+        (7008, 6001, 3004, '2026-07-01', '7008', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-01T00:00:00', NULL), -- Complete, all pass
+        (7009, 6001, 3004, '2026-07-05', '7009', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-05T00:00:00', NULL), -- Complete, all pass
+        (7010, 6001, 3012, '2026-07-10', '7010', 'ASM-1002', 'Sub-Assembly',  '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8302, 8202, NULL, '2020-01-01T00:00:00', '2026-07-10T00:00:00', 'Session run on bench 2; DMM swapped mid-session after a fuse blew (#870 seed note).'), -- WIP, lot-tracked part → lot 8302 + build 8202 (#677)
+        (7011, 6001, 3005, '2026-07-11', '7011', 'ASM-1001', 'Skyrunner Standard Drone','6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, 8201, 8503, '2020-01-01T00:00:00', '2026-07-11T00:00:00', NULL), -- WIP, non-lot-tracked assembly → build 8201 only (#677); unit 8503 under test (#742, Q8 — denormalized lot/build equal the unit's)
+        (7012, 6001, 3007, '2026-05-16', '7012', 'RAW-1002', 'Stainless Steel Bar Stock', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8301, NULL, 8502, '2020-01-01T00:00:00', '2026-05-16T00:00:00', NULL), -- WIP, Incoming Inspection: lot 8301 → build_id NULL (#737 PRE-state row; reuses form 6001 purely to cover the receipt-not-yet-consumed case, not a realistic electrical test on bar stock); unit 8502 under test (#742, Q8)
+        (7013, 6001, 3013, '2026-05-31', '7013', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, 8306, 8203, 8501, '2020-01-01T00:00:00', '2026-05-31T00:00:00', NULL), -- WIP, Final Test on the top-level assembly: lot 8306 + build 8203 (#737) — completes the receipt(7012)→build(8202)→build(8203)→final-test flow (plan §0); unit 8501 under test (#742, Q8)
         -- Retest of unit 8501 (#745): a SECOND form_record pointing at the SAME unit — the
         -- retest-as-same-unit case. serial_number matches unit 8501's ('SN-3013-001') and
         -- unit_id is reused; lot_id/build_id are NULL (the slice-8 write-shape: provenance is
         -- read THROUGH the unit, Q8), so this row also exercises loadRecordTrace's read-through.
-        (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', 0, 0, 1, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00');
+        (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', 0, 0, 1, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00', NULL);
     SET IDENTITY_INSERT dbo.form_record OFF;
 
     -- One materialized row per step per record, headings included (type=1) — matching what

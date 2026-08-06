@@ -106,6 +106,15 @@
         <th class="text-muted">Type</th>
         <td>{{.Record.Comments}}</td>
       </tr>
+      {{/* #870 — session-level note, frozen with the record. The linked LOT's note (#872)
+           is batch-level and keeps changing after this record freezes, so it lives in its
+           own card to the right rather than inline here. */}}
+      {{if .Record.Notes}}
+      <tr>
+        <th class="text-muted">Note</th>
+        <td style="white-space:pre-wrap; word-break:break-word;">{{.Record.Notes}}</td>
+      </tr>
+      {{end}}
       {{if .Record.InstrumentType}}
       <tr>
         <th class="text-muted">Instrument Type</th>
@@ -131,6 +140,31 @@
       */}}
     </table>
   </div>
+
+  {{/* #872 — related lot. Read-only: the batch note is appended to from the record's EDIT
+       page (append-only, so simultaneous testers don't clobber each other) and rewritten in
+       full only on the lot edit page. Shown here so a locked record still says what batch it
+       came from and what was noted against it — note the lot note is NOT frozen with the
+       record, so it may have grown since this record was completed. */}}
+  {{if and .Trace .Trace.LinkedLot}}
+  <div class="card ms-4 flex-grow-1" style="max-width:420px;">
+    <div class="card-body py-2">
+      <div class="fw-semibold small mb-1">
+        Lot <a href="/part/{{.Trace.PartID}}/lots/{{.Trace.LinkedLot.ID}}">{{.Trace.LinkedLot.LotNumber}}</a>
+        {{if .Trace.LinkedLot.LotDescription}}<span class="text-muted fw-normal">&middot; {{.Trace.LinkedLot.LotDescription}}</span>{{end}}
+      </div>
+      {{if .Trace.LinkedLot.VendorLot}}
+      <div class="small text-muted mb-1">Vendor lot {{.Trace.LinkedLot.VendorLot}}</div>
+      {{end}}
+      {{if .Trace.LinkedLot.Notes}}
+      <p class="small mb-0" style="white-space:pre-wrap; word-break:break-word; max-height:9rem; overflow-y:auto;">{{.Trace.LinkedLot.Notes}}</p>
+      {{else}}
+      <p class="small text-muted mb-0">No notes on this lot.</p>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+
   <div class="dropdown" data-col-table="results-table">
     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
       Columns

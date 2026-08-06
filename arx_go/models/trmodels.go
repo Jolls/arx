@@ -66,6 +66,7 @@ type TestRecord struct {
 	SerialNumberDesc string // description of the unit under test
 	RecordDate       *time.Time
 	Comments         string // used as "Type" in the UI
+	Notes            string // free-text remark for the whole test session (#870); freezes with the record
 	InstrumentType   string // free-text instrument type label; matched against form_row.instrument_types to filter steps
 	IsLocked         bool
 	IsApproved       bool // 1 = reviewer-approved; only a TR reviewer may unlock (#249). Requires IsLocked.

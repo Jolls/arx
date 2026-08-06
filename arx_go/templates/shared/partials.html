@@ -144,6 +144,13 @@
 {{end}}
 
 {{/* inv_txn_badge — pass the inventory transaction type code (.) */}}
+{{/* note_cell — a free-text note inside a table cell (#872). Truncated to one line with
+     the full text in the tooltip, so a multi-line note can't blow up the row height.
+     Pipeline: the note string; "" renders an em dash. */}}
+{{define "note_cell"}}
+{{if .}}<span class="text-truncate d-inline-block" style="max-width:280px;" title="{{.}}">{{.}}</span>{{else}}<span class="text-muted">&mdash;</span>{{end}}
+{{end}}
+
 {{define "inv_txn_badge"}}
 {{if eq . "receipt"}}<span class="badge bg-success">Receipt</span>
 {{else if eq . "issue"}}<span class="badge bg-warning text-dark">Issue</span>

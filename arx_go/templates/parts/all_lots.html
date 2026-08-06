@@ -21,6 +21,7 @@
                     <th class="sortable" onclick="sortTable(this)">Lot Description</th>
                     <th class="sortable" onclick="sortTable(this)">Part Number</th>
                     <th class="sortable" onclick="sortTable(this)">Part Description</th>
+                    <th class="sortable" onclick="sortTable(this)">Notes</th>
                     <th class="sortable" onclick="sortTable(this)" style="width:120px;">Created</th>
                     <th class="sortable" onclick="sortTable(this)" style="width:80px;">Status</th>
                 </tr>
@@ -33,6 +34,7 @@
                     <td>{{if .LotDescription}}{{.LotDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
                     <td>{{if .PartTitle}}{{.PartTitle}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{template "note_cell" .Notes}}</td>
                     <td>{{.CreatedAt.Format "2006-01-02"}}</td>
                     <td>{{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Inactive</span>{{end}}</td>
                 </tr>

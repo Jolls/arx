@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.16] - 2026-08-06
+### Added
+- Lots carry free-text notes (`lot.notes`), editable in full on the lot edit page and shown on the lot detail header, the per-part Lots subtab, the cross-part Lots list, and both genealogy trace tables ([#872](https://github.com/Jolls/arx-legacy/issues/872))
+- A test record's read-only view gains a related-lot card beside the record info, showing the linked lot's number, description, vendor lot, and current batch note ([#872](https://github.com/Jolls/arx-legacy/issues/872))
+- A test record's edit page can append a line to its linked lot's note, saved with the record in the same transaction. Only the new text is posted and the server concatenates it, stamped with the author's username and date, so two testers appending from long-open record pages both land instead of one clobbering the other ([#872](https://github.com/Jolls/arx-legacy/issues/872))
+- Test records carry a record-level note (`form_record.notes`) for remarks covering the whole test session, distinct from the per-step Comment column. It shows on the record view and printed record, freezes when the record is locked/approved, and is deliberately not carried over by Duplicate ([#870](https://github.com/Jolls/arx-legacy/issues/870))
+
 ## [0.7.15] - 2026-08-05
 ### Added
 - ArxDev seed data: BOM line 3913 adds part 3012 (`lot`-tracked, not `lot_serial`, with its own BOM) as a further FORM-1001 testable unit, so the whole-lot/batch build-at-test-time qty field has a selectable, buildable fixture to exercise ([#867](https://github.com/Jolls/arx-legacy/issues/867))

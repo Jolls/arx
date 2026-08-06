@@ -28,6 +28,8 @@
                 <dd class="col-sm-10">{{if .Lot.LotDescription}}{{.Lot.LotDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
                 <dt class="col-sm-2">Created</dt>
                 <dd class="col-sm-10">{{.Lot.CreatedAt.Format "2006-01-02"}}</dd>
+                <dt class="col-sm-2">Notes</dt>
+                <dd class="col-sm-10">{{if .Lot.Notes}}<span style="white-space:pre-wrap; word-break:break-word;">{{.Lot.Notes}}</span>{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
             </dl>
         </div>
     </div>
@@ -42,6 +44,7 @@
                     <th>Lot / Unit</th>
                     <th>Part</th>
                     <th>Vendor Lot</th>
+                    <th>Notes</th>
                     <th class="text-end" style="width:120px;">Qty Consumed</th>
                 </tr>
             </thead>
@@ -59,6 +62,7 @@
                     </td>
                     <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartTitle}} &mdash; {{.PartTitle}}{{end}}</td>
                     <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{template "note_cell" .Notes}}</td>
                     <td class="text-end">{{printf "%g" .Qty}}</td>
                 </tr>
                 {{end}}
@@ -79,6 +83,7 @@
                     <th>Lot / Unit</th>
                     <th>Part</th>
                     <th>Vendor Lot</th>
+                    <th>Notes</th>
                     <th class="text-end" style="width:120px;">Qty Consumed</th>
                 </tr>
             </thead>
@@ -95,6 +100,7 @@
                     </td>
                     <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartTitle}} &mdash; {{.PartTitle}}{{end}}</td>
                     <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{template "note_cell" .Notes}}</td>
                     <td class="text-end">{{printf "%g" .Qty}}</td>
                 </tr>
                 {{end}}

@@ -64,6 +64,15 @@
     <div class="cell"><label>Type</label><span>{{if .Record.Comments}}{{.Record.Comments}}{{else}}—{{end}}</span></div>
   </div>
 
+  {{/* #870 — the session-level note belongs on the printed record: it is part of what the
+       tester recorded. The lot's batch note (#872) does not — it keeps changing after this
+       record is frozen, so printing it would date the document. */}}
+  {{if .Record.Notes}}
+  <div class="meta-strip">
+    <div class="cell" style="flex:1;"><label>Note</label><span style="white-space:pre-wrap;">{{.Record.Notes}}</span></div>
+  </div>
+  {{end}}
+
   <table>
     <thead>
       <tr>

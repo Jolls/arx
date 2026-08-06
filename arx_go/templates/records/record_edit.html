@@ -59,6 +59,14 @@
     </div>
   </div>
 
+  {{/* #870 — record-level note: a remark covering the whole test session, as opposed to
+       the per-step Comment column below. Saves and freezes with the record. */}}
+  <div class="mb-3">
+    <label for="record-notes" class="form-label fw-semibold mb-1 small">Record Note</label>
+    <textarea id="record-notes" name="notes" rows="3" class="form-control form-control-sm"
+              placeholder="Remarks that apply to this whole test session">{{.Record.Notes}}</textarea>
+  </div>
+
   {{/* #677/#687/#745 — Lot/build/unit traceability linkage. Re-enabled for v0.7.0 (#745):
        a serial/lot_serial part's record captures the lot/build that give its new unit
        provenance; on save the record links a unit and reads lot/build through it (Q8). */}}
@@ -96,6 +104,33 @@
     </div>
     {{end}}
   </div>
+
+  {{/* #872 — the linked lot's batch note. The existing note is read-only here: this page
+       may only APPEND, and posts just the new sentence, so two testers with this page open
+       for a whole session both land their line instead of one overwriting the other's
+       page-load copy. The box is an ordinary field of #edit-form — it saves with the
+       record, in the same transaction. Full rewrites happen on the lot edit page. */}}
+  {{if .Trace.LinkedLot}}
+  <div class="card mb-3">
+    <div class="card-body py-2">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="fw-semibold small">Lot note &mdash; lot {{.Trace.LinkedLot.LotNumber}}</span>
+        {{/* New tab: this page holds an in-progress test session, so navigating away
+             from it would discard unsaved results. */}}
+        <a href="/part/{{.Trace.PartID}}/lots/{{.Trace.LinkedLot.ID}}/edit" target="_blank" class="small">edit in full</a>
+      </div>
+      {{if .Trace.LinkedLot.Notes}}
+      <p class="small mb-2" style="white-space:pre-wrap; word-break:break-word;">{{.Trace.LinkedLot.Notes}}</p>
+      {{else}}
+      <p class="small text-muted mb-2">No notes on this lot yet.</p>
+      {{end}}
+      <label for="lot-note" class="form-label mb-1 small">Add to lot note</label>
+      <textarea id="lot-note" name="lot_note" rows="2" class="form-control form-control-sm"
+                placeholder="A line to append to this batch's note"></textarea>
+      <div class="form-text">Appended with your username and today's date when you save this record.</div>
+    </div>
+  </div>
+  {{end}}
 
   {{/* #747 — inline build-at-test-time panel. Expanded by the button above; saving the
        record then builds this part's BOM (components consumed, output received) in the
@@ -297,7 +332,9 @@ function draftData() {
     '#edit-form input[name^="result_"], #edit-form select[name^="result_"], ' +
     '#edit-form input[name^="comment_"]'
   ).forEach(el => { data[el.name] = el.value; });
-  ['record_date', 'comments', 'instrument_type'].forEach(n => {
+  // notes = the record-level note (#870); lot_note = the pending append to the lot's
+  // batch note (#872), which is only written on save, so an unsaved one is draft state.
+  ['record_date', 'comments', 'instrument_type', 'notes', 'lot_note'].forEach(n => {
     const el = document.querySelector('#edit-form [name="' + n + '"]');
     if (el) data[n] = el.value;
   });
