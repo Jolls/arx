@@ -5,6 +5,13 @@ dialect-translated port of the same tables). Solid relationship lines (`--`) are
 FOREIGN KEY constraints; dotted lines (`..`) are logical-only references with no DB-level
 constraint — see "Non-enforced references" in Notes.
 
+The [full schema](#full-schema) below has all 31 tables. For a smaller, more digestible view,
+see the [diagrams by domain](#diagrams-by-domain) further down — each one is scoped to a
+single area of the app, with entities it references from other domains shown as PK-only
+stubs (full columns live in that entity's home diagram).
+
+## Full schema
+
 ```mermaid
 erDiagram
 
@@ -406,8 +413,6 @@ erDiagram
     uom               ||--o{ part            : "base unit (uom_id)"
     uom               ||--o{ supplier_part   : "purchase unit (uom_id)"
     mfg_part          ||--o{ supplier_part   : "manufacturer PN (mfg_part_id)"
-    price             ||..o{ part            : "active price for (price_id, deferred)"
-    company           ||..o{ part            : "preferred supplier for (default_supplier_id, deferred)"
 
     %% ===== Relationships: purchasing =====
     purchase_order ||--o{ po_line                 : "line items (po_id)"
@@ -473,3 +478,451 @@ erDiagram
   `SQL/azure/triggers.sql` — never updated directly in application code.
 - Per-table column semantics, trigger side-effects, and full DDL live in `SQL/SCHEMA.md`
   and `SQL/azure/*.sql`.
+
+## Diagrams by domain
+
+### Parts & sourcing
+
+What a part is and what it's built from. `company_schematic` is a compact stub standing in
+for `company`/`mfg_part`/`price`/`supplier_part` — the company-side tables that price, source,
+and manufacture a part — fully detailed in "Companies" below.
+
+```mermaid
+erDiagram
+
+    part {
+        int     id                    PK
+        varchar part_number           "UNIQUE"
+        varchar category              "ASM/BUY/DWG/DOC/FORM/MFG/OPS/RAW/SVC/TOOL"
+        varchar release_status        "U/A/D"
+        int     uom_id                FK
+        int     price_id              FK "deferred, not enforced"
+        int     default_supplier_id   FK "deferred, not enforced"
+        int     primary_attachment_id FK
+        bit     is_active
+    }
+
+    part_attachment {
+        int     id        PK
+        int     part_id   FK
+        varchar file_name "path or URL"
+        varchar category
+        bit     is_active
+    }
+
+    bom {
+        int     id                 PK
+        int     parent_part_id     FK
+        int     component_part_id  FK
+        decimal qty
+    }
+
+    uom {
+        int     uom_id       PK
+        varchar abbreviation
+        varchar unit_type    "count/volume/length/mass/package"
+    }
+
+    company_schematic {
+        varchar company
+        varchar mfg_part
+        varchar price
+        varchar supplier_part
+    }
+
+    part                ||--o{ part_attachment    : "attached files (part_id)"
+    part_attachment     ||--o{ part               : "primary attachment for (primary_attachment_id)"
+    part                ||--o{ bom                : "as parent assembly (parent_part_id)"
+    part                ||--o{ bom                : "as component (component_part_id)"
+    uom                 ||--o{ part               : "base unit (uom_id)"
+    part                ||--o{ company_schematic  : "pricing (price.part_id)"
+    part                ||--o{ company_schematic  : "sourcing links (supplier_part.part_id, uom_id)"
+    part                ||--o{ company_schematic  : "manufacturer PNs (mfg_part.part_id)"
+    company_schematic   ||..o{ part               : "preferred supplier & active price (default_supplier_id, price_id — deferred)"
+```
+
+### Companies
+
+Suppliers, manufacturers, and their contacts, plus the sourcing/pricing/manufacturer-PN
+tables that bridge to parts. `parts_schematic` is a compact stub standing in for
+`part`/`part_attachment`/`bom`/`uom` — fully detailed in "Parts & sourcing" above.
+
+```mermaid
+erDiagram
+
+    company {
+        int     id                    PK
+        varchar name                  "UNIQUE"
+        bit     is_supplier
+        bit     is_manufacturer
+        int     default_contact       FK
+        int     primary_attachment_id FK
+        bit     is_active
+    }
+
+    company_attachment {
+        int      supplier_attachment_id PK
+        int      supplier_id            FK
+        nvarchar file_path              "LOCAL:... or https://"
+        bit      is_active
+    }
+
+    contact {
+        int     id           PK
+        varchar display_name
+        int     company_id   FK
+        varchar email
+        bit     is_active
+    }
+
+    price {
+        int     id          PK
+        int     part_id     FK
+        int     supplier_id FK
+        decimal price_ea
+        decimal pack_size
+        bit     is_active
+    }
+
+    supplier_part {
+        int     id          PK
+        int     supplier_id FK
+        int     part_id     FK
+        int     mfg_part_id FK
+        int     uom_id      FK
+        varchar supplier_pn
+        int     preference
+    }
+
+    mfg_part {
+        int     id              PK
+        int     part_id         FK
+        int     mfg_id          FK
+        varchar mfg_part_number
+        bit     is_active
+    }
+
+    parts_schematic {
+        varchar part
+        varchar part_attachment
+        varchar bom
+        varchar uom
+    }
+
+    company              ||--o{ company_attachment : "attachments (supplier_id)"
+    company_attachment   ||--o{ company             : "primary attachment for (primary_attachment_id)"
+    company              ||..o{ contact             : "contacts (company_id, deferred)"
+    contact              ||--o{ company             : "default contact for (default_contact)"
+    company               ||--o{ supplier_part       : "sourcing links (supplier_id)"
+    company               ||--o{ mfg_part            : "as manufacturer (mfg_id)"
+    company               ||--o{ price               : "pricing (supplier_id)"
+    mfg_part               ||--o{ supplier_part        : "manufacturer PN (mfg_part_id)"
+    parts_schematic         ||--o{ price                : "priced parts (part_id)"
+    parts_schematic         ||--o{ supplier_part         : "sourced parts & purchase unit (part_id, uom_id)"
+    parts_schematic         ||--o{ mfg_part              : "manufacturer PNs (part_id)"
+    company                 ||..o{ parts_schematic        : "preferred supplier & active price for (default_supplier_id, price_id — deferred)"
+```
+
+### Purchasing / PO lifecycle
+
+The RFQ → PO → receive flow. `part` is a PK-only stub — see "Parts & sourcing" above;
+`company`/`contact` are PK-only stubs — see "Companies" above.
+
+```mermaid
+erDiagram
+
+    company {
+        int id PK
+    }
+
+    contact {
+        int id PK
+    }
+
+    part {
+        int id PK
+    }
+
+    purchase_order {
+        int     id                  PK
+        varchar number              "UNIQUE"
+        int     supplier_id         FK
+        int     receiver_id         FK
+        int     supplier_contact_id FK
+        int     receiver_contact_id FK
+        varchar status              "draft/open/sent/partially_received/closed/cancelled/rfq"
+        varchar approval_status     "not_submitted/pending/approved/rejected"
+        int     rfq_group_id
+        decimal total_cost
+    }
+
+    po_line {
+        int     id             PK
+        int     po_id          FK
+        int     part_id        FK
+        int     line_number
+        decimal qty
+        decimal unit_cost
+        decimal received_qty
+        int     lead_time_days
+    }
+
+    company         ||--o{ purchase_order : "as supplier (supplier_id)"
+    company         ||--o{ purchase_order : "as receiver (receiver_id)"
+    contact         ||--o{ purchase_order : "as supplier contact (supplier_contact_id)"
+    contact         ||--o{ purchase_order : "as receiver contact (receiver_contact_id)"
+    purchase_order  ||--o{ po_line        : "line items (po_id)"
+    part            ||--o{ po_line        : "ordered part (part_id)"
+```
+
+### Inventory, lot & serial traceability
+
+The #676/#736 lot-control and serialization epic: goods receipt and builds create `lot`
+rows, individual tested units get a `unit` row, and `genealogy` records which lot/unit was
+consumed into which. `po_line` and `form_record` are PK-only stubs — `po_line` is fully
+defined in "Purchasing" above, `form_record` in "Test forms & execution" below. `part` is
+scoped to just its lot-tracking columns here (full definition in "Parts & sourcing" above) —
+`is_lot_tracked`/`tracking_mode` are why a part enters this flow at all, so they're kept
+rather than trimmed to a bare stub.
+
+```mermaid
+erDiagram
+
+    part {
+        int     id             PK
+        varchar part_number
+        bit     is_lot_tracked
+        varchar tracking_mode  "none/lot/serial/lot_serial"
+        decimal stock_on_hand  "cached SUM(inventory_transaction.qty)"
+    }
+
+    po_line {
+        int id PK
+    }
+
+    inventory_transaction {
+        int     id         PK
+        int     part_id    FK
+        varchar txn_type   "receipt/issue/adjustment/count"
+        decimal qty        "signed"
+        int     po_line_id FK
+        int     lot_id     FK
+        int     build_id   FK
+    }
+
+    lot {
+        int      id              PK
+        int      part_id         FK
+        varchar  lot_number
+        varchar  lot_description
+        varchar  source          "purchase/build/adjust"
+        int      po_line_id      FK
+        bit      is_active
+    }
+
+    build {
+        int     id            PK
+        int     part_id       FK
+        int     output_lot_id FK
+        decimal qty
+        date    build_date
+    }
+
+    unit {
+        int      id            PK
+        int      part_id       FK
+        int      lot_id        FK
+        int      build_id      FK
+        varchar  serial_number "UNIQUE per part_id"
+        varchar  source        "test/manual"
+        bit      is_active
+    }
+
+    genealogy {
+        int     id             PK
+        int     parent_lot_id  FK "exactly one of parent_lot_id/parent_unit_id set"
+        int     parent_unit_id FK
+        int     child_lot_id   FK "exactly one of child_lot_id/child_unit_id set"
+        int     child_unit_id  FK
+        decimal qty_consumed
+    }
+
+    form_record {
+        int id      PK
+        int lot_id   FK "logical only, not enforced"
+        int build_id FK "logical only, not enforced"
+        int unit_id  FK
+    }
+
+    part     ||--o{ inventory_transaction : "stock ledger (part_id)"
+    po_line  ||--o{ inventory_transaction : "receipts (po_line_id)"
+    lot      ||--o{ inventory_transaction : "movements (lot_id)"
+    build    ||--o{ inventory_transaction : "movements (build_id)"
+    part     ||--o{ lot                   : "lots (part_id)"
+    po_line  ||--o{ lot                   : "purchased lots (po_line_id)"
+    part     ||--o{ build                 : "builds (part_id)"
+    lot      ||--o{ build                 : "output lot (output_lot_id)"
+    part     ||--o{ unit                  : "serialized units (part_id)"
+    lot      ||--o{ unit                  : "units in lot (lot_id)"
+    build    ||--o{ unit                  : "build-sourced units (build_id)"
+    lot      ||--o{ genealogy             : "as parent lot (parent_lot_id)"
+    lot      ||--o{ genealogy             : "as child lot (child_lot_id)"
+    unit     ||--o{ genealogy             : "as parent unit (parent_unit_id)"
+    unit     ||--o{ genealogy             : "as child unit (child_unit_id)"
+    lot      ||..o{ form_record           : "tested-unit lot (lot_id, logical only)"
+    build    ||..o{ form_record           : "tested-unit build (build_id, logical only)"
+    unit     ||--o{ form_record           : "unit under test (unit_id)"
+```
+
+### Test forms & execution
+
+Form definitions vs. the frozen per-record snapshot taken at test time. `lot`/`build`/`unit`
+are PK-only stubs — see "Inventory, lot & serial traceability" above for their full columns;
+`form_record.lot_id`/`build_id`/`unit_id` is how a test record ties back to what was tested.
+
+```mermaid
+erDiagram
+
+    part {
+        int id PK
+    }
+
+    form {
+        int     id              PK
+        int     part_number_id  FK
+        bit     is_locked
+        bit     is_active
+        varchar form_type       "inspection/test/calibration/checklist/batch record"
+        int     revision
+    }
+
+    form_row {
+        int     id           PK
+        int     form_id      FK "logical only, not enforced"
+        int     type         "0=data,1-3=heading"
+        varchar parameter
+        varchar spec_min
+        varchar spec_max
+        varchar spec_nom
+        varchar granularity  "unit/lot"
+    }
+
+    form_record {
+        int      id             PK
+        int      form_id        FK "logical only, not enforced"
+        int      part_id        FK
+        int      lot_id         FK "logical only, not enforced"
+        int      build_id       FK "logical only, not enforced"
+        int      unit_id        FK
+        bit      is_locked
+        bit      is_approved
+        bit      is_active
+    }
+
+    result {
+        int     id             PK
+        int     form_record_id FK "logical only, not enforced"
+        int     form_row_id    FK "logical only, not enforced"
+        bit     pass_fail
+        varchar result
+    }
+
+    lot {
+        int id PK
+    }
+
+    build {
+        int id PK
+    }
+
+    unit {
+        int     id            PK
+        varchar serial_number
+    }
+
+    part          ||--o{ form         : "test forms (part_number_id)"
+    part          ||--o{ form_record  : "test records (part_id)"
+    form          ||..o{ form_row     : "test definitions (form_id, logical only)"
+    form          ||..o{ form_record  : "executed records (form_id, logical only)"
+    form_row      ||..o{ result       : "results (form_row_id, logical only)"
+    form_record   ||..o{ result       : "results (form_record_id, logical only)"
+    lot           ||..o{ form_record  : "tested-unit lot (lot_id, logical only)"
+    build         ||..o{ form_record  : "tested-unit build (build_id, logical only)"
+    unit          ||--o{ form_record  : "unit under test (unit_id)"
+```
+
+### Audit trails
+
+A recurring pattern that cuts across three unrelated domains: an append-only event log,
+sometimes paired with a per-event frozen snapshot table. `form`, `form_row`, `form_record`,
+and `purchase_order` are PK-only stubs — see their home diagrams above for full columns.
+
+```mermaid
+erDiagram
+
+    form {
+        int id PK
+    }
+
+    form_events {
+        int      id         PK
+        int      form_id    FK
+        varchar  event_type "locked/unlocked/archived/activated"
+        varchar  username
+        datetime event_date
+    }
+
+    form_row {
+        int id PK
+    }
+
+    form_row_history {
+        int      id          PK
+        int      form_row_id FK "logical only, not enforced"
+        datetime changed_at
+        varchar  changed_by
+    }
+
+    form_record {
+        int id PK
+    }
+
+    record_events {
+        int      id             PK
+        int      form_record_id FK
+        varchar  event_type     "locked/unlocked/archived/activated"
+        varchar  username
+        datetime event_date
+    }
+
+    record_event_results {
+        int     id          PK
+        int     event_id    FK
+        int     form_row_id FK "logical only, not enforced"
+        varchar parameter
+        varchar result
+        bit     pass_fail
+    }
+
+    purchase_order {
+        int id PK
+    }
+
+    purchase_order_history {
+        int      id          PK
+        int      po_id       FK
+        varchar  event_type  "status/approval"
+        varchar  from_status
+        varchar  to_status
+        varchar  action      "submitted/approved/rejected/reset"
+        varchar  changed_by
+        datetime changed_at
+    }
+
+    form             ||--o{ form_events           : "audit events (form_id)"
+    form_row         ||..o{ form_row_history      : "audit snapshots (form_row_id, logical only)"
+    form_record      ||--o{ record_events         : "audit events (form_record_id)"
+    record_events    ||--o{ record_event_results  : "lock snapshot (event_id)"
+    form_row         ||..o{ record_event_results  : "snapshot rows (form_row_id, logical only)"
+    purchase_order   ||--o{ purchase_order_history : "activity log (po_id)"
+```
