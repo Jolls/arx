@@ -30,7 +30,7 @@ import (
 )
 
 // arxDevSentinelPartID/Number/Title identify a fixed-ID row that only exists in
-// the Arx test seed data (SQL/seed_test_data.sql and SQL/postgres/seed_test_data.sql
+// the Arx test seed data (SQL/azure/seed_test_data.sql and SQL/postgres/seed_test_data.sql
 // carry the same id/values), used to confirm ARX_TEST_DSN actually points at
 // seeded test data rather than trusting the database name.
 const (
@@ -799,7 +799,7 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 			}
 			if !got.Valid || got.Time.Format("2006-01-02T15:04:05") != sentinel {
 				t.Errorf("%s id %d: updated_at = %v, want sentinel %s (row was touched by something, "+
-					"or ArxDev needs SQL/seed_test_data.sql re-run)",
+					"or ArxDev needs SQL/azure/seed_test_data.sql re-run)",
 					c.table, id, got, sentinel)
 			}
 		}
@@ -1386,7 +1386,7 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 
-	// Seed IDs from SQL/seed_test_data.sql: 3005 Widget Assembly (has BOM/orders),
+	// Seed IDs from SQL/azure/seed_test_data.sql: 3005 Widget Assembly (has BOM/orders),
 	// 3002 M3x8 SHCS (has price history), company 1001 Acme Fasteners, PO 5002,
 	// form 6001 (has test records spanning multiple months).
 	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID, seedFormID = 3005, 3002, 1001, 5002, 6001
@@ -3164,7 +3164,7 @@ func TestIntegration_RunNamedQuery_UnknownName(t *testing.T) {
 
 // TestIntegration_RunNamedQuery_StaleSpecNomParamRename is the regression test
 // for the production incident documented in
-// SQL/migrations/migrate_max_subbatch_result_param_rename.sql: a named_queries
+// SQL/azure/migrations/migrate_max_subbatch_result_param_rename.sql: a named_queries
 // row's stored SQL was renamed to a new param name, but a spec_nom usage string
 // elsewhere still referenced the old name. parseQuerySpec builds its param map
 // from the spec_nom text, not from named_queries.params, so this produces a
@@ -6120,7 +6120,7 @@ func TestIntegration_QuerySpendByPart(t *testing.T) {
 // (5504, part of PO 5003/Acme Fasteners) that has lead_time_days,
 // date_received, and its PO's date_ordered all set (#815). Requires ArxDev
 // reseeded with the lead_time_days=50 addition to po_line 5504 in
-// SQL/seed_test_data.sql — until reseeded this test fails against the old
+// SQL/azure/seed_test_data.sql — until reseeded this test fails against the old
 // (lead_time_days IS NULL) row.
 func TestIntegration_QueryOnTimeDelivery(t *testing.T) {
 	h, cleanup := liveHandler(t)

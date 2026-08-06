@@ -307,7 +307,7 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 // (UQ_unit_serial), or the raw error otherwise — shared by UnitCreate and
 // UnitUpdate, the two unit-writing handlers (#799). Matched case-insensitively:
 // Postgres folds an unquoted constraint name to lowercase (uq_unit_serial) where
-// SQL Server preserves the case as declared in SQL/unit.sql.
+// SQL Server preserves the case as declared in SQL/azure/unit.sql.
 func (h *Handler) renderUnitSaveErr(w http.ResponseWriter, r *http.Request, err error) {
 	if strings.Contains(strings.ToLower(err.Error()), "uq_unit_serial") {
 		h.renderError(w, r, "A unit with this serial already exists for this part.")
