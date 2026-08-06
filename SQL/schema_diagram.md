@@ -198,6 +198,7 @@ erDiagram
         varchar  vendor_lot_number
         varchar  source            "purchase/build/adjust"
         int      po_line_id        FK
+        varchar  notes             "free-text batch notes"
         datetime created_at
         bit      is_active
     }
@@ -288,6 +289,8 @@ erDiagram
         varchar  serial_number
         datetime record_date
         varchar  instrument_type
+        varchar  comments       "record Type in the UI"
+        varchar  notes          "session-level remark"
         bit      is_locked
         bit      is_approved
         bit      is_active

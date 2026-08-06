@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -122,6 +123,7 @@ type LotRow struct {
 	PartNumber     string
 	PartTitle      string
 	LotDescription string
+	Notes          string // free-text batch notes (#872)
 	CreatedAt      time.Time
 	IsActive       bool
 }
@@ -131,7 +133,7 @@ type LotRow struct {
 func (h *Handler) lotRowSelect() string {
 	return fmt.Sprintf(`
 		SELECT l.id, l.lot_number, l.vendor_lot_number, l.part_id,
-		       p.part_number, p.title, l.lot_description, l.created_at, l.is_active
+		       p.part_number, p.title, l.lot_description, l.notes, l.created_at, l.is_active
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
 	`, h.cfg.LotTable(), h.cfg.PartsTable())
@@ -140,12 +142,13 @@ func (h *Handler) lotRowSelect() string {
 // scanLotRow reads one LotRow from a row cursor over lotRowSelect's columns.
 func scanLotRow(sc interface{ Scan(...any) error }) (LotRow, error) {
 	var lr LotRow
-	var vendorLot, partNumber, partTitle sql.NullString
+	var vendorLot, partNumber, partTitle, notes sql.NullString
 	if err := sc.Scan(&lr.ID, &lr.LotNumber, &vendorLot, &lr.PartID,
-		&partNumber, &partTitle, &lr.LotDescription, &lr.CreatedAt, &lr.IsActive); err != nil {
+		&partNumber, &partTitle, &lr.LotDescription, &notes, &lr.CreatedAt, &lr.IsActive); err != nil {
 		return LotRow{}, err
 	}
 	lr.VendorLot = vendorLot.String
+	lr.Notes = notes.String
 	lr.PartNumber = partNumber.String
 	lr.PartTitle = partTitle.String
 	return lr, nil
@@ -176,7 +179,7 @@ func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]
 	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %sl.id, l.lot_number, l.vendor_lot_number, l.part_id,
-		       p.part_number, p.title, l.lot_description, l.created_at, l.is_active
+		       p.part_number, p.title, l.lot_description, l.notes, l.created_at, l.is_active
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
 		WHERE l.part_id = @p1 ORDER BY l.created_at DESC, l.id DESC
@@ -227,6 +230,7 @@ type TraceNode struct {
 	ID          int
 	Number      string // lot.lot_number or unit.serial_number, per NodeType
 	VendorLot   string // lot nodes only; "" for unit nodes
+	Notes       string // lot nodes only (#872); "" for unit nodes
 	PartID      int
 	PartNumber  string
 	PartTitle   string
@@ -252,14 +256,14 @@ func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, a
 		filterCol, joinPrefix = "parent_"+nodeType+"_id", "child"
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT 'lot' AS node_type, l.id, l.lot_number, l.vendor_lot_number, l.po_line_id,
+		SELECT 'lot' AS node_type, l.id, l.lot_number, l.vendor_lot_number, l.notes, l.po_line_id,
 		       p.id, p.part_number, p.title, g.qty_consumed
 		FROM %[1]s g
 		JOIN %[2]s l ON l.id = g.%[3]s_lot_id
 		JOIN %[4]s p ON p.id = l.part_id
 		WHERE g.%[5]s = @p1
 		UNION ALL
-		SELECT 'unit' AS node_type, u.id, u.serial_number, NULL, NULL,
+		SELECT 'unit' AS node_type, u.id, u.serial_number, NULL, NULL, NULL,
 		       p.id, p.part_number, p.title, g.qty_consumed
 		FROM %[1]s g
 		JOIN %[6]s u ON u.id = g.%[3]s_unit_id
@@ -274,13 +278,14 @@ func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, a
 	var out []TraceNode
 	for rows.Next() {
 		var n TraceNode
-		var vendorLot, partNumber, partTitle sql.NullString
+		var vendorLot, notes, partNumber, partTitle sql.NullString
 		var poLineID sql.NullInt64
-		if err := rows.Scan(&n.NodeType, &n.ID, &n.Number, &vendorLot, &poLineID,
+		if err := rows.Scan(&n.NodeType, &n.ID, &n.Number, &vendorLot, &notes, &poLineID,
 			&n.PartID, &partNumber, &partTitle, &n.Qty); err != nil {
 			return nil, err
 		}
 		n.VendorLot = vendorLot.String
+		n.Notes = notes.String
 		n.PartNumber = partNumber.String
 		n.PartTitle = partTitle.String
 		n.IsVendorLot = poLineID.Valid
@@ -459,14 +464,32 @@ func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	description := fv(r, "lot_description")
 	vendorLot := fv(r, "vendor_lot")
+	notes := fv(r, "notes")
 	_, err = h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET lot_description = @p1, vendor_lot_number = @p2 WHERE id = @p3 AND part_id = @p4`,
-		h.cfg.LotTable()), description, nullableText(vendorLot), lotID, p.ID)
+		`UPDATE %s SET lot_description = @p1, vendor_lot_number = @p2, notes = @p3 WHERE id = @p4 AND part_id = @p5`,
+		h.cfg.LotTable()), description, nullableText(vendorLot), nullableText(notes), lotID, p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error saving lot: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/lots/%d", id, lotID), http.StatusFound)
+}
+
+// appendLotNote appends one entry to a lot's notes (#872). The concatenation happens
+// server-side, from just the new text, rather than the caller posting back a whole
+// rewritten field: a test record's edit page stays open for a whole session, so a
+// full-field write would silently drop anything another tester appended in the
+// meantime. Entries carry a [username date] prefix — a multi-author free-text field
+// is unreadable without attribution. CASE/COALESCE/CONCAT all work on both engines,
+// so no Dialect hook is needed. Takes the caller's tx so an append made while saving
+// a record rolls back with the record if that save fails.
+func (h *Handler) appendLotNote(ctx context.Context, tx *txLogger, lotID int, text, username string) error {
+	entry := fmt.Sprintf("[%s %s] %s", username, time.Now().Format("2006-01-02"), strings.TrimSpace(text))
+	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
+		UPDATE %s SET notes = CASE WHEN COALESCE(notes, '') = '' THEN @p1 ELSE CONCAT(notes, @p2) END
+		WHERE id = @p3
+	`, h.cfg.LotTable()), entry, "\n\n"+entry, lotID)
+	return err
 }
 
 // ── All lots (#701) ──────────────────────────────────────────────────────────

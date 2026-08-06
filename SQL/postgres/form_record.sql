@@ -13,8 +13,9 @@ CREATE TABLE form_record (
   subject_part_number    VARCHAR(64),                       -- Denormalized PN at record creation.
   subject_pn_description  VARCHAR(64),                      -- Denormalized PN description.
   test_order             TEXT,                              -- Snapshot of form.test_order.
-  comments               TEXT,
-  instrument_type        VARCHAR(100),                      -- Matched against form_row.instrument_types.
+  comments               TEXT,                               -- Despite the name, holds the record Type shown in the UI. Rename tracked as #874.
+  notes                  TEXT,                               -- Free-text remark for the whole test session (#870). Freezes with the record.
+  instrument_type        VARCHAR(100),                     -- Matched against form_row.instrument_types.
   is_locked              BOOLEAN      NOT NULL DEFAULT FALSE, -- TRUE = locked (Complete or Approved).
   is_approved            BOOLEAN      NOT NULL DEFAULT FALSE, -- TRUE = reviewer-approved.
   is_active              BOOLEAN      NOT NULL DEFAULT TRUE,  -- FALSE = soft-deleted.

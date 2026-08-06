@@ -22,6 +22,7 @@
                     <th>Lot #</th>
                     <th>Vendor Lot</th>
                     <th style="width:140px;">Lot Description</th>
+                    <th>Notes</th>
                     <th style="width:120px;">Created</th>
                     <th style="width:80px;">Status</th>
                 </tr>
@@ -32,6 +33,7 @@
                     <td><a href="/part/{{$.Part.ID}}/lots/{{.ID}}">{{.LotNumber}}</a></td>
                     <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{if .LotDescription}}{{.LotDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{template "note_cell" .Notes}}</td>
                     <td>{{.CreatedAt.Format "2006-01-02"}}</td>
                     <td>{{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Inactive</span>{{end}}</td>
                 </tr>

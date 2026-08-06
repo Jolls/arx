@@ -38,8 +38,9 @@ CREATE TABLE form_record (
   subject_part_number    VARCHAR(64),                       -- Denormalized PN at record creation.
   subject_pn_description  VARCHAR(64),                      -- Denormalized PN description at record creation.
   test_order             VARCHAR(MAX),                      -- Snapshot of form.test_order at record creation.
-  comments               VARCHAR(MAX),
-  instrument_type        VARCHAR(100),                      -- Instrument type label (e.g. 'ModelA'). Matched against form_row.instrument_types to filter applicable steps.
+  comments               VARCHAR(MAX),                      -- Despite the name, holds the record Type ('New Release', 'Re-Test') shown in the UI. Rename tracked as #874.
+  notes                  VARCHAR(MAX),                      -- Free-text remark for the whole test session (#870). Freezes with the record when it is locked/approved.
+  instrument_type        VARCHAR(100),                     -- Instrument type label (e.g. 'ModelA'). Matched against form_row.instrument_types to filter applicable steps.
   is_locked              BIT          NOT NULL CONSTRAINT DF_form_record_is_locked DEFAULT 0, -- 1 = record is locked from further edits (Complete or Approved).
   is_approved            BIT          NOT NULL CONSTRAINT DF_form_record_is_approved DEFAULT 0, -- 1 = reviewer-approved; only a TR reviewer may unlock. Requires is_locked = 1.
   is_active              BIT          NOT NULL CONSTRAINT DF_form_record_is_active DEFAULT 1, -- 0 = soft-deleted; excluded from all views.

@@ -1213,11 +1213,11 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       record_date, comments, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       lot_id, build_id, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
+			&record.SerialNumberDesc, &record.RecordDate, &record.Comments, &record.Notes,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
 			&record.LotID, &record.BuildID, &record.UnitID)
 	if err == sql.ErrNoRows {
@@ -1352,10 +1352,10 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, comments, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
+			&record.SerialNumberDesc, &record.RecordDate, &record.Comments, &record.Notes,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
@@ -1853,11 +1853,11 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       record_date, comments, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       lot_id, build_id, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
+			&record.SerialNumberDesc, &record.RecordDate, &record.Comments, &record.Notes,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
 			&record.LotID, &record.BuildID, &record.UnitID)
 	if err == sql.ErrNoRows {
@@ -2533,6 +2533,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 
 	comments := strings.TrimSpace(r.FormValue("comments"))
 	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
+	notes := strings.TrimSpace(r.FormValue("notes")) // #870: record-level session remark
 
 	// #677: lot/build linkage saves with the record's other metadata (blank clears it).
 	lotArg, buildArg, linkErr := h.recordLinkageArgs(r, record.PartNumberID)
@@ -2630,6 +2631,24 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// #872: the lot-note box on this page contributes an append-only delta — only the new
+	// text is posted and appendLotNote concatenates server-side, so two testers with this
+	// page open for a whole session both land their line instead of one overwriting the
+	// other's page-load copy. Placed here so a note can follow a lot the build above just
+	// created, and while lotArg still holds the lot — the Q8 reset below nils it out.
+	if lotNote := strings.TrimSpace(r.FormValue("lot_note")); lotNote != "" {
+		if lotID, ok := lotArg.(int); ok {
+			username := ""
+			if u := h.currentUser(r); u != nil {
+				username = u.Username
+			}
+			if err := h.appendLotNote(r.Context(), tx, lotID, lotNote, username); err != nil {
+				http.Error(w, "could not save lot note: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
 	var unitArg interface{}
 	if models.TracksSerials(trackingMode) && record.SerialNumber != "" && (buildArg != nil || lotArg != nil) {
 		uid, uerr := h.upsertUnitForRecord(r.Context(), tx, record.PartNumberID, record.SerialNumber, buildArg, lotArg)
@@ -2642,12 +2661,12 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 	if rd != nil {
 		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET record_date=@p1, comments=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, unit_id=@p6, updated_at=GETDATE() WHERE id=@p7",
-			h.cfg.RecordsTable()), *rd, comments, instrumentType, lotArg, buildArg, unitArg, recordID)
+			"UPDATE %s SET record_date=@p1, comments=@p2, notes=@p3, instrument_type=@p4, lot_id=@p5, build_id=@p6, unit_id=@p7, updated_at=GETDATE() WHERE id=@p8",
+			h.cfg.RecordsTable()), *rd, comments, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
 	} else {
 		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET comments=@p1, instrument_type=@p2, lot_id=@p3, build_id=@p4, unit_id=@p5, updated_at=GETDATE() WHERE id=@p6",
-			h.cfg.RecordsTable()), comments, instrumentType, lotArg, buildArg, unitArg, recordID)
+			"UPDATE %s SET comments=@p1, notes=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, unit_id=@p6, updated_at=GETDATE() WHERE id=@p7",
+			h.cfg.RecordsTable()), comments, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
 	}
 	if err != nil {
 		http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)

@@ -28,6 +28,13 @@
                 <input type="text" id="vendor_lot" name="vendor_lot" class="form-control"
                        value="{{.Lot.VendorLot}}">
             </div>
+            {{/* #872 — the only place a lot note is rewritten in full. Test record pages
+                 may only append to it, so a long-open record page can't clobber it. */}}
+            <div class="detail-row">
+                <label for="notes" class="form-label">Notes</label>
+                <textarea id="notes" name="notes" class="form-control" rows="6">{{.Lot.Notes}}</textarea>
+                <div class="form-text">Free-text notes about this batch. Testers can append to this from a test record.</div>
+            </div>
         </div>
 
         <button type="submit" class="btn btn-primary">Save</button>
