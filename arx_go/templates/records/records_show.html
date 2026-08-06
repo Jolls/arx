@@ -121,23 +121,15 @@
         <td>{{.Record.InstrumentType}}</td>
       </tr>
       {{end}}
-      {{/* #677/#687 — Lot/build display hidden for 0.6.0 (unfinished, deferred to v0.7.0
-           #702). See docs/plans/677-hide-testrecord-lot-linkage.md
-      {{if .Trace}}
-      {{if .Trace.LinkedLot}}
-      <tr>
-        <th class="text-muted">Lot</th>
-        <td><a href="/part/{{.Trace.PartID}}/lots/{{.Trace.LinkedLot.ID}}">{{.Trace.LinkedLot.LotNumber}}</a>{{if .Trace.LinkedLot.LotDescription}} · {{.Trace.LinkedLot.LotDescription}}{{end}}</td>
-      </tr>
-      {{end}}
-      {{if .Trace.LinkedBuild}}
+      {{/* #871 — build that produced this unit, if any. The lot gets its own card below
+           (#872) since it carries a note; the build has no detail page to link to, so it's
+           a plain label here, matching the read-only rendering on the edit page. */}}
+      {{if and .Trace .Trace.LinkedBuild}}
       <tr>
         <th class="text-muted">Build</th>
         <td>{{.Trace.LinkedBuild.Label}}</td>
       </tr>
       {{end}}
-      {{end}}
-      */}}
     </table>
   </div>
 
