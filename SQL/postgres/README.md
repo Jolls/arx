@@ -1,11 +1,11 @@
 # Postgres DDL (issue #625, Phase 2)
 
-Postgres port of the reference DDL in `SQL/*.sql`. Human-run, like the SQL Server
+Postgres port of the reference DDL in `SQL/azure/*.sql`. Human-run, like the SQL Server
 set - not auto-applied. These files exist alongside the T-SQL DDL during the
 migration; the T-SQL set is deleted at cutover (Phase 3).
 
 **Triggers are ported in `triggers.sql`** (issue #670). The design review with
-Jolls concluded all 5 SQL Server triggers (`SQL/triggers.sql`) are still needed
+Jolls concluded all 5 SQL Server triggers (`SQL/azure/triggers.sql`) are still needed
 and stay triggers (see `docs/plans/625-postgres-migration-design.md` §3). The
 4 count triggers keep the denormalized columns (`part.attachment_count`,
 `part.po_line_count`, `company.SUNumOfLNKs`, `company.SUNumOfPOs`) in sync; the
@@ -85,13 +85,13 @@ id` would reuse id 1 and collide. `seed_test_data.sql` (#829) resets each seeded
 table's sequence at the end via `setval(pg_get_serial_sequence(...), N)`.
 
 `seed_test_data.sql` and `seed_company_logo.sql` (run after it) are the Postgres
-port of `SQL/seed_test_data.sql` / `SQL/seed_company_logo.sql` — same pinned IDs,
+port of `SQL/azure/seed_test_data.sql` / `SQL/azure/seed_company_logo.sql` — same pinned IDs,
 same synthetic reference dataset, human-run, safe to re-run. Named-query seed rows
 are intentionally left out of `seed_test_data.sql` (see "named_queries seed rows"
 below).
 
 Porting the seed data surfaced one schema-DDL gap fixed directly in `users.sql`:
-`is_admin` (#750) existed in `SQL/users.sql` but had never been backported to the
+`is_admin` (#750) existed in `SQL/azure/users.sql` but had never been backported to the
 Postgres DDL — added here since no Postgres deployment has run this DDL yet.
 
 ## Not covered by this DDL (app-side, later sessions)

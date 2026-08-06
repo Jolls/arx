@@ -51,7 +51,7 @@ Required before: audit trails with real usernames (AUD-1, #251), PO approval (#2
 Required before: Level 2/3 automated tests (#240), any new test infrastructure.
 - Replace `_Test` table suffix with a DSN swap pointing to `ArxDev` database
 - Simplifies `*Table()` helpers to just return the table name
-- ~~`_test.sql` becomes a "populate ArxDev from prod" script~~ **Superseded by `SQL/seed_test_data.sql` (issue #545): ArxDev is seeded with fixed synthetic data instead of a prod clone.**
+- ~~`_test.sql` becomes a "populate ArxDev from prod" script~~ **Superseded by `SQL/azure/seed_test_data.sql` (issue #545): ArxDev is seeded with fixed synthetic data instead of a prod clone.**
 
 ### 3. Schema constraints (#213)
 Many FK and NOT NULL constraints deferred at table creation. Should be applied incrementally before adding columns that depend on referential integrity. Verify no orphan/NULL rows before each constraint.

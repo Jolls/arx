@@ -91,7 +91,7 @@ IMAGE_ROOT\<form part_number>\SN<Serial>_rID<recordID>_tID<testID>_YYYYMMDD_HHMM
   both keep rendering.
 - The old VBA convention gated picture-paste on a step's `parameter` field
   starting with `"Screenshot/File"`; the Go app instead uses the dedicated
-  `pf_type = "attach"` value (see `SQL/migrations/migrate_screenshot_file_to_attach.sql`
+  `pf_type = "attach"` value (see `SQL/azure/migrations/migrate_screenshot_file_to_attach.sql`
   for migrating existing forms off the legacy convention).
 
 ## PO folder convention
