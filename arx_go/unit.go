@@ -224,11 +224,33 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error tracing unit descendants: "+err.Error())
 		return
 	}
+	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), "unit_id", unitID)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving record types: "+err.Error())
+		return
+	}
 	h.render(w, r, "parts/part_unit_trace.html", map[string]any{
 		"Part": p, "Unit": unit, "Build": build, "Ancestors": ancestors, "Descendants": descendants,
+		"TypeOptions": typeOptions,
 		"ActiveTab": "parts", "ActiveSubTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
+}
+
+// UnitRecordsRows — GET /api/part/{id}/units/{unitID}/records/rows. JSON rows
+// for the records table on the unit trace page (#875).
+func (h *Handler) UnitRecordsRows(w http.ResponseWriter, r *http.Request) {
+	unitID, err := strconv.Atoi(chi.URLParam(r, "unitID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	out, err := h.scopedRecordsRows(r.Context(), "unit_id", unitID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, out)
 }
 
 // unitSerialLocked reports whether a unit's serial is frozen — true once any locked

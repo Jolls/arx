@@ -1828,6 +1828,42 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PartRecords — GET /part/{id}/records. Lists every active test record across
+// every form where subject part_id = this part (#875).
+func (h *Handler) PartRecords(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "records")
+	if !ok {
+		return
+	}
+	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), "part_id", p.ID)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving record types: "+err.Error())
+		return
+	}
+	h.render(w, r, "parts/part_records.html", map[string]any{
+		"Part": p, "TypeOptions": typeOptions,
+		"ActiveTab": "parts", "ActiveSubTab": "records",
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+	})
+}
+
+// PartRecordsRows — GET /api/part/{id}/records/rows. JSON rows for PartRecords'
+// table (#875).
+func (h *Handler) PartRecordsRows(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	out, err := h.scopedRecordsRows(r.Context(), "part_id", id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, out)
+}
+
 // partPOSummary is one row in the Part dashboard "Recent POs" card (#521).
 type partPOSummary struct {
 	Number       string

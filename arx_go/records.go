@@ -354,6 +354,99 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
+// scopedRecordRow is one row for the Part/Lot/Unit-scoped records tables
+// (PartRecordsRows/LotRecordsRows/UnitRecordsRows, #875) — like RecordsRows'
+// row but spans multiple forms, so it carries the Form (test template) too.
+type scopedRecordRow struct {
+	ID           int    `json:"id"`
+	PartNumberID int    `json:"pnId"`
+	SN           string `json:"sn"`
+	SNPN         string `json:"snPN"`
+	SNDesc       string `json:"snDesc"`
+	Date         string `json:"date"`
+	Type         string `json:"type"`
+	Status       string `json:"status"`
+	FormRev      string `json:"formRev"`
+	FormID       int    `json:"formId"`
+	FormLabel    string `json:"formLabel"` // "<form part number> — <form title>"
+}
+
+// scopedRecordsRows returns every active form_record matching whereCol = id,
+// across all forms, for the Part/Lot/Unit records tables (#875). whereCol must
+// be "part_id", "lot_id", or "unit_id" — always a caller-supplied constant,
+// never request input.
+func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int) ([]scopedRecordRow, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT r.id, COALESCE(r.part_id,0), r.serial_number, r.subject_part_number, r.subject_pn_description,
+		       r.record_date, r.comments, r.is_locked, r.is_approved, r.form_revision,
+		       r.form_id, fp.part_number, fp.title
+		FROM %s r
+		JOIN %s f ON f.id = r.form_id
+		JOIN %s fp ON fp.id = f.part_number_id
+		WHERE r.%s = @p1 AND r.is_active = %s
+		ORDER BY r.record_date DESC`,
+		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(),
+		whereCol, h.dia().BoolLiteral(true)), id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]scopedRecordRow, 0)
+	for rows.Next() {
+		var rec scopedRecordRow
+		var recordDate *time.Time
+		var formRev *int
+		var locked, approved bool
+		var formPN, formTitle string
+		if err := rows.Scan(&rec.ID, &rec.PartNumberID, &rec.SN, &rec.SNPN, &rec.SNDesc,
+			&recordDate, &rec.Type, &locked, &approved, &formRev,
+			&rec.FormID, &formPN, &formTitle); err != nil {
+			return nil, err
+		}
+		if recordDate != nil {
+			rec.Date = recordDate.Format("2006-01-02 15:04")
+		}
+		switch {
+		case approved:
+			rec.Status = "approved"
+		case locked:
+			rec.Status = "complete"
+		default:
+			rec.Status = "wip"
+		}
+		rec.FormRev = models.TestRecord{FormRevision: formRev}.FormRevLabel()
+		rec.FormLabel = formPN
+		if formTitle != "" {
+			rec.FormLabel += " — " + formTitle
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// scopedRecordTypeOptions returns distinct non-empty comments (Type) values for
+// the filter-row datalist, scoped the same way as scopedRecordsRows.
+func (h *Handler) scopedRecordTypeOptions(ctx context.Context, whereCol string, id int) ([]string, error) {
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`
+		SELECT DISTINCT comments FROM %s
+		WHERE %s = @p1 AND is_active = %s AND comments <> ''
+		ORDER BY comments`, h.cfg.RecordsTable(), whereCol, h.dia().BoolLiteral(true)), id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // FormDef â€" GET /forms/{id}/def
 // Shows all test step definitions for a form without any result data.
 // Used as a reference when creating a new test record.

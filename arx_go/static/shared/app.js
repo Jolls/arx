@@ -265,6 +265,30 @@ const ROW_BUILDER_PATTERNS = [
         },
         cellText: r => ['', r.sn, r.snPN, r.snDesc, r.date, r.type, r.status, r.formRev],
     },
+    {
+        // /api/part/{id}/records/rows, /api/part/{id}/lots/{lotID}/records/rows,
+        // /api/part/{id}/units/{unitID}/records/rows — #875. Same column shape as
+        // the per-form records table, minus the select checkbox (read-only,
+        // cross-form view), plus a trailing Form column (records span multiple
+        // forms in these scoped views).
+        test: /\/api\/part\/\d+\/(?:lots\/\d+\/|units\/\d+\/)?records\/rows$/,
+        build: r => {
+            const pn = r.pnId
+                ? `<a href="/part/${r.pnId}">${escHtml(r.snPN)}</a>`
+                : escHtml(r.snPN);
+            return `<tr>
+                <td data-col="col-sn"><a href="/records/${r.id}" class="fw-semibold">${escHtml(r.sn)}</a></td>
+                <td data-col="col-pn">${pn}</td>
+                <td data-col="col-desc">${escHtml(r.snDesc)}</td>
+                <td data-col="col-date" class="text-nowrap">${r.date || ''}</td>
+                <td data-col="col-type">${escHtml(r.type)}</td>
+                <td data-col="col-status" class="text-center">${TR_STATUS_BADGE[r.status] || ''}</td>
+                <td data-col="col-form-rev" class="text-center">${escHtml(r.formRev)}</td>
+                <td data-col="col-form"><a href="/forms/${r.formId}/records">${escHtml(r.formLabel)}</a></td>
+            </tr>`;
+        },
+        cellText: r => [r.sn, r.snPN, r.snDesc, r.date, r.type, r.status, r.formRev, r.formLabel],
+    },
 ];
 
 function resolveRowConfig(url) {
