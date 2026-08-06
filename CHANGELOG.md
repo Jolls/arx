@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.18] - 2026-08-06
+### Added
+- New "Records" subtab on the part detail page listing every active test record across every test form for that part, sortable/filterable/linkable ([#875](https://github.com/Jolls/arx-legacy/issues/875))
+- Lot and unit genealogy trace pages gain a matching test-records table scoped to that lot/unit ([#875](https://github.com/Jolls/arx-legacy/issues/875))
+
 ## [0.7.17] - 2026-08-06
 ### Added
 - Test record's read-only view shows the linked build, alongside the existing lot card, without needing to open Edit; removed a dead commented-out block from #677 that this supersedes ([#871](https://github.com/Jolls/arx-legacy/issues/871))

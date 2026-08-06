@@ -7,6 +7,11 @@ let currentPage = 1;
 let allRows = [];
 let sortCol = null;
 let sortDir = 'asc';
+// The table driving the current data-rows-url flow (#875). Most pages have exactly
+// one <table>/<tbody>, so a bare document.querySelector('tbody') always found the
+// right one; pages with extra plain tables (e.g. the lot/unit genealogy trace pages)
+// need lookups scoped to this table specifically. Set once in loadListRows().
+let activeTable = null;
 
 // PO status / BOM cost-source badge markup, rendered client-side for the
 // /pos and BOM table views. Mirrors the po_status_badge / bom_source_badge
@@ -265,6 +270,30 @@ const ROW_BUILDER_PATTERNS = [
         },
         cellText: r => ['', r.sn, r.snPN, r.snDesc, r.date, r.type, r.status, r.formRev],
     },
+    {
+        // /api/part/{id}/records/rows, /api/part/{id}/lots/{lotID}/records/rows,
+        // /api/part/{id}/units/{unitID}/records/rows — #875. Same column shape as
+        // the per-form records table, minus the select checkbox (read-only,
+        // cross-form view), plus a trailing Form column (records span multiple
+        // forms in these scoped views).
+        test: /\/api\/part\/\d+\/(?:lots\/\d+\/|units\/\d+\/)?records\/rows$/,
+        build: r => {
+            const pn = r.pnId
+                ? `<a href="/part/${r.pnId}">${escHtml(r.snPN)}</a>`
+                : escHtml(r.snPN);
+            return `<tr>
+                <td data-col="col-sn"><a href="/records/${r.id}" class="fw-semibold">${escHtml(r.sn)}</a></td>
+                <td data-col="col-pn">${pn}</td>
+                <td data-col="col-desc">${escHtml(r.snDesc)}</td>
+                <td data-col="col-date" class="text-nowrap">${r.date || ''}</td>
+                <td data-col="col-type">${escHtml(r.type)}</td>
+                <td data-col="col-status" class="text-center">${TR_STATUS_BADGE[r.status] || ''}</td>
+                <td data-col="col-form-rev" class="text-center">${escHtml(r.formRev)}</td>
+                <td data-col="col-form"><a href="/forms/${r.formId}/records">${escHtml(r.formLabel)}</a></td>
+            </tr>`;
+        },
+        cellText: r => [r.sn, r.snPN, r.snDesc, r.date, r.type, r.status, r.formRev, r.formLabel],
+    },
 ];
 
 function resolveRowConfig(url) {
@@ -355,7 +384,7 @@ function applySort() {
 }
 
 function updateSortHeaders() {
-    document.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
+    (activeTable || document).querySelectorAll('thead tr:first-child th').forEach((th, i) => {
         th.classList.remove('sort-asc', 'sort-desc');
         if (i === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
     });
@@ -406,7 +435,7 @@ function applyTruncationTooltips(tbody) {
 }
 
 function renderRows(rowsToShow) {
-    const tbody = document.querySelector('tbody');
+    const tbody = (activeTable || document).querySelector('tbody');
     if (!tbody) return;
 
     // Full filtered+sorted set (pre-pagination), exposed for callers that need
@@ -451,6 +480,7 @@ function nextPage() {
 function loadListRows() {
     const table = document.querySelector('table[data-rows-url]');
     if (!table) return;
+    activeTable = table;
     const url = table.dataset.rowsUrl;
     const cfg = resolveRowConfig(url);
     if (!cfg) return;
@@ -470,7 +500,7 @@ function loadListRows() {
                 item._text = cellText(item).map(s => (s == null ? '' : String(s)).toLowerCase());
                 return item;
             });
-            document.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
+            table.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
                 th.classList.add('sortable');
                 th.addEventListener('click', () => sortByCol(i));
             });
