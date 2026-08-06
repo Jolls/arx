@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.15] - 2026-08-05
+### Added
+- ArxDev seed data: BOM line 3913 adds part 3012 (`lot`-tracked, not `lot_serial`, with its own BOM) as a further FORM-1001 testable unit, so the whole-lot/batch build-at-test-time qty field has a selectable, buildable fixture to exercise ([#867](https://github.com/Jolls/arx-legacy/issues/867))
+
+### Fixed
+- Inline "Build this unit" panel on a test record's edit page hardcoded qty=1 even for whole-lot/batch records (a `lot`/`none`-tracked part's record, which has no single serialized unit under Q8) — those records now get a "Qty to build" input instead of being stuck at 1; serial/lot_serial records are unaffected ([#867](https://github.com/Jolls/arx-legacy/issues/867))
+
 ## [0.7.14] - 2026-08-05
 ### Added
 - Test coverage for the local-filesystem browse/serve handlers (`files.go`'s four handlers and the `suppliers.go`/`pos.go` folder+file equivalents), pinning current behavior including drift between the three copies ([#863](https://github.com/Jolls/arx-legacy/issues/863))

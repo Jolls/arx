@@ -267,7 +267,10 @@ BEGIN TRY
                                     -- Incoming Inspection record — see form_record 7012 below
         (3910, 3013, 3012, 1, 1),   -- 3013's own BOM: 1x sub-assembly 3012 (#737)
         (3911, 3013, 3007, 2, 1),   -- + 1x raw stainless bar stock, direct (not via 3012)
-        (3912, 3010, 3013, 3, 1);   -- FORM part's BOM also covers 3013, for its Final Test record
+        (3912, 3010, 3013, 3, 1),   -- FORM part's BOM also covers 3013, for its Final Test record
+        (3913, 3010, 3012, 4, 1);   -- FORM part's BOM also covers 3012 (#867/#868) — its own BOM (3905/3906)
+                                    -- + tracking_mode='lot' (not lot_serial) makes it a NewRecord-selectable,
+                                    -- buildable whole-lot/batch part for testing the qty-at-test-time field
     SET IDENTITY_INSERT dbo.bom OFF;
 
     -- ============================================================

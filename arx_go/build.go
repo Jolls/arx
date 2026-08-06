@@ -351,6 +351,16 @@ func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, output
 	return buildID, outputLotID, nil
 }
 
+// parseBuildQty parses and validates a positive build quantity from the request's "qty"
+// field, shared by the standalone Build tab and the inline build-at-test-time panel (#867).
+func parseBuildQty(r *http.Request) (float64, error) {
+	qty, err := strconv.ParseFloat(fv(r, "qty"), 64)
+	if err != nil || qty <= 0 {
+		return 0, fmt.Errorf("Enter a positive build quantity.")
+	}
+	return qty, nil
+}
+
 // ── PartBuildCreate — POST /part/{id}/build ──────────────────────────────────
 
 func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
@@ -368,9 +378,9 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
-	qty, err := strconv.ParseFloat(fv(r, "qty"), 64)
-	if err != nil || qty <= 0 {
-		h.renderError(w, r, "Enter a positive build quantity.")
+	qty, err := parseBuildQty(r)
+	if err != nil {
+		h.renderError(w, r, err.Error())
 		return
 	}
 	note := fv(r, "note")
