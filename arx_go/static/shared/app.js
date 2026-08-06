@@ -7,6 +7,11 @@ let currentPage = 1;
 let allRows = [];
 let sortCol = null;
 let sortDir = 'asc';
+// The table driving the current data-rows-url flow (#875). Most pages have exactly
+// one <table>/<tbody>, so a bare document.querySelector('tbody') always found the
+// right one; pages with extra plain tables (e.g. the lot/unit genealogy trace pages)
+// need lookups scoped to this table specifically. Set once in loadListRows().
+let activeTable = null;
 
 // PO status / BOM cost-source badge markup, rendered client-side for the
 // /pos and BOM table views. Mirrors the po_status_badge / bom_source_badge
@@ -379,7 +384,7 @@ function applySort() {
 }
 
 function updateSortHeaders() {
-    document.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
+    (activeTable || document).querySelectorAll('thead tr:first-child th').forEach((th, i) => {
         th.classList.remove('sort-asc', 'sort-desc');
         if (i === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
     });
@@ -430,7 +435,7 @@ function applyTruncationTooltips(tbody) {
 }
 
 function renderRows(rowsToShow) {
-    const tbody = document.querySelector('tbody');
+    const tbody = (activeTable || document).querySelector('tbody');
     if (!tbody) return;
 
     // Full filtered+sorted set (pre-pagination), exposed for callers that need
@@ -475,6 +480,7 @@ function nextPage() {
 function loadListRows() {
     const table = document.querySelector('table[data-rows-url]');
     if (!table) return;
+    activeTable = table;
     const url = table.dataset.rowsUrl;
     const cfg = resolveRowConfig(url);
     if (!cfg) return;
@@ -494,7 +500,7 @@ function loadListRows() {
                 item._text = cellText(item).map(s => (s == null ? '' : String(s)).toLowerCase());
                 return item;
             });
-            document.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
+            table.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
                 th.classList.add('sortable');
                 th.addEventListener('click', () => sortByCol(i));
             });
