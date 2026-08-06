@@ -839,6 +839,12 @@ func (h *Handler) SupplierFile(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	h.serveSupplierFile(w, r, s, id)
+}
+
+// serveSupplierFile holds SupplierFile's logic once the supplier row is in
+// hand, split out so it can be exercised in tests without a DB (#863).
+func (h *Handler) serveSupplierFile(w http.ResponseWriter, r *http.Request, s models.Supplier, id string) {
 	root := h.cfg.SupplierFilesRoot
 	if root == "" {
 		root = h.cfg.DocControlRoot

@@ -1,7 +1,15 @@
 package main
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
 )
@@ -275,5 +283,265 @@ func TestPOStatusActions(t *testing.T) {
 				t.Errorf("poStatusActions(%q) target %q missing label/class", status, a.Target)
 			}
 		}
+	}
+}
+
+// ── findPOBaseFolder ─────────────────────────────────────────────────────────
+
+func TestFindPOBaseFolder(t *testing.T) {
+	root := t.TempDir()
+	if got := findPOBaseFolder(root, "PO-100"); got != "" {
+		t.Errorf("findPOBaseFolder(empty root) = %q, want empty", got)
+	}
+
+	if err := os.Mkdir(filepath.Join(root, "PO-200 Vendor"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if got := findPOBaseFolder(root, "PO-100"); got != "" {
+		t.Errorf("findPOBaseFolder(no matching prefix) = %q, want empty", got)
+	}
+	if got := findPOBaseFolder(root, "PO-200"); got != "PO-200 Vendor" {
+		t.Errorf("findPOBaseFolder(one match) = %q, want %q", got, "PO-200 Vendor")
+	}
+}
+
+// ── renderPOFolder ───────────────────────────────────────────────────────────
+// Called directly with a manually-built PurchaseOrder, bypassing the
+// DB-backed fetchPO (see filesTestHandler in files_test.go for the DB-free
+// Handler used throughout this file).
+
+func TestRenderPOFolder_RootUnconfigured(t *testing.T) {
+	h := filesTestHandler()
+	po := models.PurchaseOrder{ID: 1, Number: "PO-100"}
+	req := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder", nil)
+	rec := httptest.NewRecorder()
+	h.renderPOFolder(rec, req, po, nil)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestRenderPOFolder_NoMatchingBaseFolder(t *testing.T) {
+	h := filesTestHandler()
+	h.cfg.POFolderRoot = t.TempDir()
+	po := models.PurchaseOrder{ID: 1, Number: "PO-100"}
+	req := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder", nil)
+	rec := httptest.NewRecorder()
+	h.renderPOFolder(rec, req, po, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestRenderPOFolder_SubpathNotFound(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	if err := os.Mkdir(filepath.Join(root, "PO-100 Vendor"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	po := models.PurchaseOrder{ID: 1, Number: "PO-100"}
+	req := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder/missing", nil)
+	rec := httptest.NewRecorder()
+	h.renderPOFolder(rec, req, po, []string{"missing"})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// NOT COVERED: renderPOFolder, unlike renderSupplierFolder, does not re-derive
+// a containment check after filepath.Join(base, subParts...) — it relies
+// entirely on os.Stat failing for a path that doesn't exist. subParts reaching
+// here already went through POFolderSub's per-segment filepath.Base
+// sanitizing in the real route, but renderPOFolder itself has no guard against
+// raw ".." if called some other way. That's a real gap, not test scope for
+// #863 (which pins behavior, not fixes it) — left as a known drift, not
+// asserted as either "rejected" or "escapes", since fabricating either
+// assertion here would misrepresent what the code actually guarantees.
+
+func TestRenderPOFolder_SortOrderAndListing(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	base := filepath.Join(root, "PO-100 Vendor")
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(base, "zzz-dir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(base, "Aaa-dir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTempFile(t, base, "Banana.txt", "b")
+	writeTempFile(t, base, "apple.txt", "a")
+
+	po := models.PurchaseOrder{ID: 1, Number: "PO-100"}
+	req := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder", nil)
+	rec := httptest.NewRecorder()
+	h.renderPOFolder(rec, req, po, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	posAaa := strings.Index(body, "Aaa-dir")
+	posZzz := strings.Index(body, "zzz-dir")
+	posApple := strings.Index(body, "apple.txt")
+	posBanana := strings.Index(body, "Banana.txt")
+	if posAaa < 0 || posZzz < 0 || posApple < 0 || posBanana < 0 {
+		t.Fatalf("expected all four entries in body, got:\n%s", body)
+	}
+	if !(posAaa < posZzz && posZzz < posApple && posApple < posBanana) {
+		t.Errorf("expected order Aaa-dir < zzz-dir < apple.txt < Banana.txt, got positions %d,%d,%d,%d",
+			posAaa, posZzz, posApple, posBanana)
+	}
+}
+
+func TestRenderPOFolder_ParentURLAtDepth(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	base := filepath.Join(root, "PO-100 Vendor")
+	if err := os.MkdirAll(filepath.Join(base, "a", "b"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	po := models.PurchaseOrder{ID: 1, Number: "PO-100"}
+
+	req := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder", nil)
+	rec := httptest.NewRecorder()
+	h.renderPOFolder(rec, req, po, nil)
+	if strings.Contains(rec.Body.String(), "Up one level") {
+		t.Error("depth-0 listing should not show an Up one level link")
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder/a", nil)
+	rec2 := httptest.NewRecorder()
+	h.renderPOFolder(rec2, req2, po, []string{"a"})
+	if !strings.Contains(rec2.Body.String(), "Up one level") {
+		t.Error("depth-1 listing should show an Up one level link")
+	}
+
+	req3 := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder/a/b", nil)
+	rec3 := httptest.NewRecorder()
+	h.renderPOFolder(rec3, req3, po, []string{"a", "b"})
+	if !strings.Contains(rec3.Body.String(), "Up one level") {
+		t.Error("depth-2 listing should show an Up one level link")
+	}
+}
+
+// ── POFile ───────────────────────────────────────────────────────────────────
+// POFile has no DB dependency (unlike SupplierFile), so it's tested directly
+// through the exported handler via chi's URLParam.
+
+func poFileRequest(t *testing.T, num, subpath string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/po/"+num+"/file/"+subpath, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", num)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+func TestPOFile_RootUnconfigured(t *testing.T) {
+	h := filesTestHandler()
+	req := poFileRequest(t, "PO-100", "doc.pdf")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestPOFile_NoMatchingBaseFolder(t *testing.T) {
+	h := filesTestHandler()
+	h.cfg.POFolderRoot = t.TempDir()
+	req := poFileRequest(t, "PO-100", "doc.pdf")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// POFile sanitizes its own path segments (dropping ".." like safePath does),
+// but http.ServeFile independently rejects any request whose r.URL.Path
+// contains a ".." element at all — see
+// TestServeLocalFile_DotDotInURLRejectedByServeFile in files_test.go.
+func TestPOFile_DotDotInURLRejectedByServeFile(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	base := filepath.Join(root, "PO-100 Vendor")
+	etcDir := filepath.Join(base, "etc")
+	if err := os.MkdirAll(etcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTempFile(t, etcDir, "secret.txt", "under-root")
+	req := poFileRequest(t, "PO-100", "../../etc/secret.txt")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (http.ServeFile rejects \"..\" in r.URL.Path), body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "invalid URL path") {
+		t.Errorf("body = %q, want to contain %q", rec.Body.String(), "invalid URL path")
+	}
+}
+
+func TestPOFile_NotFound(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	if err := os.Mkdir(filepath.Join(root, "PO-100 Vendor"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	req := poFileRequest(t, "PO-100", "missing.txt")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestPOFile_PDFInline(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	base := filepath.Join(root, "PO-100 Vendor")
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTempFile(t, base, "doc.pdf", "%PDF-1.4")
+	req := poFileRequest(t, "PO-100", "doc.pdf")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Disposition"); got != "inline" {
+		t.Errorf("Content-Disposition = %q, want %q", got, "inline")
+	}
+	// Unlike files.go's ServeLocalFile/ServeSupplierFile, POFile sets no
+	// Cache-Control header at all — pin that drift.
+	if got := rec.Header().Get("Cache-Control"); got != "" {
+		t.Errorf("Cache-Control = %q, want empty (no header set)", got)
+	}
+}
+
+func TestPOFile_OtherAttachment(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	base := filepath.Join(root, "PO-100 Vendor")
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTempFile(t, base, "notes.txt", "hi")
+	req := poFileRequest(t, "PO-100", "notes.txt")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	// Raw string format here, not mime.FormatMediaType like files.go — pin as-is.
+	want := `attachment; filename="notes.txt"`
+	if got := rec.Header().Get("Content-Disposition"); got != want {
+		t.Errorf("Content-Disposition = %q, want %q", got, want)
 	}
 }

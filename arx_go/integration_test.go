@@ -29,16 +29,70 @@ import (
 	"arx/arxlib/urlutil"
 )
 
-// liveHandler opens a real DB connection to ArxDev and returns a Handler plus a
-// cleanup function that removes any rows created during the test.
+// arxDevSentinelPartID/Number/Title identify a fixed-ID row that only exists in
+// the Arx test seed data (SQL/seed_test_data.sql and SQL/postgres/seed_test_data.sql
+// carry the same id/values), used to confirm ARX_TEST_DSN actually points at
+// seeded test data rather than trusting the database name.
+const (
+	arxDevSentinelPartID    = 3005
+	arxDevSentinelPartNum   = "ASM-1001"
+	arxDevSentinelPartTitle = "Skyrunner Standard Drone"
+)
+
+// checkArxDevSentinel confirms h is connected to a database with Arx test seed
+// data loaded — the database name isn't a reliable signal (it may just be
+// called "arx"), so this checks content instead: a real production database
+// won't have this part number under this fictional title.
+func checkArxDevSentinel(ctx context.Context, h *Handler) error {
+	var gotNum, gotTitle string
+	err := h.queryRowContext(ctx,
+		fmt.Sprintf("SELECT part_number, title FROM %s WHERE id = @p1", h.cfg.PartsTable()),
+		arxDevSentinelPartID,
+	).Scan(&gotNum, &gotTitle)
+	if err != nil {
+		return fmt.Errorf("integration tests must target a database with Arx test seed data loaded (sentinel part %d lookup failed: %v)", arxDevSentinelPartID, err)
+	}
+	if gotNum != arxDevSentinelPartNum || gotTitle != arxDevSentinelPartTitle {
+		return fmt.Errorf("integration tests must target a database with Arx test seed data loaded (sentinel part %d = %q/%q, want %q/%q)",
+			arxDevSentinelPartID, gotNum, gotTitle, arxDevSentinelPartNum, arxDevSentinelPartTitle)
+	}
+	return nil
+}
+
+// TestMain checks once, up front, that ARX_TEST_DSN (when set) points at a
+// reachable database with Arx test seed data loaded, and aborts the whole run
+// immediately if not — otherwise every one of the ~100+ tests below would
+// independently redial and fail the same way via liveHandler, turning one bad
+// credential into a very slow way to find that out.
+func TestMain(m *testing.M) {
+	if dsn := os.Getenv("ARX_TEST_DSN"); dsn != "" {
+		cfg := arxbase.Load("dev")
+		cfg.TestMode = true
+
+		database, dialect, err := arxdb.Connect(cfg.DBEngine(), dsn)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "integration tests: db.Connect: %v\n", err)
+			os.Exit(1)
+		}
+		h := New(database, dialect, cfg, templatesFS, nil)
+		if err := checkArxDevSentinel(context.Background(), h); err != nil {
+			fmt.Fprintln(os.Stderr, "integration tests:", err)
+			database.Close()
+			os.Exit(1)
+		}
+		database.Close()
+	}
+	os.Exit(m.Run())
+}
+
+// liveHandler opens a real DB connection to the Arx test database and returns
+// a Handler plus a cleanup function that removes any rows created during the
+// test.
 func liveHandler(t *testing.T) (*Handler, func()) {
 	t.Helper()
 	dsn := os.Getenv("ARX_TEST_DSN")
 	if dsn == "" {
-		t.Skip("set ARX_TEST_DSN (ArxDev) to run integration tests")
-	}
-	if !strings.Contains(strings.ToLower(dsn), "arxdev") {
-		t.Fatal("integration tests must target the ArxDev database")
+		t.Skip("set ARX_TEST_DSN to run integration tests")
 	}
 
 	cfg := arxbase.Load("dev")
@@ -50,6 +104,12 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 	}
 
 	h := New(database, dialect, cfg, templatesFS, nil)
+
+	if err := checkArxDevSentinel(context.Background(), h); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+
 	h.loadPartCategories(context.Background())
 
 	cleanup := func() {

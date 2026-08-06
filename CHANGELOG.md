@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.14] - 2026-08-05
+### Added
+- Test coverage for the local-filesystem browse/serve handlers (`files.go`'s four handlers and the `suppliers.go`/`pos.go` folder+file equivalents), pinning current behavior including drift between the three copies ([#863](https://github.com/Jolls/arx-legacy/issues/863))
+
+### Changed
+- Integration tests (`-tags integration`) no longer trust the target database's name — `ARX_TEST_DSN` is now validated by checking for known seed content instead, since a test target may not literally be named "ArxDev". A `TestMain` runs this check once up front so a bad credential/connection fails the whole run immediately instead of every test independently redialing and failing.
+
 ## [0.7.13] - 2026-07-29
 ### Changed
 - ArxDev seed data: renamed the "Widget" reference product family to a "Skyrunner Drone" one (part titles, form title, and denormalized record snapshots) so the assembly/sub-assembly/tracking-mode structure reads as a recognizable, concrete product instead of a generic placeholder ([#797](https://github.com/Jolls/arx-legacy/issues/797))

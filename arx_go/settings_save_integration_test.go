@@ -15,17 +15,15 @@ import (
 	arxdb "arx/arxlib/db"
 )
 
-// arxDevProfile parses ARX_TEST_DSN (sqlserver://user:pass@server?database=ArxDev&...)
-// into its component fields. Guards the same way liveHandler does: DSN must
-// reference ArxDev, never ArxProd.
+// arxDevProfile parses ARX_TEST_DSN (e.g.
+// sqlserver://user:pass@server?database=ArxDev&...) into its component
+// fields. TestMain already confirmed ARX_TEST_DSN points at seeded test data
+// (see checkArxDevSentinel in integration_test.go) before any test runs.
 func arxDevProfile(t *testing.T) (server, user, password, database string) {
 	t.Helper()
 	dsn := os.Getenv("ARX_TEST_DSN")
 	if dsn == "" {
-		t.Skip("set ARX_TEST_DSN (ArxDev) to run integration tests")
-	}
-	if !strings.Contains(strings.ToLower(dsn), "arxdev") {
-		t.Fatal("integration tests must target the ArxDev database")
+		t.Skip("set ARX_TEST_DSN to run integration tests")
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {
@@ -74,10 +72,6 @@ func TestIntegration_SettingsSave_TestModeSwap(t *testing.T) {
 	h.cfg.TestDBUser = user
 	h.cfg.TestDBName = database
 
-	if !strings.Contains(strings.ToLower(h.cfg.ActiveDBName()), "arxdev") {
-		t.Fatal("integration test must target ArxDev")
-	}
-
 	oldConn := h.conn.Load()
 
 	vals := url.Values{
@@ -103,6 +97,9 @@ func TestIntegration_SettingsSave_TestModeSwap(t *testing.T) {
 	}
 	if err := h.database().PingContext(context.Background()); err != nil {
 		t.Errorf("SettingsSave(test-mode swap): new connection does not ping: %v", err)
+	}
+	if err := checkArxDevSentinel(context.Background(), h); err != nil {
+		t.Fatalf("SettingsSave(test-mode swap): swapped connection: %v", err)
 	}
 
 	secrets, err := arxbase.LoadSecrets()
@@ -163,8 +160,8 @@ func TestIntegration_SettingsSave_TestModeToggleForcesRelogin(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.SettingsSave(rec, req)
 
-	if !strings.Contains(strings.ToLower(h.cfg.ActiveDBName()), "arxdev") {
-		t.Fatal("integration test must target ArxDev")
+	if err := checkArxDevSentinel(context.Background(), h); err != nil {
+		t.Fatalf("SettingsSave(relogin): swapped connection: %v", err)
 	}
 
 	if rec.Code != http.StatusSeeOther {
