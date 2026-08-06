@@ -90,26 +90,37 @@
     {{if .Trace.Buildable}}
     <div class="col-auto">
       <button type="button" class="btn btn-sm btn-outline-secondary" id="build-panel-toggle"
-              data-bs-toggle="tooltip" title="Build this unit from its BOM as part of saving this record — its components are consumed and the resulting build is linked here.">
-        <i class="bi bi-hammer"></i> Build this unit
+              data-bs-toggle="tooltip" title="Build {{if .Trace.TracksSerials}}this unit {{end}}from its BOM as part of saving this record — its components are consumed and the resulting build is linked here.">
+        <i class="bi bi-hammer"></i> Build{{if .Trace.TracksSerials}} this unit{{end}}
       </button>
     </div>
     {{end}}
   </div>
 
   {{/* #747 — inline build-at-test-time panel. Expanded by the button above; saving the
-       record then builds ONE unit (components consumed, output received) in the same
-       transaction and links the build to this record. build_panel is disabled (so it
-       does not POST) until the panel is opened, keeping a collapsed panel inert. */}}
+       record then builds this part's BOM (components consumed, output received) in the
+       same transaction and links the build to this record. build_panel is disabled (so
+       it does not POST) until the panel is opened, keeping a collapsed panel inert.
+       #867: a serial/lot_serial record is always qty=1 (the record IS the unit); a
+       lot/none record has no single unit, so it gets a qty field for the batch size. */}}
   {{if .Trace.Buildable}}
   <div class="mb-3" id="build-panel" style="display:none;">
     <input type="hidden" name="build_panel" id="build-panel-flag" value="1" disabled>
     <div class="card border-secondary">
       <div class="card-body py-2">
         <p class="text-muted small mb-2">
-          Saving will build one unit of this part: its BOM components are consumed and this
-          record links to the resulting build{{if .Trace.IsLotTracked}} and its output lot{{end}}.
+          Saving will build {{if .Trace.TracksSerials}}one unit of {{end}}this part: its BOM
+          components are consumed and this record links to the resulting
+          build{{if .Trace.IsLotTracked}} and its output lot{{end}}.
         </p>
+        {{if not .Trace.TracksSerials}}
+        <div class="mb-2">
+          <label class="form-label mb-0 small" for="build-panel-qty">Qty to build</label>
+          <input type="number" step="any" min="0" id="build-panel-qty" name="qty"
+                 class="form-control form-control-sm build-qty-input" style="width:110px;"
+                 value="1" required disabled>
+        </div>
+        {{end}}
         {{if .Trace.Components}}
         <div class="table-wrapper">
           <table class="table table-bordered table-sm mb-0">
@@ -371,7 +382,7 @@ if (_savedRaw) {
     panel.style.display = open ? '' : 'none';
     flag.disabled = !open;
     btn.classList.toggle('active', open);
-    panel.querySelectorAll('.build-lot-pick').forEach(function (s) { s.disabled = !open; });
+    panel.querySelectorAll('.build-lot-pick, .build-qty-input').forEach(function (s) { s.disabled = !open; });
   });
 })();
 

@@ -2568,11 +2568,13 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// #747: build-at-test-time. When the inline build panel was submitted, build ONE
-	// unit's worth of this part in the same transaction (single-unit — the record IS
-	// the unit under test) and use the new build (and its output lot) as the unit's
-	// provenance below. Both build workflows converge on the same end state: the
-	// standalone Build tab (build-first) and this test-time build.
+	// #747: build-at-test-time. When the inline build panel was submitted, build this
+	// part in the same transaction and use the new build (and its output lot) as the
+	// record's provenance below. Both build workflows converge on the same end state:
+	// the standalone Build tab (build-first) and this test-time build.
+	// #867: a serial/lot_serial record IS the one unit under test, so it always builds
+	// qty=1. A lot/none record has no single unit (Q8: whole-lot/batch testing
+	// enumerates no individual units) — it builds a user-entered qty instead.
 	if fv(r, "build_panel") == "1" {
 		// Don't re-build a record already linked to a build/unit — a second build would
 		// silently re-consume stock and orphan itself (the unit upsert reuses the
@@ -2581,12 +2583,22 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "This record is already linked to a build.", http.StatusBadRequest)
 			return
 		}
-		// A serial/lot_serial part must carry a serial before building — otherwise the
-		// unit can't be minted and the build would consume stock for a unit that never
-		// exists, landing lot/build straight on the record (violating Q8).
-		if models.TracksSerials(trackingMode) && record.SerialNumber == "" {
-			http.Error(w, "Enter a serial number before building this unit.", http.StatusBadRequest)
-			return
+		qty := 1.0
+		if models.TracksSerials(trackingMode) {
+			// A serial/lot_serial part must carry a serial before building — otherwise
+			// the unit can't be minted and the build would consume stock for a unit
+			// that never exists, landing lot/build straight on the record (violating Q8).
+			if record.SerialNumber == "" {
+				http.Error(w, "Enter a serial number before building this unit.", http.StatusBadRequest)
+				return
+			}
+		} else {
+			parsedQty, qerr := parseBuildQty(r)
+			if qerr != nil {
+				http.Error(w, qerr.Error(), http.StatusBadRequest)
+				return
+			}
+			qty = parsedQty
 		}
 		outputLotTracked := models.TracksLots(trackingMode)
 		lines, lerr := h.loadBuildLines(r.Context(), record.PartNumberID)
@@ -2607,7 +2619,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		if rd != nil {
 			buildDate = *rd
 		}
-		bID, outLot, berr := h.performBuild(r, tx, record.PartNumberID, outputLotTracked, 1, buildDate, "", lines, lotPicks)
+		bID, outLot, berr := h.performBuild(r, tx, record.PartNumberID, outputLotTracked, qty, buildDate, "", lines, lotPicks)
 		if berr != nil {
 			http.Error(w, "could not build: "+berr.Error(), http.StatusInternalServerError)
 			return
