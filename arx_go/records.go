@@ -2743,13 +2743,23 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var unitArg interface{}
-	if models.TracksSerials(trackingMode) && record.SerialNumber != "" && (buildArg != nil || lotArg != nil) {
+	if record.UnitID != nil {
+		// Already linked to a unit — reuse it rather than re-deriving from
+		// serial_number. A unit's serial can be edited after the fact (#799, Part →
+		// Units), which would otherwise desync it from record.SerialNumber; re-deriving
+		// by serial on every save would then silently mint a duplicate unit and orphan
+		// the original (#876). There is no UI to change a record's serial_number after
+		// creation, so the record<->unit link, once set, is authoritative.
+		unitArg = *record.UnitID
+	} else if models.TracksSerials(trackingMode) && record.SerialNumber != "" && (buildArg != nil || lotArg != nil) {
 		uid, uerr := h.upsertUnitForRecord(r.Context(), tx, record.PartNumberID, record.SerialNumber, buildArg, lotArg)
 		if uerr != nil {
 			http.Error(w, "could not record unit: "+uerr.Error(), http.StatusInternalServerError)
 			return
 		}
 		unitArg = uid
+	}
+	if unitArg != nil {
 		lotArg, buildArg = nil, nil // Q8: provenance lives on the unit, not the record
 	}
 	if rd != nil {

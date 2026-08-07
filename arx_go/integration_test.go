@@ -2265,6 +2265,80 @@ func TestIntegration_SerialUnitCreationAndRetest(t *testing.T) {
 	}
 }
 
+// TestIntegration_SaveDoesNotDuplicateUnitOnSerialMismatch verifies #876: saving a
+// serial/lot_serial record that's already linked to a unit reuses that unit via
+// record.UnitID rather than re-deriving it from record.SerialNumber. Editing a
+// unit's serial_number after linking (#799, Part → Units) desyncs it from the
+// record's serial; before the fix, the next save of the record would silently
+// mint a duplicate unit and repoint the record at it, orphaning the original.
+func TestIntegration_SaveDoesNotDuplicateUnitOnSerialMismatch(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	rt := h.cfg.RecordsTable()
+	ut := h.cfg.UnitTable()
+
+	const testedPart = 3013 // ASM-1003, tracking_mode lot_serial in seed
+	const provBuild = 8203  // a build of 3013
+	origSerial := smokeUniq("SN-MISMATCH-ORIG")
+
+	// Mint a unit directly (as upsertUnitForRecord would) and a record linked to it.
+	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
+		`part_id, build_id, serial_number, source`, `@p1, @p2, @p3, 'test'`, false)
+	var unitID int
+	if err := h.DB().QueryRowContext(ctx, insertUnit, testedPart, provBuild, origSerial).Scan(&unitID); err != nil {
+		t.Fatalf("seed unit: %v", err)
+	}
+
+	var recordID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active, unit_id)
+		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 0, 1, @p3)`, rt),
+		testedPart, origSerial, unitID).Scan(&recordID); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+	defer func() {
+		// Records reference the unit via unit_id FK — delete them before the unit(s).
+		// unitID is deleted directly since its serial_number is renamed mid-test; also
+		// sweep any duplicate unit the bug would have minted under the original serial.
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, rt), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id = @p1`, ut), unitID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id = @p1 AND serial_number = @p2`, ut), testedPart, origSerial)
+	}()
+
+	// Simulate #799: the unit's serial is corrected after linking, diverging it
+	// from the (unchangeable) record.serial_number.
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET serial_number = @p1 WHERE id = @p2`, ut),
+		smokeUniq("SN-MISMATCH-RENAMED"), unitID); err != nil {
+		t.Fatalf("rename unit serial: %v", err)
+	}
+
+	// Save the record with no changes — this alone must not touch unit linkage.
+	req := withID(postForm(fmt.Sprintf("/records/%d/edit", recordID), url.Values{}), recordID)
+	rec := httptest.NewRecorder()
+	h.SaveResults(rec, req)
+	assertStatus(t, "SaveResults(unit serial mismatch)", rec, http.StatusSeeOther)
+
+	var gotUnit sql.NullInt64
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT unit_id FROM %s WHERE id = @p1`, rt), recordID).Scan(&gotUnit); err != nil {
+		t.Fatalf("read record: %v", err)
+	}
+	if !gotUnit.Valid || int(gotUnit.Int64) != unitID {
+		t.Errorf("record unit_id = %v, want unchanged %d (reuse, not re-derive)", gotUnit, unitID)
+	}
+
+	var dupCount int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE part_id = @p1 AND serial_number = @p2`, ut), testedPart, origSerial).
+		Scan(&dupCount); err != nil {
+		t.Fatalf("count units with original serial: %v", err)
+	}
+	if dupCount != 0 {
+		t.Errorf("found %d unit row(s) still/newly carrying the original serial %q — save minted a duplicate unit", dupCount, origSerial)
+	}
+}
+
 // TestIntegration_UnitGenealogyTrace verifies slice 9 (#746): the generalized walk
 // resolves a serialized unit's mixed lot+unit ancestry from the genealogy edge table.
 // Seed unit 8501 (top assembly 3013) has a unit parent (8503) and a lot parent (8301)

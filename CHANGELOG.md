@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.19] - 2026-08-06
+### Added
+- "Receive All" button on the PO detail page's receive form, pre-filling every open line's remaining quantity and submitting in one click alongside the existing "Receive" button ([#879](https://github.com/Jolls/arx-legacy/issues/879))
+
+### Fixed
+- Saving a serial/lot_serial test record already linked to a unit now reuses that unit via `record.UnitID` instead of re-deriving it from `serial_number` — previously, editing a unit's serial after linking (#799) and then re-saving the record would silently mint a duplicate unit and orphan the original ([#876](https://github.com/Jolls/arx-legacy/issues/876))
+- Seed record 7013's `serial_number` corrected to match its linked unit 8501's serial, removing a self-corrupting seed fixture ([#877](https://github.com/Jolls/arx-legacy/issues/877))
+
 ## [0.7.18] - 2026-08-06
 ### Added
 - New "Records" subtab on the part detail page listing every active test record across every test form for that part, sortable/filterable/linkable ([#875](https://github.com/Jolls/arx-legacy/issues/875))
