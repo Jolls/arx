@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -520,10 +521,10 @@ func TestPOFile_PDFInline(t *testing.T) {
 	if got := rec.Header().Get("Content-Disposition"); got != "inline" {
 		t.Errorf("Content-Disposition = %q, want %q", got, "inline")
 	}
-	// Unlike files.go's ServeLocalFile/ServeSupplierFile, POFile sets no
-	// Cache-Control header at all — pin that drift.
-	if got := rec.Header().Get("Cache-Control"); got != "" {
-		t.Errorf("Cache-Control = %q, want empty (no header set)", got)
+	// See ServeLocalFile/ServeSupplierFile in files.go (#839): force
+	// revalidation so a replaced file isn't served stale from cache.
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("Cache-Control = %q, want %q", got, "no-cache")
 	}
 }
 
@@ -539,9 +540,48 @@ func TestPOFile_OtherAttachment(t *testing.T) {
 	req := poFileRequest(t, "PO-100", "notes.txt")
 	rec := httptest.NewRecorder()
 	h.POFile(rec, req)
-	// Raw string format here, not mime.FormatMediaType like files.go — pin as-is.
-	want := `attachment; filename="notes.txt"`
-	if got := rec.Header().Get("Content-Disposition"); got != want {
-		t.Errorf("Content-Disposition = %q, want %q", got, want)
+	got := rec.Header().Get("Content-Disposition")
+	if !strings.HasPrefix(got, "attachment") || !strings.Contains(got, "notes.txt") {
+		t.Errorf("Content-Disposition = %q, want attachment with filename notes.txt", got)
+	}
+}
+
+func TestPOFile_NonASCIIFilenameEncoded(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	base := filepath.Join(root, "PO-100 Vendor")
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A non-ASCII filename would produce a malformed header with naive
+	// `filename="` + name + `"` concatenation (#363); mime.FormatMediaType
+	// RFC 6266-encodes it correctly.
+	writeTempFile(t, base, "café.txt", "hi")
+	req := poFileRequest(t, "PO-100", "café.txt")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	got := rec.Header().Get("Content-Disposition")
+	if _, params, err := mime.ParseMediaType(got); err != nil {
+		t.Fatalf("Content-Disposition = %q is not valid RFC 6266: %v", got, err)
+	} else if params["filename"] != "café.txt" {
+		t.Errorf("filename param = %q, want %q", params["filename"], "café.txt")
+	}
+}
+
+func TestPOFile_ImageInline(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.POFolderRoot = root
+	base := filepath.Join(root, "PO-100 Vendor")
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTempFile(t, base, "pic.png", "fake-png")
+	req := poFileRequest(t, "PO-100", "pic.png")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	if got := rec.Header().Get("Content-Disposition"); got != "inline" {
+		t.Errorf("Content-Disposition = %q, want %q", got, "inline")
 	}
 }
