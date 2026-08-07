@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.21] - 2026-08-07
+### Changed
+- Promoted four deferred logical references to real, DB-enforced foreign keys: `contact.company_id` and `part.default_supplier_id` → `company.id`; `part.price_id` → `price.id`; `part.primary_attachment_id` → `part_attachment.id`. The latter two also convert their `DEFAULT 0` "no value" sentinel to `NULL`, matching the existing `company.primary_attachment_id` pattern — `Part.PrimaryAttachmentID` is now `*int` instead of `int` ([#735](https://github.com/Jolls/arx-legacy/issues/735), follow-up to [#213](https://github.com/Jolls/arx-legacy/issues/213))
+
+### Fixed
+- `seed_test_data.sql` (both dialects) now breaks the circular FK between `contact`/`company` and nulls `part`'s three newly-FK'd columns before its DELETE cascade, so a reseed no longer fails against the new constraints
+- `TestIntegration_RunNamedQuery_SingleResult`'s cleanup now clears `part.primary_attachment_id` before deleting the attachment row, avoiding an FK violation that silently orphaned test fixtures
+
 ## [0.7.20] - 2026-08-06
 ### Fixed
 - `SuppliersRows` now checks `rows.Err()` after its scan loop, matching `PartsRows`/`PORows` — a failure part-way through row iteration no longer returns a silently truncated supplier list as HTTP 200 ([#862](https://github.com/Jolls/arx-legacy/issues/862))

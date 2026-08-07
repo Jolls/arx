@@ -10,7 +10,7 @@
 -- po_line_count: trg_POL_part_count fires on po_line INSERT/UPDATE/DELETE (see SQL/triggers.sql).
 -- attachment_count: trg_FIL_part_count fires on part_attachment INSERT/UPDATE/DELETE, counts is_active=1 rows only.
 -- user_field_1-10 are configurable user-defined fields.
--- price_id FKs to the price table; FK constraint deferred — see #213.
+-- price_id FKs to the price table (real FK).
 -- default_supplier_id: the preferred supplier for cost rollup (#465). The rollup uses the cheapest
 --   active price row from this supplier as the part's leaf cost (falls back to current_cost when NULL).
 --   Auto-set to the first supplier a price is added for; NULL only when the part has no suppliers.
@@ -47,13 +47,13 @@ CREATE TABLE part (
   last_rollup_cost    DECIMAL(16,8)    NULL,                                            -- NULL = no rollup ever run.
   last_rollup_at      DATETIME         NULL,                                            -- NULL = no rollup ever run.
   attachment_count    INT              CONSTRAINT DF_part_number_attachment_count DEFAULT 0,    -- Denormalized count of part_attachment rows for this part.
-  primary_attachment_id INT            CONSTRAINT DF_part_number_primary_attachment_id DEFAULT 0,  -- part_attachment.id of the primary attachment.
+  primary_attachment_id INT            NULL,  -- part_attachment.id of the primary attachment.
   current_cost        DECIMAL(16,8)    CONSTRAINT DF_part_number_current_cost     DEFAULT 0,
   is_active           BIT              CONSTRAINT DF_part_number_is_active        DEFAULT 1,
   po_line_count       INT              CONSTRAINT DF_part_number_po_line_count    DEFAULT 0,    -- Denormalized count of po_line rows for this part.
   modified_date       DATE             CONSTRAINT DF_part_number_modified_date    DEFAULT GETDATE(),
-  price_id            INT              CONSTRAINT DF_part_number_price_id         DEFAULT 0,    -- FK to price table; FK constraint deferred — see #213.
-  default_supplier_id INT              NULL,                                             -- Preferred supplier for cost rollup (#465); FK to company.id, deferred like price_id.
+  price_id            INT              NULL,                                             -- FK to price.id.
+  default_supplier_id INT              NULL,                                             -- Preferred supplier for cost rollup (#465); FK to company.id.
   uom_id              INT              NULL,                                             -- FK to uom.uom_id. Base/inventory unit for this part (EA, mL, kg, …).
   stock_on_hand       DECIMAL(16,8)    NOT NULL CONSTRAINT DF_part_number_stock_on_hand DEFAULT 0, -- Cached inventory balance (issue #272); = SUM(inventory_transaction.qty). Maintained by the app, not a trigger. Do not edit directly.
   reorder_min         DECIMAL(16,8)    NULL,                                            -- Reorder point (issue #273): flag the part when stock_on_hand < reorder_min. NULL = no reorder point set (never flagged).
@@ -66,3 +66,6 @@ CREATE TABLE part (
 );
 
 ALTER TABLE dbo.part ADD CONSTRAINT FK_part_number_uom FOREIGN KEY (uom_id) REFERENCES dbo.uom (uom_id);
+ALTER TABLE dbo.part ADD CONSTRAINT FK_part_default_supplier FOREIGN KEY (default_supplier_id) REFERENCES dbo.company (id);
+ALTER TABLE dbo.part ADD CONSTRAINT FK_part_price FOREIGN KEY (price_id) REFERENCES dbo.price (id);
+ALTER TABLE dbo.part ADD CONSTRAINT FK_part_primary_attachment FOREIGN KEY (primary_attachment_id) REFERENCES dbo.part_attachment (id);

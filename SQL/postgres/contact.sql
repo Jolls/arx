@@ -17,7 +17,9 @@ CREATE TABLE contact (
   website             VARCHAR(500),
   email               VARCHAR(127),
   is_active           BOOLEAN        DEFAULT TRUE,
-  company_id          INTEGER,                       -- FK to company.id; deferred (#213).
+  company_id          INTEGER,                       -- FK to company.id.
   updated_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
   notes               VARCHAR(4000)
 );
+
+ALTER TABLE contact ADD CONSTRAINT FK_contact_company FOREIGN KEY (company_id) REFERENCES company (id);

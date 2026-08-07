@@ -3166,6 +3166,9 @@ func TestIntegration_RunNamedQuery_SingleResult(t *testing.T) {
 		`UPDATE %s SET primary_attachment_id=@p1 WHERE id=@p2`, h.cfg.PartsTable()), attID, partID); err != nil {
 		t.Fatalf("set primary attachment: %v", err)
 	}
+	// Clear primary_attachment_id before the attachment is deleted below (FK_part_primary_attachment,
+	// #735) — deferred after the attachment-delete defer so it runs first (LIFO).
+	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1", h.cfg.PartsTable()), partID)
 
 	qr, err := h.runNamedQuery(ctx, fmt.Sprintf("query:pn_primary_attachment(@pn=%s)", pn))
 	if err != nil {

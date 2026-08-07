@@ -48,7 +48,7 @@
             <tbody>
                 {{range .Attachments}}
                 {{$f := .FileName}}
-                {{$isPrimary := eq .ID $.Part.PrimaryAttachmentID}}
+                {{$isPrimary := and $.Part.PrimaryAttachmentID (eq .ID (derefInt $.Part.PrimaryAttachmentID))}}
                 <tr>
                     <td class="text-center text-muted">{{if .OrderID}}{{derefInt .OrderID}}{{end}}</td>
                     <td>{{.PartRevision}}</td>
