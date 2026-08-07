@@ -149,9 +149,8 @@ func (h *Handler) checkDeadLinks(ctx context.Context) (utilCheck, error) {
 }
 
 // checkOrphanPointers flags parts whose soft-FK pointer references a row that no
-// longer exists. These columns have no DB-enforced FK (see #213). Unset values
-// use a sentinel of 0 (or NULL for default_supplier_id); the `> 0` guard excludes
-// both, so an unset pointer is never reported as dangling.
+// longer exists. Unset values are NULL; the `> 0` guard excludes them since
+// `NULL > 0` is never true.
 func (h *Handler) checkOrphanPointers(ctx context.Context) (utilCheck, error) {
 	check := utilCheck{
 		Title: "Orphaned part pointers",

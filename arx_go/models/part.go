@@ -19,7 +19,7 @@ type Part struct {
 	Notes               string
 	CreatedDate         *time.Time
 	ModifiedDate        *time.Time
-	PrimaryAttachmentID int
+	PrimaryAttachmentID *int // part_attachment.id of the primary attachment; nil = none set
 	StockOnHand         float64
 	ReorderMin          *float64 // reorder point (#273); nil = none set, never flagged below-min
 	IsLotTracked        bool     // DEPRECATED (#745): derived from TrackingMode; kept in sync for back-compat until a later cleanup slice drops the column. Read TrackingMode / TracksLots / TracksSerials for new logic.

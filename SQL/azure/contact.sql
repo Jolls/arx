@@ -17,7 +17,9 @@ CREATE TABLE contact (
   website             VARCHAR(500),                  -- URL for supplier/contact website.
   email               VARCHAR(127),
   is_active           BIT            DEFAULT 1,
-  company_id          INT,                           -- FK to company.id; FK constraint deferred — see #213.
+  company_id          INT,                           -- FK to company.id.
   updated_at          DATETIME       CONSTRAINT DF_contact_updated_at DEFAULT GETDATE(),
   notes               VARCHAR(4000)
 );
+
+ALTER TABLE dbo.contact ADD CONSTRAINT FK_contact_company FOREIGN KEY (company_id) REFERENCES dbo.company (id);

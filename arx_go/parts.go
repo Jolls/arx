@@ -40,7 +40,10 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	p.Title = title.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
-	p.PrimaryAttachmentID = int(filIDPrimary.Int64)
+	if filIDPrimary.Valid {
+		v := int(filIDPrimary.Int64)
+		p.PrimaryAttachmentID = &v
+	}
 	p.StockOnHand = stockOnHand.Float64
 	p.TrackingMode = trackingMode.String
 	p.IsLotTracked = models.TracksLots(trackingMode.String)
@@ -276,7 +279,10 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	p.IsActive = active.Bool
 	p.RequestedBy = reqBy.String
 	p.Notes = notes.String
-	p.PrimaryAttachmentID = int(filIDPrimary.Int64)
+	if filIDPrimary.Valid {
+		v := int(filIDPrimary.Int64)
+		p.PrimaryAttachmentID = &v
+	}
 	p.StockOnHand = stockOnHand.Float64
 	if reorderMin.Valid {
 		v := reorderMin.Float64
@@ -315,13 +321,13 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var primaryAtt *models.Attachment
-	if p.PrimaryAttachmentID > 0 {
+	if p.PrimaryAttachmentID != nil {
 		var att models.Attachment
 		var fname, fnotes, frev sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 			`SELECT id, file_name, category, part_revision FROM %s WHERE id = @p1`,
 			h.cfg.AttachmentsTable(),
-		), p.PrimaryAttachmentID).Scan(&att.ID, &fname, &fnotes, &frev); err == nil {
+		), *p.PrimaryAttachmentID).Scan(&att.ID, &fname, &fnotes, &frev); err == nil {
 			att.FileName = fname.String
 			att.Category = fnotes.String
 			att.PartRevision = frev.String
@@ -348,7 +354,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 					v := int(sortOrder.Int64)
 					att.OrderID = &v
 				}
-				if att.ID != p.PrimaryAttachmentID && len(topAtts) < 5 {
+				if (p.PrimaryAttachmentID == nil || att.ID != *p.PrimaryAttachmentID) && len(topAtts) < 5 {
 					topAtts = append(topAtts, att)
 				}
 				// The generated "Thumbnail" (#696) is purpose-built for the /parts

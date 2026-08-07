@@ -1,7 +1,7 @@
 -- part: the core parts catalog. The part_number COLUMN is the human-readable PN.
 -- attachment_count and po_line_count are denormalized counts, maintained by
 -- triggers (SQL/postgres/triggers.sql).
--- price_id / default_supplier_id / uom_id FKs are mostly deferred - see #213.
+-- price_id / default_supplier_id / uom_id FKs are all enforced now (#735, follow-up to #213).
 
 DROP TABLE IF EXISTS part CASCADE;
 
@@ -31,13 +31,13 @@ CREATE TABLE part (
   last_rollup_cost    NUMERIC(16,8)    NULL,
   last_rollup_at      TIMESTAMP        NULL,
   attachment_count    INTEGER          DEFAULT 0,             -- Denormalized; see header note.
-  primary_attachment_id INTEGER        DEFAULT 0,
+  primary_attachment_id INTEGER        NULL,
   current_cost        NUMERIC(16,8)    DEFAULT 0,
   is_active           BOOLEAN          DEFAULT TRUE,
   po_line_count       INTEGER          DEFAULT 0,             -- Denormalized; see header note.
   modified_date       DATE             DEFAULT CURRENT_DATE,
-  price_id            INTEGER          DEFAULT 0,             -- FK to price; deferred (#213).
-  default_supplier_id INTEGER          NULL,                 -- FK to company.id; deferred (#465/#213).
+  price_id            INTEGER          NULL,                  -- FK to price.id.
+  default_supplier_id INTEGER          NULL,                 -- FK to company.id.
   uom_id              INTEGER          NULL,                 -- FK to uom.uom_id.
   stock_on_hand       NUMERIC(16,8)    NOT NULL DEFAULT 0,   -- Cached inventory balance (#272); app-maintained.
   reorder_min         NUMERIC(16,8)    NULL,                 -- Reorder point (#273); NULL = none.
@@ -48,3 +48,6 @@ CREATE TABLE part (
 );
 
 ALTER TABLE part ADD CONSTRAINT FK_part_number_uom FOREIGN KEY (uom_id) REFERENCES uom (uom_id);
+ALTER TABLE part ADD CONSTRAINT FK_part_default_supplier FOREIGN KEY (default_supplier_id) REFERENCES company (id);
+ALTER TABLE part ADD CONSTRAINT FK_part_price FOREIGN KEY (price_id) REFERENCES price (id);
+ALTER TABLE part ADD CONSTRAINT FK_part_primary_attachment FOREIGN KEY (primary_attachment_id) REFERENCES part_attachment (id);

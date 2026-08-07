@@ -41,6 +41,16 @@ BEGIN TRY
     -- company rows must go before both contact (FK_company_default_contact) and
     -- company_attachment (FK_company_primary_attachment) — company points AT both,
     -- so deleting either first fails on a re-run once those columns are set.
+    -- contact.company_id -> company.id (FK_contact_company, #735) makes company <-> contact
+    -- a circular reference (company.default_contact -> contact.id already existed the other
+    -- way) — null out contact.company_id first to break the cycle before either table's
+    -- rows are deleted.
+    UPDATE dbo.contact SET company_id = NULL;
+    -- part.default_supplier_id -> company.id, part.price_id -> price.id, and
+    -- part.primary_attachment_id -> part_attachment.id (#735) are all real FKs now, but
+    -- company/price/part_attachment are deleted well before part below — null out part's
+    -- side of all three first so those earlier deletes don't fail on a dangling reference.
+    UPDATE dbo.part SET default_supplier_id = NULL, price_id = NULL, primary_attachment_id = NULL;
     DELETE FROM dbo.part_attachment;
     DELETE FROM dbo.supplier_part;
     DELETE FROM dbo.mfg_part;
@@ -130,10 +140,10 @@ BEGIN TRY
          'SELECT part_number, title FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
          'pn, item', 'list', GETDATE(), '2020-01-01T00:00:00'),
         (5, 'pn_primary_attachment', 'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
-         'SELECT TOP 1 part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.part_number = @pn AND part_attachment.is_active = 1 ORDER BY CASE WHEN part.primary_attachment_id > 0 AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC',
+         'SELECT TOP 1 part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.part_number = @pn AND part_attachment.is_active = 1 ORDER BY CASE WHEN part.primary_attachment_id IS NOT NULL AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC',
          'pn', 'single', GETDATE(), '2020-01-01T00:00:00'),
         (6, 'form_primary_attachment', 'Primary attachment for the form''s own part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
-         'SELECT TOP 1 part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.id = @pnid AND part_attachment.is_active = 1 ORDER BY CASE WHEN part.primary_attachment_id > 0 AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC',
+         'SELECT TOP 1 part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.id = @pnid AND part_attachment.is_active = 1 ORDER BY CASE WHEN part.primary_attachment_id IS NOT NULL AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC',
          'pnid', 'single', GETDATE(), '2020-01-01T00:00:00'),
         (7, 'recent_serial_numbers_for_form', 'Most recent 20 serial numbers tested against a given form (active records only, newest first). Use a literal form_id to reference a different form than the current one.',
          'SELECT TOP 20 serial_number FROM form_record WHERE form_id = @form_id AND is_active = 1 ORDER BY TRY_CAST(serial_number AS INT) DESC, record_date DESC',
