@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -85,6 +84,10 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 		s.Contact = cnName.String
 		s.Country = cnCountry.String
 		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	log.Printf("[rows] suppliers: %d rows in %v", len(out), time.Since(start))
 	writeJSON(w, out)
@@ -718,14 +721,8 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 	}
 
 	base := filepath.Join(root, s.SUSupplierCode)
-	path := base
-	if len(subParts) > 0 {
-		path = filepath.Join(append([]string{base}, subParts...)...)
-	}
-
-	absBase, _ := filepath.Abs(base)
-	absPath, _ := filepath.Abs(path)
-	if absPath != absBase && !strings.HasPrefix(absPath+string(filepath.Separator), absBase+string(filepath.Separator)) {
+	path, ok := safePath(base, strings.Join(subParts, "/"))
+	if !ok {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -749,59 +746,20 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 		dirName = subParts[len(subParts)-1]
 	}
 
-	var parentURL string
-	if len(subParts) > 1 {
-		parentURL = fmt.Sprintf("/supplier/%d/folder/%s", s.ID, strings.Join(subParts[:len(subParts)-1], "/"))
-	} else if len(subParts) == 1 {
-		parentURL = fmt.Sprintf("/supplier/%d/folder", s.ID)
-	}
-
-	rawEntries, _ := os.ReadDir(path)
-	sort.Slice(rawEntries, func(i, j int) bool {
-		di, dj := rawEntries[i].IsDir(), rawEntries[j].IsDir()
-		if di != dj {
-			return di
-		}
-		return strings.ToLower(rawEntries[i].Name()) < strings.ToLower(rawEntries[j].Name())
-	})
-
-	var entries []DirEntry
-	var numDirs, numFiles int
-	for _, e := range rawEntries {
-		name := e.Name()
-		isDir := e.IsDir()
-		rel := append(subParts, name)
-		var relURL string
-		if isDir {
-			relURL = fmt.Sprintf("/supplier/%d/folder/%s", s.ID, strings.Join(rel, "/"))
-			numDirs++
-		} else {
-			relURL = fmt.Sprintf("/supplier/%d/file/%s", s.ID, strings.Join(rel, "/"))
-			numFiles++
-		}
-		entry := DirEntry{Name: name, IsDir: isDir, URL: relURL}
-		if !isDir {
-			entry.Ext = strings.ToUpper(strings.TrimPrefix(filepath.Ext(name), "."))
-			if fi, err2 := e.Info(); err2 == nil {
-				entry.Size = formatFileSize(fi.Size())
-			}
-		}
-		entries = append(entries, entry)
-	}
+	folderURL := fmt.Sprintf("/supplier/%d/folder", s.ID)
+	parentURL := dirParentURL(folderURL, folderURL, subParts)
 
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "shared/local_dir.html", map[string]any{
-		"Supplier":  &s,
-		"DirName":   dirName,
-		"FullPath":  path,
-		"ParentURL": parentURL,
-		"Entries":   entries,
-		"NumDirs":   numDirs,
-		"NumFiles":  numFiles,
-		"ActiveTab": "suppliers", "ActiveSubTab": "folder",
-		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode": h.cfg.TestMode,
+	h.renderDirListing(w, r, dirListingParams{
+		Path: path, RelParts: subParts,
+		DirURLPrefix:  folderURL,
+		FileURLPrefix: fmt.Sprintf("/supplier/%d/file", s.ID),
+		DirName:       dirName,
+		ParentURL:     parentURL,
+		Supplier:      &s,
+		ActiveTab:     "suppliers", ActiveSubTab: "folder",
+		NavBackURL: backURL, NavBackLabel: backLabel,
 	})
 }
 
@@ -860,28 +818,7 @@ func (h *Handler) serveSupplierFile(w http.ResponseWriter, r *http.Request, s mo
 
 	base := filepath.Join(root, s.SUSupplierCode)
 	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/supplier/%s/file/", id))
-	path, ok2 := safePath(base, splat)
-	if !ok2 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) || (err == nil && info.IsDir()) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, "Error accessing file", http.StatusInternalServerError)
-		return
-	}
-
-	if strings.ToLower(filepath.Ext(path)) == ".pdf" {
-		w.Header().Set("Content-Disposition", "inline")
-	} else {
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(path)+`"`)
-	}
-	http.ServeFile(w, r, path)
+	h.serveLocalizedFile(w, r, fileServingParams{Root: base, Splat: splat})
 }
 
 func supplierFromForm(r *http.Request) models.Supplier {

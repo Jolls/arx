@@ -214,9 +214,8 @@ func TestServeSupplierFile_PDFInline(t *testing.T) {
 	}
 }
 
-// ServeSupplierFile only special-cases .pdf, unlike ServeLocalFile which also
-// inlines images via urlutil.IsImage — pinning that drift (#863).
-func TestServeSupplierFile_ImageIsAttachmentNotInline(t *testing.T) {
+// ServeSupplierFile now inlines images the same way ServeLocalFile does (#861).
+func TestServeSupplierFile_ImageInline(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
 	h.cfg.SupplierFilesRoot = root
@@ -224,9 +223,8 @@ func TestServeSupplierFile_ImageIsAttachmentNotInline(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local/pic.png", nil)
 	rec := httptest.NewRecorder()
 	h.ServeSupplierFile(rec, req)
-	got := rec.Header().Get("Content-Disposition")
-	if !strings.HasPrefix(got, "attachment") {
-		t.Errorf("Content-Disposition = %q, want attachment (image inlining not implemented here)", got)
+	if got := rec.Header().Get("Content-Disposition"); got != "inline" {
+		t.Errorf("Content-Disposition = %q, want %q", got, "inline")
 	}
 }
 

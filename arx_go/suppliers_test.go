@@ -1,6 +1,7 @@
 package main
 
 import (
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -73,16 +74,24 @@ func TestRenderSupplierFolder_EmptySupplierCode(t *testing.T) {
 // renderSupplierFolder joins raw subParts and then checks containment — so
 // passing ".." segments directly here (bypassing SupplierFolderSub's
 // per-segment filepath.Base sanitizing) does reach the 400 branch.
-func TestRenderSupplierFolder_PathTraversalRejected(t *testing.T) {
+// renderSupplierFolder now uses safePath (#864), matching ServeLocalDir/
+// ServeSupplierDir/renderPOFolder: traversal segments are silently stripped
+// and the request resolves under root, rather than rejected.
+func TestRenderSupplierFolder_DotDotSegmentsStayUnderRoot(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
 	h.cfg.SupplierFilesRoot = root
+	// safePath strips ".." segments and resolves the rest under base
+	// (root/ACME), so the traversal attempt lands on root/ACME/etc.
+	if err := os.MkdirAll(filepath.Join(root, "ACME", "etc"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	s := models.Supplier{ID: 1, SUSupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder/../../etc", nil)
 	rec := httptest.NewRecorder()
 	h.renderSupplierFolder(rec, req, s, []string{"..", "..", "etc"})
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (resolves to root/ACME/etc), body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -262,10 +271,10 @@ func TestServeSupplierFile_PDFInlineNoDB(t *testing.T) {
 	if got := rec.Header().Get("Content-Disposition"); got != "inline" {
 		t.Errorf("Content-Disposition = %q, want %q", got, "inline")
 	}
-	// Unlike files.go's ServeSupplierFile, this codepath sets no Cache-Control
-	// header at all — pin that drift.
-	if got := rec.Header().Get("Cache-Control"); got != "" {
-		t.Errorf("Cache-Control = %q, want empty (no header set)", got)
+	// See ServeLocalFile/ServeSupplierFile in files.go (#839): force
+	// revalidation so a replaced file isn't served stale from cache.
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("Cache-Control = %q, want %q", got, "no-cache")
 	}
 }
 
@@ -282,9 +291,50 @@ func TestServeSupplierFile_OtherAttachmentNoDB(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/notes.txt", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")
-	// Raw string format here, not mime.FormatMediaType like files.go — pin as-is.
-	want := `attachment; filename="notes.txt"`
-	if got := rec.Header().Get("Content-Disposition"); got != want {
-		t.Errorf("Content-Disposition = %q, want %q", got, want)
+	got := rec.Header().Get("Content-Disposition")
+	if !strings.HasPrefix(got, "attachment") || !strings.Contains(got, "notes.txt") {
+		t.Errorf("Content-Disposition = %q, want attachment with filename notes.txt", got)
+	}
+}
+
+func TestServeSupplierFile_NonASCIIFilenameEncodedNoDB(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.SupplierFilesRoot = root
+	base := filepath.Join(root, "ACME")
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A non-ASCII filename would produce a malformed header with naive
+	// `filename="` + name + `"` concatenation (#363); mime.FormatMediaType
+	// RFC 6266-encodes it correctly.
+	writeTempFile(t, base, "café.txt", "hi")
+	s := models.Supplier{SUSupplierCode: "ACME"}
+	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/café.txt", nil)
+	rec := httptest.NewRecorder()
+	h.serveSupplierFile(rec, req, s, "1")
+	got := rec.Header().Get("Content-Disposition")
+	if _, params, err := mime.ParseMediaType(got); err != nil {
+		t.Fatalf("Content-Disposition = %q is not valid RFC 6266: %v", got, err)
+	} else if params["filename"] != "café.txt" {
+		t.Errorf("filename param = %q, want %q", params["filename"], "café.txt")
+	}
+}
+
+func TestServeSupplierFile_ImageInlineNoDB(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg.SupplierFilesRoot = root
+	base := filepath.Join(root, "ACME")
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTempFile(t, base, "pic.png", "fake-png")
+	s := models.Supplier{SUSupplierCode: "ACME"}
+	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/pic.png", nil)
+	rec := httptest.NewRecorder()
+	h.serveSupplierFile(rec, req, s, "1")
+	if got := rec.Header().Get("Content-Disposition"); got != "inline" {
+		t.Errorf("Content-Disposition = %q, want %q", got, "inline")
 	}
 }

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.20] - 2026-08-06
+### Fixed
+- `SuppliersRows` now checks `rows.Err()` after its scan loop, matching `PartsRows`/`PORows` — a failure part-way through row iteration no longer returns a silently truncated supplier list as HTTP 200 ([#862](https://github.com/Jolls/arx-legacy/issues/862))
+- `SupplierFile`/`POFile` now set `Cache-Control: no-cache` and RFC 6266-encode filenames via `mime.FormatMediaType`, matching `ServeLocalFile`/`ServeSupplierFile` — closes the gap left when #363 and #839 were fixed in only two of the four file-serving handlers. Image inlining (alongside PDFs) is now uniform across all four file-serving sites ([#861](https://github.com/Jolls/arx-legacy/issues/861))
+
+### Changed
+- Unified the four directory-listing handlers (`ServeLocalDir`, `ServeSupplierDir`, `renderSupplierFolder`, `renderPOFolder`) and four file-serving handlers (`ServeLocalFile`, `ServeSupplierFile`, `SupplierFile`, `POFile`) onto shared `renderDirListing`/`serveLocalizedFile` helpers in `files.go`, removing near-duplicate sort/entry-loop/path-containment logic. `renderPOFolder`/`POFile` gain `safePath` containment (previously unchecked); `renderSupplierFolder`'s path-traversal handling now matches the other three sites (silently resolves under root instead of rejecting with 400) ([#864](https://github.com/Jolls/arx-legacy/issues/864))
+
 ## [0.7.19] - 2026-08-06
 ### Added
 - "Receive All" button on the PO detail page's receive form, pre-filling every open line's remaining quantity and submitting in one click alongside the existing "Receive" button ([#879](https://github.com/Jolls/arx-legacy/issues/879))

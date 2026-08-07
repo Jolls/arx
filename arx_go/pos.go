@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1076,9 +1075,10 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 	}
 
 	base := filepath.Join(root, baseName)
-	path := base
-	if len(subParts) > 0 {
-		path = filepath.Join(append([]string{base}, subParts...)...)
+	path, ok := safePath(base, strings.Join(subParts, "/"))
+	if !ok {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
 	}
 
 	info, err := os.Stat(path)
@@ -1092,59 +1092,20 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 		dirName = subParts[len(subParts)-1]
 	}
 
-	var parentURL string
-	if len(subParts) > 1 {
-		parentURL = fmt.Sprintf("/po/%s/folder/%s", po.Number, strings.Join(subParts[:len(subParts)-1], "/"))
-	} else if len(subParts) == 1 {
-		parentURL = fmt.Sprintf("/po/%s/folder", po.Number)
-	}
-
-	rawEntries, _ := os.ReadDir(path)
-	sort.Slice(rawEntries, func(i, j int) bool {
-		di, dj := rawEntries[i].IsDir(), rawEntries[j].IsDir()
-		if di != dj {
-			return di
-		}
-		return strings.ToLower(rawEntries[i].Name()) < strings.ToLower(rawEntries[j].Name())
-	})
-
-	var entries []DirEntry
-	var numDirs, numFiles int
-	for _, e := range rawEntries {
-		name := e.Name()
-		isDir := e.IsDir()
-		var relURL string
-		rel := append(subParts, name)
-		if isDir {
-			relURL = fmt.Sprintf("/po/%s/folder/%s", po.Number, strings.Join(rel, "/"))
-			numDirs++
-		} else {
-			relURL = fmt.Sprintf("/po/%s/file/%s", po.Number, strings.Join(rel, "/"))
-			numFiles++
-		}
-		entry := DirEntry{Name: name, IsDir: isDir, URL: relURL}
-		if !isDir {
-			entry.Ext = strings.ToUpper(strings.TrimPrefix(filepath.Ext(name), "."))
-			if fi, err := e.Info(); err == nil {
-				entry.Size = formatFileSize(fi.Size())
-			}
-		}
-		entries = append(entries, entry)
-	}
+	folderURL := fmt.Sprintf("/po/%s/folder", po.Number)
+	parentURL := dirParentURL(folderURL, folderURL, subParts)
 
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "shared/local_dir.html", map[string]any{
-		"PO":        &po,
-		"DirName":   dirName,
-		"FullPath":  path,
-		"ParentURL": parentURL,
-		"Entries":   entries,
-		"NumDirs":   numDirs,
-		"NumFiles":  numFiles,
-		"ActiveTab": "pos", "ActiveSubTab": "folder",
-		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode": h.cfg.TestMode,
+	h.renderDirListing(w, r, dirListingParams{
+		Path: path, RelParts: subParts,
+		DirURLPrefix:  folderURL,
+		FileURLPrefix: fmt.Sprintf("/po/%s/file", po.Number),
+		DirName:       dirName,
+		ParentURL:     parentURL,
+		PO:            &po,
+		ActiveTab:     "pos", ActiveSubTab: "folder",
+		NavBackURL: backURL, NavBackLabel: backLabel,
 	})
 }
 
@@ -1189,25 +1150,7 @@ func (h *Handler) POFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/po/%s/file/", num))
-	var parts []string
-	for _, seg := range strings.Split(splat, "/") {
-		base := filepath.Base(seg)
-		if base != "" && base != "." && base != ".." {
-			parts = append(parts, base)
-		}
-	}
-	path := filepath.Join(append([]string{root, baseName}, parts...)...)
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) || (err == nil && info.IsDir()) {
-		http.NotFound(w, r)
-		return
-	}
-	if strings.ToLower(filepath.Ext(path)) == ".pdf" {
-		w.Header().Set("Content-Disposition", "inline")
-	} else {
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(path)+`"`)
-	}
-	http.ServeFile(w, r, path)
+	h.serveLocalizedFile(w, r, fileServingParams{Root: filepath.Join(root, baseName), Splat: splat})
 }
 
 // ── PO status lifecycle (issue #271) ─────────────────────────────────────────

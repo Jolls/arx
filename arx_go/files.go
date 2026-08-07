@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"arx/arx_go/models"
 	"arx/arxlib/urlutil"
 )
 
@@ -53,18 +54,17 @@ func safePath(root, splat string) (string, bool) {
 	return result, true
 }
 
-// ServeLocalFile — GET /local/*
-// Serves a single file from DOC_CONTROL_ROOT.
-// PDFs open inline; everything else triggers a download.
-func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.DocControlRoot
-	if root == "" {
-		http.Error(w, "DOC_CONTROL_ROOT is not configured", http.StatusServiceUnavailable)
-		return
-	}
+// fileServingParams parameterizes serveLocalizedFile by root and URL splat —
+// the only real variation across the file-serving handlers (#864).
+type fileServingParams struct {
+	Root  string
+	Splat string
+}
 
-	splat := strings.TrimPrefix(r.URL.Path, "/local/")
-	path, ok := safePath(root, splat)
+// serveLocalizedFile serves a single file from p.Root, resolving p.Splat
+// safely under it. PDFs and images open inline; everything else downloads.
+func (h *Handler) serveLocalizedFile(w http.ResponseWriter, r *http.Request, p fileServingParams) {
+	path, ok := safePath(p.Root, p.Splat)
 	if !ok {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
@@ -95,6 +95,18 @@ func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
+// ServeLocalFile — GET /local/*
+// Serves a single file from DOC_CONTROL_ROOT.
+func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
+	root := h.cfg.DocControlRoot
+	if root == "" {
+		http.Error(w, "DOC_CONTROL_ROOT is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	splat := strings.TrimPrefix(r.URL.Path, "/local/")
+	h.serveLocalizedFile(w, r, fileServingParams{Root: root, Splat: splat})
+}
+
 // ServeSupplierFile — GET /supplier-local/*
 // Serves a single file from SUPPLIER_FILES_ROOT (falls back to DOC_CONTROL_ROOT).
 func (h *Handler) ServeSupplierFile(w http.ResponseWriter, r *http.Request) {
@@ -106,34 +118,123 @@ func (h *Handler) ServeSupplierFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
 		return
 	}
-
 	splat := strings.TrimPrefix(r.URL.Path, "/supplier-local/")
-	path, ok := safePath(root, splat)
-	if !ok {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
+	h.serveLocalizedFile(w, r, fileServingParams{Root: root, Splat: splat})
+}
 
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) || (err == nil && info.IsDir()) {
-		http.NotFound(w, r)
-		return
+// dirListingParams parameterizes renderDirListing by root resolution and URL
+// prefixes — the only real variation across the directory-listing handlers (#864).
+type dirListingParams struct {
+	Path          string // absolute path to list; caller has validated existence/is-dir/containment
+	RelParts      []string
+	DirURLPrefix  string // no trailing slash
+	FileURLPrefix string // no trailing slash
+	DirName       string
+	ParentURL     string
+	PO            *models.PurchaseOrder // set only for PO-folder listings
+	Supplier      *models.Supplier      // set only for supplier-folder listings
+	ActiveTab     string
+	ActiveSubTab  string
+	NavBackURL    string
+	NavBackLabel  string
+}
+
+// dirParentURL derives the "up one level" URL for a directory listing.
+// joinPrefix + "/" + parent segments covers 2+ relative segments; rootURL is
+// returned as-is for exactly 1 segment (splat-based routes need a trailing
+// slash there, entity-scoped routes don't — callers pass what their own
+// routing convention requires).
+func dirParentURL(joinPrefix, rootURL string, relParts []string) string {
+	switch {
+	case len(relParts) > 1:
+		return joinPrefix + "/" + strings.Join(relParts[:len(relParts)-1], "/")
+	case len(relParts) == 1:
+		return rootURL
+	default:
+		return ""
 	}
+}
+
+// renderDirListing reads p.Path and renders shared/local_dir.html — the sort
+// order, entry loop, and render map shared by all four directory-listing sites (#864).
+func (h *Handler) renderDirListing(w http.ResponseWriter, r *http.Request, p dirListingParams) {
+	rawEntries, err := os.ReadDir(p.Path)
 	if err != nil {
-		http.Error(w, "Error accessing file", http.StatusInternalServerError)
+		http.Error(w, "Error reading directory", http.StatusInternalServerError)
 		return
 	}
+	sort.Slice(rawEntries, func(i, j int) bool {
+		di, dj := rawEntries[i].IsDir(), rawEntries[j].IsDir()
+		if di != dj {
+			return di // dirs first
+		}
+		return strings.ToLower(rawEntries[i].Name()) < strings.ToLower(rawEntries[j].Name())
+	})
 
-	if strings.ToLower(filepath.Ext(path)) == ".pdf" {
-		w.Header().Set("Content-Disposition", "inline")
-	} else {
-		w.Header().Set("Content-Disposition",
-			mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(path)}))
+	relPrefix := strings.Join(p.RelParts, "/")
+	var entries []DirEntry
+	var numDirs, numFiles int
+	for _, e := range rawEntries {
+		name := e.Name()
+		isDir := e.IsDir()
+		relURL := name
+		if relPrefix != "" {
+			relURL = relPrefix + "/" + name
+		}
+
+		entry := DirEntry{Name: name, IsDir: isDir}
+		if isDir {
+			entry.URL = p.DirURLPrefix + "/" + relURL
+			numDirs++
+		} else {
+			entry.URL = p.FileURLPrefix + "/" + relURL
+			entry.Ext = strings.ToUpper(strings.TrimPrefix(filepath.Ext(name), "."))
+			if fi, err := e.Info(); err == nil {
+				entry.Size = formatFileSize(fi.Size())
+			}
+			numFiles++
+		}
+		entries = append(entries, entry)
 	}
-	// See ServeLocalFile: force revalidation so a replaced file isn't served
-	// stale from the browser cache under its unchanged URL (#839).
-	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFile(w, r, path)
+
+	data := map[string]any{
+		"DirName":      p.DirName,
+		"FullPath":     p.Path,
+		"ParentURL":    p.ParentURL,
+		"Entries":      entries,
+		"NumDirs":      numDirs,
+		"NumFiles":     numFiles,
+		"ActiveTab":    p.ActiveTab,
+		"ActiveSubTab": p.ActiveSubTab,
+		"NavBackURL":   p.NavBackURL,
+		"NavBackLabel": p.NavBackLabel,
+		"TestMode":     h.cfg.TestMode,
+	}
+	if p.PO != nil {
+		data["PO"] = p.PO
+	}
+	if p.Supplier != nil {
+		data["Supplier"] = p.Supplier
+	}
+	h.render(w, r, "shared/local_dir.html", data)
+}
+
+// relSegments returns path's segments relative to root, split on the OS
+// path separator with empties dropped. Used by handlers whose root/path pair
+// come from safePath rather than a splat already split into subParts (#864).
+func relSegments(root, path string) []string {
+	absRoot, _ := filepath.Abs(root)
+	absPath, _ := filepath.Abs(path)
+	rel, _ := filepath.Rel(absRoot, absPath)
+	var relParts []string
+	if rel != "." && rel != "" {
+		for _, p := range strings.Split(rel, string(filepath.Separator)) {
+			if p != "" {
+				relParts = append(relParts, p)
+			}
+		}
+	}
+	return relParts
 }
 
 // ServeSupplierDir — GET /supplier-local-dir/*
@@ -165,80 +266,18 @@ func (h *Handler) ServeSupplierDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absRoot, _ := filepath.Abs(root)
-	absPath, _ := filepath.Abs(path)
-	rel, _ := filepath.Rel(absRoot, absPath)
-	var relParts []string
-	if rel != "." && rel != "" {
-		for _, p := range strings.Split(rel, string(filepath.Separator)) {
-			if p != "" {
-				relParts = append(relParts, p)
-			}
-		}
-	}
-
-	var parentURL string
-	if len(relParts) > 1 {
-		parentURL = "/supplier-local-dir/" + strings.Join(relParts[:len(relParts)-1], "/")
-	} else if len(relParts) == 1 {
-		parentURL = "/supplier-local-dir/"
-	}
+	relParts := relSegments(root, path)
+	parentURL := dirParentURL("/supplier-local-dir", "/supplier-local-dir/", relParts)
 
 	dirName := filepath.Base(path)
 	if dirName == "." || dirName == "" {
 		dirName = filepath.Base(root)
 	}
 
-	rawEntries, err := os.ReadDir(path)
-	if err != nil {
-		http.Error(w, "Error reading directory", http.StatusInternalServerError)
-		return
-	}
-	sort.Slice(rawEntries, func(i, j int) bool {
-		di, dj := rawEntries[i].IsDir(), rawEntries[j].IsDir()
-		if di != dj {
-			return di
-		}
-		return strings.ToLower(rawEntries[i].Name()) < strings.ToLower(rawEntries[j].Name())
-	})
-
-	var entries []DirEntry
-	var numDirs, numFiles int
-	for _, e := range rawEntries {
-		name := e.Name()
-		isDir := e.IsDir()
-		var relURL string
-		if len(relParts) > 0 {
-			relURL = strings.Join(append(relParts, name), "/")
-		} else {
-			relURL = name
-		}
-
-		entry := DirEntry{Name: name, IsDir: isDir}
-		if isDir {
-			entry.URL = "/supplier-local-dir/" + relURL
-			numDirs++
-		} else {
-			entry.URL = "/supplier-local/" + relURL
-			ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(name), "."))
-			entry.Ext = ext
-			if fi, err := e.Info(); err == nil {
-				entry.Size = formatFileSize(fi.Size())
-			}
-			numFiles++
-		}
-		entries = append(entries, entry)
-	}
-
-	h.render(w, r, "shared/local_dir.html", map[string]any{
-		"DirName":   dirName,
-		"FullPath":  path,
-		"ParentURL": parentURL,
-		"Entries":   entries,
-		"NumDirs":   numDirs,
-		"NumFiles":  numFiles,
-		"ActiveTab": "",
-		"TestMode":  h.cfg.TestMode,
+	h.renderDirListing(w, r, dirListingParams{
+		Path: path, RelParts: relParts,
+		DirURLPrefix: "/supplier-local-dir", FileURLPrefix: "/supplier-local",
+		DirName: dirName, ParentURL: parentURL,
 	})
 }
 
@@ -268,81 +307,17 @@ func (h *Handler) ServeLocalDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build relative segments for parent URL calculation
-	absRoot, _ := filepath.Abs(root)
-	absPath, _ := filepath.Abs(path)
-	rel, _ := filepath.Rel(absRoot, absPath)
-	var relParts []string
-	if rel != "." && rel != "" {
-		for _, p := range strings.Split(rel, string(filepath.Separator)) {
-			if p != "" {
-				relParts = append(relParts, p)
-			}
-		}
-	}
-
-	var parentURL string
-	if len(relParts) > 1 {
-		parentURL = "/local-dir/" + strings.Join(relParts[:len(relParts)-1], "/")
-	} else if len(relParts) == 1 {
-		parentURL = "/local-dir/"
-	}
+	relParts := relSegments(root, path)
+	parentURL := dirParentURL("/local-dir", "/local-dir/", relParts)
 
 	dirName := filepath.Base(path)
 	if dirName == "." || dirName == "" {
 		dirName = filepath.Base(root)
 	}
 
-	// Read and sort entries: dirs first, then files, both alphabetical
-	rawEntries, err := os.ReadDir(path)
-	if err != nil {
-		http.Error(w, "Error reading directory", http.StatusInternalServerError)
-		return
-	}
-	sort.Slice(rawEntries, func(i, j int) bool {
-		di, dj := rawEntries[i].IsDir(), rawEntries[j].IsDir()
-		if di != dj {
-			return di // dirs first
-		}
-		return strings.ToLower(rawEntries[i].Name()) < strings.ToLower(rawEntries[j].Name())
-	})
-
-	var entries []DirEntry
-	var numDirs, numFiles int
-	for _, e := range rawEntries {
-		name := e.Name()
-		isDir := e.IsDir()
-		var relURL string
-		if len(relParts) > 0 {
-			relURL = strings.Join(append(relParts, name), "/")
-		} else {
-			relURL = name
-		}
-
-		entry := DirEntry{Name: name, IsDir: isDir}
-		if isDir {
-			entry.URL = "/local-dir/" + relURL
-			numDirs++
-		} else {
-			entry.URL = "/local/" + relURL
-			ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(name), "."))
-			entry.Ext = ext
-			if fi, err := e.Info(); err == nil {
-				entry.Size = formatFileSize(fi.Size())
-			}
-			numFiles++
-		}
-		entries = append(entries, entry)
-	}
-
-	h.render(w, r, "shared/local_dir.html", map[string]any{
-		"DirName":   dirName,
-		"FullPath":  path,
-		"ParentURL": parentURL,
-		"Entries":   entries,
-		"NumDirs":   numDirs,
-		"NumFiles":  numFiles,
-		"ActiveTab": "",
-		"TestMode":  h.cfg.TestMode,
+	h.renderDirListing(w, r, dirListingParams{
+		Path: path, RelParts: relParts,
+		DirURLPrefix: "/local-dir", FileURLPrefix: "/local",
+		DirName: dirName, ParentURL: parentURL,
 	})
 }
