@@ -244,7 +244,7 @@
                         <td class="text-end">{{printf "%.2f" .Qty}}</td>
                         <td class="text-end">
                             <span {{if ge .ReceivedQty .Qty}}class="badge bg-success"{{end}}>{{printf "%.2f" .ReceivedQty}} / {{printf "%.2f" .Qty}}</span>
-                            {{if $canReceive}}<input type="number" step="any" min="0" name="recv[{{.ID}}]" class="form-control form-control-sm mt-1 text-end" placeholder="+ qty">
+                            {{if $canReceive}}<input type="number" step="any" min="0" name="recv[{{.ID}}]" class="form-control form-control-sm mt-1 text-end" placeholder="+ qty" data-qty="{{.Qty}}" data-received="{{.ReceivedQty}}">
                             {{if .IsLotTracked}}<input type="text" name="vlot[{{.ID}}]" class="form-control form-control-sm mt-1 text-end" placeholder="Vendor lot #" title="Lot-controlled part: enter the vendor's lot/batch number for this receipt (optional).">{{end}}{{end}}
                         </td>
                         <td class="text-end">${{printf "%.4f" .UnitCost}}</td>
@@ -282,6 +282,7 @@
                 <label for="recv-date" class="form-label mb-0">Receipt date</label>
                 <input type="date" id="recv-date" name="txn_date" value="{{.Today}}" class="form-control form-control-sm">
             </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="fillReceiveAll(this)"><i class="bi bi-box-arrow-in-down"></i> Receive All</button>
             <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-down"></i> Receive</button>
         </div>
         </form>{{end}}
@@ -408,6 +409,17 @@ function openImportModal(partId, partNumber) {
     .catch(function() {
       document.getElementById('importFileList').innerHTML = '<span class="text-danger small">Error loading attachments.</span>';
     });
+}
+
+function fillReceiveAll(btn) {
+  var form = btn.closest('form');
+  form.querySelectorAll('input[name^="recv["]').forEach(function (input) {
+    var qty = parseFloat(input.dataset.qty);
+    var received = parseFloat(input.dataset.received);
+    var remaining = Math.round((qty - received) * 100) / 100;
+    input.value = remaining > 0 ? remaining : '';
+  });
+  form.submit();
 }
 </script>
 {{end}}
