@@ -62,16 +62,16 @@
   </div>
 
   <div class="mb-3">
-    <label class="form-label fw-semibold" for="comments">Type</label>
+    <label class="form-label fw-semibold" for="record_type">Type</label>
     {{$types := .Form.RecordTypeList}}
     {{if $types}}
-    <select class="form-select" id="comments" name="comments">
+    <select class="form-select" id="record_type" name="record_type">
       {{range $i, $t := $types}}
       <option value="{{$t}}"{{if eq $i 0}} selected{{end}}>{{$t}}</option>
       {{end}}
     </select>
     {{else}}
-    <input type="text" class="form-control" id="comments" name="comments"
+    <input type="text" class="form-control" id="record_type" name="record_type"
            placeholder="e.g. New Release, Re-Test, Upgrade">
     {{end}}
   </div>

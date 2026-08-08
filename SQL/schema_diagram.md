@@ -289,7 +289,7 @@ erDiagram
         varchar  serial_number
         datetime record_date
         varchar  instrument_type
-        varchar  comments       "record Type in the UI"
+        varchar  record_type    "record Type in the UI"
         varchar  notes          "session-level remark"
         bit      is_locked
         bit      is_approved

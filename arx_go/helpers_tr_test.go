@@ -164,7 +164,7 @@ func TestEvaluateHide(t *testing.T) {
 	results := map[int]*models.TestResult{
 		12: {Result: "N/A"},
 	}
-	record := &models.TestRecord{Comments: "Re-Test"}
+	record := &models.TestRecord{RecordType: "Re-Test"}
 
 	cases := []struct {
 		name    string
