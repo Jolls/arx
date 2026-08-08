@@ -77,7 +77,7 @@ func seedWIPRecord(t *testing.T, h *Handler, ctx context.Context, formID, testID
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, record_date, serial_number, subject_part_number, subject_pn_description,
-		 test_order, comments, is_locked, is_approved, is_active)
+		 test_order, record_type, is_locked, is_approved, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, '2026-07-01', @p2, '', '', @p3, 'New Release', 0, 0, 1)`,
 		h.cfg.RecordsTable()), formID, serial, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
@@ -367,7 +367,7 @@ func TestIntegration_LockLotTrackedRecordWithNoLot(t *testing.T) {
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description,
-		 test_order, comments, is_locked, is_approved, is_active)
+		 test_order, record_type, is_locked, is_approved, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, @p2, '2026-07-01', 'NL1', '', '', @p3, 'New Release', 0, 0, 1)`,
 		h.cfg.RecordsTable()), formID, lotTrackedPart, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {

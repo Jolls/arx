@@ -65,7 +65,7 @@ type TestRecord struct {
 	SerialNumberPN   string // part number of the unit under test
 	SerialNumberDesc string // description of the unit under test
 	RecordDate       *time.Time
-	Comments         string // used as "Type" in the UI
+	RecordType       string // the record's Type (New Release / Re-Test / Upgrade)
 	Notes            string // free-text remark for the whole test session (#870); freezes with the record
 	InstrumentType   string // free-text instrument type label; matched against form_row.instrument_types to filter steps
 	IsLocked         bool

@@ -117,7 +117,7 @@ func isAutoSerial(submitted, suggested string) bool {
 
 // substituteRefs replaces tokens in s:
 //   - {123}              → recorded result for step 123, falling back to that step's spec_nom
-//   - {record.type}      → record's Type (comments field)
+//   - {record.type}      → record's Type (record_type field)
 //   - {record.pn}        → record's unit-under-test part number (subject_part_number)
 //   - {record.sn}        → record's serial number
 //   - {record.pndesc}    → record's unit-under-test description (subject_pn_description / title)
@@ -135,7 +135,7 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 			}
 			switch inner {
 			case "record.type":
-				return record.Comments
+				return record.RecordType
 			case "record.pn":
 				return record.SerialNumberPN
 			case "record.sn":
@@ -253,12 +253,12 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 
 	lockedCount, _ := strconv.Atoi(r.URL.Query().Get("locked"))
 
-	// Distinct Type (comments) values for this form, to populate the filter datalist.
+	// Distinct Type (record_type) values for this form, to populate the filter datalist.
 	var typeOptions []string
 	typeRows, terr := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT DISTINCT comments FROM %s
-		WHERE form_id = @p1 AND is_active = %s AND comments <> ''
-		ORDER BY comments`, h.cfg.RecordsTable(), h.dia().BoolLiteral(true)), formID)
+		SELECT DISTINCT record_type FROM %s
+		WHERE form_id = @p1 AND is_active = %s AND record_type <> ''
+		ORDER BY record_type`, h.cfg.RecordsTable(), h.dia().BoolLiteral(true)), formID)
 	if terr == nil {
 		defer typeRows.Close()
 		for typeRows.Next() {
@@ -310,7 +310,7 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, is_locked, is_approved, form_revision
+		       record_date, record_type, is_locked, is_approved, form_revision
 		FROM %s
 		WHERE form_id = @p1 AND is_active = %s
 		ORDER BY %s DESC, record_date DESC`,
@@ -378,7 +378,7 @@ type scopedRecordRow struct {
 func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int) ([]scopedRecordRow, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT r.id, COALESCE(r.part_id,0), r.serial_number, r.subject_part_number, r.subject_pn_description,
-		       r.record_date, r.comments, r.is_locked, r.is_approved, r.form_revision,
+		       r.record_date, r.record_type, r.is_locked, r.is_approved, r.form_revision,
 		       r.form_id, fp.part_number, fp.title
 		FROM %s r
 		JOIN %s f ON f.id = r.form_id
@@ -425,13 +425,13 @@ func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int
 	return out, rows.Err()
 }
 
-// scopedRecordTypeOptions returns distinct non-empty comments (Type) values for
+// scopedRecordTypeOptions returns distinct non-empty record_type (Type) values for
 // the filter-row datalist, scoped the same way as scopedRecordsRows.
 func (h *Handler) scopedRecordTypeOptions(ctx context.Context, whereCol string, id int) ([]string, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT DISTINCT comments FROM %s
-		WHERE %s = @p1 AND is_active = %s AND comments <> ''
-		ORDER BY comments`, h.cfg.RecordsTable(), whereCol, h.dia().BoolLiteral(true)), id)
+		SELECT DISTINCT record_type FROM %s
+		WHERE %s = @p1 AND is_active = %s AND record_type <> ''
+		ORDER BY record_type`, h.cfg.RecordsTable(), whereCol, h.dia().BoolLiteral(true)), id)
 	if err != nil {
 		return nil, err
 	}
@@ -1306,11 +1306,11 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       record_date, record_type, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       lot_id, build_id, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments, &record.Notes,
+			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType, &record.Notes,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
 			&record.LotID, &record.BuildID, &record.UnitID)
 	if err == sql.ErrNoRows {
@@ -1445,10 +1445,10 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, record_type, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments, &record.Notes,
+			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType, &record.Notes,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
@@ -1614,7 +1614,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	serialNumber := strings.TrimSpace(r.FormValue("serial_number"))
 	suggestedSN := strings.TrimSpace(r.FormValue("suggested_serial_number"))
-	comments := strings.TrimSpace(r.FormValue("comments"))
+	recordType := strings.TrimSpace(r.FormValue("record_type"))
 	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
 
 	// Resolve the selected BOM part into denormalized PN fields.
@@ -1673,12 +1673,12 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	var newID int
 	insertRecord := h.dia().InsertReturningID(h.cfg.RecordsTable(),
 		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
-		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision`,
+		 record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision`,
 		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,GETDATE(),%s,%s,@p10`,
 			h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)),
 		false)
 	err = tx.QueryRowContext(r.Context(), insertRecord,
-		formID, partNumberID, serialNumber, snPN, snDesc, comments, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
+		formID, partNumberID, serialNumber, snPN, snDesc, recordType, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1687,7 +1687,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	// Freeze the record from the start: materialize a snapshot row per applicable step (#487).
 	rec := models.TestRecord{
 		ID: newID, FormID: formID, SerialNumber: serialNumber,
-		SerialNumberPN: snPN, SerialNumberDesc: snDesc, Comments: comments,
+		SerialNumberPN: snPN, SerialNumberDesc: snDesc, RecordType: recordType,
 		InstrumentType: instrumentType, RecordDate: &recordDate, TestOrder: form.TestOrder,
 	}
 	if err := h.materializeRecordSteps(r.Context(), tx, &rec, &form); err != nil {
@@ -1946,11 +1946,11 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       record_date, record_type, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       lot_id, build_id, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments, &record.Notes,
+			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType, &record.Notes,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
 			&record.LotID, &record.BuildID, &record.UnitID)
 	if err == sql.ErrNoRows {
@@ -2201,10 +2201,10 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	var src models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order, unit_id
+		       record_date, record_type, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order, unit_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&src.ID, &src.FormID, &src.PartNumberID, &src.SerialNumber, &src.SerialNumberPN,
-			&src.SerialNumberDesc, &src.RecordDate, &src.Comments,
+			&src.SerialNumberDesc, &src.RecordDate, &src.RecordType,
 			&src.InstrumentType, &src.IsLocked, &src.IsApproved, &src.IsActive, &src.TestOrder, &src.UnitID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
@@ -2243,13 +2243,13 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	// the source record (#745, design §2/§5), never a new unit row.
 	insertDupRecord := h.dia().InsertReturningID(h.cfg.RecordsTable(),
 		`form_id, part_id, serial_number, subject_part_number, subject_pn_description,
-		 comments, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision, unit_id`,
+		 record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision, unit_id`,
 		fmt.Sprintf(`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE(),GETDATE(),%s,%s,%s,@p9,@p10`,
 			h.dia().BoolLiteral(true), h.dia().BoolLiteral(false), h.dia().BoolLiteral(false)),
 		false)
 	err = tx.QueryRowContext(r.Context(), insertDupRecord,
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
-		src.Comments, src.InstrumentType, src.TestOrder, formRevision, src.UnitID).Scan(&newID)
+		src.RecordType, src.InstrumentType, src.TestOrder, formRevision, src.UnitID).Scan(&newID)
 	if err != nil {
 		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2458,11 +2458,11 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
+		       record_date, record_type, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       unit_id, build_id
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
+			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
 			&record.UnitID, &record.BuildID)
 	if err == sql.ErrNoRows {
@@ -2624,7 +2624,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	comments := strings.TrimSpace(r.FormValue("comments"))
+	recordType := strings.TrimSpace(r.FormValue("record_type"))
 	instrumentType := strings.TrimSpace(r.FormValue("instrument_type"))
 	notes := strings.TrimSpace(r.FormValue("notes")) // #870: record-level session remark
 
@@ -2764,12 +2764,12 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 	if rd != nil {
 		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET record_date=@p1, comments=@p2, notes=@p3, instrument_type=@p4, lot_id=@p5, build_id=@p6, unit_id=@p7, updated_at=GETDATE() WHERE id=@p8",
-			h.cfg.RecordsTable()), *rd, comments, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
+			"UPDATE %s SET record_date=@p1, record_type=@p2, notes=@p3, instrument_type=@p4, lot_id=@p5, build_id=@p6, unit_id=@p7, updated_at=GETDATE() WHERE id=@p8",
+			h.cfg.RecordsTable()), *rd, recordType, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
 	} else {
 		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET comments=@p1, notes=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, unit_id=@p6, updated_at=GETDATE() WHERE id=@p7",
-			h.cfg.RecordsTable()), comments, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
+			"UPDATE %s SET record_type=@p1, notes=@p2, instrument_type=@p3, lot_id=@p4, build_id=@p5, unit_id=@p6, updated_at=GETDATE() WHERE id=@p7",
+			h.cfg.RecordsTable()), recordType, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
 	}
 	if err != nil {
 		http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
@@ -2799,10 +2799,10 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	var record models.TestRecord
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, comments, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
+		       record_date, record_type, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
 		FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recordID).
 		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.Comments,
+			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType,
 			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)

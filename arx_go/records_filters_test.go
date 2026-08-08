@@ -83,7 +83,7 @@ func TestWhereClauses_AllFiltersNumberedFromStart(t *testing.T) {
 	}
 	f := parseRecordFilters(q)
 	sql, args := f.whereClauses(arxdb.NewSQLServerDialect(), 2)
-	want := " AND comments = @p2 AND record_date >= @p3 AND record_date < DATEADD(day, 1, @p4)"
+	want := " AND record_type = @p2 AND record_date >= @p3 AND record_date < DATEADD(day, 1, @p4)"
 	if sql != want {
 		t.Errorf("sql = %q, want %q", sql, want)
 	}

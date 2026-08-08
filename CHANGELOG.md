@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.22] - 2026-08-07
+### Changed
+- Renamed `form_record.comments` → `record_type`: the column never held comments — it holds the record Type ("New Release" / "Re-Test" / "Upgrade") shown in the UI. The misleading name blocked #870 from adding a real record-level comment field. Bumps `ExpectedSchemaVersion` 8 → 9; run `migrate_874_form_record_type_rename.sql` ([#874](https://github.com/Jolls/arx-legacy/issues/874))
+
 ## [0.7.21] - 2026-08-07
 ### Changed
 - Promoted four deferred logical references to real, DB-enforced foreign keys: `contact.company_id` and `part.default_supplier_id` → `company.id`; `part.price_id` → `price.id`; `part.primary_attachment_id` → `part_attachment.id`. The latter two also convert their `DEFAULT 0` "no value" sentinel to `NULL`, matching the existing `company.primary_attachment_id` pattern — `Part.PrimaryAttachmentID` is now `*int` instead of `int` ([#735](https://github.com/Jolls/arx-legacy/issues/735), follow-up to [#213](https://github.com/Jolls/arx-legacy/issues/213))

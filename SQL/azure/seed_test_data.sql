@@ -115,7 +115,7 @@ BEGIN TRY
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
     -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO dbo.app_config (setting_key, setting_value, updated_at) VALUES
-        ('schema_version', '8', '2020-01-01T00:00:00'),
+        ('schema_version', '9', '2020-01-01T00:00:00'),
         ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
@@ -581,7 +581,7 @@ BEGIN TRY
     -- lot-tracked assembly (3005) to its build (8201) only — the build_id-without-lot_id
     -- case that build_id exists to cover. Both are WIP with recent (non-stale) dates.
     SET IDENTITY_INSERT dbo.form_record ON;
-    INSERT INTO dbo.form_record (id, form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, comments, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, unit_id, updated_at, created_at, notes) VALUES
+    INSERT INTO dbo.form_record (id, form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, record_type, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, unit_id, updated_at, created_at, notes) VALUES
         (7001, 6001, 3004, '2026-06-01', '7001', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelA', 0, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-01T00:00:00', NULL), -- WIP, stale
         (7002, 6001, 3004, '2026-06-02', '7002', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'Re-Test',     'ModelA', 1, 0, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-02T00:00:00', NULL), -- Complete
         (7003, 6001, 3004, '2026-06-03', '7003', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6104', 'New Release', 'ModelB', 1, 1, 1, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-06-03T00:00:00', NULL), -- Approved (locked twice — see events)

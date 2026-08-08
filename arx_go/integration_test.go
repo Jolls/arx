@@ -514,7 +514,7 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	// Seed four records: WIP/Complete/Approved + a type/date spread.
 	type seed struct {
 		sn          string
-		comments    string
+		recordType  string
 		date        string
 		locked, app int
 	}
@@ -526,9 +526,9 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	}
 	for _, s := range seeds {
 		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (form_id, record_date, serial_number, comments, is_locked, is_approved, is_active)
+			`INSERT INTO %s (form_id, record_date, serial_number, record_type, is_locked, is_approved, is_active)
 			 VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)`, h.cfg.RecordsTable()),
-			formID, s.date, s.sn, s.comments, s.locked, s.app); err != nil {
+			formID, s.date, s.sn, s.recordType, s.locked, s.app); err != nil {
 			t.Fatalf("seed record %s: %v", s.sn, err)
 		}
 	}
@@ -629,7 +629,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, test_order, comments, is_locked, is_active)
+		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, test_order, record_type, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587', '', '', @p2, '', 0, 1)`, h.cfg.RecordsTable()),
 		formID, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
@@ -2121,7 +2121,7 @@ func TestIntegration_RecordLinkageSave(t *testing.T) {
 	// strings (real records always carry these snapshots).
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active)
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1002', 'Sub-Assembly', '', '', 0, 1)`, rt),
 		testedPart, smokeUniq("RLS")).Scan(&recordID); err != nil {
 		t.Fatalf("seed record: %v", err)
@@ -2185,7 +2185,7 @@ func TestIntegration_SerialUnitCreationAndRetest(t *testing.T) {
 	mkRecord := func() int {
 		var id int
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active)
+			`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active)
 			 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 0, 1)`, rt),
 			testedPart, serial).Scan(&id); err != nil {
 			t.Fatalf("seed record: %v", err)
@@ -2292,7 +2292,7 @@ func TestIntegration_SaveDoesNotDuplicateUnitOnSerialMismatch(t *testing.T) {
 
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active, unit_id)
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active, unit_id)
 		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 0, 1, @p3)`, rt),
 		testedPart, origSerial, unitID).Scan(&recordID); err != nil {
 		t.Fatalf("seed record: %v", err)
@@ -2402,7 +2402,7 @@ func TestIntegration_BuildAtTestTime(t *testing.T) {
 
 	var recordID, buildID, unitID, outputLotID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active)
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active)
 		 OUTPUT INSERTED.id VALUES (6001, @p1, @p2, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 0, 1)`, rt),
 		testedPart, serial).Scan(&recordID); err != nil {
 		t.Fatalf("seed record: %v", err)
@@ -2615,7 +2615,7 @@ func TestIntegration_UnitSerialLocked(t *testing.T) {
 
 	var recID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, comments, test_order, is_locked, is_active, unit_id)
+		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active, unit_id)
 		 OUTPUT INSERTED.id VALUES (6001, 3013, @p1, 'ASM-1003', 'Widget Deluxe Assembly', '', '', 1, 1, @p2)`, rt),
 		smokeUniq("SN-LOCK"), lockedUnit).Scan(&recID); err != nil {
 		t.Fatalf("seed locked record (ArxDev may need reseed): %v", err)

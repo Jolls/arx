@@ -1,3 +1,58 @@
+Arx v0.7.22 — August 2026
+========================
+
+NEW FEATURES
+
+  Test Records Tab on Part, Lot, and Unit Pages
+  A part's detail page now has a Records subtab listing every active test
+  record across all of its test forms, sortable and filterable, with a
+  link into each one. The same table now also appears on lot and unit
+  genealogy trace pages, scoped to that lot or unit.
+
+  Lot Notes
+  Lots can now carry a free-text note, editable from the lot page and
+  visible on the lot detail header, the part's Lots subtab, the
+  cross-part Lots list, and genealogy trace tables. A test record's view
+  page shows a card for its linked lot, including the lot's current
+  note, and the record's edit page can append a new line to that note
+  without overwriting what a previous session already added.
+
+  Test Record Session Notes
+  Test records can now carry their own free-text note covering the whole
+  test session, separate from the per-step comment column. It shows on
+  the record's view and printed pages, locks with the record once
+  complete or approved, and is not carried over when a record is
+  duplicated for a retest.
+
+  Linked Build Shown on Test Records
+  A test record's read-only view now shows the build that produced the
+  unit under test, alongside the existing lot information, without
+  needing to open Edit.
+
+  Receive All on Purchase Orders
+  The PO detail page's receive form now has a "Receive All" button that
+  pre-fills every open line with its full remaining quantity in one
+  click.
+
+BUG FIXES
+
+  Fixed the inline "Build this unit" panel on a test record always
+  defaulting to a quantity of 1, even for whole-lot/batch records that
+  should allow building more than one unit at a time.
+
+  Fixed saving a test record that was already linked to a serialized
+  unit sometimes creating a duplicate unit and orphaning the original,
+  if that unit's serial number had been edited after linking.
+
+  Fixed the Suppliers list silently showing a truncated (and
+  incorrectly successful-looking) result if a database error occurred
+  partway through loading.
+
+  Fixed inconsistent caching and filename handling across the four
+  file-download routes (local files, supplier files, and their PO/part
+  attachment equivalents), which could serve a stale cached file after
+  a replacement was uploaded.
+
 Arx v0.7.13 — July 2026
 ========================
 

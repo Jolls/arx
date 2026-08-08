@@ -38,7 +38,7 @@
     <div class="col-auto">
       <label class="form-label fw-semibold mb-1 small">Type</label>
       <input type="text" class="form-control form-control-sm"
-             name="comments" value="{{.Record.Comments}}"
+             name="record_type" value="{{.Record.RecordType}}"
              placeholder="e.g. New Release, Re-Test">
     </div>
     <div class="col-auto">
@@ -334,7 +334,7 @@ function draftData() {
   ).forEach(el => { data[el.name] = el.value; });
   // notes = the record-level note (#870); lot_note = the pending append to the lot's
   // batch note (#872), which is only written on save, so an unsaved one is draft state.
-  ['record_date', 'comments', 'instrument_type', 'notes', 'lot_note'].forEach(n => {
+  ['record_date', 'record_type', 'instrument_type', 'notes', 'lot_note'].forEach(n => {
     const el = document.querySelector('#edit-form [name="' + n + '"]');
     if (el) data[n] = el.value;
   });
@@ -443,7 +443,7 @@ function resolveHideTokens(formula) {
       return el ? el.value : m;
     }
     if (tok === 'record.type') {
-      const el = document.querySelector('#edit-form [name="comments"]');
+      const el = document.querySelector('#edit-form [name="record_type"]');
       return el ? el.value : m;
     }
     return m;
@@ -477,8 +477,8 @@ document.querySelectorAll('#edit-form [name^="result_"]').forEach(function(el) {
   el.addEventListener('input', applyHideFormulas);
   el.addEventListener('change', applyHideFormulas);
 });
-const _hideCommentsEl = document.querySelector('#edit-form [name="comments"]');
-if (_hideCommentsEl) _hideCommentsEl.addEventListener('input', applyHideFormulas);
+const _hideRecordTypeEl = document.querySelector('#edit-form [name="record_type"]');
+if (_hideRecordTypeEl) _hideRecordTypeEl.addEventListener('input', applyHideFormulas);
 applyHideFormulas();
 </script>
 <script>
