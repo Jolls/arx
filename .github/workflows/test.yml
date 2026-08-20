@@ -1,0 +1,38 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-vet-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+
+      - name: Install systray cgo dependency
+        run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev
+
+      - name: Vet
+        run: |
+          go vet ./...
+        working-directory: arx_go
+      - run: go vet ./...
+        working-directory: arxlib
+
+      - name: Build
+        run: go build ./...
+        working-directory: arx_go
+      - run: go build ./...
+        working-directory: arxlib
+
+      - name: Test
+        run: go test ./...
+        working-directory: arx_go
+      - run: go test ./...
+        working-directory: arxlib
