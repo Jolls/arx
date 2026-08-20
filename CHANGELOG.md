@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.23] - 2026-08-20
+### Changed
+- Upgraded Go toolchain to 1.27.0 and applied `go fix`'s modernizers across `arx_go` (range-over-int loops, `any` instead of `interface{}`, `strings.Cut`/`CutPrefix`/`SplitSeq`, `maps.Copy`, `slices.Contains`) — no behavior change
+
 ## [0.7.22] - 2026-08-07
 ### Changed
 - Renamed `form_record.comments` → `record_type`: the column never held comments — it holds the record Type ("New Release" / "Re-Test" / "Upgrade") shown in the UI. The misleading name blocked #870 from adding a real record-level comment field. Bumps `ExpectedSchemaVersion` 8 → 9; run `migrate_874_form_record_type_rename.sql` ([#874](https://github.com/Jolls/arx-legacy/issues/874))
