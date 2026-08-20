@@ -782,7 +782,7 @@ func (h *Handler) SupplierFolderSub(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/supplier/%s/folder/", id))
 	var subParts []string
-	for _, seg := range strings.Split(splat, "/") {
+	for seg := range strings.SplitSeq(splat, "/") {
 		b := filepath.Base(seg)
 		if b != "" && b != "." && b != ".." {
 			subParts = append(subParts, b)
@@ -836,7 +836,7 @@ func supplierFromForm(r *http.Request) models.Supplier {
 	return s
 }
 
-func nullableInt(s string) interface{} {
+func nullableInt(s string) any {
 	if s == "" {
 		return nil
 	}
@@ -855,7 +855,7 @@ func floatOrZero(s string) float64 {
 }
 
 // nullableText returns nil for an empty string so the column is stored as NULL.
-func nullableText(s string) interface{} {
+func nullableText(s string) any {
 	if s == "" {
 		return nil
 	}

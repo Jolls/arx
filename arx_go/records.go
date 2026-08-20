@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -28,7 +29,7 @@ func stepAppliesToRecord(instrumentTypes, recordType string) bool {
 	if instrumentTypes == "" || recordType == "" {
 		return true
 	}
-	for _, t := range strings.Split(instrumentTypes, ",") {
+	for t := range strings.SplitSeq(instrumentTypes, ",") {
 		if strings.EqualFold(strings.TrimSpace(t), strings.TrimSpace(recordType)) {
 			return true
 		}
@@ -882,8 +883,8 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	// Collect step IDs from submitted original_ fields.
 	stepIDs := map[int]bool{}
 	for key := range r.Form {
-		if strings.HasPrefix(key, "original_parameter_") {
-			if id, err := strconv.Atoi(strings.TrimPrefix(key, "original_parameter_")); err == nil {
+		if after, ok := strings.CutPrefix(key, "original_parameter_"); ok {
+			if id, err := strconv.Atoi(after); err == nil {
 				stepIDs[id] = true
 			}
 		}
@@ -983,12 +984,12 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		rest := key[len("new_row["):]
-		sep := strings.Index(rest, "][")
-		if sep < 0 {
+		before, after, ok := strings.Cut(rest, "][")
+		if !ok {
 			continue
 		}
-		idx := rest[:sep]
-		field := strings.TrimSuffix(rest[sep+2:], "]")
+		idx := before
+		field := strings.TrimSuffix(after, "]")
 		val := ""
 		if len(vals) > 0 {
 			val = strings.TrimSpace(vals[0])
@@ -1086,8 +1087,8 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			kept := make([]string, 0, len(parts))
 			for _, p := range parts {
 				p = strings.TrimSpace(p)
-				if strings.HasPrefix(p, "new_") {
-					idx := strings.TrimPrefix(p, "new_")
+				if after, ok := strings.CutPrefix(p, "new_"); ok {
+					idx := after
 					if realID, ok := newIDMap[idx]; ok {
 						kept = append(kept, strconv.Itoa(realID))
 					}
@@ -1101,7 +1102,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 
 		// Append any inserted rows whose new_X token wasn't in step_order.
 		inOrder := map[string]bool{}
-		for _, p := range strings.Split(stepOrder, ",") {
+		for p := range strings.SplitSeq(stepOrder, ",") {
 			inOrder[strings.TrimSpace(p)] = true
 		}
 		for _, realID := range newIDMap {
@@ -1251,9 +1252,7 @@ func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord,
 
 	// Synthetic step map for {id} spec_nom fallback: prefer the frozen snapshot nominal.
 	refSteps := map[int]*models.TestStep{}
-	for tid, st := range liveSteps {
-		refSteps[tid] = st
-	}
+	maps.Copy(refSteps, liveSteps)
 	for tid, res := range results {
 		refSteps[tid] = &models.TestStep{ID: tid, SpecNom: res.SpecNom}
 	}
@@ -1877,9 +1876,9 @@ func containsLotOption(lots []LotOption, lotID int) bool {
 // blank. A non-blank id that doesn't belong to the part yields an error (surfaced as a
 // 400). Unlike the build's component-lot check, a lot need not be active here — a record
 // may legitimately reference a since-retired lot.
-func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildArg interface{}, err error) {
+func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildArg any, err error) {
 	ctx := r.Context()
-	belongs := func(table, v string) (interface{}, error) {
+	belongs := func(table, v string) (any, error) {
 		id, convErr := strconv.Atoi(v)
 		if convErr != nil || id <= 0 {
 			return nil, fmt.Errorf("invalid selection")
@@ -1917,7 +1916,7 @@ func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildA
 // CK_unit_provenance was dropped by migrate_799_unit_source.sql (#799), since a
 // `manual` unit legitimately has neither. tx-accepting so a build-at-test-time save
 // (#747) can mint the unit in the same transaction as the build.
-func (h *Handler) upsertUnitForRecord(ctx context.Context, tx *txLogger, partID int, serial string, buildID, lotID interface{}) (int, error) {
+func (h *Handler) upsertUnitForRecord(ctx context.Context, tx *txLogger, partID int, serial string, buildID, lotID any) (int, error) {
 	var unitID int
 	err := tx.QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT id FROM %s WHERE part_id = @p1 AND serial_number = @p2`, h.cfg.UnitTable()), partID, serial).Scan(&unitID)
@@ -2742,7 +2741,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var unitArg interface{}
+	var unitArg any
 	if record.UnitID != nil {
 		// Already linked to a unit — reuse it rather than re-deriving from
 		// serial_number. A unit's serial can be edited after the fact (#799, Part →

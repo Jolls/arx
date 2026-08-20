@@ -62,8 +62,8 @@ func TestRenderPDFFirstPage_InvalidPDF(t *testing.T) {
 
 func TestEncodePNG_RoundTrips(t *testing.T) {
 	src := image.NewRGBA(image.Rect(0, 0, 4, 4))
-	for y := 0; y < 4; y++ {
-		for x := 0; x < 4; x++ {
+	for y := range 4 {
+		for x := range 4 {
 			src.Set(x, y, color.RGBA{R: 10, G: 20, B: 30, A: 255})
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"maps"
 	"math"
 	"net/http"
 	"os"
@@ -935,12 +936,12 @@ func extractBOMRows(form map[string][]string, prefix string) map[string]bomRow {
 			continue
 		}
 		rest := key[len(prefix)+1:]
-		sep := strings.Index(rest, "][")
-		if sep < 0 {
+		before, after, ok := strings.Cut(rest, "][")
+		if !ok {
 			continue
 		}
-		id := rest[:sep]
-		field := strings.TrimSuffix(rest[sep+2:], "]")
+		id := before
+		field := strings.TrimSuffix(after, "]")
 		val := ""
 		if len(vals) > 0 {
 			val = strings.TrimSpace(vals[0])
@@ -1586,9 +1587,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		"TestMode":             h.cfg.TestMode,
 		"NextOrderID":          nextOrderID,
 	}
-	for k, v := range extra {
-		data[k] = v
-	}
+	maps.Copy(data, extra)
 	h.render(w, r, "parts/part_attachments.html", data)
 }
 

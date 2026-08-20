@@ -25,7 +25,7 @@ type DirEntry struct {
 // would escape root (path traversal attempt).
 func safePath(root, splat string) (string, bool) {
 	var clean []string
-	for _, seg := range strings.Split(splat, "/") {
+	for seg := range strings.SplitSeq(splat, "/") {
 		seg = strings.TrimSpace(seg)
 		if seg == "" || seg == "." || seg == ".." {
 			continue
@@ -228,7 +228,7 @@ func relSegments(root, path string) []string {
 	rel, _ := filepath.Rel(absRoot, absPath)
 	var relParts []string
 	if rel != "." && rel != "" {
-		for _, p := range strings.Split(rel, string(filepath.Separator)) {
+		for p := range strings.SplitSeq(rel, string(filepath.Separator)) {
 			if p != "" {
 				relParts = append(relParts, p)
 			}

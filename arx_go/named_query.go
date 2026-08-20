@@ -75,7 +75,7 @@ func parseQuerySpec(specNom string) (name string, params map[string]string) {
 	name = strings.TrimSpace(s[:parenIdx])
 	paramStr := strings.Trim(s[parenIdx:], "()")
 
-	for _, p := range strings.Split(paramStr, ",") {
+	for p := range strings.SplitSeq(paramStr, ",") {
 		p = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(p), "@"))
 		eqIdx := strings.Index(p, "=")
 		if eqIdx < 0 {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -240,9 +241,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"ActiveTab":             "settings",
 		"CsrfToken":             h.csrfToken(w, r),
 	}
-	for k, v := range extra {
-		data[k] = v
-	}
+	maps.Copy(data, extra)
 	return data
 }
 

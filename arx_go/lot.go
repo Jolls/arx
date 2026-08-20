@@ -39,7 +39,7 @@ type lotCreateArgs struct {
 // lots) defers to the lot's own id, guaranteed unique by construction (#687) — a
 // second UPDATE sets it once the id is known post-insert.
 func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args lotCreateArgs, poLineID *int) (int, error) {
-	var poArg interface{}
+	var poArg any
 	if poLineID != nil {
 		poArg = *poLineID
 	}
@@ -410,7 +410,7 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_lot_trace.html", map[string]any{
 		"Part": p, "Lot": lot, "Ancestors": ancestors, "Descendants": descendants,
 		"TypeOptions": typeOptions,
-		"ActiveTab": "parts", "ActiveSubTab": "lots",
+		"ActiveTab":   "parts", "ActiveSubTab": "lots",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
 	})
 }

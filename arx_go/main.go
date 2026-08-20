@@ -96,7 +96,7 @@ func onExit() {
 }
 
 func openWhenReady(url, port string) {
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		c, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 50*time.Millisecond)
 		if err == nil {
 			c.Close()

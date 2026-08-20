@@ -20,15 +20,15 @@ import (
 // nil for movements not driven by a build.
 func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, txnType string, qty float64, txnDate time.Time, reference, note string, poLineID, lotID, buildID *int) error {
 	ctx := r.Context()
-	var poArg interface{}
+	var poArg any
 	if poLineID != nil {
 		poArg = *poLineID
 	}
-	var lotArg interface{}
+	var lotArg any
 	if lotID != nil {
 		lotArg = *lotID
 	}
-	var buildArg interface{}
+	var buildArg any
 	if buildID != nil {
 		buildArg = *buildID
 	}

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -635,7 +636,7 @@ func (h *Handler) setNavContext(w http.ResponseWriter, r *http.Request, url, lab
 	sess := h.session(r)
 
 	if ref := r.Referer(); ref != "" {
-		refPath := strings.SplitN(ref, "?", 2)[0]
+		refPath, _, _ := strings.Cut(ref, "?")
 		if idx := strings.Index(refPath, "://"); idx >= 0 {
 			refPath = refPath[idx+3:]
 			if sl := strings.Index(refPath, "/"); sl >= 0 {
@@ -718,12 +719,7 @@ func coreTemplateFuncs() template.FuncMap {
 			return map[string]any{"Categories": cats, "Selected": selected}
 		},
 		"inList": func(list []string, val string) bool {
-			for _, s := range list {
-				if s == val {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(list, val)
 		},
 		"not": func(v any) bool {
 			if v == nil {
@@ -739,7 +735,7 @@ func coreTemplateFuncs() template.FuncMap {
 				return val.Int() == 0
 			case reflect.Slice, reflect.Map, reflect.Array:
 				return val.Len() == 0
-			case reflect.Ptr, reflect.Interface:
+			case reflect.Pointer, reflect.Interface:
 				return val.IsNil()
 			default:
 				return false
@@ -808,7 +804,7 @@ func formatFileSize(bytes int64) string {
 // splitCSV splits a comma-separated string into trimmed, non-empty tokens.
 func splitCSV(s string) []string {
 	var out []string
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		if t := strings.TrimSpace(p); t != "" {
 			out = append(out, t)
 		}

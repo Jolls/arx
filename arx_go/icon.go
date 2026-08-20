@@ -20,8 +20,8 @@ func appIcon() []byte {
 
 	// XOR mask — 32-bit BGRA, bottom-up row order (ICO convention).
 	xor := make([]byte, w*h*4)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			row := h - 1 - y
 			idx := (row*w + x) * 4
 			rv, gv, bv, av := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()

@@ -28,14 +28,14 @@ func evaluateHide(formula string, results map[int]*models.TestResult, steps map[
 		return true
 	}
 	// Check != before = to avoid splitting on the = within !=.
-	if idx := strings.Index(resolved, "!="); idx >= 0 {
-		lhs := strings.TrimSpace(resolved[:idx])
-		rhs := strings.TrimSpace(resolved[idx+2:])
+	if before, after, ok := strings.Cut(resolved, "!="); ok {
+		lhs := strings.TrimSpace(before)
+		rhs := strings.TrimSpace(after)
 		return !strings.EqualFold(lhs, rhs)
 	}
-	if idx := strings.Index(resolved, "="); idx >= 0 {
-		lhs := strings.TrimSpace(resolved[:idx])
-		rhs := strings.TrimSpace(resolved[idx+1:])
+	if before, after, ok := strings.Cut(resolved, "="); ok {
+		lhs := strings.TrimSpace(before)
+		rhs := strings.TrimSpace(after)
 		return strings.EqualFold(lhs, rhs)
 	}
 	return false // unknown expression → show

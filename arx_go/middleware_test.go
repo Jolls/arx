@@ -553,7 +553,7 @@ func TestLoginThrottle_LockoutLifecycle(t *testing.T) {
 	if h.loginBlocked("bob") {
 		t.Fatal("bob blocked before any failures")
 	}
-	for i := 0; i < loginMaxFails-1; i++ {
+	for range loginMaxFails - 1 {
 		h.noteLoginFail("bob")
 	}
 	if h.loginBlocked("bob") {
@@ -576,7 +576,7 @@ func TestLoginThrottle_LockoutLifecycle(t *testing.T) {
 func TestLoginThrottle_LockoutExpires(t *testing.T) {
 	h := testHandler()
 
-	for i := 0; i < loginMaxFails; i++ {
+	for range loginMaxFails {
 		h.noteLoginFail("bob")
 	}
 	if !h.loginBlocked("bob") {

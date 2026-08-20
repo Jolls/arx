@@ -6,7 +6,8 @@ import (
 	"arx/arx_go/models"
 )
 
-func boolPtr(b bool) *bool { return &b }
+//go:fix inline
+func boolPtr(b bool) *bool { return new(b) }
 
 // snap builds a snapshot row for tests.
 func snap(testID int, result string, pf *bool, comment string) models.RecordResultSnapshot {
@@ -14,7 +15,7 @@ func snap(testID int, result string, pf *bool, comment string) models.RecordResu
 }
 
 func TestDiffSnapshot_NoPriorIsAllUnchanged(t *testing.T) {
-	curr := []models.RecordResultSnapshot{snap(1, "5", boolPtr(true), ""), snap(2, "10", nil, "ok")}
+	curr := []models.RecordResultSnapshot{snap(1, "5", new(true), ""), snap(2, "10", nil, "ok")}
 	got := diffSnapshot(curr, nil)
 	if len(got) != 2 {
 		t.Fatalf("len = %d, want 2", len(got))
@@ -27,8 +28,8 @@ func TestDiffSnapshot_NoPriorIsAllUnchanged(t *testing.T) {
 }
 
 func TestDiffSnapshot_ChangedResultValue(t *testing.T) {
-	prev := []models.RecordResultSnapshot{snap(1, "5", boolPtr(true), "")}
-	curr := []models.RecordResultSnapshot{snap(1, "6", boolPtr(true), "")}
+	prev := []models.RecordResultSnapshot{snap(1, "5", new(true), "")}
+	curr := []models.RecordResultSnapshot{snap(1, "6", new(true), "")}
 	got := diffSnapshot(curr, prev)
 	if got[0].Status != "changed" {
 		t.Errorf("status = %q, want changed", got[0].Status)
@@ -36,8 +37,8 @@ func TestDiffSnapshot_ChangedResultValue(t *testing.T) {
 }
 
 func TestDiffSnapshot_ChangedPassFail(t *testing.T) {
-	prev := []models.RecordResultSnapshot{snap(1, "5", boolPtr(true), "")}
-	curr := []models.RecordResultSnapshot{snap(1, "5", boolPtr(false), "")}
+	prev := []models.RecordResultSnapshot{snap(1, "5", new(true), "")}
+	curr := []models.RecordResultSnapshot{snap(1, "5", new(false), "")}
 	if diffSnapshot(curr, prev)[0].Status != "changed" {
 		t.Errorf("pass_fail change not detected")
 	}
@@ -72,8 +73,8 @@ func TestDiffSnapshot_ChangedSpecification(t *testing.T) {
 }
 
 func TestDiffSnapshot_IdenticalIsUnchanged(t *testing.T) {
-	prev := []models.RecordResultSnapshot{snap(1, "5", boolPtr(true), "note")}
-	curr := []models.RecordResultSnapshot{snap(1, "5", boolPtr(true), "note")}
+	prev := []models.RecordResultSnapshot{snap(1, "5", new(true), "note")}
+	curr := []models.RecordResultSnapshot{snap(1, "5", new(true), "note")}
 	if diffSnapshot(curr, prev)[0].Status != "unchanged" {
 		t.Errorf("identical row flagged as changed")
 	}

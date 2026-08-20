@@ -46,22 +46,20 @@ func (h *Handler) SettingsCategoriesSave(w http.ResponseWriter, r *http.Request)
 	}
 	n, _ := strconv.Atoi(r.FormValue("cat_count"))
 	var cats []models.Category
-	for i := 0; i < n; i++ {
+	for i := range n {
 		code := strings.ToUpper(strings.TrimSpace(r.FormValue("code_" + strconv.Itoa(i))))
 		if code == "" {
 			continue
 		}
 		cats = append(cats, models.Category{
-			Code:  code,
-			Label: strings.TrimSpace(r.FormValue("label_" + strconv.Itoa(i))),
-			CategoryTabs: models.CategoryTabs{
-				BOM:       r.FormValue("bom_"+strconv.Itoa(i)) == "1",
-				Orders:    r.FormValue("orders_"+strconv.Itoa(i)) == "1",
-				Pricing:   r.FormValue("pricing_"+strconv.Itoa(i)) == "1",
-				MfgParts:  r.FormValue("mfgparts_"+strconv.Itoa(i)) == "1",
-				Suppliers: r.FormValue("suppliers_"+strconv.Itoa(i)) == "1",
-				Inventory: r.FormValue("inventory_"+strconv.Itoa(i)) == "1",
-			},
+			Code:      code,
+			Label:     strings.TrimSpace(r.FormValue("label_" + strconv.Itoa(i))),
+			BOM:       r.FormValue("bom_"+strconv.Itoa(i)) == "1",
+			Orders:    r.FormValue("orders_"+strconv.Itoa(i)) == "1",
+			Pricing:   r.FormValue("pricing_"+strconv.Itoa(i)) == "1",
+			MfgParts:  r.FormValue("mfgparts_"+strconv.Itoa(i)) == "1",
+			Suppliers: r.FormValue("suppliers_"+strconv.Itoa(i)) == "1",
+			Inventory: r.FormValue("inventory_"+strconv.Itoa(i)) == "1",
 		})
 	}
 	data, _ := json.Marshal(cats)

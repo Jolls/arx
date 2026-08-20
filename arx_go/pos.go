@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -201,12 +202,12 @@ func extractPolRows(form url.Values, prefix string) map[string]polRow {
 			continue
 		}
 		rest := key[len(prefix)+1:]
-		sep := strings.Index(rest, "][")
-		if sep < 0 {
+		before, after, ok := strings.Cut(rest, "][")
+		if !ok {
 			continue
 		}
-		id := rest[:sep]
-		field := strings.TrimSuffix(rest[sep+2:], "]")
+		id := before
+		field := strings.TrimSuffix(after, "]")
 		val := ""
 		if len(vals) > 0 {
 			val = strings.TrimSpace(vals[0])
@@ -235,7 +236,7 @@ func extractPolRows(form url.Values, prefix string) map[string]polRow {
 	return rows
 }
 
-func polRowToArgs(row polRow) (item int, qty, cost float64, pnid interface{}) {
+func polRowToArgs(row polRow) (item int, qty, cost float64, pnid any) {
 	item, _ = strconv.Atoi(row.Item)
 	qty, _ = strconv.ParseFloat(row.Qty, 64)
 	cost, _ = strconv.ParseFloat(row.Cost, 64)
@@ -269,7 +270,7 @@ func parseFormDate(s string) *time.Time {
 	return &t
 }
 
-func parseFormFloat(s string) interface{} {
+func parseFormFloat(s string) any {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
@@ -837,7 +838,7 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 	supplierID := r.FormValue("supplier_id")
 
 	linksCount, _ := strconv.Atoi(r.FormValue("links_count"))
-	for i := 0; i < linksCount; i++ {
+	for i := range linksCount {
 		if r.FormValue(fmt.Sprintf("add_%d", i)) != "1" {
 			continue
 		}
@@ -863,7 +864,7 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 	today := time.Now().Format("2006-01-02")
 	pr := h.cfg.PriceTable()
 	pricesCount, _ := strconv.Atoi(r.FormValue("prices_count"))
-	for i := 0; i < pricesCount; i++ {
+	for i := range pricesCount {
 		if r.FormValue(fmt.Sprintf("add_price_%d", i)) != "1" {
 			continue
 		}
@@ -1128,7 +1129,7 @@ func (h *Handler) POFolderSub(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/po/%s/folder/", num))
 	var subParts []string
-	for _, seg := range strings.Split(splat, "/") {
+	for seg := range strings.SplitSeq(splat, "/") {
 		base := filepath.Base(seg)
 		if base != "" && base != "." && base != ".." {
 			subParts = append(subParts, base)
@@ -1178,12 +1179,7 @@ var poTransitions = map[string][]string{
 }
 
 func poCanTransition(from, to string) bool {
-	for _, t := range poTransitions[from] {
-		if t == to {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(poTransitions[from], to)
 }
 
 // StatusAction is a transition button rendered on the PO detail page.

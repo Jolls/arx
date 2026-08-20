@@ -3,6 +3,7 @@ package main
 import (
 	"html/template"
 	"io/fs"
+	"maps"
 	"strings"
 	"testing"
 
@@ -114,9 +115,7 @@ func coreLayoutFakeData(extra map[string]any) map[string]any {
 		"Favicon":          "",
 		"FaviconType":      "",
 	}
-	for k, v := range extra {
-		data[k] = v
-	}
+	maps.Copy(data, extra)
 	return data
 }
 

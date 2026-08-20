@@ -114,7 +114,7 @@ func TestPolRowToArgs(t *testing.T) {
 		wantItem int
 		wantQty  float64
 		wantCost float64
-		wantPNID interface{}
+		wantPNID any
 	}{
 		{
 			polRow{Item: "3", Qty: "2.5", Cost: "10.99", PNID: "42"},

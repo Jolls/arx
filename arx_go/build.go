@@ -437,7 +437,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 				`SELECT COALESCE(part_id,0), is_locked FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recID).
 				Scan(&recPart, &recLocked)
 			if err == nil && recPart == partID && !recLocked {
-				var lotArg interface{}
+				var lotArg any
 				if outputLotTracked {
 					lotArg = outputLotID
 				}

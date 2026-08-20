@@ -1,6 +1,6 @@
 module arx/arx_go
 
-go 1.26.3
+go 1.27.0
 
 require (
 	github.com/getlantern/systray v1.2.2
