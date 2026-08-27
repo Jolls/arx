@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.25] - 2026-08-26
+### Changed
+- Repository migrated to `Jolls/arx`; the pre-migration history now lives in the private `Jolls/arx-legacy`. Existing changelog and docs issue links intentionally point at `arx-legacy`, where those numbers resolve — new entries link to `Jolls/arx`
+
 ## [0.7.24] - 2026-08-20
 ### Added
 - GitHub Actions workflow (`test.yml`) running `go vet`/`go build`/`go test` for `arx_go` and `arxlib` on every push to main and PR — unit tests only, no DB credentials or integration tests involved
