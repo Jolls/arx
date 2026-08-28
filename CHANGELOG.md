@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.26] - 2026-08-27
+### Changed
+- Pre-publication privacy cleanup: rewrote history to drop the tracked `CLAUDE.md` (named the private companion repo and local paths) and a since-removed `.claude/settings.local.json`, and redacted a changelog byline naming the repo owner. Split `CLAUDE.md` into a sanitized tracked file plus a gitignored `CLAUDE.local.md` for the private sections.
+
 ## [0.7.25] - 2026-08-26
 ### Changed
 - Repository migrated to `Jolls/arx`; the pre-migration history now lives in the private `Jolls/arx-legacy`. Existing changelog and docs issue links intentionally point at `arx-legacy`, where those numbers resolve — new entries link to `Jolls/arx`
