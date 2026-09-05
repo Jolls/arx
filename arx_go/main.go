@@ -112,6 +112,18 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(h.profileRequest)
+	// Must run before RequireCsrfOnPost: its verifyCsrf call reads
+	// r.FormValue, which for a multipart POST fully parses the body via
+	// r.ParseMultipartForm before any handler runs — a handler's own
+	// ParseMultipartForm(maxUploadBytes) call afterward is then a no-op
+	// (net/http: "subsequent calls have no effect"), so this is the only
+	// place a size ceiling can still apply to multipart uploads (#36).
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+			next.ServeHTTP(w, r)
+		})
+	})
 	r.Use(h.RequireCsrfOnPost)
 
 	// Static assets under /static/<tab>/, plus /static/shared/ for cross-tab assets (icons, nav CSS/JS).
@@ -177,8 +189,10 @@ func buildRouter(h *Handler) *chi.Mux {
 		// Local file serving (Parts Master)
 		r.Get("/local/*", h.ServeLocalFile)
 		r.Get("/local-dir/*", h.ServeLocalDir)
+		r.Post("/local-dir-upload/*", h.ServeLocalDirUpload)
 		r.Get("/supplier-local/*", h.ServeSupplierFile)
 		r.Get("/supplier-local-dir/*", h.ServeSupplierDir)
+		r.Post("/supplier-local-dir-upload/*", h.ServeSupplierDirUpload)
 
 		// Test Records image serving
 		r.Get("/images/*", h.ServeImage)
@@ -287,6 +301,8 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/supplier/{id}/primary_attachment", h.SupplierSetPrimaryAttachment)
 		r.Get("/supplier/{id}/folder", h.SupplierFolder)
 		r.Get("/supplier/{id}/folder/*", h.SupplierFolderSub)
+		r.Post("/supplier/{id}/folder-upload", h.SupplierFolderUpload)
+		r.Post("/supplier/{id}/folder-upload/*", h.SupplierFolderUploadSub)
 		r.Get("/supplier/{id}/file/*", h.SupplierFile)
 
 		// Parts Master — Contacts
@@ -323,6 +339,8 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/po/{id}/duplicate", h.PODuplicate)
 		r.Get("/po/{id}/folder", h.POFolder)
 		r.Get("/po/{id}/folder/*", h.POFolderSub)
+		r.Post("/po/{id}/folder-upload", h.POFolderUpload)
+		r.Post("/po/{id}/folder-upload/*", h.POFolderUploadSub)
 		r.Get("/po/{id}/file/*", h.POFile)
 
 		// Parts Master — API

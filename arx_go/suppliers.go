@@ -760,7 +760,58 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 		Supplier:      &s,
 		ActiveTab:     "suppliers", ActiveSubTab: "folder",
 		NavBackURL: backURL, NavBackLabel: backLabel,
+		UploadURLPrefix: fmt.Sprintf("/supplier/%d/folder-upload", s.ID),
 	})
+}
+
+// SupplierFolderUpload — POST /supplier/{id}/folder-upload
+func (h *Handler) SupplierFolderUpload(w http.ResponseWriter, r *http.Request) {
+	h.supplierFolderUpload(w, r, nil)
+}
+
+// SupplierFolderUploadSub — POST /supplier/{id}/folder-upload/*
+func (h *Handler) SupplierFolderUploadSub(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/supplier/%s/folder-upload/", id))
+	var subParts []string
+	for seg := range strings.SplitSeq(splat, "/") {
+		b := filepath.Base(seg)
+		if b != "" && b != "." && b != ".." {
+			subParts = append(subParts, b)
+		}
+	}
+	h.supplierFolderUpload(w, r, subParts)
+}
+
+func (h *Handler) supplierFolderUpload(w http.ResponseWriter, r *http.Request, subParts []string) {
+	id := chi.URLParam(r, "id")
+	s, ok := h.fetchSupplier(w, r, id)
+	if !ok {
+		return
+	}
+	root := h.cfg.SupplierFilesRoot
+	if root == "" {
+		root = h.cfg.DocControlRoot
+	}
+	if root == "" {
+		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if s.SUSupplierCode == "" {
+		http.Error(w, "Supplier has no supplier code — cannot determine folder name", http.StatusBadRequest)
+		return
+	}
+	base := filepath.Join(root, s.SUSupplierCode)
+	dir, ok := resolveUploadDir(base, strings.Join(subParts, "/"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	redirectURL := fmt.Sprintf("/supplier/%d/folder", s.ID)
+	if len(subParts) > 0 {
+		redirectURL += "/" + strings.Join(subParts, "/")
+	}
+	h.handleDirUpload(w, r, dir, redirectURL)
 }
 
 func (h *Handler) SupplierFolder(w http.ResponseWriter, r *http.Request) {

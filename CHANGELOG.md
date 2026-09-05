@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.27] - 2026-09-04
+### Added
+- Warning when navigating away from the PO edit form (new/edit/RFQ/duplicate) with unsaved changes ([#34](https://github.com/Jolls/arx/issues/34))
+- Banner prompting a user with no default PO receiver configured to finish account setup, shown on New PO/RFQ ([#35](https://github.com/Jolls/arx/issues/35))
+- Upload a file directly into a PO folder, supplier folder, or the generic document-control folder browsers ([#36](https://github.com/Jolls/arx/issues/36))
+
 ## [0.7.26] - 2026-08-27
 ### Changed
 - Pre-publication privacy cleanup: rewrote history to drop the tracked `CLAUDE.md` (named the private companion repo and local paths) and a since-removed `.claude/settings.local.json`, and redacted a changelog byline naming the repo owner. Split `CLAUDE.md` into a sanitized tracked file plus a gitignored `CLAUDE.local.md` for the private sections.

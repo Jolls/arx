@@ -410,11 +410,12 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 // receiver/contact (Profile → PO defaults, issue #463), returning the contact
 // dropdown lists for the edit form. When the user has no default contact, the
 // receiver company's own default_contact is used as a fallback.
-func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (supplierContacts, receiverContacts []ContactSummary) {
+func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (supplierContacts, receiverContacts []ContactSummary, noDefaultReceiver bool) {
 	var receiverID, contactID int
 	if u := h.currentUser(r); u != nil {
 		receiverID = u.DefaultPOReceiverID
 		contactID = u.DefaultPOContactID
+		noDefaultReceiver = receiverID <= 0
 	}
 	if rid := receiverID; rid > 0 {
 		var rName sql.NullString
@@ -450,7 +451,7 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 			}
 		}
 	}
-	return supplierContacts, receiverContacts
+	return supplierContacts, receiverContacts, noDefaultReceiver
 }
 
 func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
@@ -459,10 +460,11 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 	if u := h.currentUser(r); u != nil {
 		po.Orderer = u.DisplayName
 	}
-	supplierContacts, receiverContacts := h.applyPODefaults(r, &po)
+	supplierContacts, receiverContacts, noDefaultReceiver := h.applyPODefaults(r, &po)
 	h.render(w, r, "pos/po_edit.html", map[string]any{
 		"PO": po, "POItems": nil, "IsNew": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
+		"NoDefaultReceiver": noDefaultReceiver,
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
@@ -1107,7 +1109,56 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 		PO:            &po,
 		ActiveTab:     "pos", ActiveSubTab: "folder",
 		NavBackURL: backURL, NavBackLabel: backLabel,
+		UploadURLPrefix: fmt.Sprintf("/po/%s/folder-upload", po.Number),
 	})
+}
+
+// POFolderUpload — POST /po/{id}/folder-upload
+func (h *Handler) POFolderUpload(w http.ResponseWriter, r *http.Request) {
+	h.poFolderUpload(w, r, nil)
+}
+
+// POFolderUploadSub — POST /po/{id}/folder-upload/*
+func (h *Handler) POFolderUploadSub(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/po/%s/folder-upload/", num))
+	var subParts []string
+	for seg := range strings.SplitSeq(splat, "/") {
+		base := filepath.Base(seg)
+		if base != "" && base != "." && base != ".." {
+			subParts = append(subParts, base)
+		}
+	}
+	h.poFolderUpload(w, r, subParts)
+}
+
+func (h *Handler) poFolderUpload(w http.ResponseWriter, r *http.Request, subParts []string) {
+	num := chi.URLParam(r, "id")
+	po, ok := h.fetchPO(w, r, num)
+	if !ok {
+		return
+	}
+	root := h.cfg.POFolderRoot
+	if root == "" {
+		http.Error(w, "PO_FOLDER_ROOT is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	baseName := findPOBaseFolder(root, po.Number)
+	if baseName == "" {
+		http.Error(w, "No folder found for PO "+po.Number+". Open the PO folder first to create it.", http.StatusNotFound)
+		return
+	}
+	base := filepath.Join(root, baseName)
+	dir, ok := resolveUploadDir(base, strings.Join(subParts, "/"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	redirectURL := fmt.Sprintf("/po/%s/folder", po.Number)
+	if len(subParts) > 0 {
+		redirectURL += "/" + strings.Join(subParts, "/")
+	}
+	h.handleDirUpload(w, r, dir, redirectURL)
 }
 
 func (h *Handler) POFolder(w http.ResponseWriter, r *http.Request) {
@@ -2021,10 +2072,11 @@ func (h *Handler) RFQNew(w http.ResponseWriter, r *http.Request) {
 	if u := h.currentUser(r); u != nil {
 		po.Orderer = u.DisplayName
 	}
-	supplierContacts, receiverContacts := h.applyPODefaults(r, &po)
+	supplierContacts, receiverContacts, noDefaultReceiver := h.applyPODefaults(r, &po)
 	h.render(w, r, "pos/po_edit.html", map[string]any{
 		"PO": po, "POItems": nil, "IsNew": true, "IsRFQ": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
+		"NoDefaultReceiver": noDefaultReceiver,
 		"ActiveTab": "pos", "TestMode": h.cfg.TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})

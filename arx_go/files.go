@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"mime"
 	"net/http"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"arx/arx_go/models"
 	"arx/arxlib/urlutil"
 )
+
+// maxUploadBytes bounds a single directory-listing upload's memory/disk use.
+const maxUploadBytes = 100 << 20 // 100 MB
 
 type DirEntry struct {
 	Name  string
@@ -137,6 +141,7 @@ type dirListingParams struct {
 	ActiveSubTab  string
 	NavBackURL    string
 	NavBackLabel  string
+	UploadURLPrefix string // no trailing slash; empty disables the upload form (#36)
 }
 
 // dirParentURL derives the "up one level" URL for a directory listing.
@@ -197,18 +202,29 @@ func (h *Handler) renderDirListing(w http.ResponseWriter, r *http.Request, p dir
 		entries = append(entries, entry)
 	}
 
+	uploadURL := ""
+	if p.UploadURLPrefix != "" {
+		uploadURL = p.UploadURLPrefix
+		if relPrefix != "" {
+			uploadURL += "/" + relPrefix
+		}
+	}
+
 	data := map[string]any{
-		"DirName":      p.DirName,
-		"FullPath":     p.Path,
-		"ParentURL":    p.ParentURL,
-		"Entries":      entries,
-		"NumDirs":      numDirs,
-		"NumFiles":     numFiles,
-		"ActiveTab":    p.ActiveTab,
-		"ActiveSubTab": p.ActiveSubTab,
-		"NavBackURL":   p.NavBackURL,
-		"NavBackLabel": p.NavBackLabel,
-		"TestMode":     h.cfg.TestMode,
+		"DirName":          p.DirName,
+		"FullPath":         p.Path,
+		"ParentURL":        p.ParentURL,
+		"Entries":          entries,
+		"NumDirs":          numDirs,
+		"NumFiles":         numFiles,
+		"ActiveTab":        p.ActiveTab,
+		"ActiveSubTab":     p.ActiveSubTab,
+		"NavBackURL":       p.NavBackURL,
+		"NavBackLabel":     p.NavBackLabel,
+		"TestMode":         h.cfg.TestMode,
+		"UploadFormAction": uploadURL,
+		// CSRFToken is not set here — h.render() (handlers.go) unconditionally
+		// injects it into every page's data map.
 	}
 	if p.PO != nil {
 		data["PO"] = p.PO
@@ -235,6 +251,98 @@ func relSegments(root, path string) []string {
 		}
 	}
 	return relParts
+}
+
+// resolveUploadDir re-derives and validates the directory a client is
+// uploading into from its declared root+splat, mirroring the corresponding
+// GET listing handler's path resolution so the destination can't diverge
+// from what's actually being browsed (#36).
+func resolveUploadDir(base, splat string) (string, bool) {
+	path, ok := safePath(base, splat)
+	if !ok {
+		return "", false
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	return path, true
+}
+
+// handleDirUpload saves an uploaded "upload" form file into dir and redirects
+// back to redirectURL — the POST counterpart shared by all upload-capable
+// directory-listing sites (#864/#36).
+func (h *Handler) handleDirUpload(w http.ResponseWriter, r *http.Request, dir, redirectURL string) {
+	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+		http.Error(w, "Error parsing upload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	file, header, err := r.FormFile("upload")
+	if err != nil {
+		http.Error(w, "No file selected", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	name := sanitizeFileNamePart(filepath.Base(header.Filename))
+	dst, ok := safePath(dir, name)
+	if !ok || name == "" {
+		http.Error(w, "Invalid filename", http.StatusBadRequest)
+		return
+	}
+	// O_EXCL makes the existence check and creation atomic, so two
+	// concurrent uploads of the same name can't race past a separate
+	// os.Stat check and silently clobber each other.
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			http.Error(w, "A file named \""+filepath.Base(dst)+"\" already exists in this folder", http.StatusConflict)
+			return
+		}
+		http.Error(w, "Error saving file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, file); err != nil {
+		http.Error(w, "Error saving file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+// ServeLocalDirUpload — POST /local-dir-upload/*
+func (h *Handler) ServeLocalDirUpload(w http.ResponseWriter, r *http.Request) {
+	root := h.cfg.DocControlRoot
+	if root == "" {
+		http.Error(w, "DOC_CONTROL_ROOT is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	splat := strings.TrimPrefix(r.URL.Path, "/local-dir-upload/")
+	dir, ok := resolveUploadDir(root, splat)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleDirUpload(w, r, dir, "/local-dir/"+splat)
+}
+
+// ServeSupplierDirUpload — POST /supplier-local-dir-upload/*
+func (h *Handler) ServeSupplierDirUpload(w http.ResponseWriter, r *http.Request) {
+	root := h.cfg.SupplierFilesRoot
+	if root == "" {
+		root = h.cfg.DocControlRoot
+	}
+	if root == "" {
+		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	splat := strings.TrimPrefix(r.URL.Path, "/supplier-local-dir-upload/")
+	dir, ok := resolveUploadDir(root, splat)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleDirUpload(w, r, dir, "/supplier-local-dir/"+splat)
 }
 
 // ServeSupplierDir — GET /supplier-local-dir/*
@@ -278,6 +386,7 @@ func (h *Handler) ServeSupplierDir(w http.ResponseWriter, r *http.Request) {
 		Path: path, RelParts: relParts,
 		DirURLPrefix: "/supplier-local-dir", FileURLPrefix: "/supplier-local",
 		DirName: dirName, ParentURL: parentURL,
+		UploadURLPrefix: "/supplier-local-dir-upload",
 	})
 }
 
@@ -319,5 +428,6 @@ func (h *Handler) ServeLocalDir(w http.ResponseWriter, r *http.Request) {
 		Path: path, RelParts: relParts,
 		DirURLPrefix: "/local-dir", FileURLPrefix: "/local",
 		DirName: dirName, ParentURL: parentURL,
+		UploadURLPrefix: "/local-dir-upload",
 	})
 }
