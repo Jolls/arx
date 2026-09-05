@@ -27,6 +27,13 @@
     <div class="alert alert-info">Duplicating from PO #{{.DuplicateFrom}} &mdash; a new PO number will be assigned on save.</div>
     {{end}}
 
+    {{if and .IsNew .NoDefaultReceiver}}
+    <div class="alert alert-warning">
+        No default PO receiver set. Finish account setup in
+        <a href="/settings#preferences">Settings</a> to auto-fill new POs.
+    </div>
+    {{end}}
+
     {{if .RFQAddFrom}}
     <div class="alert alert-info">Adding another supplier's quote to this RFQ &mdash; pick the supplier; quantities carry over. Enter quoted prices and lead times here or on the comparison grid after saving.</div>
     {{else if and .IsRFQ .IsNew}}
@@ -283,7 +290,7 @@
                             <td><input type="number" step="any" name="new_pol[dup{{$i}}][POLCost]" value="{{printf "%g" $item.UnitCost}}" class="form-control form-control-sm text-end"></td>
                             <td><input type="number" name="new_pol[dup{{$i}}][POLPNID]" value="{{if $item.PartID}}{{derefInt $item.PartID}}{{end}}" class="form-control form-control-sm"></td>
                             <td class="text-center">
-                                <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove(); formDirty = true;" title="Remove">&#215;</button>
                             </td>
                         </tr>
                         {{end}}
@@ -333,13 +340,14 @@
         <td><input type="number" step="any" name="new_pol[IDX][POLCost]" class="form-control form-control-sm text-end" placeholder="0.0000"></td>
         <td><input type="number" name="new_pol[IDX][POLPNID]" class="form-control form-control-sm" placeholder=""></td>
         <td class="text-center">
-            <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove()" title="Remove">&#215;</button>
+            <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0 lh-1" onclick="this.closest('tr').remove(); formDirty = true;" title="Remove">&#215;</button>
         </td>
     </tr>
 </template>
 
 <script>
 let newLineIdx = {{if .POItems}}{{len .POItems}}{{else}}0{{end}};
+let formDirty = false;
 
 function nextItemNumber() {
     let max = 0;
@@ -359,6 +367,7 @@ function addNewLine() {
     const itemInput = clone.querySelector('[name$="[POLItem]"]');
     if (itemInput) itemInput.value = nextItemNumber();
     tbody.appendChild(clone);
+    formDirty = true;
     const row = tbody.lastElementChild;
     setupPartAutocomplete(row.querySelector('[name$="[POLPNPartNumber]"]'), row);
     setupPartAutocomplete(row.querySelector('[name$="[POLDesc]"]'), row, 'desc');
@@ -385,7 +394,18 @@ document.getElementById('line-items-tbody').addEventListener('input', e => {
 });
 recalcTotal();
 
+const poForm = document.getElementById('po-form');
+poForm.addEventListener('input', () => { formDirty = true; });
+poForm.addEventListener('change', () => { formDirty = true; });
+
+window.addEventListener('beforeunload', (e) => {
+    if (!formDirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+});
+
 function removeExistingLine(btn, polid) {
+    formDirty = true;
     const row = btn.closest('tr');
     const form = btn.closest('form');
     const hidden = document.createElement('input');
@@ -580,7 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
         // Fail if ID is missing (empty = not selected) OR text present without a valid ID
         const invalid = checks.filter(c => !c.idEl.value);
-        if (!invalid.length) return;
+        if (!invalid.length) { formDirty = false; return; }
         e.preventDefault();
         invalid.forEach(c => c.nameEl.classList.add('is-invalid'));
         let banner = document.getElementById('typeahead-error-banner');
