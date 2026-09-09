@@ -1,3 +1,17 @@
+Arx v0.7.27 — September 2026
+========================
+
+NEW FEATURES
+
+  Unsaved Changes Warning on Purchase Orders
+  Warns before you navigate away from a PO with unsaved edits.
+
+  Receiver Setup Reminder
+  Prompts new POs/RFQs to finish setup if no default receiver is set.
+
+  Upload Files Directly to a Folder
+  PO, supplier, and document-control folders now accept direct uploads.
+
 Arx v0.7.22 — August 2026
 ========================
 
