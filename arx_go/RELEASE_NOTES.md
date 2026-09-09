@@ -18,54 +18,39 @@ Arx v0.7.22 — August 2026
 NEW FEATURES
 
   Test Records Tab on Part, Lot, and Unit Pages
-  A part's detail page now has a Records subtab listing every active test
-  record across all of its test forms, sortable and filterable, with a
-  link into each one. The same table now also appears on lot and unit
-  genealogy trace pages, scoped to that lot or unit.
+  Part, lot, and unit pages now have a Records subtab listing every
+  active test record, linking into each one.
 
   Lot Notes
   Lots can now carry a free-text note, editable from the lot page and
-  visible on the lot detail header, the part's Lots subtab, the
-  cross-part Lots list, and genealogy trace tables. A test record's view
-  page shows a card for its linked lot, including the lot's current
-  note, and the record's edit page can append a new line to that note
-  without overwriting what a previous session already added.
+  shown wherever lot info appears, including on linked test records.
 
   Test Record Session Notes
-  Test records can now carry their own free-text note covering the whole
-  test session, separate from the per-step comment column. It shows on
-  the record's view and printed pages, locks with the record once
-  complete or approved, and is not carried over when a record is
-  duplicated for a retest.
+  Test records can now carry a session-wide note, separate from
+  per-step comments, that locks with the record.
 
   Linked Build Shown on Test Records
-  A test record's read-only view now shows the build that produced the
-  unit under test, alongside the existing lot information, without
-  needing to open Edit.
+  A test record's view now shows the build that produced its unit,
+  without needing to open Edit.
 
   Receive All on Purchase Orders
-  The PO detail page's receive form now has a "Receive All" button that
-  pre-fills every open line with its full remaining quantity in one
-  click.
+  A "Receive All" button on the PO receive form fills every open line
+  with its full remaining quantity in one click.
 
 BUG FIXES
 
-  Fixed the inline "Build this unit" panel on a test record always
-  defaulting to a quantity of 1, even for whole-lot/batch records that
-  should allow building more than one unit at a time.
+  Fixed the inline "Build this unit" panel always defaulting to a
+  quantity of 1, even for lot/batch records that allow more.
 
-  Fixed saving a test record that was already linked to a serialized
-  unit sometimes creating a duplicate unit and orphaning the original,
-  if that unit's serial number had been edited after linking.
+  Fixed saving a test record linked to a serialized unit sometimes
+  creating a duplicate unit if the serial number was edited after
+  linking.
 
-  Fixed the Suppliers list silently showing a truncated (and
-  incorrectly successful-looking) result if a database error occurred
-  partway through loading.
+  Fixed the Suppliers list showing a truncated, falsely-successful
+  result on a mid-load database error.
 
-  Fixed inconsistent caching and filename handling across the four
-  file-download routes (local files, supplier files, and their PO/part
-  attachment equivalents), which could serve a stale cached file after
-  a replacement was uploaded.
+  Fixed inconsistent caching and filenames across the file-download
+  routes, which could serve a stale file after a replacement upload.
 
 Arx v0.7.13 — July 2026
 ========================
@@ -73,32 +58,26 @@ Arx v0.7.13 — July 2026
 NEW FEATURES
 
   Manual Unit Entry
-  A serialized part's Units list now has "Add Unit" and per-unit "Edit"
-  buttons, so a serial that predates Arx's traceability tracking can be
-  entered or corrected without running it through a test record. The
-  Build tab's completeness count only credits units that came from an
-  actual test, so back-filled serials don't inflate it.
+  Serialized parts can now have units added or edited manually, for
+  serials that predate test-based tracking.
 
   Lots & Units on the Part Dashboard
-  A lot- or serial-tracked part's detail page now shows Lots and Units
-  cards with a total count and the 5 most recent, without needing to
-  open the Build tab.
+  A part's detail page now shows Lots and Units cards with counts and
+  the most recent items.
 
 BUG FIXES
 
   Fixed /settings being unreachable when the database connection was
-  broken but still configured — there was previously no way back to
-  fix a bad server, login, or connectivity setting from within the app.
+  broken but still configured.
 
   Fixed PDF attachment thumbnails failing to render in some installs.
 
   Fixed the Browse file/folder dialog sometimes opening behind the
-  main Arx window with no way to click it.
+  main Arx window.
 
   Fixed replacing a PDF attachment sometimes still showing the old
-  file due to browser caching, and fixed regenerated thumbnail images
-  occasionally being saved alongside the original instead of
-  replacing it.
+  file due to caching, and regenerated thumbnails overwriting the
+  original.
 
 Arx v0.7.0 — July 2026
 ========================
@@ -106,29 +85,25 @@ Arx v0.7.0 — July 2026
 NEW FEATURES
 
   Serialized Unit Tracking
-  Parts can now be marked None, Lot, Serial, or Lot & Serial tracked.
-  Testing a serial-tracked part creates a real, traceable unit carrying
-  its lot and build history; retesting the same serial reuses that
-  unit instead of creating a duplicate.
+  Parts can be marked None, Lot, Serial, or Lot & Serial tracked;
+  testing a serial-tracked part creates a real, traceable unit.
 
   Build & Unit Traceability View
-  A new Units tab on a build shows every serialized unit produced, and
-  each unit has a "birth certificate" page tracing its as-built
-  components back through its lot and build — in both directions, from
-  raw materials up or from a finished unit down.
+  A build's Units tab and each unit's "birth certificate" page trace
+  components back through its lot and build history, in both
+  directions.
 
   Build-at-Test-Time
   Testing a serial or lot-and-serial part now offers an inline panel
-  to build the unit right from the test record, instead of leaving the
-  page to use the Build tab first.
+  to build the unit right from the test record.
 
 BUG FIXES
 
   Fixed Settings folder/file Browse dialogs sometimes opening behind
-  the main Arx window with no way to click them.
+  the main Arx window.
 
   Fixed BOM view rows for lazily-expanded sub-assemblies linking to a
-  broken part page and showing a blank quantity.
+  broken part page with a blank quantity.
 
 Arx v0.6.24 — July 2026
 ========================
@@ -136,32 +111,28 @@ Arx v0.6.24 — July 2026
 SECURITY
 
   Login is now required for every settings page and save action once
-  Arx is connected to a database, including Configuration, the folder
-  and file browse dialogs, and the main Settings page itself. Passwords
-  are compared in constant time, sessions rotate on login/logout and
-  time out after 7 days idle, and repeated failed logins are throttled.
+  Arx is connected to a database, with constant-time password checks,
+  session rotation, a 7-day idle timeout, and login throttling.
 
-  Added an admin flag for user accounts. Managing other users,
-  resetting a password, or changing approval permissions now requires
-  an admin account.
+  Added an admin flag; managing users, resetting passwords, or
+  changing approval permissions now requires an admin account.
 
 BUG FIXES
 
   Settings > Backup now includes several inventory and traceability
   tables that were previously left out.
 
-  Fixed Roll Up Cost and the BOM tab disagreeing on how to handle a
-  part with a $0.00 preferred price, which could understate an
-  assembly's rolled-up cost.
+  Fixed Roll Up Cost and the BOM tab disagreeing on parts with a
+  $0.00 preferred price.
 
-  Fixed editing or deleting a line on one purchase order or BOM being
-  able to affect a different PO or BOM's rows.
+  Fixed editing or deleting a line on one PO or BOM sometimes
+  affecting a different one's rows.
 
-  Fixed the record history view not flagging a step's specification or
-  acceptance criteria as changed when it drifted between test events.
+  Fixed the record history view not flagging spec or acceptance-
+  criteria changes between test events.
 
-  Fixed several reports and saved queries (Failure Modes, Spend by
-  Part, and others) returning stale, incomplete, or mismatched results.
+  Fixed several reports and saved queries returning stale or
+  mismatched results.
 
 Arx v0.6.4 — July 2026
 ========================
@@ -169,20 +140,16 @@ Arx v0.6.4 — July 2026
 SECURITY
 
   Database passwords and the session-signing secret now live in a
-  per-user config file instead of the shared, exe-adjacent one. A
-  shared or OneDrive install of Arx no longer exposes one user's
-  database password to everyone with folder access, and no longer lets
-  any user forge another's session by sharing a signing key. Existing
-  secrets are migrated automatically on first run.
+  per-user config file instead of the shared, exe-adjacent one,
+  migrated automatically on first run.
 
 BUG FIXES
 
-  Fixed folder-root settings (Doc Control, PO Folders, Supplier Files,
-  Images) under a user's profile directory saving a path specific to
-  whoever last saved Settings, so a shared or OneDrive install now
-  resolves each user's own profile correctly. Fixed two stored named
-  queries that had drifted out of sync with what they're supposed to
-  return.
+  Fixed folder-root settings saving a path specific to whoever last
+  saved Settings, instead of each user's own profile.
+
+  Fixed two stored named queries that had drifted out of sync with
+  what they're supposed to return.
 
 Arx v0.6.0 — July 2026
 ========================
@@ -190,66 +157,40 @@ Arx v0.6.0 — July 2026
 NEW FEATURES
 
   Inventory — Lot & Batch Tracking
-  Mark a part "Batch / lot controlled" and goods receipts and builds now
-  create and track lots. A new Lots subtab lists a part's lots and traces
-  genealogy both directions — the raw vendor lots that went into an
-  output lot, and the downstream assemblies it was consumed into. A new
-  cross-part "All Lots" page lists every lot without drilling into a part
-  first, and each lot's Vendor Lot and Description can be edited from its
-  trace page.
+  Batch/lot-controlled parts now track lots through receipts and
+  builds, with two-way genealogy tracing and a cross-part All Lots
+  page.
 
   Inventory — Build Flow
-  A new Build subtab on assemblies consumes BOM components and produces
-  the output part in one transaction, keeping stock on hand in sync on
-  both sides — required quantities and current on-hand (with shortages
-  highlighted) are shown up front. Lot-controlled components prompt for
-  the specific lot consumed, and lot-controlled assemblies get a
-  traceable output lot.
+  A Build subtab consumes BOM components and produces the output
+  part in one transaction, tracking lots and required/on-hand
+  quantities.
 
   Parts — Reorder Points
-  Set a Reorder Minimum on any part; parts below it are flagged on the
-  Parts list, the part detail page, and a new Below Reorder Point card on
-  the Reports dashboard.
+  Set a Reorder Minimum on any part; parts below it are flagged on
+  lists and a Reports dashboard card.
 
   Reports Dashboard
-  A new Reports tab gives a KPI dashboard (open POs, POs received this
-  month, recent activity) plus dedicated views for Spend Analysis (by
-  supplier/part, with CSV export), Yield Summary and Failure Modes per
-  test form, Supplier On-Time Delivery, PO Cycle Time, and
-  Attachment/Data Quality Gaps — plus summary cards for Stale WIP
-  records, POs Pending Approval, and Below Reorder Point parts.
+  A new Reports tab adds a KPI dashboard plus Spend, Yield, Failure
+  Modes, On-Time Delivery, PO Cycle Time, and Data Quality views.
 
   Accent Colors
-  Choose a preset accent color theme (blue/indigo/teal/green/slate) from
-  Settings under My Preferences so primary-colored UI elements stand out
-  from the app header.
+  Choose a preset accent color theme from Settings.
 
   Purchasing Improvements
-  Vendor part numbers on PO lines link back to that part's primary
-  attachment. "Supplier Code" is renamed to "Folder Stub" (with
-  validation against filesystem-unsafe characters) to better reflect its
-  role naming attachment/PO folders. Contacts now show the purchase
-  orders tied to them, and PO defaults (receiver/contact) are set per
-  user under My Preferences rather than one shared machine default.
+  PO lines link to vendor part attachments, "Supplier Code" is
+  renamed to "Folder Stub", contacts show their POs, and PO defaults
+  are now set per user.
 
   Small Touches
-  Per-tab browser favicon matches the active section. The Parts list
-  "Type" filter is now a dropdown of configured categories. The Price
-  History chart splits quantity-break price-list points into separate
-  series per tier. A "Cost to Build" calculator on the BOM edit page
-  prices out a full assembly at the correct quantity-break tier for each
-  component.
+  Per-tab favicon, a Type filter dropdown, a tiered Price History
+  chart, and a BOM "Cost to Build" calculator.
 
 BUG FIXES
 
-  Fixed auto-issued lot numbers colliding across multiple lot-tracked
-  lines or partial receipts on the same PO. Fixed the Lots subtab not
-  appearing on a lot-tracked part until another subtab was visited
-  first. Fixed the Sent, Labor, and Part badges becoming unreadable under
-  certain accent color themes. Fixed PO line items with only a vendor
-  part number (or only qty/cost/rev) entered being silently dropped
-  instead of saved. Fixed a row-action menu getting clipped for rows near
-  the bottom of a table.
+  Fixed colliding auto-issued lot numbers, a missing Lots subtab on
+  first load, unreadable badges under some accent themes, dropped PO
+  lines with only partial data, and clipped row-action menus.
 
 Arx v0.5.88 — July 2026
 ========================
@@ -257,59 +198,44 @@ Arx v0.5.88 — July 2026
 NEW FEATURES
 
   Part Numbering — Next Available Number Suggestion
-  The New Part form now suggests the next available base number as you
-  type, based on rules you set in Settings (separator, segment position,
-  zero-padding, and whether to fill gaps in the sequence or always jump
-  to max+1).
+  The New Part form suggests the next available base number as you
+  type, per your Settings numbering rules.
 
   Company Logo
-  Upload your company logo in Settings and it appears in the app header,
-  the login page, and on printed PO PDFs.
+  Upload your company logo in Settings; it appears in the header,
+  the login page, and printed PO PDFs.
 
   Attachments — "Where Used" and Faster Actions
-  See every part and vendor linked to a given file from a new "Where
-  used" view. The per-attachment actions (Set default, Edit, Where used,
-  Delete) are now grouped into a single menu instead of a row of buttons.
-  Attachments also support a free-text comment, and part/test-record
-  photos can be added by pasting directly from the clipboard.
+  See every part/vendor linked to a file via "Where used"; per-
+  attachment actions are now one menu, plus comments and clipboard-
+  paste photos.
 
   Contacts Linked to Purchase Orders
-  A contact's detail page now lists every PO tied to that contact, and a
-  PO's supplier/receiver contact links back to their contact record. The
-  vendor detail page also gained an "Other Contacts" card for
-  non-default contacts, and the contacts list has a show/hide inactive
-  toggle.
+  A contact's page lists its POs, and PO contacts link back; vendors
+  gained an "Other Contacts" card.
 
   Settings — Utilities and Named Queries
-  A new Utilities section under Settings runs read-only data-integrity
-  checks: dead attachment links, orphaned part pointers, soft-deleted
-  primary attachments, and PO status drift. A new Named Queries editor
-  lets you build and test-drive `spec_nom` queries without writing SQL.
+  A Utilities section runs data-integrity checks; a Named Queries
+  editor builds spec_nom queries without writing SQL.
 
   Attachments — Smarter Link Handling
-  Pasting a file path now auto-detects whether it's a URL, absolute
-  path, or UNC path, and shows a copy-path control for local paths.
-  Internal `LOCAL:` links are now hidden from all views.
+  Pasting a file path auto-detects URL/absolute/UNC and shows a
+  copy-path control; internal LOCAL: links are hidden.
 
   BOM and Purchasing Improvements
-  Assembly BOMs support Expand All / Collapse All to view nested
-  sub-assemblies inline. The PO add-item form now searches by
-  description as well as part number. The two post-save PO suggestion
-  banners (new vendor part number, new price) are merged into one so
-  dismissing one no longer discards the other.
+  BOMs support Expand/Collapse All, PO item search includes
+  description, and the two post-save PO suggestion banners are
+  merged into one.
 
   Small Touches
-  Per-tab icons on the main nav bar, the Arx icon in the header, an
-  auto-filled Order Number when adding attachments, and more of the
-  Part Details page's attachments shown at a glance.
+  Per-tab nav icons, a header icon, auto-filled Order Number, and
+  more attachments shown at a glance.
 
 BUG FIXES
 
-  Fixed a crash on the PO detail page after saving when only one kind
-  of post-save suggestion (new vendor part number or new price) applied.
-  Fixed a crash on Settings when the database auto-connect fails on
-  startup. Fixed the new BOM line quantity field showing the wrong
-  default hint.
+  Fixed a crash on PO save with only one post-save suggestion, a
+  Settings crash on failed auto-connect, and a wrong default hint on
+  new BOM line quantity.
 
 Arx v0.5.66 — July 2026
 ========================
@@ -317,87 +243,63 @@ Arx v0.5.66 — July 2026
 NEW FEATURES
 
   Purchasing — Request for Quotation (RFQ)
-  Request a quote from a supplier, add competing quotes from other
-  suppliers to the same RFQ, and enter each one's unit price and lead
-  time on a side-by-side comparison grid. Award the winner with one click
-  to turn it into a purchase order; the RFQ and its quotes are kept on
-  record.
+  Request quotes from suppliers, compare them side-by-side, and
+  award one with a click to create a PO.
 
   Purchasing — Receiving and Goods Receipt
-  Receive line items on a PO, in full or partially, straight from the PO
-  page. Each receipt updates stock on hand, advances the PO status, and is
-  recorded in a receipt history that cross-links to the part's stock
-  transactions.
+  Receive PO line items in full or partially, updating stock, PO
+  status, and receipt history.
 
   Parts — Price History
-  A new Price History tab on each part charts its unit cost over time,
-  with a point for every purchase-order line and price-list entry. Hover
-  any point to see the PO number, supplier, date, and cost.
+  A Price History tab charts unit cost over time from POs and price
+  lists.
 
   Parts — BOM Cost Rollup and Labor
-  Assembly cost rollups now use each part's preferred supplier price, set
-  with a "Set preferred" control on the Pricing tab. A new Operation/Labor
-  part type lets you add a labor job to a BOM (quantity = hours) so the
-  rollup includes hours times the hourly rate.
+  Assembly rollups now use each part's preferred supplier price; a
+  new Labor part type adds hours to the rollup.
 
   Parts — Duplicate a Part
-  Duplicate an existing part, including its full bill of materials, from
-  the part page — a fast start for a similar part.
+  Duplicate a part, including its BOM, from the part page.
 
   Parts — Attachment Browse and Import
-  A Browse button on part attachments copies (or moves) a file you pick
-  into Doc Control, automatically renaming it from the part number,
-  revision, title, and category. If a matching file already exists, it
-  offers to link to that one instead.
+  Browse copies or moves a file into Doc Control, auto-renamed from
+  the part; a matching existing file offers to link instead.
 
   Test Records — Approval Lifecycle
-  Test records now move through WIP, Complete, and Approved. Anyone can
-  mark a record Complete; a designated TR Reviewer approves it, after
-  which only a reviewer can unlock it. Every complete, approve, and unlock
-  event is kept in an audit log with the user, time, and reason.
+  Records move through WIP, Complete, and Approved, with a reviewer
+  role and an audit log of every event.
 
   Test Records — Result Snapshots and Frozen Definitions
-  A saved record is frozen to a snapshot of the form as it was at
-  creation, so later edits to a form never change existing records. Each
-  time a record is completed it also captures a snapshot of its results,
-  viewable in the audit log with changes since the previous completion
-  highlighted.
+  Records snapshot their form definition at creation and their
+  results on each completion, viewable with changes highlighted.
 
   Test Records — Form Revisions and Step Archiving
-  Form definitions now carry a formal revision number that is captured on
-  each record. Individual test steps can be archived and restored, so they
-  drop off new records while staying on historical ones.
+  Forms carry a revision number, and steps can be archived without
+  affecting historical records.
 
   Test Records — Faster Data Entry
-  Duplicate a record to quickly re-test with the same serial number, lock
-  several records Complete at once, auto-save partial results as you go
-  with a restore prompt if you leave and come back, and press Enter to
-  advance to the next input.
+  Duplicate a record to retest, bulk-lock records Complete, auto-save
+  with a restore prompt, and press Enter to advance fields.
 
   Lists — Export, Sharing, and Columns
-  Export the Parts, PO, and BOM lists to CSV. Filter, sort, and page
-  settings are now stored in the page address, so a filtered view can be
-  bookmarked or shared and a pasted link reproduces exactly what the
-  sender saw. Every list has a Columns dropdown to hide or show columns,
-  new Attachments and PO Lines counts, a "Show inactive" toggle, and
-  From/To date-range filters.
+  Export lists to CSV; filter/sort/page settings are shareable via
+  the URL; a Columns dropdown, counts, and date-range filters were
+  added.
 
   Detail Pages Redesigned
-  Part, Supplier, and Contact pages are now dashboard-style summaries that
-  pull together highlights from each of their sub-tabs at a glance.
+  Part, Supplier, and Contact pages are now dashboard-style summaries
+  of their sub-tabs.
 
   Ease-of-Use Improvements
-  Supplier pickers across pricing, contact, sourcing, and settings forms
-  now search as you type. New prices and new PO dates default to today,
-  and the part's title now appears beside its number throughout the part
-  pages.
+  Supplier pickers now search as you type, new prices/PO dates
+  default to today, and part titles show alongside their numbers.
 
 BUG FIXES
 
-  Fixed new attachments saving without their selected category.
-  Fixed needing to double-click a row link right after filtering a list.
-  Fixed the PO/RFQ default contact using the wrong company's contact.
-  Fixed simultaneous new test records occasionally sharing a serial number.
+  Fixed attachments saving without their category, list rows needing
+  a double-click after filtering, the PO/RFQ default contact using
+  the wrong company, and simultaneous test records sharing a serial
+  number.
 
 Arx v0.5.29 — June 2026
 ========================
@@ -405,29 +307,20 @@ Arx v0.5.29 — June 2026
 NEW FEATURES
 
   Parts Master — Inventory and Stock Tracking
-  Stockable parts now track stock on hand. A new Transactions tab shows
-  every stock movement with a running balance, and you can record manual
-  adjustments — a reason is required for each. Which part categories are
-  stockable is configurable in Settings.
+  Stockable parts now track stock on hand, with a Transactions tab
+  and reasoned manual adjustments.
 
   Parts Master — Purchase Order Status
-  Purchase orders now move through a clear lifecycle — Draft, Open, Sent,
-  Partially Received, and Closed (or Cancelled) — with buttons on the PO
-  page to advance the status. Every change is logged with who and when,
-  the current status is shown prominently, and the PO list can be filtered
-  by status.
+  POs move through Draft, Open, Sent, Partially Received, and
+  Closed/Cancelled, logged and filterable.
 
   Parts Master — Purchase Order Approval
-  Purchase orders now go through an approval step. Submit a PO for
-  approval, and a designated approver can approve or reject it. A PO
-  cannot be sent or printed until it has been approved, and editing an
-  approved PO clears its approval so the change gets re-reviewed.
-  Approvers are designated with a "PO Approver" toggle in Settings. PO
-  status and approval events share one combined history timeline.
+  POs require approval before sending or printing; an approved PO is
+  re-reviewed on edit; approvers are set in Settings.
 
   Settings — Download Backup
-  The Configuration tab in Settings has a Download Backup button that
-  exports all of your data as a ZIP of spreadsheet-friendly CSV files.
+  A Download Backup button in Settings exports all data as a ZIP of
+  CSV files.
 
 Arx v0.5.24 — June 2026
 ========================
@@ -435,12 +328,9 @@ Arx v0.5.24 — June 2026
 NEW FEATURES
 
   Both Apps — User Accounts and Sign-In
-  Arx now requires signing in with a username and password. On first run,
-  you will be prompted to create the initial admin account. Additional users
-  can be added, reset, and deactivated from Settings. Your name now appears
-  in the header and on lock/unlock events, form-definition history, and PO
-  and part creation defaults — giving every change a real author instead of
-  the server account.
+  Arx now requires signing in; users are managed in Settings, and
+  changes now carry a real author's name instead of the server
+  account.
 
 Arx v0.5.17 — June 2026
 =======================
@@ -448,30 +338,26 @@ Arx v0.5.17 — June 2026
 NEW FEATURES
 
   Both Apps — Faster Navigation
-  List pages (Parts, Vendors, POs, Contacts) now load the page frame
-  immediately and fill in the rows in the background. Navigating between
-  sections no longer shows a blank white flash while the server assembles
-  the full page.
+  List pages now load immediately and fill in rows in the
+  background, with no blank-page flash.
 
   Both Apps — Column Widths and Overflow Tooltips
-  Table columns now size proportionally to the viewport. Cells that are
-  too narrow to show their full content are truncated with an ellipsis,
-  and hovering shows the full text in a tooltip.
+  Columns size to the viewport; truncated cells show full text on
+  hover.
 
   Both Apps — Header and Tab Tooltips
-  Column headers and most field labels now show a short tooltip on hover
-  to clarify what the field contains.
+  Column headers and most field labels show a clarifying tooltip on
+  hover.
 
   Test Records — Form Definition History
-  The form definition history view now shows the actual previous values of
-  each changed field, not just which rows were modified. You can see
-  exactly what was changed and what it said before.
+  The history view now shows each field's actual previous value, not
+  just which rows changed.
 
 BUG FIXES
 
   Test Records — Step Name False Positives
-  Steps with names like "created_at" or "alternate" no longer get flagged
-  incorrectly by the query-safety check.
+  Steps named like "created_at" or "alternate" no longer get flagged
+  by the query-safety check.
 
 Arx v0.5.12 — June 2026
 =======================
@@ -479,16 +365,13 @@ Arx v0.5.12 — June 2026
 NEW FEATURES
 
   Parts Master — Records Tab
-  Test Records is now a tab in the Parts Master navigation bar alongside
-  Parts, Vendors, POs, and Contacts. Both apps share the same header and
-  tab bar, so switching between them feels like changing tabs rather than
-  opening a different app. The separate cross-app link in the header is gone.
+  Test Records is now a tab in the shared nav bar alongside Parts,
+  Vendors, POs, and Contacts.
 
   Parts Master — Part Subtabs per Category
-  The detail tabs shown for a part (BOM, Order History, Pricing, Mfg Parts,
-  Suppliers) can now be configured per part category. Tabs that don't apply
-  to a category are grayed out rather than cluttering the view. Categories
-  and their tab visibility are editable in Settings.
+  Part detail tabs (BOM, Order History, Pricing, Mfg Parts,
+  Suppliers) are now configurable per category, editable in
+  Settings.
 
 Arx v0.5.6 — June 2026
 =======================
@@ -496,10 +379,8 @@ Arx v0.5.6 — June 2026
 NEW FEATURES
 
   Both Apps — Single Address
-  Parts Master and Test Records now run together at one address. Open
-  Arx and use the Test Records link in the header to switch apps. The
-  separate Test Records port is gone; update any bookmarks to the main
-  Arx address. Settings now covers both apps in one page.
+  Parts Master and Test Records now run together at one address;
+  update any bookmarks to the main Arx address.
 
 Arx v0.5.1 — June 2026
 =======================
@@ -512,8 +393,8 @@ NEW FEATURES
 BUG FIXES
 
   Test Records — Form Definition View
-  View Definition spec_nom now shows the raw stored value, matching the
-  editor. Previously cross-reference tokens like {629} were expanded.
+  View Definition spec_nom now shows the raw stored value, matching
+  the editor, instead of expanding cross-reference tokens.
 
   Test Records — Long Comments in Results Table
   Long step comments no longer stretch the Comment column across the
@@ -525,16 +406,16 @@ Arx v0.4.1 — June 2026
 BUG FIXES
 
   Both Apps — Security hardening
-  CSRF protection now covers all form submissions. Session key is
-  auto-generated per installation. Config file writes are atomic.
+  CSRF protection now covers all form submissions, the session key
+  auto-generates per install, and config file writes are atomic.
 
   Both Apps — Cleaner shutdown on port conflict
   A second instance that fails to bind now exits cleanly instead of
   terminating abruptly.
 
   Test Records — Date field formula bug
-  Editing a record with a Test Date step no longer overwrites the saved
-  result with a raw decimal value.
+  Editing a record with a Test Date step no longer overwrites the
+  saved result with a raw decimal value.
 
 Arx v0.4.0 — May 2026
 ======================
@@ -542,37 +423,28 @@ Arx v0.4.0 — May 2026
 NEW FEATURES
 
   Test Records — Conditional Step Visibility
-  Steps in a form can now be shown or hidden based on other step results
-  or record context. Enter an expression like {record.type}!=Re-Test or
-  {12}=Yes in the hide column of the form definition editor. Steps hidden
-  by an expression are excluded from the record view, edit view, and
-  print output — no manual editing needed when the same form is used for
-  multiple record types.
+  Steps can now be shown or hidden by an expression based on other
+  results or record context.
 
   Test Records — Result Display Format
-  The format field on a step definition now controls how the result
-  appears in the record view and print output. The edit input shows a
-  placeholder hint to guide data entry to the expected format.
+  A step's format field now controls how its result displays, with
+  a placeholder hint to guide entry.
 
   Parts Master — Units of Measure
-  Parts now have a base unit and sourcing relationships can specify a
-  purchase unit. A unit reference table manages available units. The
-  supplier parts list shows the effective unit, falling back to the
-  part's base unit when no purchase unit is set.
+  Parts now have a base unit, and sourcing can specify a purchase
+  unit via a unit reference table.
 
   Parts Master — Vendors
-  The Suppliers section has been renamed to Vendors throughout the app.
-  The vendor detail page now shows a Roles row indicating whether the
-  company is flagged as a supplier, manufacturer, or both.
+  The Suppliers section is renamed to Vendors, with a Roles row for
+  supplier/manufacturer.
 
   Parts Master — Manufacturer Page Links
-  On a part's Mfg Parts tab, the manufacturer name is now a clickable
-  link to that company's detail page.
+  Manufacturer names on the Mfg Parts tab now link to that company's
+  detail page.
 
   Both Apps — Windows Login Auto-Fill
-  New POs pre-fill the Orderer field and new part requests pre-fill the
-  Requested By field with your Windows login name. The same login is
-  recorded in the audit trail for form and record lock and unlock events.
+  New POs and part requests pre-fill your Windows login name, which
+  is also recorded in the audit trail.
 
 Arx v0.3.46 — May 2026
 =======================
@@ -580,11 +452,8 @@ Arx v0.3.46 — May 2026
 NEW FEATURES
 
   Parts Master — Manufacturer Part Numbers (MPN)
-  Each part now has a "Mfg Parts" tab listing the manufacturers who
-  make it and their part numbers. Add as many manufacturer/MPN pairs
-  as needed. Companies can now be flagged as manufacturers in addition
-  to (or instead of) suppliers, making them available in the MPN
-  manufacturer dropdown.
+  A "Mfg Parts" tab lists a part's manufacturers and their part
+  numbers; companies can now be flagged as manufacturers.
 
 Arx v0.3.31 — May 2026
 =======================
@@ -592,61 +461,55 @@ Arx v0.3.31 — May 2026
 NEW FEATURES
 
   Test Records — Print / PDF Export
-  Test records can now be printed or saved as a PDF. Click the Print
-  button on any record to open a clean print-friendly page. The
-  suggested PDF filename is automatically set to the serial number
-  and part number.
+  Test records can now be printed or saved as a PDF, with an
+  auto-suggested filename.
 
   Test Records — Image Gallery
-  Screenshots now display as a tiled gallery below the results table
-  and are included when printing or saving as a PDF. Image rows in
-  the results table show "[see gallery]" to keep the table compact.
+  Screenshots display as a tiled gallery below the results table and
+  are included when printing or saving as a PDF.
 
   Test Records — Prev / Next Navigation
-  Arrow buttons on the record view let you step through records in
-  the same form without returning to the list.
+  Arrow buttons step through records in the same form without
+  returning to the list.
 
   Parts Master — BOM Rollup Cost
-  A "Run Rollup" button on the BOM tab calculates the total cost of
-  a part from its direct components and saves it to the part record.
-  The BOM table now shows the unit cost for each component.
+  A "Run Rollup" button calculates a part's cost from its components
+  and shows unit cost per line.
 
   Parts Master — PO Revision Tracking
-  The part revision is captured at the time of ordering and shown on
-  the PO detail, edit form, and print views.
+  The part revision is captured at order time and shown on the PO.
 
   Parts Master — PO Print Improvements
-  PO print pages suppress browser headers for clean PDF output. The
-  suggested PDF filename is set to the PO number and supplier code.
-  After marking a PO as printed, a button opens the PO folder in
-  Windows Explorer (created automatically if it does not exist).
+  PO print pages suppress browser headers, auto-name the PDF, and
+  can open the PO folder after printing.
 
   Parts Master — BOM Editing
-  BOM rows can be added, updated, and removed directly from the web
-  UI without using the Excel workbook.
+  BOM rows can be added, updated, and removed directly in the web
+  UI without the Excel workbook.
 
   Both Apps — Cross-App Navigation
-  A link in the header lets you switch between Parts Master and Test
-  Records without going through Settings.
+  A header link switches between Parts Master and Test Records.
 
   Both Apps — Test Mode Toggle in Settings
-  Test mode can be switched in the Settings UI without editing the
-  .env file. A confirmation prompt warns you before switching.
+  Test mode can be switched in Settings, with a confirmation prompt,
+  instead of editing the .env file.
 
   Both Apps — Schema Version Check
-  A banner is shown if the app detects a database schema mismatch,
-  indicating that a migration may be needed.
+  A banner warns if the database schema doesn't match, signaling a
+  needed migration.
 
   Both Apps — What's New
-  Release notes are now embedded in the app. A banner appears at the
-  top of the page after updating to a new version.
+  Release notes are now embedded in-app, shown via a banner after
+  updating.
 
 BUG FIXES
 
-  Parts Master — fixed a crash on the new supplier form.
-  Parts Master — fixed PO creation failure on databases with triggers.
-  Test Records — fixed an issue where the where-used page could fail
-  to load when BOM quantity or item number was NULL.
-  Both Apps — each app now has its own local config file so Parts
-  Master and Test Records no longer overwrite each other's settings
-  when run from the same folder.
+  Fixed a crash on the new supplier form and a PO creation failure
+  on databases with triggers.
+
+  Fixed the where-used page failing to load when BOM quantity or
+  item number was NULL.
+
+  Each app now has its own local config file, so Parts Master and
+  Test Records no longer overwrite each other's settings when run
+  from the same folder.
