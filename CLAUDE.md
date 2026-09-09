@@ -134,7 +134,9 @@ Arx vX.Y.Z — Month YYYY
 NEW FEATURES
 
   <Feature Name>
-  One or two sentences, for users not devs, no technical detail.
+  One sentence, for users not devs, no technical detail. Keep it terse —
+  a single plain-language line beats a paragraph; skip caveats/detail a
+  user doesn't need to act on.
 
 BUG FIXES
 
