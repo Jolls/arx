@@ -2,10 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -26,11 +28,20 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
+	digiKeyEnabled := h.cfg.DigiKeyEnabled()
+	var manufacturers []manufacturerOption
+	if digiKeyEnabled {
+		// Only fetched for the DigiKey manufacturer picker — skip the query
+		// entirely on every other Sourcing tab render.
+		manufacturers, _ = h.fetchManufacturers(r)
+	}
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":             p,
 		"Links":            links,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
 		"Units":            units,
+		"Manufacturers":    manufacturers,
+		"DigiKeyEnabled":   digiKeyEnabled,
 		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -39,6 +50,11 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 
 // ── SupplierPartCreate — POST /part/{id}/suppliers ───────────────────────────
 
+// SupplierPartCreate adds a supplier link. When the Add Supplier form was
+// filled via the DigiKey lookup (issue #27), the optional dk_* fields carry
+// prices/datasheet/photo/manufacturer data the user chose to import; those
+// are written in the same transaction as the supplier link so a failure
+// midway never leaves a supplier link with half-imported data.
 func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, ok := h.requireTab(w, r, id, "suppliers"); !ok {
@@ -49,7 +65,15 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderSourcingWithError(w, r, id, "Supplier is required", nil, supplierPartFromForm(r))
 		return
 	}
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
+		return
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
 	`, h.cfg.SupplierPartTable()),
@@ -64,6 +88,22 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
 		return
+	}
+
+	pricesInserted, err := h.applyDigiKeyImportExtras(r, tx, id, supplierID)
+	if err != nil {
+		h.renderSourcingWithError(w, r, id, err.Error(), nil, supplierPartFromForm(r))
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
+		return
+	}
+	// Matches the trigger PriceCreate/PriceEdit use: fire only when a price
+	// row actually landed, not merely when the user checked "import prices".
+	if pricesInserted {
+		h.ensureDefaultSupplier(r.Context(), id, supplierID)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/suppliers", id), http.StatusFound)
 }
@@ -90,6 +130,90 @@ func supplierPartFromForm(r *http.Request) *models.SupplierPart {
 		sp.UnitID = &v
 	}
 	return sp
+}
+
+// applyDigiKeyImportExtras writes the optional DigiKey-imported price breaks,
+// datasheet/photo attachments, and manufacturer link submitted alongside a new
+// supplier link. A no-op when none of the dk_* fields are present, so a plain
+// (non-imported) Add Supplier submit is unaffected. Returns whether at least
+// one price row was actually inserted (as opposed to skipped as a pre-existing
+// active price), which the caller uses to decide whether to run
+// ensureDefaultSupplier.
+func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID, supplierID string) (pricesInserted bool, err error) {
+	ctx := r.Context()
+
+	if r.FormValue("dk_import_prices") == "1" {
+		var breaks []digikeyPriceBreak
+		if raw := r.FormValue("dk_prices_json"); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &breaks); err != nil {
+				return false, fmt.Errorf("could not read imported prices: %w", err)
+			}
+		}
+		effectiveDate := time.Now().Format("2006-01-02")
+		for _, b := range breaks {
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+				INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+				VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
+			`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)),
+				partID, supplierID, b.BreakQuantity, b.UnitPrice, b.TotalPrice, effectiveDate,
+			); err != nil {
+				if strings.Contains(err.Error(), "UQ_price") {
+					continue // an active price already exists at this pack size; leave it alone
+				}
+				return false, fmt.Errorf("could not save imported price: %w", err)
+			}
+			pricesInserted = true
+		}
+	}
+
+	for _, imp := range []struct{ flag, urlField, category string }{
+		{"dk_import_datasheet", "dk_datasheet_url", "Datasheet"},
+		{"dk_import_photo", "dk_photo_url", "Photo"},
+	} {
+		if r.FormValue(imp.flag) != "1" {
+			continue
+		}
+		fileURL := strings.TrimSpace(r.FormValue(imp.urlField))
+		if fileURL == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (part_id, file_name, part_revision, category, comment) VALUES (@p1,@p2,@p3,@p4,@p5)`,
+			h.cfg.AttachmentsTable(),
+		), partID, fileURL, "", imp.category, "Imported from DigiKey"); err != nil {
+			return false, fmt.Errorf("could not save imported %s: %w", strings.ToLower(imp.category), err)
+		}
+	}
+
+	mfgChoice := strings.TrimSpace(r.FormValue("dk_mfg_choice"))
+	mfgPartNumber := strings.TrimSpace(r.FormValue("dk_mfg_part_number"))
+	if mfgChoice != "" && mfgChoice != "skip" && mfgPartNumber != "" {
+		mfgID := mfgChoice
+		if mfgChoice == "create" {
+			mfgName := strings.TrimSpace(r.FormValue("dk_mfg_name"))
+			if mfgName == "" {
+				return pricesInserted, fmt.Errorf("manufacturer name is required to create a new manufacturer")
+			}
+			insertMfg := h.dia().InsertReturningID(h.cfg.CompanyTable(),
+				`name, is_supplier, is_manufacturer`, `@p1,@p2,@p3`, false)
+			var newID int
+			if err := tx.QueryRowContext(ctx, insertMfg, mfgName, false, true).Scan(&newID); err != nil {
+				if strings.Contains(err.Error(), "UQ_company_name") {
+					return pricesInserted, fmt.Errorf("a company named %q already exists — pick it from the manufacturer list instead", mfgName)
+				}
+				return pricesInserted, fmt.Errorf("could not create manufacturer: %w", err)
+			}
+			mfgID = strconv.Itoa(newID)
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (part_id, mfg_id, mfg_part_number, is_active) VALUES (@p1,@p2,@p3,%s)`,
+			h.cfg.MfgPartTable(), h.dia().BoolLiteral(true),
+		), partID, mfgID, mfgPartNumber); err != nil && !strings.Contains(err.Error(), "UQ_mfg_part") {
+			return pricesInserted, fmt.Errorf("could not save manufacturer part: %w", err)
+		}
+	}
+
+	return pricesInserted, nil
 }
 
 // ── SupplierPartEdit — GET /part/{id}/suppliers/{spID}/edit ──────────────────
@@ -320,6 +444,11 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	}
 	links, _ := h.fetchSupplierLinks(r, partID)
 	units, _ := h.fetchUnits(r.Context())
+	digiKeyEnabled := h.cfg.DigiKeyEnabled()
+	var manufacturers []manufacturerOption
+	if digiKeyEnabled {
+		manufacturers, _ = h.fetchManufacturers(r)
+	}
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":             p,
 		"Links":            links,
@@ -327,6 +456,8 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 		"AddDraft":         draft,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, partID),
 		"Units":            units,
+		"Manufacturers":    manufacturers,
+		"DigiKeyEnabled":   digiKeyEnabled,
 		"Error":            errMsg,
 		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,

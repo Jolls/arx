@@ -159,6 +159,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/settings/part-numbering", h.SettingsPartNumberingSave)
 		r.Post("/settings/company-logo", h.SettingsCompanyLogoSave)
 		r.Post("/settings/company-logo/remove", h.SettingsCompanyLogoRemove)
+		r.Post("/settings/digikey", h.SettingsDigiKeySave)
 
 		// Named Queries editor (Settings → Named Queries tab). Behind auth because
 		// these routes execute/persist SQL and require a live DB connection.
@@ -349,6 +350,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Get("/api/parts/search", h.APIPartSearch)
 		r.Get("/api/parts/next-number", h.PartsNextNumber)
 		r.Get("/api/supplier-part", h.APISupplierPN)
+		r.Get("/api/digikey/lookup", h.APIDigiKeyLookup)
 		r.Get("/api/part/{id}/local-attachments", h.APIPartLocalAttachments)
 		r.Get("/api/part/{id}/bom-children", h.APIPartBOMChildren)
 		r.Get("/api/parts/rows", h.PartsRows)

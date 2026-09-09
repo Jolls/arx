@@ -1,0 +1,36 @@
+{
+  "Product": {
+    "Description": {
+      "ProductDescription": "CAP CER 0.1UF 50V X7R 0603",
+      "DetailedDescription": "0.1 uF ±10% 50V Ceramic Capacitor X7R 0603 (1608 Metric)"
+    },
+    "Manufacturer": {
+      "Id": 1276,
+      "Name": "KEMET"
+    },
+    "ManufacturerProductNumber": "C0603C104K5RACTU",
+    "ManufacturerLeadWeeks": "8",
+    "DatasheetUrl": "https://www.kemet.com/datasheet/C0603C104K5RACTU.pdf",
+    "PhotoUrl": "https://media.digikey.com/photos/Kemet%20Photos/C0603.jpg",
+    "ProductVariations": [
+      {
+        "DigiKeyProductNumber": "399-1096-1-ND",
+        "PackageType": { "Name": "Cut Tape (CT)" },
+        "MinimumOrderQuantity": 1,
+        "StandardPricing": [
+          { "BreakQuantity": 1, "UnitPrice": 0.1, "TotalPrice": 0.1 },
+          { "BreakQuantity": 10, "UnitPrice": 0.05, "TotalPrice": 0.5 },
+          { "BreakQuantity": 100, "UnitPrice": 0.01, "TotalPrice": 1.0 }
+        ]
+      },
+      {
+        "DigiKeyProductNumber": "399-1096-2-ND",
+        "PackageType": { "Name": "Digi-Reel" },
+        "MinimumOrderQuantity": 4000,
+        "StandardPricing": [
+          { "BreakQuantity": 4000, "UnitPrice": 0.008, "TotalPrice": 32.0 }
+        ]
+      }
+    ]
+  }
+}

@@ -59,6 +59,8 @@ type Handler struct {
 
 	loginMu       sync.Mutex
 	loginAttempts map[string]*loginAttempt
+
+	digikeyToken digikeyTokenCache
 }
 
 // database returns the live *sql.DB, or nil when not connected.
