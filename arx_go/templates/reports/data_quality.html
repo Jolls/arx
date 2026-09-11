@@ -15,12 +15,12 @@
                     <div class="card-body">
                         {{if .NoAttachments}}
                         <table class="table table-sm table-hover mb-0">
-                            <thead><tr><th>Part Number</th><th>Title</th><th>Category</th></tr></thead>
+                            <thead><tr><th>Part Number</th><th>Description</th><th>Category</th></tr></thead>
                             <tbody>
                                 {{range .NoAttachments}}
                                 <tr>
                                     <td>{{.PartNumber}}</td>
-                                    <td>{{.Title}}</td>
+                                    <td>{{.Description}}</td>
                                     <td>{{.Category}}</td>
                                 </tr>
                                 {{end}}
@@ -45,12 +45,12 @@
                     <div class="card-body">
                         {{if .MissingDefaultSupplier}}
                         <table class="table table-sm table-hover mb-0">
-                            <thead><tr><th>Part Number</th><th>Title</th></tr></thead>
+                            <thead><tr><th>Part Number</th><th>Description</th></tr></thead>
                             <tbody>
                                 {{range .MissingDefaultSupplier}}
                                 <tr>
                                     <td>{{.PartNumber}}</td>
-                                    <td>{{.Title}}</td>
+                                    <td>{{.Description}}</td>
                                 </tr>
                                 {{end}}
                             </tbody>
@@ -74,12 +74,12 @@
                     <div class="card-body">
                         {{if .StaleRollup}}
                         <table class="table table-sm table-hover mb-0">
-                            <thead><tr><th>Part Number</th><th>Title</th><th>Category</th></tr></thead>
+                            <thead><tr><th>Part Number</th><th>Description</th><th>Category</th></tr></thead>
                             <tbody>
                                 {{range .StaleRollup}}
                                 <tr>
                                     <td>{{.PartNumber}}</td>
-                                    <td>{{.Title}}</td>
+                                    <td>{{.Description}}</td>
                                     <td>{{.Category}}</td>
                                 </tr>
                                 {{end}}

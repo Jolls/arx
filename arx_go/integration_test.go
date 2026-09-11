@@ -29,32 +29,32 @@ import (
 	"arx/arxlib/urlutil"
 )
 
-// arxDevSentinelPartID/Number/Title identify a fixed-ID row that only exists in
+// arxDevSentinelPartID/Number/Description identify a fixed-ID row that only exists in
 // the Arx test seed data (SQL/azure/seed_test_data.sql and SQL/postgres/seed_test_data.sql
 // carry the same id/values), used to confirm ARX_TEST_DSN actually points at
 // seeded test data rather than trusting the database name.
 const (
-	arxDevSentinelPartID    = 3005
-	arxDevSentinelPartNum   = "ASM-1001"
-	arxDevSentinelPartTitle = "Skyrunner Standard Drone"
+	arxDevSentinelPartID          = 3005
+	arxDevSentinelPartNum         = "ASM-1001"
+	arxDevSentinelPartDescription = "Skyrunner Standard Drone"
 )
 
 // checkArxDevSentinel confirms h is connected to a database with Arx test seed
 // data loaded — the database name isn't a reliable signal (it may just be
 // called "arx"), so this checks content instead: a real production database
-// won't have this part number under this fictional title.
+// won't have this part number under this fictional description.
 func checkArxDevSentinel(ctx context.Context, h *Handler) error {
-	var gotNum, gotTitle string
+	var gotNum, gotDescription string
 	err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT part_number, title FROM %s WHERE id = @p1", h.cfg.PartsTable()),
+		fmt.Sprintf("SELECT part_number, description FROM %s WHERE id = @p1", h.cfg.PartsTable()),
 		arxDevSentinelPartID,
-	).Scan(&gotNum, &gotTitle)
+	).Scan(&gotNum, &gotDescription)
 	if err != nil {
 		return fmt.Errorf("integration tests must target a database with Arx test seed data loaded (sentinel part %d lookup failed: %v)", arxDevSentinelPartID, err)
 	}
-	if gotNum != arxDevSentinelPartNum || gotTitle != arxDevSentinelPartTitle {
+	if gotNum != arxDevSentinelPartNum || gotDescription != arxDevSentinelPartDescription {
 		return fmt.Errorf("integration tests must target a database with Arx test seed data loaded (sentinel part %d = %q/%q, want %q/%q)",
-			arxDevSentinelPartID, gotNum, gotTitle, arxDevSentinelPartNum, arxDevSentinelPartTitle)
+			arxDevSentinelPartID, gotNum, gotDescription, arxDevSentinelPartNum, arxDevSentinelPartDescription)
 	}
 	return nil
 }
@@ -239,7 +239,7 @@ func seedCyclePair(t *testing.T, h *Handler, ctx context.Context) (idA, idB int,
 // against the ArxDev database:
 //
 //  1. Create a part (identity INSERT with OUTPUT INSERTED.PNID)
-//  2. Update the part title
+//  2. Update the part description
 //  3. Add an attachment (triggers trg_FIL_part_count → PN.AttachmentCount = 1)
 //  4. Soft-delete the attachment (trigger → PN.AttachmentCount = 0)
 //  5. Hard-delete the test rows (cleanup)
@@ -254,7 +254,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	createVals := url.Values{
 		"part_number":    {partNumber},
 		"revision":       {"A"},
-		"title":          {"Integration Test Part"},
+		"description":    {"Integration Test Part"},
 		"release_status": {"U"},
 		"active":         {"1"},
 	}
@@ -279,10 +279,10 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	}()
 
 	// ── 2. Update ─────────────────────────────────────────────────────────────
-	newTitle := "Updated Integration Test Part"
+	newDescription := "Updated Integration Test Part"
 	updateVals := url.Values{
 		"part_number":    {partNumber},
-		"title":          {newTitle},
+		"description":    {newDescription},
 		"release_status": {"U"},
 		"active":         {"1"},
 	}
@@ -290,15 +290,15 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	h.PartUpdate(rec, withID(postForm(fmt.Sprintf("/part/%d", pnID), updateVals), pnID))
 	assert302(t, "PartUpdate", rec)
 
-	var gotTitle string
+	var gotDescription string
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT title FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
-	).Scan(&gotTitle)
+		fmt.Sprintf(`SELECT description FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
+	).Scan(&gotDescription)
 	if err != nil {
-		t.Fatalf("SELECT title after PartUpdate: %v", err)
+		t.Fatalf("SELECT description after PartUpdate: %v", err)
 	}
-	if gotTitle != newTitle {
-		t.Errorf("PartUpdate: title = %q, want %q", gotTitle, newTitle)
+	if gotDescription != newDescription {
+		t.Errorf("PartUpdate: description = %q, want %q", gotDescription, newDescription)
 	}
 
 	// ── 3. Attachment create + trigger check ───────────────────────────────────
@@ -376,7 +376,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	var partID int
 	partNumber := "ITEST-YS-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -488,7 +488,7 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	var partID int
 	partNumber := "ITEST-RF-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -584,7 +584,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	var partID int
 	partNumber := "ITEST-ASPF-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -722,7 +722,7 @@ func TestIntegration_PasteResultImageGuards(t *testing.T) {
 	var partID int
 	partNumber := "ITEST-587-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -1654,7 +1654,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 	var partID int
 	partNumber := "ITEST-TDHA-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -3147,7 +3147,7 @@ func TestIntegration_RunNamedQuery_SingleResult(t *testing.T) {
 	pn := fmt.Sprintf("ITEST-807-%d", time.Now().UnixNano())
 	var partID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, title, is_active) OUTPUT INSERTED.id VALUES (@p1, @p2, 1)`,
+		`INSERT INTO %s (part_number, description, is_active) OUTPUT INSERTED.id VALUES (@p1, @p2, 1)`,
 		h.cfg.PartsTable()), pn, "807 test part",
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
@@ -4090,7 +4090,7 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	var partID int
 	partNumber := "ITEST-FDH-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -4234,7 +4234,7 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 	var partID int
 	partNumber := "ITEST-SFD-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -4505,7 +4505,7 @@ func seedThrowawayForm(t *testing.T, h *Handler, ctx context.Context, label stri
 	t.Helper()
 	partNumber := label + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
@@ -5037,7 +5037,7 @@ func seedThrowawayPart(t *testing.T, h *Handler, ctx context.Context, issue stri
 	t.Helper()
 	partNumber = "ITEST-" + issue + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&id); err != nil {
@@ -6377,8 +6377,8 @@ func TestIntegration_ReportsSpendByPartExportCSV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse CSV: %v", err)
 	}
-	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Total Spend"}) {
-		t.Fatalf("header row = %v, want [Part Number Title Total Spend]", records)
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Description", "Total Spend"}) {
+		t.Fatalf("header row = %v, want [Part Number Name Total Spend]", records)
 	}
 	if !csvRowsContain(records[1:], []string{"RAW-1002", "Stainless Steel Bar Stock", "205.00"}) {
 		t.Errorf("rows = %v, want to contain RAW-1002/Stainless Steel Bar Stock/205.00", records[1:])
@@ -6448,8 +6448,8 @@ func TestIntegration_ReportsDataQualityNoAttachmentsExportCSV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse CSV: %v", err)
 	}
-	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Category"}) {
-		t.Fatalf("header row = %v, want [Part Number Title Category]", records)
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Description", "Category"}) {
+		t.Fatalf("header row = %v, want [Part Number Name Category]", records)
 	}
 	found := false
 	for _, row := range records[1:] {
@@ -6478,8 +6478,8 @@ func TestIntegration_ReportsDataQualityMissingSupplierExportCSV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse CSV: %v", err)
 	}
-	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Category"}) {
-		t.Fatalf("header row = %v, want [Part Number Title Category]", records)
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Description", "Category"}) {
+		t.Fatalf("header row = %v, want [Part Number Name Category]", records)
 	}
 	dataRows := records[1:]
 	if len(dataRows) != 1 || len(dataRows[0]) == 0 || dataRows[0][0] != "BUY-1003" {
@@ -6502,8 +6502,8 @@ func TestIntegration_ReportsDataQualityStaleRollupExportCSV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse CSV: %v", err)
 	}
-	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Title", "Category"}) {
-		t.Fatalf("header row = %v, want [Part Number Title Category]", records)
+	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Description", "Category"}) {
+		t.Fatalf("header row = %v, want [Part Number Name Category]", records)
 	}
 	found := false
 	for _, row := range records[1:] {

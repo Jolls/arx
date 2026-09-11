@@ -39,12 +39,12 @@
                 <div class="card-body">
                     {{if .ByPart}}
                     <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>Part Number</th><th>Title</th><th class="text-end">Total Spend</th></tr></thead>
+                        <thead><tr><th>Part Number</th><th>Description</th><th class="text-end">Total Spend</th></tr></thead>
                         <tbody>
                             {{range .ByPart}}
                             <tr>
                                 <td>{{.PartNumber}}</td>
-                                <td>{{.Title}}</td>
+                                <td>{{.Description}}</td>
                                 <td class="text-end">${{printf "%.2f" .TotalSpend}}</td>
                             </tr>
                             {{end}}

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.29] - 2026-09-10
+### Changed
+- Renamed `part.title` → `part.description`, previously labeled inconsistently as "Title" or "Name" across pages, now consistently the `description` column labeled "Description" everywhere. Run `migrate_40_part_description.sql` ([#40](https://github.com/Jolls/arx/issues/40))
+
 ## [0.7.28] - 2026-09-10
 ### Fixed
 - Supplier link "preference" field crashed with a SQL conversion error since it was a free-text input over an INT column; now a Primary/Alternate/Backup dropdown ([#41](https://github.com/Jolls/arx/issues/41))

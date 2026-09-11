@@ -180,7 +180,7 @@ const ROW_BUILDERS = {
             ? `<span class="pn-thumb" data-thumb="${escHtml(r.thumb)}"><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a></span>`
             : `<a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>`}${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum">Below Min</span>' : ''}</td>
         <td data-col="col-rev">${escHtml(r.rev)}</td>
-        <td data-col="col-title">${escHtml(r.title)}</td>
+        <td data-col="col-title">${escHtml(r.description)}</td>
         <td data-col="col-detail">${escHtml(r.detail)}</td>
         <td data-col="col-reqby">${escHtml(r.reqBy)}</td>
         <td data-col="col-date">${r.date || 'N/A'}</td>
@@ -232,7 +232,7 @@ const ROW_BUILDERS = {
 
 // Per-column text for filter matching — column order must match the thead.
 const CELL_TEXT = {
-    '/api/parts/rows':     r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified, String(r.attach), String(r.poLines)],
+    '/api/parts/rows':     r => [r.pn, r.rev, r.description, r.detail, r.reqBy, r.date, r.cat, r.modified, String(r.attach), String(r.poLines)],
     '/api/suppliers/rows': r => [r.name, r.active ? 'active' : 'inactive', r.country, String(r.links), String(r.pos), r.contact, r.code],
     '/api/contacts/rows':  r => [r.supplier, r.name, r.email, r.country, r.state, r.city, r.phone, r.web, r.modified, r.notes, r.active ? 'yes' : 'no'],
     '/api/pos/rows':       r => [r.num, r.status, r.supplier, r.ordered, r.closed, r.orderer, String(r.cost)],
@@ -536,8 +536,8 @@ function exportCSV() {
     const configs = {
         '/api/parts/rows': {
             filename: 'parts.csv',
-            headers: ['Part Number','Revision','Title','Detail','Requested By','Date','Category','Modified','Attachments','PO Lines','Active'],
-            row: r => [r.pn, r.rev, r.title, r.detail, r.reqBy, r.date, r.cat, r.modified, r.attach, r.poLines, r.active ? 'true' : 'false'],
+            headers: ['Part Number','Revision','Description','Detail','Requested By','Date','Category','Modified','Attachments','PO Lines','Active'],
+            row: r => [r.pn, r.rev, r.description, r.detail, r.reqBy, r.date, r.cat, r.modified, r.attach, r.poLines, r.active ? 'true' : 'false'],
         },
         '/api/pos/rows': {
             filename: 'purchase-orders.csv',
@@ -684,7 +684,7 @@ function buildBOMSubRow(item, num) {
     tr.innerHTML =
         '<td data-col="col-item" style="--bom-depth:' + depth + '">' + toggle + num + '</td>' +
         '<td data-col="col-pn"><a href="/part/' + item.ComponentPartID + '" class="part-number-link">' + escHtml(item.PartNumber) + '</a></td>' +
-        '<td data-col="col-title">' + escHtml(item.Title) + '</td>' +
+        '<td data-col="col-title">' + escHtml(item.Description) + '</td>' +
         '<td data-col="col-rev">' + escHtml(item.Revision) + '</td>' +
         '<td data-col="col-cat">' + escHtml(item.Category) + '</td>' +
         '<td data-col="col-qty" class="text-end">' + formatBOMQty(item.Qty) + '</td>' +

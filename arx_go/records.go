@@ -121,7 +121,7 @@ func isAutoSerial(submitted, suggested string) bool {
 //   - {record.type}      → record's Type (record_type field)
 //   - {record.pn}        → record's unit-under-test part number (subject_part_number)
 //   - {record.sn}        → record's serial number
-//   - {record.pndesc}    → record's unit-under-test description (subject_pn_description / title)
+//   - {record.pndesc}    → record's unit-under-test description (subject_pn_description / description)
 //   - {record.date}      → record's test date (MM/DD/YYYY) — date only, safe for SQL format 101
 //   - {record.datetime}  → record's test date + time (MM/DD/YYYY H:MM AM/PM)
 //
@@ -193,7 +193,7 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 // FormsList â€" GET /
 func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.revision, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.revision, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
@@ -208,7 +208,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	var forms []models.TestForm
 	for rows.Next() {
 		var f models.TestForm
-		if err := rows.Scan(&f.ID, &f.PartNumberID, &f.IsLocked, &f.Revision, &f.PartNumber, &f.Title); err != nil {
+		if err := rows.Scan(&f.ID, &f.PartNumberID, &f.IsLocked, &f.Revision, &f.PartNumber, &f.Description); err != nil {
 			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -237,12 +237,12 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	// Load the form header.
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -369,7 +369,7 @@ type scopedRecordRow struct {
 	Status       string `json:"status"`
 	FormRev      string `json:"formRev"`
 	FormID       int    `json:"formId"`
-	FormLabel    string `json:"formLabel"` // "<form part number> — <form title>"
+	FormLabel    string `json:"formLabel"` // "<form part number> — <form description>"
 }
 
 // scopedRecordsRows returns every active form_record matching whereCol = id,
@@ -380,7 +380,7 @@ func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT r.id, COALESCE(r.part_id,0), r.serial_number, r.subject_part_number, r.subject_pn_description,
 		       r.record_date, r.record_type, r.is_locked, r.is_approved, r.form_revision,
-		       r.form_id, fp.part_number, fp.title
+		       r.form_id, fp.part_number, fp.description
 		FROM %s r
 		JOIN %s f ON f.id = r.form_id
 		JOIN %s fp ON fp.id = f.part_number_id
@@ -399,10 +399,10 @@ func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int
 		var recordDate *time.Time
 		var formRev *int
 		var locked, approved bool
-		var formPN, formTitle string
+		var formPN, formDescription string
 		if err := rows.Scan(&rec.ID, &rec.PartNumberID, &rec.SN, &rec.SNPN, &rec.SNDesc,
 			&recordDate, &rec.Type, &locked, &approved, &formRev,
-			&rec.FormID, &formPN, &formTitle); err != nil {
+			&rec.FormID, &formPN, &formDescription); err != nil {
 			return nil, err
 		}
 		if recordDate != nil {
@@ -418,8 +418,8 @@ func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int
 		}
 		rec.FormRev = models.TestRecord{FormRevision: formRev}.FormRevLabel()
 		rec.FormLabel = formPN
-		if formTitle != "" {
-			rec.FormLabel += " — " + formTitle
+		if formDescription != "" {
+			rec.FormLabel += " — " + formDescription
 		}
 		out = append(out, rec)
 	}
@@ -460,12 +460,12 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -749,11 +749,11 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title,
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description,
 		       f.record_types, f.instrument_types
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Title,
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description,
 			&recordTypes, &instrumentTypes)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
@@ -1323,12 +1323,12 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1460,12 +1460,12 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1513,7 +1513,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 type BOMPart struct {
 	PartNumberID int
 	PartNumber   string
-	Title        string
+	Description  string
 }
 
 // NewRecord — GET /forms/{id}/records/new
@@ -1527,10 +1527,10 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	var recordTypes, instrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title, f.record_types, f.instrument_types
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description, f.record_types, f.instrument_types
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Title, &recordTypes, &instrumentTypes)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description, &recordTypes, &instrumentTypes)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1545,16 +1545,16 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 	// BOM lookup: parts listed under the form's own part number in PL.
 	var bomParts []BOMPart
 	bomRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PN.id, PN.part_number, PN.title
+		SELECT PN.id, PN.part_number, PN.description
 		FROM %s PL JOIN %s PN ON PL.component_part_id = PN.id
 		WHERE PL.parent_part_id = @p1
-		ORDER BY PN.title`,
+		ORDER BY PN.description`,
 		h.cfg.BOMTable(), h.cfg.PartsTable()), form.PartNumberID)
 	if err == nil {
 		defer bomRows.Close()
 		for bomRows.Next() {
 			var p BOMPart
-			if bomRows.Scan(&p.PartNumberID, &p.PartNumber, &p.Title) == nil {
+			if bomRows.Scan(&p.PartNumberID, &p.PartNumber, &p.Description) == nil {
 				bomParts = append(bomParts, p)
 			}
 		}
@@ -1598,10 +1598,10 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.description
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1621,12 +1621,12 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	var partNumberID *int
 	if pnidStr := r.FormValue("bom_pnid"); pnidStr != "" {
 		if pnid, convErr := strconv.Atoi(pnidStr); convErr == nil {
-			var pn, title sql.NullString
+			var pn, description sql.NullString
 			if scanErr := h.queryRowContext(r.Context(), fmt.Sprintf(`
-				SELECT part_number, title FROM %s WHERE id = @p1`,
-				h.cfg.PartsTable()), pnid).Scan(&pn, &title); scanErr == nil {
+				SELECT part_number, description FROM %s WHERE id = @p1`,
+				h.cfg.PartsTable()), pnid).Scan(&pn, &description); scanErr == nil {
 				snPN = pn.String
-				snDesc = title.String
+				snDesc = description.String
 				partNumberID = &pnid
 			}
 		}
@@ -1968,10 +1968,10 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	var form models.TestForm
 	var editInstrumentTypes sql.NullString
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title, f.instrument_types
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description, f.instrument_types
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Title, &editInstrumentTypes)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description, &editInstrumentTypes)
 	if err != nil {
 		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2939,14 +2939,14 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 type formPN struct {
 	PartNumberID int
 	PartNumber   string
-	Title        string
+	Description  string
 }
 
 // formPNList returns FORM-category PNs that don't already have an active form.
 // Used by both NewForm and DuplicateForm to populate the PN picker.
 func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, title
+		SELECT id, part_number, description
 		FROM %s
 		WHERE category = 'FORM' AND is_active = %s
 		  AND NOT EXISTS (
@@ -2961,7 +2961,7 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 	var list []formPN
 	for rows.Next() {
 		var pn formPN
-		if err := rows.Scan(&pn.PartNumberID, &pn.PartNumber, &pn.Title); err != nil {
+		if err := rows.Scan(&pn.PartNumberID, &pn.PartNumber, &pn.Description); err != nil {
 			return nil, err
 		}
 		list = append(list, pn)
@@ -3082,7 +3082,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 
 	// Load existing active forms for the "copy steps from" dropdown.
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, pn.part_number, pn.title
+		SELECT f.id, pn.part_number, pn.description
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.is_active = %s ORDER BY pn.part_number`,
 		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true)))
@@ -3094,7 +3094,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 	var sourceForms []models.TestForm
 	for rows.Next() {
 		var f models.TestForm
-		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Title); err != nil {
+		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Description); err != nil {
 			log.Printf("NewForm: source-forms scan error: %v", err)
 			break
 		}
@@ -3191,10 +3191,10 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -3306,12 +3306,12 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return

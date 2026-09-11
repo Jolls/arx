@@ -97,12 +97,12 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 
 	var form models.TestForm
 	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.title
+		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.PartNumber, &form.Title)
+		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return

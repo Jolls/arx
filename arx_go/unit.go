@@ -20,17 +20,17 @@ import (
 // UnitRow is one serialized unit for the Units subtab list and the header of a unit's
 // genealogy trace. LotNumber is joined for display and is "" when LotID is nil.
 type UnitRow struct {
-	ID           int
-	SerialNumber string
-	PartID       int
-	PartNumber   string
-	PartTitle    string
-	LotID        *int
-	LotNumber    string
-	BuildID      *int
-	IsActive     bool
-	CreatedAt    time.Time
-	Source       string // "test" | "manual" (#799)
+	ID              int
+	SerialNumber    string
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	LotID           *int
+	LotNumber       string
+	BuildID         *int
+	IsActive        bool
+	CreatedAt       time.Time
+	Source          string // "test" | "manual" (#799)
 }
 
 // IsManual reports whether this unit was manually back-filled (#799), for the
@@ -56,7 +56,7 @@ func (u UnitRow) BuildIDVal() int {
 // A `WHERE …` clause and ordering are appended by callers.
 func (h *Handler) unitRowSelect() string {
 	return fmt.Sprintf(`
-		SELECT u.id, u.serial_number, u.part_id, p.part_number, p.title,
+		SELECT u.id, u.serial_number, u.part_id, p.part_number, p.description,
 		       u.lot_id, l.lot_number, u.build_id, u.is_active, u.created_at, u.source
 		FROM %s u
 		JOIN %s p ON p.id = u.part_id
@@ -67,14 +67,14 @@ func (h *Handler) unitRowSelect() string {
 // scanUnitRow reads one UnitRow from a cursor over unitRowSelect's columns.
 func scanUnitRow(sc interface{ Scan(...any) error }) (UnitRow, error) {
 	var ur UnitRow
-	var partNumber, partTitle, lotNumber sql.NullString
+	var partNumber, partDescription, lotNumber sql.NullString
 	var lotID, buildID sql.NullInt64
-	if err := sc.Scan(&ur.ID, &ur.SerialNumber, &ur.PartID, &partNumber, &partTitle,
+	if err := sc.Scan(&ur.ID, &ur.SerialNumber, &ur.PartID, &partNumber, &partDescription,
 		&lotID, &lotNumber, &buildID, &ur.IsActive, &ur.CreatedAt, &ur.Source); err != nil {
 		return UnitRow{}, err
 	}
 	ur.PartNumber = partNumber.String
-	ur.PartTitle = partTitle.String
+	ur.PartDescription = partDescription.String
 	ur.LotNumber = lotNumber.String
 	if lotID.Valid {
 		v := int(lotID.Int64)
@@ -111,7 +111,7 @@ func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, erro
 func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([]UnitRow, error) {
 	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %su.id, u.serial_number, u.part_id, p.part_number, p.title,
+		SELECT %su.id, u.serial_number, u.part_id, p.part_number, p.description,
 		       u.lot_id, l.lot_number, u.build_id, u.is_active, u.created_at, u.source
 		FROM %s u
 		JOIN %s p ON p.id = u.part_id

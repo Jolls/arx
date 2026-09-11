@@ -9,7 +9,7 @@ type Part struct {
 	ID                  int
 	PartNumber          string
 	Revision            string
-	Title               string
+	Description         string
 	Detail              string
 	Category            string
 	HasBOM              bool
@@ -208,7 +208,7 @@ type BOMItem struct {
 	ComponentPartID int
 	ParentPartID    int
 	PartNumber      string
-	Title           string
+	Description     string
 	Revision        string
 	Category        string
 	CurrentCost     float64

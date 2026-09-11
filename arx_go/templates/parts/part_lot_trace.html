@@ -21,7 +21,7 @@
             </h5>
             <dl class="row mb-0 small">
                 <dt class="col-sm-2">Part</dt>
-                <dd class="col-sm-10"><a href="/part/{{.Lot.PartID}}">{{.Lot.PartNumber}}</a>{{if .Lot.PartTitle}} &mdash; {{.Lot.PartTitle}}{{end}}</dd>
+                <dd class="col-sm-10"><a href="/part/{{.Lot.PartID}}">{{.Lot.PartNumber}}</a>{{if .Lot.PartDescription}} &mdash; {{.Lot.PartDescription}}{{end}}</dd>
                 <dt class="col-sm-2">Vendor Lot</dt>
                 <dd class="col-sm-10">{{if .Lot.VendorLot}}{{.Lot.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
                 <dt class="col-sm-2">Lot Description</dt>
@@ -60,7 +60,7 @@
                         {{if .IsVendorLot}}<span class="badge bg-warning text-dark" title="Purchased raw/vendor lot">vendor</span>{{end}}
                         {{end}}
                     </td>
-                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartTitle}} &mdash; {{.PartTitle}}{{end}}</td>
+                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartDescription}} &mdash; {{.PartDescription}}{{end}}</td>
                     <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{template "note_cell" .Notes}}</td>
                     <td class="text-end">{{printf "%g" .Qty}}</td>
@@ -98,7 +98,7 @@
                         <a href="/part/{{.PartID}}/lots/{{.ID}}">{{.Number}}</a>
                         {{end}}
                     </td>
-                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartTitle}} &mdash; {{.PartTitle}}{{end}}</td>
+                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .PartDescription}} &mdash; {{.PartDescription}}{{end}}</td>
                     <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{template "note_cell" .Notes}}</td>
                     <td class="text-end">{{printf "%g" .Qty}}</td>

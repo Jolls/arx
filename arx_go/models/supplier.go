@@ -45,10 +45,10 @@ type SupplierPart struct {
 	LeadTime     string
 	MinIncrement *float64
 	// joined — part info (supplier parts view)
-	PartNumber string
-	Title      string
-	Revision   string
-	Category   string
+	PartNumber  string
+	Description string
+	Revision    string
+	Category    string
 	// joined — supplier + mfg info (part sourcing view)
 	SupplierName           string
 	MfgPartID              *int

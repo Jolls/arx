@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}</li>
     </ol>
 </nav>
 <div class="content">
@@ -14,7 +14,7 @@
             <thead class="table-dark">
                 <tr>
                     <th>Parent Part Number</th>
-                    <th>Title</th>
+                    <th>Description</th>
                     <th style="width:60px;">Rev</th>
                     <th style="width:80px;">Type</th>
                     <th style="width:80px; text-align:right;">Qty Used</th>
@@ -24,7 +24,7 @@
                 {{range .WhereUsedItems}}
                 <tr>
                     <td><a href="/part/{{.ParentPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
-                    <td>{{.Title}}</td>
+                    <td>{{.Description}}</td>
                     <td>{{.Revision}}</td>
                     <td>{{.Category}}</td>
                     <td style="text-align:right;">{{printf "%.5g" .Qty}}</td>

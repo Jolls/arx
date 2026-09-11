@@ -88,7 +88,7 @@ func (h *Handler) fetchBuildOption(ctx context.Context, buildID int) (*BuildOpti
 type buildComponent struct {
 	PartID       int
 	PartNumber   string
-	Title        string
+	Description  string
 	Category     string
 	QtyPer       float64
 	StockOnHand  float64
@@ -103,7 +103,7 @@ type buildComponent struct {
 // always draws from a specific lot regardless of whether the output is lot-tracked.
 func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]buildComponent, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT b.component_part_id, p.part_number, p.title, p.category, b.qty, p.stock_on_hand, p.tracking_mode
+		SELECT b.component_part_id, p.part_number, p.description, p.category, b.qty, p.stock_on_hand, p.tracking_mode
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
 		WHERE b.parent_part_id = @p1
 		ORDER BY b.line_number
@@ -114,15 +114,15 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 	var comps []buildComponent
 	for rows.Next() {
 		var c buildComponent
-		var title, trackingMode sql.NullString
-		if err := rows.Scan(&c.PartID, &c.PartNumber, &title, &c.Category, &c.QtyPer, &c.StockOnHand, &trackingMode); err != nil {
+		var description, trackingMode sql.NullString
+		if err := rows.Scan(&c.PartID, &c.PartNumber, &description, &c.Category, &c.QtyPer, &c.StockOnHand, &trackingMode); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		if !models.TabsForCategory(h.partCategories, c.Category).Inventory {
 			continue // non-stocked line (labor/doc/…) — not consumed from stock.
 		}
-		c.Title = title.String
+		c.Description = description.String
 		c.IsLotTracked = models.TracksLots(trackingMode.String)
 		comps = append(comps, c)
 	}

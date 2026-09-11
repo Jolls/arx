@@ -9,8 +9,8 @@ import (
 
 func TestBuildAttachmentFileName(t *testing.T) {
 	cases := []struct {
-		partNumber, rev, title, category, ext string
-		want                                  string
+		partNumber, rev, description, category, ext string
+		want                                        string
 	}{
 		{"1234-567", "B", "Widget Bracket", "Drawing", ".pdf", "1234-567 B Widget Bracket Drawing.pdf"},
 		{"1234-567", "", "Widget", "Drawing", ".pdf", "1234-567 Widget Drawing.pdf"},
@@ -18,16 +18,16 @@ func TestBuildAttachmentFileName(t *testing.T) {
 		{"1234-567", "B", "", "", ".pdf", "1234-567 B.pdf"},
 		// whitespace-only fields are treated as blank
 		{"1234-567", "", "   ", "  ", ".pdf", "1234-567.pdf"},
-		// title longer than titleMaxLen (20) is truncated, trailing space trimmed
-		{"1234-567", "B", "This is a very long part title here", "Drawing", ".pdf", "1234-567 B This is a very long Drawing.pdf"},
+		// description longer than descriptionMaxLen (20) is truncated, trailing space trimmed
+		{"1234-567", "B", "This is a very long part description here", "Drawing", ".pdf", "1234-567 B This is a very long Drawing.pdf"},
 		// illegal filesystem characters are replaced with '-'
 		{"AB/CD", "R?2", "Ti:tle", "Spec\\1", ".dwg", "AB-CD R-2 Ti-tle Spec-1.dwg"},
 	}
 	for _, c := range cases {
-		got := buildAttachmentFileName(c.partNumber, c.rev, c.title, c.category, c.ext)
+		got := buildAttachmentFileName(c.partNumber, c.rev, c.description, c.category, c.ext)
 		if got != c.want {
 			t.Errorf("buildAttachmentFileName(%q,%q,%q,%q,%q) = %q, want %q",
-				c.partNumber, c.rev, c.title, c.category, c.ext, got, c.want)
+				c.partNumber, c.rev, c.description, c.category, c.ext, got, c.want)
 		}
 	}
 }

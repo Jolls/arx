@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}</li>
     </ol>
 </nav>
 <div class="content">
@@ -20,7 +20,7 @@
             <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:160px">
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-item" checked> Item</label></li>
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-pn" checked> Part Number</label></li>
-                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-title" checked> Title</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-title" checked> Description</label></li>
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-rev" checked> Rev</label></li>
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-cat" checked> Type</label></li>
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" data-toggle-col="col-qty" checked> Qty</label></li>
@@ -40,7 +40,7 @@
                 <tr>
                     <th data-col="col-item" class="sortable" onclick="sortTable(this)" style="width:50px;">Item</th>
                     <th data-col="col-pn" class="sortable" onclick="sortTable(this)">Part Number</th>
-                    <th data-col="col-title" class="sortable" onclick="sortTable(this)">Title</th>
+                    <th data-col="col-title" class="sortable" onclick="sortTable(this)">Description</th>
                     <th data-col="col-rev" class="sortable" onclick="sortTable(this)" style="width:60px;">Rev</th>
                     <th data-col="col-cat" class="sortable" onclick="sortTable(this)" style="width:80px;">Type</th>
                     <th data-col="col-qty" class="sortable" onclick="sortTable(this)" style="width:80px; text-align:right;">Qty</th>
@@ -59,7 +59,7 @@
                         {{.LineNumber}}
                     </td>
                     <td data-col="col-pn"><a href="/part/{{.ComponentPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
-                    <td data-col="col-title">{{.Title}}</td>
+                    <td data-col="col-title">{{.Description}}</td>
                     <td data-col="col-rev">{{.Revision}}</td>
                     <td data-col="col-cat">{{.Category}}</td>
                     <td data-col="col-qty" class="text-end">{{printf "%.5g" .Qty}}</td>

@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}</li>
     </ol>
 </nav>
 <div class="content">
@@ -65,7 +65,7 @@
                                         <a href="/part/{{.PartID}}">{{.PartNumber}}</a>
                                         {{if .IsLotTracked}}<span class="badge bg-info text-dark" title="Lot controlled">lot</span>{{end}}
                                     </td>
-                                    <td>{{.Title}}</td>
+                                    <td>{{.Description}}</td>
                                     <td>{{.Category}}</td>
                                     <td class="text-end">{{printf "%g" .QtyPer}}</td>
                                     <td class="text-end build-required">&mdash;</td>

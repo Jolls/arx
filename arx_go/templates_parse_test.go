@@ -147,7 +147,7 @@ func TestContactDetailTemplateRenders(t *testing.T) {
 // TestYieldTemplateRenders renders templates/records/yield.html (a representative
 // records page) with fake data and asserts bound values appear in output (#825).
 func TestYieldTemplateRenders(t *testing.T) {
-	form := models.TestForm{ID: 7, PartNumber: "PN-TEST-YIELD", Title: "Widget"}
+	form := models.TestForm{ID: 7, PartNumber: "PN-TEST-YIELD", Description: "Widget"}
 	total := yieldBucket{Label: "Total", Total: 10, Passed: 8, Failed: 2}
 	tmpl, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(templatesFS,
 		"templates/shared/layout.html",

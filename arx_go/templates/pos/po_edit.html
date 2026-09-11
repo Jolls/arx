@@ -550,7 +550,7 @@ function setupPartAutocomplete(input, row, searchBy) {
         parts.forEach(p => {
             const item = document.createElement('div');
             item.className = 'search-dropdown-item';
-            item.innerHTML = '<strong>' + escHtml(p.part_number) + '</strong>' + (p.title ? ' <span class="search-dropdown-desc">' + escHtml(p.title) + '</span>' : '');
+            item.innerHTML = '<strong>' + escHtml(p.part_number) + '</strong>' + (p.description ? ' <span class="search-dropdown-desc">' + escHtml(p.description) + '</span>' : '');
             item.addEventListener('mousedown', e => { e.preventDefault(); select(p); });
             dd.appendChild(item);
         });
@@ -566,7 +566,7 @@ function setupPartAutocomplete(input, row, searchBy) {
         const idInput     = row.querySelector('[name$="[POLPNID]"]');
         const vendorInput = row.querySelector('[name$="[VendorPN]"]');
         if (pnInput)   pnInput.value   = p.part_number;
-        if (descInput) descInput.value = p.title || '';
+        if (descInput) descInput.value = p.description || '';
         if (revInput  && !revInput.value)  revInput.value  = p.revision || '';
         if (idInput) idInput.value = p.pnid;
         const suppID = document.getElementById('supplier_id')?.value;

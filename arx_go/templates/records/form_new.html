@@ -20,7 +20,7 @@
     <select class="form-select" id="pnid" name="pnid" required>
       <option value="">— select part number —</option>
       {{range .PNs}}
-      <option value="{{.PartNumberID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
+      <option value="{{.PartNumberID}}">{{.PartNumber}} &mdash; {{.Description}}</option>
       {{end}}
     </select>
   </div>
@@ -31,7 +31,7 @@
     <select class="form-select" id="source_id" name="source_id">
       <option value="">— start empty —</option>
       {{range .SourceForms}}
-      <option value="{{.ID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
+      <option value="{{.ID}}">{{.PartNumber}} &mdash; {{.Description}}</option>
       {{end}}
     </select>
     <div class="form-text">Optional. Copies all test steps from the selected form as a starting point.</div>

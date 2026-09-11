@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}</li>
     </ol>
 </nav>
 <div class="content">
@@ -24,7 +24,7 @@
             <thead class="table-dark">
                 <tr>
                     <th>Part Number</th>
-                    <th>Title</th>
+                    <th>Description</th>
                     <th style="text-align:right;">Qty Needed</th>
                     <th style="text-align:right;">Tier (pack)</th>
                     <th style="text-align:right;">Unit Price</th>
@@ -36,7 +36,7 @@
                 {{range .Lines}}
                 <tr>
                     <td><a href="/part/{{.PNID}}" class="part-number-link">{{.PartNumber}}</a></td>
-                    <td>{{.Title}}</td>
+                    <td>{{.Description}}</td>
                     <td style="text-align:right;">{{printf "%.5g" .QtyNeeded}}</td>
                     <td style="text-align:right;">{{if eq .Source "price"}}{{printf "%.5g" .PackSize}}{{end}}</td>
                     <td style="text-align:right;">{{if eq .Source "price"}}${{printf "%.4f" .UnitPrice}}{{end}}</td>
@@ -73,7 +73,7 @@
 (function() {
   // Shared helper in static/table-sort.js
   copyTableTSV('build-cost-table', 'copy-build-cost',
-    ['Part Number', 'Title', 'Qty Needed', 'Tier (pack)', 'Unit Price', 'Ext Cost', 'Source'],
+    ['Part Number', 'Description', 'Qty Needed', 'Tier (pack)', 'Unit Price', 'Ext Cost', 'Source'],
     function(tr, cells, i) {
       if (i === 6) return cells[6].getAttribute('data-source') === 'price' ? 'Price' : 'Missing';
       return cells[i].textContent.trim();

@@ -7,7 +7,7 @@ import (
 )
 
 // TestForm is a row in the form table.
-// PartNumber and Title are joined from the part_number table.
+// PartNumber and Description are joined from the part_number table.
 type TestForm struct {
 	ID              int
 	PartNumberID    int
@@ -15,7 +15,7 @@ type TestForm struct {
 	IsActive        bool
 	TestOrder       string // comma-separated test IDs in display order
 	PartNumber      string // joined: PN.part_number
-	Title           string // joined: PN.title
+	Description     string // joined: PN.description
 	RecordTypes     string // comma-separated allowed record types; empty = free-text
 	InstrumentTypes string // comma-separated valid instrument types for this form; empty = free-text
 	Revision        int    // number of times this form has been released (locked); 0 = never released ("Draft"). Bumped on unlock->lock, never on save (#260).

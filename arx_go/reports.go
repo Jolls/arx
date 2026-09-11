@@ -351,7 +351,7 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	var items []dashboardActivityItem
 
 	partRows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT %sid, part_number, title, modified_date
+		`SELECT %sid, part_number, description, modified_date
 		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC`+h.dia().LimitClause("@p1"),
 		h.dia().TopClause("@p1"), h.cfg.PartsTable()), limit)
 	if err != nil {
@@ -359,15 +359,15 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	}
 	for partRows.Next() {
 		var id int
-		var partNumber, title sql.NullString
+		var partNumber, description sql.NullString
 		var modified time.Time // query filters modified_date IS NOT NULL
-		if err := partRows.Scan(&id, &partNumber, &title, &modified); err != nil {
+		if err := partRows.Scan(&id, &partNumber, &description, &modified); err != nil {
 			partRows.Close()
 			return nil, err
 		}
 		label := partNumber.String
-		if title.String != "" {
-			label += " — " + title.String
+		if description.String != "" {
+			label += " — " + description.String
 		}
 		items = append(items, dashboardActivityItem{
 			Label: label, URL: fmt.Sprintf("/part/%d", id),
@@ -501,9 +501,9 @@ type spendSupplierRow struct {
 }
 
 type spendPartRow struct {
-	PartNumber string
-	Title      string
-	TotalSpend float64
+	PartNumber  string
+	Description string
+	TotalSpend  float64
 }
 
 // querySpendBySupplier totals PO line spend (qty * unit_cost) by supplier
@@ -543,13 +543,13 @@ func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]
 	where, args := rng.whereClause("po.date_ordered", 1)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT COALESCE(p.part_number, pol.part_number_snapshot) AS part_number,
-			p.title, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
+			p.description, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.id
 		LEFT JOIN %s p ON pol.part_id = p.id
 		WHERE 1=1%s
 		GROUP BY COALESCE(CAST(pol.part_id AS VARCHAR(20)), CONCAT('snap:', pol.part_number_snapshot)),
-			p.part_number, p.title, pol.part_number_snapshot
+			p.part_number, p.description, pol.part_number_snapshot
 		ORDER BY total_spend DESC
 	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PartsTable(), where), args...)
 	if err != nil {
@@ -559,12 +559,12 @@ func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]
 
 	var result []spendPartRow
 	for rows.Next() {
-		var partNumber, title sql.NullString
+		var partNumber, description sql.NullString
 		var total float64
-		if err := rows.Scan(&partNumber, &title, &total); err != nil {
+		if err := rows.Scan(&partNumber, &description, &total); err != nil {
 			return nil, err
 		}
-		result = append(result, spendPartRow{PartNumber: partNumber.String, Title: title.String, TotalSpend: total})
+		result = append(result, spendPartRow{PartNumber: partNumber.String, Description: description.String, TotalSpend: total})
 	}
 	return result, rows.Err()
 }
@@ -803,14 +803,14 @@ func (h *Handler) ReportsCycleTimeExportCSV(w http.ResponseWriter, r *http.Reque
 // redundant/unused for the missing-default-supplier check, which is already
 // scoped to BUY only).
 type dataQualityPartRow struct {
-	PartNumber string
-	Title      string
-	Category   string
+	PartNumber  string
+	Description string
+	Category    string
 }
 
 func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]dataQualityPartRow, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT p.part_number, p.title, p.category
+		SELECT p.part_number, p.description, p.category
 		FROM %s p
 		WHERE p.is_active = %s AND %s
 		ORDER BY p.part_number ASC
@@ -822,11 +822,11 @@ func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]da
 
 	var result []dataQualityPartRow
 	for rows.Next() {
-		var partNumber, title, category sql.NullString
-		if err := rows.Scan(&partNumber, &title, &category); err != nil {
+		var partNumber, description, category sql.NullString
+		if err := rows.Scan(&partNumber, &description, &category); err != nil {
 			return nil, err
 		}
-		result = append(result, dataQualityPartRow{PartNumber: partNumber.String, Title: title.String, Category: category.String})
+		result = append(result, dataQualityPartRow{PartNumber: partNumber.String, Description: description.String, Category: category.String})
 	}
 	return result, rows.Err()
 }
@@ -888,7 +888,7 @@ func (h *Handler) ReportsDataQuality(w http.ResponseWriter, r *http.Request) {
 func dataQualityCSVRows(rows []dataQualityPartRow) [][]string {
 	var csvRows [][]string
 	for _, row := range rows {
-		csvRows = append(csvRows, []string{row.PartNumber, row.Title, row.Category})
+		csvRows = append(csvRows, []string{row.PartNumber, row.Description, row.Category})
 	}
 	return csvRows
 }
@@ -901,7 +901,7 @@ func (h *Handler) ReportsDataQualityNoAttachmentsExportCSV(w http.ResponseWriter
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeSpendCSV(w, "data_quality_no_attachments.csv", []string{"Part Number", "Title", "Category"}, dataQualityCSVRows(rows))
+	writeSpendCSV(w, "data_quality_no_attachments.csv", []string{"Part Number", "Description", "Category"}, dataQualityCSVRows(rows))
 }
 
 // ReportsDataQualityMissingSupplierExportCSV streams the missing-default-
@@ -912,7 +912,7 @@ func (h *Handler) ReportsDataQualityMissingSupplierExportCSV(w http.ResponseWrit
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeSpendCSV(w, "data_quality_missing_supplier.csv", []string{"Part Number", "Title", "Category"}, dataQualityCSVRows(rows))
+	writeSpendCSV(w, "data_quality_missing_supplier.csv", []string{"Part Number", "Description", "Category"}, dataQualityCSVRows(rows))
 }
 
 // ReportsDataQualityStaleRollupExportCSV streams the no/stale-rollup table as
@@ -923,22 +923,22 @@ func (h *Handler) ReportsDataQualityStaleRollupExportCSV(w http.ResponseWriter, 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeSpendCSV(w, "data_quality_stale_rollup.csv", []string{"Part Number", "Title", "Category"}, dataQualityCSVRows(rows))
+	writeSpendCSV(w, "data_quality_stale_rollup.csv", []string{"Part Number", "Description", "Category"}, dataQualityCSVRows(rows))
 }
 
 // formOption is one form listed on a per-form report picker (e.g. Reports >
 // Yield Summary, issue #244; Reports > Failure Modes, issue #245).
 type formOption struct {
-	ID         int
-	PartNumber string
-	Title      string
+	ID          int
+	PartNumber  string
+	Description string
 }
 
 // loadActiveFormOptions lists active forms for a per-form report picker,
 // shared by ReportsYieldPicker and ReportsFailureModesPicker.
 func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT f.id, pn.part_number, pn.title
+		SELECT f.id, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
@@ -952,7 +952,7 @@ func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, erro
 	var forms []formOption
 	for rows.Next() {
 		var f formOption
-		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Title); err != nil {
+		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Description); err != nil {
 			continue
 		}
 		forms = append(forms, f)
@@ -1038,7 +1038,7 @@ func (h *Handler) ReportsSpendByPartExportCSV(w http.ResponseWriter, r *http.Req
 	}
 	csvRows := make([][]string, len(rows))
 	for i, row := range rows {
-		csvRows[i] = []string{row.PartNumber, row.Title, fmt.Sprintf("%.2f", row.TotalSpend)}
+		csvRows[i] = []string{row.PartNumber, row.Description, fmt.Sprintf("%.2f", row.TotalSpend)}
 	}
-	writeSpendCSV(w, "spend-by-part.csv", []string{"Part Number", "Title", "Total Spend"}, csvRows)
+	writeSpendCSV(w, "spend-by-part.csv", []string{"Part Number", "Description", "Total Spend"}, csvRows)
 }

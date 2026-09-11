@@ -183,16 +183,16 @@ func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limi
 
 // supplierPartSummary is one row in the Supplier dashboard "Linked Parts" card (#521).
 type supplierPartSummary struct {
-	PNID       int
-	PartNumber string
-	Title      string
+	PNID        int
+	PartNumber  string
+	Description string
 }
 
 func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit int) []supplierPartSummary {
 	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
 	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %spn.id, pn.part_number, pn.title
+		SELECT %spn.id, pn.part_number, pn.description
 		FROM %s sp JOIN %s pn ON sp.part_id = pn.id
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
@@ -204,11 +204,11 @@ func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit
 	var out []supplierPartSummary
 	for rows.Next() {
 		var s supplierPartSummary
-		var num, title sql.NullString
-		if rows.Scan(&s.PNID, &num, &title) != nil {
+		var num, description sql.NullString
+		if rows.Scan(&s.PNID, &num, &description) != nil {
 			continue
 		}
-		s.PartNumber, s.Title = num.String, title.String
+		s.PartNumber, s.Description = num.String, description.String
 		out = append(out, s)
 	}
 	return out
@@ -355,7 +355,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,
-		       pn.part_number, pn.title, pn.revision, pn.category,
+		       pn.part_number, pn.description, pn.revision, pn.category,
 		       sp.uom_id,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
 		       %s AS unit_is_explicit
@@ -378,12 +378,12 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		var supplierPN, supplierDesc, leadTime sql.NullString
 		var minIncr sql.NullFloat64
 		var unitID sql.NullInt64
-		var partNumber, title, revision, category, unitAbbr sql.NullString
+		var partNumber, description, revision, category, unitAbbr sql.NullString
 		var unitIsExplicit bool
 		if err := rows.Scan(
 			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
 			&leadTime, &minIncr,
-			&partNumber, &title, &revision, &category,
+			&partNumber, &description, &revision, &category,
 			&unitID, &unitAbbr, &unitIsExplicit,
 		); err != nil {
 			h.renderError(w, r, "Error reading linked parts: "+err.Error())
@@ -400,7 +400,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 			lk.MinIncrement = &minIncr.Float64
 		}
 		lk.PartNumber = partNumber.String
-		lk.Title = title.String
+		lk.Description = description.String
 		lk.Revision = revision.String
 		lk.Category = category.String
 		if unitID.Valid {

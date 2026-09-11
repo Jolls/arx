@@ -137,7 +137,7 @@ BEGIN TRY
          'SELECT purchase_order.number FROM po_line LEFT JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE po_line.part_number_snapshot LIKE @pn + ''%'' ORDER BY po_line.po_id DESC',
          'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
         (4, 'bom_pn_by_item', 'Part number at a specific BOM item position for a given parent assembly PN',
-         'SELECT part_number, title FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
+         'SELECT part_number, description FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
          'pn, item', 'list', GETDATE(), '2020-01-01T00:00:00'),
         (5, 'pn_primary_attachment', 'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
          'SELECT TOP 1 part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.part_number = @pn AND part_attachment.is_active = 1 ORDER BY CASE WHEN part.primary_attachment_id IS NOT NULL AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC',
@@ -210,7 +210,7 @@ BEGIN TRY
     -- 6. Parts
     -- ============================================================
     SET IDENTITY_INSERT dbo.part ON;
-    INSERT INTO dbo.part (id, part_number, category, revision, title, release_status, is_active, uom_id, current_cost, default_supplier_id, last_rollup_cost, last_rollup_at) VALUES
+    INSERT INTO dbo.part (id, part_number, category, revision, description, release_status, is_active, uom_id, current_cost, default_supplier_id, last_rollup_cost, last_rollup_at) VALUES
         (3001, 'RAW-1001', 'RAW', 'A', 'Aluminum Stock 6061',        'A', 1, 6,  2.50,   1001, NULL, NULL),
         (3002, 'BUY-1001', 'BUY', 'A', 'M3x8 SHCS',                  'A', 1, 1,  0.05,   1002, NULL, NULL),
         (3003, 'BUY-1002', 'BUY', 'A', 'O-Ring 2-014',               'A', 1, 1,  0.12,   1001, NULL, NULL),

@@ -58,7 +58,7 @@ erDiagram
         varchar part_number           "UNIQUE"
         varchar category              "ASM/BUY/DWG/DOC/FORM/MFG/OPS/RAW/SVC/TOOL"
         varchar revision
-        varchar title
+        varchar description
         varchar release_status        "U/A/D"
         int     primary_attachment_id FK
         int     price_id              FK "deferred, not enforced"

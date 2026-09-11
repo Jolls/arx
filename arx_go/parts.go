@@ -29,16 +29,16 @@ import (
 
 func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, error) {
 	var p models.Part
-	var partNumber, title, category, trackingMode sql.NullString
+	var partNumber, description, category, trackingMode sql.NullString
 	var hasBOM sql.NullBool
 	var filIDPrimary sql.NullInt64
 	var stockOnHand sql.NullFloat64
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, title, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode FROM %s p WHERE id = @p1`,
+		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode FROM %s p WHERE id = @p1`,
 		h.cfg.PartsTable(),
-	), id).Scan(&p.ID, &partNumber, &title, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode)
+	), id).Scan(&p.ID, &partNumber, &description, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode)
 	p.PartNumber = partNumber.String
-	p.Title = title.String
+	p.Description = description.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
 	if filIDPrimary.Valid {
@@ -152,20 +152,20 @@ func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	type row struct {
-		ID       int    `json:"id"`
-		PN       string `json:"pn"`
-		Rev      string `json:"rev"`
-		Title    string `json:"title"`
-		Detail   string `json:"detail"`
-		ReqBy    string `json:"reqBy"`
-		Date     string `json:"date"`
-		Cat      string `json:"cat"`
-		Modified string `json:"modified"`
-		Active   bool   `json:"active"`
-		Attach   int    `json:"attach"`
-		POLines  int    `json:"poLines"`
-		BelowMin bool   `json:"belowMin"`
-		Thumb    string `json:"thumb"`
+		ID          int    `json:"id"`
+		PN          string `json:"pn"`
+		Rev         string `json:"rev"`
+		Description string `json:"description"`
+		Detail      string `json:"detail"`
+		ReqBy       string `json:"reqBy"`
+		Date        string `json:"date"`
+		Cat         string `json:"cat"`
+		Modified    string `json:"modified"`
+		Active      bool   `json:"active"`
+		Attach      int    `json:"attach"`
+		POLines     int    `json:"poLines"`
+		BelowMin    bool   `json:"belowMin"`
+		Thumb       string `json:"thumb"`
 	}
 
 	// Thumb is the /parts hover-tooltip image from a part's generated PDF thumbnail
@@ -173,7 +173,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 	// separate round-trip; MIN() is an arbitrary tie-break since the app enforces
 	// one active Thumbnail row per part.
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail,
+		SELECT id, part_number, revision, description, detail,
 		       requested_by, created_date, category, modified_date, is_active,
 		       attachment_count, po_line_count,
 		       %s,
@@ -188,11 +188,11 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 	out := make([]row, 0)
 	for rows.Next() {
 		var p row
-		var pn, rev, title, detail, reqBy, cat, thumbFile sql.NullString
+		var pn, rev, description, detail, reqBy, cat, thumbFile sql.NullString
 		var date, modified sql.NullTime
 		var active sql.NullBool
 		var attach, poLines sql.NullInt64
-		if err := rows.Scan(&p.ID, &pn, &rev, &title, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines, &p.BelowMin, &thumbFile); err != nil {
+		if err := rows.Scan(&p.ID, &pn, &rev, &description, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines, &p.BelowMin, &thumbFile); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -202,7 +202,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		p.PN = pn.String
 		p.Active = !active.Valid || active.Bool
 		p.Rev = rev.String
-		p.Title = title.String
+		p.Description = description.String
 		p.Detail = detail.String
 		p.ReqBy = reqBy.String
 		p.Cat = cat.String
@@ -231,20 +231,20 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 
 	var p models.Part
 	var (
-		partNumber, revision, title, detail, category sql.NullString
-		status, reqBy, notes                          sql.NullString
-		user1, user2, user3, user4, user5             sql.NullString
-		user6, user7, user8, user9, user10            sql.NullString
-		trackingMode                                  sql.NullString
-		pnDate, pnDateModified, lastRollupAt          sql.NullTime
-		active, hasBOM                                sql.NullBool
-		filIDPrimary, filLinks, poLinks               sql.NullInt64
-		currentCost, lastRollupCost                   sql.NullFloat64
-		stockOnHand, reorderMin                       sql.NullFloat64
-		unitID                                        sql.NullInt64
+		partNumber, revision, description, detail, category sql.NullString
+		status, reqBy, notes                                sql.NullString
+		user1, user2, user3, user4, user5                   sql.NullString
+		user6, user7, user8, user9, user10                  sql.NullString
+		trackingMode                                        sql.NullString
+		pnDate, pnDateModified, lastRollupAt                sql.NullTime
+		active, hasBOM                                      sql.NullBool
+		filIDPrimary, filLinks, poLinks                     sql.NullInt64
+		currentCost, lastRollupCost                         sql.NullFloat64
+		stockOnHand, reorderMin                             sql.NullFloat64
+		unitID                                              sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
+		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
@@ -253,7 +253,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
 	`, h.cfg.PartsTable()), id).Scan(
-		&p.ID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
+		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
 		&currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
@@ -272,7 +272,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 
 	p.PartNumber = partNumber.String
 	p.Revision = revision.String
-	p.Title = title.String
+	p.Description = description.String
 	p.Detail = detail.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
@@ -516,7 +516,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	mode := trackingModeFromForm(r)
 	var newID int
 	insertPart := h.dia().InsertReturningID(h.cfg.PartsTable(),
-		`part_number, revision, title, detail, category,
+		`part_number, revision, description, detail, category,
 		 release_status, is_active, requested_by, notes, created_date, modified_date,
 		 uom_id, current_cost, reorder_min,
 		 user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
@@ -526,7 +526,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		 @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26`,
 		false)
 	err := h.queryRowContext(r.Context(), insertPart,
-		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
+		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), fv(r, "category"),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		now, now,
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
@@ -625,7 +625,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	mode := trackingModeFromForm(r)
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  part_number=@p1, revision=@p2, title=@p3, detail=@p4, category=@p5,
+		  part_number=@p1, revision=@p2, description=@p3, detail=@p4, category=@p5,
 		  release_status=@p6, is_active=@p7, requested_by=@p8, notes=@p9, modified_date=@p10,
 		  uom_id=@p11, current_cost=@p12, reorder_min=@p13,
 		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
@@ -633,7 +633,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		  is_lot_tracked=@p24, tracking_mode=@p25
 		WHERE id=@p26
 	`, h.cfg.PartsTable()),
-		partNumber, fv(r, "revision"), fv(r, "title"), fv(r, "detail"), fv(r, "category"),
+		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), fv(r, "category"),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		time.Now(),
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
@@ -696,7 +696,7 @@ func partFromForm(r *http.Request) models.Part {
 	mode := trackingModeFromForm(r)
 	p := models.Part{
 		PartNumber: fv(r, "part_number"), Revision: fv(r, "revision"),
-		Title: fv(r, "title"), Detail: fv(r, "detail"), Category: fv(r, "category"),
+		Description: fv(r, "description"), Detail: fv(r, "detail"), Category: fv(r, "category"),
 		ReleaseStatus: releaseStatusOrUnderReview(fv(r, "release_status")), IsActive: activeFromStatus(r),
 		RequestedBy: fv(r, "PNReqBy"), Notes: fv(r, "PNNotes"),
 		UserField1: fv(r, "user_field_1"), UserField2: fv(r, "user_field_2"), UserField3: fv(r, "user_field_3"),
@@ -728,24 +728,24 @@ func partFromForm(r *http.Request) models.Part {
 func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, error) {
 	var p models.Part
 	var (
-		partNumber, revision, title, detail, category sql.NullString
-		status, reqBy, notes                          sql.NullString
-		user1, user2, user3, user4, user5             sql.NullString
-		user6, user7, user8, user9, user10            sql.NullString
-		trackingMode                                  sql.NullString
-		active, hasBOM                                sql.NullBool
-		unitID                                        sql.NullInt64
-		currentCost, reorderMin                       sql.NullFloat64
+		partNumber, revision, description, detail, category sql.NullString
+		status, reqBy, notes                                sql.NullString
+		user1, user2, user3, user4, user5                   sql.NullString
+		user6, user7, user8, user9, user10                  sql.NullString
+		trackingMode                                        sql.NullString
+		active, hasBOM                                      sql.NullBool
+		unitID                                              sql.NullInt64
+		currentCost, reorderMin                             sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
+		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       uom_id, current_cost, reorder_min, tracking_mode,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
 	`, h.cfg.PartsTable()), id).Scan(
-		&p.ID, &partNumber, &revision, &title, &detail, &category, &hasBOM,
+		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&unitID, &currentCost, &reorderMin, &trackingMode,
 		&user1, &user2, &user3, &user4, &user5,
@@ -763,7 +763,7 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 	p.IsLotTracked = models.TracksLots(trackingMode.String)
 	p.PartNumber = partNumber.String
 	p.Revision = revision.String
-	p.Title = title.String
+	p.Description = description.String
 	p.Detail = detail.String
 	p.Category = category.String
 	p.HasBOM = hasBOM.Bool
@@ -813,7 +813,7 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 	pl, pn, prc := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pl.component_part_id,
-		       pn.part_number, pn.title, pn.revision, pn.category,
+		       pn.part_number, pn.description, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
 		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
@@ -832,18 +832,18 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 	var bomTotal float64
 	for rows.Next() {
 		var item models.BOMItem
-		var partNumber, title, revision, category sql.NullString
+		var partNumber, description, revision, category sql.NullString
 		var currentCost, lastRollupCost, preferredPrice sql.NullFloat64
 		var childHasBOM sql.NullBool
 		var attachCount, poLineCount sql.NullInt64
 		if err := rows.Scan(&item.LineNumber, &item.Qty, &item.ComponentPartID,
-			&partNumber, &title, &revision, &category,
+			&partNumber, &description, &revision, &category,
 			&currentCost, &lastRollupCost, &preferredPrice, &childHasBOM,
 			&attachCount, &poLineCount); err != nil {
 			return nil, 0, err
 		}
 		item.PartNumber = partNumber.String
-		item.Title = title.String
+		item.Description = description.String
 		item.Revision = revision.String
 		item.Category = category.String
 		item.CurrentCost = currentCost.Float64
@@ -887,7 +887,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pl.parent_part_id,
-		       pn.part_number, pn.title, pn.revision, pn.category
+		       pn.part_number, pn.description, pn.revision, pn.category
 		FROM %s pl
 		JOIN %s pn ON pl.parent_part_id = pn.id
 		WHERE pl.component_part_id = @p1
@@ -901,14 +901,14 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	var items []models.BOMItem
 	for rows.Next() {
 		var item models.BOMItem
-		var partNumber, title, revision, category sql.NullString
+		var partNumber, description, revision, category sql.NullString
 		if err := rows.Scan(&item.LineNumber, &item.Qty, &item.ParentPartID,
-			&partNumber, &title, &revision, &category); err != nil {
+			&partNumber, &description, &revision, &category); err != nil {
 			h.renderError(w, r, "Error reading where-used: "+err.Error())
 			return
 		}
 		item.PartNumber = partNumber.String
-		item.Title = title.String
+		item.Description = description.String
 		item.Revision = revision.String
 		item.Category = category.String
 		items = append(items, item)
@@ -973,7 +973,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
-		       pn.part_number, pn.title
+		       pn.part_number, pn.description
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
 		WHERE pl.parent_part_id = @p1
@@ -987,14 +987,14 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	var items []models.BOMItem
 	for rows.Next() {
 		var item models.BOMItem
-		var partNumber, title sql.NullString
+		var partNumber, description sql.NullString
 		if err := rows.Scan(&item.ID, &item.LineNumber, &item.Qty, &item.ComponentPartID,
-			&partNumber, &title); err != nil {
+			&partNumber, &description); err != nil {
 			h.renderError(w, r, "Error reading BOM: "+err.Error())
 			return
 		}
 		item.PartNumber = partNumber.String
-		item.Title = title.String
+		item.Description = description.String
 		items = append(items, item)
 	}
 	var lastRollupCost sql.NullFloat64
@@ -1264,14 +1264,14 @@ func pickTier(tiers []priceTier, qty float64) (unitPrice, packSize float64, ok b
 }
 
 type buildCostLine struct {
-	PNID       int
-	PartNumber string
-	Title      string
-	QtyNeeded  float64
-	PackSize   float64
-	UnitPrice  float64
-	ExtCost    float64
-	Source     string // "price" | "missing"
+	PNID        int
+	PartNumber  string
+	Description string
+	QtyNeeded   float64
+	PackSize    float64
+	UnitPrice   float64
+	ExtCost     float64
+	Source      string // "price" | "missing"
 }
 
 type buildCostResult struct {
@@ -1343,11 +1343,11 @@ func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty floa
 // fallback, no extrapolation.
 type buildCostPartInfo struct {
 	PartNumber        string
-	Title             string
+	Description       string
 	DefaultSupplierID sql.NullInt64
 }
 
-// fetchPartInfoByID batches a part_number/title/default_supplier_id lookup for
+// fetchPartInfoByID batches a part_number/description/default_supplier_id lookup for
 // every id in ids into a single query, keyed by id. Used by buildCost's Pass 2
 // so pricing N leaves costs O(1) round trips instead of O(N).
 func (h *Handler) fetchPartInfoByID(ctx context.Context, ids []int) (map[int]buildCostPartInfo, error) {
@@ -1357,7 +1357,7 @@ func (h *Handler) fetchPartInfoByID(ctx context.Context, ids []int) (map[int]bui
 	}
 	placeholders, args := sqlInClause(ids)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, title, default_supplier_id FROM %s WHERE id IN (%s)`,
+		`SELECT id, part_number, description, default_supplier_id FROM %s WHERE id IN (%s)`,
 		h.cfg.PartsTable(), placeholders), args...)
 	if err != nil {
 		return nil, err
@@ -1365,12 +1365,12 @@ func (h *Handler) fetchPartInfoByID(ctx context.Context, ids []int) (map[int]bui
 	defer rows.Close()
 	for rows.Next() {
 		var id int
-		var partNumber, title sql.NullString
+		var partNumber, description sql.NullString
 		var info buildCostPartInfo
-		if err := rows.Scan(&id, &partNumber, &title, &info.DefaultSupplierID); err != nil {
+		if err := rows.Scan(&id, &partNumber, &description, &info.DefaultSupplierID); err != nil {
 			return nil, err
 		}
-		info.PartNumber, info.Title = partNumber.String, title.String
+		info.PartNumber, info.Description = partNumber.String, description.String
 		out[id] = info
 	}
 	return out, rows.Err()
@@ -1449,7 +1449,7 @@ func (h *Handler) buildCost(ctx context.Context, pnid int, qty float64) (buildCo
 	for childID, totalQty := range leaves {
 		info := partInfo[childID]
 		line := buildCostLine{
-			PNID: childID, PartNumber: info.PartNumber, Title: info.Title,
+			PNID: childID, PartNumber: info.PartNumber, Description: info.Description,
 			QtyNeeded: totalQty, Source: "missing",
 		}
 
@@ -2362,7 +2362,7 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT part_number, revision, title, detail,
+		SELECT part_number, revision, description, detail,
 		       requested_by, created_date, category, modified_date, is_active
 		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
@@ -2374,12 +2374,12 @@ func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="parts.csv"`)
 	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{"Part Number", "Revision", "Title", "Detail", "Requested By", "Created Date", "Category", "Modified Date", "Active"})
+	_ = cw.Write([]string{"Part Number", "Revision", "Description", "Detail", "Requested By", "Created Date", "Category", "Modified Date", "Active"})
 	for rows.Next() {
-		var pn, rev, title, detail, reqBy, cat sql.NullString
+		var pn, rev, description, detail, reqBy, cat sql.NullString
 		var created, modified sql.NullTime
 		var active sql.NullBool
-		if err := rows.Scan(&pn, &rev, &title, &detail, &reqBy, &created, &cat, &modified, &active); err != nil {
+		if err := rows.Scan(&pn, &rev, &description, &detail, &reqBy, &created, &cat, &modified, &active); err != nil {
 			return
 		}
 		activeStr := "true"
@@ -2394,7 +2394,7 @@ func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 		if modified.Valid {
 			modifiedStr = modified.Time.Format("2006-01-02")
 		}
-		_ = cw.Write([]string{pn.String, rev.String, title.String, detail.String, reqBy.String, createdStr, cat.String, modifiedStr, activeStr})
+		_ = cw.Write([]string{pn.String, rev.String, description.String, detail.String, reqBy.String, createdStr, cat.String, modifiedStr, activeStr})
 	}
 	cw.Flush()
 }
@@ -2415,7 +2415,7 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	prc := h.cfg.PriceTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.line_number, pl.qty, pn.part_number, pn.title, pn.revision, pn.category,
+		SELECT pl.line_number, pl.qty, pn.part_number, pn.description, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
 		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
@@ -2433,14 +2433,14 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+parentPN+`-bom.csv"`)
 	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{"Line #", "Qty", "Part Number", "Title", "Revision", "Category", "Unit Cost", "Ext Cost", "Cost Source"})
+	_ = cw.Write([]string{"Line #", "Qty", "Part Number", "Description", "Revision", "Category", "Unit Cost", "Ext Cost", "Cost Source"})
 	for rows.Next() {
 		var lineNum sql.NullInt64
 		var qty sql.NullFloat64
-		var partNum, title, rev, cat sql.NullString
+		var partNum, description, rev, cat sql.NullString
 		var currentCost, rollupCost, preferredPrice sql.NullFloat64
 		var childHasBOM sql.NullBool
-		if err := rows.Scan(&lineNum, &qty, &partNum, &title, &rev, &cat,
+		if err := rows.Scan(&lineNum, &qty, &partNum, &description, &rev, &cat,
 			&currentCost, &rollupCost, &preferredPrice, &childHasBOM); err != nil {
 			return
 		}
@@ -2449,7 +2449,7 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 		_ = cw.Write([]string{
 			fmt.Sprintf("%d", lineNum.Int64),
 			fmt.Sprintf("%.4g", qty.Float64),
-			partNum.String, title.String, rev.String, cat.String,
+			partNum.String, description.String, rev.String, cat.String,
 			fmt.Sprintf("%.2f", unitCost),
 			fmt.Sprintf("%.2f", extCost),
 			costSrc,

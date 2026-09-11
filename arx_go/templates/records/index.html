@@ -10,7 +10,7 @@
   <thead class="table-dark">
     <tr>
       <th class="sortable" onclick="sortTable(this)">Part Number</th>
-      <th class="sortable" onclick="sortTable(this)">Title</th>
+      <th class="sortable" onclick="sortTable(this)">Description</th>
       <th class="text-center sortable" onclick="sortTable(this)">Rev</th>
       <th class="text-center">Status</th>
     </tr>
@@ -24,7 +24,7 @@
       <td>
         <a href="/forms/{{.ID}}/records" class="fw-semibold">{{.PartNumber}}</a>
       </td>
-      <td>{{.Title}}</td>
+      <td>{{.Description}}</td>
       <td class="text-center">{{if .Revision}}Rev {{.Revision}}{{else}}Draft{{end}}</td>
       <td class="text-center">
         {{if .IsLocked}}
