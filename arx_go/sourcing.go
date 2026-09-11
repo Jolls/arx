@@ -46,7 +46,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
 	if supplierID == "" {
-		h.renderSourcingWithError(w, r, id, "Supplier is required")
+		h.renderSourcingWithError(w, r, id, "Supplier is required", nil, supplierPartFromForm(r))
 		return
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
@@ -62,10 +62,34 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		nullableInt(r.FormValue("unit_id")),
 	)
 	if err != nil {
-		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error())
+		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/suppliers", id), http.StatusFound)
+}
+
+// supplierPartFromForm rebuilds a SupplierPart from submitted form values so a
+// failed create/update can redisplay what the user typed instead of losing it.
+func supplierPartFromForm(r *http.Request) *models.SupplierPart {
+	sp := &models.SupplierPart{
+		SupplierPN:   strings.TrimSpace(r.FormValue("supplier_pn")),
+		SupplierDesc: strings.TrimSpace(r.FormValue("supplier_desc")),
+		LeadTime:     strings.TrimSpace(r.FormValue("lead_time")),
+		SupplierName: strings.TrimSpace(r.FormValue("supplier_name")),
+	}
+	if v, err := strconv.Atoi(strings.TrimSpace(r.FormValue("supplier_id"))); err == nil {
+		sp.SupplierID = v
+	}
+	if v, err := strconv.Atoi(strings.TrimSpace(r.FormValue("preference"))); err == nil {
+		sp.Preference = &v
+	}
+	if v, err := strconv.ParseFloat(strings.TrimSpace(r.FormValue("min_increment")), 64); err == nil {
+		sp.MinIncrement = &v
+	}
+	if v, err := strconv.Atoi(strings.TrimSpace(r.FormValue("unit_id"))); err == nil {
+		sp.UnitID = &v
+	}
+	return sp
 }
 
 // ── SupplierPartEdit — GET /part/{id}/suppliers/{spID}/edit ──────────────────
@@ -137,9 +161,12 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spID := chi.URLParam(r, "spID")
+	spIDInt, _ := strconv.Atoi(spID)
 	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
 	if supplierID == "" {
-		h.renderSourcingWithError(w, r, id, "Supplier is required")
+		draft := supplierPartFromForm(r)
+		draft.ID = spIDInt
+		h.renderSourcingWithError(w, r, id, "Supplier is required", draft, nil)
 		return
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
@@ -157,7 +184,9 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		spID, id,
 	)
 	if err != nil {
-		h.renderError(w, r, "Error updating supplier link: "+err.Error())
+		draft := supplierPartFromForm(r)
+		draft.ID = spIDInt
+		h.renderSourcingWithError(w, r, id, "Error updating supplier link: "+err.Error(), draft, nil)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/suppliers", id), http.StatusFound)
@@ -276,7 +305,11 @@ func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) ma
 	return out
 }
 
-func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request, partID, errMsg string) {
+// renderSourcingWithError re-renders the sourcing page in place after a failed
+// create/update, so the user's input isn't lost. editing repopulates the Edit
+// Supplier form (an in-progress edit of an existing link); draft repopulates
+// the Add Supplier form. At most one of the two is non-nil.
+func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request, partID, errMsg string, editing, draft *models.SupplierPart) {
 	p, backURL, backLabel, ok := h.partPageBase(w, r, partID, "suppliers")
 	if !ok {
 		return
@@ -286,6 +319,8 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":             p,
 		"Links":            links,
+		"EditingLink":      editing,
+		"AddDraft":         draft,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, partID),
 		"Units":            units,
 		"Error":            errMsg,
