@@ -19,7 +19,7 @@
                     <th>Supplier</th>
                     <th>Supplier PN</th>
                     <th>Description</th>
-                    <th style="width:80px;"><span data-bs-toggle="tooltip" title="Sourcing ranking, e.g. Primary or Secondary">Preference</span></th>
+                    <th style="width:80px;"><span data-bs-toggle="tooltip" title="Sourcing ranking — 1 = Primary, 2 = Alternate, …">Preference</span></th>
                     <th style="width:90px;"><span data-bs-toggle="tooltip" title="Typical supplier delivery time">Lead Time</span></th>
                     <th class="text-end" style="width:80px;"><span data-bs-toggle="tooltip" title="Minimum order increment — smallest purchasable quantity">Min Incr.</span></th>
                     <th style="width:80px;"><span data-bs-toggle="tooltip" title="Unit of measure for this supplier (may differ from part's base unit)">Purchase Unit</span></th>
@@ -33,7 +33,7 @@
                     <td><a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a></td>
                     <td class="font-monospace">{{.SupplierPN}}</td>
                     <td>{{.SupplierDesc}}</td>
-                    <td>{{.Preference}}</td>
+                    <td>{{if .Preference}}{{derefInt .Preference}}{{end}}</td>
                     <td>{{.LeadTime}}</td>
                     <td class="text-end">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
                     <td>
@@ -106,8 +106,8 @@
             </div>
             <div class="detail-row">
                 <label class="form-label">Preference</label>
-                <input type="text" name="preference" class="form-control"
-                       value="{{.EditingLink.Preference}}" placeholder="e.g. Primary, Secondary">
+                <input type="number" name="preference" class="form-control" min="1" step="1"
+                       value="{{if .EditingLink.Preference}}{{derefInt .EditingLink.Preference}}{{end}}" placeholder="1 = Primary, 2 = Alternate, …">
             </div>
             <div class="detail-row">
                 <label class="form-label">Lead Time</label>
@@ -165,8 +165,8 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Preference</label>
-                    <input type="text" name="preference" class="form-control"
-                           placeholder="e.g. Primary, Secondary">
+                    <input type="number" name="preference" class="form-control" min="1" step="1"
+                           placeholder="1 = Primary, 2 = Alternate, …">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Lead Time</label>

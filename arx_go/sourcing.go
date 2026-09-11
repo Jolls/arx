@@ -54,7 +54,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
 	`, h.cfg.SupplierPartTable()),
 		supplierID, id,
-		strings.TrimSpace(r.FormValue("preference")),
+		nullableInt(r.FormValue("preference")),
 		strings.TrimSpace(r.FormValue("supplier_pn")),
 		strings.TrimSpace(r.FormValue("supplier_desc")),
 		strings.TrimSpace(r.FormValue("lead_time")),
@@ -78,7 +78,8 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var sp models.SupplierPart
-	var pref, supplierPN, supplierDesc, leadTime sql.NullString
+	var pref sql.NullInt64
+	var supplierPN, supplierDesc, leadTime sql.NullString
 	var minIncr sql.NullFloat64
 	var unitID sql.NullInt64
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
@@ -95,7 +96,10 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving supplier link: "+err.Error())
 		return
 	}
-	sp.Preference = pref.String
+	if pref.Valid {
+		v := int(pref.Int64)
+		sp.Preference = &v
+	}
 	sp.SupplierPN = supplierPN.String
 	sp.SupplierDesc = supplierDesc.String
 	sp.LeadTime = leadTime.String
@@ -144,7 +148,7 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		WHERE id=@p8 AND part_id=@p9
 	`, h.cfg.SupplierPartTable()),
 		supplierID,
-		strings.TrimSpace(r.FormValue("preference")),
+		nullableInt(r.FormValue("preference")),
 		strings.TrimSpace(r.FormValue("supplier_pn")),
 		strings.TrimSpace(r.FormValue("supplier_desc")),
 		strings.TrimSpace(r.FormValue("lead_time")),
@@ -203,7 +207,8 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 	var list []models.SupplierPart
 	for rows.Next() {
 		var lk models.SupplierPart
-		var pref, supplierPN, supplierDesc, leadTime, supplierName, unitAbbr sql.NullString
+		var pref sql.NullInt64
+		var supplierPN, supplierDesc, leadTime, supplierName, unitAbbr sql.NullString
 		var minIncr sql.NullFloat64
 		var unitID sql.NullInt64
 		var unitIsExplicit bool
@@ -214,7 +219,10 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 		); err != nil {
 			return nil, err
 		}
-		lk.Preference = pref.String
+		if pref.Valid {
+			v := int(pref.Int64)
+			lk.Preference = &v
+		}
 		lk.SupplierPN = supplierPN.String
 		lk.SupplierDesc = supplierDesc.String
 		lk.LeadTime = leadTime.String
