@@ -103,14 +103,17 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	var sp models.SupplierPart
 	var pref sql.NullInt64
-	var supplierPN, supplierDesc, leadTime sql.NullString
+	var supplierPN, supplierDesc, leadTime, supplierName sql.NullString
 	var minIncr sql.NullFloat64
 	var unitID sql.NullInt64
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id
-		FROM %s WHERE id = @p1 AND part_id = @p2
-	`, h.cfg.SupplierPartTable()), spID, id).Scan(
-		&sp.ID, &sp.SupplierID, &sp.PartID, &pref, &supplierPN, &supplierDesc, &leadTime, &minIncr, &unitID,
+		SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
+		       sp.lead_time, sp.min_increment, sp.uom_id, c.name
+		FROM %s sp
+		JOIN %s c ON sp.supplier_id = c.id
+		WHERE sp.id = @p1 AND sp.part_id = @p2
+	`, h.cfg.SupplierPartTable(), h.cfg.CompanyTable()), spID, id).Scan(
+		&sp.ID, &sp.SupplierID, &sp.PartID, &pref, &supplierPN, &supplierDesc, &leadTime, &minIncr, &unitID, &supplierName,
 	)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Supplier link not found")
@@ -127,6 +130,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 	sp.SupplierPN = supplierPN.String
 	sp.SupplierDesc = supplierDesc.String
 	sp.LeadTime = leadTime.String
+	sp.SupplierName = supplierName.String
 	if minIncr.Valid {
 		sp.MinIncrement = &minIncr.Float64
 	}
