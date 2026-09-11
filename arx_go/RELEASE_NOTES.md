@@ -1,3 +1,24 @@
+Arx v0.7.30 — September 2026
+========================
+
+BUG FIXES
+
+  Supplier Link Preference Field
+  Fixed a crash when saving a supplier link's preference; it's now a
+  Primary/Alternate/Backup dropdown instead of free text.
+
+  Supplier Link Forms Keep Your Input
+  Add/Edit Supplier Link forms no longer lose what you typed if
+  validation or a save fails.
+
+  Edit Supplier Link Shows Supplier Name
+  The Edit Supplier Link form no longer shows a blank supplier name
+  for a valid link.
+
+  Consistent Part Description Labeling
+  The part field previously labeled inconsistently as Title or Name
+  is now labeled Description everywhere.
+
 Arx v0.7.27 — September 2026
 ========================
 
