@@ -712,6 +712,21 @@ func coreTemplateFuncs() template.FuncMap {
 			}
 			return fmt.Sprintf("%g", *f)
 		},
+		"supplierPrefLabel": func(i *int) string {
+			if i == nil {
+				return ""
+			}
+			switch *i {
+			case 1:
+				return "Primary"
+			case 2:
+				return "Alternate"
+			case 3:
+				return "Backup"
+			default:
+				return strconv.Itoa(*i)
+			}
+		},
 		"categoryCtx": func(opts []string, current, inputID string) map[string]any {
 			return map[string]any{"Opts": opts, "Current": current, "InputID": inputID}
 		},

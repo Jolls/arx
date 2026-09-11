@@ -33,7 +33,7 @@
                     <td><a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a></td>
                     <td class="font-monospace">{{.SupplierPN}}</td>
                     <td>{{.SupplierDesc}}</td>
-                    <td>{{if .Preference}}{{derefInt .Preference}}{{end}}</td>
+                    <td>{{supplierPrefLabel .Preference}}</td>
                     <td>{{.LeadTime}}</td>
                     <td class="text-end">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
                     <td>
@@ -106,8 +106,12 @@
             </div>
             <div class="detail-row">
                 <label class="form-label">Preference</label>
-                <input type="number" name="preference" class="form-control" min="1" step="1"
-                       value="{{if .EditingLink.Preference}}{{derefInt .EditingLink.Preference}}{{end}}" placeholder="1 = Primary, 2 = Alternate, …">
+                <select name="preference" class="form-select">
+                    <option value="">— none —</option>
+                    <option value="1" {{if and .EditingLink.Preference (eq (derefInt .EditingLink.Preference) 1)}}selected{{end}}>1 — Primary</option>
+                    <option value="2" {{if and .EditingLink.Preference (eq (derefInt .EditingLink.Preference) 2)}}selected{{end}}>2 — Alternate</option>
+                    <option value="3" {{if and .EditingLink.Preference (eq (derefInt .EditingLink.Preference) 3)}}selected{{end}}>3 — Backup</option>
+                </select>
             </div>
             <div class="detail-row">
                 <label class="form-label">Lead Time</label>
@@ -166,8 +170,12 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Preference</label>
-                    <input type="number" name="preference" class="form-control" min="1" step="1"
-                           value="{{if and .AddDraft .AddDraft.Preference}}{{derefInt .AddDraft.Preference}}{{end}}" placeholder="1 = Primary, 2 = Alternate, …">
+                    <select name="preference" class="form-select">
+                        <option value="">— none —</option>
+                        <option value="1" {{if and $.AddDraft $.AddDraft.Preference (eq (derefInt $.AddDraft.Preference) 1)}}selected{{end}}>1 — Primary</option>
+                        <option value="2" {{if and $.AddDraft $.AddDraft.Preference (eq (derefInt $.AddDraft.Preference) 2)}}selected{{end}}>2 — Alternate</option>
+                        <option value="3" {{if and $.AddDraft $.AddDraft.Preference (eq (derefInt $.AddDraft.Preference) 3)}}selected{{end}}>3 — Backup</option>
+                    </select>
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Lead Time</label>
