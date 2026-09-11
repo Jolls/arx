@@ -71,7 +71,7 @@ func seedPart(t *testing.T, h *Handler, ctx context.Context, category string) (i
 	h.PartsCreate(rec, postForm("/parts", url.Values{
 		"part_number":    {smokeUniq("SMOKE-PN")},
 		"revision":       {"A"},
-		"title":          {"smoke part"},
+		"description":    {"smoke part"},
 		"category":       {category},
 		"release_status": {"U"},
 		"active":         {"1"},
@@ -119,7 +119,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 				h.PartsCreate(rec, postForm("/parts", url.Values{
 					"part_number":    {smokeUniq("SMOKE-PN")},
 					"revision":       {"A"},
-					"title":          {"smoke part"},
+					"description":    {"smoke part"},
 					"category":       {"BUY"},
 					"release_status": {"U"},
 					"active":         {"1"},

@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{if .IsDuplicate}}Duplicate Part{{else if .IsNew}}New Part{{else}}{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}{{end}}</li>
+        <li class="breadcrumb-item active">{{if .IsDuplicate}}Duplicate Part{{else if .IsNew}}New Part{{else}}{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}{{end}}</li>
     </ol>
 </nav>
 <div class="content">
@@ -36,9 +36,9 @@
                        value="{{.Part.Revision}}">
             </div>
             <div class="detail-row">
-                <label for="title" class="form-label">Title</label>
-                <input type="text" id="title" name="title" class="form-control"
-                       value="{{.Part.Title}}">
+                <label for="description" class="form-label">Description</label>
+                <input type="text" id="description" name="description" class="form-control"
+                       value="{{.Part.Description}}">
             </div>
             <div class="detail-row">
                 <label for="detail" class="form-label">Detail</label>

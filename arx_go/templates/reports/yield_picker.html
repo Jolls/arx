@@ -7,12 +7,12 @@
         <div class="card-body">
             {{if .Forms}}
             <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Part Number</th><th>Title</th></tr></thead>
+                <thead><tr><th>Part Number</th><th>Description</th></tr></thead>
                 <tbody>
                     {{range .Forms}}
                     <tr>
                         <td><a href="/forms/{{.ID}}/yield">{{.PartNumber}}</a></td>
-                        <td>{{.Title}}</td>
+                        <td>{{.Description}}</td>
                     </tr>
                     {{end}}
                 </tbody>

@@ -116,16 +116,16 @@ func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID
 // <number>" for a purchased lot, "Build #<id>" for a manufactured one, "Manual
 // entry" for one created directly on the inventory adjustment tab.
 type LotRow struct {
-	ID             int
-	LotNumber      string
-	VendorLot      string
-	PartID         int
-	PartNumber     string
-	PartTitle      string
-	LotDescription string
-	Notes          string // free-text batch notes (#872)
-	CreatedAt      time.Time
-	IsActive       bool
+	ID              int
+	LotNumber       string
+	VendorLot       string
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	LotDescription  string
+	Notes           string // free-text batch notes (#872)
+	CreatedAt       time.Time
+	IsActive        bool
 }
 
 // lotRowSelect is the shared SELECT for a lot joined to its part. A `WHERE …`
@@ -133,7 +133,7 @@ type LotRow struct {
 func (h *Handler) lotRowSelect() string {
 	return fmt.Sprintf(`
 		SELECT l.id, l.lot_number, l.vendor_lot_number, l.part_id,
-		       p.part_number, p.title, l.lot_description, l.notes, l.created_at, l.is_active
+		       p.part_number, p.description, l.lot_description, l.notes, l.created_at, l.is_active
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
 	`, h.cfg.LotTable(), h.cfg.PartsTable())
@@ -142,15 +142,15 @@ func (h *Handler) lotRowSelect() string {
 // scanLotRow reads one LotRow from a row cursor over lotRowSelect's columns.
 func scanLotRow(sc interface{ Scan(...any) error }) (LotRow, error) {
 	var lr LotRow
-	var vendorLot, partNumber, partTitle, notes sql.NullString
+	var vendorLot, partNumber, partDescription, notes sql.NullString
 	if err := sc.Scan(&lr.ID, &lr.LotNumber, &vendorLot, &lr.PartID,
-		&partNumber, &partTitle, &lr.LotDescription, &notes, &lr.CreatedAt, &lr.IsActive); err != nil {
+		&partNumber, &partDescription, &lr.LotDescription, &notes, &lr.CreatedAt, &lr.IsActive); err != nil {
 		return LotRow{}, err
 	}
 	lr.VendorLot = vendorLot.String
 	lr.Notes = notes.String
 	lr.PartNumber = partNumber.String
-	lr.PartTitle = partTitle.String
+	lr.PartDescription = partDescription.String
 	return lr, nil
 }
 
@@ -179,7 +179,7 @@ func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]
 	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %sl.id, l.lot_number, l.vendor_lot_number, l.part_id,
-		       p.part_number, p.title, l.lot_description, l.notes, l.created_at, l.is_active
+		       p.part_number, p.description, l.lot_description, l.notes, l.created_at, l.is_active
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
 		WHERE l.part_id = @p1 ORDER BY l.created_at DESC, l.id DESC
@@ -226,17 +226,17 @@ func (h *Handler) fetchLotRow(ctx context.Context, lotID int) (LotRow, bool, err
 // or the unit's serial_number accordingly. Qty is qty_consumed on the edge connecting
 // this node to its predecessor (how much of a parent fed the child that led here).
 type TraceNode struct {
-	NodeType    string // "lot" | "unit"
-	ID          int
-	Number      string // lot.lot_number or unit.serial_number, per NodeType
-	VendorLot   string // lot nodes only; "" for unit nodes
-	Notes       string // lot nodes only (#872); "" for unit nodes
-	PartID      int
-	PartNumber  string
-	PartTitle   string
-	IsVendorLot bool // lot nodes only: po_line_id set → a purchased raw/vendor lot (a genealogy leaf)
-	Qty         float64
-	Depth       int
+	NodeType        string // "lot" | "unit"
+	ID              int
+	Number          string // lot.lot_number or unit.serial_number, per NodeType
+	VendorLot       string // lot nodes only; "" for unit nodes
+	Notes           string // lot nodes only (#872); "" for unit nodes
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	IsVendorLot     bool // lot nodes only: po_line_id set → a purchased raw/vendor lot (a genealogy leaf)
+	Qty             float64
+	Depth           int
 }
 
 // IsUnit reports whether this node is a serialized unit (vs a lot) — for templates.
@@ -257,14 +257,14 @@ func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, a
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT 'lot' AS node_type, l.id, l.lot_number, l.vendor_lot_number, l.notes, l.po_line_id,
-		       p.id, p.part_number, p.title, g.qty_consumed
+		       p.id, p.part_number, p.description, g.qty_consumed
 		FROM %[1]s g
 		JOIN %[2]s l ON l.id = g.%[3]s_lot_id
 		JOIN %[4]s p ON p.id = l.part_id
 		WHERE g.%[5]s = @p1
 		UNION ALL
 		SELECT 'unit' AS node_type, u.id, u.serial_number, NULL, NULL, NULL,
-		       p.id, p.part_number, p.title, g.qty_consumed
+		       p.id, p.part_number, p.description, g.qty_consumed
 		FROM %[1]s g
 		JOIN %[6]s u ON u.id = g.%[3]s_unit_id
 		JOIN %[4]s p ON p.id = u.part_id
@@ -278,16 +278,16 @@ func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, a
 	var out []TraceNode
 	for rows.Next() {
 		var n TraceNode
-		var vendorLot, notes, partNumber, partTitle sql.NullString
+		var vendorLot, notes, partNumber, partDescription sql.NullString
 		var poLineID sql.NullInt64
 		if err := rows.Scan(&n.NodeType, &n.ID, &n.Number, &vendorLot, &notes, &poLineID,
-			&n.PartID, &partNumber, &partTitle, &n.Qty); err != nil {
+			&n.PartID, &partNumber, &partDescription, &n.Qty); err != nil {
 			return nil, err
 		}
 		n.VendorLot = vendorLot.String
 		n.Notes = notes.String
 		n.PartNumber = partNumber.String
-		n.PartTitle = partTitle.String
+		n.PartDescription = partDescription.String
 		n.IsVendorLot = poLineID.Valid
 		out = append(out, n)
 	}

@@ -11,7 +11,7 @@
 
 <h4 class="mb-1">Duplicate Form</h4>
 <p class="text-muted mb-4">
-  Copying <strong>{{.Form.PartNumber}}</strong> &mdash; {{.Form.Title}}
+  Copying <strong>{{.Form.PartNumber}}</strong> &mdash; {{.Form.Description}}
   ({{.StepCount}} step{{if ne .StepCount 1}}s{{end}})
 </p>
 
@@ -27,7 +27,7 @@
     <select class="form-select" id="pnid" name="pnid" required>
       <option value="">— select part number —</option>
       {{range .PNs}}
-      <option value="{{.PartNumberID}}">{{.PartNumber}} &mdash; {{.Title}}</option>
+      <option value="{{.PartNumberID}}">{{.PartNumber}} &mdash; {{.Description}}</option>
       {{end}}
     </select>
   </div>

@@ -115,10 +115,10 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	where := "part_number LIKE @p1"
 	if r.URL.Query().Get("by") == "desc" {
-		where = "title LIKE @p1 OR detail LIKE @p1"
+		where = "description LIKE @p1 OR detail LIKE @p1"
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, title, detail FROM %s
+		SELECT id, part_number, revision, description, detail FROM %s
 		WHERE %s
 		ORDER BY part_number
 		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY
@@ -129,20 +129,20 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	type result struct {
-		PNID       int    `json:"pnid"`
-		PartNumber string `json:"part_number"`
-		Revision   string `json:"revision"`
-		Title      string `json:"title"`
-		Detail     string `json:"detail"`
+		PNID        int    `json:"pnid"`
+		PartNumber  string `json:"part_number"`
+		Revision    string `json:"revision"`
+		Description string `json:"description"`
+		Detail      string `json:"detail"`
 	}
 	var out []result
 	for rows.Next() {
 		var p result
-		var partNumber, revision, title, detail sql.NullString
-		if rows.Scan(&p.PNID, &partNumber, &revision, &title, &detail) == nil {
+		var partNumber, revision, description, detail sql.NullString
+		if rows.Scan(&p.PNID, &partNumber, &revision, &description, &detail) == nil {
 			p.PartNumber = partNumber.String
 			p.Revision = revision.String
-			p.Title = title.String
+			p.Description = description.String
 			p.Detail = detail.String
 			out = append(out, p)
 		}
@@ -248,7 +248,7 @@ func (h *Handler) APIPartAttachmentName(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	q := r.URL.Query()
-	name := buildAttachmentFileName(p.PartNumber, q.Get("rev"), p.Title, q.Get("category"), q.Get("ext"))
+	name := buildAttachmentFileName(p.PartNumber, q.Get("rev"), p.Description, q.Get("category"), q.Get("ext"))
 	writeJSON(w, map[string]any{"name": name})
 }
 
@@ -283,7 +283,7 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Title, "Photo", ext)
+	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Description, "Photo", ext)
 	finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
@@ -355,7 +355,7 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Title, "Photo", ext)
+	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Description, "Photo", ext)
 	finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
@@ -499,7 +499,7 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 			writeJSONError(w, http.StatusInternalServerError, "Error encoding image: "+err.Error())
 			return
 		}
-		name := buildAttachmentFileName(p.PartNumber, rev, p.Title, spec.category, ".png")
+		name := buildAttachmentFileName(p.PartNumber, rev, p.Description, spec.category, ".png")
 
 		var oldFileNS sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
@@ -510,7 +510,7 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		// Regenerating produces the same name as last time (same part/rev/title/
+		// Regenerating produces the same name as last time (same part/rev/description/
 		// category), so replace that file in place rather than writing a fresh
 		// "(2)"-suffixed copy and deleting the original out from under it (#839).
 		finalName := name

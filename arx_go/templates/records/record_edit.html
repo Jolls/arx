@@ -172,7 +172,7 @@
               {{range .Trace.Components}}
               <tr>
                 <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a>{{if .IsLotTracked}} <span class="badge bg-info text-dark" title="Lot controlled">lot</span>{{end}}</td>
-                <td>{{.Title}}</td>
+                <td>{{.Description}}</td>
                 <td class="text-end">{{printf "%g" .QtyPer}}</td>
                 <td class="text-end">{{printf "%.2f" .StockOnHand}}</td>
                 <td>

@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Title}} &mdash; {{.Part.Title}}{{end}}</li>
+        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}</li>
     </ol>
 </nav>
 <div class="content">
@@ -68,7 +68,7 @@
                 <div class="card-header">Reference</div>
                 <div class="card-body">
                     <div class="detail-row"><strong>Part Number:</strong><span>{{.Part.PartNumber}}</span></div>
-                    <div class="detail-row"><strong>Title:</strong><span>{{.Part.Title}}</span></div>
+                    <div class="detail-row"><strong>Description:</strong><span>{{.Part.Description}}</span></div>
                     <div class="detail-row"><strong>Category:</strong><span>{{.Part.Category}}</span></div>
                     <div class="detail-row"><strong>Revision:</strong><span>{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</span></div>
                     <div class="detail-row"><strong>Detail:</strong><span>{{.Part.Detail}}</span></div>

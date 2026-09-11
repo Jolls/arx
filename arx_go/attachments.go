@@ -17,23 +17,23 @@ import (
 // illegalFileNameChars are characters not permitted in a Windows filename.
 const illegalFileNameChars = `<>:"/\|?*`
 
-// titleMaxLen caps the part title portion of a generated attachment filename.
-const titleMaxLen = 20
+// descriptionMaxLen caps the part description portion of a generated attachment filename.
+const descriptionMaxLen = 20
 
 // buildAttachmentFileName produces the base filename for an imported attachment:
-// "<PartNumber> <Rev> <Title> <Category><ext>". Blank (or whitespace-only) parts
-// are skipped so separators never double up, and the title is truncated to
-// titleMaxLen. Each part is sanitised of filesystem-illegal characters, and the
+// "<PartNumber> <Rev> <Description> <Category><ext>". Blank (or whitespace-only) parts
+// are skipped so separators never double up, and the description is truncated to
+// descriptionMaxLen. Each part is sanitised of filesystem-illegal characters, and the
 // result is always a bare base name (no directory component), so it cannot
 // escape the target folder.
 //
 // This is the sole implementation of the naming convention; the Browse live
 // preview in templates/parts/part_attachments.html calls it via
 // GET /api/part/{id}/attachment-name rather than duplicating the rule (#558).
-func buildAttachmentFileName(partNumber, rev, title, category, ext string) string {
-	title = truncateRunes(strings.TrimSpace(title), titleMaxLen)
+func buildAttachmentFileName(partNumber, rev, description, category, ext string) string {
+	description = truncateRunes(strings.TrimSpace(description), descriptionMaxLen)
 	var parts []string
-	for _, p := range []string{partNumber, rev, title, category} {
+	for _, p := range []string{partNumber, rev, description, category} {
 		if s := sanitizeFileNamePart(p); s != "" {
 			parts = append(parts, s)
 		}
@@ -185,7 +185,7 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 		return attachmentFileInput{ErrMsg: "Error loading part: " + err.Error()}
 	}
 	move := fv(r, "move_source") == "1"
-	name := buildAttachmentFileName(p.PartNumber, rev, p.Title, category, filepath.Ext(src))
+	name := buildAttachmentFileName(p.PartNumber, rev, p.Description, category, filepath.Ext(src))
 	if fv(r, "link_existing") != "1" {
 		if replaceName != "" && strings.EqualFold(name, replaceName) {
 			if err := replaceLocalFile(h.cfg.DocControlRoot, name, src); err != nil {
@@ -312,7 +312,7 @@ type attachmentUsage struct {
 	Kind    string // "part" or "supplier"
 	OwnerID int
 	Code    string // part number (empty for suppliers)
-	Label   string // part title or supplier name
+	Label   string // part description or supplier name
 }
 
 // AttachmentWhereUsed shows every part and supplier that links the given file
@@ -325,7 +325,7 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT 'part' AS kind, p.id, p.part_number, p.title
+		SELECT 'part' AS kind, p.id, p.part_number, p.description
 		FROM %s fa JOIN %s p ON p.id = fa.part_id
 		WHERE fa.is_active = %s AND fa.file_name = @p1
 		UNION ALL

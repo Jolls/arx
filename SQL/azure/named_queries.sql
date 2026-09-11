@@ -7,7 +7,7 @@
 -- Column conventions for the SELECT statement:
 --   1 column : the value stored in result.result AND the label shown in the picker.
 --   2 columns: col1 = stored value (unique key, e.g. PNPartNumber or PO.number)
---              col2 = human-readable label shown in the picker (e.g. PNTitle or POLDesc)
+--              col2 = human-readable label shown in the picker (e.g. PNDescription or POLDesc)
 --   Additional columns beyond 2 are ignored.
 --
 -- result_type:
@@ -58,7 +58,7 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
   'bom_pn_by_item',
   'Part number at a specific BOM item position for a given parent assembly PN',
-  'SELECT part_number, title FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
+  'SELECT part_number, description FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
   'pn, item', 'list',
   GETDATE()
 );

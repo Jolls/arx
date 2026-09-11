@@ -29,7 +29,7 @@ func seedLockTestForm(t *testing.T, h *Handler, ctx context.Context) (partID, fo
 	t.Helper()
 	partNumber := "ITEST-LOCK-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_number, revision, title, release_status, is_active)
+		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
 		h.cfg.PartsTable()), partNumber,
 	).Scan(&partID); err != nil {

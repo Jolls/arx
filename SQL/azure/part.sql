@@ -27,7 +27,7 @@ CREATE TABLE part (
   category            VARCHAR(10)      CONSTRAINT DF_part_number_category         DEFAULT 'BUY'
                                        CONSTRAINT CK_part_number_category         CHECK (category IN ('', 'ASM', 'BUY', 'DWG', 'DOC', 'FORM', 'MFG', 'OPS', 'RAW', 'SVC', 'TOOL')),  -- '' permitted for legacy/uncategorized rows (matches live).
   revision            VARCHAR(10)      CONSTRAINT DF_part_number_revision         DEFAULT '',   -- NOT NULL deferred; see #213.
-  title               VARCHAR(255)     CONSTRAINT DF_part_number_title            DEFAULT '',
+  description         VARCHAR(255)     CONSTRAINT DF_part_description             DEFAULT '',
   detail              VARCHAR(255)     CONSTRAINT DF_part_number_detail           DEFAULT '',
   release_status      VARCHAR(255)     NOT NULL CONSTRAINT DF_part_number_release_status   DEFAULT 'U'
                                        CONSTRAINT CK_part_number_release_status CHECK (release_status IN ('U','A','D')),  -- NOT NULL + default 'U' (#542); CHECK added #540/#542; VARCHAR(255) narrowing deferred — see #213.
