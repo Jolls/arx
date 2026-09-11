@@ -8,16 +8,22 @@
 --
 -- part.detail is a separate column and is NOT touched by this migration.
 --
+-- NON-BACKWARDS-COMPATIBLE: a pre-#40 binary queries this column by its old name.
+-- The Go change (Config/model fields, part.description column literals) and this
+-- migration must ship together — an older binary breaks after the rename, and this
+-- build breaks against an un-renamed column. Bumps schema_version 9 -> 10, gating the
+-- rollout via the mismatch banner. Run once every client is on a #40 build.
+--
 -- SAFETY: pinned to ArxDev via the USE below. To apply to ArxProd, remove/change that
 -- single line — nothing else in the script names a database. This is a script for a
 -- human to run, not for an agent (see CLAUDE.md "ArxProd is off-limits").
 --
 -- Idempotent (each step guarded on the old name existing / new name not existing; safe
 -- to re-run). Runs as a single batch (no `GO`) — the Azure portal's query editor sends
--- the whole script as one batch. sp_rename and the named_queries UPDATE are all
--- runtime-resolved (EXEC calls / string literals, not direct column references), so
--- none of this needs dynamic-SQL wrapping the way a same-batch SELECT/UPDATE against
--- the new column name would.
+-- the whole script as one batch. sp_rename and the named_queries/app_config UPDATEs
+-- are all runtime-resolved (EXEC calls / string literals, not direct column
+-- references), so none of this needs dynamic-SQL wrapping the way a same-batch
+-- SELECT/UPDATE against the new column name would.
 --
 -- Postgres equivalents follow each step in comments (for the #625 migration).
 
@@ -46,3 +52,12 @@ UPDATE dbo.named_queries
    SET sql = 'SELECT part_number, description FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item'
  WHERE name = 'bom_pn_by_item';
 -- Postgres: identical UPDATE (named_queries is dialect-agnostic row data).
+
+-- ------------------------------------------------------------------
+-- 4. Bump schema_version 9 -> 10 (gates the rollout; guarded, only advances 9 -> 10).
+-- ------------------------------------------------------------------
+UPDATE dbo.app_config
+   SET setting_value = '10'
+ WHERE setting_key = 'schema_version'
+   AND setting_value = '9';
+-- Postgres: identical UPDATE.
