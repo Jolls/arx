@@ -39,7 +39,7 @@ type SupplierPart struct {
 	ID           int
 	SupplierID   int
 	PartID       int
-	Preference   string
+	Preference   *int
 	SupplierPN   string
 	SupplierDesc string
 	LeadTime     string

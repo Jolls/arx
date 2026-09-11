@@ -19,7 +19,7 @@
                     <th>Supplier</th>
                     <th>Supplier PN</th>
                     <th>Description</th>
-                    <th style="width:80px;"><span data-bs-toggle="tooltip" title="Sourcing ranking, e.g. Primary or Secondary">Preference</span></th>
+                    <th style="width:80px;"><span data-bs-toggle="tooltip" title="Sourcing ranking — 1 = Primary, 2 = Alternate, …">Preference</span></th>
                     <th style="width:90px;"><span data-bs-toggle="tooltip" title="Typical supplier delivery time">Lead Time</span></th>
                     <th class="text-end" style="width:80px;"><span data-bs-toggle="tooltip" title="Minimum order increment — smallest purchasable quantity">Min Incr.</span></th>
                     <th style="width:80px;"><span data-bs-toggle="tooltip" title="Unit of measure for this supplier (may differ from part's base unit)">Purchase Unit</span></th>
@@ -33,7 +33,7 @@
                     <td><a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a></td>
                     <td class="font-monospace">{{.SupplierPN}}</td>
                     <td>{{.SupplierDesc}}</td>
-                    <td>{{.Preference}}</td>
+                    <td>{{supplierPrefLabel .Preference}}</td>
                     <td>{{.LeadTime}}</td>
                     <td class="text-end">{{if .MinIncrement}}{{printf "%g" (deref .MinIncrement)}}{{end}}</td>
                     <td>
@@ -89,9 +89,9 @@
             <div class="detail-row">
                 <label for="edit_supplier_name" class="form-label">Supplier *</label>
                 <div style="position:relative; flex:1;">
-                    <input type="text" id="edit_supplier_name" class="form-control"
+                    <input type="text" id="edit_supplier_name" name="supplier_name" class="form-control"
                            value="{{.EditingLink.SupplierName}}" placeholder="Required — type to search…" autocomplete="off">
-                    <input type="hidden" id="edit_supplier_id" name="supplier_id" value="{{.EditingLink.SupplierID}}">
+                    <input type="hidden" id="edit_supplier_id" name="supplier_id" value="{{if .EditingLink.SupplierID}}{{.EditingLink.SupplierID}}{{end}}">
                 </div>
             </div>
             <div class="detail-row">
@@ -106,8 +106,12 @@
             </div>
             <div class="detail-row">
                 <label class="form-label">Preference</label>
-                <input type="text" name="preference" class="form-control"
-                       value="{{.EditingLink.Preference}}" placeholder="e.g. Primary, Secondary">
+                <select name="preference" class="form-select">
+                    <option value="">— none —</option>
+                    <option value="1" {{if and .EditingLink.Preference (eq (derefInt .EditingLink.Preference) 1)}}selected{{end}}>1 — Primary</option>
+                    <option value="2" {{if and .EditingLink.Preference (eq (derefInt .EditingLink.Preference) 2)}}selected{{end}}>2 — Alternate</option>
+                    <option value="3" {{if and .EditingLink.Preference (eq (derefInt .EditingLink.Preference) 3)}}selected{{end}}>3 — Backup</option>
+                </select>
             </div>
             <div class="detail-row">
                 <label class="form-label">Lead Time</label>
@@ -140,7 +144,7 @@
 
     {{/* ── Add form ──────────────────────────────────────────── */}}
     {{if not .EditingLink}}
-    <details class="mt-4">
+    <details class="mt-4" {{if .AddDraft}}open{{end}}>
         <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Supplier</summary>
         <div class="detail-section mt-2">
             <form id="add-supplier-form" method="post" action="/part/{{.Part.ID}}/suppliers">
@@ -148,42 +152,47 @@
                 <div class="detail-row">
                     <label for="add_supplier_name" class="form-label">Supplier *</label>
                     <div style="position:relative; flex:1;">
-                        <input type="text" id="add_supplier_name" class="form-control"
-                               placeholder="Required — type to search…" autocomplete="off">
-                        <input type="hidden" id="add_supplier_id" name="supplier_id">
+                        <input type="text" id="add_supplier_name" name="supplier_name" class="form-control"
+                               value="{{if .AddDraft}}{{.AddDraft.SupplierName}}{{end}}" placeholder="Required — type to search…" autocomplete="off">
+                        <input type="hidden" id="add_supplier_id" name="supplier_id"
+                               value="{{if and .AddDraft .AddDraft.SupplierID}}{{.AddDraft.SupplierID}}{{end}}">
                     </div>
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Supplier PN</label>
                     <input type="text" name="supplier_pn" class="form-control"
-                           placeholder="Supplier's part number">
+                           value="{{if .AddDraft}}{{.AddDraft.SupplierPN}}{{end}}" placeholder="Supplier's part number">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Description</label>
                     <input type="text" name="supplier_desc" class="form-control"
-                           placeholder="Supplier's description">
+                           value="{{if .AddDraft}}{{.AddDraft.SupplierDesc}}{{end}}" placeholder="Supplier's description">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Preference</label>
-                    <input type="text" name="preference" class="form-control"
-                           placeholder="e.g. Primary, Secondary">
+                    <select name="preference" class="form-select">
+                        <option value="">— none —</option>
+                        <option value="1" {{if and $.AddDraft $.AddDraft.Preference (eq (derefInt $.AddDraft.Preference) 1)}}selected{{end}}>1 — Primary</option>
+                        <option value="2" {{if and $.AddDraft $.AddDraft.Preference (eq (derefInt $.AddDraft.Preference) 2)}}selected{{end}}>2 — Alternate</option>
+                        <option value="3" {{if and $.AddDraft $.AddDraft.Preference (eq (derefInt $.AddDraft.Preference) 3)}}selected{{end}}>3 — Backup</option>
+                    </select>
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Lead Time</label>
                     <input type="text" name="lead_time" class="form-control"
-                           placeholder="e.g. 2 weeks">
+                           value="{{if .AddDraft}}{{.AddDraft.LeadTime}}{{end}}" placeholder="e.g. 2 weeks">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Min Increment</label>
                     <input type="number" name="min_increment" class="form-control" step="any" min="0"
-                           placeholder="Minimum order quantity">
+                           value="{{if and .AddDraft .AddDraft.MinIncrement}}{{printf "%g" (deref .AddDraft.MinIncrement)}}{{end}}" placeholder="Minimum order quantity">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Purchase Unit</label>
                     <select name="unit_id" class="form-select">
                         <option value="">— inherit from part base unit —</option>
                         {{range .Units}}
-                        <option value="{{.ID}}">{{.Abbreviation}}{{if .DisplayName}} — {{.DisplayName}}{{end}}</option>
+                        <option value="{{.ID}}" {{if and $.AddDraft $.AddDraft.UnitID (eq .ID (derefInt $.AddDraft.UnitID))}}selected{{end}}>{{.Abbreviation}}{{if .DisplayName}} — {{.DisplayName}}{{end}}</option>
                         {{end}}
                     </select>
                 </div>

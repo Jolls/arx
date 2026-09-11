@@ -374,7 +374,8 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	var links []models.SupplierPart
 	for rows.Next() {
 		var lk models.SupplierPart
-		var preference, supplierPN, supplierDesc, leadTime sql.NullString
+		var preference sql.NullInt64
+		var supplierPN, supplierDesc, leadTime sql.NullString
 		var minIncr sql.NullFloat64
 		var unitID sql.NullInt64
 		var partNumber, title, revision, category, unitAbbr sql.NullString
@@ -388,7 +389,10 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error reading linked parts: "+err.Error())
 			return
 		}
-		lk.Preference = preference.String
+		if preference.Valid {
+			v := int(preference.Int64)
+			lk.Preference = &v
+		}
 		lk.SupplierPN = supplierPN.String
 		lk.SupplierDesc = supplierDesc.String
 		lk.LeadTime = leadTime.String

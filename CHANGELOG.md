@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.28] - 2026-09-10
+### Fixed
+- Supplier link "preference" field crashed with a SQL conversion error since it was a free-text input over an INT column; now a Primary/Alternate/Backup dropdown ([#41](https://github.com/Jolls/arx/issues/41))
+- Add/Edit Supplier Link forms lost the user's input on a validation or DB error instead of redisplaying it ([#42](https://github.com/Jolls/arx/issues/42))
+- Edit Supplier Link form showed a blank supplier name on open despite a valid link ([#43](https://github.com/Jolls/arx/issues/43))
+
 ## [0.7.27] - 2026-09-04
 ### Added
 - Warning when navigating away from the PO edit form (new/edit/RFQ/duplicate) with unsaved changes ([#34](https://github.com/Jolls/arx/issues/34))
