@@ -663,6 +663,42 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, map[string]any{"ok": true, "filename": name})
 }
 
+// APIDigiKeyLookup — GET /api/digikey/lookup?pn=<DigiKey PN> — fetches product
+// metadata to autofill the Add Supplier form on the Sourcing tab (#27). Never
+// writes anything; the user's Save on that form is the only commit point.
+func (h *Handler) APIDigiKeyLookup(w http.ResponseWriter, r *http.Request) {
+	pn := strings.TrimSpace(r.URL.Query().Get("pn"))
+	if pn == "" {
+		writeJSONError(w, http.StatusBadRequest, "DigiKey part number is required")
+		return
+	}
+
+	result, err := h.fetchDigiKeyProduct(r.Context(), pn)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	out := map[string]any{
+		"supplier_desc":   result.SupplierDesc,
+		"lead_time":       result.LeadTime,
+		"mfg_part_number": result.MfgPartNumber,
+		"mfg_name":        result.MfgName,
+		"datasheet_url":   result.DatasheetURL,
+		"photo_url":       result.PhotoURL,
+		"prices":          result.Prices,
+	}
+	if result.MinIncrement != nil {
+		out["min_increment"] = *result.MinIncrement
+	}
+	// Matching result.MfgName against an existing company is left to the
+	// caller: the Sourcing page already has the full manufacturer list
+	// rendered into the <select>'s <option>s, so the client can do the
+	// case-insensitive match against that instead of a second DB round trip.
+
+	writeJSON(w, out)
+}
+
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

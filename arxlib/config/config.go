@@ -23,9 +23,16 @@ const ExpectedSchemaVersion = "10"
 // Config holds all configuration for the merged Arx application.
 type Config struct {
 	Base
-	POFolderRoot      string
-	SupplierFilesRoot string
-	ImageRoot         string // used by Test Records; stored/displayed here so settings save round-trips it
+	POFolderRoot        string
+	SupplierFilesRoot   string
+	ImageRoot           string // used by Test Records; stored/displayed here so settings save round-trips it
+	DigiKeyClientID     string // from the per-user secrets store only (#27); never in .env or config/local.json
+	DigiKeyClientSecret string
+}
+
+// DigiKeyEnabled reports whether a client ID/secret pair has been configured.
+func (c *Config) DigiKeyEnabled() bool {
+	return c.DigiKeyClientID != "" && c.DigiKeyClientSecret != ""
 }
 
 // Load reads configuration from .env files, environment variables, and
@@ -139,6 +146,8 @@ func Load(version string) *Config {
 	if secrets != nil {
 		cfg.DBPassword = secrets.DBPassword
 		cfg.TestDBPassword = secrets.TestDBPassword
+		cfg.DigiKeyClientID = secrets.DigiKeyClientID
+		cfg.DigiKeyClientSecret = secrets.DigiKeyClientSecret
 	}
 
 	// Resolve the session secret used to sign session/CSRF cookies. Precedence:

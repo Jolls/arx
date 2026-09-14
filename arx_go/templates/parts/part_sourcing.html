@@ -160,12 +160,23 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Supplier PN</label>
-                    <input type="text" name="supplier_pn" class="form-control"
-                           value="{{if .AddDraft}}{{.AddDraft.SupplierPN}}{{end}}" placeholder="Supplier's part number">
+                    <div style="flex:1; display:flex; gap:8px;">
+                        <input type="text" id="add_supplier_pn" name="supplier_pn" class="form-control"
+                               value="{{if .AddDraft}}{{.AddDraft.SupplierPN}}{{end}}" placeholder="Supplier's part number">
+                        {{if .DigiKeyEnabled}}
+                        <button type="button" id="digikey-fetch-btn" class="btn btn-secondary text-nowrap">Fetch from DigiKey</button>
+                        {{end}}
+                    </div>
                 </div>
+                {{if .DigiKeyEnabled}}
+                <div class="detail-row" id="digikey-status-row" hidden>
+                    <label class="form-label"></label>
+                    <div id="digikey-status" style="flex:1; font-size:0.85em;"></div>
+                </div>
+                {{end}}
                 <div class="detail-row">
                     <label class="form-label">Description</label>
-                    <input type="text" name="supplier_desc" class="form-control"
+                    <input type="text" id="add_supplier_desc" name="supplier_desc" class="form-control"
                            value="{{if .AddDraft}}{{.AddDraft.SupplierDesc}}{{end}}" placeholder="Supplier's description">
                 </div>
                 <div class="detail-row">
@@ -179,12 +190,12 @@
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Lead Time</label>
-                    <input type="text" name="lead_time" class="form-control"
+                    <input type="text" id="add_lead_time" name="lead_time" class="form-control"
                            value="{{if .AddDraft}}{{.AddDraft.LeadTime}}{{end}}" placeholder="e.g. 2 weeks">
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Min Increment</label>
-                    <input type="number" name="min_increment" class="form-control" step="any" min="0"
+                    <input type="number" id="add_min_increment" name="min_increment" class="form-control" step="any" min="0"
                            value="{{if and .AddDraft .AddDraft.MinIncrement}}{{printf "%g" (deref .AddDraft.MinIncrement)}}{{end}}" placeholder="Minimum order quantity">
                 </div>
                 <div class="detail-row">
@@ -196,6 +207,51 @@
                         {{end}}
                     </select>
                 </div>
+
+                {{if .DigiKeyEnabled}}
+                <div id="digikey-results" class="detail-section mt-3" hidden style="background:var(--bs-tertiary-bg, #f8f9fa);">
+                    <h4 style="font-size:0.95em; margin-bottom:8px;">Imported from DigiKey</h4>
+
+                    <div id="digikey-prices-row" class="detail-row" hidden>
+                        <label class="form-label">
+                            <input type="checkbox" id="digikey-import-prices" name="dk_import_prices" value="1" checked> Import prices
+                        </label>
+                        <div id="digikey-prices-list" style="flex:1; font-size:0.85em;"></div>
+                    </div>
+
+                    <div id="digikey-datasheet-row" class="detail-row" hidden>
+                        <label class="form-label">
+                            <input type="checkbox" id="digikey-import-datasheet" name="dk_import_datasheet" value="1" checked> Import datasheet
+                        </label>
+                        <a id="digikey-datasheet-link" href="#" target="_blank" rel="noopener" style="flex:1;"></a>
+                    </div>
+
+                    <div id="digikey-photo-row" class="detail-row" hidden>
+                        <label class="form-label">
+                            <input type="checkbox" id="digikey-import-photo" name="dk_import_photo" value="1" checked> Import photo
+                        </label>
+                        <a id="digikey-photo-link" href="#" target="_blank" rel="noopener" style="flex:1;"></a>
+                    </div>
+
+                    <div id="digikey-mfg-row" class="detail-row" hidden>
+                        <label class="form-label">Manufacturer</label>
+                        <select id="digikey-mfg-choice" name="dk_mfg_choice" class="form-select">
+                            <option value="skip">Skip — don't add manufacturer info</option>
+                            <option value="create">Create new manufacturer</option>
+                            {{range .Manufacturers}}
+                            <option value="{{.ID}}">{{.Name}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                </div>
+
+                <input type="hidden" id="digikey-prices-json" name="dk_prices_json" value="">
+                <input type="hidden" id="digikey-datasheet-url" name="dk_datasheet_url" value="">
+                <input type="hidden" id="digikey-photo-url" name="dk_photo_url" value="">
+                <input type="hidden" id="digikey-mfg-name" name="dk_mfg_name" value="">
+                <input type="hidden" id="digikey-mfg-part-number" name="dk_mfg_part_number" value="">
+                {{end}}
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">
                         Add Supplier
@@ -231,6 +287,97 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('add_supplier_name'),
         document.getElementById('add_supplier_id')
     );
+
+    // ── DigiKey import (issue #27) ───────────────────────────────────────
+    // Fetch is read-only: it only fills the form. Nothing is written to the
+    // database until the user reviews the fields and clicks Add Supplier.
+    const fetchBtn = document.getElementById('digikey-fetch-btn');
+    if (fetchBtn) {
+        const statusRow = document.getElementById('digikey-status-row');
+        const statusEl = document.getElementById('digikey-status');
+        const resultsEl = document.getElementById('digikey-results');
+
+        function setStatus(msg, isError) {
+            statusRow.hidden = !msg;
+            statusEl.textContent = msg || '';
+            statusEl.className = isError ? 'text-danger' : 'text-muted';
+        }
+
+        // Shows/hides an import row and fills its hidden URL field + link
+        // preview. Used for datasheet and photo, which are identical apart
+        // from element-id prefix.
+        function wireImportLink(prefix, url) {
+            const row = document.getElementById('digikey-' + prefix + '-row');
+            row.hidden = !url;
+            if (!url) return;
+            document.getElementById('digikey-' + prefix + '-url').value = url;
+            const link = document.getElementById('digikey-' + prefix + '-link');
+            link.href = url;
+            link.textContent = url;
+        }
+
+        fetchBtn.addEventListener('click', async () => {
+            const pn = document.getElementById('add_supplier_pn').value.trim();
+            if (!pn) {
+                setStatus('Enter a DigiKey part number first.', true);
+                return;
+            }
+            fetchBtn.disabled = true;
+            setStatus('Fetching…', false);
+            resultsEl.hidden = true;
+            try {
+                const resp = await fetch('/api/digikey/lookup?pn=' + encodeURIComponent(pn));
+                const data = await resp.json();
+                if (!resp.ok) {
+                    setStatus(data.error || 'Lookup failed.', true);
+                    return;
+                }
+
+                if (data.supplier_desc) document.getElementById('add_supplier_desc').value = data.supplier_desc;
+                if (data.lead_time) document.getElementById('add_lead_time').value = data.lead_time;
+                if (data.min_increment) document.getElementById('add_min_increment').value = data.min_increment;
+
+                const pricesRow = document.getElementById('digikey-prices-row');
+                if (data.prices && data.prices.length) {
+                    pricesRow.hidden = false;
+                    document.getElementById('digikey-prices-json').value = JSON.stringify(data.prices);
+                    document.getElementById('digikey-prices-list').textContent =
+                        data.prices.map(p => p.break_quantity + '+: $' + p.unit_price.toFixed(4)).join('   ');
+                } else {
+                    pricesRow.hidden = true;
+                }
+
+                wireImportLink('datasheet', data.datasheet_url);
+                wireImportLink('photo', data.photo_url);
+
+                const mfgRow = document.getElementById('digikey-mfg-row');
+                const mfgChoice = document.getElementById('digikey-mfg-choice');
+                if (data.mfg_part_number) {
+                    mfgRow.hidden = false;
+                    document.getElementById('digikey-mfg-name').value = data.mfg_name || '';
+                    document.getElementById('digikey-mfg-part-number').value = data.mfg_part_number;
+                    // Match against the manufacturer options already rendered into this
+                    // <select> (case-insensitive) instead of a separate server round trip.
+                    // Default to Skip unless there's an exact match — creating a new
+                    // manufacturer is something the user opts into, never a silent default.
+                    const nameLower = (data.mfg_name || '').toLowerCase();
+                    const match = nameLower && Array.from(mfgChoice.options).find(
+                        o => o.value !== 'skip' && o.value !== 'create' && o.text.toLowerCase() === nameLower);
+                    mfgChoice.value = match ? match.value : 'skip';
+                } else {
+                    mfgRow.hidden = true;
+                    mfgChoice.value = 'skip';
+                }
+
+                resultsEl.hidden = false;
+                setStatus('Fetched. Review the fields below, then Add Supplier.', false);
+            } catch (e) {
+                setStatus('Lookup failed: ' + e.message, true);
+            } finally {
+                fetchBtn.disabled = false;
+            }
+        });
+    }
 });
 </script>
 {{end}}

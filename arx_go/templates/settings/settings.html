@@ -263,6 +263,36 @@
     </div>
 
     <div class="detail-section mt-4">
+        <h3>DigiKey Import</h3>
+        <p class="text-muted" style="margin:0 0 12px; font-size:0.85em;">
+            Lets the part Sourcing tab fetch pricing, datasheet, photo, and manufacturer
+            info from a DigiKey part number. Requires a client ID/secret from a
+            <a href="https://developer.digikey.com/" target="_blank" rel="noopener">DigiKey developer app</a>.
+            Stored per-user, not in the shared config file.
+        </p>
+        <form method="post" action="/settings/digikey">
+            <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
+            <div class="detail-row">
+                <label class="form-label" for="digikey_client_id">Client ID</label>
+                <input type="text" id="digikey_client_id" name="digikey_client_id" class="form-control"
+                       value="{{.DigiKeyClientID}}" style="width:400px;" autocomplete="off">
+            </div>
+            <div class="detail-row">
+                <label class="form-label" for="digikey_client_secret">Client Secret</label>
+                <div style="flex:1;">
+                    <input type="password" id="digikey_client_secret" name="digikey_client_secret"
+                           class="form-control" style="width:400px;" autocomplete="off"
+                           placeholder="{{if .DigiKeyClientSecretSet}}(unchanged){{end}}">
+                    <p class="text-muted" style="margin:4px 0 0; font-size:0.82em;">Leave blank to keep the current secret.</p>
+                </div>
+            </div>
+            <div class="form-actions mt-2">
+                <button type="submit" class="btn btn-primary">Save DigiKey Credentials</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="detail-section mt-4">
         <h3>Company Logo</h3>
         <form method="post" action="/settings/company-logo" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">

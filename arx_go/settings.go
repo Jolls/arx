@@ -221,6 +221,8 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"POContacts":            poContacts,
 		"POSuppliers":           poSuppliers,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
+		"DigiKeyClientID":       h.cfg.DigiKeyClientID,
+		"DigiKeyClientSecretSet": h.cfg.DigiKeyClientSecret != "",
 		"CompanyLogo":           h.companyLogoURL(),
 		"AccentColor":           accentColor,
 		"AccentThemes":          accentThemes,
@@ -270,6 +272,46 @@ func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *htt
 		}
 	}
 	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+// SettingsDigiKeySave persists the shop's DigiKey API client ID/secret to the
+// per-user secrets store (issue #27). It has its own endpoint so this partial
+// form can't blank the fields the main settings form writes. A blank secret
+// field keeps the stored secret (matches the DB-password reuse convention);
+// a blank client ID clears both, since a secret with no ID is unusable.
+func (h *Handler) SettingsDigiKeySave(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.FormValue("digikey_client_id"))
+	clientSecret := strings.TrimSpace(r.FormValue("digikey_client_secret"))
+
+	secrets, err := arxbase.LoadSecrets()
+	if err != nil {
+		// A genuine read error (corrupt file, permissions) — not "file doesn't
+		// exist", which LoadSecrets already handles by returning an empty,
+		// non-nil config. Saving over it would blindly wipe the DB password,
+		// test DB password, and session secret already stored there.
+		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
+			"Error": "Could not save DigiKey credentials: the secrets store could not be read (" + err.Error() + "). Fix that first so other stored secrets aren't lost.",
+		}))
+		return
+	}
+	if secrets == nil {
+		secrets = &arxbase.SecretsConfig{}
+	}
+	if clientID == "" {
+		secrets.DigiKeyClientID = ""
+		secrets.DigiKeyClientSecret = ""
+	} else {
+		secrets.DigiKeyClientID = clientID
+		if clientSecret != "" {
+			secrets.DigiKeyClientSecret = clientSecret
+		}
+	}
+	if err := arxbase.SaveSecrets(secrets); err != nil {
+		log.Printf("warning: could not save DigiKey credentials: %v", err)
+	}
+	h.cfg.DigiKeyClientID = secrets.DigiKeyClientID
+	h.cfg.DigiKeyClientSecret = secrets.DigiKeyClientSecret
+	http.Redirect(w, r, "/settings#configuration", http.StatusFound)
 }
 
 // SettingsAccentColorSave persists the logged-in user's accent color theme

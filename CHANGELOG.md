@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.32] - 2026-09-11
+### Added
+- Import part metadata from DigiKey: fetch pricing, datasheet, photo, manufacturer, and MPN by DigiKey part number on the part Sourcing tab's Add Supplier form; requires a DigiKey developer API client ID/secret configured in Settings ([#27](https://github.com/Jolls/arx/issues/27))
 ## [0.7.31] - 2026-09-14
 ### Added
 - Preferred Supplier card on the part detail dashboard showing the preferred supplier's part number, description, and active price ([#55](https://github.com/Jolls/arx/issues/55))
