@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.31] - 2026-09-14
+### Added
+- Preferred Supplier card on the part detail dashboard showing the preferred supplier's part number, description, and active price ([#55](https://github.com/Jolls/arx/issues/55))
+
 ## [0.7.30] - 2026-09-11
 ### Changed
 - `migrate_40_part_description.sql` now bumps `schema_version` 9 → 10 and `ExpectedSchemaVersion` is bumped to match — the `part.title` → `part.description` rename in 0.7.29 is not backward-compatible (a pre-#40 binary queries the old column name) and was missing the schema-version gate every other rename migration uses to show the mismatch banner instead of a raw DB error ([#40](https://github.com/Jolls/arx/issues/40))

@@ -421,6 +421,14 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		unitCount, _ = h.unitCountForPart(r.Context(), p.ID)
 	}
 
+	var prefSupplier *preferredSupplierSummary
+	if p.ShowSuppliers() {
+		prefSupplier = h.preferredSupplier(r.Context(), id)
+		if prefSupplier != nil && prefPrice.Valid {
+			prefSupplier.Price = &prefPrice.Float64
+		}
+	}
+
 	var priceJSON template.JS
 	var hasPriceData bool
 	if p.ShowPricing() {
@@ -446,6 +454,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		"LotCount":          lotCount,
 		"RecentUnits":       recentUnits,
 		"UnitCount":         unitCount,
+		"PreferredSupplier": prefSupplier,
 		"PriceDataJSON":     priceJSON,
 		"HasPriceData":      hasPriceData,
 	})
@@ -1949,6 +1958,47 @@ func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) 
 		out = append(out, s)
 	}
 	return out
+}
+
+// preferredSupplierSummary is the part detail dashboard's Preferred Supplier
+// card (#55): the part's preferred supplier (part.default_supplier_id, #465)
+// plus its supplier_part reference fields. HasLink is false when the supplier
+// is pinned but no supplier_part row exists for it yet.
+type preferredSupplierSummary struct {
+	SupplierID   int
+	SupplierName string
+	SupplierPN   string
+	SupplierDesc string
+	HasLink      bool
+	Price        *float64 // cheapest active price from this supplier; nil = none
+}
+
+// preferredSupplier loads the part's preferred supplier and its supplier_part
+// reference row for the Preferred Supplier card (#55). Returns nil when no
+// preferred supplier is pinned (the JOIN drops the row on a NULL
+// default_supplier_id). Price is filled in by the caller.
+func (h *Handler) preferredSupplier(ctx context.Context, partID string) *preferredSupplierSummary {
+	top, limitClause := h.topLimit("@p2")
+	pt, co, sp := h.cfg.PartsTable(), h.cfg.CompanyTable(), h.cfg.SupplierPartTable()
+	var s preferredSupplierSummary
+	var name, pn, desc sql.NullString
+	var spID sql.NullInt64
+	err := h.queryRowContext(ctx, fmt.Sprintf(`
+		SELECT %sc.id, c.name, sp.id, sp.supplier_pn, sp.supplier_desc
+		FROM %s p
+		JOIN %s c ON c.id = p.default_supplier_id
+		LEFT JOIN %s sp ON sp.part_id = p.id AND sp.supplier_id = c.id
+		WHERE p.id = @p1
+		ORDER BY sp.preference, sp.id
+	`+limitClause, top, pt, co, sp), partID, 1).Scan(&s.SupplierID, &name, &spID, &pn, &desc)
+	if err != nil {
+		return nil
+	}
+	s.SupplierName = name.String
+	s.SupplierPN = pn.String
+	s.SupplierDesc = desc.String
+	s.HasLink = spID.Valid
+	return &s
 }
 
 // pricePoint is one unit-cost-over-time sample for the price-history chart (#284),

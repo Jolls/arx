@@ -104,6 +104,29 @@
         </div>
         {{end}}
 
+        {{/* Preferred Supplier — reference data for part.default_supplier_id (#55) */}}
+        {{if .Part.ShowSuppliers}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Preferred Supplier</span>
+                    <a href="/part/{{.Part.ID}}/suppliers" class="small">View all &rarr;</a>
+                </div>
+                <div class="card-body">
+                    {{with .PreferredSupplier}}
+                    <div class="detail-row"><strong>Supplier:</strong><span><a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a></span></div>
+                    <div class="detail-row"><strong>Supplier P/N:</strong><span class="font-monospace">{{if .SupplierPN}}{{.SupplierPN}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>Supplier Description:</strong><span>{{if .SupplierDesc}}{{.SupplierDesc}}{{else}}—{{end}}</span></div>
+                    <div class="detail-row"><strong>Supplier Price:</strong><span>{{if .Price}}${{printf "%.4f" (deref .Price)}}{{else}}—{{end}}</span></div>
+                    {{if not .HasLink}}<p class="text-muted mb-0 mt-2">No supplier part details on file.</p>{{end}}
+                    {{else}}
+                    <p class="text-muted mb-0">No preferred supplier set.</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+
         {{/* Pricing snapshot — data already on .Part */}}
         {{if .Part.ShowPricing}}
         <div class="col">
