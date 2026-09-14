@@ -15,11 +15,9 @@ import (
 // under os.UserConfigDir() instead (%APPDATA%\Arx on Windows, ~/.config/arx on
 // Linux).
 type SecretsConfig struct {
-	DBPassword          string `json:"db_password,omitempty"`
-	TestDBPassword      string `json:"test_db_password,omitempty"`
-	SessionSecret       string `json:"session_secret,omitempty"`
-	DigiKeyClientID     string `json:"digikey_client_id,omitempty"`
-	DigiKeyClientSecret string `json:"digikey_client_secret,omitempty"`
+	DBPassword     string `json:"db_password,omitempty"`
+	TestDBPassword string `json:"test_db_password,omitempty"`
+	SessionSecret  string `json:"session_secret,omitempty"`
 }
 
 // secretsPath returns the per-user secrets file location. It errors only when

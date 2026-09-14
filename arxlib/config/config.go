@@ -26,7 +26,7 @@ type Config struct {
 	POFolderRoot        string
 	SupplierFilesRoot   string
 	ImageRoot           string // used by Test Records; stored/displayed here so settings save round-trips it
-	DigiKeyClientID     string // from the per-user secrets store only (#27); never in .env or config/local.json
+	DigiKeyClientID     string // loaded from app_config after DB connect (#60); never in .env or config/local.json
 	DigiKeyClientSecret string
 }
 
@@ -146,8 +146,6 @@ func Load(version string) *Config {
 	if secrets != nil {
 		cfg.DBPassword = secrets.DBPassword
 		cfg.TestDBPassword = secrets.TestDBPassword
-		cfg.DigiKeyClientID = secrets.DigiKeyClientID
-		cfg.DigiKeyClientSecret = secrets.DigiKeyClientSecret
 	}
 
 	// Resolve the session secret used to sign session/CSRF cookies. Precedence:

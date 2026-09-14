@@ -249,6 +249,14 @@ func (h *Handler) loadCompanyLogo(ctx context.Context) {
 	h.companyLogo = h.appConfigGetOr(ctx, "company_logo", "")
 }
 
+// loadDigiKeyCredentials loads the shop's DigiKey API client ID/secret from
+// app_config onto cfg (issue #60 — shared across every user, unlike a DB
+// password). Safe to call when db is nil.
+func (h *Handler) loadDigiKeyCredentials(ctx context.Context) {
+	h.cfg.DigiKeyClientID = h.appConfigGetOr(ctx, "digikey_client_id", "")
+	h.cfg.DigiKeyClientSecret = h.appConfigGetOr(ctx, "digikey_client_secret", "")
+}
+
 // companyLogoURL returns the cached company logo as a template.URL. html/template's
 // URL-context filter defangs any src/href value whose scheme isn't http(s)/mailto,
 // which would otherwise strip our data: URI; template.URL marks it as pre-vetted.
