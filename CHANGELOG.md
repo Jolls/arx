@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.34] - 2026-09-14
+### Fixed
+- DigiKey-imported "Datasheet"/"Photo" attachments are now copied into `DOC_CONTROL_ROOT` like every other attachment instead of stored as a bare remote URL, which silently excluded the photo from the part detail page's Photos card and prevented Generate Thumbnail from working on the imported datasheet ([#62](https://github.com/Jolls/arx/issues/62))
+### Added
+- "Generate thumbnail from photo" option on the DigiKey import form, building the `/parts` hover-tooltip Thumbnail from the imported photo without a separate manual step ([#62](https://github.com/Jolls/arx/issues/62))
+
 ## [0.7.33] - 2026-09-14
 ### Changed
 - DigiKey API client ID/secret now stored in `app_config` (shared by every user of the shop's install) instead of the per-user secrets store, matching the shop-level nature of the DigiKey app registration ([#60](https://github.com/Jolls/arx/issues/60))

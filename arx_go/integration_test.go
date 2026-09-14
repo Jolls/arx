@@ -3,12 +3,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"image"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -5927,6 +5929,104 @@ func TestIntegration_APIPartGenerateThumbnail(t *testing.T) {
 			t.Errorf("status = %d, want 500. body: %s", rec.Code, rec.Body.String())
 		}
 	})
+}
+
+// TestIntegration_SupplierPartCreate_DigiKeyImport exercises the #62 fix: a
+// DigiKey-imported "Datasheet"/"Photo" is downloaded and copied into
+// DOC_CONTROL_ROOT like any other attachment (LOCAL: file_name) instead of
+// stored as a bare remote URL, and the "Generate thumbnail from photo"
+// checkbox produces a Thumbnail row from the imported photo.
+func TestIntegration_SupplierPartCreate_DigiKeyImport(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const seedSupplierID = 1001 // "Acme Fasteners", seeded in seed_test_data.sql
+
+	// A tiny real PNG so generateThumbnailFromPhoto's image.Decode succeeds; the
+	// server path's ".jpg" extension is irrelevant to decoding (format is
+	// sniffed from content) but still exercises the extension-from-URL naming
+	// logic in applyDigiKeyImportExtras.
+	var photoBuf bytes.Buffer
+	if err := png.Encode(&photoBuf, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatalf("encode test photo: %v", err)
+	}
+	photoBytes := photoBuf.Bytes()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/datasheet.pdf":
+			w.Write([]byte("%PDF-1.4 fake datasheet"))
+		case "/photo.jpg":
+			w.Write(photoBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	docRoot := tempDocControlRoot(t, h)
+	partID, partNumber, cleanupPart := seedThrowawayPart(t, h, ctx, "62")
+	defer cleanupPart()
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.SupplierPartTable()), partID)
+	}()
+
+	form := url.Values{
+		"supplier_id":           {strconv.Itoa(seedSupplierID)},
+		"dk_import_datasheet":   {"1"},
+		"dk_datasheet_url":      {srv.URL + "/datasheet.pdf"},
+		"dk_import_photo":       {"1"},
+		"dk_photo_url":          {srv.URL + "/photo.jpg"},
+		"dk_generate_thumbnail": {"1"},
+	}
+	req := postForm(fmt.Sprintf("/part/%d/suppliers", partID), form)
+	rec := httptest.NewRecorder()
+	h.SupplierPartCreate(rec, withID(req, partID))
+	assert302(t, "SupplierPartCreate", rec)
+
+	rows, err := h.DB().QueryContext(ctx, fmt.Sprintf(
+		`SELECT category, file_name FROM %s WHERE part_id=@p1 AND is_active=%s`,
+		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), partID)
+	if err != nil {
+		t.Fatalf("query attachments: %v", err)
+	}
+	got := map[string]string{}
+	for rows.Next() {
+		var category, fileName sql.NullString
+		if err := rows.Scan(&category, &fileName); err != nil {
+			rows.Close()
+			t.Fatalf("scan attachment: %v", err)
+		}
+		got[category.String] = fileName.String
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	rows.Close()
+
+	const partDesc = "Integration Test Part"
+	wantDatasheet := "LOCAL:" + buildAttachmentFileName(partNumber, "", partDesc, "Datasheet", ".pdf")
+	wantPhoto := "LOCAL:" + buildAttachmentFileName(partNumber, "", partDesc, "Photo", ".jpg")
+	wantThumb := "LOCAL:" + buildAttachmentFileName(partNumber, "", partDesc, thumbnailCategory, ".png")
+
+	if got["Datasheet"] != wantDatasheet {
+		t.Errorf("Datasheet file_name = %q, want %q", got["Datasheet"], wantDatasheet)
+	}
+	if got["Photo"] != wantPhoto {
+		t.Errorf("Photo file_name = %q, want %q", got["Photo"], wantPhoto)
+	}
+	if got[thumbnailCategory] != wantThumb {
+		t.Errorf("%s file_name = %q, want %q", thumbnailCategory, got[thumbnailCategory], wantThumb)
+	}
+
+	for label, want := range map[string]string{"Datasheet": wantDatasheet, "Photo": wantPhoto, thumbnailCategory: wantThumb} {
+		name := strings.TrimPrefix(want, "LOCAL:")
+		if _, err := os.Stat(filepath.Join(docRoot, name)); err != nil {
+			t.Errorf("%s: expected file at %s, stat err = %v", label, name, err)
+		}
+	}
 }
 
 // TestIntegration_UpsertGeneratedAttachment exercises upsertGeneratedAttachment's

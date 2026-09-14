@@ -230,7 +230,13 @@
                         <label class="form-label">
                             <input type="checkbox" id="digikey-import-photo" name="dk_import_photo" value="1" checked> Import photo
                         </label>
-                        <a id="digikey-photo-link" href="#" target="_blank" rel="noopener" style="flex:1;"></a>
+                        <div style="flex:1;">
+                            <a id="digikey-photo-link" href="#" target="_blank" rel="noopener" style="display:block;"></a>
+                            <label class="form-label fw-normal small">
+                                <input type="checkbox" id="digikey-generate-thumbnail" name="dk_generate_thumbnail" value="1" checked>
+                                Generate thumbnail from photo
+                            </label>
+                        </div>
                     </div>
 
                     <div id="digikey-mfg-row" class="detail-row" hidden>
@@ -296,6 +302,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const statusRow = document.getElementById('digikey-status-row');
         const statusEl = document.getElementById('digikey-status');
         const resultsEl = document.getElementById('digikey-results');
+
+        // Generating a thumbnail needs the photo itself imported, so the two
+        // checkboxes travel together (#62).
+        const importPhotoCheckbox = document.getElementById('digikey-import-photo');
+        const generateThumbCheckbox = document.getElementById('digikey-generate-thumbnail');
+        if (importPhotoCheckbox && generateThumbCheckbox) {
+            importPhotoCheckbox.addEventListener('change', () => {
+                generateThumbCheckbox.disabled = !importPhotoCheckbox.checked;
+            });
+        }
 
         function setStatus(msg, isError) {
             statusRow.hidden = !msg;

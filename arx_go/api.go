@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg" // registers jpeg decoding for image.Decode (DigiKey photos, #62)
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"arx/arx_go/models"
 	"arx/arxlib/folderpick"
 	"arx/arxlib/urlutil"
 )
@@ -499,35 +503,8 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 			writeJSONError(w, http.StatusInternalServerError, "Error encoding image: "+err.Error())
 			return
 		}
-		name := buildAttachmentFileName(p.PartNumber, rev, p.Description, spec.category, ".png")
-
-		var oldFileNS sql.NullString
-		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s`,
-			h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
-		), id, spec.category).Scan(&oldFileNS); err != nil && err != sql.ErrNoRows {
-			writeJSONError(w, http.StatusInternalServerError, "Error loading existing attachment: "+err.Error())
-			return
-		}
-
-		// Regenerating produces the same name as last time (same part/rev/description/
-		// category), so replace that file in place rather than writing a fresh
-		// "(2)"-suffixed copy and deleting the original out from under it (#839).
-		finalName := name
-		if urlutil.IsLocalFile(oldFileNS.String) && strings.EqualFold(urlutil.StripLocalPrefix(oldFileNS.String), name) {
-			if err := replaceDocControlData(h.cfg.DocControlRoot, name, data); err != nil {
-				writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
-				return
-			}
-		} else {
-			finalName, err = writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ".png", data)
-			if err != nil {
-				writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
-				return
-			}
-		}
-		if err := h.upsertGeneratedAttachment(r.Context(), id, rev, spec.category, "LOCAL:"+finalName); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Error saving attachment: "+err.Error())
+		if err := h.saveGeneratedAttachment(r.Context(), id, rev, spec.category, p.PartNumber, p.Description, data); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
@@ -575,6 +552,73 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 		}
 	}
 	return nil
+}
+
+// saveGeneratedAttachment writes data as a PNG for partID/category, then
+// upserts the attachment row via upsertGeneratedAttachment. Regenerating
+// produces the same name as last time (same part/rev/description/category),
+// so it replaces that file in place rather than writing a fresh
+// "(2)"-suffixed copy and deleting the original out from under it (#839).
+// Callers must hold lockPartForThumbnail(partID), same as upsertGeneratedAttachment.
+func (h *Handler) saveGeneratedAttachment(ctx context.Context, partID, rev, category, partNumber, description string, data []byte) error {
+	name := buildAttachmentFileName(partNumber, rev, description, category, ".png")
+
+	var oldFileNS sql.NullString
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s`,
+		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
+	), partID, category).Scan(&oldFileNS); err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("Error loading existing attachment: %w", err)
+	}
+
+	finalName := name
+	if urlutil.IsLocalFile(oldFileNS.String) && strings.EqualFold(urlutil.StripLocalPrefix(oldFileNS.String), name) {
+		if err := replaceDocControlData(h.cfg.DocControlRoot, name, data); err != nil {
+			return fmt.Errorf("Error saving image: %w", err)
+		}
+	} else {
+		var err error
+		finalName, err = writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ".png", data)
+		if err != nil {
+			return fmt.Errorf("Error saving image: %w", err)
+		}
+	}
+	if err := h.upsertGeneratedAttachment(ctx, partID, rev, category, "LOCAL:"+finalName); err != nil {
+		return fmt.Errorf("Error saving attachment: %w", err)
+	}
+	return nil
+}
+
+// generateThumbnailFromPhoto builds a "Thumbnail" attachment (#62) from an
+// already-downloaded DigiKey photo, mirroring APIPartGenerateThumbnail's
+// PDF-page path but starting from image bytes instead of a rendered PDF page.
+// part is passed in rather than re-fetched: the caller (SupplierPartCreate,
+// via prepareDigiKeyFiles) already looked it up earlier in the same request.
+// Called after the supplier-link transaction has already committed, so
+// unlike the rest of the DigiKey import this is best-effort: a failure here
+// must not undo a supplier link that already saved successfully, so it only
+// logs instead of surfacing an error to the user.
+func (h *Handler) generateThumbnailFromPhoto(ctx context.Context, partID string, part models.Part, photoData []byte) {
+	if h.cfg.DocControlRoot == "" {
+		return
+	}
+	img, _, err := image.Decode(bytes.NewReader(photoData))
+	if err != nil {
+		log.Printf("[thumbnail] part %s: could not decode DigiKey photo for thumbnail: %v", partID, err)
+		return
+	}
+	data, err := encodePNG(resizeLongEdge(img, 250))
+	if err != nil {
+		log.Printf("[thumbnail] part %s: could not encode DigiKey thumbnail: %v", partID, err)
+		return
+	}
+
+	unlock := lockPartForThumbnail(partID)
+	defer unlock()
+
+	if err := h.saveGeneratedAttachment(ctx, partID, "", thumbnailCategory, part.PartNumber, part.Description, data); err != nil {
+		log.Printf("[thumbnail] part %s: could not save DigiKey thumbnail: %v", partID, err)
+	}
 }
 
 // APIRecordPasteResultImage saves a clipboard-pasted image to disk for a
