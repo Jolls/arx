@@ -252,30 +252,9 @@ func (h *Handler) loadCompanyLogo(ctx context.Context) {
 // loadDigiKeyCredentials loads the shop's DigiKey API client ID/secret from
 // app_config onto cfg (issue #60 — shared across every user, unlike a DB
 // password). Safe to call when db is nil.
-//
-// If app_config has nothing configured, it also checks for credentials left
-// over in the per-user secrets store from before #60 (one-time migration —
-// arxbase.MigrateDigiKeySecrets scrubs them from the store once found) and
-// promotes them into app_config so an in-place upgrade doesn't silently lose
-// an already-configured DigiKey integration.
 func (h *Handler) loadDigiKeyCredentials(ctx context.Context) {
 	h.cfg.DigiKeyClientID = h.appConfigGetOr(ctx, "digikey_client_id", "")
 	h.cfg.DigiKeyClientSecret = h.appConfigGetOr(ctx, "digikey_client_secret", "")
-	if h.cfg.DigiKeyClientID != "" || h.database() == nil {
-		return
-	}
-	if clientID, clientSecret := arxbase.MigrateDigiKeySecrets(); clientID != "" {
-		if err := h.appConfigSet(ctx, "digikey_client_id", clientID); err != nil {
-			log.Printf("warning: could not migrate digikey_client_id to app_config: %v", err)
-			return
-		}
-		if err := h.appConfigSet(ctx, "digikey_client_secret", clientSecret); err != nil {
-			log.Printf("warning: could not migrate digikey_client_secret to app_config: %v", err)
-		}
-		h.cfg.DigiKeyClientID = clientID
-		h.cfg.DigiKeyClientSecret = clientSecret
-		log.Println("arx: migrated DigiKey credentials from per-user secrets store to app_config (#60)")
-	}
 }
 
 // companyLogoURL returns the cached company logo as a template.URL. html/template's
