@@ -15,11 +15,9 @@ import (
 // under os.UserConfigDir() instead (%APPDATA%\Arx on Windows, ~/.config/arx on
 // Linux).
 type SecretsConfig struct {
-	DBPassword          string `json:"db_password,omitempty"`
-	TestDBPassword      string `json:"test_db_password,omitempty"`
-	SessionSecret       string `json:"session_secret,omitempty"`
-	DigiKeyClientID     string `json:"digikey_client_id,omitempty"`
-	DigiKeyClientSecret string `json:"digikey_client_secret,omitempty"`
+	DBPassword     string `json:"db_password,omitempty"`
+	TestDBPassword string `json:"test_db_password,omitempty"`
+	SessionSecret  string `json:"session_secret,omitempty"`
 }
 
 // secretsPath returns the per-user secrets file location. It errors only when
@@ -70,6 +68,40 @@ func SaveSecrets(sc *SecretsConfig) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0600)
+}
+
+// MigrateDigiKeySecrets returns any DigiKey client ID/secret left over in the
+// per-user secrets store from before #60 moved them to the shared app_config
+// table, and scrubs them from the store once found (so this runs at most
+// once per machine). Returns empty strings when there is nothing to migrate.
+// The caller (which has DB access, unlike this package) is responsible for
+// writing the returned values into app_config.
+func MigrateDigiKeySecrets() (clientID, clientSecret string) {
+	path, err := secretsPath()
+	if err != nil {
+		return "", ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", ""
+	}
+	var legacy struct {
+		DigiKeyClientID     string `json:"digikey_client_id"`
+		DigiKeyClientSecret string `json:"digikey_client_secret"`
+	}
+	if json.Unmarshal(data, &legacy) != nil || legacy.DigiKeyClientID == "" {
+		return "", ""
+	}
+
+	// Re-save the current (already-stripped) SecretsConfig to scrub the legacy
+	// keys from disk now that they've been read out.
+	var sc SecretsConfig
+	if json.Unmarshal(data, &sc) == nil {
+		if err := SaveSecrets(&sc); err != nil {
+			log.Printf("warning: could not scrub migrated DigiKey credentials from secrets store: %v", err)
+		}
+	}
+	return legacy.DigiKeyClientID, legacy.DigiKeyClientSecret
 }
 
 // migrateFromSharedConfig performs the one-time relocation of secrets out of the

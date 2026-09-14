@@ -49,6 +49,7 @@ func onReady() {
 	h.CheckSchemaVersion(context.Background())
 	h.loadCompanyLogo(context.Background())
 	h.loadPartCategories(context.Background())
+	h.loadDigiKeyCredentials(context.Background())
 
 	if cfg.DebugMode {
 		openDebugConsole()

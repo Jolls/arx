@@ -15,8 +15,9 @@ import (
 
 // DigiKey Product Information API v4 client (issue #27). Client-credentials
 // OAuth2 against a shop-level app registration (developer.digikey.com); the
-// client ID/secret live in the per-user secrets store, never in .env or
-// config/local.json (#732 pattern — see arxlib/config/secrets.go).
+// client ID/secret are shop-wide, so they live in app_config (set once via
+// Settings, shared by every user, #60) rather than .env, config/local.json,
+// or the per-user secrets store.
 //
 // This is the app's first outbound HTTP call to a third party. It must fail
 // soft: an offline shop, an expired token, or a 429 surfaces as an inline
