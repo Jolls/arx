@@ -27,9 +27,42 @@ const (
 	digikeyTokenURL   = "https://api.digikey.com/v1/oauth2/token"
 	digikeyProductURL = "https://api.digikey.com/products/v4/search/%s/productdetails"
 	digikeyTimeout    = 10 * time.Second
+
+	// digikeyFileTimeout budgets a datasheet/photo download (#62) — longer than
+	// digikeyTimeout since these are file downloads, not a JSON API round trip.
+	digikeyFileTimeout  = 20 * time.Second
+	digikeyFileMaxBytes = 25 << 20 // 25MB
 )
 
 var digikeyHTTPClient = &http.Client{Timeout: digikeyTimeout}
+var digikeyFileHTTPClient = &http.Client{Timeout: digikeyFileTimeout}
+
+// fetchDigiKeyFile downloads a DigiKey-hosted datasheet/photo URL for local
+// import (#62) so it can be copied into DOC_CONTROL_ROOT like every other
+// attachment instead of being stored as a bare remote link. Capped at
+// digikeyFileMaxBytes so a misbehaving response can't exhaust memory.
+func fetchDigiKeyFile(ctx context.Context, fileURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := digikeyFileHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, digikeyFileMaxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > digikeyFileMaxBytes {
+		return nil, fmt.Errorf("file exceeds %d byte limit", digikeyFileMaxBytes)
+	}
+	return data, nil
+}
 
 // digikeyTokenCache holds the short-lived OAuth2 access token so a burst of
 // lookups (e.g. several parts edited in a row) doesn't re-authenticate every

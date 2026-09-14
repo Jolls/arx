@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +69,16 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Downloaded and written to DOC_CONTROL_ROOT before the transaction opens
+	// (#62): each fetch can block for up to digikeyFileTimeout, and doing that
+	// while holding a DB transaction open would tie up a pool connection for
+	// no reason — the file writes aren't part of the SQL transaction anyway.
+	preparedFiles, importedPart, err := h.prepareDigiKeyFiles(r.Context(), r, id)
+	if err != nil {
+		h.renderSourcingWithError(w, r, id, err.Error(), nil, supplierPartFromForm(r))
+		return
+	}
+
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
@@ -90,7 +103,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pricesInserted, err := h.applyDigiKeyImportExtras(r, tx, id, supplierID)
+	pricesInserted, photoForThumbnail, err := h.applyDigiKeyImportExtras(r, tx, id, supplierID, preparedFiles)
 	if err != nil {
 		h.renderSourcingWithError(w, r, id, err.Error(), nil, supplierPartFromForm(r))
 		return
@@ -104,6 +117,14 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	// row actually landed, not merely when the user checked "import prices".
 	if pricesInserted {
 		h.ensureDefaultSupplier(r.Context(), id, supplierID)
+	}
+	// Best-effort, like ensureDefaultSupplier above: runs after the supplier
+	// link is already committed, so a thumbnail failure must not undo it.
+	// importedPart is always populated here: photoForThumbnail is only set
+	// when the Photo entry in preparedFiles was, which only happens after
+	// prepareDigiKeyFiles has fetched the part.
+	if photoForThumbnail != nil {
+		h.generateThumbnailFromPhoto(r.Context(), id, *importedPart, photoForThumbnail)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/suppliers", id), http.StatusFound)
 }
@@ -132,21 +153,93 @@ func supplierPartFromForm(r *http.Request) *models.SupplierPart {
 	return sp
 }
 
+// digikeyPreparedFile is a DigiKey datasheet/photo already downloaded and
+// written into DOC_CONTROL_ROOT by prepareDigiKeyFiles, ready for its
+// part_attachment row to be inserted once a transaction is open. data carries
+// the raw bytes only for category "Photo", so generateThumbnailFromPhoto can
+// build a Thumbnail from it without fetching the URL a second time.
+type digikeyPreparedFile struct {
+	category string
+	fileName string // "LOCAL:<name>"
+	data     []byte
+}
+
+// prepareDigiKeyFiles downloads the datasheet/photo the user chose to import
+// (issue #27) and copies them into DOC_CONTROL_ROOT like every other
+// attachment (#62) rather than storing DigiKey's bare remote URL — a remote
+// file_name isn't recognised as local by urlutil.IsLocalFile, so it silently
+// never showed up in the part detail page's Photos card, and a remote
+// "Datasheet" couldn't be used with Generate Thumbnail either.
+//
+// Runs before SupplierPartCreate opens its DB transaction: each download can
+// block for up to digikeyFileTimeout, and the file writes aren't part of the
+// SQL transaction anyway, so there's no reason to hold a transaction open
+// across them. Returns the part it had to look up (for buildAttachmentFileName),
+// or nil if neither dk_import_datasheet nor dk_import_photo was requested.
+func (h *Handler) prepareDigiKeyFiles(ctx context.Context, r *http.Request, partID string) (files []digikeyPreparedFile, part *models.Part, err error) {
+	for _, imp := range []struct{ flag, urlField, category, defaultExt string }{
+		{"dk_import_datasheet", "dk_datasheet_url", "Datasheet", ".pdf"},
+		{"dk_import_photo", "dk_photo_url", "Photo", ".jpg"},
+	} {
+		if r.FormValue(imp.flag) != "1" {
+			continue
+		}
+		fileURL := strings.TrimSpace(r.FormValue(imp.urlField))
+		if fileURL == "" {
+			continue
+		}
+		if h.cfg.DocControlRoot == "" {
+			return nil, nil, fmt.Errorf("DOC_CONTROL_ROOT is not configured; cannot import DigiKey files")
+		}
+		if part == nil {
+			fetched, ferr := h.fetchPartBasic(ctx, partID)
+			if ferr != nil {
+				return nil, nil, fmt.Errorf("could not load part for DigiKey import: %w", ferr)
+			}
+			part = &fetched
+		}
+		data, ferr := fetchDigiKeyFile(ctx, fileURL)
+		if ferr != nil {
+			return nil, nil, fmt.Errorf("could not download DigiKey %s: %w", strings.ToLower(imp.category), ferr)
+		}
+		ext := imp.defaultExt
+		if u, perr := url.Parse(fileURL); perr == nil {
+			if e := path.Ext(u.Path); e != "" {
+				ext = e
+			}
+		}
+		name := buildAttachmentFileName(part.PartNumber, "", part.Description, imp.category, ext)
+		finalName, werr := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
+		if werr != nil {
+			return nil, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(imp.category), werr)
+		}
+		pf := digikeyPreparedFile{category: imp.category, fileName: "LOCAL:" + finalName}
+		if imp.category == "Photo" {
+			pf.data = data
+		}
+		files = append(files, pf)
+	}
+	return files, part, nil
+}
+
 // applyDigiKeyImportExtras writes the optional DigiKey-imported price breaks,
-// datasheet/photo attachments, and manufacturer link submitted alongside a new
-// supplier link. A no-op when none of the dk_* fields are present, so a plain
-// (non-imported) Add Supplier submit is unaffected. Returns whether at least
-// one price row was actually inserted (as opposed to skipped as a pre-existing
-// active price), which the caller uses to decide whether to run
-// ensureDefaultSupplier.
-func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID, supplierID string) (pricesInserted bool, err error) {
+// datasheet/photo attachment rows (already downloaded by prepareDigiKeyFiles),
+// and manufacturer link submitted alongside a new supplier link. A no-op when
+// none of the dk_* fields are present, so a plain (non-imported) Add Supplier
+// submit is unaffected. Returns whether at least one price row was actually
+// inserted (as opposed to skipped as a pre-existing active price), which the
+// caller uses to decide whether to run ensureDefaultSupplier.
+// photoForThumbnail is the raw bytes of a "dk_import_photo" download, returned
+// only when the user also checked "dk_generate_thumbnail" — the caller uses it
+// to build the /parts hover-tooltip Thumbnail after the transaction commits.
+func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID, supplierID string, preparedFiles []digikeyPreparedFile) (pricesInserted bool, photoForThumbnail []byte, err error) {
 	ctx := r.Context()
 
 	if r.FormValue("dk_import_prices") == "1" {
 		var breaks []digikeyPriceBreak
 		if raw := r.FormValue("dk_prices_json"); raw != "" {
 			if err := json.Unmarshal([]byte(raw), &breaks); err != nil {
-				return false, fmt.Errorf("could not read imported prices: %w", err)
+				return false, nil, fmt.Errorf("could not read imported prices: %w", err)
 			}
 		}
 		effectiveDate := time.Now().Format("2006-01-02")
@@ -160,28 +253,21 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 				if strings.Contains(err.Error(), "UQ_price") {
 					continue // an active price already exists at this pack size; leave it alone
 				}
-				return false, fmt.Errorf("could not save imported price: %w", err)
+				return false, nil, fmt.Errorf("could not save imported price: %w", err)
 			}
 			pricesInserted = true
 		}
 	}
 
-	for _, imp := range []struct{ flag, urlField, category string }{
-		{"dk_import_datasheet", "dk_datasheet_url", "Datasheet"},
-		{"dk_import_photo", "dk_photo_url", "Photo"},
-	} {
-		if r.FormValue(imp.flag) != "1" {
-			continue
-		}
-		fileURL := strings.TrimSpace(r.FormValue(imp.urlField))
-		if fileURL == "" {
-			continue
-		}
+	for _, pf := range preparedFiles {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (part_id, file_name, part_revision, category, comment) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 			h.cfg.AttachmentsTable(),
-		), partID, fileURL, "", imp.category, "Imported from DigiKey"); err != nil {
-			return false, fmt.Errorf("could not save imported %s: %w", strings.ToLower(imp.category), err)
+		), partID, pf.fileName, "", pf.category, "Imported from DigiKey"); err != nil {
+			return false, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(pf.category), err)
+		}
+		if pf.category == "Photo" && r.FormValue("dk_generate_thumbnail") == "1" {
+			photoForThumbnail = pf.data
 		}
 	}
 
@@ -192,16 +278,16 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 		if mfgChoice == "create" {
 			mfgName := strings.TrimSpace(r.FormValue("dk_mfg_name"))
 			if mfgName == "" {
-				return pricesInserted, fmt.Errorf("manufacturer name is required to create a new manufacturer")
+				return pricesInserted, nil, fmt.Errorf("manufacturer name is required to create a new manufacturer")
 			}
 			insertMfg := h.dia().InsertReturningID(h.cfg.CompanyTable(),
 				`name, is_supplier, is_manufacturer`, `@p1,@p2,@p3`, false)
 			var newID int
 			if err := tx.QueryRowContext(ctx, insertMfg, mfgName, false, true).Scan(&newID); err != nil {
 				if strings.Contains(err.Error(), "UQ_company_name") {
-					return pricesInserted, fmt.Errorf("a company named %q already exists — pick it from the manufacturer list instead", mfgName)
+					return pricesInserted, nil, fmt.Errorf("a company named %q already exists — pick it from the manufacturer list instead", mfgName)
 				}
-				return pricesInserted, fmt.Errorf("could not create manufacturer: %w", err)
+				return pricesInserted, nil, fmt.Errorf("could not create manufacturer: %w", err)
 			}
 			mfgID = strconv.Itoa(newID)
 		}
@@ -209,11 +295,11 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 			`INSERT INTO %s (part_id, mfg_id, mfg_part_number, is_active) VALUES (@p1,@p2,@p3,%s)`,
 			h.cfg.MfgPartTable(), h.dia().BoolLiteral(true),
 		), partID, mfgID, mfgPartNumber); err != nil && !strings.Contains(err.Error(), "UQ_mfg_part") {
-			return pricesInserted, fmt.Errorf("could not save manufacturer part: %w", err)
+			return pricesInserted, nil, fmt.Errorf("could not save manufacturer part: %w", err)
 		}
 	}
 
-	return pricesInserted, nil
+	return pricesInserted, photoForThumbnail, nil
 }
 
 // ── SupplierPartEdit — GET /part/{id}/suppliers/{spID}/edit ──────────────────
