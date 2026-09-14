@@ -6,3 +6,4 @@ arx_go/Arx.exe~
 *.local.*
 *local*.json
 /local/
+docs/digikey-api-compliance-assessment.md
