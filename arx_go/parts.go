@@ -463,7 +463,10 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 // ── PartsNew — GET /parts/new ───────────────────────────────────────────────
 
 func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
-	p := models.Part{}
+	p := models.Part{
+		PartNumber:  r.URL.Query().Get("part_number"),
+		Description: r.URL.Query().Get("description"),
+	}
 	if u := h.currentUser(r); u != nil {
 		p.RequestedBy = u.DisplayName
 	}
