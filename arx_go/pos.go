@@ -133,11 +133,12 @@ type SuggestPrice struct {
 	PartID     int
 	PartNumber string
 	Cost       float64
+	PackSize   float64
 }
 
 func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPrice {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT DISTINCT pol.part_id, pol.part_number_snapshot, pol.unit_cost
+		SELECT DISTINCT pol.part_id, pol.part_number_snapshot, pol.unit_cost, pol.qty
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.number = @p1
@@ -148,7 +149,7 @@ func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPri
 		    SELECT 1 FROM %s pr
 		    WHERE pr.part_id = pol.part_id
 		      AND pr.supplier_id = po.supplier_id
-		      AND pr.pack_size = 1
+		      AND pr.pack_size = pol.qty
 		      AND pr.is_active = %s
 		      AND pr.price_ea = pol.unit_cost
 		  )
@@ -162,7 +163,7 @@ func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPri
 		var s SuggestPrice
 		var partID sql.NullInt64
 		var partNum sql.NullString
-		if err := rows.Scan(&partID, &partNum, &s.Cost); err != nil {
+		if err := rows.Scan(&partID, &partNum, &s.Cost, &s.PackSize); err != nil {
 			log.Printf("fetchSuggestPrices: scan error: %v", err)
 			break
 		}
@@ -872,21 +873,31 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 		}
 		partID := r.FormValue(fmt.Sprintf("price_part_id_%d", i))
 		cost := r.FormValue(fmt.Sprintf("price_cost_%d", i))
+		packSize := r.FormValue(fmt.Sprintf("price_pack_size_%d", i))
 		if partID == "" || cost == "" || supplierID == "" {
 			continue
 		}
-		// Deactivate any existing active price at pack_size=1 for this part+supplier.
+		if packSize == "" {
+			packSize = "1"
+		}
+		// Deactivate any existing active price at this pack size for this part+supplier.
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET is_active=%s
-			WHERE part_id=@p1 AND supplier_id=@p2 AND pack_size=1 AND is_active=%s
-		`, pr, h.dia().BoolLiteral(false), h.dia().BoolLiteral(true)), partID, supplierID); err != nil {
+			WHERE part_id=@p1 AND supplier_id=@p2 AND pack_size=@p3 AND is_active=%s
+		`, pr, h.dia().BoolLiteral(false), h.dia().BoolLiteral(true)), partID, supplierID, packSize); err != nil {
 			h.renderError(w, r, "Error updating price: "+err.Error())
 			return
 		}
+		packPrice := cost
+		if packSizeF, err := strconv.ParseFloat(packSize, 64); err == nil {
+			if costF, err := strconv.ParseFloat(cost, 64); err == nil {
+				packPrice = strconv.FormatFloat(costF*packSizeF, 'f', -1, 64)
+			}
+		}
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(`
 			INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-			VALUES (@p1, @p2, 1, @p3, @p3, @p4, %s)
-		`, pr, h.dia().BoolLiteral(true)), partID, supplierID, cost, today); err != nil {
+			VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
+		`, pr, h.dia().BoolLiteral(true)), partID, supplierID, packSize, cost, packPrice, today); err != nil {
 			h.renderError(w, r, "Error inserting price: "+err.Error())
 			return
 		}

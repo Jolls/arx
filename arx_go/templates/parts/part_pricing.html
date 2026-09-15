@@ -70,6 +70,11 @@
                                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                                 <button type="submit" class="btn btn-sm btn-secondary">Activate</button>
                             </form>
+                            <form method="post" action="/part/{{$.Part.ID}}/pricing/{{.ID}}/delete" class="d-inline"
+                                  onsubmit="return confirm('Permanently delete this price?');">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
                             {{end}}
                         </td>
                     </tr>
