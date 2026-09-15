@@ -222,6 +222,16 @@ func (h *Handler) fetchDigiKeyProduct(ctx context.Context, productNumber string)
 	return mapDigiKeyProduct(&parsed, productNumber), nil
 }
 
+// normalizeDigiKeyURL adds an explicit https: scheme to the protocol-relative
+// URLs ("//mm.digikey.com/...") the ProductDetails endpoint returns for
+// DatasheetUrl/PhotoUrl — net/http rejects a schemeless URL outright.
+func normalizeDigiKeyURL(u string) string {
+	if strings.HasPrefix(u, "//") {
+		return "https:" + u
+	}
+	return u
+}
+
 // mapDigiKeyProduct converts the raw API response into Arx's sourcing shape.
 // A product can have multiple ProductVariations (e.g. cut-tape vs. reel,
 // each with its own DigiKey product number, MOQ, and pricing) even though the
@@ -235,8 +245,8 @@ func mapDigiKeyProduct(parsed *digikeyProductResponse, requestedPN string) *digi
 		SupplierDesc:  p.Description.ProductDescription,
 		MfgPartNumber: p.ManufacturerProductNumber,
 		MfgName:       p.Manufacturer.Name,
-		DatasheetURL:  p.DatasheetURL,
-		PhotoURL:      p.PhotoURL,
+		DatasheetURL:  normalizeDigiKeyURL(p.DatasheetURL),
+		PhotoURL:      normalizeDigiKeyURL(p.PhotoURL),
 	}
 	if weeks := strings.TrimSpace(p.ManufacturerLeadWeeks); weeks != "" {
 		if n, err := strconv.Atoi(weeks); err == nil {

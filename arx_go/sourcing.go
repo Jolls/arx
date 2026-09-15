@@ -355,12 +355,19 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
+	digiKeyEnabled := h.cfg.DigiKeyEnabled()
+	var manufacturers []manufacturerOption
+	if digiKeyEnabled {
+		manufacturers, _ = h.fetchManufacturers(r)
+	}
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":             p,
 		"Links":            links,
 		"EditingLink":      &sp,
 		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
 		"Units":            units,
+		"Manufacturers":    manufacturers,
+		"DigiKeyEnabled":   digiKeyEnabled,
 		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
@@ -376,14 +383,33 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	spID := chi.URLParam(r, "spID")
 	spIDInt, _ := strconv.Atoi(spID)
-	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
-	if supplierID == "" {
+	fail := func(msg string) {
 		draft := supplierPartFromForm(r)
 		draft.ID = spIDInt
-		h.renderSourcingWithError(w, r, id, "Supplier is required", draft, nil)
+		h.renderSourcingWithError(w, r, id, msg, draft, nil)
+	}
+	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
+	if supplierID == "" {
+		fail("Supplier is required")
 		return
 	}
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
+	// Mirrors SupplierPartCreate: downloaded and written to DOC_CONTROL_ROOT
+	// before the transaction opens (#62), since the fetch isn't part of the
+	// SQL transaction anyway.
+	preparedFiles, importedPart, err := h.prepareDigiKeyFiles(r.Context(), r, id)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		fail("Error updating supplier link: " + err.Error())
+		return
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET supplier_id=@p1, preference=@p2, supplier_pn=@p3, supplier_desc=@p4,
 		              lead_time=@p5, min_increment=@p6, uom_id=@p7
 		WHERE id=@p8 AND part_id=@p9
@@ -398,10 +424,25 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		spID, id,
 	)
 	if err != nil {
-		draft := supplierPartFromForm(r)
-		draft.ID = spIDInt
-		h.renderSourcingWithError(w, r, id, "Error updating supplier link: "+err.Error(), draft, nil)
+		fail("Error updating supplier link: " + err.Error())
 		return
+	}
+
+	pricesInserted, photoForThumbnail, err := h.applyDigiKeyImportExtras(r, tx, id, supplierID, preparedFiles)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		fail("Error updating supplier link: " + err.Error())
+		return
+	}
+	if pricesInserted {
+		h.ensureDefaultSupplier(r.Context(), id, supplierID)
+	}
+	if photoForThumbnail != nil {
+		h.generateThumbnailFromPhoto(r.Context(), id, *importedPart, photoForThumbnail)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/suppliers", id), http.StatusFound)
 }

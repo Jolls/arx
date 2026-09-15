@@ -688,6 +688,23 @@ func navBack(sess *sessions.Session) (url, label string) {
 
 func coreTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
+		// dict builds a map from alternating string-key/value pairs so a
+		// {{template}} call can pass more than one value to a named template
+		// (a Go html/template block only ever receives a single ".").
+		"dict": func(pairs ...any) (map[string]any, error) {
+			if len(pairs)%2 != 0 {
+				return nil, fmt.Errorf("dict: odd number of arguments")
+			}
+			m := make(map[string]any, len(pairs)/2)
+			for i := 0; i < len(pairs); i += 2 {
+				key, ok := pairs[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: keys must be strings")
+				}
+				m[key] = pairs[i+1]
+			}
+			return m, nil
+		},
 		"formatDate":           formatDate,
 		"formatFileSize":       formatFileSize,
 		"fileIcon":             urlutil.FileIcon,
