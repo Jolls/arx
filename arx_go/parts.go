@@ -2391,6 +2391,24 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
 }
 
+// PriceDelete hard-deletes a price row. Only deactivated rows may be deleted —
+// active pricing must be deactivated first (#57).
+func (h *Handler) PriceDelete(w http.ResponseWriter, r *http.Request) {
+	partID := chi.URLParam(r, "id")
+	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+		return
+	}
+	priceID := chi.URLParam(r, "priceID")
+	_, err := h.execContext(r.Context(), fmt.Sprintf(
+		`DELETE FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`, h.cfg.PriceTable(), h.dia().BoolLiteral(false),
+	), priceID, partID)
+	if err != nil {
+		h.renderError(w, r, "Error deleting price: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
+}
+
 func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
 	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {

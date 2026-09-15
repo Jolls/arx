@@ -34,7 +34,8 @@
                 <input type="checkbox" name="add_price_{{.Index}}" value="1" checked>
                 <input type="hidden" name="price_part_id_{{.Index}}" value="{{.PartID}}">
                 <input type="hidden" name="price_cost_{{.Index}}" value="{{.Cost}}">
-                <span>{{.PartNumber}} &mdash; <code>{{printf "%.4f" .Cost}}</code> ea</span>
+                <input type="hidden" name="price_pack_size_{{.Index}}" value="{{.PackSize}}">
+                <span>{{.PartNumber}} &mdash; <code>{{printf "%.4f" .Cost}}</code> ea @ qty {{printf "%.2f" .PackSize}}</span>
             </label>
             {{end}}
             {{end}}

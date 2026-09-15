@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.38] - 2026-09-14
+### Fixed
+- Accepting a PO's "New unit cost(s) — add to part pricing?" suggestion always saved the price at `pack_size=1`, clobbering the part's base unit price with what was actually a quantity-break price; it now saves at the PO line's ordered quantity, and the suggestion matching/dedup check no longer assumes `pack_size=1` either ([#57](https://github.com/Jolls/arx/issues/57))
+### Added
+- Deactivated prices on the Part Pricing tab can now be permanently deleted ([#57](https://github.com/Jolls/arx/issues/57))
+
 ## [0.7.37] - 2026-09-14
 ### Added
 - Supplier "Linked Parts" table now shows the same `/parts` hover-tooltip thumbnail on the Internal PN column when a linked part has one ([#63](https://github.com/Jolls/arx/issues/63))
