@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.37] - 2026-09-14
+### Added
+- Supplier "Linked Parts" table now shows the same `/parts` hover-tooltip thumbnail on the Internal PN column when a linked part has one ([#63](https://github.com/Jolls/arx/issues/63))
+- Table text filters now support `*`/`?` glob wildcards (e.g. `65*-013*-*`), matched whole-field and case-insensitively; plain filter text with no wildcard chars still matches by substring as before ([#51](https://github.com/Jolls/arx/issues/51))
+### Fixed
+- Date-range filter dropdown on tables (e.g. `/parts`, `/records`) was clipped by the table's bottom edge when the filtered result set was short, since the dropdown's toggle button is created after the shared "fixed positioning" pass that escapes the table wrapper's scroll clipping; the same fix is now reapplied when the date-filter control is built ([#52](https://github.com/Jolls/arx/issues/52))
+
 ## [0.7.36] - 2026-09-14
 ### Added
 - "Fetch from DigiKey" is now available on the Edit Supplier Link form, not just Add Supplier — pulls fresh description/lead time/MOQ/pricing/datasheet/photo/manufacturer data when editing an existing DigiKey-sourced supplier link

@@ -49,6 +49,7 @@ type SupplierPart struct {
 	Description string
 	Revision    string
 	Category    string
+	Thumb       string // joined — /parts-style hover thumbnail URL (#63), empty when part has none
 	// joined — supplier + mfg info (part sourcing view)
 	SupplierName           string
 	MfgPartID              *int
