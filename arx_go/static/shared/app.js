@@ -306,6 +306,19 @@ function resolveRowConfig(url) {
 // filter control (e.g. a select/checkbox column) reads as an inert text
 // filter. Read from the th itself (not its inputs) so columns with zero,
 // one, or two controls each still occupy exactly one positional slot.
+// Compiles a `*`/`?` glob into a case-insensitive, whole-field RegExp.
+// Returns null when the trimmed value has no wildcard chars, so callers
+// fall back to the existing substring `includes` behavior unchanged (#51).
+function compileGlob(raw) {
+    const v = (raw || '').trim();
+    if (!v || !/[*?]/.test(v)) return null;
+    const pattern = v
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&') // escape regex specials (not * or ?)
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.');
+    return new RegExp('^' + pattern + '$', 'i');
+}
+
 function getFilterColumns() {
     return Array.from(document.querySelectorAll('tr.filter-row th')).map(th => {
         if (th.dataset.filterType === 'date') {
@@ -314,7 +327,8 @@ function getFilterColumns() {
             return { type: 'date', from: from ? from.value : '', to: to ? to.value : '' };
         }
         const input = th.querySelector('input, select');
-        return { type: 'text', value: input ? input.value : '' };
+        const raw = input ? input.value : '';
+        return { type: 'text', value: raw, regex: compileGlob(raw) };
     });
 }
 
@@ -329,6 +343,7 @@ function matchesRow(row, cols) {
             if (c.to && d > c.to) return false;
             return true;
         }
+        if (c.regex) return c.regex.test(text);
         const v = (c.value || '').toLowerCase().trim();
         return !v || text.includes(v);
     });
@@ -361,6 +376,11 @@ function initDateFilters() {
         to.addEventListener('change', onChange);
         clear.addEventListener('click', () => { from.value = ''; to.value = ''; onChange(); });
     });
+    // The date-filter dropdown toggle is created above, after the shared
+    // DOMContentLoaded listener that applies Popper's 'fixed' strategy to
+    // dropdowns already in the DOM — apply it here too so this toggle isn't
+    // clipped by .table-wrapper's computed overflow-y (#52).
+    useFixedDropdownStrategy();
 }
 
 function updateDateFilterButton(th) {
@@ -564,13 +584,14 @@ function exportCSV() {
 // strategy, which is clipped by any scrollable ancestor — .table-wrapper's
 // overflow-x:auto clips rows near the bottom of a table. 'fixed' strategy
 // positions relative to the viewport instead, escaping that clipping.
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+function useFixedDropdownStrategy(root = document) {
+    root.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
         bootstrap.Dropdown.getOrCreateInstance(el, {
             popperConfig: defaultConfig => Object.assign({}, defaultConfig, { strategy: 'fixed' }),
         });
     });
-});
+}
+document.addEventListener('DOMContentLoaded', () => useFixedDropdownStrategy());
 
 document.addEventListener('DOMContentLoaded', () => {
     initDateFilters();

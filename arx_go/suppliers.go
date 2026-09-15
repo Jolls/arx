@@ -351,21 +351,22 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Name = name.String
 
-	sp, pn, ut := h.cfg.SupplierPartTable(), h.cfg.PartsTable(), h.cfg.UomTable()
+	sp, pn, ut, at := h.cfg.SupplierPartTable(), h.cfg.PartsTable(), h.cfg.UomTable(), h.cfg.AttachmentsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,
 		       pn.part_number, pn.description, pn.revision, pn.category,
 		       sp.uom_id,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
-		       %s AS unit_is_explicit
+		       %s AS unit_is_explicit,
+		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = pn.id AND a.is_active = %s AND a.category = @p2) AS thumb_file
 		FROM %s sp
 		JOIN %s pn ON sp.part_id = pn.id
 		LEFT JOIN %s pu ON sp.uom_id   = pu.uom_id   -- explicit purchase unit
 		LEFT JOIN %s bu ON pn.uom_id   = bu.uom_id   -- base unit fallback
 		WHERE sp.supplier_id = @p1
 		ORDER BY pn.part_number
-	`, h.dia().BoolFromCondition("sp.uom_id IS NOT NULL"), sp, pn, ut, ut), id)
+	`, h.dia().BoolFromCondition("sp.uom_id IS NOT NULL"), at, h.dia().BoolLiteral(true), sp, pn, ut, ut), id, thumbnailCategory)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving linked parts: "+err.Error())
 		return
@@ -378,13 +379,13 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		var supplierPN, supplierDesc, leadTime sql.NullString
 		var minIncr sql.NullFloat64
 		var unitID sql.NullInt64
-		var partNumber, description, revision, category, unitAbbr sql.NullString
+		var partNumber, description, revision, category, unitAbbr, thumbFile sql.NullString
 		var unitIsExplicit bool
 		if err := rows.Scan(
 			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
 			&leadTime, &minIncr,
 			&partNumber, &description, &revision, &category,
-			&unitID, &unitAbbr, &unitIsExplicit,
+			&unitID, &unitAbbr, &unitIsExplicit, &thumbFile,
 		); err != nil {
 			h.renderError(w, r, "Error reading linked parts: "+err.Error())
 			return
@@ -409,6 +410,9 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		}
 		lk.PurchaseUnitAbbr = unitAbbr.String
 		lk.PurchaseUnitIsExplicit = unitIsExplicit
+		if urlutil.IsLocalFile(thumbFile.String) {
+			lk.Thumb = urlutil.LocalFileURL(thumbFile.String, "/local/")
+		}
 		links = append(links, lk)
 	}
 
