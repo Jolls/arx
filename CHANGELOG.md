@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.36] - 2026-09-14
+### Added
+- "Fetch from DigiKey" is now available on the Edit Supplier Link form, not just Add Supplier — pulls fresh description/lead time/MOQ/pricing/datasheet/photo/manufacturer data when editing an existing DigiKey-sourced supplier link
+### Fixed
+- DigiKey-imported datasheet/photo downloads failed with "unsupported protocol scheme" for the schemeless `//host/...` URLs the API returns for `DatasheetUrl`/`PhotoUrl`; these are now normalized to `https://` before fetching
+
 ## [0.7.35] - 2026-09-14
 ### Added
 - New Part button now opens a quick-add modal for entering Part Number/Description before continuing to the full New Part form, prefilling those two fields ([#50](https://github.com/Jolls/arx/issues/50))

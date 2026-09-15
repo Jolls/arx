@@ -76,6 +76,27 @@ func TestMapDigiKeyProductLeadTimeSingular(t *testing.T) {
 	}
 }
 
+// TestMapDigiKeyProductNormalizesProtocolRelativeURLs guards against a
+// regression to the schemeless "//mm.digikey.com/..." URLs the live API
+// returns for DatasheetUrl/PhotoUrl — net/http rejects those outright, so the
+// download silently breaks with "unsupported protocol scheme" if the
+// normalization in mapDigiKeyProduct is ever dropped.
+func TestMapDigiKeyProductNormalizesProtocolRelativeURLs(t *testing.T) {
+	var parsed digikeyProductResponse
+	parsed.Product.DatasheetURL = "//mm.digikey.com/Volume0/opasdata/d220001/medias/docus/6592/TMCM-1260_hardware_manual_V120.pdf"
+	parsed.Product.PhotoURL = "//media.digikey.com/photos/Trinamic%20Photos/TMCM-1260.jpg"
+	got := mapDigiKeyProduct(&parsed, "")
+
+	wantDatasheet := "https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/6592/TMCM-1260_hardware_manual_V120.pdf"
+	if got.DatasheetURL != wantDatasheet {
+		t.Errorf("DatasheetURL = %q, want %q", got.DatasheetURL, wantDatasheet)
+	}
+	wantPhoto := "https://media.digikey.com/photos/Trinamic%20Photos/TMCM-1260.jpg"
+	if got.PhotoURL != wantPhoto {
+		t.Errorf("PhotoURL = %q, want %q", got.PhotoURL, wantPhoto)
+	}
+}
+
 func TestMapDigiKeyProductEmpty(t *testing.T) {
 	var parsed digikeyProductResponse
 	got := mapDigiKeyProduct(&parsed, "")
