@@ -39,13 +39,14 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		manufacturers, _ = h.fetchManufacturers(r)
 	}
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
-		"Part":             p,
-		"Links":            links,
-		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
-		"Units":            units,
-		"Manufacturers":    manufacturers,
-		"DigiKeyEnabled":   digiKeyEnabled,
-		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
+		"Part":              p,
+		"Links":             links,
+		"PricesBySupplier":  h.fetchActivePricesBySupplier(r, id),
+		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, supplierScopeCol),
+		"Units":             units,
+		"Manufacturers":     manufacturers,
+		"DigiKeyEnabled":    digiKeyEnabled,
+		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -361,14 +362,15 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		manufacturers, _ = h.fetchManufacturers(r)
 	}
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
-		"Part":             p,
-		"Links":            links,
-		"EditingLink":      &sp,
-		"PricesBySupplier": h.fetchActivePricesBySupplier(r, id),
-		"Units":            units,
-		"Manufacturers":    manufacturers,
-		"DigiKeyEnabled":   digiKeyEnabled,
-		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
+		"Part":              p,
+		"Links":             links,
+		"EditingLink":       &sp,
+		"PricesBySupplier":  h.fetchActivePricesBySupplier(r, id),
+		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, supplierScopeCol),
+		"Units":             units,
+		"Manufacturers":     manufacturers,
+		"DigiKeyEnabled":    digiKeyEnabled,
+		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -577,16 +579,17 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 		manufacturers, _ = h.fetchManufacturers(r)
 	}
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
-		"Part":             p,
-		"Links":            links,
-		"EditingLink":      editing,
-		"AddDraft":         draft,
-		"PricesBySupplier": h.fetchActivePricesBySupplier(r, partID),
-		"Units":            units,
-		"Manufacturers":    manufacturers,
-		"DigiKeyEnabled":   digiKeyEnabled,
-		"Error":            errMsg,
-		"ActiveTab":        "parts", "ActiveSubTab": "suppliers",
+		"Part":              p,
+		"Links":             links,
+		"EditingLink":       editing,
+		"AddDraft":          draft,
+		"PricesBySupplier":  h.fetchActivePricesBySupplier(r, partID),
+		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, partID, supplierScopeCol),
+		"Units":             units,
+		"Manufacturers":     manufacturers,
+		"DigiKeyEnabled":    digiKeyEnabled,
+		"Error":             errMsg,
+		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})

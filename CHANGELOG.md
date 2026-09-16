@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.39] - 2026-09-16
+### Added
+- Part attachments can now be scoped to one of the part's supplier links or manufacturer parts, via a new "Linked Vendor" picker on the Add/Edit Attachment forms and a matching column on the Attachments tab; scoped attachments appear under their supplier/manufacturer row on the Suppliers and Mfg Parts tabs, while part-level attachments stay on the Attachments tab as before ([#56](https://github.com/Jolls/arx/issues/56))
+- Part breadcrumb PN label now shows the same `/parts` hover-tooltip thumbnail when the part has one ([#56](https://github.com/Jolls/arx/issues/56))
+### Fixed
+- Part Records tab was missing its breadcrumb trail ([#56](https://github.com/Jolls/arx/issues/56))
+### Changed
+- Part sub-tab breadcrumb markup consolidated into a shared partial, so every part tab renders the same trail ([#56](https://github.com/Jolls/arx/issues/56))
+
 ## [0.7.38] - 2026-09-14
 ### Fixed
 - Accepting a PO's "New unit cost(s) — add to part pricing?" suggestion always saved the price at `pack_size=1`, clobbering the part's base unit price with what was actually a quantity-break price; it now saves at the PO line's ordered quantity, and the suggestion matching/dedup check no longer assumes `pack_size=1` either ([#57](https://github.com/Jolls/arx/issues/57))

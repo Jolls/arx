@@ -33,10 +33,11 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "parts/mfg_parts.html", map[string]any{
-		"Part":          p,
-		"MfgParts":      mfgParts,
-		"Manufacturers": manufacturers,
-		"ActiveTab":     "parts", "ActiveSubTab": "mfg-parts",
+		"Part":              p,
+		"MfgParts":          mfgParts,
+		"Manufacturers":     manufacturers,
+		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, mfgScopeCol),
+		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -112,11 +113,12 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "parts/mfg_parts.html", map[string]any{
-		"Part":           p,
-		"MfgParts":       mfgParts,
-		"EditingMfgPart": &mp,
-		"Manufacturers":  manufacturers,
-		"ActiveTab":      "parts", "ActiveSubTab": "mfg-parts",
+		"Part":              p,
+		"MfgParts":          mfgParts,
+		"EditingMfgPart":    &mp,
+		"Manufacturers":     manufacturers,
+		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, mfgScopeCol),
+		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})
@@ -239,11 +241,12 @@ func (h *Handler) renderMfgPartsWithError(w http.ResponseWriter, r *http.Request
 	mfgParts, _ := h.fetchMfgParts(r, partID)
 	manufacturers, _ := h.fetchManufacturers(r)
 	h.render(w, r, "parts/mfg_parts.html", map[string]any{
-		"Part":          p,
-		"MfgParts":      mfgParts,
-		"Manufacturers": manufacturers,
-		"Error":         errMsg,
-		"ActiveTab":     "parts", "ActiveSubTab": "mfg-parts",
+		"Part":              p,
+		"MfgParts":          mfgParts,
+		"Manufacturers":     manufacturers,
+		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, partID, mfgScopeCol),
+		"Error":             errMsg,
+		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 	})

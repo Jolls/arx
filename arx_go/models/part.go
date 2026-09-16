@@ -28,6 +28,7 @@ type Part struct {
 	LastRollupCost      float64
 	LastRollupAt        *time.Time
 	AttachmentCount     int
+	ThumbnailURL        string // resolved URL of the active "Thumbnail"-category attachment, if any (#56); empty when none generated
 	POLineCount         int
 	DefaultSupplierID   *int // preferred supplier for cost rollup (#465); nil = none pinned
 	UserField1          string
@@ -230,4 +231,8 @@ type Attachment struct {
 	Category     string
 	OrderID      *int
 	Comment      string
+	// Vendor scope (#56): "s:<supplier_part_id>" or "m:<mfg_part_id>", empty when the
+	// attachment is part-level. VendorName is the joined supplier/manufacturer name.
+	VendorScope string
+	VendorName  string
 }

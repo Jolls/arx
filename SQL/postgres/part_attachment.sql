@@ -1,5 +1,7 @@
 -- part_attachment: file and URL attachments linked to a part.
 -- Deletions are soft-delete only (is_active = FALSE); never hard-delete rows.
+-- supplier_part_id / mfg_part_id optionally scope an attachment to one of the part's
+-- vendor links (#56); both NULL = a plain part-level attachment.
 -- attachment_count on part is maintained by a trigger (SQL/postgres/triggers.sql);
 -- it counts only active (is_active) rows.
 
@@ -13,5 +15,14 @@ CREATE TABLE part_attachment (
   part_revision  VARCHAR(10),
   sort_order     INTEGER        DEFAULT 1,
   is_active      BOOLEAN NOT NULL DEFAULT TRUE,
-  comment        VARCHAR(500)    -- Free-text note (#585).
+  comment        VARCHAR(500),   -- Free-text note (#585).
+
+  -- Vendor scope (#56). At most one may be set; both NULL = part-level attachment.
+  -- ON DELETE SET NULL: supplier_part rows are hard-deleted, so a scoped attachment
+  -- reverts to part-level rather than blocking the delete.
+  supplier_part_id INTEGER REFERENCES supplier_part (id) ON DELETE SET NULL,
+  mfg_part_id      INTEGER REFERENCES mfg_part (id) ON DELETE SET NULL,
+
+  CONSTRAINT CK_part_attachment_vendor_scope
+    CHECK (supplier_part_id IS NULL OR mfg_part_id IS NULL)
 );

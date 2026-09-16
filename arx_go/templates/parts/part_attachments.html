@@ -1,10 +1,17 @@
+{{/* vendor_scope_select — the "Linked Vendor" picker (#56). Offers only the vendors
+     already linked to this part; blank keeps the attachment part-level.
+     Pipeline: {Options, Selected} — build with dict. */}}
+{{define "vendor_scope_select"}}
+<select name="vendor_scope" class="form-select">
+    <option value="">&mdash; part-level (no vendor) &mdash;</option>
+    {{range .Options}}
+    <option value="{{.Value}}" {{if eq .Value $.Selected}}selected{{end}}>{{.Label}}</option>
+    {{end}}
+</select>
+{{end}}
+
 {{define "content"}}
-<nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}</li>
-    </ol>
-</nav>
+{{template "part_breadcrumb" .}}
 <div class="content">
     {{template "part_tabs" .}}
 
@@ -23,6 +30,7 @@
             <input type="hidden" name="FILPNRev" value="{{.ImportCollision.Rev}}">
             <input type="hidden" name="order_id" value="{{.ImportCollision.OrderID}}">
             <input type="hidden" name="comment" value="{{.ImportCollision.Comment}}">
+            <input type="hidden" name="vendor_scope" value="{{.ImportCollision.VendorScope}}">
             {{if .ImportCollision.Move}}<input type="hidden" name="move_source" value="1">{{end}}
             <input type="hidden" name="link_existing" value="1">
             <button type="submit" class="btn btn-sm btn-warning">Link to existing file</button>
@@ -41,6 +49,7 @@
                     <th style="width:60px;">Rev</th>
                     <th>File / URL</th>
                     <th>Category</th>
+                    <th><span data-bs-toggle="tooltip" title="Supplier or manufacturer link this attachment belongs to — blank means it applies to the part as a whole">Linked Vendor</span></th>
                     <th>Comment</th>
                     <th style="width:50px;"></th>
                 </tr>
@@ -54,28 +63,10 @@
                     <td>{{.PartRevision}}</td>
                     <td class="text-truncate" style="max-width:340px;">
                         {{if $isPrimary}}<span style="color:#f5a623; font-size:1.1em;" title="Primary attachment">&#9733;</span> {{end}}
-                        {{if isHTTPURL $f}}
-                            <a href="{{$f}}" target="_blank" rel="noopener noreferrer" title="{{$f}}">{{$f}}</a>
-                        {{else if isLocalDir $f}}
-                            <a href="{{localDirURL $f}}" title="Open folder">&#128193; {{displayLink $f}}</a>
-                        {{else if isLocalFile $f}}
-                            {{if isPDF $f}}
-                                <a href="{{localFileURL $f}}" target="_blank" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
-                            {{else if isImage (fileBaseName $f)}}
-                                <span class="img-hover-wrap" data-src="{{localFileURL $f}}">
-                                    <a href="{{localFileURL $f}}" target="_blank" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
-                                    <span class="img-hover-preview"><img alt="preview"></span>
-                                </span>
-                            {{else}}
-                                <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" title="{{fileBaseName $f}}">{{fileBaseName $f}}</a>
-                            {{end}}
-                        {{else if isAbsPath $f}}
-                            {{template "abspath_link" $f}}
-                        {{else}}
-                            <span class="font-monospace" style="font-size:0.9em;" title="{{$f}}">{{$f}}</span>
-                        {{end}}
+                        {{template "attachment_link" $f}}
                     </td>
                     <td>{{.Category}}</td>
+                    <td>{{if .VendorName}}{{.VendorName}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td class="text-truncate" style="max-width:200px;">{{.Comment}}</td>
                     <td class="text-center">
                         <div class="dropdown">
@@ -139,6 +130,10 @@
                 {{template "category_select" (categoryCtx .AttachmentCategories .EditingAtt.Category "edit_category")}}
             </div>
             <div class="detail-row">
+                <label class="form-label">Linked Vendor</label>
+                {{template "vendor_scope_select" (dict "Options" .VendorScopeOptions "Selected" .EditingAtt.VendorScope)}}
+            </div>
+            <div class="detail-row">
                 <label class="form-label">Replace File / URL</label>
                 <input type="text" name="FILFileName" id="edit_FILFileName" class="form-control"
                        placeholder="leave blank to keep current file">
@@ -192,6 +187,10 @@
                 <div class="detail-row">
                     <label class="form-label">Category</label>
                     {{template "category_select" (categoryCtx .AttachmentCategories "" "add_category")}}
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Linked Vendor</label>
+                    {{template "vendor_scope_select" (dict "Options" .VendorScopeOptions "Selected" "")}}
                 </div>
                 <div class="detail-row">
                     <label class="form-label">File / URL *</label>

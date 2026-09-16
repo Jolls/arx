@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"arx/arx_go/models"
 	"arx/arxlib/urlutil"
 )
 
@@ -201,6 +203,7 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 					"Name": name, "SourcePath": src,
 					"Category": category, "Rev": rev, "OrderID": fv(r, "order_id"),
 					"Move": fv(r, "move_source"), "Comment": comment,
+					"VendorScope": fv(r, "vendor_scope"),
 				}}
 			}
 		}
@@ -305,6 +308,124 @@ func (h *Handler) setPrimaryAttachment(ctx context.Context, table, idCol, primar
 		`UPDATE %s SET %s=@p1 WHERE %s=@p2`, table, primaryCol, idCol,
 	), attachmentID, parentID)
 	return err
+}
+
+// Vendor-scope columns on part_attachment (#56). Interpolated into SQL, so these are
+// the only permitted values — never user input.
+const (
+	supplierScopeCol = "supplier_part_id"
+	mfgScopeCol      = "mfg_part_id"
+)
+
+// vendorScopeOption is one choice in the attachments page's "Linked Vendor" picker.
+// Value is the form token parsed by resolveVendorScope.
+type vendorScopeOption struct {
+	Value string
+	Label string
+}
+
+// fetchVendorScopeOptions lists the part's own supplier links and manufacturer parts —
+// the only vendors one of its attachments may be scoped to (#56).
+func (h *Handler) fetchVendorScopeOptions(r *http.Request, partID string) ([]vendorScopeOption, error) {
+	links, err := h.fetchSupplierLinks(r, partID)
+	if err != nil {
+		return nil, err
+	}
+	var opts []vendorScopeOption
+	for _, lk := range links {
+		opts = append(opts, vendorScopeOption{
+			Value: fmt.Sprintf("s:%d", lk.ID),
+			Label: vendorScopeLabel("Supplier", lk.SupplierName, lk.SupplierPN),
+		})
+	}
+	mfgParts, err := h.fetchMfgParts(r, partID)
+	if err != nil {
+		return nil, err
+	}
+	for _, mp := range mfgParts {
+		opts = append(opts, vendorScopeOption{
+			Value: fmt.Sprintf("m:%d", mp.ID),
+			Label: vendorScopeLabel("Mfg", mp.MfgName, mp.MfgPartNumber),
+		})
+	}
+	return opts, nil
+}
+
+func vendorScopeLabel(kind, name, pn string) string {
+	if pn == "" {
+		return kind + ": " + name
+	}
+	return kind + ": " + name + " (" + pn + ")"
+}
+
+// resolveVendorScope turns a submitted "Linked Vendor" token into the supplier_part_id /
+// mfg_part_id pair to store (#56). An empty token means part-level (both NULL). The
+// referenced link must belong to partID — the picker only offers this part's own vendors,
+// and nothing else may be scoped to an attachment of a different part.
+func (h *Handler) resolveVendorScope(ctx context.Context, partID, token string) (supplierPartID, mfgPartID any, err error) {
+	if token == "" {
+		return nil, nil, nil
+	}
+	kind, rest, ok := strings.Cut(token, ":")
+	if !ok {
+		return nil, nil, fmt.Errorf("invalid linked vendor selection")
+	}
+	id, convErr := strconv.Atoi(rest)
+	if convErr != nil {
+		return nil, nil, fmt.Errorf("invalid linked vendor selection")
+	}
+	var table string
+	switch kind {
+	case "s":
+		table = h.cfg.SupplierPartTable()
+	case "m":
+		table = h.cfg.MfgPartTable()
+	default:
+		return nil, nil, fmt.Errorf("invalid linked vendor selection")
+	}
+	var count int
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE id=@p1 AND part_id=@p2`, table,
+	), id, partID).Scan(&count); err != nil {
+		return nil, nil, err
+	}
+	if count == 0 {
+		return nil, nil, fmt.Errorf("that supplier or manufacturer is not linked to this part")
+	}
+	if kind == "s" {
+		return id, nil, nil
+	}
+	return nil, id, nil
+}
+
+// fetchAttachmentsByVendor returns a part's active attachments that are scoped to a vendor
+// link, keyed by that link's id, for the Suppliers / Mfg Parts tabs (#56). col is one of
+// supplierScopeCol / mfgScopeCol.
+func (h *Handler) fetchAttachmentsByVendor(r *http.Request, partID, col string) map[int][]models.Attachment {
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+		SELECT %s, id, file_name, category, part_revision
+		FROM %s
+		WHERE part_id = @p1 AND is_active = %s AND %s IS NOT NULL
+		ORDER BY sort_order, id
+	`, col, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), col), partID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[int][]models.Attachment{}
+	for rows.Next() {
+		var vendorID sql.NullInt64
+		var att models.Attachment
+		var fname, category, rev sql.NullString
+		if rows.Scan(&vendorID, &att.ID, &fname, &category, &rev) != nil || !vendorID.Valid {
+			continue
+		}
+		att.FileName = fname.String
+		att.Category = category.String
+		att.PartRevision = rev.String
+		out[int(vendorID.Int64)] = append(out[int(vendorID.Int64)], att)
+	}
+	return out
 }
 
 // attachmentUsage is one row/owner in the "where used" results for a file link.
