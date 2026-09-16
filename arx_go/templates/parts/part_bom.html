@@ -2,7 +2,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
-        <li class="breadcrumb-item active">{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}</li>
+        <li class="breadcrumb-item active"><span{{if .Part.ThumbnailURL}} class="pn-thumb" data-thumb="{{.Part.ThumbnailURL}}"{{end}}>{{.Part.PartNumber}}{{if .Part.Description}} &mdash; {{.Part.Description}}{{end}}{{if .Part.ThumbnailURL}} <i class="bi bi-image text-muted" style="font-size:0.85em;"></i>{{end}}</span></li>
     </ol>
 </nav>
 <div class="content">

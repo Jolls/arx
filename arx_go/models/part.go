@@ -28,6 +28,7 @@ type Part struct {
 	LastRollupCost      float64
 	LastRollupAt        *time.Time
 	AttachmentCount     int
+	ThumbnailURL        string // resolved URL of the active "Thumbnail"-category attachment, if any (#56); empty when none generated
 	POLineCount         int
 	DefaultSupplierID   *int // preferred supplier for cost rollup (#465); nil = none pinned
 	UserField1          string

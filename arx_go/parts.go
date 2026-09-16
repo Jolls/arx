@@ -33,10 +33,16 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	var hasBOM sql.NullBool
 	var filIDPrimary sql.NullInt64
 	var stockOnHand sql.NullFloat64
+	var thumbFile sql.NullString
+	// the thumbnail subquery rides this one query (rather than a separate
+	// round-trip) since fetchPartBasic backs every part sub-tab page — see the
+	// Thumb subquery in PartsRows for the same pattern (#56).
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode FROM %s p WHERE id = @p1`,
-		h.cfg.PartsTable(),
-	), id).Scan(&p.ID, &partNumber, &description, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode)
+		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode,
+		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = %s AND a.category = @p2)
+		FROM %s p WHERE id = @p1`,
+		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg.PartsTable(),
+	), id, thumbnailCategory).Scan(&p.ID, &partNumber, &description, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode, &thumbFile)
 	p.PartNumber = partNumber.String
 	p.Description = description.String
 	p.Category = category.String
@@ -48,6 +54,9 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	p.StockOnHand = stockOnHand.Float64
 	p.TrackingMode = trackingMode.String
 	p.IsLotTracked = models.TracksLots(trackingMode.String)
+	if urlutil.IsLocalFile(thumbFile.String) {
+		p.ThumbnailURL = urlutil.LocalFileURL(thumbFile.String, "/local/")
+	}
 	return p, err
 }
 
@@ -365,6 +374,12 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 					urlutil.IsImage(urlutil.FileBaseName(att.FileName)) && att.Category != thumbnailCategory {
 					photoAtts = append(photoAtts, att)
 				}
+				// PartDetail runs its own attachment query rather than fetchPartBasic
+				// (#56), so the breadcrumb hover thumbnail is resolved here off this
+				// same loop instead of a second round-trip.
+				if att.Category == thumbnailCategory && urlutil.IsLocalFile(att.FileName) {
+					p.ThumbnailURL = urlutil.LocalFileURL(att.FileName, "/local/")
+				}
 			}
 		}
 		if err := rows.Err(); err != nil {
@@ -603,6 +618,9 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.applyCategoryTabs(r.Context(), &full) // resolve tabs for the part_tabs partial
+	// fetchPartFull doesn't select this (#56); carry it over from the
+	// fetchPartBasic-backed p above rather than a third query.
+	full.ThumbnailURL = p.ThumbnailURL
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": full, "IsNew": false,
@@ -624,6 +642,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
 		pf := partFromForm(r)
 		h.applyCategoryTabs(r.Context(), &pf)
+		pf.ThumbnailURL = p.ThumbnailURL
 		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Part Number is required",
 			"Categories": h.partCategories,
@@ -659,6 +678,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		units, _ := h.fetchUnits(r.Context())
 		pf := partFromForm(r)
 		h.applyCategoryTabs(r.Context(), &pf)
+		pf.ThumbnailURL = p.ThumbnailURL
 		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Error saving part: " + err.Error(),
 			"Units": units, "Categories": h.partCategories,
