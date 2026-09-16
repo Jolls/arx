@@ -607,3 +607,20 @@ func nullableFloat(s string) any {
 	}
 	return f
 }
+
+// resolvePriceFields fills in a missing price_ea/price_pack from the other
+// using pack_size, when only one was submitted (#75).
+func resolvePriceFields(r *http.Request) (priceEA, pricePack any) {
+	priceEA = nullableFloat(r.FormValue("price_ea"))
+	pricePack = nullableFloat(r.FormValue("price_pack"))
+	packSize, err := strconv.ParseFloat(r.FormValue("pack_size"), 64)
+	if err != nil || packSize <= 0 {
+		return priceEA, pricePack
+	}
+	if priceEA == nil && pricePack != nil {
+		priceEA = pricePack.(float64) / packSize
+	} else if pricePack == nil && priceEA != nil {
+		pricePack = priceEA.(float64) * packSize
+	}
+	return priceEA, pricePack
+}
