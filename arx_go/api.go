@@ -154,7 +154,9 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// APISupplierPN returns the supplier_pn for a (part, supplier) pair.
+// APISupplierPN returns the supplier_pn, minimum order increment, and cheapest
+// active unit price for a (part, supplier) pair, used to autofill a PO line
+// (#76).
 // GET /api/supplier-part?part_id=X&supplier_id=Y
 func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 	partID := r.URL.Query().Get("part_id")
@@ -164,17 +166,33 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var pn sql.NullString
+	var minIncrement sql.NullFloat64
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT TOP 1 supplier_pn
+		SELECT TOP 1 supplier_pn, min_increment
 		FROM %s
 		WHERE part_id = @p1 AND supplier_id = @p2
 		ORDER BY preference ASC
-	`, h.cfg.SupplierPartTable()), partID, supplierID).Scan(&pn)
+	`, h.cfg.SupplierPartTable()), partID, supplierID).Scan(&pn, &minIncrement)
 	if err != nil {
 		writeJSON(w, map[string]string{"supplier_pn": ""})
 		return
 	}
-	writeJSON(w, map[string]string{"supplier_pn": pn.String})
+	var priceEa sql.NullFloat64
+	h.queryRowContext(r.Context(), fmt.Sprintf(`
+		SELECT TOP 1 price_ea
+		FROM %s
+		WHERE part_id = @p1 AND supplier_id = @p2 AND is_active = %s
+		ORDER BY pack_size ASC
+	`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)), partID, supplierID).Scan(&priceEa)
+
+	resp := map[string]any{"supplier_pn": pn.String}
+	if minIncrement.Valid && minIncrement.Float64 > 0 {
+		resp["min_increment"] = minIncrement.Float64
+	}
+	if priceEa.Valid {
+		resp["price_ea"] = priceEa.Float64
+	}
+	writeJSON(w, resp)
 }
 
 // APIPartBOMChildren returns a part's direct BOM lines as JSON, used to
