@@ -8,6 +8,32 @@
 </span>
 {{end}}
 
+{{/* attachment_link — renders one attachment's file_name as the right kind of link
+     (http URL, doc-control folder/file, image with hover preview, absolute path, or
+     bare text). Pipeline: the file_name string. */}}
+{{define "attachment_link"}}
+{{if isHTTPURL .}}
+    <a href="{{.}}" target="_blank" rel="noopener noreferrer" title="{{.}}">{{.}}</a>
+{{else if isLocalDir .}}
+    <a href="{{localDirURL .}}" title="Open folder">&#128193; {{displayLink .}}</a>
+{{else if isLocalFile .}}
+    {{if isPDF .}}
+        <a href="{{localFileURL .}}" target="_blank" title="{{fileBaseName .}}">{{fileBaseName .}}</a>
+    {{else if isImage (fileBaseName .)}}
+        <span class="img-hover-wrap" data-src="{{localFileURL .}}">
+            <a href="{{localFileURL .}}" target="_blank" title="{{fileBaseName .}}">{{fileBaseName .}}</a>
+            <span class="img-hover-preview"><img alt="preview"></span>
+        </span>
+    {{else}}
+        <a href="{{localFileURL .}}" download="{{fileBaseName .}}" title="{{fileBaseName .}}">{{fileBaseName .}}</a>
+    {{end}}
+{{else if isAbsPath .}}
+    {{template "abspath_link" .}}
+{{else}}
+    <span class="font-monospace" style="font-size:0.9em;" title="{{.}}">{{.}}</span>
+{{end}}
+{{end}}
+
 {{define "kebab_toggle"}}
 <button class="btn btn-sm btn-secondary" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false" title="Actions">
     <i class="bi bi-three-dots-vertical"></i>

@@ -37,6 +37,17 @@
                         </form>
                     </td>
                 </tr>
+                {{$atts := index $.AttachmentsByLink .ID}}
+                {{if $atts}}
+                <tr class="vendor-attachment-subrow">
+                    <td colspan="5">
+                        <span class="text-muted me-2">Attachments:</span>
+                        {{range $i, $att := $atts}}{{if $i}}<span class="text-muted mx-1">|</span>{{end}}
+                        {{if $att.Category}}<span class="text-muted">{{$att.Category}}:</span> {{end}}{{template "attachment_link" $att.FileName}}
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
                 {{end}}
             </tbody>
         </table>

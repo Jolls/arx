@@ -277,6 +277,13 @@ BEGIN;
         (4002, 1002, 3002, 4101, 14,   'PMC-M3X8',     'M3x8 SHCS (reel of 1000)', 1000, '2-3 weeks', 1),
         (4003, 1001, 3003, NULL, NULL, 'ACME-OR2014',  'O-Ring 2-014',            NULL,  NULL,        1);
 
+    -- Vendor-scoped attachments (#56) — seeded here, after supplier_part/mfg_part, because
+    -- they FK to those rows. Part 3002 ends up with all three scopes: 8101 part-level
+    -- (section 6b), 8103 scoped to supplier link 4002, 8104 scoped to MPN 4101.
+    INSERT INTO part_attachment (id, part_id, file_name, category, part_revision, sort_order, comment, supplier_part_id, mfg_part_id) VALUES
+        (8103, 3002, 'https://example.com/coa/pmc-m3x8-lot7.pdf',  'COA',       'A', 2, 'Supplier-specific CoA', 4002, NULL),
+        (8104, 3002, 'https://example.com/datasheets/cx-4471.pdf', 'Datasheet', 'A', 3, NULL,                    NULL, 4101);
+
     -- 4204/4205 (#466): additional active qty-break tiers on 3002, alongside 4203, so the
     -- build-cost calculation has 3 tiers (1 / 100 / 1000) to select between. See bom line
     -- 3908 above for the shared-leaf scenario these tiers are meant to exercise.

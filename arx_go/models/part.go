@@ -231,4 +231,8 @@ type Attachment struct {
 	Category     string
 	OrderID      *int
 	Comment      string
+	// Vendor scope (#56): "s:<supplier_part_id>" or "m:<mfg_part_id>", empty when the
+	// attachment is part-level. VendorName is the joined supplier/manufacturer name.
+	VendorScope string
+	VendorName  string
 }

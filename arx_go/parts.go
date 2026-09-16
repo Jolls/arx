@@ -1551,9 +1551,16 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, file_name, category, part_revision, sort_order, comment
-		FROM %s WHERE part_id = @p1 AND is_active = %s ORDER BY sort_order, id
-	`, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), id)
+		SELECT a.id, a.file_name, a.category, a.part_revision, a.sort_order, a.comment,
+		       a.supplier_part_id, a.mfg_part_id, COALESCE(sc.name, mc.name) AS vendor_name
+		FROM %s a
+		LEFT JOIN %s sp ON sp.id = a.supplier_part_id
+		LEFT JOIN %s sc ON sc.id = sp.supplier_id
+		LEFT JOIN %s mp ON mp.id = a.mfg_part_id
+		LEFT JOIN %s mc ON mc.id = mp.mfg_id
+		WHERE a.part_id = @p1 AND a.is_active = %s ORDER BY a.sort_order, a.id
+	`, h.cfg.AttachmentsTable(), h.cfg.SupplierPartTable(), h.cfg.CompanyTable(),
+		h.cfg.MfgPartTable(), h.cfg.CompanyTable(), h.dia().BoolLiteral(true)), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
@@ -1563,9 +1570,10 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	nextOrderID := 1
 	for rows.Next() {
 		var att models.Attachment
-		var fname, fnotes, frev, fcomment sql.NullString
-		var orderID sql.NullInt64
-		if err := rows.Scan(&att.ID, &fname, &fnotes, &frev, &orderID, &fcomment); err != nil {
+		var fname, fnotes, frev, fcomment, vendorName sql.NullString
+		var orderID, supplierPartID, mfgPartID sql.NullInt64
+		if err := rows.Scan(&att.ID, &fname, &fnotes, &frev, &orderID, &fcomment,
+			&supplierPartID, &mfgPartID, &vendorName); err != nil {
 			h.renderError(w, r, "Error reading attachments: "+err.Error())
 			return
 		}
@@ -1573,6 +1581,13 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		att.Category = fnotes.String
 		att.PartRevision = frev.String
 		att.Comment = fcomment.String
+		att.VendorName = vendorName.String
+		switch {
+		case supplierPartID.Valid:
+			att.VendorScope = fmt.Sprintf("s:%d", supplierPartID.Int64)
+		case mfgPartID.Valid:
+			att.VendorScope = fmt.Sprintf("m:%d", mfgPartID.Int64)
+		}
 		if orderID.Valid {
 			v := int(orderID.Int64)
 			att.OrderID = &v
@@ -1608,12 +1623,18 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 	cats := splitCSV(h.appConfigGetOr(r.Context(), "attachment_categories", ""))
+	vendorOptions, err := h.fetchVendorScopeOptions(r, id)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving linked vendors: "+err.Error())
+		return
+	}
 	data := map[string]any{
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken":            h.csrfToken(w, r),
 		"AttachmentCategories": cats,
+		"VendorScopeOptions":   vendorOptions,
 		"DocControlConfigured": h.cfg.DocControlRoot != "",
 		"HasThumbnail":         hasThumbnail,
 		"TestMode":             h.cfg.TestMode,
@@ -1639,6 +1660,12 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	supplierPartID, mfgPartID, err := h.resolveVendorScope(r.Context(), id, fv(r, "vendor_scope"))
+	if err != nil {
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": err.Error()})
+		return
+	}
+
 	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, "")
 	if in.ErrMsg != "" {
 		h.renderPartAttachments(w, r, id, map[string]any{"Error": in.ErrMsg})
@@ -1650,9 +1677,9 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)`,
 		h.cfg.AttachmentsTable(),
-	), id, in.FileName, rev, category, oID, comment); err != nil {
+	), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
@@ -1679,6 +1706,12 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	rev, category := fv(r, "FILPNRev"), fv(r, "category")
 	comment := fv(r, "comment")
+
+	supplierPartID, mfgPartID, scopeErr := h.resolveVendorScope(r.Context(), id, fv(r, "vendor_scope"))
+	if scopeErr != nil {
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": scopeErr.Error()})
+		return
+	}
 
 	var oldFileNameNS, oldCategoryNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
@@ -1716,14 +1749,14 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if fileChanged {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, file_name=@p5 WHERE id=@p6`,
+			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6, file_name=@p7 WHERE id=@p8`,
 			h.cfg.AttachmentsTable(),
-		), rev, category, oID, comment, in.FileName, attIDInt)
+		), rev, category, oID, comment, supplierPartID, mfgPartID, in.FileName, attIDInt)
 	} else {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4 WHERE id=@p5`,
+			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6 WHERE id=@p7`,
 			h.cfg.AttachmentsTable(),
-		), rev, category, oID, comment, attIDInt)
+		), rev, category, oID, comment, supplierPartID, mfgPartID, attIDInt)
 	}
 	if err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
