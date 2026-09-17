@@ -20,10 +20,9 @@ The `FILFileName` column in `FIL` (and the equivalent field in `company_attachme
 
 ## Imported attachment naming convention
 
-When a file is imported via the **Browse** button on a part's Attachments tab, it
-is placed into `DOC_CONTROL_ROOT` and renamed. A **Copy / Move** toggle beside the
-Browse button controls the source file: *Copy* (default) leaves it in place;
-*Move* deletes it after the import succeeds. The generated name is:
+When a file is uploaded via the file picker on a part's Attachments tab, it
+is copied into `DOC_CONTROL_ROOT` (as the bytes received in the upload — the
+browser never exposes a source path) and renamed. The generated name is:
 
 ```
 <PartNumber> <Rev> <Title> <Category>.<ext>
@@ -42,6 +41,14 @@ Browse button controls the source file: *Copy* (default) leaves it in place;
   attachment row pointing at the existing file without copying.
 
 ---
+
+## Supplier attachment upload
+
+A vendor's Attachments tab also accepts a direct file upload (beside the existing URL/path text
+field), written into `SUPPLIER_FILES_ROOT` (no fallback to `DOC_CONTROL_ROOT` — the upload is
+rejected with an error if `SUPPLIER_FILES_ROOT` isn't configured). Unlike part attachments, there's
+no part-number/rev naming convention to apply: the uploaded file keeps its sanitized original name,
+auto-suffixed with `" (2)"`, `" (3)"`, ... on a name collision (no "Link to existing file" prompt).
 
 ## Pasted-image attachment naming convention
 

@@ -11,7 +11,6 @@ import (
 	"maps"
 	"math"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1683,15 +1682,6 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
-	// Move mode: remove the source now that the attachment is saved. The row
-	// already exists, so a failure here is non-fatal — surface it as a warning.
-	if in.MoveSrc != "" {
-		if err := os.Remove(in.MoveSrc); err != nil {
-			h.renderPartAttachments(w, r, id, map[string]any{
-				"Error": "Attachment saved, but the source file could not be removed: " + err.Error()})
-			return
-		}
-	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
 }
 
@@ -1763,16 +1753,6 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Move-mode cleanup runs whenever a source was browsed and moved, whether
-	// or not the stored file_name changed (an identical-name replace via
-	// replaceLocalFile still consumed the browsed source and needs it removed).
-	if in.MoveSrc != "" {
-		if err := os.Remove(in.MoveSrc); err != nil {
-			h.renderPartAttachments(w, r, id, map[string]any{
-				"Error": "Attachment updated, but the source file could not be removed: " + err.Error()})
-			return
-		}
-	}
 	if fileChanged && replaceName != "" {
 		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
 			attIDInt, oldFileName, h.cfg.DocControlRoot, replaceName); err != nil {

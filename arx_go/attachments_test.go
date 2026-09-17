@@ -1,10 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"io"
+	"mime/multipart"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 func TestBuildAttachmentFileName(t *testing.T) {
@@ -46,15 +52,11 @@ func TestBuildResultImageName(t *testing.T) {
 	}
 }
 
-func TestCopyIntoDocControl(t *testing.T) {
+func TestCopyReaderIntoDocControl(t *testing.T) {
 	root := t.TempDir()
-	src := filepath.Join(t.TempDir(), "source.pdf")
-	if err := os.WriteFile(src, []byte("hello"), 0644); err != nil {
-		t.Fatal(err)
-	}
 
 	// fresh copy
-	existed, err := copyIntoDocControl(root, "1234_Drawing_A.pdf", src)
+	existed, err := copyReaderIntoDocControl(root, "1234_Drawing_A.pdf", strings.NewReader("hello"))
 	if err != nil {
 		t.Fatalf("fresh copy error: %v", err)
 	}
@@ -67,10 +69,7 @@ func TestCopyIntoDocControl(t *testing.T) {
 	}
 
 	// collision: does not overwrite, reports existed
-	if err := os.WriteFile(src, []byte("changed"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	existed, err = copyIntoDocControl(root, "1234_Drawing_A.pdf", src)
+	existed, err = copyReaderIntoDocControl(root, "1234_Drawing_A.pdf", strings.NewReader("changed"))
 	if err != nil {
 		t.Fatalf("collision returned error: %v", err)
 	}
@@ -82,13 +81,69 @@ func TestCopyIntoDocControl(t *testing.T) {
 		t.Fatalf("collision overwrote target: got %q, want unchanged %q", got, "hello")
 	}
 
-	// missing source: error, and no orphan target left behind
-	_, err = copyIntoDocControl(root, "new.pdf", filepath.Join(t.TempDir(), "nope.pdf"))
+	// failing reader: error, and no orphan target left behind
+	_, err = copyReaderIntoDocControl(root, "new.pdf", iotest.ErrReader(io.ErrUnexpectedEOF))
 	if err == nil {
-		t.Fatal("missing source did not error")
+		t.Fatal("failing reader did not error")
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "new.pdf")); !os.IsNotExist(statErr) {
-		t.Fatal("missing-source copy left an orphan target file")
+		t.Fatal("failing-reader copy left an orphan target file")
+	}
+}
+
+func TestReplaceLocalFileFrom(t *testing.T) {
+	root := t.TempDir()
+	if _, err := copyReaderIntoDocControl(root, "part.pdf", strings.NewReader("original")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceLocalFileFrom(root, "part.pdf", strings.NewReader("replaced")); err != nil {
+		t.Fatalf("replace error: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, "part.pdf"))
+	if string(got) != "replaced" {
+		t.Fatalf("replaced content = %q, want %q", got, "replaced")
+	}
+
+	// a failing reader must leave the original target intact
+	if err := replaceLocalFileFrom(root, "part.pdf", iotest.ErrReader(io.ErrUnexpectedEOF)); err == nil {
+		t.Fatal("failing reader did not error")
+	}
+	got, _ = os.ReadFile(filepath.Join(root, "part.pdf"))
+	if string(got) != "replaced" {
+		t.Fatalf("failed replace altered target: got %q, want unchanged %q", got, "replaced")
+	}
+}
+
+func TestAttachmentUploads(t *testing.T) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("upload_file", "test.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw.Write([]byte("data"))
+	mw.Close()
+
+	req := httptest.NewRequest("POST", "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if err := req.ParseMultipartForm(10 << 20); err != nil {
+		t.Fatal(err)
+	}
+	ups := attachmentUploads(req, "upload_file")
+	if len(ups) != 1 || ups[0].Filename != "test.pdf" {
+		t.Fatalf("attachmentUploads = %v, want one file named test.pdf", ups)
+	}
+
+	if ups := attachmentUploads(req, "other_field"); len(ups) != 0 {
+		t.Fatalf("attachmentUploads for missing field = %v, want empty", ups)
+	}
+
+	// non-multipart POST: r.MultipartForm is nil
+	plainReq := httptest.NewRequest("POST", "/", strings.NewReader("a=b"))
+	plainReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if ups := attachmentUploads(plainReq, "upload_file"); ups != nil {
+		t.Fatalf("attachmentUploads for non-multipart request = %v, want nil", ups)
 	}
 }
 

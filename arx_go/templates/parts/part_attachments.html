@@ -20,18 +20,18 @@
     {{if .ImportCollision}}
     <div class="alert alert-warning">
         <p class="mb-2">A file named <strong>{{.ImportCollision.Name}}</strong> already exists in
-            Doc Control. The file was <em>not</em> copied.</p>
+            Doc Control. The file was <em>not</em> copied. The uploaded file has been discarded —
+            cancelling below will require re-selecting it.</p>
         <form method="post"
               action="{{if .ImportCollision.AttID}}/part/{{.Part.ID}}/attachments/{{.ImportCollision.AttID}}{{else}}/part/{{.Part.ID}}/attachments{{end}}"
               class="d-inline">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <input type="hidden" name="source_path" value="{{.ImportCollision.SourcePath}}">
+            <input type="hidden" name="link_name" value="{{.ImportCollision.Name}}">
             <input type="hidden" name="category" value="{{.ImportCollision.Category}}">
             <input type="hidden" name="FILPNRev" value="{{.ImportCollision.Rev}}">
             <input type="hidden" name="order_id" value="{{.ImportCollision.OrderID}}">
             <input type="hidden" name="comment" value="{{.ImportCollision.Comment}}">
             <input type="hidden" name="vendor_scope" value="{{.ImportCollision.VendorScope}}">
-            {{if .ImportCollision.Move}}<input type="hidden" name="move_source" value="1">{{end}}
             <input type="hidden" name="link_existing" value="1">
             <button type="submit" class="btn btn-sm btn-warning">Link to existing file</button>
         </form>
@@ -117,9 +117,8 @@
     <div id="edit-form" class="detail-section mt-4">
         <h3>Edit Attachment</h3>
         <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{displayLink .EditingAtt.FileName}}</p>
-        <form method="post" action="/part/{{.Part.ID}}/attachments/{{.EditingAtt.ID}}">
+        <form method="post" action="/part/{{.Part.ID}}/attachments/{{.EditingAtt.ID}}" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <input type="hidden" name="source_path" id="edit_source_path" value="">
             <div class="detail-row">
                 <label class="form-label">Rev</label>
                 <input type="text" name="FILPNRev" id="edit_FILPNRev" class="form-control" style="max-width:100px;"
@@ -142,20 +141,15 @@
                 <label class="form-label">Import file</label>
                 <div class="d-flex flex-column gap-1">
                     <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-sm btn-secondary" onclick="browseAttachment(this, 'edit')"
-                                {{if not $.DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>Browse…</button>
+                        <input type="file" name="upload_file" id="edit_upload_file" class="form-control form-control-sm" style="max-width:320px;"
+                               onchange="updateBrowsePreview('edit')"
+                               {{if not $.DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>
                         <button type="button" id="edit_paste-clipboard-btn" class="btn btn-sm btn-secondary" disabled
                                 onclick="pasteAttachmentFromClipboard(this, 'edit', {{.EditingAtt.ID}})">Grab from clipboard</button>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" role="switch"
-                                   id="edit_move_source" name="move_source" value="1" onchange="updateBrowsePreview('edit')">
-                            <label class="form-check-label" for="edit_move_source"><span id="edit_move_mode_label">Copy</span></label>
-                        </div>
-                        <span id="edit_browse-file-name" class="text-muted font-monospace" style="font-size:0.9em;"></span>
                         <a href="#" id="edit_browse-clear" onclick="clearBrowse(event, 'edit')" style="display:none;">clear</a>
                     </div>
                     <div id="edit_browse-note" class="form-text" style="display:none;">
-                        Will be <span id="edit_browse-verb">copied</span> to Doc Control as <code id="edit_browse-preview"></code>
+                        Will be copied to Doc Control as <code id="edit_browse-preview"></code>
                     </div>
                     <div id="edit_paste-error" class="form-text text-danger" style="display:none;"></div>
                 </div>
@@ -181,9 +175,8 @@
     <details class="mt-4">
         <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Attachment</summary>
         <div class="detail-section mt-2">
-            <form method="post" action="/part/{{.Part.ID}}/attachments">
+            <form method="post" action="/part/{{.Part.ID}}/attachments" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                <input type="hidden" name="source_path" id="source_path" value="">
                 <div class="detail-row">
                     <label class="form-label">Category</label>
                     {{template "category_select" (categoryCtx .AttachmentCategories "" "add_category")}}
@@ -201,20 +194,15 @@
                     <label class="form-label">Import file</label>
                     <div class="d-flex flex-column gap-1">
                         <div class="d-flex align-items-center gap-2">
-                            <button type="button" class="btn btn-sm btn-secondary" onclick="browseAttachment(this)"
-                                    {{if not .DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>Browse…</button>
+                            <input type="file" name="upload_file" id="upload_file" class="form-control form-control-sm" style="max-width:320px;"
+                                   onchange="updateBrowsePreview()"
+                                   {{if not .DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>
                             <button type="button" id="paste-clipboard-btn" class="btn btn-sm btn-secondary" disabled
                                     onclick="pasteAttachmentFromClipboard(this)">Grab from clipboard</button>
-                            <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" role="switch"
-                                       id="move_source" name="move_source" value="1" onchange="updateBrowsePreview()">
-                                <label class="form-check-label" for="move_source"><span id="move_mode_label">Copy</span></label>
-                            </div>
-                            <span id="browse-file-name" class="text-muted font-monospace" style="font-size:0.9em;"></span>
                             <a href="#" id="browse-clear" onclick="clearBrowse(event)" style="display:none;">clear</a>
                         </div>
                         <div id="browse-note" class="form-text" style="display:none;">
-                            Will be <span id="browse-verb">copied</span> to Doc Control as <code id="browse-preview"></code>
+                            Will be copied to Doc Control as <code id="browse-preview"></code>
                         </div>
                         <div id="paste-error" class="form-text text-danger" style="display:none;"></div>
                     </div>
@@ -258,16 +246,23 @@ function attId(mode, name) {
 }
 function updateBrowsePreview(mode) {
     mode = mode || 'add';
-    var moved = document.getElementById(attId(mode, 'move_source')).checked;
-    var lbl = document.getElementById(attId(mode, 'move_mode_label'));
-    if (lbl) { lbl.textContent = moved ? 'Move' : 'Copy'; }
-    var verb = document.getElementById(attId(mode, 'browse-verb'));
-    if (verb) { verb.textContent = moved ? 'moved' : 'copied'; }
+    var input = document.getElementById(attId(mode, 'upload_file'));
+    var base = (input && input.files[0]) ? input.files[0].name : '';
     var el = document.getElementById(attId(mode, 'browse-preview'));
+    var note = document.getElementById(attId(mode, 'browse-note'));
+    var clearLink = document.getElementById(attId(mode, 'browse-clear'));
+    var f = document.getElementById(attId(mode, 'FILFileName'));
+    if (!base) {
+        if (el) { el.textContent = ''; }
+        if (note) { note.style.display = 'none'; }
+        if (clearLink) { clearLink.style.display = 'none'; }
+        if (f) { f.value = ''; f.readOnly = false; }
+        return;
+    }
+    if (note) { note.style.display = ''; }
+    if (clearLink) { clearLink.style.display = ''; }
+    if (f) { f.value = base; f.readOnly = true; }
     if (!el) { return; }
-    var src = document.getElementById(attId(mode, 'source_path')).value;
-    if (!src) { el.textContent = ''; return; }
-    var base = src.split(/[\\/]/).pop();
     var dot = base.lastIndexOf('.');
     var ext = dot > -1 ? base.slice(dot) : '';
     var rev = document.getElementById(attId(mode, 'FILPNRev')).value;
@@ -284,35 +279,10 @@ function updateBrowsePreview(mode) {
             });
     }, 250);
 }
-function browseAttachment(btn, mode) {
-    mode = mode || 'add';
-    var orig = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Browsing…';
-    fetch('/api/browse-file')
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-            if (!data.path) { return; }
-            document.getElementById(attId(mode, 'source_path')).value = data.path;
-            var base = data.path.split(/[\\/]/).pop();
-            document.getElementById(attId(mode, 'browse-file-name')).textContent = base;
-            document.getElementById(attId(mode, 'browse-note')).style.display = '';
-            document.getElementById(attId(mode, 'browse-clear')).style.display = '';
-            var f = document.getElementById(attId(mode, 'FILFileName'));
-            f.value = base;
-            f.readOnly = true;
-            updateBrowsePreview(mode);
-        })
-        .finally(function () {
-            btn.disabled = false;
-            btn.textContent = orig;
-        });
-}
 function clearBrowse(e, mode) {
     e.preventDefault();
     mode = mode || 'add';
-    document.getElementById(attId(mode, 'source_path')).value = '';
-    document.getElementById(attId(mode, 'browse-file-name')).textContent = '';
+    document.getElementById(attId(mode, 'upload_file')).value = '';
     document.getElementById(attId(mode, 'browse-note')).style.display = 'none';
     document.getElementById(attId(mode, 'browse-clear')).style.display = 'none';
     var f = document.getElementById(attId(mode, 'FILFileName'));

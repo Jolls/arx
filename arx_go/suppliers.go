@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -543,18 +544,55 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		"ActiveTab":   "suppliers", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
-		"NextOrderID": nextOrderID,
+		"NextOrderID":              nextOrderID,
+		"SupplierFilesConfigured": h.cfg.SupplierFilesRoot != "",
 	})
+}
+
+// saveSupplierUpload writes an uploaded file into SupplierFilesRoot under its
+// sanitized original name, auto-suffixing " (2)", " (3)", ... on collision
+// (mirrors the clipboard-paste unique-name pattern; suppliers have no
+// per-part naming convention to render a destination-name collision banner
+// against). Returns the LOCAL:<name> value to store.
+func (h *Handler) saveSupplierUpload(hdr *multipart.FileHeader) (filePath string, err error) {
+	if h.cfg.SupplierFilesRoot == "" {
+		return "", fmt.Errorf("Supplier Files Root is not configured; cannot import files")
+	}
+	ext := filepath.Ext(hdr.Filename)
+	base := sanitizeFileNamePart(strings.TrimSuffix(filepath.Base(hdr.Filename), ext))
+	if base == "" {
+		base = "file"
+	}
+	f, err := hdr.Open()
+	if err != nil {
+		return "", fmt.Errorf("error reading upload: %w", err)
+	}
+	defer f.Close()
+	name, err := copyReaderIntoDocControlUnique(h.cfg.SupplierFilesRoot, base+ext, ext, f)
+	if err != nil {
+		return "", fmt.Errorf("error copying file: %w", err)
+	}
+	return "LOCAL:" + name, nil
 }
 
 func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	filePath := strings.TrimSpace(r.FormValue("file_path"))
-	if filePath == "" {
-		http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
-		return
+	var filePath string
+	if ups := attachmentUploads(r, "upload_file"); len(ups) > 0 {
+		fp, err := h.saveSupplierUpload(ups[0])
+		if err != nil {
+			h.renderError(w, r, "Error adding attachment: "+err.Error())
+			return
+		}
+		filePath = fp
+	} else {
+		filePath = strings.TrimSpace(r.FormValue("file_path"))
+		if filePath == "" {
+			http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
+			return
+		}
+		filePath = urlutil.NormalizeLink(filePath)
 	}
-	filePath = urlutil.NormalizeLink(filePath)
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
 
@@ -595,7 +633,17 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	attID := chi.URLParam(r, "attID")
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
-	newFilePath := urlutil.NormalizeLink(strings.TrimSpace(r.FormValue("file_path")))
+	var newFilePath string
+	if ups := attachmentUploads(r, "upload_file"); len(ups) > 0 {
+		fp, err := h.saveSupplierUpload(ups[0])
+		if err != nil {
+			h.renderError(w, r, "Error updating attachment: "+err.Error())
+			return
+		}
+		newFilePath = fp
+	} else {
+		newFilePath = urlutil.NormalizeLink(strings.TrimSpace(r.FormValue("file_path")))
+	}
 
 	var sortOrderVal any
 	if sortOrderStr != "" {
