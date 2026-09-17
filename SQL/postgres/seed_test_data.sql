@@ -190,6 +190,10 @@ BEGIN;
 
     UPDATE company SET default_contact = 2001 WHERE id = 1001;
     UPDATE company SET default_contact = 2003 WHERE id = 1002;
+
+    -- Bulk-order copy-to-clipboard settings (#80): exercise both delimiter/PN-source paths.
+    UPDATE company SET bulk_order_delimiter = 'comma',   bulk_order_pn_source = 'internal' WHERE id = 1001;
+    UPDATE company SET bulk_order_delimiter = 'newline', bulk_order_pn_source = 'vendor'   WHERE id = 1002;
     UPDATE company SET default_contact = 2005 WHERE id = 1003;
 
     -- ============================================================
