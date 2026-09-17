@@ -380,19 +380,22 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	if u := h.currentUser(r); u != nil {
 		canApprove = u.CanApprovePO
 	}
+	bulkOrderDelimiter, bulkOrderPNSource := h.fetchSupplierBulkOrderOptions(r, po.SupplierID)
 	tplData := map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"ActiveTab": "pos", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode":        h.cfg.TestMode,
-		"StatusActions":   poStatusActions(po.Status),
-		"ApprovalLabel":   poApprovalLabels[po.ApprovalStatus],
-		"ApprovalActions": poApprovalActions(po.ApprovalStatus, canApprove),
-		"History":         h.fetchPOHistory(r, po.ID),
-		"Receipts":        h.fetchPOReceipts(r, po.ID),
-		"Today":           time.Now().Format("2006-01-02"),
-		"CanSend":         poApprovalAllowsSend(po.ApprovalStatus),
-		"CSRFToken":       h.csrfToken(w, r),
+		"TestMode":           h.cfg.TestMode,
+		"StatusActions":      poStatusActions(po.Status),
+		"ApprovalLabel":      poApprovalLabels[po.ApprovalStatus],
+		"ApprovalActions":    poApprovalActions(po.ApprovalStatus, canApprove),
+		"History":            h.fetchPOHistory(r, po.ID),
+		"Receipts":           h.fetchPOReceipts(r, po.ID),
+		"Today":              time.Now().Format("2006-01-02"),
+		"CanSend":            poApprovalAllowsSend(po.ApprovalStatus),
+		"CSRFToken":          h.csrfToken(w, r),
+		"BulkOrderDelimiter": bulkOrderDelimiter,
+		"BulkOrderPNSource":  bulkOrderPNSource,
 	}
 	if r.URL.Query().Get("suggest_links") == "1" {
 		if links := h.fetchSuggestLinks(r, num); len(links) > 0 {
@@ -405,6 +408,31 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.render(w, r, "pos/po_detail.html", tplData)
+}
+
+// fetchSupplierBulkOrderOptions looks up the PO's supplier's "Copy for Ordering" clipboard
+// settings (#80) live by supplier_id — an ordering preference, not a PO-time snapshot like the
+// address/contact fields already on purchase_order. Falls back to the column defaults if the
+// supplier is missing or unset.
+func (h *Handler) fetchSupplierBulkOrderOptions(r *http.Request, supplierID *int) (delimiter, pnSource string) {
+	delimiter, pnSource = "comma", "internal"
+	if supplierID == nil {
+		return
+	}
+	var d, s sql.NullString
+	err := h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT bulk_order_delimiter, bulk_order_pn_source FROM %s WHERE id = @p1`, h.cfg.CompanyTable(),
+	), *supplierID).Scan(&d, &s)
+	if err != nil {
+		return
+	}
+	if d.String != "" {
+		delimiter = d.String
+	}
+	if s.String != "" {
+		pnSource = s.String
+	}
+	return
 }
 
 // ── PONew — GET /pos/new ─────────────────────────────────────────────────────

@@ -312,15 +312,19 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET name=@p1, SUSupplierCode=@p2, default_contact=@p3,
 		              is_active=@p4, is_supplier=@p5, is_manufacturer=@p6,
-		              SUNotes=@p7, date_modified=@p8
-		WHERE id=@p9
+		              SUNotes=@p7, date_modified=@p8,
+		              bulk_order_delimiter=@p9, bulk_order_pn_source=@p10
+		WHERE id=@p11
 	`, h.cfg.CompanyTable()),
 		name, fv(r, "SUSupplierCode"),
 		nullableInt(fv(r, "default_contact")),
 		r.FormValue("is_active") == "1",
 		r.FormValue("is_supplier") == "1",
 		r.FormValue("is_manufacturer") == "1",
-		fv(r, "SUNotes"), time.Now(), id,
+		fv(r, "SUNotes"), time.Now(),
+		bulkOrderDelimiterOrDefault(fv(r, "bulk_order_delimiter")),
+		bulkOrderPNSourceOrDefault(fv(r, "bulk_order_pn_source")),
+		id,
 	)
 	if err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
@@ -647,11 +651,13 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 	var dateModified sql.NullTime
 	var primaryAttID sql.NullInt64
 	var cnName, cnPhone, cnEmail, cnCity sql.NullString
+	var bulkOrderDelimiter, bulkOrderPNSource sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, su.SUSupplierCode, su.SUNotes,
 		       su.default_contact, su.is_active, su.is_supplier, su.is_manufacturer,
 		       su.SUNumOfLNKs, su.SUNumOfPOs, su.date_modified,
 		       su.primary_attachment_id,
+		       su.bulk_order_delimiter, su.bulk_order_pn_source,
 		       cn.display_name, cn.phone_1, cn.email, cn.city
 		FROM %s su
 		LEFT JOIN %s cn ON su.default_contact = cn.id
@@ -661,6 +667,7 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		&defaultContact, &isActive, &isSupplier, &isManufacturer,
 		&numLNKs, &numPOs, &dateModified,
 		&primaryAttID,
+		&bulkOrderDelimiter, &bulkOrderPNSource,
 		&cnName, &cnPhone, &cnEmail, &cnCity,
 	)
 	if err == sql.ErrNoRows {
@@ -694,6 +701,8 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		v := int(primaryAttID.Int64)
 		s.PrimaryAttachmentID = &v
 	}
+	s.BulkOrderDelimiter = bulkOrderDelimiter.String
+	s.BulkOrderPNSource = bulkOrderPNSource.String
 	return s, true
 }
 
@@ -883,16 +892,38 @@ func (h *Handler) serveSupplierFile(w http.ResponseWriter, r *http.Request, s mo
 func supplierFromForm(r *http.Request) models.Supplier {
 	s := models.Supplier{
 		Name: fv(r, "name"), SUSupplierCode: fv(r, "SUSupplierCode"),
-		SUNotes:        fv(r, "SUNotes"),
-		IsActive:       r.FormValue("is_active") == "1",
-		IsSupplier:     r.FormValue("is_supplier") == "1",
-		IsManufacturer: r.FormValue("is_manufacturer") == "1",
+		SUNotes:            fv(r, "SUNotes"),
+		IsActive:           r.FormValue("is_active") == "1",
+		IsSupplier:         r.FormValue("is_supplier") == "1",
+		IsManufacturer:     r.FormValue("is_manufacturer") == "1",
+		BulkOrderDelimiter: bulkOrderDelimiterOrDefault(fv(r, "bulk_order_delimiter")),
+		BulkOrderPNSource:  bulkOrderPNSourceOrDefault(fv(r, "bulk_order_pn_source")),
 	}
 	if v := nullableInt(fv(r, "default_contact")); v != nil {
 		i := v.(int)
 		s.DefaultContact = &i
 	}
 	return s
+}
+
+// bulkOrderDelimiterOrDefault restricts the PO "Copy for Ordering" delimiter (#80) to known values.
+func bulkOrderDelimiterOrDefault(v string) string {
+	switch v {
+	case "comma", "tab", "newline":
+		return v
+	default:
+		return "comma"
+	}
+}
+
+// bulkOrderPNSourceOrDefault restricts the PO "Copy for Ordering" PN source (#80) to known values.
+func bulkOrderPNSourceOrDefault(v string) string {
+	switch v {
+	case "internal", "vendor":
+		return v
+	default:
+		return "internal"
+	}
 }
 
 func nullableInt(s string) any {

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.41] - 2026-09-16
+### Added
+- Suppliers can set a bulk-order delimiter and PN source in Ordering Options; PO detail pages now have a "Copy for Ordering" button that copies part number + qty pairs formatted for pasting into the supplier's ordering system, e.g. McMaster-Carr's comma-separated bulk order form ([#80](https://github.com/Jolls/arx/issues/80))
+
 ## [0.7.40] - 2026-09-16
 ### Added
 - Selecting a part on a PO line now autofills Qty (from the supplier's minimum order increment) and Unit Cost (from the supplier's cheapest active price) when available ([#76](https://github.com/Jolls/arx/issues/76))
