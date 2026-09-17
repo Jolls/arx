@@ -565,6 +565,8 @@ function setupPartAutocomplete(input, row, searchBy) {
         const descInput   = row.querySelector('[name$="[POLDesc]"]');
         const idInput     = row.querySelector('[name$="[POLPNID]"]');
         const vendorInput = row.querySelector('[name$="[VendorPN]"]');
+        const qtyInput    = row.querySelector('[name$="[POLQty]"]');
+        const costInput   = row.querySelector('[name$="[POLCost]"]');
         if (pnInput)   pnInput.value   = p.part_number;
         if (descInput) descInput.value = p.description || '';
         if (revInput  && !revInput.value)  revInput.value  = p.revision || '';
@@ -573,7 +575,12 @@ function setupPartAutocomplete(input, row, searchBy) {
         if (vendorInput && suppID) {
             fetch('/api/supplier-part?part_id=' + encodeURIComponent(p.pnid) + '&supplier_id=' + encodeURIComponent(suppID))
                 .then(r => r.json())
-                .then(d => { vendorInput.value = d.supplier_pn || ''; });
+                .then(d => {
+                    vendorInput.value = d.supplier_pn || '';
+                    if (qtyInput  && !qtyInput.value  && d.min_increment) qtyInput.value  = d.min_increment;
+                    if (costInput && !costInput.value && d.price_ea)      costInput.value = d.price_ea;
+                    recalcTotal();
+                });
         }
         close();
         row.querySelector('[name$="[POLQty]"]')?.focus();
