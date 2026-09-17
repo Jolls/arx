@@ -116,7 +116,7 @@ thead.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opac
 
 /* --- Sub-tabs (detail pages) --------------------------------- */
 .sub-tabs {
-    display: flex; border-bottom: 2px solid #e0e0e0;
+    display: flex; flex-wrap: wrap; border-bottom: 2px solid #e0e0e0;
     margin-bottom: 20px; margin-top: -4px;
 }
 .sub-tab {
