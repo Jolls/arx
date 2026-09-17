@@ -15,6 +15,8 @@ type Supplier struct {
 	SUNumOfLNKs         int
 	SUNumOfPOs          int
 	PrimaryAttachmentID *int
+	BulkOrderDelimiter  string // "comma" | "tab" | "newline" — PO "Copy for Ordering" clipboard format (#80)
+	BulkOrderPNSource   string // "internal" | "vendor" — which PN the bulk-order copy uses (#80)
 	// joined fields (contact)
 	DisplayName string
 	Website     string

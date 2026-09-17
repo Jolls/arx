@@ -18,7 +18,9 @@ CREATE TABLE company (
   SUNumOfPOs        INTEGER        DEFAULT 0,         -- Denormalized count of PO rows.
   SUSupplierCode    VARCHAR(12),
   default_contact        INTEGER   NULL,              -- FK to contact.id. NULL = none assigned.
-  primary_attachment_id  INTEGER   NULL               -- FK to company_attachment.supplier_attachment_id.
+  primary_attachment_id  INTEGER   NULL,              -- FK to company_attachment.supplier_attachment_id.
+  bulk_order_delimiter   VARCHAR(10) NOT NULL DEFAULT 'comma',   -- 'comma' | 'tab' | 'newline'; PO bulk-order copy-to-clipboard (#80)
+  bulk_order_pn_source   VARCHAR(10) NOT NULL DEFAULT 'internal' -- 'internal' | 'vendor'; which PN the bulk-order copy uses
 );
 
 ALTER TABLE company ADD CONSTRAINT FK_company_default_contact    FOREIGN KEY (default_contact)        REFERENCES contact (id);

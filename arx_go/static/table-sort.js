@@ -54,3 +54,33 @@ function copyTableTSV(tableId, btnId, header, cellFn) {
         });
     });
 }
+
+// Copies PO line items as "PN<delimiter>qty" pairs for pasting into a supplier's bulk-order
+// form (issue #80, e.g. McMaster-Carr's comma-separated part_number,qty upload). Rows read
+// their PN/qty from data-* attributes (set per the supplier's configured PN source) rather than
+// cell text, since the PN cell can contain a link. delimiter is 'comma' | 'tab' | 'newline'.
+function copyBulkOrderList(tableId, btnId, delimiter) {
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    var defaultLabel = btn.innerHTML;
+    var sep = delimiter === 'tab' ? '\t' : delimiter === 'newline' ? '\n' : ',';
+    btn.addEventListener('click', function() {
+        var lines = [];
+        var tbody = document.querySelector('#' + tableId + ' tbody');
+        if (tbody) {
+            tbody.querySelectorAll('tr').forEach(function(tr) {
+                var pn = tr.getAttribute('data-bulk-pn');
+                var qty = parseFloat(tr.getAttribute('data-bulk-qty'));
+                if (!pn || !qty) return;
+                lines.push(pn + sep + qty);
+            });
+        }
+        navigator.clipboard.writeText(lines.join('\n')).then(function() {
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
+            setTimeout(function() { btn.innerHTML = defaultLabel; }, 2000);
+        }).catch(function() {
+            btn.textContent = 'Copy failed';
+            setTimeout(function() { btn.innerHTML = defaultLabel; }, 2000);
+        });
+    });
+}

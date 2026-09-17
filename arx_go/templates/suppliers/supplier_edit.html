@@ -87,6 +87,29 @@
                       style="width:100%; margin-top:8px;">{{.Supplier.SUNotes}}</textarea>
         </div>
 
+        {{if not .IsNew}}
+        <div class="detail-section">
+            <h3>Ordering Options</h3>
+            <div class="detail-row">
+                <label for="bulk_order_delimiter" class="form-label" data-bs-toggle="tooltip"
+                       title="Separator used between part number and quantity when copying line items for bulk ordering">Bulk Order Delimiter</label>
+                <select id="bulk_order_delimiter" name="bulk_order_delimiter" class="form-select">
+                    <option value="comma"   {{if eq .Supplier.BulkOrderDelimiter "comma"}}selected{{end}}>Comma (PN,qty)</option>
+                    <option value="tab"     {{if eq .Supplier.BulkOrderDelimiter "tab"}}selected{{end}}>Tab</option>
+                    <option value="newline" {{if eq .Supplier.BulkOrderDelimiter "newline"}}selected{{end}}>Newline (PN and qty on separate lines)</option>
+                </select>
+            </div>
+            <div class="detail-row">
+                <label for="bulk_order_pn_source" class="form-label" data-bs-toggle="tooltip"
+                       title="Which part number to use when copying line items for bulk ordering">Bulk Order PN Source</label>
+                <select id="bulk_order_pn_source" name="bulk_order_pn_source" class="form-select">
+                    <option value="internal" {{if eq .Supplier.BulkOrderPNSource "internal"}}selected{{end}}>Internal part number</option>
+                    <option value="vendor"   {{if eq .Supplier.BulkOrderPNSource "vendor"}}selected{{end}}>Vendor part number</option>
+                </select>
+            </div>
+        </div>
+        {{end}}
+
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create Vendor{{else}}Save Changes{{end}}

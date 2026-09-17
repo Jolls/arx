@@ -194,12 +194,20 @@
     {{/* ── Line items ─────────────────────────────────────────── */}}
     {{$canReceive := or (eq .PO.Status "sent") (eq .PO.Status "partially_received")}}
     <div class="detail-section">
-        <h3>Line Items ({{len .POItems}})</h3>
+        <h3 class="d-flex align-items-center justify-content-between">
+            Line Items ({{len .POItems}})
+            {{if .POItems}}
+            <button type="button" id="copy-bulk-order-btn" class="btn btn-sm btn-outline-secondary"
+                    title="Copy part number + qty pairs for pasting into the supplier's ordering system">
+                <i class="bi bi-clipboard"></i> Copy for Ordering
+            </button>
+            {{end}}
+        </h3>
         {{if .POItems}}
         {{if $canReceive}}<form method="POST" action="/po/{{.PO.Number}}/receive">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">{{end}}
         <div class="table-wrapper mt-2">
-            <table class="table table-bordered table-hover table-sm">
+            <table id="po-line-items-table" class="table table-bordered table-hover table-sm">
                 <thead class="table-dark">
                     <tr>
                         <th style="width:36px;">#</th>
@@ -215,7 +223,7 @@
                 </thead>
                 <tbody>
                     {{range .POItems}}
-                    <tr>
+                    <tr data-bulk-pn="{{if eq $.BulkOrderPNSource "vendor"}}{{.VendorPN}}{{else}}{{.PartNumberSnapshot}}{{end}}" data-bulk-qty="{{.Qty}}">
                         <td>{{.LineNumber}}</td>
                         <td>
                             {{if .PartID}}<a href="/part/{{derefInt .PartID}}" class="part-number-link">{{.PartNumberSnapshot}}</a>
@@ -422,5 +430,9 @@ function fillReceiveAll(btn) {
   });
   form.submit();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  copyBulkOrderList('po-line-items-table', 'copy-bulk-order-btn', '{{.BulkOrderDelimiter}}');
+});
 </script>
 {{end}}
