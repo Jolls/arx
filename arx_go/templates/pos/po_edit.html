@@ -5,6 +5,9 @@
         {{if .RFQAddFrom}}
         <li class="breadcrumb-item"><a href="/po/{{.RFQAddFrom}}">RFQ #{{.RFQAddFrom}}</a></li>
         <li class="breadcrumb-item active">Add Supplier Quote</li>
+        {{else if .StartRFQFrom}}
+        <li class="breadcrumb-item"><a href="/po/{{.StartRFQFrom}}">PO #{{.StartRFQFrom}}</a></li>
+        <li class="breadcrumb-item active">Start RFQ</li>
         {{else if .IsDuplicate}}
         <li class="breadcrumb-item"><a href="/po/{{.DuplicateFrom}}">PO #{{.DuplicateFrom}}</a></li>
         <li class="breadcrumb-item active">Copy</li>
@@ -34,7 +37,9 @@
     </div>
     {{end}}
 
-    {{if .RFQAddFrom}}
+    {{if .StartRFQFrom}}
+    <div class="alert alert-info">Starting an RFQ from PO #{{.StartRFQFrom}} &mdash; a new RFQ number will be assigned on save; this PO's line items, supplier, and pricing carry over as the first quote. The original PO is unchanged.</div>
+    {{else if .RFQAddFrom}}
     <div class="alert alert-info">Adding another supplier's quote to this RFQ &mdash; pick the supplier; quantities carry over. Enter quoted prices and lead times here or on the comparison grid after saving.</div>
     {{else if and .IsRFQ .IsNew}}
     <div class="alert alert-info">New Request for Quotation &mdash; choose the supplier and the parts/quantities to quote. Add more suppliers and compare responses after saving.</div>
@@ -323,7 +328,7 @@
             <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}{{if .IsRFQ}}Create RFQ{{else}}Create PO{{end}}{{else}}Save Changes{{end}}
             </button>
-            <a href="{{if .RFQAddFrom}}/po/{{.RFQAddFrom}}{{else if .IsDuplicate}}/po/{{.DuplicateFrom}}{{else if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}"
+            <a href="{{if .RFQAddFrom}}/po/{{.RFQAddFrom}}{{else if .StartRFQFrom}}/po/{{.StartRFQFrom}}{{else if .IsDuplicate}}/po/{{.DuplicateFrom}}{{else if .IsNew}}/pos{{else}}/po/{{.PO.Number}}{{end}}"
                class="btn btn-secondary">Cancel</a>
         </div>
     </form>

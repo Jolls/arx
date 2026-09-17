@@ -340,6 +340,7 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/po/{id}/open-folder", h.POOpenFolder)
 		r.Post("/po/{id}/import-part-file", h.POImportPartFile)
 		r.Get("/po/{id}/duplicate", h.PODuplicate)
+		r.Get("/po/{id}/start-rfq", h.POStartRFQ)
 		r.Get("/po/{id}/folder", h.POFolder)
 		r.Get("/po/{id}/folder/*", h.POFolderSub)
 		r.Post("/po/{id}/folder-upload", h.POFolderUpload)

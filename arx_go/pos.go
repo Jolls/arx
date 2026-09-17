@@ -950,6 +950,53 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── POStartRFQ — GET /po/{id}/start-rfq ──────────────────────────────────────
+
+// Starts a new RFQ from a draft PO: clones its line items and supplier pricing
+// into a brand-new RFQ as the first quote. The source PO is left untouched —
+// no renumbering, no status change.
+func (h *Handler) POStartRFQ(w http.ResponseWriter, r *http.Request) {
+	num := chi.URLParam(r, "id")
+	source, ok := h.fetchPO(w, r, num)
+	if !ok {
+		return
+	}
+	if source.Status != "draft" {
+		h.renderError(w, r, "Only a draft PO can be used to start an RFQ.")
+		return
+	}
+	sourceItems, err := h.fetchPOItems(r, num)
+	if err != nil {
+		h.renderError(w, r, "Error loading PO items: "+err.Error())
+		return
+	}
+
+	source.Number = ""
+	source.DateOrdered = nil
+	source.DateRequested = nil
+	source.DateClosed = nil
+	source.TotalCost = nil
+	source.Status = "rfq"
+	source.IsActive = true
+
+	supID := 0
+	if source.SupplierID != nil {
+		supID = *source.SupplierID
+	}
+	recID := 0
+	if source.ReceiverID != nil {
+		recID = *source.ReceiverID
+	}
+	h.render(w, r, "pos/po_edit.html", map[string]any{
+		"PO": source, "POItems": nil, "DuplicateItems": sourceItems,
+		"IsNew": true, "IsRFQ": true, "StartRFQFrom": num,
+		"SupplierContacts": h.contactsForSupplier(r, supID),
+		"ReceiverContacts": h.contactsForSupplier(r, recID),
+		"ActiveTab":        "pos", "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r),
+	})
+}
+
 // ── PONote — GET /po/{id}/note ───────────────────────────────────────────────
 
 func (h *Handler) PONote(w http.ResponseWriter, r *http.Request) {

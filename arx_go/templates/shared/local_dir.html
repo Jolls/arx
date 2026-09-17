@@ -24,11 +24,13 @@
     {{end}}
 
     {{if .UploadFormAction}}
-    <form method="POST" action="{{.UploadFormAction}}" enctype="multipart/form-data"
-          class="d-flex align-items-center gap-2 mb-3 mt-3">
+    <form id="upload-form" method="POST" action="{{.UploadFormAction}}" enctype="multipart/form-data"
+          class="d-flex align-items-center gap-2 mb-3 mt-3 p-2 rounded"
+          style="border:2px dashed transparent;">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <input type="file" name="upload" class="form-control" style="max-width:320px;" required>
+        <input type="file" name="upload" id="upload-input" class="form-control" style="max-width:320px;" required>
         <button type="submit" class="btn btn-primary">Upload</button>
+        <span class="text-muted" style="font-size:0.85em;">or drag a file here</span>
     </form>
     {{end}}
 
@@ -76,6 +78,37 @@
     <p style="color:#999; font-style:italic;">This folder is empty.</p>
     {{end}}
 </div>
+
+{{if .UploadFormAction}}
+<script>
+(function() {
+    var form = document.getElementById('upload-form');
+    var input = document.getElementById('upload-input');
+    ['dragenter', 'dragover'].forEach(function(evt) {
+        form.addEventListener(evt, function(e) {
+            e.preventDefault();
+            form.style.borderColor = '#0d6efd';
+            form.style.background = '#f0f4ff';
+        });
+    });
+    ['dragleave', 'drop'].forEach(function(evt) {
+        form.addEventListener(evt, function(e) {
+            e.preventDefault();
+            form.style.borderColor = 'transparent';
+            form.style.background = '';
+        });
+    });
+    form.addEventListener('drop', function(e) {
+        var files = e.dataTransfer.files;
+        if (!files.length) return;
+        var dt = new DataTransfer();
+        dt.items.add(files[0]);
+        input.files = dt.files;
+        form.submit();
+    });
+})();
+</script>
+{{end}}
 
 <script>
 function copyDirPath() {

@@ -121,7 +121,7 @@
 {{else}}
 <a href="/pos" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to POs List</a>
 {{end}}
-<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+<div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-bottom:16px;">
     <div class="sub-tabs" style="margin-bottom:0;">
         <a href="/po/{{.PO.Number}}"        class="sub-tab{{if eq .ActiveSubTab "details"}} active{{end}}">Details</a>
         <a href="/po/{{.PO.Number}}/edit"   class="sub-tab{{if eq .ActiveSubTab "edit"}} active{{end}}">Edit</a>
@@ -134,7 +134,12 @@
         {{if .PO.RFQGroupID}}<a href="/rfq/{{derefInt .PO.RFQGroupID}}/compare" class="btn btn-sm btn-primary">Compare Quotes</a>{{end}}
     </div>
     {{else}}
-    <a href="/po/{{.PO.Number}}/duplicate" class="btn btn-sm btn-secondary">Duplicate PO</a>
+    <div class="d-flex gap-2">
+        <a href="/po/{{.PO.Number}}/duplicate" class="btn btn-sm btn-secondary">Duplicate PO</a>
+        {{if eq .PO.Status "draft"}}
+        <a href="/po/{{.PO.Number}}/start-rfq" class="btn btn-sm btn-secondary">Start RFQ</a>
+        {{end}}
+    </div>
     {{end}}
 </div>
 {{end}}

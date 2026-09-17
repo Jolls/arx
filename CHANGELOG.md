@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.41] - 2026-09-16
+### Added
+- "Start RFQ" button on draft POs clones the PO's line items and supplier pricing into a new RFQ as the first quote, leaving the original PO untouched ([#74](https://github.com/Jolls/arx/issues/74))
+- File upload in PO/part/supplier folder views now supports drag-and-drop, in addition to click-to-browse ([#73](https://github.com/Jolls/arx/issues/73))
+### Fixed
+- Sub-tabs (and the PO detail action buttons alongside them) now wrap to a second row instead of overflowing on mobile/narrow windows ([#72](https://github.com/Jolls/arx/issues/72))
+
 ## [0.7.40] - 2026-09-16
 ### Added
 - Selecting a part on a PO line now autofills Qty (from the supplier's minimum order increment) and Unit Cost (from the supplier's cheapest active price) when available ([#76](https://github.com/Jolls/arx/issues/76))
