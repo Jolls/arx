@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.40] - 2026-09-16
 ### Added
 - Selecting a part on a PO line now autofills Qty (from the supplier's minimum order increment) and Unit Cost (from the supplier's cheapest active price) when available ([#76](https://github.com/Jolls/arx/issues/76))
+- Adding/editing a price now auto-calculates Price/Unit from Price/Pack (or vice versa) when only one is entered, using the pack size ([#75](https://github.com/Jolls/arx/issues/75))
 
 ## [0.7.39] - 2026-09-16
 ### Added

@@ -2299,12 +2299,13 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	if effectiveDate == "" {
 		effectiveDate = time.Now().Format("2006-01-02")
 	}
+	priceEA, pricePack := resolvePriceFields(r)
 	_, err = h.execContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
 	`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)),
 		partID, supplierID,
-		nullableFloat(r.FormValue("pack_size")), nullableFloat(r.FormValue("price_ea")), nullableFloat(r.FormValue("price_pack")),
+		nullableFloat(r.FormValue("pack_size")), priceEA, pricePack,
 		effectiveDate,
 	)
 	if err != nil {
@@ -2403,12 +2404,13 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error updating price: "+err.Error())
 		return
 	}
+	priceEA, pricePack := resolvePriceFields(r)
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
 	`, pr, h.dia().BoolLiteral(true)),
 		partID, supplierID,
-		nullableFloat(r.FormValue("pack_size")), nullableFloat(r.FormValue("price_ea")), nullableFloat(r.FormValue("price_pack")),
+		nullableFloat(r.FormValue("pack_size")), priceEA, pricePack,
 		effectiveDate,
 	)
 	if err != nil {
