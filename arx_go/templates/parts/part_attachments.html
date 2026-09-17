@@ -19,24 +19,51 @@
 
     {{if .ImportCollision}}
     <div class="alert alert-warning">
+        {{if .ImportCollision.BatchTotal}}
+        <p class="mb-1 fw-semibold">Importing file {{.ImportCollision.BatchIndex}} of {{.ImportCollision.BatchTotal}}</p>
+        {{end}}
         <p class="mb-2">A file named <strong>{{.ImportCollision.Name}}</strong> already exists in
-            Doc Control. The file was <em>not</em> copied. The uploaded file has been discarded —
-            cancelling below will require re-selecting it.</p>
+            Doc Control. The file was <em>not</em> copied.
+            {{if .ImportCollision.BatchDir}}The remaining files in this batch have not been imported yet.
+            {{else}}The uploaded file has been discarded — cancelling below will require re-selecting it.{{end}}</p>
         <form method="post"
               action="{{if .ImportCollision.AttID}}/part/{{.Part.ID}}/attachments/{{.ImportCollision.AttID}}{{else}}/part/{{.Part.ID}}/attachments{{end}}"
               class="d-inline">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="link_name" value="{{.ImportCollision.Name}}">
+            {{if not .ImportCollision.BatchDir}}
             <input type="hidden" name="category" value="{{.ImportCollision.Category}}">
+            {{end}}
             <input type="hidden" name="FILPNRev" value="{{.ImportCollision.Rev}}">
             <input type="hidden" name="order_id" value="{{.ImportCollision.OrderID}}">
             <input type="hidden" name="comment" value="{{.ImportCollision.Comment}}">
             <input type="hidden" name="vendor_scope" value="{{.ImportCollision.VendorScope}}">
             <input type="hidden" name="link_existing" value="1">
+            {{if .ImportCollision.BatchDir}}
+            <input type="hidden" name="batch_dir" value="{{.ImportCollision.BatchDir}}">
+            <input type="hidden" name="batch_remaining" value="{{.ImportCollision.BatchRemaining}}">
+            <input type="hidden" name="batch_categories" value="{{.ImportCollision.BatchCategories}}">
+            <input type="hidden" name="batch_total" value="{{.ImportCollision.BatchTotal}}">
+            {{end}}
             <button type="submit" class="btn btn-sm btn-warning">Link to existing file</button>
         </form>
+        {{if .ImportCollision.BatchDir}}
+        <form method="post" action="/part/{{.Part.ID}}/attachments" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="FILPNRev" value="{{.ImportCollision.Rev}}">
+            <input type="hidden" name="order_id" value="{{.ImportCollision.OrderID}}">
+            <input type="hidden" name="comment" value="{{.ImportCollision.Comment}}">
+            <input type="hidden" name="vendor_scope" value="{{.ImportCollision.VendorScope}}">
+            <input type="hidden" name="batch_dir" value="{{.ImportCollision.BatchDir}}">
+            <input type="hidden" name="batch_total" value="{{.ImportCollision.BatchTotal}}">
+            {{/* Cancel aborts the rest of the batch (files before the collision stay imported). */}}
+            <input type="hidden" name="batch_remaining" value="">
+            <button type="submit" class="btn btn-sm btn-secondary">Cancel</button>
+        </form>
+        {{else}}
         <a href="/part/{{.Part.ID}}/attachments{{if .ImportCollision.AttID}}?edit={{.ImportCollision.AttID}}#edit-form{{end}}"
            class="btn btn-sm btn-secondary">Cancel</a>
+        {{end}}
     </div>
     {{end}}
 
@@ -177,7 +204,7 @@
         <div class="detail-section mt-2">
             <form method="post" action="/part/{{.Part.ID}}/attachments" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                <div class="detail-row">
+                <div class="detail-row" id="category-row">
                     <label class="form-label">Category</label>
                     {{template "category_select" (categoryCtx .AttachmentCategories "" "add_category")}}
                 </div>
@@ -194,7 +221,7 @@
                     <label class="form-label">Import file</label>
                     <div class="d-flex flex-column gap-1">
                         <div class="d-flex align-items-center gap-2">
-                            <input type="file" name="upload_file" id="upload_file" class="form-control form-control-sm" style="max-width:320px;"
+                            <input type="file" name="upload_file" id="upload_file" class="form-control form-control-sm" style="max-width:320px;" multiple
                                    onchange="updateBrowsePreview()"
                                    {{if not .DocControlConfigured}}disabled title="DOC_CONTROL_ROOT is not configured"{{end}}>
                             <button type="button" id="paste-clipboard-btn" class="btn btn-sm btn-secondary" disabled
@@ -204,6 +231,7 @@
                         <div id="browse-note" class="form-text" style="display:none;">
                             Will be copied to Doc Control as <code id="browse-preview"></code>
                         </div>
+                        <div id="browse-multi-list" style="display:none;"></div>
                         <div id="paste-error" class="form-text text-danger" style="display:none;"></div>
                     </div>
                 </div>
@@ -231,6 +259,7 @@
 // Live preview of the imported filename. Fetched from the server so it always
 // matches buildAttachmentFileName in arx_go/attachments.go exactly (#558).
 var ATT_PART_ID = {{.Part.ID}};
+var ATT_CATEGORIES = {{.AttachmentCategoriesJSON}};
 var attPreviewDebounce = {};
 var attPreviewRequestSeq = {};
 
@@ -247,20 +276,71 @@ function attId(mode, name) {
 function updateBrowsePreview(mode) {
     mode = mode || 'add';
     var input = document.getElementById(attId(mode, 'upload_file'));
-    var base = (input && input.files[0]) ? input.files[0].name : '';
+    var files = (input && input.files) ? input.files : null;
     var el = document.getElementById(attId(mode, 'browse-preview'));
     var note = document.getElementById(attId(mode, 'browse-note'));
+    var multiList = document.getElementById(attId(mode, 'browse-multi-list'));
     var clearLink = document.getElementById(attId(mode, 'browse-clear'));
     var f = document.getElementById(attId(mode, 'FILFileName'));
-    if (!base) {
+    if (!files || files.length === 0) {
         if (el) { el.textContent = ''; }
         if (note) { note.style.display = 'none'; }
+        if (multiList) { multiList.style.display = 'none'; multiList.textContent = ''; }
         if (clearLink) { clearLink.style.display = 'none'; }
         if (f) { f.value = ''; f.readOnly = false; }
         return;
     }
-    if (note) { note.style.display = ''; }
     if (clearLink) { clearLink.style.display = ''; }
+    var categoryRow = document.getElementById('category-row');
+    if (files.length > 1) {
+        // Each selected file becomes its own attachment row on submit, and
+        // buildAttachmentFileName only varies by category/rev/ext — files
+        // sharing a category (and extension) would generate identical names
+        // and collide with each other, not just with pre-existing files. So
+        // a batch requires its own category per file instead of the single
+        // shared Category field above (#70).
+        if (note) { note.style.display = 'none'; }
+        if (categoryRow) { categoryRow.style.display = 'none'; }
+        if (f) { f.value = files.length + ' files selected'; f.readOnly = true; }
+        if (multiList) {
+            multiList.style.display = '';
+            multiList.textContent = '';
+            var heading = document.createElement('div');
+            heading.className = 'form-text';
+            heading.textContent = files.length + ' files selected — choose a category for each:';
+            multiList.appendChild(heading);
+            for (var i = 0; i < files.length; i++) {
+                var row = document.createElement('div');
+                row.className = 'd-flex align-items-center gap-2 mt-1';
+                var label = document.createElement('span');
+                label.textContent = files[i].name;
+                label.style.flex = '1';
+                var sel = document.createElement('select');
+                sel.name = 'batch_category';
+                sel.className = 'form-select form-select-sm';
+                sel.style.maxWidth = '200px';
+                sel.required = true;
+                var blank = document.createElement('option');
+                blank.value = '';
+                blank.textContent = '-- Select --';
+                sel.appendChild(blank);
+                for (var j = 0; j < ATT_CATEGORIES.length; j++) {
+                    var opt = document.createElement('option');
+                    opt.value = ATT_CATEGORIES[j];
+                    opt.textContent = ATT_CATEGORIES[j];
+                    sel.appendChild(opt);
+                }
+                row.appendChild(label);
+                row.appendChild(sel);
+                multiList.appendChild(row);
+            }
+        }
+        return;
+    }
+    if (categoryRow) { categoryRow.style.display = ''; }
+    if (multiList) { multiList.style.display = 'none'; multiList.textContent = ''; }
+    var base = files[0].name;
+    if (note) { note.style.display = ''; }
     if (f) { f.value = base; f.readOnly = true; }
     if (!el) { return; }
     var dot = base.lastIndexOf('.');
@@ -288,6 +368,10 @@ function clearBrowse(e, mode) {
     var f = document.getElementById(attId(mode, 'FILFileName'));
     f.value = '';
     f.readOnly = false;
+    var multiList = document.getElementById(attId(mode, 'browse-multi-list'));
+    if (multiList) { multiList.style.display = 'none'; multiList.textContent = ''; }
+    var categoryRow = document.getElementById('category-row');
+    if (categoryRow) { categoryRow.style.display = ''; }
 }
 function notesSelChange(sel, inputId) {
     var input = document.getElementById(inputId);

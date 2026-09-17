@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.44] - 2026-09-17
+### Added
+- Part Attachments' Add form accepts multiple files at once, each with its own category, importing them all in one submission instead of one file per submission ([#70](https://github.com/Jolls/arx/issues/70))
+### Fixed
+- Uploading a file over the 100 MB limit now shows a clear "file too large" message instead of a generic, CSRF-looking "Invalid form submission" error ([#88](https://github.com/Jolls/arx/issues/88))
+
 ## [0.7.43] - 2026-09-17
 ### Changed
 - Attachment import now uses a standard browser file upload on both part and vendor Attachments tabs, replacing the native Windows file-picker dialog; the Copy/Move toggle is gone — imports are always a copy ([#65](https://github.com/Jolls/arx/issues/65))

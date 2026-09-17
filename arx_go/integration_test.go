@@ -5126,7 +5126,7 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 
 	t.Run("manual_filfilename_no_import", func(t *testing.T) {
 		req := postForm("/x", url.Values{"FILFileName": {"http://example.com/foo.pdf"}})
-		result := h.resolveAttachmentFileInput(ctx, req, "999999999", "A", "Datasheet", "", "")
+		result := h.resolveAttachmentFileInput(ctx, req, "999999999", "A", "Datasheet", "", "", nil, true)
 		if result.FileName != urlutil.NormalizeLink("http://example.com/foo.pdf") {
 			t.Errorf("FileName = %q, want normalized manual link", result.FileName)
 		}
@@ -5140,7 +5140,8 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 		h.cfg.DocControlRoot = ""
 		defer func() { h.cfg.DocControlRoot = orig }()
 		req := postMultipart(t, "/x", url.Values{}, "upload_file", "path.txt", []byte("x"))
-		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		upload := multipartUploadSource(attachmentUploads(req, "upload_file")[0])
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "", &upload, true)
 		if result.ErrMsg != "DOC_CONTROL_ROOT is not configured; cannot import files." {
 			t.Errorf("ErrMsg = %q", result.ErrMsg)
 		}
@@ -5149,7 +5150,8 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 	t.Run("fresh_import_copy", func(t *testing.T) {
 		docRoot := tempDocControlRoot(t, h)
 		req := postMultipart(t, "/x", url.Values{}, "upload_file", "test.txt", []byte("hello world"))
-		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		upload := multipartUploadSource(attachmentUploads(req, "upload_file")[0])
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "", &upload, true)
 		if result.ErrMsg != "" {
 			t.Fatalf("unexpected ErrMsg: %s", result.ErrMsg)
 		}
@@ -5171,7 +5173,8 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 			t.Fatalf("pre-create target: %v", err)
 		}
 		req := postMultipart(t, "/x", url.Values{}, "upload_file", "test.txt", []byte("new bytes"))
-		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		upload := multipartUploadSource(attachmentUploads(req, "upload_file")[0])
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "", &upload, true)
 		if result.Collision == nil {
 			t.Fatalf("expected Collision, got nil (result=%+v)", result)
 		}
@@ -5196,7 +5199,7 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 			t.Fatalf("pre-create target: %v", err)
 		}
 		req := postForm("/x", url.Values{"link_existing": {"1"}, "link_name": {wantName}})
-		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "", nil, true)
 		if result.FileName != "LOCAL:"+wantName {
 			t.Errorf("FileName = %q, want %q", result.FileName, "LOCAL:"+wantName)
 		}
@@ -5209,7 +5212,7 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 	t.Run("link_existing_rejects_path_traversal", func(t *testing.T) {
 		tempDocControlRoot(t, h)
 		req := postForm("/x", url.Values{"link_existing": {"1"}, "link_name": {`..\..\evil.txt`}})
-		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "", nil, true)
 		if result.ErrMsg == "" {
 			t.Fatalf("expected ErrMsg for path-traversal link_name, got %+v", result)
 		}
@@ -5221,7 +5224,8 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 			t.Fatalf("pre-create target: %v", err)
 		}
 		req := postMultipart(t, "/x", url.Values{}, "upload_file", "test.txt", []byte("new bytes"))
-		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", wantName)
+		upload := multipartUploadSource(attachmentUploads(req, "upload_file")[0])
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", wantName, &upload, true)
 		if result.Collision != nil {
 			t.Errorf("expected no Collision, got %+v", result.Collision)
 		}
@@ -5240,7 +5244,8 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 	t.Run("part_not_found", func(t *testing.T) {
 		tempDocControlRoot(t, h)
 		req := postMultipart(t, "/x", url.Values{}, "upload_file", "path.txt", []byte("x"))
-		result := h.resolveAttachmentFileInput(ctx, req, "99999999999999999999", "A", "Datasheet", "", "")
+		upload := multipartUploadSource(attachmentUploads(req, "upload_file")[0])
+		result := h.resolveAttachmentFileInput(ctx, req, "99999999999999999999", "A", "Datasheet", "", "", &upload, true)
 		if !strings.HasPrefix(result.ErrMsg, "Error loading part: ") {
 			t.Errorf("ErrMsg = %q, want prefix %q", result.ErrMsg, "Error loading part: ")
 		}
