@@ -49,8 +49,8 @@ Required before: audit trails with real usernames (AUD-1, #251), PO approval (#2
 
 ### 2. TEST_MODE → ArxDev database (#241)
 Required before: Level 2/3 automated tests (#240), any new test infrastructure.
-- Replace `_Test` table suffix with a DSN swap pointing to `ArxDev` database
-- Simplifies `*Table()` helpers to just return the table name
+- ~~Replace `_Test` table suffix with a DSN swap pointing to `ArxDev` database~~ **Done.**
+- ~~Simplifies `*Table()` helpers to just return the table name~~ **Done.**
 - ~~`_test.sql` becomes a "populate ArxDev from prod" script~~ **Superseded by `SQL/azure/seed_test_data.sql` (issue #545): ArxDev is seeded with fixed synthetic data instead of a prod clone.**
 
 ### 3. Schema constraints (#213)
@@ -220,9 +220,9 @@ No authentication exists yet. When implemented:
 - `TestRecordHistory.username` and `test_definition_history.changed_by` should switch from `SYSTEM_USER` to app-level user
 - Simple session cookie with a small user table is sufficient — avoid OAuth complexity unless specifically requested
 
-### TEST_MODE → ArxDev DB (#241)
-Current `_Test` table suffix is confusing alongside Go's `_test.go` convention.
-**Plan:** Separate `ArxDev` database on the same SQL Server instance. `TEST_MODE` becomes a DSN swap. `*Table()` helpers simplify to just the table name. This is a prerequisite for writing Level 2 (httptest) and Level 3 (integration) tests (#240).
+### ~~TEST_MODE → ArxDev DB (#241)~~
+~~Current `_Test` table suffix is confusing alongside Go's `_test.go` convention.~~
+~~**Plan:** Separate `ArxDev` database on the same SQL Server instance. `TEST_MODE` becomes a DSN swap. `*Table()` helpers simplify to just the table name. This is a prerequisite for writing Level 2 (httptest) and Level 3 (integration) tests (#240).~~ **Done.**
 
 ### Automated Test Expansion (#240)
 Current state: Level 1 pure unit tests in place for `arxlib`, `parts_master_go/handlers`, `parts_master_go/models`.

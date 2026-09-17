@@ -30,7 +30,3 @@ INSERT INTO uom (abbreviation, display_name, unit_type) VALUES
     ('BOX',   'Box',          'package'),
     ('BTL',   'Bottle',       'package'),
     ('SPOOL', 'Spool',        'package');
-
--- Test variant
-IF OBJECT_ID('dbo.uom_Test', 'U') IS NOT NULL DROP TABLE dbo.uom_Test;
-SELECT * INTO uom_Test FROM uom;

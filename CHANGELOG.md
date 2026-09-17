@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.45] - 2026-09-17
+### Removed
+- Dead `_Test` clone-table DDL from `SQL/azure/app_config.sql`, `uom.sql`, `company_attachment.sql` — a fossil of the pre-#241 test-mode mechanism, superseded by the ArxDev connection-profile swap ([#92](https://github.com/Jolls/arx/issues/92))
+
 ## [0.7.44] - 2026-09-17
 ### Added
 - Part Attachments' Add form accepts multiple files at once, each with its own category, importing them all in one submission instead of one file per submission ([#70](https://github.com/Jolls/arx/issues/70))
