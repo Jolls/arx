@@ -68,6 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
         dateEl.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     }
 
+    const priceEAEl = document.getElementById('price_ea');
+    const pricePackEl = document.getElementById('price_pack');
+    priceEAEl.addEventListener('input', () => { pricePackEl.value = ''; });
+    pricePackEl.addEventListener('input', () => { priceEAEl.value = ''; });
+
     document.getElementById('price-form').addEventListener('submit', function(e) {
         const nameEl = document.getElementById('supplier_name');
         const idEl = document.getElementById('supplier_id');
