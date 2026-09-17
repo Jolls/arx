@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -164,6 +165,41 @@ func withIDAndUnitID(req *http.Request, id, unitID int) *http.Request {
 func postForm(target string, vals url.Values) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(vals.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return req
+}
+
+// postMultipart builds a multipart/form-data POST request carrying vals plus,
+// when fileField is non-empty, one uploaded file under that field. It calls
+// ParseMultipartForm itself, mirroring what the RequireCsrfOnPost middleware
+// does ahead of every handler in production.
+func postMultipart(t *testing.T, target string, vals url.Values, fileField, fileName string, fileBody []byte) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, vs := range vals {
+		for _, v := range vs {
+			if err := mw.WriteField(k, v); err != nil {
+				t.Fatalf("WriteField(%q): %v", k, err)
+			}
+		}
+	}
+	if fileField != "" {
+		fw, err := mw.CreateFormFile(fileField, fileName)
+		if err != nil {
+			t.Fatalf("CreateFormFile: %v", err)
+		}
+		if _, err := fw.Write(fileBody); err != nil {
+			t.Fatalf("write file body: %v", err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, target, &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if err := req.ParseMultipartForm(32 << 20); err != nil {
+		t.Fatalf("ParseMultipartForm: %v", err)
+	}
 	return req
 }
 
@@ -5094,7 +5130,7 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 		if result.FileName != urlutil.NormalizeLink("http://example.com/foo.pdf") {
 			t.Errorf("FileName = %q, want normalized manual link", result.FileName)
 		}
-		if result.MoveSrc != "" || result.Collision != nil || result.ErrMsg != "" {
+		if result.Collision != nil || result.ErrMsg != "" {
 			t.Errorf("unexpected side fields: %+v", result)
 		}
 	})
@@ -5103,7 +5139,7 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 		orig := h.cfg.DocControlRoot
 		h.cfg.DocControlRoot = ""
 		defer func() { h.cfg.DocControlRoot = orig }()
-		req := postForm("/x", url.Values{"source_path": {`C:\some\path.txt`}})
+		req := postMultipart(t, "/x", url.Values{}, "upload_file", "path.txt", []byte("x"))
 		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
 		if result.ErrMsg != "DOC_CONTROL_ROOT is not configured; cannot import files." {
 			t.Errorf("ErrMsg = %q", result.ErrMsg)
@@ -5112,20 +5148,13 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 
 	t.Run("fresh_import_copy", func(t *testing.T) {
 		docRoot := tempDocControlRoot(t, h)
-		srcFile := filepath.Join(t.TempDir(), "test.txt")
-		if err := os.WriteFile(srcFile, []byte("hello world"), 0644); err != nil {
-			t.Fatalf("write src file: %v", err)
-		}
-		req := postForm("/x", url.Values{"source_path": {srcFile}})
+		req := postMultipart(t, "/x", url.Values{}, "upload_file", "test.txt", []byte("hello world"))
 		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
 		if result.ErrMsg != "" {
 			t.Fatalf("unexpected ErrMsg: %s", result.ErrMsg)
 		}
 		if result.FileName != "LOCAL:"+wantName {
 			t.Errorf("FileName = %q, want %q", result.FileName, "LOCAL:"+wantName)
-		}
-		if result.MoveSrc != "" {
-			t.Errorf("MoveSrc = %q, want empty", result.MoveSrc)
 		}
 		gotBytes, err := os.ReadFile(filepath.Join(docRoot, wantName))
 		if err != nil {
@@ -5136,41 +5165,21 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 		}
 	})
 
-	t.Run("move_mode", func(t *testing.T) {
-		tempDocControlRoot(t, h)
-		srcFile := filepath.Join(t.TempDir(), "test.txt")
-		if err := os.WriteFile(srcFile, []byte("hello world"), 0644); err != nil {
-			t.Fatalf("write src file: %v", err)
-		}
-		req := postForm("/x", url.Values{"source_path": {srcFile}, "move_source": {"1"}})
-		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
-		if result.ErrMsg != "" {
-			t.Fatalf("unexpected ErrMsg: %s", result.ErrMsg)
-		}
-		if result.MoveSrc != srcFile {
-			t.Errorf("MoveSrc = %q, want %q", result.MoveSrc, srcFile)
-		}
-	})
-
 	t.Run("import_collision", func(t *testing.T) {
 		docRoot := tempDocControlRoot(t, h)
-		srcFile := filepath.Join(t.TempDir(), "test.txt")
-		if err := os.WriteFile(srcFile, []byte("new bytes"), 0644); err != nil {
-			t.Fatalf("write src file: %v", err)
-		}
 		if err := os.WriteFile(filepath.Join(docRoot, wantName), []byte("original bytes"), 0644); err != nil {
 			t.Fatalf("pre-create target: %v", err)
 		}
-		req := postForm("/x", url.Values{"source_path": {srcFile}})
+		req := postMultipart(t, "/x", url.Values{}, "upload_file", "test.txt", []byte("new bytes"))
 		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
 		if result.Collision == nil {
 			t.Fatalf("expected Collision, got nil (result=%+v)", result)
 		}
-		if result.Collision["Name"] != wantName || result.Collision["SourcePath"] != srcFile {
-			t.Errorf("Collision = %+v, want Name=%q SourcePath=%q", result.Collision, wantName, srcFile)
+		if result.Collision["Name"] != wantName {
+			t.Errorf("Collision = %+v, want Name=%q", result.Collision, wantName)
 		}
-		if result.FileName != "" || result.MoveSrc != "" {
-			t.Errorf("expected empty FileName/MoveSrc on collision, got %+v", result)
+		if result.FileName != "" {
+			t.Errorf("expected empty FileName on collision, got %+v", result)
 		}
 		gotBytes, err := os.ReadFile(filepath.Join(docRoot, wantName))
 		if err != nil {
@@ -5183,30 +5192,35 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 
 	t.Run("link_existing_skips_copy", func(t *testing.T) {
 		docRoot := tempDocControlRoot(t, h)
-		srcFile := filepath.Join(t.TempDir(), "test.txt")
-		if err := os.WriteFile(srcFile, []byte("hello"), 0644); err != nil {
-			t.Fatalf("write src file: %v", err)
+		if err := os.WriteFile(filepath.Join(docRoot, wantName), []byte("hello"), 0644); err != nil {
+			t.Fatalf("pre-create target: %v", err)
 		}
-		req := postForm("/x", url.Values{"source_path": {srcFile}, "link_existing": {"1"}})
+		req := postForm("/x", url.Values{"link_existing": {"1"}, "link_name": {wantName}})
 		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
 		if result.FileName != "LOCAL:"+wantName {
 			t.Errorf("FileName = %q, want %q", result.FileName, "LOCAL:"+wantName)
 		}
-		if _, err := os.Stat(filepath.Join(docRoot, wantName)); !os.IsNotExist(err) {
-			t.Errorf("expected no file created at %s, stat err = %v", wantName, err)
+		gotBytes, err := os.ReadFile(filepath.Join(docRoot, wantName))
+		if err != nil || string(gotBytes) != "hello" {
+			t.Errorf("linked file bytes changed: got %q err %v, want unchanged %q", gotBytes, err, "hello")
+		}
+	})
+
+	t.Run("link_existing_rejects_path_traversal", func(t *testing.T) {
+		tempDocControlRoot(t, h)
+		req := postForm("/x", url.Values{"link_existing": {"1"}, "link_name": {`..\..\evil.txt`}})
+		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "")
+		if result.ErrMsg == "" {
+			t.Fatalf("expected ErrMsg for path-traversal link_name, got %+v", result)
 		}
 	})
 
 	t.Run("replace_name_uses_replace_local_file", func(t *testing.T) {
 		docRoot := tempDocControlRoot(t, h)
-		srcFile := filepath.Join(t.TempDir(), "test.txt")
-		if err := os.WriteFile(srcFile, []byte("new bytes"), 0644); err != nil {
-			t.Fatalf("write src file: %v", err)
-		}
 		if err := os.WriteFile(filepath.Join(docRoot, wantName), []byte("old bytes"), 0644); err != nil {
 			t.Fatalf("pre-create target: %v", err)
 		}
-		req := postForm("/x", url.Values{"source_path": {srcFile}})
+		req := postMultipart(t, "/x", url.Values{}, "upload_file", "test.txt", []byte("new bytes"))
 		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", wantName)
 		if result.Collision != nil {
 			t.Errorf("expected no Collision, got %+v", result.Collision)
@@ -5225,7 +5239,7 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 
 	t.Run("part_not_found", func(t *testing.T) {
 		tempDocControlRoot(t, h)
-		req := postForm("/x", url.Values{"source_path": {`C:\some\path.txt`}})
+		req := postMultipart(t, "/x", url.Values{}, "upload_file", "path.txt", []byte("x"))
 		result := h.resolveAttachmentFileInput(ctx, req, "99999999999999999999", "A", "Datasheet", "", "")
 		if !strings.HasPrefix(result.ErrMsg, "Error loading part: ") {
 			t.Errorf("ErrMsg = %q, want prefix %q", result.ErrMsg, "Error loading part: ")

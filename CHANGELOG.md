@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.43] - 2026-09-17
+### Changed
+- Attachment import now uses a standard browser file upload on both part and vendor Attachments tabs, replacing the native Windows file-picker dialog; the Copy/Move toggle is gone — imports are always a copy ([#65](https://github.com/Jolls/arx/issues/65))
+- Vendor Attachments tab now also supports uploading a file directly, alongside the existing URL/path text field ([#65](https://github.com/Jolls/arx/issues/65))
+### Removed
+- `GET /api/browse-file` and `folderpick.BrowseFile`/`BrowseFileContext` — the folder-picker dialog (Settings) is unaffected ([#65](https://github.com/Jolls/arx/issues/65))
+
 ## [0.7.42] - 2026-09-16
 ### Added
 - On a PO, selecting a supplier with only one contact now auto-selects that contact instead of leaving it blank ([#82](https://github.com/Jolls/arx/issues/82))

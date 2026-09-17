@@ -213,12 +213,6 @@ func (h *Handler) APIBrowseFolder(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"path": folderpick.BrowseFolderContext(r.Context())})
 }
 
-// APIBrowseFile opens a native Windows file-picker dialog and returns the
-// selected absolute path as JSON. Used by the attachment Browse button.
-func (h *Handler) APIBrowseFile(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]string{"path": folderpick.BrowseFileContext(r.Context())})
-}
-
 var pasteImageExts = map[string]string{
 	"image/png":  ".png",
 	"image/jpeg": ".jpg",

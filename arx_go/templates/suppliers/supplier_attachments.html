@@ -87,12 +87,17 @@
     <div id="edit-form" class="detail-section mt-4">
         <h3>Edit Attachment</h3>
         <p class="text-muted font-monospace mb-2" style="font-size:0.9em;">{{displayLink .EditingAtt.FilePath}}</p>
-        <form method="post" action="/supplier/{{.Supplier.ID}}/attachments/{{.EditingAtt.SupplierAttachmentID}}">
+        <form method="post" action="/supplier/{{.Supplier.ID}}/attachments/{{.EditingAtt.SupplierAttachmentID}}" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
                 <label class="form-label">Replace File / URL</label>
                 <input type="text" name="file_path" class="form-control"
                        placeholder="leave blank to keep current file">
+            </div>
+            <div class="detail-row">
+                <label class="form-label">Import file</label>
+                <input type="file" name="upload_file" class="form-control"
+                       {{if not $.SupplierFilesConfigured}}disabled title="SUPPLIER_FILES_ROOT is not configured"{{end}}>
             </div>
             <div class="detail-row">
                 <label class="form-label">Notes</label>
@@ -115,12 +120,17 @@
     <details class="mt-4">
         <summary class="fw-semibold" style="cursor:pointer; font-size:1em; padding:8px 0;">Add Attachment</summary>
         <div class="detail-section mt-2">
-            <form method="post" action="/supplier/{{.Supplier.ID}}/attachments">
+            <form method="post" action="/supplier/{{.Supplier.ID}}/attachments" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
-                    <label class="form-label">File / URL *</label>
+                    <label class="form-label">File / URL</label>
                     <input type="text" name="file_path" class="form-control"
-                           placeholder="https://... or LOCAL:relative\path\to\file.pdf or LOCAL:folder\" required>
+                           placeholder="https://... or LOCAL:relative\path\to\file.pdf or LOCAL:folder\">
+                </div>
+                <div class="detail-row">
+                    <label class="form-label">Import file</label>
+                    <input type="file" name="upload_file" class="form-control"
+                           {{if not .SupplierFilesConfigured}}disabled title="SUPPLIER_FILES_ROOT is not configured"{{end}}>
                 </div>
                 <div class="detail-row">
                     <label class="form-label">Notes</label>

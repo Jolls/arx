@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -76,10 +78,10 @@ func sanitizeFileNamePart(s string) string {
 	}, s)
 }
 
-// copyIntoDocControl copies src to <root>/<name> without overwriting.
-// If the target already exists it returns (true, nil) and does not copy.
-// A copy failure returns an error and leaves no orphan target behind.
-func copyIntoDocControl(root, name, src string) (existed bool, err error) {
+// copyReaderIntoDocControl streams src into <root>/<name> without overwriting.
+// If the target already exists it returns (true, nil) and writes nothing.
+// A failure leaves no orphan target behind.
+func copyReaderIntoDocControl(root, name string, src io.Reader) (existed bool, err error) {
 	target := filepath.Join(root, name)
 	dst, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
@@ -89,17 +91,9 @@ func copyIntoDocControl(root, name, src string) (existed bool, err error) {
 		return false, err
 	}
 
-	in, err := os.Open(src)
-	if err != nil {
-		dst.Close()
-		os.Remove(target) // remove the empty target we just created
-		return false, err
-	}
-	defer in.Close()
-
 	// Close dst before any cleanup so os.Remove isn't blocked by an open handle
 	// (Windows sharing violation).
-	_, copyErr := io.Copy(dst, in)
+	_, copyErr := io.Copy(dst, src)
 	closeErr := dst.Close()
 	if copyErr != nil || closeErr != nil {
 		os.Remove(target)
@@ -115,25 +109,7 @@ func copyIntoDocControl(root, name, src string) (existed bool, err error) {
 // If the target already exists it returns (true, nil) and does not write.
 // A write failure leaves no orphan target behind.
 func writeIntoDocControl(root, name string, data []byte) (existed bool, err error) {
-	target := filepath.Join(root, name)
-	dst, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
-	if err != nil {
-		if os.IsExist(err) {
-			return true, nil
-		}
-		return false, err
-	}
-
-	_, writeErr := dst.Write(data)
-	closeErr := dst.Close()
-	if writeErr != nil || closeErr != nil {
-		os.Remove(target)
-		if writeErr != nil {
-			return false, writeErr
-		}
-		return false, closeErr
-	}
-	return false, nil
+	return copyReaderIntoDocControl(root, name, bytes.NewReader(data))
 }
 
 // writeIntoDocControlUnique calls writeIntoDocControl, retrying with " (2)",
@@ -154,30 +130,72 @@ func writeIntoDocControlUnique(root, name, ext string, data []byte) (finalName s
 	return "", fmt.Errorf("could not find a unique name for %q after 20 attempts", name)
 }
 
+// copyReaderIntoDocControlUnique calls copyReaderIntoDocControl, retrying with
+// " (2)", " (3)", ... appended before ext on collision. name must already
+// include ext. Safe to retry against the same src: a collision is detected
+// before src is read, so no bytes are consumed on a failed attempt.
+func copyReaderIntoDocControlUnique(root, name, ext string, src io.Reader) (finalName string, err error) {
+	base := strings.TrimSuffix(name, ext)
+	candidate := name
+	for attempt := 1; attempt <= 20; attempt++ {
+		existed, err := copyReaderIntoDocControl(root, candidate, src)
+		if err != nil {
+			return "", err
+		}
+		if !existed {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s (%d)%s", base, attempt+1, ext)
+	}
+	return "", fmt.Errorf("could not find a unique name for %q after 20 attempts", name)
+}
+
 // attachmentFileInput carries the outcome of resolveAttachmentFileInput: the
-// file_name value to store, an optional source file to remove afterward
-// (Move mode), or a reason (error / import collision) the caller must
-// surface to the user instead of saving.
+// file_name value to store, or a reason (error / import collision) the
+// caller must surface to the user instead of saving.
 type attachmentFileInput struct {
 	FileName  string
-	MoveSrc   string
 	Collision map[string]string
 	ErrMsg    string
 }
 
+// attachmentUploads returns the files submitted under the given multipart form
+// field, or nil when none were submitted. It returns a slice (not a single
+// file) so a future multi-file upload can accept multiple files per submission
+// without reshaping the callers' contract; today every caller uses only the
+// first entry. Does not call r.ParseMultipartForm — the CSRF middleware
+// (RequireCsrfOnPost) already parses the body ahead of every handler.
+func attachmentUploads(r *http.Request, field string) []*multipart.FileHeader {
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		return nil
+	}
+	return r.MultipartForm.File[field]
+}
+
 // resolveAttachmentFileInput inspects the form for either a manual FILFileName
-// value or a browse-import source_path, shared by PartAttachmentCreate and
-// PartAttachmentUpdate. replaceName, when non-empty, is the current LOCAL:
-// file (already stripped of its prefix) that this same row is replacing; if
-// the newly generated name matches it exactly, replaceLocalFile is used
-// instead of copyIntoDocControl so the row's own file is swapped in place
-// rather than reported as a false collision against itself. replaceName is
-// always empty for Create, so this branch never affects that path.
+// value, an uploaded file, or a link_existing carry-over from a prior
+// collision, shared by PartAttachmentCreate and PartAttachmentUpdate.
+// replaceName, when non-empty, is the current LOCAL: file (already stripped
+// of its prefix) that this same row is replacing; if the newly generated name
+// matches it exactly, replaceLocalFileFrom is used instead of
+// copyReaderIntoDocControl so the row's own file is swapped in place rather
+// than reported as a false collision against itself. replaceName is always
+// empty for Create, so this branch never affects that path.
 func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Request, partID, rev, category, comment, replaceName string) attachmentFileInput {
-	fileName := fv(r, "FILFileName")
-	src := fv(r, "source_path")
-	if src == "" {
-		return attachmentFileInput{FileName: urlutil.NormalizeLink(fileName)}
+	if fv(r, "link_existing") == "1" {
+		name := sanitizeFileNamePart(filepath.Base(fv(r, "link_name")))
+		if name == "" {
+			return attachmentFileInput{ErrMsg: "That file no longer exists in Doc Control."}
+		}
+		if _, err := os.Stat(filepath.Join(h.cfg.DocControlRoot, name)); err != nil {
+			return attachmentFileInput{ErrMsg: "That file no longer exists in Doc Control."}
+		}
+		return attachmentFileInput{FileName: "LOCAL:" + name}
+	}
+
+	ups := attachmentUploads(r, "upload_file")
+	if len(ups) == 0 {
+		return attachmentFileInput{FileName: urlutil.NormalizeLink(fv(r, "FILFileName"))}
 	}
 	if h.cfg.DocControlRoot == "" {
 		return attachmentFileInput{ErrMsg: "DOC_CONTROL_ROOT is not configured; cannot import files."}
@@ -186,42 +204,41 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 	if err != nil {
 		return attachmentFileInput{ErrMsg: "Error loading part: " + err.Error()}
 	}
-	move := fv(r, "move_source") == "1"
-	name := buildAttachmentFileName(p.PartNumber, rev, p.Description, category, filepath.Ext(src))
-	if fv(r, "link_existing") != "1" {
-		if replaceName != "" && strings.EqualFold(name, replaceName) {
-			if err := replaceLocalFile(h.cfg.DocControlRoot, name, src); err != nil {
-				return attachmentFileInput{ErrMsg: "Error replacing file: " + err.Error()}
-			}
-		} else {
-			existed, err := copyIntoDocControl(h.cfg.DocControlRoot, name, src)
-			if err != nil {
-				return attachmentFileInput{ErrMsg: "Error copying file: " + err.Error()}
-			}
-			if existed {
-				return attachmentFileInput{Collision: map[string]string{
-					"Name": name, "SourcePath": src,
-					"Category": category, "Rev": rev, "OrderID": fv(r, "order_id"),
-					"Move": fv(r, "move_source"), "Comment": comment,
-					"VendorScope": fv(r, "vendor_scope"),
-				}}
-			}
+	hdr := ups[0]
+	name := buildAttachmentFileName(p.PartNumber, rev, p.Description, category, filepath.Ext(hdr.Filename))
+	f, err := hdr.Open()
+	if err != nil {
+		return attachmentFileInput{ErrMsg: "Error reading upload: " + err.Error()}
+	}
+	defer f.Close()
+
+	if replaceName != "" && strings.EqualFold(name, replaceName) {
+		if err := replaceLocalFileFrom(h.cfg.DocControlRoot, name, f); err != nil {
+			return attachmentFileInput{ErrMsg: "Error replacing file: " + err.Error()}
+		}
+	} else {
+		existed, err := copyReaderIntoDocControl(h.cfg.DocControlRoot, name, f)
+		if err != nil {
+			return attachmentFileInput{ErrMsg: "Error copying file: " + err.Error()}
+		}
+		if existed {
+			return attachmentFileInput{Collision: map[string]string{
+				"Name": name,
+				"Category": category, "Rev": rev, "OrderID": fv(r, "order_id"),
+				"Comment": comment, "VendorScope": fv(r, "vendor_scope"),
+			}}
 		}
 	}
-	result := attachmentFileInput{FileName: "LOCAL:" + name}
-	if move {
-		result.MoveSrc = src
-	}
-	return result
+	return attachmentFileInput{FileName: "LOCAL:" + name}
 }
 
-// replaceLocalFile copies src into root under name, keeping name intact even
-// if the copy fails: it copies to a temporary sibling file first and only
+// replaceLocalFileFrom streams src into root under name, keeping name intact
+// even if the copy fails: it copies to a temporary sibling file first and only
 // removes the existing file and swaps the temp file into place once the copy
 // has fully succeeded, so a mid-copy failure never leaves name missing.
-func replaceLocalFile(root, name, src string) error {
+func replaceLocalFileFrom(root, name string, src io.Reader) error {
 	tmpName := name + ".tmp_replace"
-	existed, err := copyIntoDocControl(root, tmpName, src)
+	existed, err := copyReaderIntoDocControl(root, tmpName, src)
 	if err != nil {
 		return err
 	}
@@ -243,8 +260,8 @@ func replaceLocalFile(root, name, src string) error {
 // replaceDocControlData writes data into <root>/<name>, keeping name intact
 // even if the write fails: it writes to a temporary sibling file first and
 // only removes the existing file and swaps the temp file into place once the
-// write has fully succeeded. Mirrors replaceLocalFile's copy-then-swap for
-// byte data instead of a source file on disk.
+// write has fully succeeded. Mirrors replaceLocalFileFrom's copy-then-swap for
+// byte data instead of an io.Reader source.
 func replaceDocControlData(root, name string, data []byte) error {
 	tmpName := name + ".tmp_replace"
 	existed, err := writeIntoDocControl(root, tmpName, data)

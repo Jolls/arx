@@ -26,24 +26,6 @@ func TestBrowseFolderContext_CanceledContext(t *testing.T) {
 	}
 }
 
-// TestBrowseFileContext_CanceledContext mirrors the folder-picker case above
-// for the file picker.
-func TestBrowseFileContext_CanceledContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	start := time.Now()
-	got := BrowseFileContext(ctx)
-	elapsed := time.Since(start)
-
-	if got != "" {
-		t.Fatalf("expected empty string for canceled context, got %q", got)
-	}
-	if elapsed > 500*time.Millisecond {
-		t.Fatalf("BrowseFileContext took %v with an already-canceled context; expected near-instant return", elapsed)
-	}
-}
-
 // TestBrowseFolderContext_ExpiredDeadline covers the timeout path
 // (context.WithTimeout/WithDeadline) as a distinct cancellation reason from
 // an explicit Cancel call above.
