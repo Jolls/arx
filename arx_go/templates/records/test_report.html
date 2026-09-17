@@ -115,12 +115,14 @@
   }
 
   // Copy (visible rows only) — shared helper in static/table-sort.js
-  copyTableTSV('report-table', 'copy-report',
-    ['Serial Number', 'Part Number', 'Record Date', 'Result Date', 'Result', 'P/F', 'Comment'],
-    function(tr, cells, i) {
-      if (i === 5) return cells[5] ? (cells[5].getAttribute('data-pf') || '') : '';
-      return cells[i] ? cells[i].textContent.trim() : '';
-    });
+  document.addEventListener('DOMContentLoaded', function() {
+    copyTableTSV('report-table', 'copy-report',
+      ['Serial Number', 'Part Number', 'Record Date', 'Result Date', 'Result', 'P/F', 'Comment'],
+      function(tr, cells, i) {
+        if (i === 5) return cells[5] ? (cells[5].getAttribute('data-pf') || '') : '';
+        return cells[i] ? cells[i].textContent.trim() : '';
+      });
+  });
 })();
 </script>
 {{end}}

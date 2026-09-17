@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.42] - 2026-09-16
+### Added
+- On a PO, selecting a supplier with only one contact now auto-selects that contact instead of leaving it blank ([#82](https://github.com/Jolls/arx/issues/82))
+### Fixed
+- Error page's "Back" link now returns to the page you came from (via Referer) instead of always going to Parts, fixing the wrong "Back to Parts" link shown after a folder→print navigation error ([#83](https://github.com/Jolls/arx/issues/83))
+- "Copy for Excel" buttons on the Part Build Cost and Test Report pages could fire before table-sort.js loaded, throwing a console error and silently failing to attach ([#84](https://github.com/Jolls/arx/issues/84))
+
 ## [0.7.41] - 2026-09-16
 ### Added
 - "Start RFQ" button on draft POs clones the PO's line items and supplier pricing into a new RFQ as the first quote, leaving the original PO untouched ([#74](https://github.com/Jolls/arx/issues/74))
