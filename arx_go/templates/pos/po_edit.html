@@ -521,6 +521,10 @@ function setupSupplierTypeahead(inputEl, idHiddenEl, contactSelectEl) {
                     zipcode:c.zipcode, country:c.country, phone:c.phone, fax:c.fax, email:c.email});
                 sel.appendChild(opt);
             });
+            if (contacts.length === 1) {
+                sel.value = contacts[0].name;
+                fillContactFields(sel, sel.id.replace('_contact', ''));
+            }
         });
     }
     function close() { dd?.remove(); dd = null; results = []; activeIdx = -1; }
