@@ -65,7 +65,7 @@
 
 {{if .Lines}}
 <script>
-(function() {
+document.addEventListener('DOMContentLoaded', function() {
   // Shared helper in static/table-sort.js
   copyTableTSV('build-cost-table', 'copy-build-cost',
     ['Part Number', 'Description', 'Qty Needed', 'Tier (pack)', 'Unit Price', 'Ext Cost', 'Source'],
@@ -73,7 +73,7 @@
       if (i === 6) return cells[6].getAttribute('data-source') === 'price' ? 'Price' : 'Missing';
       return cells[i].textContent.trim();
     });
-})();
+});
 </script>
 {{end}}
 {{end}}

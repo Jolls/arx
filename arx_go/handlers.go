@@ -11,6 +11,7 @@ import (
 	ioFS "io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"path"
 	"reflect"
 	"slices"
@@ -576,10 +577,22 @@ func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// sameOriginRefererPath returns the path+query of the request's Referer if it
+// points back at this same host, or "" otherwise (guards against an
+// open-redirect-style "Back" link from a spoofed/external Referer header).
+func sameOriginRefererPath(r *http.Request) string {
+	ref, err := url.Parse(r.Referer())
+	if err != nil || ref.Host != r.Host {
+		return ""
+	}
+	return ref.RequestURI()
+}
+
 func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, msg string) {
 	h.render(w, r, "shared/error.html", map[string]any{
 		"Error":    msg,
 		"TestMode": h.cfg.TestMode,
+		"BackURL":  sameOriginRefererPath(r),
 	})
 }
 
