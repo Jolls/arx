@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -172,6 +173,33 @@ func attachmentUploads(r *http.Request, field string) []*multipart.FileHeader {
 	return r.MultipartForm.File[field]
 }
 
+// attachmentUploadSource abstracts a single pending file's bytes for
+// resolveAttachmentFileInput, so the same resolution logic serves both a live
+// multipart upload (single-file Create/Update) and a file staged to disk from
+// an earlier multi-file batch POST that's resuming after a collision decision
+// (#70) — its bytes no longer live in any *http.Request by the time of resume.
+type attachmentUploadSource struct {
+	ext  string
+	open func() (io.ReadCloser, error)
+}
+
+// multipartUploadSource wraps a directly-submitted upload.
+func multipartUploadSource(fh *multipart.FileHeader) attachmentUploadSource {
+	return attachmentUploadSource{
+		ext:  filepath.Ext(fh.Filename),
+		open: func() (io.ReadCloser, error) { return fh.Open() },
+	}
+}
+
+// stagedUploadSource wraps a file previously staged to disk by
+// startAttachmentBatch, resumed after a collision decision (#70).
+func stagedUploadSource(path string) attachmentUploadSource {
+	return attachmentUploadSource{
+		ext:  filepath.Ext(path),
+		open: func() (io.ReadCloser, error) { return os.Open(path) },
+	}
+}
+
 // resolveAttachmentFileInput inspects the form for either a manual FILFileName
 // value, an uploaded file, or a link_existing carry-over from a prior
 // collision, shared by PartAttachmentCreate and PartAttachmentUpdate.
@@ -180,9 +208,17 @@ func attachmentUploads(r *http.Request, field string) []*multipart.FileHeader {
 // matches it exactly, replaceLocalFileFrom is used instead of
 // copyReaderIntoDocControl so the row's own file is swapped in place rather
 // than reported as a false collision against itself. replaceName is always
-// empty for Create, so this branch never affects that path.
-func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Request, partID, rev, category, comment, replaceName string) attachmentFileInput {
-	if fv(r, "link_existing") == "1" {
+// empty for Create, so this branch never affects that path. upload is nil
+// when the caller has no pending file (manual FILFileName / link_existing).
+// allowLinkExisting must be false when resolving a later file in a batch
+// resumed after a "Link to existing file" decision (#70): the resume POST's
+// link_existing=1/link_name form values apply only to the one file that
+// collided, but the same *http.Request is reused for every file recursively
+// imported afterward — without this, every subsequent file in the batch
+// would also be silently linked to that same colliding name instead of
+// being imported from its staged bytes.
+func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Request, partID, rev, category, comment, replaceName string, upload *attachmentUploadSource, allowLinkExisting bool) attachmentFileInput {
+	if allowLinkExisting && fv(r, "link_existing") == "1" {
 		name := sanitizeFileNamePart(filepath.Base(fv(r, "link_name")))
 		if name == "" {
 			return attachmentFileInput{ErrMsg: "That file no longer exists in Doc Control."}
@@ -193,8 +229,7 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 		return attachmentFileInput{FileName: "LOCAL:" + name}
 	}
 
-	ups := attachmentUploads(r, "upload_file")
-	if len(ups) == 0 {
+	if upload == nil {
 		return attachmentFileInput{FileName: urlutil.NormalizeLink(fv(r, "FILFileName"))}
 	}
 	if h.cfg.DocControlRoot == "" {
@@ -204,9 +239,8 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 	if err != nil {
 		return attachmentFileInput{ErrMsg: "Error loading part: " + err.Error()}
 	}
-	hdr := ups[0]
-	name := buildAttachmentFileName(p.PartNumber, rev, p.Description, category, filepath.Ext(hdr.Filename))
-	f, err := hdr.Open()
+	name := buildAttachmentFileName(p.PartNumber, rev, p.Description, category, upload.ext)
+	f, err := upload.open()
 	if err != nil {
 		return attachmentFileInput{ErrMsg: "Error reading upload: " + err.Error()}
 	}
@@ -230,6 +264,186 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 		}
 	}
 	return attachmentFileInput{FileName: "LOCAL:" + name}
+}
+
+// batchDirPrefix names every temp directory created by a multi-file
+// attachment batch (#70), so a client-supplied batch_dir value can be
+// verified to be one of ours before anything touches the filesystem with it.
+const batchDirPrefix = "arx-attach-batch-"
+
+// stagedFileNamePattern matches the "NNN.ext" names startAttachmentBatch
+// gives staged files. Used to validate a client-supplied batch_remaining
+// value before joining it onto a filesystem path.
+var stagedFileNamePattern = regexp.MustCompile(`^[0-9]{3}[A-Za-z0-9.]*$`)
+
+// batchPartIDMarker is the name of the file startAttachmentBatch writes
+// inside its temp dir recording which part the batch belongs to, so a
+// forged/stale batch_dir posted to a different part's attachments page is
+// rejected instead of importing staged files under the wrong part (#70).
+const batchPartIDMarker = ".part_id"
+
+// isBatchTempDir reports whether dir is exactly one of ours — a direct child
+// of the OS temp directory, named with batchDirPrefix, that still exists —
+// and was created for partID.
+func isBatchTempDir(dir, partID string) bool {
+	if !strings.HasPrefix(filepath.Base(dir), batchDirPrefix) {
+		return false
+	}
+	if filepath.Dir(dir) != filepath.Clean(os.TempDir()) {
+		return false
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return false
+	}
+	marker, err := os.ReadFile(filepath.Join(dir, batchPartIDMarker))
+	return err == nil && string(marker) == partID
+}
+
+// startAttachmentBatch handles a multi-file Add Attachment submission (#70).
+// categories holds one category per file in ups, same order — batch files
+// need their own category (rather than the single-file form's one shared
+// Category field) because buildAttachmentFileName only varies by
+// category/rev/ext, so two files in one batch sharing a category (and
+// extension) would generate identical names and collide with each other,
+// not just with pre-existing files.
+// Every uploaded file is staged to its own temp file, named "<3-digit
+// index><ext>" in submission order, before any import runs — a mid-batch
+// collision re-renders the page (a fresh request), and the original
+// multipart upload's bytes do not survive that. Only the extension is staged
+// per name because buildAttachmentFileName never uses the original filename.
+func (h *Handler) startAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID any, ups []*multipart.FileHeader, categories []string) {
+	dir, err := os.MkdirTemp("", batchDirPrefix)
+	if err != nil {
+		h.renderError(w, r, "Error starting import: "+err.Error())
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, batchPartIDMarker), []byte(id), 0644); err != nil {
+		os.RemoveAll(dir)
+		h.renderError(w, r, "Error starting import: "+err.Error())
+		return
+	}
+	staged := make([]string, 0, len(ups))
+	for i, fh := range ups {
+		name := fmt.Sprintf("%03d%s", i, filepath.Ext(fh.Filename))
+		src, err := fh.Open()
+		if err != nil {
+			os.RemoveAll(dir)
+			h.renderError(w, r, "Error reading upload: "+err.Error())
+			return
+		}
+		dst, err := os.Create(filepath.Join(dir, name))
+		if err != nil {
+			src.Close()
+			os.RemoveAll(dir)
+			h.renderError(w, r, "Error staging upload: "+err.Error())
+			return
+		}
+		_, copyErr := io.Copy(dst, src)
+		src.Close()
+		dst.Close()
+		if copyErr != nil {
+			os.RemoveAll(dir)
+			h.renderError(w, r, "Error staging upload: "+copyErr.Error())
+			return
+		}
+		staged = append(staged, name)
+	}
+	h.importAttachmentBatch(w, r, id, rev, comment, oID, supplierPartID, mfgPartID, dir, staged, categories, len(staged), false)
+}
+
+// resumeAttachmentBatch continues a batch after a collision decision posted
+// back from the collision page (#70): "Link to existing file" (link_existing=1,
+// batch_remaining/batch_categories include the colliding file so it's
+// retried and resolved via the link_existing branch above) or "Cancel"
+// (batch_remaining is empty, aborting the rest of the batch — files already
+// imported stay imported). dir, remaining, and their categories are
+// client-supplied (hidden form fields) and are validated before any
+// filesystem access or DB write.
+func (h *Handler) resumeAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID any, dir string) {
+	if !isBatchTempDir(dir, id) {
+		h.renderError(w, r, "This import batch has expired or is invalid. Please re-select your files.")
+		return
+	}
+	total, err := strconv.Atoi(fv(r, "batch_total"))
+	if err != nil || total <= 0 {
+		os.RemoveAll(dir)
+		h.renderError(w, r, "This import batch has expired or is invalid. Please re-select your files.")
+		return
+	}
+	var remaining []string
+	if v := fv(r, "batch_remaining"); v != "" {
+		remaining = strings.Split(v, ",")
+	}
+	for _, name := range remaining {
+		if !stagedFileNamePattern.MatchString(name) {
+			os.RemoveAll(dir)
+			h.renderError(w, r, "This import batch has expired or is invalid. Please re-select your files.")
+			return
+		}
+	}
+	var categories []string
+	if v := fv(r, "batch_categories"); v != "" {
+		categories = strings.Split(v, ",")
+	}
+	if len(categories) != len(remaining) {
+		os.RemoveAll(dir)
+		h.renderError(w, r, "This import batch has expired or is invalid. Please re-select your files.")
+		return
+	}
+	for _, category := range categories {
+		if category == "" || isGeneratedCategory(category) {
+			os.RemoveAll(dir)
+			h.renderError(w, r, "This import batch has expired or is invalid. Please re-select your files.")
+			return
+		}
+	}
+	h.importAttachmentBatch(w, r, id, rev, comment, oID, supplierPartID, mfgPartID, dir, remaining, categories, total, true)
+}
+
+// importAttachmentBatch imports staged[0] under categories[0], then recurses
+// on staged[1:]/categories[1:] — one file at a time, in submission order
+// (#70). A collision re-renders the attachments page with staged[1:] and
+// categories[1:], and separately all of staged/categories for the "Link to
+// existing" retry, encoded into ImportCollision so the next POST can resume
+// via resumeAttachmentBatch. dir is removed once staged is exhausted or an
+// error (not a collision) aborts the batch. allowLinkExisting is true only
+// when staged[0] is the file a "Link to existing file" resume POST is
+// retrying — r's link_existing=1/link_name values apply to that one file
+// only, so every recursive call after it passes false (r is reused across
+// the whole recursion and never stops carrying those values).
+func (h *Handler) importAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID any, dir string, staged, categories []string, total int, allowLinkExisting bool) {
+	if len(staged) == 0 {
+		os.RemoveAll(dir)
+		http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
+		return
+	}
+	category := categories[0]
+	upload := stagedUploadSource(filepath.Join(dir, staged[0]))
+	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, "", &upload, allowLinkExisting)
+	if in.ErrMsg != "" {
+		os.RemoveAll(dir)
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": in.ErrMsg})
+		return
+	}
+	if in.Collision != nil {
+		in.Collision["BatchDir"] = dir
+		in.Collision["BatchTotal"] = strconv.Itoa(total)
+		in.Collision["BatchIndex"] = strconv.Itoa(total - len(staged) + 1)
+		// For "Link to existing file": resume must retry staged[0] itself
+		// (this time taking the link_existing branch), so the full list
+		// (current file included) is what that form's batch_remaining/
+		// batch_categories post.
+		in.Collision["BatchRemaining"] = strings.Join(staged, ",")
+		in.Collision["BatchCategories"] = strings.Join(categories, ",")
+		h.renderPartAttachments(w, r, id, map[string]any{"ImportCollision": in.Collision})
+		return
+	}
+	if err := h.insertAttachmentRow(r.Context(), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID); err != nil {
+		os.RemoveAll(dir)
+		h.renderError(w, r, "Error adding attachment: "+err.Error())
+		return
+	}
+	h.importAttachmentBatch(w, r, id, rev, comment, oID, supplierPartID, mfgPartID, dir, staged[1:], categories[1:], total, false)
 }
 
 // replaceLocalFileFrom streams src into root under name, keeping name intact

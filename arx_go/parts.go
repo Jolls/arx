@@ -1622,6 +1622,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 	cats := splitCSV(h.appConfigGetOr(r.Context(), "attachment_categories", ""))
+	catsJSON, _ := json.Marshal(cats)
 	vendorOptions, err := h.fetchVendorScopeOptions(r, id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving linked vendors: "+err.Error())
@@ -1631,9 +1632,10 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
 		"ActiveTab": "parts", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken":            h.csrfToken(w, r),
-		"AttachmentCategories": cats,
-		"VendorScopeOptions":   vendorOptions,
+		"CSRFToken":                h.csrfToken(w, r),
+		"AttachmentCategories":     cats,
+		"AttachmentCategoriesJSON": template.JS(catsJSON),
+		"VendorScopeOptions":       vendorOptions,
 		"DocControlConfigured": h.cfg.DocControlRoot != "",
 		"HasThumbnail":         hasThumbnail,
 		"TestMode":             h.cfg.TestMode,
@@ -1641,6 +1643,16 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	}
 	maps.Copy(data, extra)
 	h.render(w, r, "parts/part_attachments.html", data)
+}
+
+// insertAttachmentRow inserts a single part_attachment row. Shared by
+// PartAttachmentCreate's single-file path and importAttachmentBatch (#70).
+func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID any, comment string, supplierPartID, mfgPartID any) error {
+	_, err := h.execContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)`,
+		h.cfg.AttachmentsTable(),
+	), partID, fileName, rev, category, oID, comment, supplierPartID, mfgPartID)
+	return err
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
@@ -1651,13 +1663,8 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 			oID = n
 		}
 	}
-	rev, category := fv(r, "FILPNRev"), fv(r, "category")
+	rev := fv(r, "FILPNRev")
 	comment := fv(r, "comment")
-	if isGeneratedCategory(category) {
-		h.renderPartAttachments(w, r, id, map[string]any{"Error": fmt.Sprintf(
-			"Category %q is reserved for generated PDF thumbnails; please choose a different category.", category)})
-		return
-	}
 
 	supplierPartID, mfgPartID, err := h.resolveVendorScope(r.Context(), id, fv(r, "vendor_scope"))
 	if err != nil {
@@ -1665,7 +1672,60 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, "")
+	// Batch resume: a collision decision ("Link to existing file" or Cancel)
+	// posted back from a mid-batch collision page (#70). batch_dir identifies
+	// the temp staging directory startAttachmentBatch created for the
+	// original multi-file POST. Must run before the len(ups) check below: the
+	// resume POST from Cancel carries no upload_file at all, and must not
+	// fall into the plain zero-file/manual-link path.
+	if dir := fv(r, "batch_dir"); dir != "" {
+		h.resumeAttachmentBatch(w, r, id, rev, comment, oID, supplierPartID, mfgPartID, dir)
+		return
+	}
+
+	ups := attachmentUploads(r, "upload_file")
+	if len(ups) > 1 {
+		// Each file in a batch gets its own category (rather than the
+		// single-file form's shared Category field): buildAttachmentFileName
+		// only varies by category/rev/ext, so files sharing a category (and
+		// extension) would generate identical names and collide with each
+		// other, not just with pre-existing files (#70).
+		var categories []string
+		if r.MultipartForm != nil {
+			categories = r.MultipartForm.Value["batch_category"]
+		}
+		if len(categories) != len(ups) {
+			h.renderPartAttachments(w, r, id, map[string]any{"Error": "Please select a category for every file."})
+			return
+		}
+		for _, cat := range categories {
+			if cat == "" {
+				h.renderPartAttachments(w, r, id, map[string]any{"Error": "Please select a category for every file."})
+				return
+			}
+			if isGeneratedCategory(cat) {
+				h.renderPartAttachments(w, r, id, map[string]any{"Error": fmt.Sprintf(
+					"Category %q is reserved for generated PDF thumbnails; please choose a different category.", cat)})
+				return
+			}
+		}
+		h.startAttachmentBatch(w, r, id, rev, comment, oID, supplierPartID, mfgPartID, ups, categories)
+		return
+	}
+
+	category := fv(r, "category")
+	if isGeneratedCategory(category) {
+		h.renderPartAttachments(w, r, id, map[string]any{"Error": fmt.Sprintf(
+			"Category %q is reserved for generated PDF thumbnails; please choose a different category.", category)})
+		return
+	}
+
+	var upload *attachmentUploadSource
+	if len(ups) == 1 {
+		u := multipartUploadSource(ups[0])
+		upload = &u
+	}
+	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, "", upload, true)
 	if in.ErrMsg != "" {
 		h.renderPartAttachments(w, r, id, map[string]any{"Error": in.ErrMsg})
 		return
@@ -1675,10 +1735,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)`,
-		h.cfg.AttachmentsTable(),
-	), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID); err != nil {
+	if err := h.insertAttachmentRow(r.Context(), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
@@ -1724,7 +1781,12 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 		replaceName = urlutil.StripLocalPrefix(oldFileName)
 	}
 
-	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, replaceName)
+	var upload *attachmentUploadSource
+	if ups := attachmentUploads(r, "upload_file"); len(ups) > 0 {
+		u := multipartUploadSource(ups[0])
+		upload = &u
+	}
+	in := h.resolveAttachmentFileInput(r.Context(), r, id, rev, category, comment, replaceName, upload, true)
 	if in.ErrMsg != "" {
 		h.renderPartAttachments(w, r, id, map[string]any{"Error": in.ErrMsg})
 		return

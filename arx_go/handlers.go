@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html/template"
 	ioFS "io/fs"
@@ -632,9 +633,25 @@ func (h *Handler) verifyCsrf(r *http.Request) bool {
 // value does not match the session token.
 func (h *Handler) RequireCsrfOnPost(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && !h.verifyCsrf(r) {
-			http.Error(w, "Invalid form submission", http.StatusForbidden)
-			return
+		if r.Method == http.MethodPost {
+			// Parse the body explicitly (instead of leaving it to verifyCsrf's
+			// r.FormValue call) so a body that exceeds the main.go
+			// MaxBytesReader cap surfaces as *http.MaxBytesError instead of
+			// being silently swallowed and misreported as a bad CSRF token
+			// (#88). 32<<20 matches net/http's own unexported defaultMaxMemory,
+			// which is what FormValue passes to ParseMultipartForm internally
+			// — this preserves today's in-memory/on-disk multipart threshold.
+			if err := r.ParseMultipartForm(32 << 20); err != nil {
+				var maxErr *http.MaxBytesError
+				if errors.As(err, &maxErr) {
+					http.Error(w, "Uploaded file is too large (max 100 MB)", http.StatusRequestEntityTooLarge)
+					return
+				}
+			}
+			if !h.verifyCsrf(r) {
+				http.Error(w, "Invalid form submission", http.StatusForbidden)
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
