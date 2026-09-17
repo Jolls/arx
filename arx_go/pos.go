@@ -126,7 +126,9 @@ func (h *Handler) fetchSuggestLinks(r *http.Request, poNum string) []SuggestLink
 	return out
 }
 
-// ── SuggestPrice is a PO line whose cost has no matching active price record ──
+// ── SuggestPrice is a PO line whose cost isn't already covered by an active
+// price at the same or lower pack size — i.e. it's a genuine new price break,
+// not just the same cost repeated at a higher quantity ──────────────────────
 
 type SuggestPrice struct {
 	Index      int
@@ -149,9 +151,9 @@ func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPri
 		    SELECT 1 FROM %s pr
 		    WHERE pr.part_id = pol.part_id
 		      AND pr.supplier_id = po.supplier_id
-		      AND pr.pack_size = pol.qty
 		      AND pr.is_active = %s
 		      AND pr.price_ea = pol.unit_cost
+		      AND pr.pack_size <= pol.qty
 		  )
 	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PriceTable(), h.dia().BoolLiteral(true)), poNum)
 	if err != nil {
