@@ -385,13 +385,135 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
       })
   }
 
-  // Evaluate a basic arithmetic expression string (only digits, +, -, *, /, ., parens).
+  // Evaluate an arithmetic expression string: digits, + - * /, parens, and calls to
+  // the named functions in MATH_FUNCS below (min/max/abs/mod/round/floor/ceil/sqrt/pow).
   // Returns the numeric result or null if the expression is invalid/unsafe.
+  //
+  // This is a hand-rolled recursive-descent parser rather than a widened character
+  // whitelist passed to Function() — a whitelist permissive enough to allow letters
+  // would let a formula invoke arbitrary globals (alert, fetch, ...). The parser only
+  // ever calls the specific functions below, by name, with validated arg counts.
+  var MATH_FUNCS = {
+    min: function (args) { return args.length >= 2 ? Math.min.apply(null, args) : null },
+    max: function (args) { return args.length >= 2 ? Math.max.apply(null, args) : null },
+    abs: function (args) { return args.length === 1 ? Math.abs(args[0]) : null },
+    mod: function (args) {
+      if (args.length !== 2) return null
+      var a = args[0], b = args[1], r = a % b
+      return (r !== 0 && (r < 0) !== (b < 0)) ? r + b : r
+    },
+    round: function (args) { return args.length === 1 ? Math.round(args[0]) : null },
+    floor: function (args) { return args.length === 1 ? Math.floor(args[0]) : null },
+    ceil: function (args) { return args.length === 1 ? Math.ceil(args[0]) : null },
+    sqrt: function (args) { return args.length === 1 ? Math.sqrt(args[0]) : null },
+    pow: function (args) { return args.length === 2 ? Math.pow(args[0], args[1]) : null }
+  }
+  var ADD_OPS = { '+': function (a, b) { return a + b }, '-': function (a, b) { return a - b } }
+  var MUL_OPS = { '*': function (a, b) { return a * b }, '/': function (a, b) { return a / b } }
+
+  function isSpace(c) { return c === ' ' || c === '\t' || c === '\n' || c === '\r' }
+  function isAlpha(c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+
   function evalMath(expr) {
     // Reject date-like strings (e.g. "12/29/2026") — slashes would be evaluated as division.
     if (/^\s*\d{1,2}\/\d{1,2}\/\d{2,4}/.test(expr)) return null
-    if (!/^[\d\s+\-*/.()]+$/.test(expr)) return null
-    try { return Function('"use strict"; return (' + expr + ')')() } catch (e) { return null }
+
+    var i = 0
+    var len = expr.length
+
+    // Parse errors throw (caught below) rather than threading a "failed" flag through
+    // every call — the try/catch is the single place that turns invalid input into null.
+    function fail() { throw 0 }
+
+    function skipSpace() { while (i < len && isSpace(expr[i])) i++ }
+
+    function parseBinary(next, ops) {
+      var value = next()
+      while (true) {
+        skipSpace()
+        var op = expr[i]
+        if (!ops.hasOwnProperty(op)) break
+        i++
+        value = ops[op](value, next())
+      }
+      return value
+    }
+
+    function parseExpression() { return parseBinary(parseTerm, ADD_OPS) }
+    function parseTerm() { return parseBinary(parseUnary, MUL_OPS) }
+
+    function parseUnary() {
+      skipSpace()
+      if (expr[i] === '-') { i++; return -parseUnary() }
+      if (expr[i] === '+') { i++; return parseUnary() }
+      return parseAtom()
+    }
+
+    function parseArgs() {
+      var args = []
+      skipSpace()
+      if (expr[i] === ')') return args
+      args.push(parseExpression())
+      skipSpace()
+      while (expr[i] === ',') {
+        i++
+        args.push(parseExpression())
+        skipSpace()
+      }
+      return args
+    }
+
+    function parseAtom() {
+      skipSpace()
+      var ch = expr[i]
+      if (ch === undefined) fail()
+
+      if (ch === '(') {
+        i++
+        var v = parseExpression()
+        skipSpace()
+        if (expr[i] !== ')') fail()
+        i++
+        return v
+      }
+
+      if (ch >= '0' && ch <= '9') {
+        var start = i
+        var sawDot = false
+        while (i < len && ((expr[i] >= '0' && expr[i] <= '9') || (expr[i] === '.' && !sawDot))) {
+          if (expr[i] === '.') sawDot = true
+          i++
+        }
+        return parseFloat(expr.slice(start, i))
+      }
+
+      if (isAlpha(ch)) {
+        var nameStart = i
+        while (i < len && isAlpha(expr[i])) i++
+        var name = expr.slice(nameStart, i)
+        skipSpace()
+        if (expr[i] !== '(' || !MATH_FUNCS.hasOwnProperty(name)) fail()
+        i++
+        var args = parseArgs()
+        skipSpace()
+        if (expr[i] !== ')') fail()
+        i++
+        var result = MATH_FUNCS[name](args)
+        if (result === null) fail()
+        return result
+      }
+
+      fail()
+    }
+
+    try {
+      var result = parseExpression()
+      skipSpace()
+      if (i !== len) return null
+      return result
+    } catch (e) {
+      return null
+    }
   }
 
   // Apply data-formula inputs: resolve {id} tokens, evaluate math, update value + P/F.
