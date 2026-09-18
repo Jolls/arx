@@ -187,3 +187,52 @@ func TestWriteIntoDocControlUnique(t *testing.T) {
 		t.Fatalf("third paste: name=%q err=%v, want %q, nil", name, err, "part Photo (3).png")
 	}
 }
+
+func TestComputeAttachmentHash(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("same content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "b.txt"), []byte("same content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "folder"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	contentHash := hashBytes([]byte("same content"))
+
+	cases := []struct {
+		name string
+		root string
+		link string
+		want string // "" means "just check it's non-empty and equals hashLinkString(link)"
+	}{
+		{"single file present", root, "LOCAL:a.txt", contentHash},
+		{"identical content, different name, same hash", root, "LOCAL:b.txt", contentHash},
+		{"directory-style link hashes the string, not the dir", root, "LOCAL:folder\\", ""},
+		{"http url hashes the string", root, "https://example.com/x.pdf", ""},
+		{"UNC path hashes the string", root, `\\server\share\x.pdf`, ""},
+		{"missing local file falls back to string hash", root, "LOCAL:missing.txt", ""},
+		{"path traversal falls back to string hash", root, "LOCAL:..\\escape.txt", ""},
+		{"empty root falls back to string hash", "", "LOCAL:a.txt", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := computeAttachmentHash(c.root, c.link)
+			if len(got) != 64 {
+				t.Fatalf("computeAttachmentHash(%q, %q) = %q, want 64 hex chars", c.root, c.link, got)
+			}
+			want := c.want
+			if want == "" {
+				want = hashLinkString(c.link)
+			}
+			if got != want {
+				t.Errorf("computeAttachmentHash(%q, %q) = %q, want %q", c.root, c.link, got, want)
+			}
+		})
+	}
+
+	if got := computeAttachmentHash(root, "LOCAL:a.txt"); got == computeAttachmentHash(root, "LOCAL:folder\\") {
+		t.Errorf("file content hash should not equal the directory-link string hash by coincidence in this test")
+	}
+}

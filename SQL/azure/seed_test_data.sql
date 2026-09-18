@@ -251,10 +251,13 @@ BEGIN TRY
     -- 6b. Part attachments — URL attachments only (no real files needed).
     -- 8101 carries a comment (#585); 8102 has none, to exercise both list states.
     -- ============================================================
+    -- hash (#71) = SHA-256 of the URL string, matching computeAttachmentHash's
+    -- rule for http(s) links; keeps the seed pre-backfilled rather than
+    -- exercising the NULL/not-yet-backfilled path.
     SET IDENTITY_INSERT dbo.part_attachment ON;
-    INSERT INTO dbo.part_attachment (id, part_id, file_name, category, part_revision, sort_order, comment) VALUES
-        (8101, 3002, 'https://example.com/datasheets/m3x8-shcs.pdf', 'Datasheet', 'A', 1, 'Confirmed torque spec with vendor 2026-06-01'),
-        (8102, 3004, 'https://example.com/drawings/widget-housing.pdf', 'Drawing', 'B', 1, NULL);
+    INSERT INTO dbo.part_attachment (id, part_id, file_name, category, part_revision, sort_order, comment, hash) VALUES
+        (8101, 3002, 'https://example.com/datasheets/m3x8-shcs.pdf', 'Datasheet', 'A', 1, 'Confirmed torque spec with vendor 2026-06-01', 'f5a466c6da42bbf7a1414f0bf831c7d749ea3870c98e54fba4272ef325c42214'),
+        (8102, 3004, 'https://example.com/drawings/widget-housing.pdf', 'Drawing', 'B', 1, NULL, 'f1dbb7a5fe4577841cabc0ec7a3a995a10b73033ef9bffb422d3888f828322a7');
     SET IDENTITY_INSERT dbo.part_attachment OFF;
 
     -- ============================================================
@@ -308,10 +311,11 @@ BEGIN TRY
     -- Vendor-scoped attachments (#56) — seeded here, after supplier_part/mfg_part, because
     -- they FK to those rows. Part 3002 ends up with all three scopes: 8101 part-level
     -- (section 6b), 8103 scoped to supplier link 4002, 8104 scoped to MPN 4101.
+    -- hash (#71) = SHA-256 of the URL string, same rule as the 8101/8102 rows above.
     SET IDENTITY_INSERT dbo.part_attachment ON;
-    INSERT INTO dbo.part_attachment (id, part_id, file_name, category, part_revision, sort_order, comment, supplier_part_id, mfg_part_id) VALUES
-        (8103, 3002, 'https://example.com/coa/pmc-m3x8-lot7.pdf',  'COA',       'A', 2, 'Supplier-specific CoA', 4002, NULL),
-        (8104, 3002, 'https://example.com/datasheets/cx-4471.pdf', 'Datasheet', 'A', 3, NULL,                    NULL, 4101);
+    INSERT INTO dbo.part_attachment (id, part_id, file_name, category, part_revision, sort_order, comment, supplier_part_id, mfg_part_id, hash) VALUES
+        (8103, 3002, 'https://example.com/coa/pmc-m3x8-lot7.pdf',  'COA',       'A', 2, 'Supplier-specific CoA', 4002, NULL, 'c275cf5daeb916b19bf60be1d1a5073a2aac5a90c45b0cfc0404c3eeb9e15d19'),
+        (8104, 3002, 'https://example.com/datasheets/cx-4471.pdf', 'Datasheet', 'A', 3, NULL,                    NULL, 4101, '11c78752e097923a15efc83fe1961b581bbd83471ad7aafb0c21a1f2eda03572');
     SET IDENTITY_INSERT dbo.part_attachment OFF;
 
     -- 4204/4205 (#466): additional active qty-break tiers on 3002, alongside 4203, so the

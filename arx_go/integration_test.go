@@ -5252,6 +5252,207 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 	})
 }
 
+// TestIntegration_AttachmentDuplicateHash exercises the #71 content-hash
+// dedup flow end to end: hash populated on create, a duplicate link warned
+// on (not saved) and dismissible via confirm_duplicate, soft-deleted rows
+// excluded from comparison, a metadata-only edit leaving hash untouched, and
+// part_attachment/company_attachment checked independently of each other.
+func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	link := "http://example.test/dup-71-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	partA, _, cleanupA := seedThrowawayPart(t, h, ctx, "71a")
+	defer cleanupA()
+	partB, _, cleanupB := seedThrowawayPart(t, h, ctx, "71b")
+	defer cleanupB()
+	partC, _, cleanupC := seedThrowawayPart(t, h, ctx, "71c")
+	defer cleanupC()
+
+	attVals := url.Values{"FILFileName": {link}, "FILPNRev": {"A"}, "category": {"itest-71"}}
+
+	// 1. First create succeeds and gets a hash.
+	rec := httptest.NewRecorder()
+	h.PartAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/attachments", partA), attVals), partA))
+	assert302(t, "PartAttachmentCreate (first)", rec)
+
+	var attIDA int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partA,
+	).Scan(&attIDA); err != nil || attIDA == 0 {
+		t.Fatalf("could not retrieve first attachment id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDA)
+	}()
+
+	var hashA sql.NullString
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDA,
+	).Scan(&hashA); err != nil {
+		t.Fatalf("select hash: %v", err)
+	}
+	if !hashA.Valid || len(hashA.String) != 64 {
+		t.Fatalf("hash after first create = %+v, want a 64-char hash", hashA)
+	}
+
+	// 2. company_attachment is checked independently of part_attachment: the
+	// same link is not flagged there even while rowA is active.
+	companyName := "ITEST-71-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	var companyID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()), companyName,
+	).Scan(&companyID); err != nil {
+		t.Fatalf("seed company: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), companyID)
+	}()
+
+	rec = httptest.NewRecorder()
+	h.SupplierAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/supplier/%d/attachments", companyID),
+		url.Values{"file_path": {link}}), companyID))
+	assert302(t, "SupplierAttachmentCreate (cross-table independence)", rec)
+
+	var companyAttID int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT MAX(supplier_attachment_id) FROM %s WHERE supplier_id=@p1`, h.cfg.CompanyAttachmentsTable()), companyID,
+	).Scan(&companyAttID); err != nil || companyAttID == 0 {
+		t.Fatalf("could not retrieve company attachment id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), companyAttID)
+	}()
+
+	// 3. Same URL on a different part is flagged, not saved.
+	rec = httptest.NewRecorder()
+	h.PartAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/attachments", partB), attVals), partB))
+	assertStatus(t, "PartAttachmentCreate (duplicate)", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "identical to an attachment") {
+		t.Errorf("expected duplicate-warning banner text, got body: %s", rec.Body.String())
+	}
+	var countB int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partB,
+	).Scan(&countB); err != nil {
+		t.Fatalf("count part B attachments: %v", err)
+	}
+	if countB != 0 {
+		t.Errorf("part B attachment count = %d, want 0 (duplicate must not be saved)", countB)
+	}
+
+	// 4. Re-posting with confirm_duplicate=1 saves it, with the same hash.
+	confirmVals := url.Values{"FILFileName": {link}, "FILPNRev": {"A"}, "category": {"itest-71"}, "confirm_duplicate": {"1"}}
+	rec = httptest.NewRecorder()
+	h.PartAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/attachments", partB), confirmVals), partB))
+	assert302(t, "PartAttachmentCreate (confirm_duplicate)", rec)
+
+	var attIDB int
+	var hashB sql.NullString
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id, hash FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partB,
+	).Scan(&attIDB, &hashB); err != nil {
+		t.Fatalf("select part B attachment: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDB)
+	}()
+	if hashB.String != hashA.String {
+		t.Errorf("hash after confirm_duplicate = %q, want %q (same link)", hashB.String, hashA.String)
+	}
+
+	// 5. Soft-deleting every existing active row with this hash means a new
+	// create with the same link is no longer flagged.
+	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
+		`UPDATE %s SET is_active=%s WHERE id IN (@p1,@p2)`, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(false)),
+		attIDA, attIDB,
+	); err != nil {
+		t.Fatalf("soft-delete attIDA/attIDB: %v", err)
+	}
+
+	rec = httptest.NewRecorder()
+	h.PartAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/attachments", partC), attVals), partC))
+	assert302(t, "PartAttachmentCreate (after soft-delete)", rec)
+
+	var attIDC int
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partC,
+	).Scan(&attIDC); err != nil || attIDC == 0 {
+		t.Fatalf("could not retrieve third attachment id: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDC)
+	}()
+
+	// 6. A metadata-only edit (comment change, same link) leaves hash untouched.
+	var hashCBefore sql.NullString
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDC,
+	).Scan(&hashCBefore); err != nil {
+		t.Fatalf("select hash before update: %v", err)
+	}
+
+	rec = httptest.NewRecorder()
+	h.PartAttachmentUpdate(rec, withIDAndAttID(postForm(fmt.Sprintf("/part/%d/attachments/%d", partC, attIDC),
+		url.Values{"FILFileName": {link}, "FILPNRev": {"A"}, "category": {"itest-71"}, "comment": {"metadata only"}}),
+		partC, attIDC))
+	assert302(t, "PartAttachmentUpdate (metadata only)", rec)
+
+	var hashCAfter sql.NullString
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDC,
+	).Scan(&hashCAfter); err != nil {
+		t.Fatalf("select hash after update: %v", err)
+	}
+	if hashCAfter.String != hashCBefore.String {
+		t.Errorf("hash changed after metadata-only edit: before %q, after %q", hashCBefore.String, hashCAfter.String)
+	}
+
+	// 7. Replacing a file's content in place — a re-upload that happens to
+	// generate the same name as the current file (same part/rev/category/ext)
+	// — must still recompute hash, even though the file_name column itself
+	// doesn't change.
+	partD, _, cleanupD := seedThrowawayPart(t, h, ctx, "71d")
+	defer cleanupD()
+	tempDocControlRoot(t, h)
+
+	rec = httptest.NewRecorder()
+	h.PartAttachmentCreate(rec, withID(postMultipart(t, fmt.Sprintf("/part/%d/attachments", partD),
+		url.Values{"FILPNRev": {"A"}, "category": {"itest-71-inplace"}}, "upload_file", "orig.txt", []byte("original bytes")),
+		partD))
+	assert302(t, "PartAttachmentCreate (file, for in-place replace test)", rec)
+
+	var attIDD int
+	var hashDBefore sql.NullString
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT id, hash FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partD,
+	).Scan(&attIDD, &hashDBefore); err != nil {
+		t.Fatalf("select part D attachment: %v", err)
+	}
+	defer func() {
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDD)
+	}()
+
+	rec = httptest.NewRecorder()
+	h.PartAttachmentUpdate(rec, withIDAndAttID(postMultipart(t, fmt.Sprintf("/part/%d/attachments/%d", partD, attIDD),
+		url.Values{"FILPNRev": {"A"}, "category": {"itest-71-inplace"}}, "upload_file", "new.txt", []byte("replaced bytes")),
+		partD, attIDD))
+	assert302(t, "PartAttachmentUpdate (in-place replace)", rec)
+
+	var hashDAfter sql.NullString
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDD,
+	).Scan(&hashDAfter); err != nil {
+		t.Fatalf("select hash after in-place replace: %v", err)
+	}
+	wantHash := hashBytes([]byte("replaced bytes"))
+	if hashDAfter.String != wantHash {
+		t.Errorf("hash after in-place replace = %q, want %q (sha256 of new content, not %q)", hashDAfter.String, wantHash, hashDBefore.String)
+	}
+}
+
 // TestIntegration_DeleteAttachmentFileIfUnshared exercises the shared-attachment
 // consolidation-on-delete check for both the part_attachment and company_attachment
 // tables (#809) — in particular the orphan-risk case: a file still referenced by
@@ -6072,7 +6273,7 @@ func TestIntegration_UpsertGeneratedAttachment(t *testing.T) {
 		defer cleanupPart()
 		partIDStr := strconv.Itoa(partID)
 
-		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "A", thumbnailCategory, "LOCAL:new.png"); err != nil {
+		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "A", thumbnailCategory, "LOCAL:new.png", ""); err != nil {
 			t.Fatalf("upsertGeneratedAttachment: %v", err)
 		}
 		var fileName string
@@ -6097,7 +6298,7 @@ func TestIntegration_UpsertGeneratedAttachment(t *testing.T) {
 		}
 		attID := seedAttachment(t, partID, "LOCAL:"+oldName, thumbnailCategory)
 
-		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "B", thumbnailCategory, "LOCAL:new-thumb.png"); err != nil {
+		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "B", thumbnailCategory, "LOCAL:new-thumb.png", ""); err != nil {
 			t.Fatalf("upsertGeneratedAttachment: %v", err)
 		}
 		var gotID int
@@ -6130,7 +6331,7 @@ func TestIntegration_UpsertGeneratedAttachment(t *testing.T) {
 		seedAttachment(t, partID, "LOCAL:"+sharedName, thumbnailCategory)
 		seedAttachment(t, partID, "LOCAL:"+sharedName, "Photo") // unrelated row sharing the same filename
 
-		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "C", thumbnailCategory, "LOCAL:fresh-thumb.png"); err != nil {
+		if err := h.upsertGeneratedAttachment(ctx, partIDStr, "C", thumbnailCategory, "LOCAL:fresh-thumb.png", ""); err != nil {
 			t.Fatalf("upsertGeneratedAttachment: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, sharedName)); err != nil {

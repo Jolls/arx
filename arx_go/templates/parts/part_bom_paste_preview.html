@@ -1,0 +1,39 @@
+<div class="table-wrapper mb-2" style="overflow-x:auto;">
+    <table class="table table-bordered table-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>Part Number</th>
+                <th>Description</th>
+                <th style="text-align:right;">Qty</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="bom-paste-preview-tbody">
+            {{range .Rows}}
+            <tr class="{{.RowClass}}"
+                data-status="{{.Status}}"
+                {{if .PLID}}data-plid="{{.PLID}}"{{end}}
+                {{if .PNID}}data-pnid="{{.PNID}}"{{end}}
+                data-part-number="{{.PartNumber}}"
+                data-description="{{.Description}}"
+                data-qty="{{printf "%g" .Qty}}">
+                <td>{{.PartNumber}}</td>
+                <td>{{.Description}}</td>
+                <td style="text-align:right;">{{if ne .Status "error"}}{{printf "%g" .Qty}}{{end}}</td>
+                <td>{{.StatusLabel}}{{if eq .Status "error"}}: <code>{{.RawText}}</code>{{end}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{if not .Rows}}
+<p class="no-results">No rows to import.</p>
+{{else}}
+{{if .HasError}}
+<p class="text-danger">Every pasted row must match an existing part number before importing. Fix or remove the error rows above and preview again.</p>
+{{end}}
+<div class="d-flex gap-2 mb-3">
+    <button type="button" class="btn btn-primary" id="bom-paste-confirm-btn" {{if .HasError}}disabled{{end}} onclick="confirmBOMPasteImport()">Confirm Import</button>
+    <button type="button" class="btn btn-secondary" onclick="cancelBOMPaste()">Cancel</button>
+</div>
+{{end}}

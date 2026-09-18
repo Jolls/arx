@@ -104,3 +104,78 @@ func TestReleaseStatusOrUnderReview(t *testing.T) {
 		}
 	}
 }
+
+func TestParseBOMPasteText(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want []bomPasteLine
+	}{
+		{
+			name: "header row sniffed off",
+			text: "Part Number\tQty\nABC-100\t4",
+			want: []bomPasteLine{
+				{PartNumber: "ABC-100", QtyText: "4", Qty: 4, QtyOK: true, RawText: "ABC-100\t4"},
+			},
+		},
+		{
+			name: "no header row",
+			text: "ABC-100\t4\nDEF-200\t2",
+			want: []bomPasteLine{
+				{PartNumber: "ABC-100", QtyText: "4", Qty: 4, QtyOK: true, RawText: "ABC-100\t4"},
+				{PartNumber: "DEF-200", QtyText: "2", Qty: 2, QtyOK: true, RawText: "DEF-200\t2"},
+			},
+		},
+		{
+			name: "blank lines skipped",
+			text: "ABC-100\t4\n\n\nDEF-200\t2\n",
+			want: []bomPasteLine{
+				{PartNumber: "ABC-100", QtyText: "4", Qty: 4, QtyOK: true, RawText: "ABC-100\t4"},
+				{PartNumber: "DEF-200", QtyText: "2", Qty: 2, QtyOK: true, RawText: "DEF-200\t2"},
+			},
+		},
+		{
+			name: "sole malformed line is treated as data, not sniffed as a header",
+			text: "GARBAGEONLY",
+			want: []bomPasteLine{
+				{PartNumber: "GARBAGEONLY", QtyText: "", Qty: 0, QtyOK: false, RawText: "GARBAGEONLY"},
+			},
+		},
+		{
+			name: "sole header-shaped line with no second row is treated as data (ambiguous, errs toward showing it)",
+			text: "Part Number\tQty",
+			want: []bomPasteLine{
+				{PartNumber: "Part Number", QtyText: "Qty", Qty: 0, QtyOK: false, RawText: "Part Number\tQty"},
+			},
+		},
+		{
+			name: "line with no tab after a data row has empty qty and is not dropped",
+			text: "ABC-100\t4\nGARBAGEONLY",
+			want: []bomPasteLine{
+				{PartNumber: "ABC-100", QtyText: "4", Qty: 4, QtyOK: true, RawText: "ABC-100\t4"},
+				{PartNumber: "GARBAGEONLY", QtyText: "", Qty: 0, QtyOK: false, RawText: "GARBAGEONLY"},
+			},
+		},
+		{
+			name: "CRLF line endings handled",
+			text: "ABC-100\t4\r\nDEF-200\t2",
+			want: []bomPasteLine{
+				{PartNumber: "ABC-100", QtyText: "4", Qty: 4, QtyOK: true, RawText: "ABC-100\t4"},
+				{PartNumber: "DEF-200", QtyText: "2", Qty: 2, QtyOK: true, RawText: "DEF-200\t2"},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := parseBOMPasteText(c.text)
+			if len(got) != len(c.want) {
+				t.Fatalf("parseBOMPasteText(%q) = %d lines, want %d: %+v", c.text, len(got), len(c.want), got)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("line %d: got %+v, want %+v", i, got[i], c.want[i])
+				}
+			}
+		})
+	}
+}

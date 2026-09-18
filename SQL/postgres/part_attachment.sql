@@ -16,6 +16,7 @@ CREATE TABLE part_attachment (
   sort_order     INTEGER        DEFAULT 1,
   is_active      BOOLEAN NOT NULL DEFAULT TRUE,
   comment        VARCHAR(500),   -- Free-text note (#585).
+  hash           CHAR(64),       -- SHA-256 hex of the attachment (#71); NULL = not yet backfilled.
 
   -- Vendor scope (#56). At most one may be set; both NULL = part-level attachment.
   -- ON DELETE SET NULL: supplier_part rows are hard-deleted, so a scoped attachment

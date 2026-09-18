@@ -311,9 +311,9 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 		oID = n
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7)`,
 		h.cfg.AttachmentsTable(),
-	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment); err != nil {
+	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment, hashBytes(data)); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error adding attachment: "+err.Error())
 		return
 	}
@@ -383,9 +383,9 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 		oID = n
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, file_name=@p5 WHERE id=@p6`,
+		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, file_name=@p5, hash=@p6 WHERE id=@p7`,
 		h.cfg.AttachmentsTable(),
-	), body.Rev, "Photo", oID, body.Comment, "LOCAL:"+finalName, attID); err != nil {
+	), body.Rev, "Photo", oID, body.Comment, "LOCAL:"+finalName, hashBytes(data), attID); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error updating attachment: "+err.Error())
 		return
 	}
@@ -530,7 +530,7 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 // or inserts one if none exists. Callers must hold lockPartForThumbnail(partID) so
 // the find-or-create check below can't race with another request for the same
 // part. partID is the URL string form used elsewhere in this file.
-func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, category, newFile string) error {
+func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, category, newFile, hash string) error {
 	var existingID int
 	var oldFileNS sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
@@ -539,17 +539,17 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 	), partID, category).Scan(&existingID, &oldFileNS)
 	if err == sql.ErrNoRows {
 		_, err = h.execContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, file_name, part_revision, category) VALUES (@p1,@p2,@p3,@p4)`,
+			`INSERT INTO %s (part_id, file_name, part_revision, category, hash) VALUES (@p1,@p2,@p3,@p4,@p5)`,
 			h.cfg.AttachmentsTable(),
-		), partID, newFile, rev, category)
+		), partID, newFile, rev, category, hash)
 		return err
 	}
 	if err != nil {
 		return err
 	}
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET file_name=@p1, part_revision=@p2 WHERE id=@p3`, h.cfg.AttachmentsTable(),
-	), newFile, rev, existingID); err != nil {
+		`UPDATE %s SET file_name=@p1, part_revision=@p2, hash=@p3 WHERE id=@p4`, h.cfg.AttachmentsTable(),
+	), newFile, rev, hash, existingID); err != nil {
 		return err
 	}
 	// The DB row is already correctly repointed at newFile at this point, so a
@@ -595,7 +595,7 @@ func (h *Handler) saveGeneratedAttachment(ctx context.Context, partID, rev, cate
 			return fmt.Errorf("Error saving image: %w", err)
 		}
 	}
-	if err := h.upsertGeneratedAttachment(ctx, partID, rev, category, "LOCAL:"+finalName); err != nil {
+	if err := h.upsertGeneratedAttachment(ctx, partID, rev, category, "LOCAL:"+finalName, hashBytes(data)); err != nil {
 		return fmt.Errorf("Error saving attachment: %w", err)
 	}
 	return nil

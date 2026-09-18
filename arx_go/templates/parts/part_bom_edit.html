@@ -41,7 +41,20 @@
 
         <div style="margin-bottom:16px;">
             <button type="button" class="btn btn-secondary" onclick="addNewRow()" style="font-size:0.9em;">+ Add Row</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="togglePasteBox()" style="font-size:0.9em;">Paste BOM rows</button>
         </div>
+
+        <div id="bom-paste-box" class="mb-3" style="display:none;">
+            <label for="bom-paste-textarea" class="form-label">Paste part number + qty rows copied from Excel (tab-separated):</label>
+            <textarea id="bom-paste-textarea" class="form-control" rows="6" placeholder="Part Number&#9;Qty"></textarea>
+            <div class="mt-2 d-flex gap-2">
+                <button type="button" class="btn btn-primary btn-sm" onclick="previewBOMPaste()">Preview</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="cancelBOMPaste()">Cancel</button>
+            </div>
+            <div id="bom-paste-error" class="text-danger mt-2" style="display:none;"></div>
+        </div>
+
+        <div id="bom-paste-preview"></div>
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save BOM</button>
@@ -118,6 +131,72 @@ function removeExistingRow(btn, plid) {
     form.appendChild(hidden);
     row.classList.add('line-removed');
     btn.disabled = true;
+}
+
+function togglePasteBox() {
+    const box = document.getElementById('bom-paste-box');
+    box.style.display = box.style.display === 'none' ? '' : 'none';
+}
+
+function cancelBOMPaste() {
+    document.getElementById('bom-paste-box').style.display = 'none';
+    document.getElementById('bom-paste-textarea').value = '';
+    document.getElementById('bom-paste-preview').innerHTML = '';
+    document.getElementById('bom-paste-error').style.display = 'none';
+}
+
+function previewBOMPaste() {
+    const errEl = document.getElementById('bom-paste-error');
+    errEl.style.display = 'none';
+    const text = document.getElementById('bom-paste-textarea').value;
+    const csrfToken = document.querySelector('form input[name="csrf_token"]').value;
+    fetch('/part/{{.Part.ID}}/bom/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ csrf_token: csrfToken, paste_text: text })
+    })
+        .then(r => {
+            if (!r.ok) { throw new Error('Preview failed (' + r.status + ')'); }
+            return r.text();
+        })
+        .then(html => { document.getElementById('bom-paste-preview').innerHTML = html; })
+        .catch(err => { errEl.textContent = err.message; errEl.style.display = ''; });
+}
+
+function confirmBOMPasteImport() {
+    const tbody = document.getElementById('bom-paste-preview-tbody');
+    if (!tbody) return;
+    const bomTbody = document.getElementById('bom-tbody');
+    const existingItems = [...bomTbody.querySelectorAll('[name$="[PLItem]"]')]
+        .map(el => parseInt(el.value) || 0);
+    let nextItem = existingItems.length ? Math.max(...existingItems) + 1 : 1;
+
+    tbody.querySelectorAll('tr').forEach(tr => {
+        const status = tr.dataset.status;
+        if (status === 'error' || status === 'noop') return;
+        if (status === 'update') {
+            const row = bomTbody.querySelector('tr[data-plid="' + tr.dataset.plid + '"]');
+            if (row) { row.querySelector('[name$="[PLQty]"]').value = tr.dataset.qty; }
+            return;
+        }
+        if (status === 'new') {
+            const tpl = document.getElementById('new-row-tpl');
+            const clone = tpl.content.cloneNode(true);
+            const idx = newRowIdx++;
+            clone.querySelectorAll('[name]').forEach(el => { el.name = el.name.replace('IDX', idx); });
+            bomTbody.appendChild(clone);
+            const row = bomTbody.lastElementChild;
+            row.querySelector('[name$="[PLItem]"]').value = nextItem++;
+            row.querySelector('[name$="[PLPartNumber]"]').value = tr.dataset.partNumber;
+            row.querySelector('[name$="[PLPNID]"]').value = tr.dataset.pnid;
+            row.querySelector('[name$="[PLQty]"]').value = tr.dataset.qty;
+            const titleSpan = row.querySelector('.bom-title');
+            if (titleSpan) { titleSpan.textContent = tr.dataset.description || ''; }
+        }
+    });
+
+    cancelBOMPaste();
+    document.querySelector('form[action$="/bom"]').requestSubmit();
 }
 
 function makeDropdown(inputEl, minWidth) {

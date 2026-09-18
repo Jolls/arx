@@ -14,6 +14,7 @@
 -- Prior migrations (historical reference):
 --   #313 — FILNotes → category rename
 --   #297 — FILPNID VARCHAR → INT FK
+--   #71  — hash column added (SQL/azure/migrations/migrate_71_attachment_hash.sql)
 
 IF OBJECT_ID('dbo.part_attachment', 'U') IS NOT NULL DROP TABLE dbo.part_attachment;
 
@@ -26,6 +27,9 @@ CREATE TABLE part_attachment (
   sort_order     INT            CONSTRAINT DF_part_attachment_sort_order DEFAULT 1,  -- Display sort order.
   is_active      BIT NOT NULL  CONSTRAINT DF_part_attachment_is_active  DEFAULT 1,
   comment        VARCHAR(500),   -- Free-text note about this attachment (#585).
+  hash           CHAR(64),       -- SHA-256 hex of the attachment (#71): file content for a
+                                 -- single-file LOCAL: link, else the link string itself.
+                                 -- NULL = not yet backfilled (see cmd/backfill_attachment_hash).
 
   -- Vendor scope (#56). At most one may be set; both NULL = part-level attachment.
   -- ON DELETE SET NULL: supplier_part rows are hard-deleted, so a scoped attachment

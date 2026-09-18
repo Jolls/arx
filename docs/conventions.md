@@ -16,6 +16,20 @@ The `FILFileName` column in `FIL` (and the equivalent field in `company_attachme
 
 **Invariant:** values stored in `FILFileName` are trimmed and use the uppercase prefix `LOCAL:`. The app never writes lowercase variants. Helper functions in `arxlib/urlutil` (`IsLocalFile`, `IsLocalDir`, `IsHTTPURL`, `LocalFileURL`, `LocalDirURL`) accept any case defensively but the stored data is always uppercase.
 
+### Content hash / duplicate detection (#71)
+
+Both `part_attachment` and `company_attachment` carry a `hash` column (`CHAR(64)`, lowercase-hex SHA-256), populated on every write:
+
+| Attachment shape | Hash input |
+|---|---|
+| `LOCAL:file.pdf` (single file) | SHA-256 of the file's **bytes** |
+| `LOCAL:folder\` (directory-style, trailing `/` or `\`) | SHA-256 of the **link string** |
+| `http://` / `https://` | SHA-256 of the **link string** |
+| Absolute path (`\\server\...`, `C:\...`, `file://`) | SHA-256 of the **link string** |
+| `LOCAL:` file that is missing/unreadable | SHA-256 of the **link string** (fallback) |
+
+The dup check is per-table, system-wide (compares against all `is_active = 1` rows in the same table, never across `part_attachment`/`company_attachment`), and excludes the row being edited. It's recomputed whenever the file/URL changes; a metadata-only edit leaves `hash` untouched. A match shows a dismissible warning before the row is saved — the user can "Add anyway" or cancel.
+
 ---
 
 ## Imported attachment naming convention

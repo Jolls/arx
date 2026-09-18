@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.46] - 2026-09-17
+### Added
+- Paste-import BOM rows from Excel (tab-separated part number + qty) with a preview showing new/updated/unchanged/error rows before committing ([#53](https://github.com/Jolls/arx/issues/53))
+- Attachments now carry a content hash and warn before saving a file or link that's already attached elsewhere, with an option to add it anyway ([#71](https://github.com/Jolls/arx/issues/71))
+
 ## [0.7.45] - 2026-09-17
 ### Removed
 - Dead `_Test` clone-table DDL from `SQL/azure/app_config.sql`, `uom.sql`, `company_attachment.sql` — a fossil of the pre-#241 test-mode mechanism, superseded by the ArxDev connection-profile swap ([#92](https://github.com/Jolls/arx/issues/92))

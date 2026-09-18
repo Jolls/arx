@@ -10,5 +10,6 @@ CREATE TABLE dbo.company_attachment (
     file_path               NVARCHAR(1024) NOT NULL,
     notes                   NVARCHAR(512),
     sort_order              INT,
-    is_active               BIT            NOT NULL CONSTRAINT DF_company_attachment_is_active DEFAULT 1
+    is_active               BIT            NOT NULL CONSTRAINT DF_company_attachment_is_active DEFAULT 1,
+    hash                    CHAR(64)       -- SHA-256 hex of the attachment (#71); NULL = not yet backfilled.
 );

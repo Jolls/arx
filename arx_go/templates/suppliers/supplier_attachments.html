@@ -10,6 +10,31 @@
 
     {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}
 
+    {{if .DuplicateWarning}}
+    <div class="alert alert-warning">
+        <p class="mb-2">This file or link is identical to an attachment that already exists on
+            <a href="{{.DuplicateWarning.DupURL}}">{{.DuplicateWarning.DupLabel}}</a>.
+            Nothing has been saved yet.</p>
+        <form method="post"
+              action="{{if .DuplicateWarning.AttID}}/supplier/{{.Supplier.ID}}/attachments/{{.DuplicateWarning.AttID}}{{else}}/supplier/{{.Supplier.ID}}/attachments{{end}}"
+              class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="file_path" value="{{.DuplicateWarning.FilePath}}">
+            <input type="hidden" name="notes" value="{{.DuplicateWarning.Notes}}">
+            <input type="hidden" name="sort_order" value="{{.DuplicateWarning.SortOrder}}">
+            <input type="hidden" name="confirm_duplicate" value="1">
+            <button type="submit" class="btn btn-sm btn-warning">Add anyway</button>
+        </form>
+        <form method="post" action="/supplier/{{.Supplier.ID}}/attachments" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            {{if .DuplicateWarning.Imported}}
+            <input type="hidden" name="discard_import" value="{{.DuplicateWarning.FilePath}}">
+            {{end}}
+            <button type="submit" class="btn btn-sm btn-secondary">Cancel</button>
+        </form>
+    </div>
+    {{end}}
+
     {{if .Attachments}}
     <div class="table-wrapper">
         <table class="table table-bordered table-hover table-sm">
