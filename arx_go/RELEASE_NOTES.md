@@ -1,3 +1,61 @@
+Arx v0.7.48 — September 2026
+========================
+
+NEW FEATURES
+
+  DigiKey Import
+  Fetch pricing, datasheet, photo, and manufacturer info from DigiKey when
+  adding or editing a supplier link.
+
+  Start RFQ from a Purchase Order
+  A "Start RFQ" button on draft POs copies the lines into a new RFQ.
+
+  Copy for Ordering
+  Copies part number and quantity pairs from a PO for pasting into a
+  supplier's bulk order form.
+
+  PO Line Autofill
+  Picking a part on a PO line fills in quantity and unit cost.
+
+  Import BOM from Excel
+  Paste part numbers and quantities from Excel to add or update BOM lines.
+
+  BOM Search by Description
+  BOM lines can be searched by description as well as part number.
+
+  Multiple File Uploads
+  Attach several files to a part at once, each with its own category.
+
+  Duplicate Attachment Warning
+  Warns before attaching a file or link that is already attached elsewhere.
+
+  Vendor-Scoped Attachments
+  Part attachments can be tied to a specific supplier or manufacturer part.
+
+  Preferred Supplier Card
+  The part page now shows the preferred supplier's part number and price.
+
+  Quick-Add New Part
+  New Part opens a quick popup for part number and description first.
+
+  Filter Wildcards
+  Table filters accept * and ? wildcards, such as 65*-013*.
+
+  Formula Functions
+  Test formulas can use min, max, abs, mod, round, floor, ceil, sqrt, pow.
+
+  Delete Old Prices
+  Deactivated prices can now be permanently deleted.
+
+BUG FIXES
+
+  Wrong price saved when accepting a PO's suggested new unit cost.
+  Large file uploads now show a clear "file too large" message.
+  Sub-tabs and PO buttons now wrap on narrow windows.
+  Error page "Back" link returns to the page you came from.
+  Copy for Excel buttons on Build Cost and Test Report pages.
+  Missing breadcrumb on the part Records tab.
+
 Arx v0.7.30 — September 2026
 ========================
 
