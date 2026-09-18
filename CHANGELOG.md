@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.48] - 2026-09-18
+### Added
+- `default_result` formulas now support `min`, `max`, `abs`, `mod`, `round`, `floor`, `ceil`, `sqrt`, and `pow` function calls, evaluated by a safe allowlisted parser rather than a widened character whitelist ([#95](https://github.com/Jolls/arx/issues/95))
+
 ## [0.7.47] - 2026-09-17
 ### Added
 - BOM line editing now supports searching by description/detail (in addition to part number), matching PO line item search ([#94](https://github.com/Jolls/arx/issues/94))
