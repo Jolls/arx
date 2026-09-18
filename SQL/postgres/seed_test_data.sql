@@ -513,7 +513,8 @@ BEGIN;
     -- (revealed by the "Show archived" toggle), but still rendered on historical records that
     -- recorded a result for it — exercises stepVisibleOnRecord / the #487 frozen-row model.
     -- 6105-6108 exercise the non-default step features: pf_type filled/comment, format,
-    -- List:/query: spec_nom pickers, {id} cross-step tokens, default_result, and hide_formula.
+    -- List:/query: spec_nom pickers, {id} cross-step tokens, default_result (including the
+    -- min/max/abs/mod/round/floor/ceil/sqrt/pow functions from #95), and hide_formula.
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so
     -- TestIntegration_UpdatedAtSentinel can assert these rows go untouched.
     -- granularity (#744): all existing form lines are per-unit tests ('unit'); the DEFAULT also covers this.
@@ -525,7 +526,7 @@ BEGIN;
         (6105, 6001, 1, 0, 'Firmware Version',      'Record installed version', NULL, NULL, NULL, NULL, 'filled', NULL, FALSE, NULL,   'v2.1',NULL, '2020-01-01T00:00:00', 'unit'),
         (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
-        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, FALSE, '0.00', NULL, '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'); -- only shown on Re-Test records
+        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, FALSE, '0.00', 'min(max({6102},4.75),5.25)', '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'); -- only shown on Re-Test records; default_result clamps the prior reading to this step's spec range
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
     -- trg_form_row_history snapshots the old row into form_row_history.

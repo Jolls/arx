@@ -47,6 +47,10 @@
     <div class="fw-semibold mt-2 mb-1">Named queries (run a SQL query; tokens above usable as parameters)</div>
     <code>query:<em>name</em>(@param={record.pn})</code>
     <div class="mt-1">Example Specification: <code>{nom}{units} ({min} – {max}{units})</code> &rarr; <em>5v (4.5 – 5.5v)</em></div>
+    <div class="fw-semibold mt-2 mb-1">default_result column</div>
+    Tokens above resolve first, then the result is evaluated as arithmetic: <code>+ - * /</code>, parentheses, and
+    <code>min()</code>, <code>max()</code>, <code>abs()</code>, <code>mod()</code>, <code>round()</code>, <code>floor()</code>, <code>ceil()</code>, <code>sqrt()</code>, <code>pow()</code>.
+    Example: <code>min({15}, {max})</code> defaults to the smaller of step 15's result and this step's spec_max.
     <div class="fw-semibold mt-2 mb-1">Hide column</div>
     Blank or <code>SHOW</code> = always visible &nbsp;&bull;&nbsp;
     <code>HIDE</code> = always hidden &nbsp;&bull;&nbsp;
