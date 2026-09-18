@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -485,7 +486,13 @@ func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	h.renderSupplierAttachments(w, r, chi.URLParam(r, "id"), nil)
+}
+
+// renderSupplierAttachments loads a supplier's attachments and renders the
+// attachments page. extra is merged into the template data (used to surface
+// errors or a duplicate-hash warning on the POST path, #71).
+func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Request, id string, extra map[string]any) {
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -524,8 +531,12 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		attachments = append(attachments, a)
 	}
 
+	editID := r.URL.Query().Get("edit")
+	if editID == "" {
+		editID = attIDFromExtra(extra, "DuplicateWarning")
+	}
 	var editingAtt *models.SupplierAttachment
-	if editID := r.URL.Query().Get("edit"); editID != "" {
+	if editID != "" {
 		for i := range attachments {
 			if strconv.Itoa(attachments[i].SupplierAttachmentID) == editID {
 				editingAtt = &attachments[i]
@@ -537,7 +548,7 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	h.render(w, r, "suppliers/supplier_attachments.html", map[string]any{
+	data := map[string]any{
 		"Supplier":    s,
 		"Attachments": attachments,
 		"EditingAtt":  editingAtt,
@@ -546,7 +557,9 @@ func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
 		"NextOrderID":              nextOrderID,
 		"SupplierFilesConfigured": h.cfg.SupplierFilesRoot != "",
-	})
+	}
+	maps.Copy(data, extra)
+	h.render(w, r, "suppliers/supplier_attachments.html", data)
 }
 
 // saveSupplierUpload writes an uploaded file into SupplierFilesRoot under its
@@ -577,7 +590,21 @@ func (h *Handler) saveSupplierUpload(hdr *multipart.FileHeader) (filePath string
 
 func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	// Cancel from a duplicate-hash warning (#71): the file was already copied
+	// into SupplierFilesRoot by the time the duplicate was detected, so discard
+	// it unless some other active row already links the same name.
+	if link := fv(r, "discard_import"); link != "" {
+		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
+			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
+				0, link, h.companyAttachmentRoot(), urlutil.StripLocalPrefix(link))
+		}
+		http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
+		return
+	}
+
 	var filePath string
+	var imported bool
 	if ups := attachmentUploads(r, "upload_file"); len(ups) > 0 {
 		fp, err := h.saveSupplierUpload(ups[0])
 		if err != nil {
@@ -585,6 +612,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		filePath = fp
+		imported = true
 	} else {
 		filePath = strings.TrimSpace(r.FormValue("file_path"))
 		if filePath == "" {
@@ -603,15 +631,52 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	hash := computeAttachmentHash(h.companyAttachmentRoot(), filePath)
+	if h.companyAttachmentDuplicateWarning(w, r, id, "", hash, 0, imported, filePath, notes, sortOrderStr) {
+		return
+	}
+
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (supplier_id, file_path, notes, sort_order)
-		VALUES (@p1, @p2, @p3, @p4)
-	`, h.cfg.CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal)
+		INSERT INTO %s (supplier_id, file_path, notes, sort_order, hash)
+		VALUES (@p1, @p2, @p3, @p4, @p5)
+	`, h.cfg.CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal, hash)
 	if err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
+}
+
+// companyAttachmentDuplicateWarning runs the #71 duplicate-hash check shared
+// by SupplierAttachmentCreate and SupplierAttachmentUpdate. On a match it
+// renders the dismissible warning banner and returns true (the caller must
+// return immediately without writing); on no match, or confirm_duplicate=1,
+// it returns false. attID is "" for the create path.
+func (h *Handler) companyAttachmentDuplicateWarning(w http.ResponseWriter, r *http.Request, id, attID, hash string, excludeID int, imported bool, filePath, notes, sortOrderStr string) bool {
+	if fv(r, "confirm_duplicate") == "1" {
+		return false
+	}
+	dup, err := h.findDuplicateCompanyAttachment(r.Context(), hash, excludeID)
+	if err != nil {
+		h.renderError(w, r, "Error checking for duplicate attachments: "+err.Error())
+		return true
+	}
+	if dup == nil {
+		return false
+	}
+	importedFlag := ""
+	if imported {
+		importedFlag = "1"
+	}
+	h.renderSupplierAttachments(w, r, id, map[string]any{"DuplicateWarning": map[string]string{
+		"FilePath": filePath,
+		"DupLabel": dup.Label,
+		"DupURL":   dup.URL,
+		"Notes":    notes, "SortOrder": sortOrderStr,
+		"Imported": importedFlag,
+		"AttID":    attID,
+	}})
+	return true
 }
 
 func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Request) {
@@ -631,9 +696,11 @@ func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Reques
 func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attID := chi.URLParam(r, "attID")
+	attIDInt, _ := strconv.Atoi(attID)
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
 	var newFilePath string
+	var imported bool
 	if ups := attachmentUploads(r, "upload_file"); len(ups) > 0 {
 		fp, err := h.saveSupplierUpload(ups[0])
 		if err != nil {
@@ -641,6 +708,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		newFilePath = fp
+		imported = true
 	} else {
 		newFilePath = urlutil.NormalizeLink(strings.TrimSpace(r.FormValue("file_path")))
 	}
@@ -661,12 +729,19 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	}
 
 	fileChanged := newFilePath != "" && newFilePath != oldFilePath
+	var hash string
+	if fileChanged {
+		hash = computeAttachmentHash(h.companyAttachmentRoot(), newFilePath)
+		if h.companyAttachmentDuplicateWarning(w, r, id, attID, hash, attIDInt, imported, newFilePath, notes, sortOrderStr) {
+			return
+		}
+	}
 	var err error
 	if fileChanged {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET notes=@p1, sort_order=@p2, file_path=@p3
-			WHERE supplier_attachment_id=@p4 AND supplier_id=@p5
-		`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, newFilePath, attID, id)
+			UPDATE %s SET notes=@p1, sort_order=@p2, file_path=@p3, hash=@p4
+			WHERE supplier_attachment_id=@p5 AND supplier_id=@p6
+		`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, newFilePath, hash, attID, id)
 	} else {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET notes=@p1, sort_order=@p2

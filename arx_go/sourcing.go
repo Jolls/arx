@@ -158,11 +158,14 @@ func supplierPartFromForm(r *http.Request) *models.SupplierPart {
 // written into DOC_CONTROL_ROOT by prepareDigiKeyFiles, ready for its
 // part_attachment row to be inserted once a transaction is open. data carries
 // the raw bytes only for category "Photo", so generateThumbnailFromPhoto can
-// build a Thumbnail from it without fetching the URL a second time.
+// build a Thumbnail from it without fetching the URL a second time. hash
+// (#71) is computed from the downloaded bytes for every category, since data
+// itself is discarded for anything other than Photo.
 type digikeyPreparedFile struct {
 	category string
 	fileName string // "LOCAL:<name>"
 	data     []byte
+	hash     string
 }
 
 // prepareDigiKeyFiles downloads the datasheet/photo the user chose to import
@@ -214,7 +217,7 @@ func (h *Handler) prepareDigiKeyFiles(ctx context.Context, r *http.Request, part
 		if werr != nil {
 			return nil, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(imp.category), werr)
 		}
-		pf := digikeyPreparedFile{category: imp.category, fileName: "LOCAL:" + finalName}
+		pf := digikeyPreparedFile{category: imp.category, fileName: "LOCAL:" + finalName, hash: hashBytes(data)}
 		if imp.category == "Photo" {
 			pf.data = data
 		}
@@ -262,9 +265,9 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 
 	for _, pf := range preparedFiles {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, file_name, part_revision, category, comment) VALUES (@p1,@p2,@p3,@p4,@p5)`,
+			`INSERT INTO %s (part_id, file_name, part_revision, category, comment, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
 			h.cfg.AttachmentsTable(),
-		), partID, pf.fileName, "", pf.category, "Imported from DigiKey"); err != nil {
+		), partID, pf.fileName, "", pf.category, "Imported from DigiKey", pf.hash); err != nil {
 			return false, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(pf.category), err)
 		}
 		if pf.category == "Photo" && r.FormValue("dk_generate_thumbnail") == "1" {

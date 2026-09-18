@@ -1143,6 +1143,168 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/bom", id), http.StatusFound)
 }
 
+// ── BOM paste-import preview ────────────────────────────────────────────────
+
+// bomPastePreviewRow is one parsed/resolved row of a pasted BOM paste,
+// carrying everything the preview template and the Confirm-Import JS need.
+type bomPastePreviewRow struct {
+	PartNumber  string  // canonical part_number from the DB match, or the raw pasted text on error
+	Description string
+	Qty         float64
+	Status      string // "new" | "update" | "noop" | "error"
+	RowClass    string // Bootstrap row class for the status
+	StatusLabel string
+	PLID        int // existing bom.id for "update"/"noop" rows, 0 otherwise
+	PNID        int // resolved component_part_id, 0 on error
+	RawText     string // original pasted line, shown for error rows
+}
+
+// parseBOMPasteText splits pasted TSV text into (partNumber, qtyText, rawLine)
+// triples, sniffing off row 1 as a header when its qty column doesn't parse
+// as a number (issue #53). Blank lines are skipped. Pure/no I/O — kept
+// separate from PartBOMPastePreview so the parsing rule is unit-testable
+// without a DB.
+type bomPasteLine struct {
+	PartNumber string
+	QtyText    string
+	Qty        float64
+	QtyOK      bool
+	RawText    string
+}
+
+func parseBOMPasteText(text string) []bomPasteLine {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	var trimmedLines []string
+	for _, line := range strings.Split(text, "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			trimmedLines = append(trimmedLines, t)
+		}
+	}
+	var out []bomPasteLine
+	for i, trimmed := range trimmedLines {
+		cols := strings.SplitN(trimmed, "\t", 2)
+		partNumber := strings.TrimSpace(cols[0])
+		qtyText := ""
+		if len(cols) > 1 {
+			qtyText = strings.TrimSpace(cols[1])
+		}
+		qty, err := strconv.ParseFloat(qtyText, 64)
+		// Row 1 is sniffed as a header and skipped only when there's at least
+		// one more row to import — a single-line paste is always treated as
+		// data, even with a malformed qty column, so a one-line typo surfaces
+		// as an error row instead of silently vanishing as a "header".
+		if i == 0 && len(trimmedLines) > 1 && err != nil {
+			continue
+		}
+		out = append(out, bomPasteLine{
+			PartNumber: partNumber, QtyText: qtyText, Qty: qty, QtyOK: err == nil, RawText: trimmed,
+		})
+	}
+	return out
+}
+
+// PartBOMPastePreview — POST /part/{id}/bom/preview. Parses pasted TSV
+// part-number+qty rows, resolves each part number against the parts table,
+// and diffs against the part's current BOM by component_part_id. Writes
+// nothing; returns an HTML preview fragment (parts/part_bom_paste_preview.html).
+func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	// Not h.requireTab: that renders a full page via h.renderError on failure,
+	// but this handler is fetched by JS and its response is dropped straight
+	// into a small preview <div> — a full-page error response would end up
+	// dumping the whole app shell into that div instead of a clean message.
+	p, err := h.fetchPartBasic(r.Context(), id)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Part not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "Error retrieving part: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.applyCategoryTabs(r.Context(), &p)
+	if !tabVisible(p, "bom") {
+		http.Error(w, "The bom section does not apply to "+p.Category+" parts.", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+
+	type existingLine struct {
+		ID  int
+		Qty float64
+	}
+	existing := map[int]existingLine{}
+	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
+		`SELECT id, component_part_id, qty FROM %s WHERE parent_part_id = @p1`, pl,
+	), id)
+	if err != nil {
+		http.Error(w, "Error retrieving BOM: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for rows.Next() {
+		var plid, cpid int
+		var qty float64
+		if err := rows.Scan(&plid, &cpid, &qty); err != nil {
+			rows.Close()
+			http.Error(w, "Error reading BOM: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		existing[cpid] = existingLine{ID: plid, Qty: qty}
+	}
+	rows.Close()
+
+	var preview []bomPastePreviewRow
+	hasError := false
+	for _, line := range parseBOMPasteText(r.FormValue("paste_text")) {
+		row := bomPastePreviewRow{PartNumber: line.PartNumber, RawText: line.RawText}
+
+		var pnid int
+		var partNumber, description sql.NullString
+		if line.PartNumber != "" {
+			if err := h.queryRowContext(r.Context(), fmt.Sprintf(
+				`SELECT id, part_number, description FROM %s WHERE part_number = @p1`, pn,
+			), line.PartNumber).Scan(&pnid, &partNumber, &description); err != nil && err != sql.ErrNoRows {
+				http.Error(w, "Error looking up part number: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		switch {
+		case pnid == 0:
+			row.Status, row.RowClass, row.StatusLabel = "error", "table-danger", "Error"
+			hasError = true
+		case !line.QtyOK:
+			row.Status, row.RowClass, row.StatusLabel = "error", "table-danger", "Error"
+			hasError = true
+		default:
+			row.PartNumber = partNumber.String
+			row.Description = description.String
+			row.Qty = line.Qty
+			row.PNID = pnid
+			if ex, ok := existing[pnid]; ok {
+				row.PLID = ex.ID
+				if ex.Qty == line.Qty {
+					row.Status, row.RowClass, row.StatusLabel = "noop", "table-secondary text-muted", "No change"
+				} else {
+					row.Status, row.RowClass, row.StatusLabel = "update", "table-warning", "Update"
+				}
+			} else {
+				row.Status, row.RowClass, row.StatusLabel = "new", "table-success", "New"
+			}
+		}
+		preview = append(preview, row)
+	}
+
+	h.renderPrint(w, "parts/part_bom_paste_preview.html", map[string]any{
+		"Rows": preview, "HasError": hasError,
+	})
+}
+
 // ── BOM cost rollup ──────────────────────────────────────────────────────────
 
 // hasOwnBOMExpr is the "does this part have its own BOM" EXISTS check shared by
@@ -1601,9 +1763,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	// Edit form instead of it disappearing from this direct (non-redirect) render.
 	editID := r.URL.Query().Get("edit")
 	if editID == "" {
-		if ic, ok := extra["ImportCollision"].(map[string]string); ok {
-			editID = ic["AttID"]
-		}
+		editID = attIDFromExtra(extra, "ImportCollision", "DuplicateWarning")
 	}
 	var editingAtt *models.Attachment
 	if editID != "" {
@@ -1647,16 +1807,29 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 
 // insertAttachmentRow inserts a single part_attachment row. Shared by
 // PartAttachmentCreate's single-file path and importAttachmentBatch (#70).
-func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID any, comment string, supplierPartID, mfgPartID any) error {
+func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID any, comment string, supplierPartID, mfgPartID any, hash string) error {
 	_, err := h.execContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)`,
 		h.cfg.AttachmentsTable(),
-	), partID, fileName, rev, category, oID, comment, supplierPartID, mfgPartID)
+	), partID, fileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash)
 	return err
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	// Cancel from a duplicate-hash warning (#71): the file was already copied
+	// into Doc Control by the time the duplicate was detected, so discard it
+	// unless some other active row already links the same name.
+	if link := fv(r, "discard_import"); link != "" {
+		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
+			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
+				0, link, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(link))
+		}
+		http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
+		return
+	}
+
 	var oID any
 	if v := fv(r, "order_id"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -1735,11 +1908,49 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.insertAttachmentRow(r.Context(), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID); err != nil {
+	hash := computeAttachmentHash(h.cfg.DocControlRoot, in.FileName)
+	if h.partAttachmentDuplicateWarning(w, r, id, "", hash, 0, upload, in.FileName, category, rev, comment) {
+		return
+	}
+
+	if err := h.insertAttachmentRow(r.Context(), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash); err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
+}
+
+// partAttachmentDuplicateWarning runs the #71 duplicate-hash check shared by
+// PartAttachmentCreate and PartAttachmentUpdate. On a match it renders the
+// dismissible warning banner and returns true (the caller must return
+// immediately without writing); on no match, or confirm_duplicate=1, it
+// returns false. attID is "" for the create path.
+func (h *Handler) partAttachmentDuplicateWarning(w http.ResponseWriter, r *http.Request, id, attID, hash string, excludeID int, upload *attachmentUploadSource, fileName, category, rev, comment string) bool {
+	if fv(r, "confirm_duplicate") == "1" {
+		return false
+	}
+	dup, err := h.findDuplicatePartAttachment(r.Context(), hash, excludeID)
+	if err != nil {
+		h.renderError(w, r, "Error checking for duplicate attachments: "+err.Error())
+		return true
+	}
+	if dup == nil {
+		return false
+	}
+	imported := ""
+	if upload != nil && urlutil.IsLocalFile(fileName) {
+		imported = "1"
+	}
+	h.renderPartAttachments(w, r, id, map[string]any{"DuplicateWarning": map[string]string{
+		"FileName": fileName,
+		"DupLabel": dup.Label,
+		"DupURL":   dup.URL,
+		"Category": category, "Rev": rev, "OrderID": fv(r, "order_id"),
+		"Comment": comment, "VendorScope": fv(r, "vendor_scope"),
+		"Imported": imported,
+		"AttID":    attID,
+	}})
+	return true
 }
 
 func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
@@ -1798,12 +2009,24 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileChanged := in.FileName != "" && in.FileName != oldFileName
+	// contentChanged also covers replacing a file in place under the same
+	// generated name (resolveAttachmentFileInput's replaceLocalFileFrom
+	// branch): fileChanged is false there since in.FileName == oldFileName,
+	// but the bytes on disk did change, so hash must still be recomputed.
+	contentChanged := fileChanged || upload != nil
+	var hash string
+	if contentChanged {
+		hash = computeAttachmentHash(h.cfg.DocControlRoot, in.FileName)
+		if h.partAttachmentDuplicateWarning(w, r, id, attID, hash, attIDInt, upload, in.FileName, category, rev, comment) {
+			return
+		}
+	}
 	var err error
-	if fileChanged {
+	if contentChanged {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6, file_name=@p7 WHERE id=@p8`,
+			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6, file_name=@p7, hash=@p8 WHERE id=@p9`,
 			h.cfg.AttachmentsTable(),
-		), rev, category, oID, comment, supplierPartID, mfgPartID, in.FileName, attIDInt)
+		), rev, category, oID, comment, supplierPartID, mfgPartID, in.FileName, hash, attIDInt)
 	} else {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
 			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6 WHERE id=@p7`,

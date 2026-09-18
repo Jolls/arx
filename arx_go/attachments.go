@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -438,7 +440,11 @@ func (h *Handler) importAttachmentBatch(w http.ResponseWriter, r *http.Request, 
 		h.renderPartAttachments(w, r, id, map[string]any{"ImportCollision": in.Collision})
 		return
 	}
-	if err := h.insertAttachmentRow(r.Context(), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID); err != nil {
+	// Batch imports record the hash but do not warn on a duplicate (#71): the
+	// mid-batch collision-resume state machine is already the most intricate
+	// code in this file, and a second interrupt state would double it.
+	hash := computeAttachmentHash(h.cfg.DocControlRoot, in.FileName)
+	if err := h.insertAttachmentRow(r.Context(), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash); err != nil {
 		os.RemoveAll(dir)
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
@@ -708,4 +714,121 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 		"FileLink": file, "Usages": usages,
 		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
 	})
+}
+
+// ── Content hash / duplicate detection (#71) ────────────────────────────────
+
+// hashBytes returns the lowercase-hex SHA-256 of data. Used where the bytes are
+// already in memory (clipboard paste, DigiKey import) so the file isn't re-read.
+func hashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// hashLinkString returns the lowercase-hex SHA-256 of an attachment link string.
+// Used for directory-style LOCAL: links, http(s) URLs, absolute/UNC paths, and as
+// the fallback when a LOCAL: file can't be read.
+func hashLinkString(link string) string {
+	return hashBytes([]byte(link))
+}
+
+// companyAttachmentRoot is the filesystem root company_attachment LOCAL: links
+// resolve against: SUPPLIER_FILES_ROOT, falling back to DOC_CONTROL_ROOT.
+func (h *Handler) companyAttachmentRoot() string {
+	if h.cfg.SupplierFilesRoot != "" {
+		return h.cfg.SupplierFilesRoot
+	}
+	return h.cfg.DocControlRoot
+}
+
+// computeAttachmentHash returns the hash identifying one attachment link (#71):
+// the file's content for a single-file LOCAL: link under root, or the link string
+// itself for a directory-style LOCAL: link, an http(s) URL, an absolute path, or a
+// LOCAL: file that is missing/unreadable. root is the filesystem root the table's
+// LOCAL: links resolve against — DocControlRoot for part_attachment,
+// companyAttachmentRoot() for company_attachment. Never returns "".
+func computeAttachmentHash(root, link string) string {
+	if root == "" || !urlutil.IsLocalFile(link) || urlutil.IsLocalDir(link) {
+		return hashLinkString(link)
+	}
+	rel := strings.ReplaceAll(urlutil.StripLocalPrefix(link), "\\", "/")
+	path, ok := safePath(root, rel)
+	if !ok {
+		return hashLinkString(link)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return hashLinkString(link)
+	}
+	defer f.Close()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return hashLinkString(link)
+	}
+	return hex.EncodeToString(sum.Sum(nil))
+}
+
+// attIDFromExtra returns the AttID recorded under the first of keys present
+// in extra whose value carries one (e.g. "ImportCollision", "DuplicateWarning"),
+// so a warning rendered directly (not via redirect) keeps the same Edit form
+// open that raised it, matching the ?edit= query-param behavior.
+func attIDFromExtra(extra map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if m, ok := extra[k].(map[string]string); ok {
+			if id := m["AttID"]; id != "" {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+// duplicateAttachment identifies the existing active attachment a pending one
+// collides with, for the warning banner's link.
+type duplicateAttachment struct {
+	ID    int
+	Label string // part number, or company name
+	URL   string // "/part/<id>/attachments" or "/supplier/<id>/attachments"
+}
+
+// findDuplicateAttachment returns the oldest active attTable row whose hash
+// matches, excluding excludeID (0 = exclude nothing, i.e. the create path).
+// Returns nil when hash is empty or nothing matches. Soft-deleted rows are
+// never compared. idCol/labelCol/joinCol/joinTable/urlFmt parameterize the
+// query shape shared by findDuplicatePartAttachment and
+// findDuplicateCompanyAttachment — the two tables are otherwise checked
+// completely independently (a match in one never flags against the other).
+func (h *Handler) findDuplicateAttachment(ctx context.Context, hash string, excludeID int, attTable, idCol, joinTable, joinCol, labelCol, urlFmt string) (*duplicateAttachment, error) {
+	if hash == "" {
+		return nil, nil
+	}
+	var dup duplicateAttachment
+	var joinID int
+	var label string
+	err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT %sa.%s, j.id, j.%s
+		FROM %s a JOIN %s j ON j.id = a.%s
+		WHERE a.is_active = %s AND a.hash = @p1 AND a.%s <> @p2
+		ORDER BY a.%s`+h.dia().LimitClause("1"),
+		h.dia().TopClause("1"), idCol, labelCol, attTable, joinTable, joinCol, h.dia().BoolLiteral(true), idCol, idCol,
+	), hash, excludeID).Scan(&dup.ID, &joinID, &label)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	dup.Label = label
+	dup.URL = fmt.Sprintf(urlFmt, joinID)
+	return &dup, nil
+}
+
+func (h *Handler) findDuplicatePartAttachment(ctx context.Context, hash string, excludeID int) (*duplicateAttachment, error) {
+	return h.findDuplicateAttachment(ctx, hash, excludeID,
+		h.cfg.AttachmentsTable(), "id", h.cfg.PartsTable(), "part_id", "part_number", "/part/%d/attachments")
+}
+
+func (h *Handler) findDuplicateCompanyAttachment(ctx context.Context, hash string, excludeID int) (*duplicateAttachment, error) {
+	return h.findDuplicateAttachment(ctx, hash, excludeID,
+		h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", h.cfg.CompanyTable(), "supplier_id", "name", "/supplier/%d/attachments")
 }

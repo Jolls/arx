@@ -10,5 +10,6 @@ CREATE TABLE company_attachment (
     file_path               VARCHAR(1024)  NOT NULL,
     notes                   VARCHAR(512),
     sort_order              INTEGER,
-    is_active               BOOLEAN        NOT NULL DEFAULT TRUE
+    is_active               BOOLEAN        NOT NULL DEFAULT TRUE,
+    hash                    CHAR(64)       -- SHA-256 hex of the attachment (#71); NULL = not yet backfilled.
 );
