@@ -574,10 +574,10 @@ func (h *Handler) renderLogin(w http.ResponseWriter, r *http.Request, data map[s
 	data["SchemaMismatch"] = h.schemaMismatch
 	tmpl, err := template.New("").ParseFS(h.tmplFS, "templates/shared/login.html")
 	if err != nil {
-		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "template error", err)
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, "login.html", data); err != nil {
-		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "template error", err)
 	}
 }
