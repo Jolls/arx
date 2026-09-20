@@ -139,13 +139,19 @@ func buildRouter(h *Handler) *chi.Mux {
 	// require a logged-in user once a database is connected — GET renders db_server,
 	// db_user, and filesystem roots, which is a config-disclosure hole to an
 	// unauthenticated caller once connected (#781, read-side sibling of #748).
+	// GET stays open to any logged-in user — the page also hosts My Preferences.
+	// POST is admin-only once connected: it rewrites the DB connection (#106).
 	r.With(h.RequireAuthOnceConnected).Get("/settings", h.Settings)
-	r.With(h.RequireAuthOnceConnected).Post("/settings", h.SettingsSave)
+	r.With(h.RequireAdminOnceConnected).Post("/settings", h.SettingsSave)
 	r.Get("/whats-new", h.WhatsNew)
 	// Gated the same way as POST /settings: reachable unauthenticated only during
 	// first-run setup, since it spawns a native folder-picker dialog and an
 	// unauthenticated GET on a connected instance would be a local DoS/nuisance (#757).
-	r.With(h.RequireAuthOnceConnected).Get("/api/browse-folder", h.APIBrowseFolder)
+	// That means admin-only once connected too (#106) — its only callers are the
+	// File Paths pickers on the Connection tab, which is now admin-only, so leaving
+	// it on RequireAuthOnceConnected would let a non-admin with no Connection UI
+	// still pop a native dialog on the host.
+	r.With(h.RequireAdminOnceConnected).Get("/api/browse-folder", h.APIBrowseFolder)
 
 	// All other routes require a live database connection.
 	r.Group(func(r chi.Router) {

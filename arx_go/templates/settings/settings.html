@@ -24,11 +24,13 @@
     {{end}}
 
     <div class="sub-tabs mb-4">
+        {{if .CanEditConnection}}
         <a href="#connection" class="sub-tab" data-tab="connection">Connection</a>
+        {{end}}
         {{if and .Connected .CurrentUser}}
         <a href="#configuration" class="sub-tab" data-tab="configuration">Configuration</a>
         {{end}}
-        {{if and .Connected .CurrentUser}}
+        {{if and .Connected .CurrentUser .CurrentUser.IsAdmin}}
         <a href="#named-queries" class="sub-tab" data-tab="named-queries">Named Queries</a>
         {{end}}
         {{if and .Connected .CurrentUser .CurrentUser.IsAdmin}}
@@ -43,6 +45,7 @@
     </div>
 
     <!-- ── Connection tab ───────────────────────────────────────────────── -->
+    {{if .CanEditConnection}}
     <div class="settings-tab-panel" id="tab-connection">
 
     <form method="POST" action="/settings">
@@ -238,6 +241,7 @@
     </form>
 
     </div><!-- /tab-connection -->
+    {{end}}
 
     <!-- ── Configuration tab ────────────────────────────────────────────── -->
     {{if and .Connected .CurrentUser}}
@@ -262,6 +266,7 @@
         </form>
     </div>
 
+    {{if and .Connected .CurrentUser .CurrentUser.IsAdmin}}
     <div class="detail-section mt-4">
         <h3>DigiKey Import</h3>
         <p class="text-muted" style="margin:0 0 12px; font-size:0.85em;">
@@ -291,6 +296,7 @@
             </div>
         </form>
     </div>
+    {{end}}
 
     <div class="detail-section mt-4">
         <h3>Company Logo</h3>
@@ -424,6 +430,7 @@
         {{end}}
     </div>
 
+    {{if and .Connected .CurrentUser .CurrentUser.IsAdmin}}
     <div class="detail-section mt-4">
         <h3>Data Backup</h3>
         <p class="text-muted" style="margin:0 0 12px; font-size:0.82em;">
@@ -445,12 +452,13 @@
         </p>
         <a href="/settings/utilities" class="btn btn-secondary">Open Utilities</a>
     </div>
+    {{end}}
 
     </div><!-- /tab-configuration -->
     {{end}}
 
     <!-- ── Named Queries tab ────────────────────────────────────────────── -->
-    {{if and .Connected .CurrentUser}}
+    {{if and .Connected .CurrentUser .CurrentUser.IsAdmin}}
     <div class="settings-tab-panel" id="tab-named-queries">
     <div class="detail-section">
         <div class="d-flex justify-content-between align-items-center mb-1">

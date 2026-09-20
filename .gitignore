@@ -1,9 +1,28 @@
+# Local agent/editor state
 CLAUDE.local.md
-.env
-arx_go/Arx.exe
 .claude/
-arx_go/Arx.exe~
+
+# Secrets and machine-local config.
+# .env* is deliberately broad — .env.local / .env.production and friends are the
+# conventional names and were previously NOT ignored. The negation must stay
+# AFTER the glob: git applies the last matching pattern.
+.env*
+!.env.example
 *.local.*
 *local*.json
 /local/
+
+# Build output
+Arx.exe
+Arx.exe~
+
+# Database exports. Settings -> Data Backup writes arx-backup-<date>.zip, a full
+# CSV dump of every table; a browser saving one into the repo would otherwise be
+# one `git add .` away from publishing the whole dataset.
+arx-backup-*.zip
+*.dump
+*.sql.gz
+*.bak
+
+# Third-party reference material kept locally, not redistributed
 docs/digikey-api-compliance-assessment.md

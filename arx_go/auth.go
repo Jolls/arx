@@ -393,11 +393,19 @@ func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 	return out, rows.Err()
 }
 
+// isAdmin reports whether the session user is an admin. requireAdmin wraps it
+// with a plain-text 403; JSON endpoints call it directly so they can keep their
+// own error shape (#103).
+func (h *Handler) isAdmin(r *http.Request) bool {
+	cu := h.currentUser(r)
+	return cu != nil && cu.IsAdmin
+}
+
 // requireAdmin writes a 403 and returns false unless the session user is an
 // admin. Every user-management endpoint gates on it so a non-admin can't
 // self-grant rights, reset passwords, or deactivate others (issue #750).
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if cu := h.currentUser(r); cu != nil && cu.IsAdmin {
+	if h.isAdmin(r) {
 		return true
 	}
 	http.Error(w, "forbidden", http.StatusForbidden)

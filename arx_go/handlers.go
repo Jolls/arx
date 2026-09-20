@@ -256,7 +256,7 @@ func (h *Handler) loadCompanyLogo(ctx context.Context) {
 // password). Safe to call when db is nil.
 func (h *Handler) loadDigiKeyCredentials(ctx context.Context) {
 	h.cfg.DigiKeyClientID = h.appConfigGetOr(ctx, "digikey_client_id", "")
-	h.cfg.DigiKeyClientSecret = h.appConfigGetOr(ctx, "digikey_client_secret", "")
+	h.cfg.DigiKeyClientSecret = h.appConfigGetOr(ctx, digikeyClientSecretKey, "")
 }
 
 // companyLogoURL returns the cached company logo as a template.URL. html/template's
@@ -436,6 +436,34 @@ func (h *Handler) RequireAuthOnceConnected(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r2)
 	})
+}
+
+// canEditConnection reports whether r's caller may change the database connection.
+// Admins always may. So may anyone during first-run setup or while the connection
+// is unusable: there may be no admin account yet, and demanding one while the DB is
+// unreachable would lock everyone out of the only screen that can fix it
+// (#106, extending #748/#852).
+//
+// Both the gate (RequireAdminOnceConnected) and the view (settingsData's
+// CanEditConnection) call this, so the page can never offer a form the server will
+// reject, and the rule has one definition rather than two that must be kept in step.
+func (h *Handler) canEditConnection(r *http.Request) bool {
+	return h.dbUnusable() || h.isAdmin(r)
+}
+
+// RequireAdminOnceConnected gates POST /settings and the folder-picker it drives.
+// It composes RequireAuthOnceConnected rather than repeating it, so the first-run
+// and broken-connection escape hatches have a single implementation: the wrapped
+// middleware either passes straight through (bypass, no user on context) or resolves
+// a real user, and canEditConnection reads correctly in both cases (#106).
+func (h *Handler) RequireAdminOnceConnected(next http.Handler) http.Handler {
+	return h.RequireAuthOnceConnected(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.canEditConnection(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
 }
 
 // fileServingPrefixes are routes that only ever serve static assets or local
