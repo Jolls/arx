@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.51] - 2026-09-19
+### Security
+- `.gitignore` now protects local-only files by name (`*.local`, `*.local.*`) as well as by directory, matches `local/` and `.local/` at any depth, and covers `.bacpac` database exports — so moving or renaming a local-only file no longer silently makes it committable ([#108](https://github.com/Jolls/arx/issues/108))
+
 ## [0.7.50] - 2026-09-18
 ### Security
 - The Named Queries editor is now admin-only. It executes SQL supplied in the request, and its plain-SELECT check blocks writes but not reads, so any signed-in user could previously read any table the app's database login can reach — including stored password hashes ([#103](https://github.com/Jolls/arx/issues/103))
