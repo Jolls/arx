@@ -284,10 +284,6 @@ func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *htt
 // the stored secret (matches the DB-password reuse convention); a blank
 // client ID clears both, since a secret with no ID is unusable.
 func (h *Handler) SettingsDigiKeySave(w http.ResponseWriter, r *http.Request) {
-	// Shop-wide API credentials — admin only (#106).
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	clientID := strings.TrimSpace(r.FormValue("digikey_client_id"))
 	clientSecret := strings.TrimSpace(r.FormValue("digikey_client_secret"))
 
@@ -639,10 +635,6 @@ func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
-	// A full export of every table — admin only (#106).
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	date := time.Now().Format("2006-01-02")
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="arx-backup-`+date+`.zip"`)
@@ -678,12 +670,15 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// appConfigSecretPrefix marks an app_config key as a shop-wide credential. Any key
+// starting with it is excluded from the backup (#119); name new credential keys
+// with it.
+const appConfigSecretPrefix = "secret_"
+
 // digikeyClientSecretKey is the app_config key the DigiKey OAuth client secret is
-// stored under. It's a const so the backup exclusion below can't drift from the key
-// the credential is actually written to — a rename that touched only one of them
-// would silently put the secret back in the export (#104). Note this is the storage
-// key, not the form field of the same name in SettingsDigiKeySave.
-const digikeyClientSecretKey = "digikey_client_secret"
+// stored under. Note this is the storage key, not the form field of the same name
+// in SettingsDigiKeySave.
+const digikeyClientSecretKey = appConfigSecretPrefix + "digikey_client"
 
 // rowFilter reports whether a row should be omitted from the export. It receives
 // the row's columns keyed by lowercased column name.
@@ -694,10 +689,10 @@ type rowFilter func(row map[string]string) bool
 // shop data, not a credential store, and these values are re-enterable in Settings
 // (#104). Named rather than inline so the exclusion is testable without a live DB.
 //
-// If you add another shop-wide credential to app_config, add it here — nothing in
-// the schema marks a row as secret, so the backup will carry it otherwise.
+// Matches by appConfigSecretPrefix, so a new shop-wide credential is excluded just
+// by being named with it — no edit here needed (#119).
 func skipAppConfigSecret(row map[string]string) bool {
-	return strings.EqualFold(row["setting_key"], digikeyClientSecretKey)
+	return strings.HasPrefix(strings.ToLower(row["setting_key"]), appConfigSecretPrefix)
 }
 
 // cellText renders a scanned column value for rowFilter matching. []byte is

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+
+	arxdb "arx/arxlib/db"
 )
 
 func TestBuildAttachmentFileName(t *testing.T) {
@@ -234,5 +236,40 @@ func TestComputeAttachmentHash(t *testing.T) {
 
 	if got := computeAttachmentHash(root, "LOCAL:a.txt"); got == computeAttachmentHash(root, "LOCAL:folder\\") {
 		t.Errorf("file content hash should not equal the directory-link string hash by coincidence in this test")
+	}
+}
+
+// The ensure statement must only repoint a NULL or inactive primary, order by
+// COALESCE(sort_order, 0) then id, and use each dialect's own row-limit syntax (#121).
+func TestPrimaryAttachmentEnsureSQL(t *testing.T) {
+	cases := []struct {
+		name         string
+		d            arxdb.Dialect
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{"sqlserver", arxdb.NewSQLServerDialect(), []string{"TOP (1)", "a.is_active = 1"}, []string{"LIMIT"}},
+		{"postgres", arxdb.NewPostgresDialect(), []string{"LIMIT 1", "a.is_active = TRUE"}, []string{"TOP"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := primaryAttachmentEnsureSQL(c.d, "part", "primary_attachment_id", "part_attachment", "id", "part_id", " AND a.x = 1")
+			for _, want := range append(c.wantContains,
+				"UPDATE part SET primary_attachment_id",
+				"a.part_id = part.id",
+				" AND a.x = 1",
+				"ORDER BY COALESCE(a.sort_order, 0), a.id",
+				"WHERE id = @p1 AND (primary_attachment_id IS NULL OR NOT EXISTS",
+			) {
+				if !strings.Contains(got, want) {
+					t.Errorf("SQL missing %q:\n%s", want, got)
+				}
+			}
+			for _, absent := range c.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("SQL should not contain %q:\n%s", absent, got)
+				}
+			}
+		})
 	}
 }

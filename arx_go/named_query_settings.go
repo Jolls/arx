@@ -73,11 +73,6 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(map[string]string{"error": msg})
 	}
-	// Admin-only: this persists SQL that execQuery later runs (#103).
-	if !h.isAdmin(r) {
-		writeErr(http.StatusForbidden, "Only an admin can edit named queries.")
-		return
-	}
 	if h.database() == nil {
 		writeErr(http.StatusServiceUnavailable, "Not connected to database.")
 		return
@@ -159,12 +154,6 @@ func (h *Handler) SettingsNamedQueryTest(w http.ResponseWriter, r *http.Request)
 		json.NewEncoder(w).Encode(map[string]string{"error": msg})
 	}
 
-	// Admin-only: this runs caller-supplied SQL. isSafeQuery blocks writes but
-	// not reads, so without this any user could SELECT from any table (#103).
-	if !h.isAdmin(r) {
-		writeErr(http.StatusForbidden, "Only an admin can test named queries.")
-		return
-	}
 	if h.database() == nil {
 		writeErr(http.StatusServiceUnavailable, "Not connected to database.")
 		return

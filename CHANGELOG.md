@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.54] - 2026-09-20
+### Added
+- The first active attachment on a part or supplier with no primary is now set as primary automatically, and deleting the primary promotes the next active attachment (or clears it when none remain); migration `20260919231000_121_backfill_primary_attachment.sql` backfills existing records ([#121](https://github.com/Jolls/arx/issues/121))
+
+### Changed
+- Admin-only endpoints are now enforced by route middleware declared in `main.go` instead of per-handler checks; the named-query 403 message is now the generic "Only an admin can do this." ([#120](https://github.com/Jolls/arx/issues/120))
+- `app_config` credentials are now identified by a `secret_` key prefix and excluded from the Settings backup automatically; the DigiKey client secret key is renamed to `secret_digikey_client` — run migration `20260919230000_119_secret_prefix_digikey_client.sql` when deploying ([#119](https://github.com/Jolls/arx/issues/119))
+
 ## [0.7.53] - 2026-09-19
 ### Added
 - `SECURITY.md` (private vulnerability reporting) and `CONTRIBUTING.md` (build/test commands, workspace and migration conventions) ([#114](https://github.com/Jolls/arx/issues/114))

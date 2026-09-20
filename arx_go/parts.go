@@ -1808,11 +1808,10 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 // insertAttachmentRow inserts a single part_attachment row. Shared by
 // PartAttachmentCreate's single-file path and importAttachmentBatch (#70).
 func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID any, comment string, supplierPartID, mfgPartID any, hash string) error {
-	_, err := h.execContext(ctx, fmt.Sprintf(
+	return h.execThenEnsurePrimary(ctx, h.ensurePartPrimary, partID, fmt.Sprintf(
 		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)`,
 		h.cfg.AttachmentsTable(),
 	), partID, fileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash)
-	return err
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
@@ -2052,7 +2051,9 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
-	if err := h.softDeleteAttachment(r.Context(), h.cfg.AttachmentsTable(), "id", attIDInt, "", 0); err != nil {
+	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
+		`UPDATE %s SET is_active=%s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(false),
+	), attIDInt, id); err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
 	}

@@ -636,7 +636,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
+	err := h.execThenEnsurePrimary(r.Context(), h.ensureSupplierPrimary, id, fmt.Sprintf(`
 		INSERT INTO %s (supplier_id, file_path, notes, sort_order, hash)
 		VALUES (@p1, @p2, @p3, @p4, @p5)
 	`, h.cfg.CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal, hash)
@@ -682,7 +682,7 @@ func (h *Handler) companyAttachmentDuplicateWarning(w http.ResponseWriter, r *ht
 func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attID := chi.URLParam(r, "attID")
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
+	err := h.execThenEnsurePrimary(r.Context(), h.ensureSupplierPrimary, id, fmt.Sprintf(`
 		UPDATE %s SET is_active = %s
 		WHERE supplier_attachment_id = @p1 AND supplier_id = @p2
 	`, h.cfg.CompanyAttachmentsTable(), h.dia().BoolLiteral(false)), attID, id)

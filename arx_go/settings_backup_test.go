@@ -12,8 +12,11 @@ func TestSkipAppConfigSecret(t *testing.T) {
 		key  string
 		want bool
 	}{
-		{"digikey client secret is dropped", "digikey_client_secret", true},
-		{"key casing is ignored", "DigiKey_Client_Secret", true},
+		{"digikey client secret is dropped", "secret_digikey_client", true},
+		{"any new secret_ key is dropped", "secret_anything_new", true},
+		{"key casing is ignored", "SECRET_Mixed_Case", true},
+		{"prefix must lead the key", "mysecret_x", false},
+		{"legacy unprefixed key is not matched", "digikey_client_secret", false},
 		{"client id is not a secret", "digikey_client_id", false},
 		{"shop config is kept", "attachment_categories", false},
 		{"schema version is kept", "schema_version", false},
@@ -39,10 +42,10 @@ func TestSkipAppConfigSecret(t *testing.T) {
 // with %v yields "[100 105 ...]", which would slip the secret row past the
 // filter — cellText must normalize it first (#104).
 func TestCellTextNormalizesBytes(t *testing.T) {
-	if got := cellText([]byte("digikey_client_secret")); got != "digikey_client_secret" {
+	if got := cellText([]byte("secret_digikey_client")); got != "secret_digikey_client" {
 		t.Errorf("cellText([]byte) = %q, want the decoded string", got)
 	}
-	if got := cellText("digikey_client_secret"); got != "digikey_client_secret" {
+	if got := cellText("secret_digikey_client"); got != "secret_digikey_client" {
 		t.Errorf("cellText(string) = %q", got)
 	}
 	if got := cellText(42); got != "42" {
@@ -50,8 +53,16 @@ func TestCellTextNormalizesBytes(t *testing.T) {
 	}
 
 	// End to end: a []byte key must still be dropped by the filter.
-	row := map[string]string{"setting_key": cellText([]byte("digikey_client_secret"))}
+	row := map[string]string{"setting_key": cellText([]byte("secret_digikey_client"))}
 	if !skipAppConfigSecret(row) {
 		t.Error("secret row survived the filter when the key arrived as []byte")
+	}
+}
+
+// The DigiKey secret's storage key must stay under the prefix, or the backup
+// exclusion silently stops covering it (#119).
+func TestDigikeyClientSecretKeyIsPrefixed(t *testing.T) {
+	if !skipAppConfigSecret(map[string]string{"setting_key": digikeyClientSecretKey}) {
+		t.Errorf("digikeyClientSecretKey %q is not excluded from the backup", digikeyClientSecretKey)
 	}
 }

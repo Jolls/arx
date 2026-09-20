@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"arx/arx_go/models"
+	arxdb "arx/arxlib/db"
 	"arx/arxlib/urlutil"
 )
 
@@ -523,19 +524,60 @@ func (h *Handler) deleteAttachmentFileIfUnshared(ctx context.Context, table, idC
 	return nil
 }
 
-// softDeleteAttachment sets is_active=0 on an attachment row.
-// ownerCol/ownerID add an ownership filter when non-empty/non-zero.
-func (h *Handler) softDeleteAttachment(ctx context.Context, table, idCol string, id int, ownerCol string, ownerID int) error {
-	if ownerCol != "" {
-		_, err := h.execContext(ctx, fmt.Sprintf(
-			`UPDATE %s SET is_active=%s WHERE %s=@p1 AND %s=@p2`, table, h.dia().BoolLiteral(false), idCol, ownerCol,
-		), id, ownerID)
+// execFunc is the ExecContext shape shared by h.execContext and (*txLogger).ExecContext,
+// so a helper can run against either.
+type execFunc func(ctx context.Context, query string, args ...any) (sql.Result, error)
+
+// primaryAttachmentEnsureSQL builds the statement that points a parent's primary at
+// its first active attachment (lowest sort_order, ties by id), but only when the
+// current primary is NULL or no longer active. A live primary is never changed, so
+// it is safe to run after every insert and soft-delete; when no active attachment
+// remains the subselect yields NULL and the primary is cleared (#121). extraFilter
+// is an optional " AND ..." clause on the attachment alias `a`. Takes @p1 = parent id.
+func primaryAttachmentEnsureSQL(d arxdb.Dialect, parentTable, primaryCol, attTable, attPK, ownerCol, extraFilter string) string {
+	return fmt.Sprintf(
+		`UPDATE %[1]s SET %[2]s = (
+			SELECT %[7]sa.%[4]s FROM %[3]s a
+			WHERE a.%[5]s = %[1]s.id AND a.is_active = %[6]s%[9]s
+			ORDER BY COALESCE(a.sort_order, 0), a.%[4]s%[8]s)
+		WHERE id = @p1 AND (%[2]s IS NULL OR NOT EXISTS (
+			SELECT 1 FROM %[3]s x WHERE x.%[4]s = %[1]s.%[2]s AND x.is_active = %[6]s))`,
+		parentTable, primaryCol, attTable, attPK, ownerCol, d.BoolLiteral(true),
+		d.TopClause("1"), d.LimitClause("1"), extraFilter)
+}
+
+// ensurePartPrimary applies primaryAttachmentEnsureSQL to a part. The generated
+// PDF Preview / Thumbnail rows never become the auto-set primary — they are
+// derived images, not the part's own files.
+func (h *Handler) ensurePartPrimary(ctx context.Context, exec execFunc, partID any) error {
+	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg.PartsTable(), "primary_attachment_id",
+		h.cfg.AttachmentsTable(), "id", "part_id",
+		fmt.Sprintf(" AND COALESCE(a.category, '') NOT IN ('%s', '%s')", previewCategory, thumbnailCategory)), partID)
+	return err
+}
+
+func (h *Handler) ensureSupplierPrimary(ctx context.Context, exec execFunc, supplierID any) error {
+	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg.CompanyTable(), "primary_attachment_id",
+		h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "supplier_id", ""), supplierID)
+	return err
+}
+
+// execThenEnsurePrimary runs an attachment INSERT or soft-delete UPDATE and then
+// ensure, in one transaction, so a failure can't leave the write done but the
+// primary stale (#121).
+func (h *Handler) execThenEnsurePrimary(ctx context.Context, ensure func(context.Context, execFunc, any) error, parentID any, query string, args ...any) error {
+	tx, err := h.beginTx(ctx)
+	if err != nil {
 		return err
 	}
-	_, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET is_active=%s WHERE %s=@p1`, table, h.dia().BoolLiteral(false), idCol,
-	), id)
-	return err
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+	if err := ensure(ctx, tx.ExecContext, parentID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // setPrimaryAttachment updates a parent record's primary attachment pointer.

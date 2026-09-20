@@ -310,7 +310,7 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 	if n, err := strconv.Atoi(body.OrderID); err == nil {
 		oID = n
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
+	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
 		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7)`,
 		h.cfg.AttachmentsTable(),
 	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment, hashBytes(data)); err != nil {

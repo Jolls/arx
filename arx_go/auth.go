@@ -401,30 +401,15 @@ func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 	return out, rows.Err()
 }
 
-// isAdmin reports whether the session user is an admin. requireAdmin wraps it
-// with a plain-text 403; JSON endpoints call it directly so they can keep their
-// own error shape (#103).
+// isAdmin reports whether the session user is an admin. The RequireAdmin and
+// RequireAdminJSON middlewares (and canEditConnection) build on it.
 func (h *Handler) isAdmin(r *http.Request) bool {
 	cu := h.currentUser(r)
 	return cu != nil && cu.IsAdmin
 }
 
-// requireAdmin writes a 403 and returns false unless the session user is an
-// admin. Every user-management endpoint gates on it so a non-admin can't
-// self-grant rights, reset passwords, or deactivate others (issue #750).
-func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if h.isAdmin(r) {
-		return true
-	}
-	http.Error(w, "forbidden", http.StatusForbidden)
-	return false
-}
-
 // POST /settings/users — create a new user.
 func (h *Handler) SettingsUsersCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
@@ -445,9 +430,6 @@ func (h *Handler) SettingsUsersCreate(w http.ResponseWriter, r *http.Request) {
 
 // POST /settings/users/{userID}/password — reset a user's password.
 func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
@@ -478,9 +460,6 @@ func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Requ
 
 // POST /settings/users/{userID}/toggle-active — toggle is_active.
 func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -502,9 +481,6 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 
 // POST /settings/users/{userID}/toggle-approve — toggle can_approve_po (PO approver, #267).
 func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -522,9 +498,6 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 
 // POST /settings/users/{userID}/toggle-approve-records — toggle can_approve_records (TR reviewer, #249).
 func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.NotFound(w, r)
@@ -544,9 +517,6 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 // An admin can't remove their own admin rights, mirroring the self-deactivate
 // guard, so the last admin can't accidentally lock everyone out of user admin.
 func (h *Handler) SettingsUsersToggleAdmin(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.NotFound(w, r)

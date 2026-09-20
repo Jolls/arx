@@ -153,6 +153,45 @@ func buildRouter(h *Handler) *chi.Mux {
 	// still pop a native dialog on the host.
 	r.With(h.RequireAdminOnceConnected).Get("/api/browse-folder", h.APIBrowseFolder)
 
+	// Admin-only routes, plain-text 403 for non-admins. RequireAuth runs first so the
+	// session user is on the context. Every admin-only endpoint is declared here or
+	// behind RequireAdminOnceConnected above — not gated inside the handler (#120).
+	r.Group(func(r chi.Router) {
+		r.Use(h.RequireAuth, h.RequireAdmin)
+
+		// Shop-wide API credentials (#106)
+		r.Post("/settings/digikey", h.SettingsDigiKeySave)
+
+		// User management (Settings → Users tab): a non-admin must not be able to
+		// self-grant rights, reset passwords, or deactivate others (#750).
+		r.Post("/settings/users", h.SettingsUsersCreate)
+		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)
+		r.Post("/settings/users/{userID}/toggle-active", h.SettingsUsersToggleActive)
+		r.Post("/settings/users/{userID}/toggle-approve", h.SettingsUsersToggleApprove)
+		r.Post("/settings/users/{userID}/toggle-approve-records", h.SettingsUsersToggleApproveRecords)
+		r.Post("/settings/users/{userID}/toggle-admin", h.SettingsUsersToggleAdmin)
+
+		// Data backup: a full export of every table (#106)
+		r.Get("/settings/backup", h.SettingsBackup)
+
+		// Data diagnostics (Settings → Utilities): row counts and data-quality stats
+		// across every table (#106)
+		r.Get("/settings/utilities", h.UtilitiesReport)
+	})
+
+	// Admin-only routes, JSON 403 for non-admins: the Settings page parses every
+	// response from these with r.json().
+	r.Group(func(r chi.Router) {
+		r.Use(h.RequireAuth, h.RequireAdminJSON)
+
+		// Named Queries editor (Settings → Named Queries tab). Admin-only because save
+		// persists SQL that execQuery later runs and test runs caller-supplied SQL;
+		// isSafeQuery blocks writes but not reads, so any user could otherwise SELECT
+		// from any table (#103). Saving is per-row, not a bulk table submit.
+		r.Post("/settings/named-queries/save", h.SettingsNamedQueryRowSave)
+		r.Post("/settings/named-queries/test", h.SettingsNamedQueryTest)
+	})
+
 	// All other routes require a live database connection.
 	r.Group(func(r chi.Router) {
 		r.Use(h.RequireAuth)
@@ -165,33 +204,12 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/settings/part-numbering", h.SettingsPartNumberingSave)
 		r.Post("/settings/company-logo", h.SettingsCompanyLogoSave)
 		r.Post("/settings/company-logo/remove", h.SettingsCompanyLogoRemove)
-		r.Post("/settings/digikey", h.SettingsDigiKeySave)
-
-		// Named Queries editor (Settings → Named Queries tab). Behind auth because
-		// these routes execute/persist SQL and require a live DB connection.
-		// Saving is per-row (one query at a time), not a bulk table submit.
-		r.Post("/settings/named-queries/save", h.SettingsNamedQueryRowSave)
-		r.Post("/settings/named-queries/test", h.SettingsNamedQueryTest)
-
-		// User management (Settings → Users tab)
-		r.Post("/settings/users", h.SettingsUsersCreate)
-		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)
-		r.Post("/settings/users/{userID}/toggle-active", h.SettingsUsersToggleActive)
-		r.Post("/settings/users/{userID}/toggle-approve", h.SettingsUsersToggleApprove)
-		r.Post("/settings/users/{userID}/toggle-approve-records", h.SettingsUsersToggleApproveRecords)
-		r.Post("/settings/users/{userID}/toggle-admin", h.SettingsUsersToggleAdmin)
 
 		// Per-user preferences (Settings → My Preferences tab; PO defaults — issue #463)
 		r.Post("/settings/preferences", h.SettingsPreferencesSave)
 		r.Post("/settings/accent-color", h.SettingsAccentColorSave)
 		r.Post("/settings/default-route", h.SettingsDefaultRouteSave)
 		r.Post("/settings/timezone", h.SettingsTimezoneSave)
-
-		// Data backup
-		r.Get("/settings/backup", h.SettingsBackup)
-
-		// Data diagnostics (Settings → Utilities)
-		r.Get("/settings/utilities", h.UtilitiesReport)
 
 		// Local file serving (Parts Master)
 		r.Get("/local/*", h.ServeLocalFile)

@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -464,6 +465,36 @@ func (h *Handler) RequireAdminOnceConnected(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	}))
+}
+
+// RequireAdmin refuses non-admins with a plain-text 403. Must run after RequireAuth
+// so the session user is on the context. Declared per route group in main.go so the
+// route table shows which endpoints are admin-only — user management in particular
+// gates on it so a non-admin can't self-grant rights, reset passwords, or deactivate
+// others (#750, #120).
+func (h *Handler) RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.isAdmin(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireAdminJSON is RequireAdmin for endpoints whose callers parse the response
+// as JSON (the Settings page runs r.json() on every response), so the 403 carries
+// a JSON error body instead of plain text (#103, #120).
+func (h *Handler) RequireAdminJSON(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.isAdmin(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Only an admin can do this."})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // fileServingPrefixes are routes that only ever serve static assets or local
