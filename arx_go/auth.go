@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -126,6 +127,13 @@ func (h *Handler) userCount(ctx context.Context) (int, error) {
 	return n, err
 }
 
+// serverError logs the full error and sends the client only msg — driver errors
+// can carry the DB host, login and database name (#110).
+func serverError(w http.ResponseWriter, msg string, err error) {
+	log.Printf("%s: %v", msg, err)
+	http.Error(w, msg, http.StatusInternalServerError)
+}
+
 // --- Session helpers ---
 
 // currentUser returns the logged-in user stored on the request context by RequireAuth.
@@ -241,7 +249,7 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 
 	n, err := h.userCount(r.Context())
 	if err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	h.renderLogin(w, r, map[string]any{
@@ -270,7 +278,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	n, err := h.userCount(r.Context())
 	if err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 
@@ -301,7 +309,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 	u, hash, err := h.userByUsername(r.Context(), username)
 	if err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	if u == nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {

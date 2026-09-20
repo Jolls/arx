@@ -1,13 +1,73 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	arxbase "arx/arxlib/config"
 )
+
+// failingDriver's Open always fails with an error shaped like a real driver
+// error, carrying the server, login and database name.
+type failingDriver struct{}
+
+func (failingDriver) Open(string) (driver.Conn, error) {
+	return nil, errors.New("unable to open tcp connection with host 'sql-prod.internal:1433': login error for user 'arxsvc' on database 'ArxSecret'")
+}
+
+func init() {
+	sql.Register("failing-driver", failingDriver{})
+}
+
+// TestLoginPost_DBErrorDoesNotLeakConnectionDetails covers #110: a driver
+// error on the pre-auth path must reach the log but not the response body.
+func TestLoginPost_DBErrorDoesNotLeakConnectionDetails(t *testing.T) {
+	db, err := sql.Open("failing-driver", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &arxbase.Config{}
+	cfg.SessionSecret = "test-secret"
+	h := New(db, nil, cfg, nil, nil)
+
+	var logBuf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logBuf)
+	defer log.SetOutput(prev)
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		logBuf.Reset()
+		req := httptest.NewRequest(method, "/login", strings.NewReader("username=alice&password=x"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		if method == http.MethodGet {
+			h.LoginGet(rec, req)
+		} else {
+			h.LoginPost(rec, req)
+		}
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s: status = %d, want 500", method, rec.Code)
+		}
+		for _, secret := range []string{"sql-prod", "arxsvc", "ArxSecret"} {
+			if strings.Contains(rec.Body.String(), secret) {
+				t.Errorf("%s: body leaks %q: %q", method, secret, rec.Body.String())
+			}
+		}
+		if !strings.Contains(logBuf.String(), "sql-prod") {
+			t.Errorf("%s: log missing driver error detail: %q", method, logBuf.String())
+		}
+	}
+}
 
 // TestCachedUserByID_ReturnsFreshEntryWithoutDB seeds the cache directly (no DB
 // call reachable) and confirms cachedUserByID returns the cached user instead

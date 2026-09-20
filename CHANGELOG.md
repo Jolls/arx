@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.52] - 2026-09-19
+### Security
+- Bumped chi (v5.3.0), `golang.org/x/crypto` (v0.56.0, now aligned across both modules) and `golang.org/x/image` (v0.45.0) past published advisories, and added a `govulncheck` step to CI so new ones surface early ([#109](https://github.com/Jolls/arx/issues/109))
+- The login page no longer returns raw database driver errors to the browser, which could expose the server, login and database name before sign-in; the detail is logged instead ([#110](https://github.com/Jolls/arx/issues/110))
+
 ## [0.7.51] - 2026-09-19
 ### Security
 - `.gitignore` now protects local-only files by name (`*.local`, `*.local.*`) as well as by directory, matches `local/` and `.local/` at any depth, and covers `.bacpac` database exports — so moving or renaming a local-only file no longer silently makes it committable ([#108](https://github.com/Jolls/arx/issues/108))
