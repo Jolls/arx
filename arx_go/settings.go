@@ -198,6 +198,9 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		// with no dbConnError). An unauthenticated caller during a #852
 		// connection-error bypass must type the password (see SettingsSave).
 		"PasswordOptional":      connected && (h.dbConnError == "" || h.currentUser(r) != nil),
+		// Same predicate RequireAdminOnceConnected gates POST /settings with, so the
+		// Connection tab is only offered to someone who can actually save it (#106).
+		"CanEditConnection":      h.canEditConnection(r),
 		"DBConnError":           h.dbConnError,
 		"DBServer":              h.cfg.DBServer,
 		"DBName":                h.cfg.DBName,
@@ -281,18 +284,22 @@ func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *htt
 // the stored secret (matches the DB-password reuse convention); a blank
 // client ID clears both, since a secret with no ID is unusable.
 func (h *Handler) SettingsDigiKeySave(w http.ResponseWriter, r *http.Request) {
+	// Shop-wide API credentials — admin only (#106).
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	clientID := strings.TrimSpace(r.FormValue("digikey_client_id"))
 	clientSecret := strings.TrimSpace(r.FormValue("digikey_client_secret"))
 
 	if clientID == "" {
 		clientSecret = ""
 	} else if clientSecret == "" {
-		clientSecret = h.appConfigGetOr(r.Context(), "digikey_client_secret", "")
+		clientSecret = h.appConfigGetOr(r.Context(), digikeyClientSecretKey, "")
 	}
 	if err := h.appConfigSet(r.Context(), "digikey_client_id", clientID); err != nil {
 		log.Printf("warning: could not save digikey_client_id: %v", err)
 	}
-	if err := h.appConfigSet(r.Context(), "digikey_client_secret", clientSecret); err != nil {
+	if err := h.appConfigSet(r.Context(), digikeyClientSecretKey, clientSecret); err != nil {
 		log.Printf("warning: could not save digikey_client_secret: %v", err)
 	}
 	h.loadDigiKeyCredentials(r.Context())
@@ -632,6 +639,10 @@ func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
+	// A full export of every table — admin only (#106).
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	date := time.Now().Format("2006-01-02")
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="arx-backup-`+date+`.zip"`)
@@ -644,7 +655,7 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 		h.cfg.ContactTable(), h.cfg.POTable(), h.cfg.POLineTable(),
 		h.cfg.AttachmentsTable(), h.cfg.PriceTable(),
 		h.cfg.MfgPartTable(), h.cfg.SupplierPartTable(), h.cfg.CompanyAttachmentsTable(),
-		h.cfg.UomTable(), h.cfg.AppConfigTable(),
+		h.cfg.UomTable(),
 		h.cfg.FormsTable(), h.cfg.RecordsTable(), h.cfg.ResultsTable(),
 		h.cfg.StepsTable(), h.cfg.FormEventsTable(), h.cfg.RecordEventsTable(),
 		h.cfg.NamedQueriesTable(), h.cfg.FormRowHistoryTable(),
@@ -653,16 +664,54 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, tbl := range tables {
-		if err := h.writeTableCSV(r, zw, tbl); err != nil {
+		if err := h.writeTableCSV(r, zw, tbl, nil); err != nil {
 			log.Printf("backup: error exporting %s: %v", tbl, err)
 		}
 	}
-	if err := h.writeTableCSV(r, zw, h.cfg.UsersTable(), "password_hash"); err != nil {
+	if err := h.writeTableCSV(r, zw, h.cfg.UsersTable(), nil, "password_hash"); err != nil {
 		log.Printf("backup: error exporting %s: %v", h.cfg.UsersTable(), err)
+	}
+	// app_config is key/value, so its credential rows can't be dropped by column
+	// exclusion the way users.password_hash is — they need a row filter (#104).
+	if err := h.writeTableCSV(r, zw, h.cfg.AppConfigTable(), skipAppConfigSecret); err != nil {
+		log.Printf("backup: error exporting %s: %v", h.cfg.AppConfigTable(), err)
 	}
 }
 
-func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string, excludeCols ...string) error {
+// digikeyClientSecretKey is the app_config key the DigiKey OAuth client secret is
+// stored under. It's a const so the backup exclusion below can't drift from the key
+// the credential is actually written to — a rename that touched only one of them
+// would silently put the secret back in the export (#104). Note this is the storage
+// key, not the form field of the same name in SettingsDigiKeySave.
+const digikeyClientSecretKey = "digikey_client_secret"
+
+// rowFilter reports whether a row should be omitted from the export. It receives
+// the row's columns keyed by lowercased column name.
+type rowFilter func(row map[string]string) bool
+
+// skipAppConfigSecret drops app_config's credential rows from the backup, the same
+// way writeTableCSV's excludeCols drops users.password_hash: a backup is a copy of
+// shop data, not a credential store, and these values are re-enterable in Settings
+// (#104). Named rather than inline so the exclusion is testable without a live DB.
+//
+// If you add another shop-wide credential to app_config, add it here — nothing in
+// the schema marks a row as secret, so the backup will carry it otherwise.
+func skipAppConfigSecret(row map[string]string) bool {
+	return strings.EqualFold(row["setting_key"], digikeyClientSecretKey)
+}
+
+// cellText renders a scanned column value for rowFilter matching. []byte is
+// handled explicitly: a driver that returns a varchar as bytes would otherwise
+// render via %v as "[100 105 ...]", skipAppConfigSecret would fail to match, and
+// the backup would silently carry the credential it is meant to drop (#104).
+func cellText(v any) string {
+	if b, ok := v.([]byte); ok {
+		return string(b)
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string, skipRow rowFilter, excludeCols ...string) error {
 	rows, err := h.queryContext(r.Context(), "SELECT * FROM "+table)
 	if err != nil {
 		return err
@@ -713,12 +762,25 @@ func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string, e
 		if err := rows.Scan(ptrs...); err != nil {
 			return err
 		}
+		// Only pay for the keyed copy when a filter actually wants it — the
+		// other tables in the backup pass nil.
+		if skipRow != nil {
+			keyed := make(map[string]string, len(cols))
+			for i, c := range cols {
+				if vals[i] != nil {
+					keyed[strings.ToLower(c)] = cellText(vals[i])
+				}
+			}
+			if skipRow(keyed) {
+				continue
+			}
+		}
 		row := make([]string, len(include))
 		for j, i := range include {
 			if vals[i] == nil {
 				row[j] = ""
 			} else {
-				row[j] = fmt.Sprintf("%v", vals[i])
+				row[j] = cellText(vals[i])
 			}
 		}
 		if err := cw.Write(row); err != nil {

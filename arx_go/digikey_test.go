@@ -21,15 +21,15 @@ func loadDigiKeyFixture(t *testing.T) *digikeyProductResponse {
 
 func TestMapDigiKeyProduct(t *testing.T) {
 	parsed := loadDigiKeyFixture(t)
-	got := mapDigiKeyProduct(parsed, "399-1096-1-ND")
+	got := mapDigiKeyProduct(parsed, "TEST-1096-1-ND")
 
 	if got.SupplierDesc != "CAP CER 0.1UF 50V X7R 0603" {
 		t.Errorf("SupplierDesc = %q", got.SupplierDesc)
 	}
-	if got.MfgName != "KEMET" {
+	if got.MfgName != "Contoso Components" {
 		t.Errorf("MfgName = %q", got.MfgName)
 	}
-	if got.MfgPartNumber != "C0603C104K5RACTU" {
+	if got.MfgPartNumber != "CC0603C104K5R" {
 		t.Errorf("MfgPartNumber = %q", got.MfgPartNumber)
 	}
 	if got.LeadTime != "8 weeks" {
@@ -57,7 +57,7 @@ func TestMapDigiKeyProduct(t *testing.T) {
 // its MOQ/pricing must be used even though it's second in the array.
 func TestMapDigiKeyProductMatchesRequestedVariation(t *testing.T) {
 	parsed := loadDigiKeyFixture(t)
-	got := mapDigiKeyProduct(parsed, "399-1096-2-ND")
+	got := mapDigiKeyProduct(parsed, "TEST-1096-2-ND")
 
 	if got.MinIncrement == nil || *got.MinIncrement != 4000 {
 		t.Errorf("MinIncrement = %v, want 4000 (Digi-Reel variation)", got.MinIncrement)
