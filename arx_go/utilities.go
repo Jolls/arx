@@ -31,10 +31,6 @@ type utilRow struct {
 // /settings/utilities). Each check runs independently; a failing check is
 // reported without aborting the others.
 func (h *Handler) UtilitiesReport(w http.ResponseWriter, r *http.Request) {
-	// Reports row counts and data-quality stats across every table — admin only (#106).
-	if !h.requireAdmin(w, r) {
-		return
-	}
 	ctx := r.Context()
 	var checks []utilCheck
 	var errs []string

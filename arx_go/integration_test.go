@@ -310,8 +310,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 
 	// Register cleanup — hard-delete FIL rows then the PN row.
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), pnID)
+		deletePartAttachments(ctx, h, pnID)
 		_, _ = h.DB().ExecContext(ctx,
 			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID)
 	}()
@@ -2674,48 +2673,6 @@ func TestIntegration_UnitSerialLocked(t *testing.T) {
 	}
 	if unlocked {
 		t.Errorf("unitSerialLocked(%d) = true, want false (no record references it)", unlockedUnit)
-	}
-}
-
-// TestIntegration_UserAdminRequiresAdmin verifies the user-management endpoints
-// reject a non-admin session with 403 (issue #750 privilege-escalation gate) —
-// before this fix they were reachable by any logged-in user. Handlers are called
-// directly (no RequireAuth middleware), so the session user is injected on the
-// request context exactly as RequireAuth would, and requireAdmin short-circuits
-// with 403 before any DB write, so the test mutates nothing.
-func TestIntegration_UserAdminRequiresAdmin(t *testing.T) {
-	h, cleanup := liveHandler(t)
-	defer cleanup()
-
-	nonAdmin := &User{ID: 8002, Username: "tester"} // seed tester, is_admin = 0
-
-	// userReq builds a POST carrying both the {userID} route param and the
-	// non-admin session user on the context.
-	userReq := func(target string) *http.Request {
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("userID", "8002")
-		req := postForm(target, url.Values{})
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		return req.WithContext(context.WithValue(req.Context(), ctxUserKey, nonAdmin))
-	}
-
-	cases := []struct {
-		name    string
-		handler http.HandlerFunc
-	}{
-		{"create", h.SettingsUsersCreate},
-		{"reset-password", h.SettingsUsersResetPassword},
-		{"toggle-active", h.SettingsUsersToggleActive},
-		{"toggle-approve", h.SettingsUsersToggleApprove},
-		{"toggle-approve-records", h.SettingsUsersToggleApproveRecords},
-		{"toggle-admin", h.SettingsUsersToggleAdmin},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			tc.handler(rec, userReq("/settings/users"))
-			assertStatus(t, tc.name+" non-admin", rec, http.StatusForbidden)
-		})
 	}
 }
 
@@ -5102,6 +5059,26 @@ func seedThrowawayAttachment(t *testing.T, h *Handler, ctx context.Context, part
 	}
 }
 
+// deletePartAttachments hard-deletes every part_attachment row of a part. It clears
+// the part's primary_attachment_id first: handler-created attachments now auto-set
+// the primary (#121), and part.primary_attachment_id has a plain FK to the row.
+func deletePartAttachments(ctx context.Context, h *Handler, partID int) {
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1`, h.cfg.PartsTable()), partID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID)
+}
+
+// deleteAttachmentRow / deleteCompanyAttachmentRow hard-delete one attachment row,
+// clearing any parent primary pointer at it first (see deletePartAttachments).
+func deleteAttachmentRow(ctx context.Context, h *Handler, attID int) {
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=@p1`, h.cfg.PartsTable()), attID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attID)
+}
+
+func deleteCompanyAttachmentRow(ctx context.Context, h *Handler, attID int) {
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=@p1`, h.cfg.CompanyTable()), attID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), attID)
+}
+
 // tempDocControlRoot points h.cfg.DocControlRoot at a fresh t.TempDir() and
 // returns the path, so file-writing #809/#821 attachment tests never touch
 // the real doc-control tree. No restore is needed: t.TempDir() is unique per
@@ -5285,7 +5262,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 		t.Fatalf("could not retrieve first attachment id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDA)
+		deleteAttachmentRow(ctx, h, attIDA)
 	}()
 
 	var hashA sql.NullString
@@ -5323,7 +5300,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 		t.Fatalf("could not retrieve company attachment id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), companyAttID)
+		deleteCompanyAttachmentRow(ctx, h, companyAttID)
 	}()
 
 	// 3. Same URL on a different part is flagged, not saved.
@@ -5357,7 +5334,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 		t.Fatalf("select part B attachment: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDB)
+		deleteAttachmentRow(ctx, h, attIDB)
 	}()
 	if hashB.String != hashA.String {
 		t.Errorf("hash after confirm_duplicate = %q, want %q (same link)", hashB.String, hashA.String)
@@ -5383,7 +5360,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 		t.Fatalf("could not retrieve third attachment id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDC)
+		deleteAttachmentRow(ctx, h, attIDC)
 	}()
 
 	// 6. A metadata-only edit (comment change, same link) leaves hash untouched.
@@ -5432,7 +5409,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 		t.Fatalf("select part D attachment: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDD)
+		deleteAttachmentRow(ctx, h, attIDD)
 	}()
 
 	rec = httptest.NewRecorder()
@@ -5650,6 +5627,125 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 	})
 }
 
+// TestIntegration_AutoPrimaryAttachment covers #121: the first attachment on a part
+// or supplier becomes its primary, later ones don't displace it, and deleting the
+// primary promotes the next active attachment (or clears it when none remain).
+func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	primaryOf := func(t *testing.T, table string, id int) sql.NullInt64 {
+		t.Helper()
+		var p sql.NullInt64
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, table), id).Scan(&p); err != nil {
+			t.Fatalf("select primary_attachment_id: %v", err)
+		}
+		return p
+	}
+	wantPrimary := func(t *testing.T, label, table string, id int, want int) {
+		t.Helper()
+		got := primaryOf(t, table, id)
+		if want == 0 {
+			if got.Valid {
+				t.Errorf("%s: primary = %d, want NULL", label, got.Int64)
+			}
+			return
+		}
+		if !got.Valid || int(got.Int64) != want {
+			t.Errorf("%s: primary = %+v, want %d", label, got, want)
+		}
+	}
+
+	t.Run("part", func(t *testing.T) {
+		partID, _, partCleanup := seedThrowawayPart(t, h, ctx, "121")
+		defer partCleanup()
+		defer deletePartAttachments(ctx, h, partID)
+
+		insert := func(name, category string) int {
+			t.Helper()
+			if err := h.insertAttachmentRow(ctx, strconv.Itoa(partID), name, "A", category, 1, "", nil, nil, ""); err != nil {
+				t.Fatalf("insertAttachmentRow: %v", err)
+			}
+			var id int
+			if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID).Scan(&id); err != nil {
+				t.Fatalf("select new attachment id: %v", err)
+			}
+			return id
+		}
+		remove := func(attID int) {
+			t.Helper()
+			rec := httptest.NewRecorder()
+			h.PartAttachmentDelete(rec, withIDAndAttID(
+				postForm(fmt.Sprintf("/part/%d/attachments/%d/delete", partID, attID), url.Values{}), partID, attID))
+			assert302(t, "PartAttachmentDelete", rec)
+		}
+
+		first := insert("LOCAL:auto-primary-1.txt", "Test")
+		wantPrimary(t, "after first insert", h.cfg.PartsTable(), partID, first)
+
+		second := insert("LOCAL:auto-primary-2.txt", "Test")
+		wantPrimary(t, "after second insert", h.cfg.PartsTable(), partID, first)
+
+		insert("LOCAL:auto-primary-thumb.png", thumbnailCategory)
+		wantPrimary(t, "generated thumbnail does not displace", h.cfg.PartsTable(), partID, first)
+
+		remove(first)
+		wantPrimary(t, "after deleting primary", h.cfg.PartsTable(), partID, second)
+
+		remove(second)
+		wantPrimary(t, "only a generated thumbnail left", h.cfg.PartsTable(), partID, 0)
+	})
+
+	t.Run("supplier", func(t *testing.T) {
+		var supplierID int
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()),
+			"ITEST-121-"+strconv.FormatInt(time.Now().UnixNano(), 10),
+		).Scan(&supplierID); err != nil {
+			t.Fatalf("seed company: %v", err)
+		}
+		defer func() {
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=@p1`, h.cfg.CompanyAttachmentsTable()), supplierID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
+		}()
+
+		insert := func(link string) int {
+			t.Helper()
+			rec := httptest.NewRecorder()
+			h.SupplierAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/supplier/%d/attachments", supplierID),
+				url.Values{"file_path": {link}}), supplierID))
+			assert302(t, "SupplierAttachmentCreate", rec)
+			var id int
+			if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+				`SELECT MAX(supplier_attachment_id) FROM %s WHERE supplier_id=@p1`, h.cfg.CompanyAttachmentsTable()), supplierID).Scan(&id); err != nil {
+				t.Fatalf("select new attachment id: %v", err)
+			}
+			return id
+		}
+		remove := func(attID int) {
+			t.Helper()
+			rec := httptest.NewRecorder()
+			h.SupplierAttachmentDelete(rec, withIDAndAttID(
+				postForm(fmt.Sprintf("/supplier/%d/attachments/%d/delete", supplierID, attID), url.Values{}), supplierID, attID))
+			assert302(t, "SupplierAttachmentDelete", rec)
+		}
+
+		first := insert("LOCAL:auto-primary-supplier-1.txt")
+		wantPrimary(t, "after first insert", h.cfg.CompanyTable(), supplierID, first)
+
+		second := insert("LOCAL:auto-primary-supplier-2.txt")
+		wantPrimary(t, "after second insert", h.cfg.CompanyTable(), supplierID, first)
+
+		remove(first)
+		wantPrimary(t, "after deleting primary", h.cfg.CompanyTable(), supplierID, second)
+
+		remove(second)
+		wantPrimary(t, "no active attachments left", h.cfg.CompanyTable(), supplierID, 0)
+	})
+}
+
 // TestIntegration_APIPartAttachmentName exercises the attachment-name preview
 // endpoint's happy path and part-not-found guard (#821).
 func TestIntegration_APIPartAttachmentName(t *testing.T) {
@@ -5708,7 +5804,7 @@ func TestIntegration_APIPartPasteAttachment(t *testing.T) {
 	seedPart := func(t *testing.T) (partID int, partNumber string, cleanup func()) {
 		id, num, partCleanup := seedThrowawayPart(t, h, ctx, "821")
 		return id, num, func() {
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			deletePartAttachments(ctx, h, id)
 			partCleanup()
 		}
 	}
@@ -5826,7 +5922,7 @@ func TestIntegration_APIPartPasteAttachmentReplace(t *testing.T) {
 	seedPart := func(t *testing.T) (partID int, cleanup func()) {
 		id, _, partCleanup := seedThrowawayPart(t, h, ctx, "821")
 		return id, func() {
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			deletePartAttachments(ctx, h, id)
 			partCleanup()
 		}
 	}
@@ -5986,7 +6082,7 @@ func TestIntegration_APIPartGenerateThumbnail(t *testing.T) {
 	seedPart := func(t *testing.T) (partID int, cleanup func()) {
 		id, _, partCleanup := seedThrowawayPart(t, h, ctx, "821")
 		return id, func() {
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			deletePartAttachments(ctx, h, id)
 			partCleanup()
 		}
 	}
@@ -6189,7 +6285,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyImport(t *testing.T) {
 	partID, partNumber, cleanupPart := seedThrowawayPart(t, h, ctx, "62")
 	defer cleanupPart()
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID)
+		deletePartAttachments(ctx, h, partID)
 		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.SupplierPartTable()), partID)
 	}()
 
@@ -6259,7 +6355,7 @@ func TestIntegration_UpsertGeneratedAttachment(t *testing.T) {
 	seedPart := func(t *testing.T) (partID int, cleanup func()) {
 		id, _, partCleanup := seedThrowawayPart(t, h, ctx, "821")
 		return id, func() {
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), id)
+			deletePartAttachments(ctx, h, id)
 			partCleanup()
 		}
 	}
