@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.53] - 2026-09-19
+### Added
+- `SECURITY.md` (private vulnerability reporting) and `CONTRIBUTING.md` (build/test commands, workspace and migration conventions) ([#114](https://github.com/Jolls/arx/issues/114))
+- `LICENSE` now names the copyright holder ([#113](https://github.com/Jolls/arx/issues/113))
+
+### Security
+- File serving and uploads now reject paths that reach outside a configured root through a symlink, including dangling ones ([#117](https://github.com/Jolls/arx/issues/117))
+- The CI workflow's `GITHUB_TOKEN` is now limited to `contents: read` ([#115](https://github.com/Jolls/arx/issues/115))
+
 ## [0.7.52] - 2026-09-19
 ### Security
 - Bumped chi (v5.3.0), `golang.org/x/crypto` (v0.56.0, now aligned across both modules) and `golang.org/x/image` (v0.45.0) past published advisories, and added a `govulncheck` step to CI so new ones surface early ([#109](https://github.com/Jolls/arx/issues/109))
