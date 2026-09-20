@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.49] - 2026-09-18
+### Added
+- `schema_migrations` ledger table; new migrations use `YYYYMMDDHHMMSS_<issue>_<desc>.sql` names and self-register, enforced by a `go test` lint ([#48](https://github.com/Jolls/arx/issues/48))
+
 ## [0.7.48] - 2026-09-18
 ### Added
 - `default_result` formulas now support `min`, `max`, `abs`, `mod`, `round`, `floor`, `ceil`, `sqrt`, and `pow` function calls, evaluated by a safe allowlisted parser rather than a widened character whitelist ([#95](https://github.com/Jolls/arx/issues/95))
