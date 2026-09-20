@@ -55,7 +55,45 @@ func safePath(root, splat string) (string, bool) {
 		absResult != absRoot {
 		return "", false
 	}
+	// The check above is lexical; a symlink inside root could still point
+	// outside it. Compare fully-resolved paths (#117).
+	realRoot, err1 := resolveExisting(absRoot)
+	realResult, err2 := resolveExisting(absResult)
+	if err1 != nil || err2 != nil {
+		return "", false
+	}
+	if realResult != realRoot &&
+		!strings.HasPrefix(realResult, realRoot+string(filepath.Separator)) {
+		return "", false
+	}
 	return result, true
+}
+
+// resolveExisting resolves symlinks in p. Missing trailing components (e.g. an
+// upload target not yet created) are re-appended to the resolved deepest
+// existing ancestor, since EvalSymlinks errors on a nonexistent path.
+func resolveExisting(p string) (string, error) {
+	var tail []string
+	for {
+		real, err := filepath.EvalSymlinks(p)
+		if err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				real = filepath.Join(real, tail[i])
+			}
+			return real, nil
+		}
+		parent := filepath.Dir(p)
+		if !os.IsNotExist(err) || parent == p {
+			return "", err
+		}
+		// A dangling symlink also reports not-exist; it is not a missing
+		// component, so refuse rather than strip it and check its parent.
+		if _, lerr := os.Lstat(p); lerr == nil {
+			return "", err
+		}
+		tail = append(tail, filepath.Base(p))
+		p = parent
+	}
 }
 
 // fileServingParams parameterizes serveLocalizedFile by root and URL splat —

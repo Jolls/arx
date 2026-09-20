@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -100,6 +101,32 @@ func TestRowLineTotal(t *testing.T) {
 	}
 	if total := rowLineTotal(map[string]polRow{}); total != 0 {
 		t.Errorf("rowLineTotal(empty) = %g, want 0", total)
+	}
+}
+
+// A symlink inside root that points outside it must be rejected (#117).
+func TestSafePath_SymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+
+	for _, splat := range []string{"link", "link/secret.txt", "link/not-yet-created.txt"} {
+		if got, ok := safePath(root, splat); ok {
+			t.Errorf("safePath(root, %q) = %q, ok=true, want rejected", splat, got)
+		}
+	}
+	if err := os.Symlink(filepath.Join(outside, "missing.txt"), filepath.Join(root, "dangling")); err == nil {
+		if got, ok := safePath(root, "dangling"); ok {
+			t.Errorf("safePath(root, \"dangling\") = %q, ok=true, want rejected", got)
+		}
+	}
+	if _, ok := safePath(root, "new-upload.txt"); !ok {
+		t.Error("nonexistent leaf directly under root should be allowed")
 	}
 }
 
