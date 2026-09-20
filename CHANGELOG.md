@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.gitignore` now covers `.env.*` variants, database backup exports and a repo-root `Arx.exe`, so a downloaded backup or an `.env.local` can't be committed by accident ([#107](https://github.com/Jolls/arx/issues/107))
 ### Changed
 - The bundled verbatim copy of DigiKey's API User Agreement is replaced by a pointer to their developer portal, and the DigiKey test fixture now uses synthetic data rather than a captured live API response ([#111](https://github.com/Jolls/arx/issues/111))
+## [0.7.49] - 2026-09-18
+### Added
+- `schema_migrations` ledger table; new migrations use `YYYYMMDDHHMMSS_<issue>_<desc>.sql` names and self-register, enforced by a `go test` lint ([#48](https://github.com/Jolls/arx/issues/48))
 
 ## [0.7.48] - 2026-09-18
 ### Added

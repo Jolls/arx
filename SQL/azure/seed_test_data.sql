@@ -21,6 +21,8 @@
 --   8301-8399  lot                     8401-8499  genealogy
 --   8501-8599  unit
 --   (identity) app_config, named_queries
+--   schema_migrations is deliberately NOT seeded or cleared here (#48): it is the applied-
+--   migration ledger, and a reseed must not overwrite real history with fixtures.
 --
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
 -- one with a comment, one without. company_attachment is NOT seeded (would require real
