@@ -8,9 +8,16 @@ CLAUDE.local.md
 # AFTER the glob: git applies the last matching pattern.
 .env*
 !.env.example
+# Local-only files, by two independent mechanisms. Name-based protection
+# travels with the file when it moves; location-based protection does not, so
+# prefer a *.local.* name for anything worth keeping. Both dir patterns are
+# unanchored to match at any depth, and both spellings are listed so renaming
+# the scratch dir between local/ and .local/ cannot silently expose it.
+*.local
 *.local.*
 *local*.json
-/local/
+.local/
+local/
 
 # Build output
 Arx.exe
@@ -23,6 +30,7 @@ arx-backup-*.zip
 *.dump
 *.sql.gz
 *.bak
+*.bacpac
 
 # Third-party reference material kept locally, not redistributed
 docs/digikey-api-compliance-assessment.md
