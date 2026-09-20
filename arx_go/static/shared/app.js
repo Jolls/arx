@@ -69,7 +69,7 @@ function restoreFilterState() {
 // engine globals. Shared by the sessionStorage and URL hydration paths.
 function _applyState(st) {
     if (st.filters) {
-        const ths = Array.from(document.querySelectorAll('tr.filter-row th'));
+        const ths = filterThs();
         st.filters.forEach((f, i) => {
             const th = ths[i];
             if (!th || !f) return;
@@ -100,22 +100,25 @@ function _applyState(st) {
 // Mirror the same state into the URL (replaceState, no reload). A pasted link
 // reproduces the sender's view; URL state wins over sessionStorage on load.
 //
-// Column filters are keyed by position: f{i} for text/select, df{i}/dt{i} for a
-// date column's from/to. Sort is sort={col}.{dir}; toggles rfqs/inactive are
-// emitted only when on; page only when past 1. Column types are read back from
-// the DOM, so they never need to live in the URL.
+// Column filters are keyed by the column's data-col name (#101), so a link stays
+// correct when users have reordered columns differently: f.{key} for text/select,
+// df.{key}/dt.{key} for a date column's from/to. Sort is sort={key}.{dir}; toggles
+// rfqs/inactive are emitted only when on; page only when past 1. Column types are
+// read back from the DOM, so they never need to live in the URL. Pre-#101
+// index-based params (f0, sort=2.asc) are ignored.
 function saveFilterStateToURL() {
     if (!document.querySelector('tr.filter-row')) return;
     const p = new URLSearchParams();
     getFilterColumns().forEach((c, i) => {
+        const key = colKeyAt(i);
         if (c.type === 'date') {
-            if (c.from) p.set('df' + i, c.from);
-            if (c.to)   p.set('dt' + i, c.to);
+            if (c.from) p.set('df.' + key, c.from);
+            if (c.to)   p.set('dt.' + key, c.to);
         } else if (c.value) {
-            p.set('f' + i, c.value);
+            p.set('f.' + key, c.value);
         }
     });
-    if (sortCol !== null) p.set('sort', sortCol + '.' + sortDir);
+    if (sortCol !== null) p.set('sort', colKeyAt(sortCol) + '.' + sortDir);
     const rfqs     = document.getElementById('show-rfqs');
     const inactive = document.getElementById('show-inactive');
     if (rfqs     && rfqs.checked)     p.set('rfqs', '1');
@@ -133,13 +136,14 @@ function restoreFilterStateFromURL() {
     const p = new URLSearchParams(window.location.search);
     let had = false;
     const filters = getFilterColumns().map((c, i) => {
+        const key = colKeyAt(i);
         if (c.type === 'date') {
-            const from = p.get('df' + i);
-            const to   = p.get('dt' + i);
+            const from = p.get('df.' + key);
+            const to   = p.get('dt.' + key);
             if (from !== null || to !== null) had = true;
             return { type: 'date', from: from || '', to: to || '' };
         }
-        const v = p.get('f' + i);
+        const v = p.get('f.' + key);
         if (v !== null) had = true;
         return { type: 'text', value: v || '' };
     });
@@ -152,9 +156,9 @@ function restoreFilterStateFromURL() {
     }
     let sort = { col: null, dir: 'asc' };
     if (sortRaw !== null) {
-        const [colStr, dirStr] = sortRaw.split('.');
-        const col = parseInt(colStr, 10);
-        if (!Number.isNaN(col)) sort = { col, dir: dirStr === 'desc' ? 'desc' : 'asc' };
+        const [keyStr, dirStr] = sortRaw.split('.');
+        const col = colKeys.length ? colKeys.indexOf(keyStr) : parseInt(keyStr, 10);
+        if (col >= 0) sort = { col, dir: dirStr === 'desc' ? 'desc' : 'asc' };
     }
     // On a shared link the toggles default off unless their param is present,
     // so the receiver's view matches the sender's exactly.
@@ -320,7 +324,7 @@ function compileGlob(raw) {
 }
 
 function getFilterColumns() {
-    return Array.from(document.querySelectorAll('tr.filter-row th')).map(th => {
+    return filterThs().map(th => {
         if (th.dataset.filterType === 'date') {
             const from = th.querySelector('.date-filter-from');
             const to   = th.querySelector('.date-filter-to');
@@ -406,7 +410,7 @@ function applySort() {
 function updateSortHeaders() {
     (activeTable || document).querySelectorAll('thead tr:first-child th').forEach((th, i) => {
         th.classList.remove('sort-asc', 'sort-desc');
-        if (i === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+        if (defaultIndex(th, i) === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
     });
 }
 
@@ -470,6 +474,7 @@ function renderRows(rowsToShow) {
     const end   = start + ROWS_PER_PAGE;
 
     tbody.innerHTML = rowsToShow.slice(start, end).map(r => r._html).join('');
+    if (colOrder) reorderRowCells(tbody);
     applyTruncationTooltips(tbody);
 
     const count = rowsToShow.length;
@@ -522,7 +527,7 @@ function loadListRows() {
             });
             table.querySelectorAll('thead tr:first-child th').forEach((th, i) => {
                 th.classList.add('sortable');
-                th.addEventListener('click', () => sortByCol(i));
+                th.addEventListener('click', () => sortByCol(defaultIndex(th, i)));
             });
             // URL state wins over sessionStorage so a shared link reproduces
             // the sender's exact view; fall back to the saved session otherwise.
@@ -595,6 +600,7 @@ document.addEventListener('DOMContentLoaded', () => useFixedDropdownStrategy());
 
 document.addEventListener('DOMContentLoaded', () => {
     initDateFilters();
+    initColumnOrder();
     loadListRows();
     // Direct children only — excludes the date-popover's own from/to inputs,
     // which are nested deeper and wire their own listeners in initDateFilters().
@@ -610,6 +616,157 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('show-rfqs')?.addEventListener('change', () => applyFilters(true));
     document.getElementById('show-inactive')?.addEventListener('change', () => applyFilters(true));
 });
+
+// --- Column reorder (#101) ---
+// Engine state (sortCol, filter/_text indexes, row _html) always uses the template's
+// default column order. Reordering is a DOM-only permutation: header cells carry their
+// default index in data-ci, and body cells are permuted after each render. Order is
+// per table in localStorage as arx.colorder.<tableId> (a list of data-col keys);
+// arx.cols.<tableId> stays reserved for column visibility (#386).
+const COL_PINNED = 'col-select';
+let colKeys = [];     // data-col of each column, default order
+let colOrder = null;  // display order as default indexes; null = table not reorderable
+let colOrderKey = '';
+let colResetBar = null;
+
+function colKeyAt(i) { return colKeys[i] || String(i); }
+
+// A header cell's default index; falls back to its DOM position on tables that
+// never went through initColumnOrder().
+function defaultIndex(th, i) { return th.dataset.ci !== undefined ? +th.dataset.ci : i; }
+
+function filterThs() {
+    return Array.from(document.querySelectorAll('tr.filter-row th'))
+        .sort((a, b) => defaultIndex(a, 0) - defaultIndex(b, 0));
+}
+
+function reorderRowCells(root) {
+    root.querySelectorAll('tr').forEach(tr => {
+        const cells = Array.from(tr.children);
+        if (cells.length !== colOrder.length) return; // e.g. the colspan "Loading…" row
+        const byIndex = cells.map((c, i) => [defaultIndex(c, i), c]);
+        colOrder.forEach(ci => tr.appendChild(byIndex.find(e => e[0] === ci)[1]));
+    });
+}
+
+function applyColumnOrder() {
+    const table = document.querySelector('table[data-rows-url]');
+    reorderRowCells(table.querySelector('thead'));
+    const colgroup = table.querySelector('colgroup');
+    if (colgroup) {
+        const cols = Array.from(colgroup.children);
+        colOrder.forEach(ci => colgroup.appendChild(cols.find(c => +c.dataset.ci === ci)));
+    }
+    colResetBar.classList.toggle('d-none', colOrder.every((v, i) => v === i));
+    if (allRows.length) applyFilters(false);
+}
+
+function moveColumn(from, to) {
+    if (from === null || from === to) return;
+    const order = colOrder.filter(i => i !== from);
+    order.splice(colOrder.indexOf(to), 0, from);
+    colOrder = order;
+    try { localStorage.setItem(colOrderKey, JSON.stringify(colOrder.map(colKeyAt))); } catch (e) {}
+    applyColumnOrder();
+}
+
+function initColumnOrder() {
+    const table = document.querySelector('table[data-rows-url]');
+    if (!table || !table.querySelector('tr.filter-row')) return;
+    table.querySelectorAll('thead tr').forEach(tr => {
+        Array.from(tr.children).forEach((th, i) => { th.dataset.ci = i; });
+    });
+    const keys = Array.from(table.querySelectorAll('thead tr:first-child th')).map(th => th.dataset.col || '');
+    if (keys.some(k => !k)) return;
+    colKeys = keys;
+    // Column widths come from app.css col:nth-child rules, which would follow the slot
+    // rather than the column. Freeze each measured width inline so <col>s can move.
+    const colgroup = table.querySelector('colgroup');
+    if (colgroup && colgroup.children.length === keys.length) {
+        const tw = table.getBoundingClientRect().width;
+        Array.from(colgroup.children).forEach((c, i) => {
+            c.dataset.ci = i;
+            c.style.width = (c.getBoundingClientRect().width / tw * 100).toFixed(2) + '%';
+        });
+    } else if (colgroup) {
+        colgroup.remove();
+    }
+    colOrderKey = 'arx.colorder.' + (table.id || window.location.pathname);
+
+    // Saved keys first (pinned column always leads); columns the saved list
+    // doesn't know about keep their relative order at the end.
+    let saved = [];
+    try { saved = JSON.parse(localStorage.getItem(colOrderKey)); } catch (e) {}
+    if (!Array.isArray(saved)) saved = [];
+    const pinned = colKeys.indexOf(COL_PINNED);
+    const order = pinned >= 0 ? [pinned] : [];
+    saved.forEach(k => {
+        const i = colKeys.indexOf(k);
+        if (i >= 0 && !order.includes(i)) order.push(i);
+    });
+    colKeys.forEach((_, i) => { if (!order.includes(i)) order.push(i); });
+    colOrder = order;
+
+    colResetBar = document.createElement('button');
+    colResetBar.type = 'button';
+    colResetBar.className = 'btn btn-sm btn-outline-secondary d-none';
+    colResetBar.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reset column order';
+    colResetBar.addEventListener('click', () => {
+        colOrder = colKeys.map((_, i) => i);
+        try { localStorage.removeItem(colOrderKey); } catch (e) {}
+        applyColumnOrder();
+    });
+    // Join the page's existing button row (right side of the toolbar above the table);
+    // pages without one get the button on its own right-aligned line.
+    const wrapper = table.closest('.table-wrapper') || table;
+    const toolbar = wrapper.previousElementSibling;
+    if (toolbar && toolbar.matches('.justify-content-between') && toolbar.children.length > 1) {
+        let group = toolbar.lastElementChild;
+        if (!group.classList.contains('d-flex')) {
+            const wrap = document.createElement('div');
+            wrap.className = 'd-flex gap-2';
+            group.replaceWith(wrap);
+            wrap.appendChild(group);
+            group = wrap;
+        }
+        group.prepend(colResetBar);
+    } else {
+        const bar = document.createElement('div');
+        bar.className = 'text-end mb-1';
+        bar.appendChild(colResetBar);
+        wrapper.before(bar);
+    }
+
+    const heads = table.querySelectorAll('thead tr:first-child th');
+    let dragged = null;
+    heads.forEach(th => {
+        const ci = +th.dataset.ci;
+        if (ci === pinned) return;
+        th.draggable = true;
+        th.addEventListener('dragstart', e => {
+            dragged = ci;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', colKeys[ci]); // Firefox won't start a drag without data
+        });
+        th.addEventListener('dragover', e => {
+            if (dragged === null || dragged === ci) return;
+            e.preventDefault();
+            th.classList.add('col-drag-over');
+        });
+        th.addEventListener('dragleave', () => th.classList.remove('col-drag-over'));
+        th.addEventListener('drop', e => {
+            e.preventDefault();
+            th.classList.remove('col-drag-over');
+            moveColumn(dragged, ci);
+        });
+        th.addEventListener('dragend', () => {
+            dragged = null;
+            heads.forEach(h => h.classList.remove('col-drag-over'));
+        });
+    });
+
+    applyColumnOrder();
+}
 
 // --- Column visibility toggle (#386) ---
 // Dropdowns use data-col-table="tableId"; checkboxes use data-toggle-col="key".

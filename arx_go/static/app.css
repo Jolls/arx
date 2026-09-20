@@ -389,6 +389,9 @@ input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; c
 /* Column visibility toggle (#386) */
 .col-hidden { display: none; }
 
+/* Column reorder drop target (#101) */
+th.col-drag-over { box-shadow: inset 3px 0 0 var(--bs-primary); }
+
 /* BOM expand/collapse (#579) */
 .bom-expand-toggle {
     background: none; border: none; padding: 0; margin-right: 4px;

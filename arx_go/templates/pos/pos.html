@@ -19,17 +19,17 @@
             </colgroup>
             <thead>
                 <tr class="table-dark">
-                    <th>PO Number</th>
-                    <th>Status</th>
-                    <th>Vendor</th>
-                    <th>Date Ordered</th>
-                    <th>Date Closed</th>
-                    <th><span data-bs-toggle="tooltip" title="Person who placed this purchase order">Orderer</span></th>
-                    <th style="text-align:right;">Total Cost</th>
+                    <th data-col="col-num">PO Number</th>
+                    <th data-col="col-status">Status</th>
+                    <th data-col="col-vendor">Vendor</th>
+                    <th data-col="col-ordered">Date Ordered</th>
+                    <th data-col="col-closed">Date Closed</th>
+                    <th data-col="col-orderer"><span data-bs-toggle="tooltip" title="Person who placed this purchase order">Orderer</span></th>
+                    <th data-col="col-cost" style="text-align:right;">Total Cost</th>
                 </tr>
                 <tr class="filter-row">
-                    <th><input type="text" placeholder=""></th>
-                    <th>
+                    <th data-col="col-num"><input type="text" placeholder=""></th>
+                    <th data-col="col-status">
                         <select class="form-select form-select-sm">
                             <option value="">All</option>
                             <option value="draft">Draft</option>
@@ -40,11 +40,11 @@
                             <option value="cancelled">Cancelled</option>
                         </select>
                     </th>
-                    <th><input type="text" placeholder=""></th>
-                    <th data-filter-type="date"></th>
-                    <th data-filter-type="date"></th>
-                    <th><input type="text" placeholder=""></th>
-                    <th><input type="text" placeholder=""></th>
+                    <th data-col="col-vendor"><input type="text" placeholder=""></th>
+                    <th data-col="col-ordered" data-filter-type="date"></th>
+                    <th data-col="col-closed" data-filter-type="date"></th>
+                    <th data-col="col-orderer"><input type="text" placeholder=""></th>
+                    <th data-col="col-cost"><input type="text" placeholder=""></th>
                 </tr>
             </thead>
             <tbody>

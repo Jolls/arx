@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.55] - 2026-09-20
+### Added
+- List tables (parts, contacts, suppliers, POs, records) support drag-and-drop column reordering, remembered per table, with a "Reset column order" button; shared filter/sort URLs are now keyed by column name instead of position, so older shared filter links no longer apply ([#101](https://github.com/Jolls/arx/issues/101))
+
 ## [0.7.54] - 2026-09-20
 ### Added
 - The first active attachment on a part or supplier with no primary is now set as primary automatically, and deleting the primary promotes the next active attachment (or clears it when none remain); migration `20260919231000_121_backfill_primary_attachment.sql` backfills existing records ([#121](https://github.com/Jolls/arx/issues/121))
