@@ -95,7 +95,7 @@
         <td>{{.EffectiveParameter}}</td>
         <td>{{.EffectiveSpec}}</td>
         <td>{{if imageResult $val}}[see gallery]{{else if isLocalFile $val}}[file: {{fileBaseName $val}}]{{else}}{{applyFormat $val .Step.Format}}{{end}}</td>
-        <td style="text-align:center;">{{pfBadge .Result}}</td>
+        <td style="text-align:center;">{{pfBadge .}}</td>
         <td style="word-break:break-word">{{if .Result}}{{.Result.Comment}}{{end}}</td>
       </tr>
       {{end}}

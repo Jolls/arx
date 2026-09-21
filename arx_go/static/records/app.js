@@ -528,6 +528,12 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
         input.readOnly = false
         input.classList.remove('formula-computed', 'formula-overridden')
         input.removeAttribute('title')
+        if (!input.dataset.override && input.value !== '' && input.value === input.dataset.computed) {
+          input.value = ''
+          var usid = input.name ? input.name.slice(7) : ''
+          if (usid) setLive(usid, '')
+          updatePF(input)
+        }
         return
       }
       // Only a leading "=" makes the default arithmetic; anything else is literal text (#132).
@@ -557,6 +563,7 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
       input.classList.remove('formula-overridden')
       input.removeAttribute('title')
       input.classList.add('formula-computed')
+      input.dataset.computed = val
       if (input.value !== val) {
         input.value = val
         var sid = input.name ? input.name.slice(7) : ''
