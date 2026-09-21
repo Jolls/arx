@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.58] - 2026-09-21
+### Fixed
+- Test step default_result is evaluated as math only when it starts with `=`; `{record.pn}` (e.g. `750-01347-01`) no longer becomes `-598`. Existing formula defaults get the `=` via migration `20260921120000_132_default_result_formula_prefix.sql` ([#132](https://github.com/Jolls/arx/issues/132))
+
 ## [0.7.57] - 2026-09-20
 ### Added
 - "Create RFQs" on the BOM tab: flattens the BOM for N assemblies, nets against stock and reorder minimums, and creates one RFQ per default supplier after an editable preview; new per-category **Purchased** flag in Settings > Part Categories ([#99](https://github.com/Jolls/arx/issues/99))
