@@ -230,7 +230,7 @@
           {{applyFormat $val .Step.Format}}
         {{end}}
       </td>
-      <td data-col="col-pf" class="text-center">{{pfBadge .Result}}</td>
+      <td data-col="col-pf" class="text-center">{{pfBadge .}}</td>
       <td data-col="col-comment" style="word-break:break-word">{{if .Result}}{{.Result.Comment}}{{end}}</td>
       <td data-col="col-updated" class="text-nowrap small text-muted">
         {{if .Result}}{{formatDateTime .Result.UpdatedAt}}{{end}}

@@ -94,8 +94,13 @@ func recordsTemplateFuncs() template.FuncMap {
 		// data attribute, so client-side image URL building (paste_result_image.js)
 		// matches the write path without needing a round-trip through the server.
 		"sanitizedPartNumber": sanitizeFileNamePart,
-		"pfBadge": func(res *models.TestResult) template.HTML {
+		"pfBadge": func(row models.ResultRow) template.HTML {
+			res := row.Result
 			if res == nil {
+				// No saved result: MISSING only where edit mode flags it (CalcPF honors default_result).
+				if row.CalcPF() == "MISSING" {
+					return `<span class="badge bg-warning text-dark">MISSING</span>`
+				}
 				return `<span class="badge bg-secondary">—</span>`
 			}
 			if res.Result == "" {

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.61] - 2026-09-21
+### Fixed
+- Record view and print show MISSING for unrecorded steps that edit mode flags ([#138](https://github.com/Jolls/arx/issues/138))
+- Formula default_result fields on a fresh record's edit page compute live (blue) instead of showing raw formula text ([#139](https://github.com/Jolls/arx/issues/139))
+
 ## [0.7.60] - 2026-09-21
 ### Changed
 - User release notes now cover 0.7.49 through 0.7.60
