@@ -117,3 +117,12 @@ INSERT INTO named_queries (name, description, sql, params, result_type, created_
 -- Usage in spec_nom: query:vendor_pns_for_pn(@pn={record.pn})
 -- INSERT into live DB:
 -- INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES ('vendor_pns_for_pn','Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).','SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' + @pn + ''%'' ORDER BY po_id DESC','pn','list',GETDATE());
+
+INSERT INTO named_queries (name, description, sql, params, result_type, created_at) VALUES (
+  'revision_for_pn',
+  'Current revision of a part, by part number',
+  'SELECT revision FROM part WHERE part_number = @pn AND is_active = 1',
+  'pn', 'single',
+  GETDATE()
+);
+-- Usage in spec_nom: query:revision_for_pn(@pn={record.pn})

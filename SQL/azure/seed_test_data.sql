@@ -155,7 +155,10 @@ BEGIN TRY
          'form_row_id, record_date', 'single', GETDATE(), '2020-01-01T00:00:00'),
         (9, 'vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
          'SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' + @pn + ''%'' ORDER BY po_id DESC',
-         'pn', 'list', GETDATE(), '2020-01-01T00:00:00');
+         'pn', 'list', GETDATE(), '2020-01-01T00:00:00'),
+        (10, 'revision_for_pn', 'Current revision of a part, by part number',
+         'SELECT revision FROM part WHERE part_number = @pn AND is_active = 1',
+         'pn', 'single', GETDATE(), '2020-01-01T00:00:00');
     SET IDENTITY_INSERT dbo.named_queries OFF;
 
     -- ============================================================
