@@ -3349,23 +3349,59 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 	step.SpecUnits = specUnits.String
 	step.Format = format.String
 
-	type reportRow struct {
-		RecordID        int
-		SerialNumber    string
-		SerialPN        string
-		PartNumberID    int
-		RecordDate      time.Time
-		Locked          bool
-		Result          string
-		PassFail        sql.NullBool
-		Comment         string
-		ResultUpdatedAt *time.Time
+	h.renderRecords(w, r, "test_report.html", map[string]any{
+		"Form":      form,
+		"Step":      step,
+		"ActiveTab": "records",
+		"TestMode":  h.cfg.TestMode,
+	})
+}
+
+// TestReportRows — GET /api/forms/{id}/tests/{testID}/report/rows
+// JSON rows for the test report's shared client-side table: every active record's
+// recorded result for one test step, in the default report order.
+func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	testID, err := strconv.Atoi(chi.URLParam(r, "testID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	start := time.Now()
+
+	var format string
+	err = h.queryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT COALESCE(format,'') FROM %s WHERE id = @p1 AND form_id = @p2`, h.cfg.StepsTable()), testID, formID).
+		Scan(&format)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type row struct {
+		ID           int    `json:"id"`
+		SN           string `json:"sn"`
+		SNPN         string `json:"snPN"`
+		PartNumberID int    `json:"pnId"`
+		Date         string `json:"date"`
+		ResultDate   string `json:"resultDate"`
+		Result       string `json:"result"`
+		PassFail     string `json:"pf"`
+		Comment      string `json:"comment"`
 	}
 
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT trec.id, trec.serial_number, COALESCE(trec.subject_part_number,''),
 		       COALESCE(trec.part_id,0),
-		       trec.record_date, trec.is_locked,
+		       trec.record_date,
 		       COALESCE(res.result,''), res.pass_fail, COALESCE(res.comment,''),
 		       res.updated_at
 		FROM %s res
@@ -3379,30 +3415,37 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resRows.Close()
 
-	var rows []reportRow
+	out := make([]row, 0)
 	for resRows.Next() {
-		var row reportRow
-		if err := resRows.Scan(
-			&row.RecordID, &row.SerialNumber, &row.SerialPN, &row.PartNumberID,
-			&row.RecordDate, &row.Locked,
-			&row.Result, &row.PassFail, &row.Comment,
-			&row.ResultUpdatedAt,
-		); err != nil {
+		var rec row
+		var recordDate time.Time
+		var result string
+		var passFail sql.NullBool
+		var updatedAt *time.Time
+		if err := resRows.Scan(&rec.ID, &rec.SN, &rec.SNPN, &rec.PartNumberID, &recordDate,
+			&result, &passFail, &rec.Comment, &updatedAt); err != nil {
 			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		rows = append(rows, row)
+		rec.Date = recordDate.Format("2006-01-02 15:04")
+		if updatedAt != nil {
+			rec.ResultDate = updatedAt.Format("2006-01-02 15:04")
+		}
+		rec.Result = applyResultFormat(result, format)
+		switch {
+		case !passFail.Valid:
+			rec.PassFail = "—"
+		case passFail.Bool:
+			rec.PassFail = "PASS"
+		default:
+			rec.PassFail = "FAIL"
+		}
+		out = append(out, rec)
 	}
 	if err := resRows.Err(); err != nil {
 		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	h.renderRecords(w, r, "test_report.html", map[string]any{
-		"Form":      form,
-		"Step":      step,
-		"Rows":      rows,
-		"ActiveTab": "records",
-		"TestMode":  h.cfg.TestMode,
-	})
+	log.Printf("[rows] report form=%d test=%d: %d rows in %v", formID, testID, len(out), time.Since(start))
+	writeJSON(w, out)
 }

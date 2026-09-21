@@ -18,110 +18,65 @@
   </button>
 </div>
 
-{{if .Rows}}
-<div class="table-responsive">
-  <table class="table table-bordered table-sm align-middle" id="report-table">
-    <thead class="table-dark">
-      <tr>
-        <th>Serial Number</th>
-        <th>Part Number</th>
-        <th>Record Date</th>
-        <th>Result Date</th>
-        <th class="text-center">Result</th>
-        <th class="text-center">P/F</th>
-        <th>Comment</th>
+<div class="table-wrapper">
+  <table class="table table-bordered table-hover table-sm align-middle" id="report-table" data-rows-url="/api/forms/{{.Form.ID}}/tests/{{.Step.ID}}/report/rows">
+    <thead>
+      <tr class="table-dark">
+        <th data-col="col-sn">Serial Number</th>
+        <th data-col="col-pn">Part Number</th>
+        <th data-col="col-record-date">Record Date</th>
+        <th data-col="col-result-date">Result Date</th>
+        <th data-col="col-result" class="text-center">Result</th>
+        <th data-col="col-pf" class="text-center">P/F</th>
+        <th data-col="col-comment">Comment</th>
       </tr>
-      <tr id="report-filter-row">
-        <th><input type="text" class="report-filter-input" placeholder=""></th>
-        <th><input type="text" class="report-filter-input" placeholder=""></th>
-        <th><input type="text" class="report-filter-input" placeholder=""></th>
-        <th><input type="text" class="report-filter-input" placeholder=""></th>
-        <th><input type="text" class="report-filter-input" placeholder=""></th>
-        <th><input type="text" class="report-filter-input" placeholder=""></th>
-        <th><input type="text" class="report-filter-input" placeholder=""></th>
+      <tr class="filter-row">
+        <th data-col="col-sn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter serial number"></th>
+        <th data-col="col-pn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter part number"></th>
+        <th data-col="col-record-date" data-filter-type="date"></th>
+        <th data-col="col-result-date" data-filter-type="date"></th>
+        <th data-col="col-result"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter result"></th>
+        <th data-col="col-pf"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter pass/fail"></th>
+        <th data-col="col-comment"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter comment"></th>
       </tr>
     </thead>
     <tbody>
-      {{range .Rows}}
-      <tr>
-        <td><a href="/records/{{.RecordID}}">{{.SerialNumber}}</a></td>
-        <td>{{if .PartNumberID}}<a href="/part/{{.PartNumberID}}">{{.SerialPN}}</a>{{else}}{{.SerialPN}}{{end}}</td>
-        <td class="text-nowrap">{{.RecordDate.Format "2006-01-02 3:04 PM"}}</td>
-        <td class="text-nowrap small text-muted">{{formatDateTime .ResultUpdatedAt}}</td>
-        <td class="text-center font-mono">{{applyFormat .Result $.Step.Format}}</td>
-        <td class="text-center" data-pf="{{if .PassFail.Valid}}{{if .PassFail.Bool}}PASS{{else}}FAIL{{end}}{{else}}—{{end}}">
-          {{if .PassFail.Valid}}
-            {{if .PassFail.Bool}}
-            <span class="badge bg-success">PASS</span>
-            {{else}}
-            <span class="badge bg-danger">FAIL</span>
-            {{end}}
-          {{else}}
-          <span class="badge bg-secondary">—</span>
-          {{end}}
-        </td>
-        <td>{{.Comment}}</td>
-      </tr>
-      {{end}}
+      <tr><td colspan="7" class="no-results">Loading&hellip;</td></tr>
     </tbody>
   </table>
 </div>
-<div class="text-muted small mt-1"><span class="report-count">{{len .Rows}}</span> of {{len .Rows}} record{{if gt (len .Rows) 1}}s{{end}}</div>
-{{else}}
-<p class="text-muted">No results recorded for this test yet.</p>
-{{end}}
+<div class="pagination-controls">
+  <span class="pagination-info"></span>
+  <div class="pagination-buttons">
+    <button type="button" class="page-nav prev" onclick="prevPage()">&#8592; Previous</button>
+    <button type="button" class="page-nav next" onclick="nextPage()">Next &#8594;</button>
+  </div>
+</div>
+<p style="margin-top:15px; color:#666; text-align:right;">
+  Total matching: <strong><span class="record-count">0</span></strong>
+</p>
 
-<style>
-#report-filter-row th { padding: 3px 4px; }
-#report-filter-row input {
-  width: 100%; box-sizing: border-box; padding: 4px 6px;
-  border: 1px solid #6c757d; border-radius: 3px;
-  font-size: 0.85em; background: #343a40; color: #fff;
-}
-#report-filter-row input::placeholder { color: #adb5bd; }
-#report-filter-row input:focus { outline: none; border-color: #adb5bd; }
-</style>
 <script>
 (function() {
-  // Filter
-  var filterInputs = document.querySelectorAll('.report-filter-input');
-  filterInputs.forEach(function(inp) {
-    inp.addEventListener('input', applyReportFilter);
-  });
-
-  function applyReportFilter() {
-    var filters = Array.from(filterInputs).map(function(i) { return i.value.toLowerCase().trim(); });
-    var tbody = document.querySelector('#report-table tbody');
-    if (!tbody) return;
-    var count = 0;
-    tbody.querySelectorAll('tr').forEach(function(tr) {
-      var cells = tr.querySelectorAll('td');
-      // col 5 (P/F) read from data-pf attribute for text match
-      var texts = [
-        cells[0] ? cells[0].textContent.trim().toLowerCase() : '',
-        cells[1] ? cells[1].textContent.trim().toLowerCase() : '',
-        cells[2] ? cells[2].textContent.trim().toLowerCase() : '',
-        cells[3] ? cells[3].textContent.trim().toLowerCase() : '',
-        cells[4] ? cells[4].textContent.trim().toLowerCase() : '',
-        cells[5] ? (cells[5].getAttribute('data-pf') || '').toLowerCase() : '',
-        cells[6] ? cells[6].textContent.trim().toLowerCase() : '',
-      ];
-      var match = filters.every(function(f, i) { return !f || texts[i].includes(f); });
-      tr.style.display = match ? '' : 'none';
-      if (match) count++;
-    });
-    var countEl = document.querySelector('.report-count');
-    if (countEl) countEl.textContent = count;
-  }
-
-  // Copy (visible rows only) — shared helper in static/table-sort.js
+  // Copy every filtered row (all pages) in the default column order, regardless of
+  // any user column reordering, so pasting into a template stays stable.
+  var HEADERS = ['Serial Number', 'Part Number', 'Record Date', 'Result Date', 'Result', 'P/F', 'Comment'];
   document.addEventListener('DOMContentLoaded', function() {
-    copyTableTSV('report-table', 'copy-report',
-      ['Serial Number', 'Part Number', 'Record Date', 'Result Date', 'Result', 'P/F', 'Comment'],
-      function(tr, cells, i) {
-        if (i === 5) return cells[5] ? (cells[5].getAttribute('data-pf') || '') : '';
-        return cells[i] ? cells[i].textContent.trim() : '';
+    var btn = document.getElementById('copy-report');
+    btn.addEventListener('click', function() {
+      var lines = [HEADERS.join('\t')];
+      (window.currentFilteredRows || []).forEach(function(r) {
+        lines.push([r.sn, r.snPN, r.date, r.resultDate, r.result, r.pf, r.comment].join('\t'));
       });
+      var original = btn.innerHTML;
+      navigator.clipboard.writeText(lines.join('\n')).then(function() {
+        btn.textContent = 'Copied!';
+      }, function() {
+        btn.textContent = 'Copy failed';
+      }).then(function() {
+        setTimeout(function() { btn.innerHTML = original; }, 2000);
+      });
+    });
   });
 })();
 </script>

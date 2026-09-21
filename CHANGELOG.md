@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.56] - 2026-09-20
+### Added
+- List tables (parts, contacts, suppliers, POs, records, test report, part records, unit/lot trace) support drag-to-resize columns, remembered per table, with double-click to reset one column and a "Reset column widths" button ([#20](https://github.com/Jolls/arx/issues/20))
+
+### Changed
+- The test report now uses the shared list-table engine: drag-and-drop column reordering, date-range filters on Record/Result Date, shared sort and pagination, and "Copy for Excel" copies every filtered row in the default column order; Record Date now shows 24-hour time ([#126](https://github.com/Jolls/arx/issues/126))
+
 ## [0.7.55] - 2026-09-20
 ### Added
 - List tables (parts, contacts, suppliers, POs, records) support drag-and-drop column reordering, remembered per table, with a "Reset column order" button; shared filter/sort URLs are now keyed by column name instead of position, so older shared filter links no longer apply ([#101](https://github.com/Jolls/arx/issues/101))

@@ -298,6 +298,29 @@ const ROW_BUILDER_PATTERNS = [
         },
         cellText: r => [r.sn, r.snPN, r.snDesc, r.date, r.type, r.status, r.formRev, r.formLabel],
     },
+    {
+        // /api/forms/{id}/tests/{testID}/report/rows — column order: sn, pn, record date,
+        // result date, result, p/f, comment. Matches templates/records/test_report.html.
+        test: /\/api\/forms\/\d+\/tests\/\d+\/report\/rows$/,
+        build: r => {
+            const pn = r.pnId
+                ? `<a href="/part/${r.pnId}">${escHtml(r.snPN)}</a>`
+                : escHtml(r.snPN);
+            const pf = r.pf === 'PASS' ? '<span class="badge bg-success">PASS</span>'
+                : r.pf === 'FAIL' ? '<span class="badge bg-danger">FAIL</span>'
+                : '<span class="badge bg-secondary">—</span>';
+            return `<tr>
+                <td data-col="col-sn"><a href="/records/${r.id}">${escHtml(r.sn)}</a></td>
+                <td data-col="col-pn">${pn}</td>
+                <td data-col="col-record-date" class="text-nowrap">${escHtml(r.date)}</td>
+                <td data-col="col-result-date" class="text-nowrap small text-muted">${escHtml(r.resultDate)}</td>
+                <td data-col="col-result" class="text-center font-mono">${escHtml(r.result)}</td>
+                <td data-col="col-pf" class="text-center">${pf}</td>
+                <td data-col="col-comment">${escHtml(r.comment)}</td>
+            </tr>`;
+        },
+        cellText: r => [r.sn, r.snPN, r.date, r.resultDate, r.result, r.pf, r.comment],
+    },
 ];
 
 function resolveRowConfig(url) {
@@ -629,6 +652,16 @@ let colOrder = null;  // display order as default indexes; null = table not reor
 let colOrderKey = '';
 let colResetBar = null;
 
+// --- Column resize (#20) ---
+// Widths persist per table in localStorage as arx.colw.<tableId> (data-col key -> px).
+// With no saved widths the table keeps its default layout; once any column is
+// resized every <col> takes an explicit px width and the table width becomes their sum.
+const COL_MIN_W = 40;
+let colWidths = {};
+let colWidthsKey = '';
+let colTable = null;
+let colWidthsBar = null;
+
 function colKeyAt(i) { return colKeys[i] || String(i); }
 
 // A header cell's default index; falls back to its DOM position on tables that
@@ -681,17 +714,34 @@ function initColumnOrder() {
     colKeys = keys;
     // Column widths come from app.css col:nth-child rules, which would follow the slot
     // rather than the column. Freeze each measured width inline so <col>s can move.
-    const colgroup = table.querySelector('colgroup');
-    if (colgroup && colgroup.children.length === keys.length) {
-        const tw = table.getBoundingClientRect().width;
-        Array.from(colgroup.children).forEach((c, i) => {
-            c.dataset.ci = i;
-            c.style.width = (c.getBoundingClientRect().width / tw * 100).toFixed(2) + '%';
-        });
-    } else if (colgroup) {
-        colgroup.remove();
+    // Tables without a <colgroup> get one (widths unset) so resizing has <col>s to drive.
+    let colgroup = table.querySelector('colgroup');
+    const hadColgroup = !!colgroup && colgroup.children.length === keys.length;
+    if (colgroup && !hadColgroup) { colgroup.remove(); colgroup = null; }
+    if (!colgroup) {
+        colgroup = document.createElement('colgroup');
+        keys.forEach(() => colgroup.appendChild(document.createElement('col')));
+        table.prepend(colgroup);
     }
-    colOrderKey = 'arx.colorder.' + (table.id || window.location.pathname);
+    const tw = table.getBoundingClientRect().width;
+    const firstHeads = table.querySelectorAll('thead tr:first-child th');
+    Array.from(colgroup.children).forEach((c, i) => {
+        const w = firstHeads[i].getBoundingClientRect().width;
+        c.dataset.ci = i;
+        c.dataset.col = keys[i];
+        c.dataset.defaultPx = Math.round(w);
+        if (keys[i] === COL_PINNED) {
+            // May be display:none (records select column) and measure 0; its th carries the fixed width.
+            c.dataset.defaultPx = parseFloat(firstHeads[i].style.width) || Math.round(w);
+            c.dataset.defaultWidth = c.dataset.defaultPx + 'px';
+        } else {
+            c.dataset.defaultWidth = hadColgroup ? (w / tw * 100).toFixed(2) + '%' : '';
+        }
+        c.style.width = c.dataset.defaultWidth;
+    });
+    const tableKey = table.id || window.location.pathname;
+    colOrderKey = 'arx.colorder.' + tableKey;
+    colWidthsKey = 'arx.colw.' + tableKey;
 
     // Saved keys first (pinned column always leads); columns the saved list
     // doesn't know about keep their relative order at the end.
@@ -716,6 +766,11 @@ function initColumnOrder() {
         try { localStorage.removeItem(colOrderKey); } catch (e) {}
         applyColumnOrder();
     });
+    colWidthsBar = document.createElement('button');
+    colWidthsBar.type = 'button';
+    colWidthsBar.className = 'btn btn-sm btn-outline-secondary d-none';
+    colWidthsBar.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reset column widths';
+    colWidthsBar.addEventListener('click', () => resetColWidths());
     // Join the page's existing button row (right side of the toolbar above the table);
     // pages without one get the button on its own right-aligned line.
     const wrapper = table.closest('.table-wrapper') || table;
@@ -730,10 +785,13 @@ function initColumnOrder() {
             group = wrap;
         }
         group.prepend(colResetBar);
+        group.prepend(colWidthsBar);
     } else {
         const bar = document.createElement('div');
         bar.className = 'text-end mb-1';
         bar.appendChild(colResetBar);
+        colWidthsBar.classList.add('ms-2');
+        bar.appendChild(colWidthsBar);
         wrapper.before(bar);
     }
 
@@ -765,7 +823,103 @@ function initColumnOrder() {
         });
     });
 
+    initColumnResize(table);
     applyColumnOrder();
+}
+
+function saveColWidths() {
+    try {
+        if (Object.keys(colWidths).length) localStorage.setItem(colWidthsKey, JSON.stringify(colWidths));
+        else localStorage.removeItem(colWidthsKey);
+    } catch (e) {}
+}
+
+// Also called after a column is shown/hidden, so the table width tracks visible columns only.
+function syncColWidths() {
+    if (!colTable) return;
+    const cols = Array.from(colTable.querySelectorAll('colgroup > col'));
+    const resized = Object.keys(colWidths).length > 0;
+    colWidthsBar.classList.toggle('d-none', !resized);
+    if (!resized) {
+        cols.forEach(c => { c.style.width = c.dataset.defaultWidth; });
+        colTable.style.width = '';
+        return;
+    }
+    let sum = 0;
+    cols.forEach(c => {
+        const px = colWidths[c.dataset.col] ?? +c.dataset.defaultPx;
+        c.style.width = px + 'px';
+        if (getComputedStyle(c).display !== 'none') sum += px;
+    });
+    colTable.style.width = sum + 'px';
+}
+
+function resetColWidths() {
+    colWidths = {};
+    saveColWidths();
+    syncColWidths();
+}
+
+function initColumnResize(table) {
+    colTable = table;
+    try {
+        const saved = JSON.parse(localStorage.getItem(colWidthsKey)) || {};
+        Object.keys(saved).forEach(k => {
+            if (colKeys.includes(k) && k !== COL_PINNED && Number.isFinite(saved[k]) && saved[k] >= COL_MIN_W) colWidths[k] = saved[k];
+        });
+    } catch (e) {}
+    syncColWidths();
+
+    table.querySelectorAll('thead tr:first-child th').forEach(th => {
+        const key = th.dataset.col;
+        if (key === COL_PINNED) return;
+        if (getComputedStyle(th).position === 'static') th.classList.add('position-relative');
+        const handle = document.createElement('span');
+        handle.className = 'col-resize-handle position-absolute top-0 bottom-0 end-0';
+        th.appendChild(handle);
+
+        let startX = 0, startW = 0, moved = false;
+        handle.addEventListener('pointerdown', e => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            th.draggable = false; // keep the header's drag-reorder from starting
+            handle.setPointerCapture(e.pointerId);
+            startX = e.clientX;
+            startW = th.getBoundingClientRect().width;
+            moved = false;
+            if (!Object.keys(colWidths).length) {
+                // Entering px mode: re-measure so the other columns don't jump.
+                table.querySelectorAll('thead tr:first-child th').forEach(h => {
+                    const c = table.querySelector('colgroup > col[data-col="' + h.dataset.col + '"]');
+                    const w = h.getBoundingClientRect().width;
+                    if (c && h.dataset.col !== COL_PINNED && w) c.dataset.defaultPx = Math.round(w);
+                });
+            }
+        });
+        handle.addEventListener('pointermove', e => {
+            if (!handle.hasPointerCapture(e.pointerId)) return;
+            const dx = e.clientX - startX;
+            if (!dx && !moved) return;
+            moved = true;
+            colWidths[key] = Math.max(COL_MIN_W, Math.round(startW + dx));
+            syncColWidths();
+        });
+        const endDrag = () => {
+            th.draggable = true;
+            if (moved) saveColWidths();
+            moved = false;
+        };
+        handle.addEventListener('pointerup', endDrag);
+        handle.addEventListener('pointercancel', endDrag);
+        handle.addEventListener('click', e => e.stopPropagation()); // don't trigger header sort
+        handle.addEventListener('dblclick', e => {
+            e.stopPropagation();
+            delete colWidths[key];
+            saveColWidths();
+            syncColWidths();
+        });
+    });
 }
 
 // --- Column visibility toggle (#386) ---
@@ -793,6 +947,7 @@ document.addEventListener('DOMContentLoaded', function () {
       container.querySelectorAll('input[data-toggle-col]').forEach(function (cb) {
         cb.checked = hidden.indexOf(cb.dataset.toggleCol) === -1
       })
+      if (table === colTable) syncColWidths()
     }
 
     container.querySelectorAll('input[data-toggle-col]').forEach(function (cb) {
@@ -815,6 +970,7 @@ document.addEventListener('DOMContentLoaded', function () {
         hidden = []
         localStorage.removeItem(storageKey)
         applyState()
+        if (table === colTable) resetColWidths()
       })
     }
 

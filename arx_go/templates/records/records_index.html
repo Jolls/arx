@@ -134,6 +134,7 @@
   function updateSelectColumn() {
     var mode = currentMode();
     table.classList.toggle('show-select', !!mode);
+    if (window.syncColWidths) window.syncColWidths();
     if (!mode) selected.clear();
     updateBulkActions();
   }

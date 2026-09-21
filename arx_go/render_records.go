@@ -106,37 +106,41 @@ func recordsTemplateFuncs() template.FuncMap {
 			}
 			return `<span class="badge bg-danger">FAIL</span>`
 		},
-		"applyFormat": func(val, format string) string {
-			if val == "" {
-				return val
-			}
-			f := strings.TrimSpace(format)
-			if f == "" || f == "General" || f == "@" {
-				return val
-			}
-			isPercent := strings.HasSuffix(f, "%")
-			numFmt := strings.TrimSuffix(f, "%")
-			if numFmt != "0" && !strings.HasPrefix(numFmt, "0.") {
-				return val
-			}
-			decimals := 0
-			if idx := strings.Index(numFmt, "."); idx >= 0 {
-				decimals = len(numFmt) - idx - 1
-			}
-			v, err := strconv.ParseFloat(val, 64)
-			if err != nil {
-				return val
-			}
-			if isPercent {
-				v *= 100
-			}
-			result := fmt.Sprintf("%.*f", decimals, v)
-			if isPercent {
-				result += "%"
-			}
-			return result
-		},
+		"applyFormat": applyResultFormat,
 	}
+}
+
+// applyResultFormat renders a recorded result through a step's number format
+// (e.g. "0.00", "0%"); values or formats it doesn't understand pass through.
+func applyResultFormat(val, format string) string {
+	if val == "" {
+		return val
+	}
+	f := strings.TrimSpace(format)
+	if f == "" || f == "General" || f == "@" {
+		return val
+	}
+	isPercent := strings.HasSuffix(f, "%")
+	numFmt := strings.TrimSuffix(f, "%")
+	if numFmt != "0" && !strings.HasPrefix(numFmt, "0.") {
+		return val
+	}
+	decimals := 0
+	if idx := strings.Index(numFmt, "."); idx >= 0 {
+		decimals = len(numFmt) - idx - 1
+	}
+	v, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		return val
+	}
+	if isPercent {
+		v *= 100
+	}
+	result := fmt.Sprintf("%.*f", decimals, v)
+	if isPercent {
+		result += "%"
+	}
+	return result
 }
 
 func recordsFormatDate(t *time.Time) string {
