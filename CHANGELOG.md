@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.60] - 2026-09-21
+### Changed
+- User release notes now cover 0.7.49 through 0.7.60
+
 ## [0.7.59] - 2026-09-21
 ### Added
 - Test records: double-click a blue default_result field to override it; overridden values show an amber tint with an "Overrides default" tooltip, and clearing the field or double-clicking again restores the default ([#133](https://github.com/Jolls/arx/issues/133))

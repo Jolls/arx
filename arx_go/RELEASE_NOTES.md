@@ -1,3 +1,34 @@
+Arx v0.7.60 — September 2026
+========================
+
+NEW FEATURES
+
+  Create RFQs from a BOM
+  Builds one RFQ per default supplier for N assemblies, netted against stock.
+
+  Resizable and Reorderable Columns
+  Drag list-table columns to resize or reorder them; Arx remembers your layout.
+
+  Test Report Upgrades
+  The test report gets column reordering, date-range filters, and copy-all for Excel.
+
+  Override Default Results
+  Double-click a blue default_result field on a test record to override it.
+
+  Automatic Primary Attachment
+  The first attachment on a part or supplier becomes primary automatically.
+
+BUG FIXES
+
+  Test step defaults like {record.pn} no longer get evaluated as math.
+
+SECURITY
+
+  Named Queries, backup, database settings and Utilities are now admin-only.
+  Settings backup no longer includes the DigiKey secret.
+  File access no longer follows symlinks outside configured folders.
+  Login errors no longer reveal database details.
+
 Arx v0.7.48 — September 2026
 ========================
 
