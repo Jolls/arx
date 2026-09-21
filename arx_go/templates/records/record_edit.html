@@ -275,7 +275,7 @@
           </div>
           {{else}}
           <input type="text" class="form-control form-control-sm font-mono"
-                 name="result_{{$sid}}" value="{{$cur}}"
+                 name="result_{{$sid}}" value="{{if .RawDefault}}{{if .Result}}{{.Result.Result}}{{end}}{{else}}{{$cur}}{{end}}"
                  placeholder="{{.Step.Format}}"
                  {{if .RawDefault}}data-formula="{{.RawDefault}}"{{end}}
                  data-spec-min="{{.Step.SpecMin}}"
