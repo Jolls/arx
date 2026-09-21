@@ -155,7 +155,7 @@ Future release targets Windows + Linux. Not needed now, but avoid design choices
 Sizing before implementing: `/evaluate-issue <NNN>` skill (cheap Sonnet-low) scopes work, recommends model/reasoning level + whether sub-agents help for the manager/impl session. Recommends only, doesn't implement.
 
 ### Milestones (in order)
-`v0.6 Major Feature Release` — new user-facing features (PO workflow, inventory, dashboards, audit). `Far Future` — out of scope (mobile, JSON API). Leave unmilestoned only for process/meta items or ongoing doc cleanup with no release dependency.
+`v0.7.x Maintenance` — bug fixes for the 0.7 line (ships from `release/0.7`). `v0.8.0`, `v0.9.0` — new user-facing features, in that order. (`v0.7.0` is closed.) Leave unmilestoned only for process/meta items or ongoing doc cleanup with no release dependency.
 
 ### Agents
 Prefer agents only if token efficient or need different models/effort level. Don't use agents to save time.
