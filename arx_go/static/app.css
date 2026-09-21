@@ -332,6 +332,7 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 
 /* Formula-computed result inputs */
 input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; cursor: default; }
+input.formula-overridden { background-color: #fff3cd !important; color: #664d03; }
 
 /* Shared visual box for hover-preview tooltips (background/border/shadow only —
    positioning is per-mechanism, see .img-hover-preview and .pn-thumb-tip below). */
