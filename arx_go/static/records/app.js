@@ -529,9 +529,13 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
         input.classList.remove('formula-computed')
         return
       }
-      var result = evalMath(resolved.trim())
-      if (result === null || !isFinite(result)) return
-      var val = String(parseFloat(result.toFixed(10)))
+      // Only a leading "=" makes the default arithmetic; anything else is literal text (#132).
+      var val = resolved.trim()
+      if (val.charAt(0) === '=') {
+        var result = evalMath(val.slice(1).trim())
+        if (result === null || !isFinite(result)) return
+        val = String(parseFloat(result.toFixed(10)))
+      }
       input.readOnly = true
       input.classList.add('formula-computed')
       if (input.value !== val) {
