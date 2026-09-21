@@ -5,6 +5,7 @@
 
     {{if .BOMItems}}
     <div class="d-flex justify-content-end gap-2 mb-2" data-col-table="bom-table">
+        <a href="/part/{{.Part.ID}}/create-rfqs" class="btn btn-sm btn-outline-secondary"><i class="bi bi-envelope-paper"></i> Create RFQs</a>
         <a href="/part/{{.Part.ID}}/bom/export.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="expandAllBOM()">Expand All</button>
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="collapseAllBOM()">Collapse All</button>

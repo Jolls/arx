@@ -1,0 +1,82 @@
+{{define "content"}}
+{{template "part_breadcrumb" .}}
+<div class="content">
+    {{template "part_tabs" .}}
+
+    <h5 class="mb-3">Create RFQs from BOM</h5>
+    {{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+
+    {{if .Created}}
+    <div class="alert alert-success mb-3">Created {{len .Created}} RFQ{{if ne (len .Created) 1}}s{{end}}.</div>
+    <ul class="mb-3">
+        {{range .Created}}<li><a href="/po/{{.Number}}">RFQ {{.Number}}</a> &mdash; {{.SupplierName}}</li>{{end}}
+    </ul>
+    {{else if not .Plan}}
+    <form method="get" class="d-flex align-items-end gap-2 mb-3">
+        <div>
+            <label for="rfq-n" class="form-label">Number of assemblies to build</label>
+            <input type="number" id="rfq-n" name="n" class="form-control" min="0" step="any" value="{{.N}}" required autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary">Preview</button>
+    </form>
+    {{end}}
+
+    {{if .Plan}}
+    <form method="post" action="/part/{{.Part.ID}}/create-rfqs">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="n" value="{{.N}}">
+        <p class="text-muted">Building {{.N}} &times; {{.Part.PartNumber}}. Adjust quantities or remove lines; nothing is created until you confirm.</p>
+        {{range .Plan.Groups}}
+        <h6 class="mt-3">{{.SupplierName}}</h6>
+        <table class="table table-bordered table-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th>Part Number</th><th>Description</th>
+                    <th class="text-end">Need</th><th class="text-end">On Hand</th><th class="text-end">Reorder Min</th>
+                    <th style="width:130px;">Order Qty</th><th style="width:50px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Lines}}
+                <tr>
+                    <td><a href="/part/{{.Part.ID}}">{{.Part.PartNumber}}</a></td>
+                    <td>{{.Part.Description}}</td>
+                    <td class="text-end">{{printf "%.5g" .Need}}</td>
+                    <td class="text-end">{{printf "%.5g" .Part.Stock}}</td>
+                    <td class="text-end">{{if .Part.ReorderMin.Valid}}{{printf "%.5g" .Part.ReorderMin.Float64}}{{end}}</td>
+                    <td>
+                        <input type="hidden" name="pid" value="{{.Part.ID}}">
+                        <input type="number" name="qty" class="form-control form-control-sm" min="0" step="any" value="{{printf "%.5g" .Qty}}">
+                    </td>
+                    <td class="text-center"><button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('tr').remove()" title="Remove line">&times;</button></td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{end}}
+        {{if not .Plan.Groups}}<div class="alert alert-info">Nothing to order &mdash; stock covers the need, or no BOM parts are in a Purchased category.</div>{{end}}
+
+        {{template "rfq_unsupplied" .Plan.Unsupplied}}
+
+        <div class="d-flex gap-2 mt-3">
+            {{if .Plan.Groups}}<button type="submit" class="btn btn-primary">Create RFQs</button>{{end}}
+            <a href="/part/{{.Part.ID}}/create-rfqs" class="btn btn-secondary">Change quantity</a>
+        </div>
+    </form>
+    {{else if .Created}}
+    {{template "rfq_unsupplied" .Unsupplied}}
+    <a href="/part/{{.Part.ID}}/bom" class="btn btn-secondary">Back to BOM</a>
+    {{end}}
+</div>
+{{end}}
+
+{{define "rfq_unsupplied"}}
+{{if .}}
+<div class="alert alert-warning mt-3">
+    <strong>No default supplier &mdash; not orderable here.</strong> Set a default supplier on each part and re-run.
+    <ul class="mb-0">
+        {{range .}}<li><a href="/part/{{.Part.ID}}">{{.Part.PartNumber}}</a> &mdash; {{.Part.Description}} (qty {{printf "%.5g" .Qty}})</li>{{end}}
+    </ul>
+</div>
+{{end}}
+{{end}}

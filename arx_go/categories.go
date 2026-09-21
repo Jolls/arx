@@ -54,6 +54,7 @@ func (h *Handler) SettingsCategoriesSave(w http.ResponseWriter, r *http.Request)
 		cats = append(cats, models.Category{
 			Code:      code,
 			Label:     strings.TrimSpace(r.FormValue("label_" + strconv.Itoa(i))),
+			Purchased: r.FormValue("purchased_"+strconv.Itoa(i)) == "1",
 			BOM:       r.FormValue("bom_"+strconv.Itoa(i)) == "1",
 			Orders:    r.FormValue("orders_"+strconv.Itoa(i)) == "1",
 			Pricing:   r.FormValue("pricing_"+strconv.Itoa(i)) == "1",

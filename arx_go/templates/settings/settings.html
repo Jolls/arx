@@ -339,6 +339,7 @@
                     <tr>
                         <th style="padding:4px 8px;">Code</th>
                         <th style="padding:4px 8px;">Label</th>
+                        <th class="text-center" style="padding:4px 8px;"><span data-bs-toggle="tooltip" title="Bought from a vendor: Create RFQs orders these parts instead of exploding their BOM">Purchased</span></th>
                         <th class="text-center" style="padding:4px 8px;">BOM</th>
                         <th class="text-center" style="padding:4px 8px;">Orders</th>
                         <th class="text-center" style="padding:4px 8px;">Pricing</th>
@@ -353,6 +354,7 @@
                     <tr class="cat-row">
                         <td style="padding:2px 8px;"><input class="form-control" data-f="code" value="{{.Code}}" style="width:80px; text-transform:uppercase;"></td>
                         <td style="padding:2px 8px;"><input class="form-control" data-f="label" value="{{.Label}}"></td>
+                        <td class="text-center"><input type="checkbox" data-f="purchased" {{if .Purchased}}checked{{end}}></td>
                         <td class="text-center"><input type="checkbox" data-f="bom" {{if .BOM}}checked{{end}}></td>
                         <td class="text-center"><input type="checkbox" data-f="orders" {{if .Orders}}checked{{end}}></td>
                         <td class="text-center"><input type="checkbox" data-f="pricing" {{if .Pricing}}checked{{end}}></td>
@@ -368,6 +370,7 @@
                 <tr class="cat-row">
                     <td style="padding:2px 8px;"><input class="form-control" data-f="code" style="width:80px; text-transform:uppercase;"></td>
                     <td style="padding:2px 8px;"><input class="form-control" data-f="label"></td>
+                    <td class="text-center"><input type="checkbox" data-f="purchased"></td>
                     <td class="text-center"><input type="checkbox" data-f="bom"></td>
                     <td class="text-center"><input type="checkbox" data-f="orders" checked></td>
                     <td class="text-center"><input type="checkbox" data-f="pricing" checked></td>
