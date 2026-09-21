@@ -526,13 +526,36 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
       var hasUnresolved = resolved.indexOf('{') !== -1
       if (hasUnresolved) {
         input.readOnly = false
-        input.classList.remove('formula-computed')
+        input.classList.remove('formula-computed', 'formula-overridden')
+        input.removeAttribute('title')
         return
       }
-      var result = evalMath(resolved.trim())
-      if (result === null || !isFinite(result)) return
-      var val = String(parseFloat(result.toFixed(10)))
+      // Only a leading "=" makes the default arithmetic; anything else is literal text (#132).
+      var val = resolved.trim()
+      if (val.charAt(0) === '=') {
+        var result = evalMath(val.slice(1).trim())
+        if (result === null || !isFinite(result)) return
+        val = String(parseFloat(result.toFixed(10)))
+      }
+      // A value saved on load that differs from the default is a manual override (#133).
+      if (!input.dataset.seen) {
+        input.dataset.seen = '1'
+        if (input.value !== '' && input.value !== val) input.dataset.override = '1'
+      }
+      // Cleared override reverts to the computed default.
+      if (input.dataset.override && input.value === '') delete input.dataset.override
+      if (input.dataset.override) {
+        input.readOnly = false
+        input.classList.remove('formula-computed')
+        var differs = input.value !== val
+        input.classList.toggle('formula-overridden', differs)
+        if (differs) input.title = 'Overrides default: ' + val
+        else input.removeAttribute('title')
+        return
+      }
       input.readOnly = true
+      input.classList.remove('formula-overridden')
+      input.removeAttribute('title')
       input.classList.add('formula-computed')
       if (input.value !== val) {
         input.value = val
@@ -589,6 +612,17 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
   document.addEventListener('change', function (e) {
     var m = e.target.name && e.target.name.match(/^result_(\d+)$/)
     if (m) { setLive(m[1], e.target.value); schedulResolve() }
+  })
+  // Double-click a locked default to override it; double-click an overridden one to revert (#133).
+  document.addEventListener('dblclick', function (e) {
+    var input = e.target
+    if (!input.matches || !input.matches('input[data-formula]')) return
+    if (input.classList.contains('formula-computed')) {
+      input.dataset.override = '1'
+    } else if (input.dataset.override) {
+      input.value = ''
+    } else return
+    applyFormulas()
   })
 }())
 

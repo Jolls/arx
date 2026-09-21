@@ -146,7 +146,10 @@ BEGIN;
          'form_row_id, record_date', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
         ('vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
          'SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' || @pn || ''%'' ORDER BY po_id DESC',
-         'pn', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00');
+         'pn', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
+        ('revision_for_pn', 'Current revision of a part, by part number',
+         'SELECT revision FROM part WHERE part_number = @pn AND is_active = TRUE',
+         'pn', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00');
 
     -- ============================================================
     -- 3. Users
@@ -526,7 +529,7 @@ BEGIN;
         (6105, 6001, 1, 0, 'Firmware Version',      'Record installed version', NULL, NULL, NULL, NULL, 'filled', NULL, FALSE, NULL,   'v2.1',NULL, '2020-01-01T00:00:00', 'unit'),
         (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
-        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, FALSE, '0.00', 'min(max({6102},4.75),5.25)', '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'); -- only shown on Re-Test records; default_result clamps the prior reading to this step's spec range
+        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, FALSE, '0.00', '=min(max({6102},4.75),5.25)', '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'); -- only shown on Re-Test records; default_result clamps the prior reading to this step's spec range
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
     -- trg_form_row_history snapshots the old row into form_row_history.
