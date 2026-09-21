@@ -260,6 +260,8 @@ func buildRouter(h *Handler) *chi.Mux {
 		r.Post("/part/{id}/bom", h.PartBOMSave)
 		r.Post("/part/{id}/bom/preview", h.PartBOMPastePreview)
 		r.Post("/part/{id}/rollup-cost", h.PartRollupCost)
+		r.Get("/part/{id}/create-rfqs", h.PartCreateRFQs)
+		r.Post("/part/{id}/create-rfqs", h.PartCreateRFQsConfirm)
 		r.Get("/part/{id}/build-cost", h.PartBuildCost)
 		r.Get("/part/{id}/where-used", h.PartWhereUsed)
 		r.Get("/part/{id}/attachments", h.PartAttachments)

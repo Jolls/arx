@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.57] - 2026-09-20
+### Added
+- "Create RFQs" on the BOM tab: flattens the BOM for N assemblies, nets against stock and reorder minimums, and creates one RFQ per default supplier after an editable preview; new per-category **Purchased** flag in Settings > Part Categories ([#99](https://github.com/Jolls/arx/issues/99))
+
 ## [0.7.56] - 2026-09-20
 ### Added
 - List tables (parts, contacts, suppliers, POs, records, test report, part records, unit/lot trace) support drag-to-resize columns, remembered per table, with double-click to reset one column and a "Reset column widths" button ([#20](https://github.com/Jolls/arx/issues/20))

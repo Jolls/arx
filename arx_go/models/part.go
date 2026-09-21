@@ -66,6 +66,9 @@ type CategoryTabs struct {
 type Category struct {
 	Code  string `json:"code"`
 	Label string `json:"label"`
+	// Purchased marks parts bought from a vendor: "Create RFQs" (#99) orders
+	// them rather than exploding their BOM. Absent in older saved JSON = false.
+	Purchased bool `json:"purchased"`
 	CategoryTabs
 }
 
@@ -82,16 +85,16 @@ func DefaultCategories() []Category {
 	svc := proc                                                                                                     // purchased but not stocked (service, tooling)
 	svc.Inventory = false
 	return []Category{
-		{"ASM", "Assembly", built},
-		{"BUY", "Purchased", proc},
-		{"DWG", "Drawing", CategoryTabs{}},
-		{"DOC", "Document", CategoryTabs{}},
-		{"FORM", "Test Form", CategoryTabs{BOM: true}},
-		{"MFG", "Manufactured", built},
-		{"OPS", "Operation / Labor", CategoryTabs{}},
-		{"RAW", "Raw Material", proc},
-		{"SVC", "Service", svc},
-		{"TOOL", "Tooling", svc},
+		{"ASM", "Assembly", false, built},
+		{"BUY", "Purchased", true, proc},
+		{"DWG", "Drawing", false, CategoryTabs{}},
+		{"DOC", "Document", false, CategoryTabs{}},
+		{"FORM", "Test Form", false, CategoryTabs{BOM: true}},
+		{"MFG", "Manufactured", false, built},
+		{"OPS", "Operation / Labor", false, CategoryTabs{}},
+		{"RAW", "Raw Material", true, proc},
+		{"SVC", "Service", true, svc},
+		{"TOOL", "Tooling", true, svc},
 	}
 }
 
