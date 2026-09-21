@@ -392,6 +392,10 @@ input.formula-computed { background-color: #e8f4fd !important; color: #0c5460; c
 /* Column reorder drop target (#101) */
 th.col-drag-over { box-shadow: inset 3px 0 0 var(--bs-primary); }
 
+/* Column resize handle (#20) */
+.col-resize-handle { width: 8px; cursor: col-resize; touch-action: none; }
+.col-resize-handle:hover { background-color: rgba(255, 255, 255, 0.3); }
+
 /* BOM expand/collapse (#579) */
 .bom-expand-toggle {
     background: none; border: none; padding: 0; margin-right: 4px;
@@ -403,8 +407,10 @@ th.col-drag-over { box-shadow: inset 3px 0 0 var(--bs-primary); }
 /* Records list select column (#502): shown only when the table carries
    .show-select (status = WIP). Kept separate from .col-hidden, which is
    reserved for the user's manual Columns toggle. */
-#records-table [data-col="col-select"] { display: none; }
-#records-table.show-select [data-col="col-select"] { display: table-cell; }
+#records-table :is(th, td)[data-col="col-select"] { display: none; }
+#records-table.show-select :is(th, td)[data-col="col-select"] { display: table-cell; }
+#records-table col[data-col="col-select"] { display: none; }
+#records-table.show-select col[data-col="col-select"] { display: table-column; }
 
 /* Archived step rows (#403): hidden on the definition view and its editor until "Show archived" is on */
 #def-table tbody tr.step-archived,
