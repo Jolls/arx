@@ -425,7 +425,7 @@ func (h *Handler) LotRecordsRows(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.scopedRecordsRows(r.Context(), "lot_id", lotID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	writeJSON(w, out)

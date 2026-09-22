@@ -53,6 +53,15 @@ func TestIsSafeQuery(t *testing.T) {
 		{"SELECT * FROM parts MERGE x", false},
 		{"SELECT 1; GRANT SELECT TO app", false},
 		{"SELECT 1 DBCC CHECKDB", false},
+		// file-read / remote-provider surface (#146) — needs neither EXEC nor ';'
+		{"SELECT * FROM OPENROWSET(BULK 'secrets.txt', SINGLE_CLOB) AS x", false},
+		{"SELECT * FROM OPENDATASOURCE('SQLNCLI', 'Data Source=evil').db.dbo.t", false},
+		{"SELECT * FROM OPENQUERY(linked, 'SELECT 1')", false},
+		{"SELECT pg_read_file('/etc/passwd')", false},
+		{"SELECT pg_ls_dir('/')", false},
+		{"SELECT pg_sleep(30)", false},
+		// word-boundary: bulk_* column names must still pass
+		{"SELECT bulk_order_delimiter FROM company", true},
 	}
 	for _, c := range cases {
 		if got := isSafeQuery(c.query); got != c.want {
