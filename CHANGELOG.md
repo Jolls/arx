@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.62] - 2026-09-21
+### Security
+- CDN-loaded Bootstrap, Bootstrap Icons and SortableJS now carry Subresource Integrity hashes ([#145](https://github.com/Jolls/arx/issues/145))
+- `/images/*` now uses the symlink-hardened `safePath`, and no longer lists directories ([#147](https://github.com/Jolls/arx/issues/147))
+
+### Removed
+- Unused `resolveUnder` and `urlutil.SafePathSegments` ([#147](https://github.com/Jolls/arx/issues/147))
+
 ## [0.7.61] - 2026-09-21
 ### Fixed
 - Record view and print show MISSING for unrecorded steps that edit mode flags ([#138](https://github.com/Jolls/arx/issues/138))
