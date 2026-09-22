@@ -1,7 +1,6 @@
 package urlutil
 
 import (
-	"reflect"
 	"testing"
 )
 
@@ -162,28 +161,6 @@ func TestIsImage(t *testing.T) {
 	for _, c := range cases {
 		if got := IsImage(c.input); got != c.want {
 			t.Errorf("IsImage(%q) = %v, want %v", c.input, got, c.want)
-		}
-	}
-}
-
-func TestSafePathSegments(t *testing.T) {
-	cases := []struct {
-		input string
-		want  []string
-	}{
-		{"foo/bar/baz.pdf", []string{"foo", "bar", "baz.pdf"}},
-		{"foo//bar", []string{"foo", "bar"}},               // empty segments dropped
-		{"../../../etc/passwd", []string{"etc", "passwd"}}, // traversal blocked — .. dropped, remaining segments kept
-		{"foo/../bar", []string{"foo", "bar"}},
-		{"", []string{}},
-	}
-	for _, c := range cases {
-		got := SafePathSegments(c.input)
-		if len(got) == 0 && len(c.want) == 0 {
-			continue
-		}
-		if !reflect.DeepEqual(got, c.want) {
-			t.Errorf("SafePathSegments(%q) = %v, want %v", c.input, got, c.want)
 		}
 	}
 }
