@@ -112,9 +112,9 @@ Never commit to main. Before first commit in session, check current branch; if o
 5. On approval, commit. Never commit without the user's explicit go-ahead — including follow-up fixes on an already-open PR, not just the first commit.
 
 ## Repo history
-This repo is `Jolls/arx`. History before 2026-08-26 was scrubbed and re-pushed from the private
-predecessor `Jolls/arx-legacy` (issue numbers there ran to #887). Existing CHANGELOG/docs links
-point at `arx-legacy` **on purpose** — those numbers only resolve there; do not rewrite them to
+This repo is `Jolls/arx`. History before 2026-08-26 was imported from a private predecessor repo,
+where issue numbers ran to #887. Existing CHANGELOG/docs links referencing issue numbers above 33
+point at that predecessor **on purpose** — those numbers only resolve there; do not rewrite them to
 `Jolls/arx`. New entries use `Jolls/arx`. The 33 issues open at migration were renumbered 1–33.
 
 ## Changelog
