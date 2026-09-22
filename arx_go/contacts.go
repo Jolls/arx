@@ -46,7 +46,7 @@ func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
 		ORDER BY su.name, cn.display_name ASC
 	`, cn, su))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()
@@ -62,7 +62,7 @@ func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
 			&city, &state, &country, &web,
 			&active, &notes, &modified, &suName,
 		); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, "database error", err)
 			return
 		}
 		if cnsuid.Valid {

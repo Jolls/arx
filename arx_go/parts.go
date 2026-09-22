@@ -189,7 +189,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		FROM %s p ORDER BY part_number
 	`, h.dia().BoolFromCondition("reorder_min IS NOT NULL AND stock_on_hand < reorder_min"), h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg.PartsTable()), thumbnailCategory)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()
@@ -201,7 +201,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		var active sql.NullBool
 		var attach, poLines sql.NullInt64
 		if err := rows.Scan(&p.ID, &pn, &rev, &description, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines, &p.BelowMin, &thumbFile); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, "database error", err)
 			return
 		}
 		if urlutil.IsLocalFile(thumbFile.String) {
@@ -225,7 +225,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	log.Printf("[rows] parts: %d rows in %v", len(out), time.Since(start))
@@ -2083,7 +2083,7 @@ func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request
 		`SELECT id, file_name FROM %s WHERE part_id = @p1 AND is_active = %s ORDER BY sort_order, id`,
 		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()
@@ -2194,7 +2194,7 @@ func (h *Handler) PartRecordsRows(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.scopedRecordsRows(r.Context(), "part_id", id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	writeJSON(w, out)
@@ -2759,7 +2759,7 @@ func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 		FROM %s ORDER BY part_number
 	`, h.cfg.PartsTable()))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()
@@ -2818,7 +2818,7 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 		ORDER BY pl.line_number
 	`, prc, h.dia().BoolLiteral(true), hasOwnBOMExpr(h.dia(), pl, "pn.id"), pl, pn), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()

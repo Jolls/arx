@@ -312,7 +312,7 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		FROM %s ORDER BY number DESC
 	`, h.cfg.POTable()))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()
@@ -325,7 +325,7 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		var totalCost sql.NullFloat64
 		if err := rows.Scan(&po.Num, &status, &supplierID, &groupID, &supplierName,
 			&dateOrdered, &dateClosed, &orderer, &totalCost); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, "database error", err)
 			return
 		}
 		po.Status = status.String
@@ -349,7 +349,7 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		out = append(out, po)
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	log.Printf("[rows] pos: %d rows in %v", len(out), time.Since(start))
@@ -1107,7 +1107,7 @@ func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET date_printed=@p1 WHERE number=@p2`, h.cfg.POTable(),
 	), time.Now(), num); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -2775,7 +2775,7 @@ func (h *Handler) POsExportCSV(w http.ResponseWriter, r *http.Request) {
 		ORDER BY p.number DESC, l.line_number
 	`, h.cfg.POTable(), h.cfg.POLineTable()))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()

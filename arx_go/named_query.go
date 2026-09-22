@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -11,12 +12,25 @@ import (
 	"strings"
 )
 
+// Sentinel errors runNamedQuery/execQuery return for caller-fixable problems
+// (bad spec, unknown name, unsafe SQL) as opposed to genuine driver failures.
+// APINamedQuery uses these to decide which errors are safe to surface verbatim.
+var (
+	errNamedQueryEmptySpec = errors.New("empty query name in spec")
+	errNamedQueryNotFound  = errors.New("named query not found")
+	errQueryNotSelect      = errors.New("query must be a plain SELECT statement")
+)
+
 // unsafeKeywordRE matches DML/DDL/admin keywords at word boundaries and
 // semicolons. INTO blocks SELECT ... INTO (a table-creating write that would
 // otherwise slip past a SELECT-prefixed query); WAITFOR blocks a trivial DoS.
+// OPENROWSET/OPENDATASOURCE/OPENQUERY/BULK block SQL Server's file-read and
+// remote-provider surface, which needs neither EXEC nor a semicolon; the PG_*
+// entries are the Postgres equivalents (file read, directory list, sleep DoS) —
+// one list for both engines, since this guard is dialect-independent (#146).
 // Word boundaries avoid false positives on column names that contain keyword
-// substrings (e.g. created_at, updated_at, alternate).
-var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE|INTO|MERGE|GRANT|REVOKE|DENY|WAITFOR|DBCC|BACKUP|RESTORE|SHUTDOWN)\b|;`)
+// substrings (e.g. created_at, updated_at, alternate, bulk_order_delimiter).
+var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE|INTO|MERGE|GRANT|REVOKE|DENY|WAITFOR|DBCC|BACKUP|RESTORE|SHUTDOWN|OPENROWSET|OPENDATASOURCE|OPENQUERY|BULK|PG_READ_FILE|PG_LS_DIR|PG_SLEEP)\b|;`)
 
 // isSafeQuery rejects anything that isn't a plain SELECT.
 // Defense-in-depth only — the real control is DB-level: the app DB user
@@ -115,7 +129,7 @@ func (qr QueryResult) Values() string {
 func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResult, error) {
 	name, params := parseQuerySpec(specNom)
 	if name == "" {
-		return QueryResult{}, fmt.Errorf("empty query name in spec_nom %q", specNom)
+		return QueryResult{}, fmt.Errorf("%w: spec_nom %q", errNamedQueryEmptySpec, specNom)
 	}
 
 	var storedSQL, resultType string
@@ -124,7 +138,7 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 		name,
 	).Scan(&storedSQL, &resultType)
 	if err == sql.ErrNoRows {
-		return QueryResult{}, fmt.Errorf("named query %q not found", name)
+		return QueryResult{}, fmt.Errorf("%w: %q", errNamedQueryNotFound, name)
 	}
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("named query lookup: %w", err)
@@ -142,7 +156,7 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 // Column handling matches runNamedQuery: 1 col = value+label, 2+ cols = value,label.
 func (h *Handler) execQuery(ctx context.Context, sqlText, resultType string, params map[string]string) (QueryResult, error) {
 	if !isSafeQuery(sqlText) {
-		return QueryResult{}, fmt.Errorf("query must be a plain SELECT statement")
+		return QueryResult{}, errQueryNotSelect
 	}
 
 	// Build args in a deterministic order (not map iteration order, which is
@@ -217,7 +231,11 @@ func (h *Handler) APINamedQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	qr, err := h.runNamedQuery(r.Context(), spec)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, errNamedQueryEmptySpec) || errors.Is(err, errNamedQueryNotFound) || errors.Is(err, errQueryNotSelect) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		serverError(w, "database error", err)
 		return
 	}
 	type rowJSON struct {
