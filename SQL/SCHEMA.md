@@ -145,6 +145,62 @@ Hand-run through the Azure portal query editor — single batch, no `GO`. See CL
 - **Ledger semantics:** no backfill. No row for a pre-#48 migration means *unknown*, not *not applied*. "What's applied?" is `SELECT * FROM dbo.schema_migrations ORDER BY version_id`.
 - **Not `app_config.schema_version`:** that scalar is the binary↔DB compatibility gate, bumped only by breaking migrations. The ledger records every migration and is read by nothing at runtime. Breaking migrations still bump `schema_version` *and* register.
 
+## Database privileges
+
+The app's DB login must be least-privilege. `isSafeQuery` (`arx_go/named_query.go`) is a
+keyword **denylist** and defense-in-depth only: an admin-authored named query executes with
+whatever rights the app login holds, so file reads (`OPENROWSET(BULK …)`, `pg_read_file()`) and
+outbound remote-provider connections are closed by the grants below, not by the regex (#146).
+
+Nothing here is auto-run and no migration applies it — a DBA applies and verifies it per
+environment (ArxDev, ArxProd), the same way `SQL/azure/*.sql` is reference DDL.
+
+**Required — and nothing more:**
+
+- `SELECT`, `INSERT`, `UPDATE`, `DELETE` on the application tables listed in "Table reference"
+  below.
+- The PO-number sequence: SQL Server `GRANT UPDATE ON OBJECT::dbo.PO_Number_Seq` (`NEXT VALUE
+  FOR` requires `UPDATE`, and `db_datawriter` does not cover sequences); Postgres
+  `GRANT USAGE ON SEQUENCE po_number_seq`. Drawn in `arx_go/pos.go` and `arx_go/rfq_bom.go`.
+- Nothing else: the app runs no DDL at runtime, calls no stored procedures, and never reads or
+  writes outside these tables. Triggers (see "Triggers") fire under the table owner via
+  ownership chaining and need no extra grant. `SET CONTEXT_INFO` needs no grant.
+
+**Must NOT hold — SQL Server / Azure SQL:**
+
+- `ADMINISTER BULK OPERATIONS` (Azure SQL Database: `ADMINISTER DATABASE BULK OPERATIONS`) or
+  the `bulkadmin` server role — these enable `BULK INSERT` and `OPENROWSET(BULK …)` file reads
+  as the SQL Server service account.
+- `db_owner`, `db_ddladmin`, `sysadmin`, or `CONTROL`/`ALTER ANY` on the database.
+- The server-level **Ad Hoc Distributed Queries** option should stay disabled (its default) —
+  it gates `OPENROWSET`/`OPENDATASOURCE` against remote providers.
+
+**Must NOT hold — Postgres:**
+
+- Membership in `pg_read_server_files`, `pg_write_server_files`, or
+  `pg_execute_server_program`.
+- `SUPERUSER`, and the login must not own the tables — an owner can `ALTER`/`DROP` them
+  regardless of grants.
+
+**Per-environment verification.** Run by hand as the app login against the target database
+(never ArxProd from tooling):
+
+```sql
+-- SQL Server / Azure SQL
+SELECT permission_name FROM fn_my_permissions(NULL, 'DATABASE') ORDER BY permission_name;
+SELECT HAS_PERMS_BY_NAME(NULL, NULL, 'ADMINISTER BULK OPERATIONS')          AS bulk_ops;  -- expect 0
+SELECT HAS_PERMS_BY_NAME(NULL, NULL, 'ADMINISTER DATABASE BULK OPERATIONS') AS db_bulk_ops; -- expect 0 (Azure SQL DB)
+SELECT IS_ROLEMEMBER('db_owner') AS db_owner, IS_ROLEMEMBER('db_ddladmin') AS db_ddladmin;  -- expect 0
+```
+
+```sql
+-- Postgres
+SELECT rolname FROM pg_roles
+ WHERE pg_has_role(current_user, oid, 'member')
+   AND rolname LIKE 'pg\_%';                       -- expect no pg_read_server_files etc.
+SELECT rolsuper FROM pg_roles WHERE rolname = current_user;  -- expect false
+```
+
 ---
 
 ## Table reference

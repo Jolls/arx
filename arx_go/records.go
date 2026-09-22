@@ -317,7 +317,7 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 		ORDER BY %s DESC, record_date DESC`,
 		h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().TryCastInt("serial_number")), formID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()
@@ -330,7 +330,7 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 		var locked, approved bool
 		if err := rows.Scan(&rec.ID, &rec.PartNumberID, &rec.SN, &rec.SNPN, &rec.SNDesc,
 			&recordDate, &rec.Type, &locked, &approved, &formRev); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, "database error", err)
 			return
 		}
 		if recordDate != nil {
@@ -348,7 +348,7 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 		out = append(out, rec)
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	log.Printf("[rows] records form=%d: %d rows in %v", formID, len(out), time.Since(start))
@@ -2630,7 +2630,8 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	// #677: lot/build linkage saves with the record's other metadata (blank clears it).
 	lotArg, buildArg, linkErr := h.recordLinkageArgs(r, record.PartNumberID)
 	if linkErr != nil {
-		http.Error(w, linkErr.Error(), http.StatusBadRequest)
+		log.Printf("invalid lot/build selection: %v", linkErr)
+		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)
 		return
 	}
 

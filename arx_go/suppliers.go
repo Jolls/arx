@@ -64,7 +64,7 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 		ORDER BY su.name ASC
 	`, su, cn))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	defer rows.Close()
@@ -75,7 +75,7 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 		var numLNKs, numPOs sql.NullInt64
 		var isActive sql.NullBool
 		if err := rows.Scan(&s.ID, &name, &code, &numLNKs, &numPOs, &isActive, &cnName, &cnCountry); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, "database error", err)
 			return
 		}
 		s.Name = name.String
@@ -88,7 +88,7 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 		out = append(out, s)
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	log.Printf("[rows] suppliers: %d rows in %v", len(out), time.Since(start))
