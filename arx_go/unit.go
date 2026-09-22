@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -247,7 +248,7 @@ func (h *Handler) UnitRecordsRows(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.scopedRecordsRows(r.Context(), "unit_id", unitID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	writeJSON(w, out)
@@ -312,7 +313,8 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	lotArg, buildArg, err := h.recordLinkageArgs(r, p.ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("invalid lot/build selection: %v", err)
+		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)
 		return
 	}
 	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
