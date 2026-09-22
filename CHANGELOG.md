@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.64] - 2026-09-22
+### Changed
+- Corrected stale CRLF/line-ending guidance in `CLAUDE.md` and annotated the maintainer-local `CLAUDE.local.md` import ([#149](https://github.com/Jolls/arx/issues/149))
+
+### Added
+- AGPL-3.0 licence and source-link notice in the app footer ([#154](https://github.com/Jolls/arx/issues/154))
+
 ## [0.7.63] - 2026-09-22
 ### Security
 - Handlers no longer return raw driver error text to clients; the real error is logged server-side and a generic message returned instead (~31 sites) ([#148](https://github.com/Jolls/arx/issues/148))
