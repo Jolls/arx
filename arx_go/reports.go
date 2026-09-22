@@ -681,7 +681,7 @@ func (h *Handler) ReportsOnTimeExportCSV(w http.ResponseWriter, r *http.Request)
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
 	rows, err := h.queryOnTimeDelivery(r.Context(), rng)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	var csvRows [][]string
@@ -786,7 +786,7 @@ func (h *Handler) ReportsCycleTimeExportCSV(w http.ResponseWriter, r *http.Reque
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
 	rows, err := h.queryPOCycleTime(r.Context(), rng)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	var csvRows [][]string
@@ -898,7 +898,7 @@ func dataQualityCSVRows(rows []dataQualityPartRow) [][]string {
 func (h *Handler) ReportsDataQualityNoAttachmentsExportCSV(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryPartsNoAttachments(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	writeSpendCSV(w, "data_quality_no_attachments.csv", []string{"Part Number", "Description", "Category"}, dataQualityCSVRows(rows))
@@ -909,7 +909,7 @@ func (h *Handler) ReportsDataQualityNoAttachmentsExportCSV(w http.ResponseWriter
 func (h *Handler) ReportsDataQualityMissingSupplierExportCSV(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryPartsMissingDefaultSupplier(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	writeSpendCSV(w, "data_quality_missing_supplier.csv", []string{"Part Number", "Description", "Category"}, dataQualityCSVRows(rows))
@@ -920,7 +920,7 @@ func (h *Handler) ReportsDataQualityMissingSupplierExportCSV(w http.ResponseWrit
 func (h *Handler) ReportsDataQualityStaleRollupExportCSV(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryPartsStaleRollup(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	writeSpendCSV(w, "data_quality_stale_rollup.csv", []string{"Part Number", "Description", "Category"}, dataQualityCSVRows(rows))
@@ -1017,7 +1017,7 @@ func (h *Handler) ReportsSpendBySupplierExportCSV(w http.ResponseWriter, r *http
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
 	rows, err := h.querySpendBySupplier(r.Context(), rng)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	csvRows := make([][]string, len(rows))
@@ -1033,7 +1033,7 @@ func (h *Handler) ReportsSpendByPartExportCSV(w http.ResponseWriter, r *http.Req
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
 	rows, err := h.querySpendByPart(r.Context(), rng)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, "database error", err)
 		return
 	}
 	csvRows := make([][]string, len(rows))
