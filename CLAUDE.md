@@ -14,6 +14,7 @@
 
 # Arx Parts Master
 @CLAUDE.local.md
+(`CLAUDE.local.md` is a maintainer-local file, gitignored and not committed — this import only resolves for the maintainer; it is not present in the public repo.)
 
 Parts master/purchasing system for engineering/manufacturing shop. One Go binary (`arx_go/Arx.exe`):
 - `arx_go/` — catalog, suppliers, POs, test records. Port 4568. `package main`.
@@ -33,7 +34,7 @@ WSL: a native Linux Go toolchain (not the Windows `go.exe`) works directly again
 - No `jq` installed — use `gh ... --json <fields> --template '{{...}}'` or PowerShell `ConvertFrom-Json`.
 - `gh issue view`/`gh pr view` plain-text (no --json) silently return empty in both Bash/PowerShell tools (pager swallows output, exits 0). Always use `--json title,body,labels,comments` etc.
 - WSL build/vet/test: install a native Linux Go toolchain (`apt install golang-go`, matching the version pinned in `go.work`) and `libayatana-appindicator3-dev` (systray's cgo dependency, `arx_go` only — `arxlib` has no extra system deps). Windows-only source (`syscall`-based files like `arxlib/folderpick`, `arx_go/console_windows.go`) needs a `!windows`-tagged counterpart to compile on Linux; check for new ones after adding OS-specific code.
-- No bulk file rewrites (`gofmt -w`, `sed -i`). Repo is NOT gofmt-clean and the working tree is mixed CRLF/LF (`core.autocrlf=true`, no `.gitattributes`). Whole-file rewrites reflow unrelated code and/or flip CRLF→LF — noisy diffs that violate surgical-change discipline. Edit via the Edit tool (`replace_all` per file for bulk renames); it preserves line endings. `gofmt -l` flags CRLF files as "unformatted" but the pending diff is just line-ending churn, not real formatting — don't chase it. Verify builds with `build.bat`, not gofmt.
+- No bulk file rewrites (`gofmt -w`, `sed -i`). Repo is NOT gofmt-clean. `.gitattributes` normalizes source files to LF in-repo (`* text=auto eol=lf`, plus explicit `eol=lf` for `.go`/`.sql`/`.md`/etc., `eol=crlf` for `.bat`/`.ps1`/`.cmd`), but a whole-file rewrite still reflows unrelated code and produces a noisy diff that violates surgical-change discipline — edit via the Edit tool instead (`replace_all` per file for bulk renames). Verify builds with `build.bat`, not gofmt.
 
 ## Key facts
 arx_go: package main, port 4568, go-chi router, getlantern/systray, templates `templates/{contacts,parts,pos,records,reports,settings,shared,suppliers}/` embedded (one nav tab per subfolder, shared layout). arxlib: package config/db/urlutil/folderpick.
