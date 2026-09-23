@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.66] - 2026-09-23
+### Security
+- `SESSION_SECRET` from the environment is now ignored (with a warning) when it is the old `.env.example` placeholder or under 32 bytes, so an install with a short `SESSION_SECRET` in `.env` switches to the generated key and is logged out once; `.env.example` no longer sets it ([#168](https://github.com/Jolls/arx/issues/168))
+- ~120 more handlers no longer return driver/parse error text to the client; the detail is logged server-side and the client gets a generic message ([#169](https://github.com/Jolls/arx/issues/169))
+- `POST /po/{id}/open-folder` validates the PO number and 404s for unknown POs instead of creating a folder from the raw route parameter ([#170](https://github.com/Jolls/arx/issues/170))
+
 ## [0.7.65] - 2026-09-22
 ### Changed
 - Copyright notice in `LICENSE`/`README.md` now reads "Jolls and contributors", reflecting confirmed non-maintainer authorship in history ([#152](https://github.com/Jolls/arx/issues/152))

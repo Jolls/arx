@@ -108,7 +108,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -126,7 +126,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		GROUP BY trec.id, record_date`,
 		h.dia().BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.ResultsTable(), h.dia().BoolLiteral(true), dateClause), args...)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer rows.Close()

@@ -200,7 +200,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 		ORDER BY pn.part_number ASC`,
 		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer rows.Close()
@@ -209,13 +209,13 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f models.TestForm
 		if err := rows.Scan(&f.ID, &f.PartNumberID, &f.IsLocked, &f.Revision, &f.PartNumber, &f.Description); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		forms = append(forms, f)
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -471,7 +471,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -483,7 +483,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		       created_at, updated_at
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer stepRows.Close()
@@ -507,7 +507,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 			&format, &stepComment,
 			&s.StepCreatedAt, &s.StepUpdatedAt,
 		); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		s.Parameter = param.String
@@ -533,7 +533,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		stepsMap[s.ID] = &s
 	}
 	if err := stepRows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 
@@ -710,7 +710,7 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		h.cfg.StepsTable(), h.cfg.FormRowHistoryTable()),
 		formID, dayStart.UTC(), dayEnd.UTC())
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer rows.Close()
@@ -723,14 +723,14 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 			&s.SpecNom, &s.SpecMin, &s.SpecMax,
 			&s.SpecUnits, &s.PFType, &s.DefaultResult, &s.HideFormula, &changed,
 		); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		s.Changed = changed == 1
 		steps = append(steps, s)
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 
@@ -760,7 +760,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	form.RecordTypes = recordTypes.String
@@ -773,7 +773,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		       instrument_types, format, comment
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), formID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer stepRows.Close()
@@ -789,7 +789,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 			&pfType, &defaultResult, &hideFormula, &s.Archived, &category, &sheetName,
 			&instrumentTypes, &format, &comment,
 		); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		s.Parameter = param.String
@@ -809,7 +809,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		stepsMap[s.ID] = &s
 	}
 	if err := stepRows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 
@@ -894,7 +894,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	// trg_form_row_history trigger on every UPDATE in this batch.
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not start transaction", err)
 		return
 	}
 	defer tx.Rollback()
@@ -955,7 +955,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			nullOrVal(sid(id, "comment")),
 			id, formID,
 		); err != nil {
-			http.Error(w, "could not save step: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "could not save step", err)
 			return
 		}
 	}
@@ -1063,7 +1063,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "could not save steps: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not save steps", err)
 		return
 	}
 
@@ -1122,7 +1122,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			if _, err := h.execContext(r.Context(), fmt.Sprintf(
 				"UPDATE %s SET test_order=@p1 WHERE id=@p2", h.cfg.FormsTable()),
 				normalizeOrder(stepOrder), formID); err != nil {
-				http.Error(w, "could not save step order: "+err.Error(), http.StatusInternalServerError)
+				serverError(w, "could not save step order", err)
 				return
 			}
 		}
@@ -1137,7 +1137,7 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			"UPDATE %s SET record_types=@p1, instrument_types=@p2 WHERE id=@p3",
 			h.cfg.FormsTable()),
 			nullOrVal(newRecordTypes), nullOrVal(newInstrTypes), formID); err != nil {
-			http.Error(w, "could not save record types: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "could not save record types", err)
 			return
 		}
 	}
@@ -1317,7 +1317,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -1330,14 +1330,14 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
 	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, false)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -1411,7 +1411,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	trace, err := h.loadRecordTrace(r.Context(), &record, false)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -1454,7 +1454,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -1467,14 +1467,14 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
 	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, false)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -1536,7 +1536,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	form.RecordTypes = recordTypes.String
@@ -1607,7 +1607,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -1643,7 +1643,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not start transaction", err)
 		return
 	}
 	defer tx.Rollback()
@@ -1663,7 +1663,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 			FROM %s WITH (UPDLOCK, HOLDLOCK) WHERE form_id = @p1`,
 			h.dia().TryCastInt("serial_number"), h.cfg.RecordsTable()), formID).Scan(&nextSN)
 		if err != nil {
-			http.Error(w, "serial number error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "serial number error", err)
 			return
 		}
 		serialNumber = strconv.Itoa(nextSN)
@@ -1679,7 +1679,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	err = tx.QueryRowContext(r.Context(), insertRecord,
 		formID, partNumberID, serialNumber, snPN, snDesc, recordType, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
 	if err != nil {
-		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "insert error", err)
 		return
 	}
 
@@ -1690,12 +1690,12 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		InstrumentType: instrumentType, RecordDate: &recordDate, TestOrder: form.TestOrder,
 	}
 	if err := h.materializeRecordSteps(r.Context(), tx, &rec, &form); err != nil {
-		http.Error(w, "materialize error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "materialize error", err)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "commit error", err)
 		return
 	}
 
@@ -1957,7 +1957,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	if record.IsLocked {
@@ -1973,7 +1973,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description, &editInstrumentTypes)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	form.InstrumentTypes = editInstrumentTypes.String
@@ -1983,7 +1983,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 	// includeHidden=true: render conditionally-hidden steps (display:none) so JS can toggle them live (#257).
 	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, true)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -2015,7 +2015,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 
 	trace, err := h.loadRecordTrace(r.Context(), &record, true)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -2047,11 +2047,11 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 
 	// Lock and, on transition, log the 'completed' event + result snapshot (#251).
 	if _, err := h.completeRecordTx(r.Context(), recordID, 0, username); err != nil {
-		status := http.StatusInternalServerError
 		if errors.Is(err, errRecordNeedsLot) {
-			status = http.StatusBadRequest
+			http.Error(w, errRecordNeedsLot.Error(), http.StatusBadRequest)
+			return
 		}
-		http.Error(w, "lock error: "+err.Error(), status)
+		serverError(w, "lock error", err)
 		return
 	}
 
@@ -2078,7 +2078,7 @@ func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
 		"UPDATE %s SET is_approved=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s AND is_approved=%s",
 		h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), recordID)
 	if err != nil {
-		http.Error(w, "approve error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "approve error", err)
 		return
 	}
 
@@ -2086,7 +2086,7 @@ func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_record_id, event_type, username, event_date) VALUES (@p1, 'approved', @p2, GETDATE())",
 			h.cfg.RecordEventsTable()), recordID, u.Username); err != nil {
-			http.Error(w, "approve error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "approve error", err)
 			return
 		}
 	}
@@ -2119,7 +2119,7 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 		"SELECT is_approved FROM %s WHERE id=@p1", h.cfg.RecordsTable()), recordID).
 		Scan(&isApproved); err != nil {
-		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "unlock error", err)
 		return
 	}
 	u := h.currentUser(r)
@@ -2137,7 +2137,7 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		"UPDATE %s SET is_locked=%s, is_approved=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s",
 		h.cfg.RecordsTable(), h.dia().BoolLiteral(false), h.dia().BoolLiteral(false), h.dia().BoolLiteral(true)), recordID)
 	if err != nil {
-		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "unlock error", err)
 		return
 	}
 
@@ -2145,7 +2145,7 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_record_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
 			h.cfg.RecordEventsTable()), recordID, username, comment); err != nil {
-			http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "unlock error", err)
 			return
 		}
 	}
@@ -2210,13 +2210,13 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not start transaction", err)
 		return
 	}
 	defer tx.Rollback()
@@ -2232,7 +2232,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 	var formRevision int
 	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
 		"SELECT revision FROM %s WHERE id=@p1", h.cfg.FormsTable()), src.FormID).Scan(&formRevision); err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -2250,7 +2250,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
 		src.RecordType, src.InstrumentType, src.TestOrder, formRevision, src.UnitID).Scan(&newID)
 	if err != nil {
-		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "insert error", err)
 		return
 	}
 
@@ -2260,7 +2260,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		       spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail
 		FROM %s WHERE form_record_id = @p1`, h.cfg.ResultsTable()), recordID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer resRows.Close()
@@ -2281,7 +2281,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 			&pfType, &format, &hideFormula, &defaultResult,
 			&result, &comment, &passFail,
 		); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		var pf *bool
@@ -2300,17 +2300,17 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 			pfType, format, hideFormula, defaultResult,
 			result, comment, pf,
 		); err != nil {
-			http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "insert error", err)
 			return
 		}
 	}
 	if err := resRows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "commit error", err)
 		return
 	}
 
@@ -2335,7 +2335,7 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 		"UPDATE %s SET is_locked=%s, revision = revision + 1 WHERE id=@p1 AND is_locked=%s",
 		h.cfg.FormsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), formID)
 	if err != nil {
-		http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "lock error", err)
 		return
 	}
 
@@ -2343,7 +2343,7 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_id, event_type, username, event_date) VALUES (@p1, 'locked', @p2, GETDATE())",
 			h.cfg.FormEventsTable()), formID, username); err != nil {
-			http.Error(w, "lock error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "lock error", err)
 			return
 		}
 	}
@@ -2379,7 +2379,7 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 		"UPDATE %s SET is_locked=%s WHERE id=@p1 AND is_locked=%s",
 		h.cfg.FormsTable(), h.dia().BoolLiteral(false), h.dia().BoolLiteral(true)), formID)
 	if err != nil {
-		http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "unlock error", err)
 		return
 	}
 
@@ -2387,7 +2387,7 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.execContext(r.Context(), fmt.Sprintf(
 			"INSERT INTO %s (form_id, event_type, username, event_date, comments) VALUES (@p1, 'unlocked', @p2, GETDATE(), @p3)",
 			h.cfg.FormEventsTable()), formID, username, comment); err != nil {
-			http.Error(w, "unlock error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "unlock error", err)
 			return
 		}
 	}
@@ -2418,7 +2418,7 @@ func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not start transaction", err)
 		return
 	}
 	defer tx.Rollback()
@@ -2430,12 +2430,12 @@ func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET archived=@p1, updated_at=GETDATE() WHERE id=@p2 AND form_id=@p3",
 		h.cfg.StepsTable()), archived, testID, formID); err != nil {
-		http.Error(w, "archive error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "archive error", err)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "archive error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "archive error", err)
 		return
 	}
 
@@ -2469,7 +2469,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	if record.IsLocked {
@@ -2491,7 +2491,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		       spec_min, spec_max, pf_type, spec_units, spec_nom, archived
 		FROM %s WHERE form_id = @p1`, h.cfg.StepsTable()), record.FormID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer stepRows.Close()
@@ -2505,7 +2505,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
 			&specMin, &specMax, &pfType, &specUnits, &specNom, &s.Archived,
 		); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		s.Parameter = param.String
@@ -2520,7 +2520,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		steps[s.ID] = &s
 	}
 	if err := stepRows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 
@@ -2539,7 +2539,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	exRows, err := h.queryContext(r.Context(), fmt.Sprintf(
 		"SELECT id, form_row_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE form_record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer exRows.Close()
@@ -2548,14 +2548,14 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		var result, comment sql.NullString
 		var specMin, specMax, pfType string
 		if err := exRows.Scan(&rid, &tid, &result, &comment, &specMin, &specMax, &pfType); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		existing[tid] = savedResult{ID: rid, Result: result.String, Comment: comment.String,
 			SpecMin: specMin, SpecMax: specMax, PFType: pfType}
 	}
 	if err := exRows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 
@@ -2592,7 +2592,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 					UPDATE %s SET result=@p1, comment=@p2, pass_fail=@p3, updated_at=GETDATE()
 					WHERE id=@p4`, h.cfg.ResultsTable()),
 					result, comment, passFail, prev.ID); err != nil {
-					http.Error(w, "could not save result: "+err.Error(), http.StatusInternalServerError)
+					serverError(w, "could not save result", err)
 					return
 				}
 			}
@@ -2617,7 +2617,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 				step.Parameter, step.Specification,
 				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
 				step.HideFormula, step.DefaultResult); err != nil {
-				http.Error(w, "could not save result: "+err.Error(), http.StatusInternalServerError)
+				serverError(w, "could not save result", err)
 				return
 			}
 		}
@@ -2657,7 +2657,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not start transaction", err)
 		return
 	}
 	defer tx.Rollback()
@@ -2689,7 +2689,8 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		} else {
 			parsedQty, qerr := parseBuildQty(r)
 			if qerr != nil {
-				http.Error(w, qerr.Error(), http.StatusBadRequest)
+				log.Printf("invalid build quantity: %v", qerr)
+				http.Error(w, "Invalid quantity", http.StatusBadRequest)
 				return
 			}
 			qty = parsedQty
@@ -2697,7 +2698,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		outputLotTracked := models.TracksLots(trackingMode)
 		lines, lerr := h.loadBuildLines(r.Context(), record.PartNumberID)
 		if lerr != nil {
-			http.Error(w, "could not load BOM: "+lerr.Error(), http.StatusInternalServerError)
+			serverError(w, "could not load BOM", lerr)
 			return
 		}
 		if len(lines) == 0 {
@@ -2715,7 +2716,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		}
 		bID, outLot, berr := h.performBuild(r, tx, record.PartNumberID, outputLotTracked, qty, buildDate, "", lines, lotPicks)
 		if berr != nil {
-			http.Error(w, "could not build: "+berr.Error(), http.StatusInternalServerError)
+			serverError(w, "could not build", berr)
 			return
 		}
 		buildArg = bID // the new build is this unit's provenance, overriding any dropdown pick
@@ -2736,7 +2737,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 				username = u.Username
 			}
 			if err := h.appendLotNote(r.Context(), tx, lotID, lotNote, username); err != nil {
-				http.Error(w, "could not save lot note: "+err.Error(), http.StatusInternalServerError)
+				serverError(w, "could not save lot note", err)
 				return
 			}
 		}
@@ -2754,7 +2755,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	} else if models.TracksSerials(trackingMode) && record.SerialNumber != "" && (buildArg != nil || lotArg != nil) {
 		uid, uerr := h.upsertUnitForRecord(r.Context(), tx, record.PartNumberID, record.SerialNumber, buildArg, lotArg)
 		if uerr != nil {
-			http.Error(w, "could not record unit: "+uerr.Error(), http.StatusInternalServerError)
+			serverError(w, "could not record unit", uerr)
 			return
 		}
 		unitArg = uid
@@ -2772,11 +2773,11 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			h.cfg.RecordsTable()), recordType, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
 	}
 	if err != nil {
-		http.Error(w, "could not save record: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not save record", err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "commit error", err)
 		return
 	}
 
@@ -2809,7 +2810,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	if record.IsLocked {
@@ -2823,14 +2824,14 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg.FormsTable(), h.cfg.PartsTable()), record.FormID).
 		Scan(&form.ID, &form.PartNumberID, &form.TestOrder, &form.Revision, &form.PartNumber); err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
 	// Live definition (full) and the record's existing snapshot rows.
 	steps, err := h.loadSteps(r.Context(), record.FormID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	existing := map[int]int{}                  // form_row_id -> result row id
@@ -2838,7 +2839,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(
 		"SELECT id, form_row_id, COALESCE(result,'') FROM %s WHERE form_record_id = @p1", h.cfg.ResultsTable()), recordID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	for resRows.Next() {
@@ -2846,7 +2847,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		var result string
 		if err := resRows.Scan(&id, &tid, &result); err != nil {
 			resRows.Close()
-			http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "query error", err)
 			return
 		}
 		existing[tid] = id
@@ -2854,14 +2855,14 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := resRows.Err(); err != nil {
 		resRows.Close()
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	resRows.Close()
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "could not start transaction: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "could not start transaction", err)
 		return
 	}
 	defer tx.Rollback()
@@ -2898,7 +2899,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 				step.Type, step.Parameter, step.Specification, step.SpecMin, step.SpecNom, step.SpecMax,
 				step.SpecUnits, step.PFType, step.Format, step.HideFormula, step.DefaultResult,
 				passFail, rowID); err != nil {
-				http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+				serverError(w, "resync error", err)
 				return
 			}
 		} else {
@@ -2912,7 +2913,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 				recordID, tid, step.Type, step.Parameter, step.Specification,
 				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
 				step.HideFormula, step.DefaultResult); err != nil {
-				http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+				serverError(w, "resync error", err)
 				return
 			}
 		}
@@ -2924,12 +2925,12 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 		"UPDATE %s SET test_order=@p1, form_revision=@p2, updated_at=GETDATE() WHERE id=@p3", h.cfg.RecordsTable()),
 		form.TestOrder, form.Revision, recordID); err != nil {
-		http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "resync error", err)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "resync error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "resync error", err)
 		return
 	}
 
@@ -3077,7 +3078,7 @@ func (h *Handler) copyFormSteps(ctx context.Context, tx *txLogger, sourceID, new
 func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 	pns, err := h.formPNList(r.Context())
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -3088,7 +3089,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 		WHERE f.is_active = %s ORDER BY pn.part_number`,
 		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true)))
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer rows.Close()
@@ -3150,7 +3151,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "tx error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "tx error", err)
 		return
 	}
 
@@ -3162,20 +3163,20 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	if err := tx.QueryRowContext(r.Context(), insertForm,
 		pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
 		tx.Rollback()
-		http.Error(w, "create error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "create error", err)
 		return
 	}
 
 	if sourceID > 0 {
 		if err := h.copyFormSteps(r.Context(), tx, sourceID, newID); err != nil {
 			tx.Rollback()
-			http.Error(w, "copy error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "copy error", err)
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "commit error", err)
 		return
 	}
 
@@ -3201,7 +3202,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -3211,7 +3212,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 
 	pns, err := h.formPNList(r.Context())
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -3261,7 +3262,7 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
-		http.Error(w, "tx error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "tx error", err)
 		return
 	}
 
@@ -3273,18 +3274,18 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	if err := tx.QueryRowContext(r.Context(), insertDupForm,
 		pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {
 		tx.Rollback()
-		http.Error(w, "insert error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "insert error", err)
 		return
 	}
 
 	if err := h.copyFormSteps(r.Context(), tx, sourceID, newFormID); err != nil {
 		tx.Rollback()
-		http.Error(w, "copy error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "copy error", err)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "commit error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "commit error", err)
 		return
 	}
 
@@ -3318,7 +3319,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -3342,7 +3343,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	step.Parameter = param.String
@@ -3383,7 +3384,7 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -3411,7 +3412,7 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 		ORDER BY %s DESC, trec.record_date DESC`,
 		h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().TryCastInt("trec.serial_number")), testID, formID)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer resRows.Close()
@@ -3425,7 +3426,7 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 		var updatedAt *time.Time
 		if err := resRows.Scan(&rec.ID, &rec.SN, &rec.SNPN, &rec.PartNumberID, &recordDate,
 			&result, &passFail, &rec.Comment, &updatedAt); err != nil {
-			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "scan error", err)
 			return
 		}
 		rec.Date = recordDate.Format("2006-01-02 15:04")
@@ -3444,7 +3445,7 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 		out = append(out, rec)
 	}
 	if err := resRows.Err(); err != nil {
-		http.Error(w, "rows error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "rows error", err)
 		return
 	}
 	log.Printf("[rows] report form=%d test=%d: %d rows in %v", formID, testID, len(out), time.Since(start))

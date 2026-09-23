@@ -577,11 +577,11 @@ func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
 		"templates/"+page,
 	)
 	if err != nil {
-		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "template parse error", err)
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, path.Base(page), data); err != nil {
-		http.Error(w, "template execute error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "template execute error", err)
 	}
 }
 
@@ -622,11 +622,11 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		"templates/"+page,
 	)
 	if err != nil {
-		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "template parse error", err)
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, "layout", data); err != nil {
-		http.Error(w, "template execute error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "template execute error", err)
 	}
 }
 
