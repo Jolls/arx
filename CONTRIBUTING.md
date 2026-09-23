@@ -15,11 +15,15 @@ On Linux you also need `libayatana-appindicator3-dev` (systray's cgo dependency)
 
 - Schema changes ship as a migration in `SQL/azure/migrations/`. Migrations are authored, never run automatically — the maintainer runs them by hand.
 - `SQL/azure/*.sql` and `SQL/postgres/*.sql` are reference DDL, not migration runners; keep them in sync.
-- Details: [`SQL/schema.md`](SQL/schema.md).
+- Details: [`SQL/SCHEMA.md`](SQL/SCHEMA.md).
 
 ## Integration tests
 
 `go test -tags integration ./arx_go/...` needs `ARX_TEST_DSN` pointing at a seeded test database. The seed data uses fixed IDs that the tests assert against (e.g. part `3005`), so don't renumber seed rows. They are excluded from the default `go test ./...`.
+
+## Licensing
+
+Contributions are accepted under the project's AGPL-3.0 license.
 
 ## Changelog
 

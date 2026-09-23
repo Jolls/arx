@@ -44,7 +44,7 @@ Cross-cutting: session-based login, local file/folder browsing for attachments, 
 
 ## Build
 
-Requires Go 1.22+ and a SQL Server instance.
+Requires Go 1.27+ and a SQL Server instance.
 
 ```bat
 cd arx_go
@@ -60,7 +60,7 @@ Outputs `arx_go\Arx.exe`. Runs all tests before building.
 1. Copy `Arx.exe` to a folder and run it. A tray icon appears.
 2. Open `http://localhost:4568` in a browser.
 3. The app redirects to `/settings` — enter your SQL Server connection details.
-4. Credentials are saved to `config\local.json` (never committed).
+4. Connection settings are saved to `config\local.json`; the DB password is saved per-user to `%APPDATA%\Arx\local.json`. Neither is committed.
 
 ---
 
@@ -69,7 +69,8 @@ Outputs `arx_go\Arx.exe`. Runs all tests before building.
 | Source | Notes |
 |---|---|
 | `.env` (repo root or `arx_go/`) | Non-secret config: `TEST_MODE`, `DEBUG_MODE` |
-| `config/local.json` | DB password — always wins, gitignored |
+| `config/local.json` | Connection settings — always wins over env, gitignored |
+| `%APPDATA%\Arx\local.json` | Per-user secrets (DB password, session secret) |
 
 `DEBUG_MODE=true` opens a console window logging SQL queries and per-route round-trip counts/timings, and surfaces extra debug info in some pages.
 `TEST_MODE=true` connects to the `ArxDev` database instead of production.

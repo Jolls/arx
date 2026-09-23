@@ -7,13 +7,12 @@ param(
 )
 
 $root      = $PSScriptRoot
-$ip        = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.)' } | Select-Object -First 1).IPAddress
 $testMode  = ($Mode -eq 'Test')
 $testEnv   = if ($testMode) { 'true' } else { 'false' }
 $modeColor = if ($testMode) { 'Yellow' } else { 'Red' }
 
 Write-Host "Starting Arx in $Mode mode..." -ForegroundColor $modeColor
-Write-Host "  http://localhost:4568  /  http://${ip}:4568" -ForegroundColor Cyan
+Write-Host "  http://localhost:4568" -ForegroundColor Cyan
 Write-Host ""
 
 $exe = "$root\arx_go\Arx.exe"
