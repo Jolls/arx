@@ -67,5 +67,5 @@ idempotent/single-batch.
 ## Reference
 
 - Plans: `docs/plans/745-slice8-create-render-logic.md`, `…/746-…`, `…/747-…`.
-- Code review + resolutions: `docs/code-review-745-747-2026-07-22.md`.
+- Code review + resolutions: `docs/archive/code-review-745-747-2026-07-22.md`.
 - Data model: `docs/plans/736-traceability-data-model.md`.

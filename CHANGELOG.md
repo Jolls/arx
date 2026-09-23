@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.65] - 2026-09-22
 ### Changed
 - Copyright notice in `LICENSE`/`README.md` now reads "Jolls and contributors", reflecting confirmed non-maintainer authorship in history ([#152](https://github.com/Jolls/arx/issues/152))
+- Moved the three dated 745-747/test-coverage review docs into `docs/archive/` with a note that they're historical snapshots, not current documentation ([#151](https://github.com/Jolls/arx/issues/151))
 
 ## [0.7.64] - 2026-09-22
 ### Changed
