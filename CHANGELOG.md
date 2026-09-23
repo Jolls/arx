@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.65] - 2026-09-22
+### Changed
+- Copyright notice in `LICENSE`/`README.md` now reads "Jolls and contributors", reflecting confirmed non-maintainer authorship in history ([#152](https://github.com/Jolls/arx/issues/152))
+
 ## [0.7.64] - 2026-09-22
 ### Changed
 - Corrected stale CRLF/line-ending guidance in `CLAUDE.md` and annotated the maintainer-local `CLAUDE.local.md` import ([#149](https://github.com/Jolls/arx/issues/149))
