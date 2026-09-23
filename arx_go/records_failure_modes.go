@@ -52,7 +52,7 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		h.dia().TopClause("1"), h.cfg.ResultsTable(), h.dia().LimitClause("1"),
 		h.dia().BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.dia().BoolLiteral(true), dateClause), args...)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "query error", err)
 		return
 	}
 	defer rows.Close()
