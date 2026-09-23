@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.64] - 2026-09-24
+### Security
+- `build.bat` now builds with `-trimpath`, so `Arx.exe` no longer embeds the builder's local source and module-cache paths ([#163](https://github.com/Jolls/arx/issues/163))
+- Requests whose `Host` header isn't `localhost`, `127.0.0.1` or `[::1]` on the app's port now get 421, closing a DNS-rebinding path to the loopback listener ([#167](https://github.com/Jolls/arx/issues/167))
+- `SESSION_SECRET` from the environment is now ignored (with a warning) when it is the old `.env.example` placeholder or under 32 bytes, so an install with a short `SESSION_SECRET` in `.env` switches to the generated key and is logged out once; `.env.example` no longer sets it ([#168](https://github.com/Jolls/arx/issues/168))
+- ~120 more handlers no longer return driver/parse error text to the client; the detail is logged server-side and the client gets a generic message ([#169](https://github.com/Jolls/arx/issues/169))
+- `POST /po/{id}/open-folder` validates the PO number and 404s for unknown POs instead of creating a folder from the raw route parameter ([#170](https://github.com/Jolls/arx/issues/170))
+
 ## [0.7.63] - 2026-09-22
 ### Security
 - Handlers no longer return raw driver error text to clients; the real error is logged server-side and a generic message returned instead (~31 sites) ([#148](https://github.com/Jolls/arx/issues/148))
