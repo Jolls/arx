@@ -158,6 +158,12 @@ func Load(version string) *Config {
 	return cfg
 }
 
+const (
+	minSessionSecretLen = 32
+	// placeholderSessionSecret is the publicly known value the old .env.example shipped.
+	placeholderSessionSecret = "change-me-to-something-long-and-random"
+)
+
 // resolveSessionSecret returns the session-signing key, generating and persisting
 // a random one to the per-user secrets store when neither the environment nor the
 // store supplies it. It only writes when the store was readable (secrets != nil),
@@ -165,7 +171,10 @@ func Load(version string) *Config {
 // per-process key is used.
 func resolveSessionSecret(secrets *SecretsConfig) string {
 	if env := os.Getenv("SESSION_SECRET"); env != "" {
-		return env
+		if len(env) >= minSessionSecretLen && env != placeholderSessionSecret {
+			return env
+		}
+		log.Println("warning: ignoring SESSION_SECRET (placeholder or shorter than 32 bytes); using the generated per-user key")
 	}
 	if secrets != nil && secrets.SessionSecret != "" {
 		return secrets.SessionSecret

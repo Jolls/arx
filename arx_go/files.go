@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -312,7 +313,8 @@ func resolveUploadDir(base, splat string) (string, bool) {
 // directory-listing sites (#864/#36).
 func (h *Handler) handleDirUpload(w http.ResponseWriter, r *http.Request, dir, redirectURL string) {
 	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
-		http.Error(w, "Error parsing upload: "+err.Error(), http.StatusBadRequest)
+		log.Printf("Error parsing upload: %v", err)
+		http.Error(w, "Error parsing upload", http.StatusBadRequest)
 		return
 	}
 	file, header, err := r.FormFile("upload")
@@ -337,12 +339,12 @@ func (h *Handler) handleDirUpload(w http.ResponseWriter, r *http.Request, dir, r
 			http.Error(w, "A file named \""+filepath.Base(dst)+"\" already exists in this folder", http.StatusConflict)
 			return
 		}
-		http.Error(w, "Error saving file: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "Error saving file", err)
 		return
 	}
 	defer out.Close()
 	if _, err := io.Copy(out, file); err != nil {
-		http.Error(w, "Error saving file: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "Error saving file", err)
 		return
 	}
 	http.Redirect(w, r, redirectURL, http.StatusFound)

@@ -109,6 +109,7 @@ func requestAs(t *testing.T, h *Handler, method, path string, u *User) *http.Req
 	} else {
 		req = httptest.NewRequest(method, path, nil)
 	}
+	req.Host = "localhost:4568"
 	for _, c := range seedRec.Result().Cookies() {
 		req.AddCookie(c)
 	}

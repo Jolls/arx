@@ -1219,7 +1219,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "Error retrieving part: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "Error retrieving part", err)
 		return
 	}
 	h.applyCategoryTabs(r.Context(), &p)
@@ -1228,7 +1228,8 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
+		log.Printf("Error parsing form: %v", err)
+		http.Error(w, "Error parsing form", http.StatusBadRequest)
 		return
 	}
 
@@ -1243,7 +1244,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, component_part_id, qty FROM %s WHERE parent_part_id = @p1`, pl,
 	), id)
 	if err != nil {
-		http.Error(w, "Error retrieving BOM: "+err.Error(), http.StatusInternalServerError)
+		serverError(w, "Error retrieving BOM", err)
 		return
 	}
 	for rows.Next() {
@@ -1251,7 +1252,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		var qty float64
 		if err := rows.Scan(&plid, &cpid, &qty); err != nil {
 			rows.Close()
-			http.Error(w, "Error reading BOM: "+err.Error(), http.StatusInternalServerError)
+			serverError(w, "Error reading BOM", err)
 			return
 		}
 		existing[cpid] = existingLine{ID: plid, Qty: qty}
@@ -1269,7 +1270,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 			if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 				`SELECT id, part_number, description FROM %s WHERE part_number = @p1`, pn,
 			), line.PartNumber).Scan(&pnid, &partNumber, &description); err != nil && err != sql.ErrNoRows {
-				http.Error(w, "Error looking up part number: "+err.Error(), http.StatusInternalServerError)
+				serverError(w, "Error looking up part number", err)
 				return
 			}
 		}

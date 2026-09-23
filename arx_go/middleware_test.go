@@ -42,7 +42,31 @@ func testHandlerWithDB() *Handler {
 	}
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
+	cfg.Port = "4568"
 	return New(db, nil, cfg, nil, nil)
+}
+
+func TestBuildRouter_RejectsForeignHost(t *testing.T) {
+	r := buildRouter(testHandlerWithDB())
+	for _, path := range []string{"/login", "/settings"} {
+		for host, want := range map[string]bool{
+			"evil.example.com":      false,
+			"evil.example.com:4568": false,
+			"localhost":             false,
+			"localhost:9999":        false,
+			"localhost:4568":        true,
+			"127.0.0.1:4568":        true,
+			"[::1]:4568":            true,
+		} {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Host = host
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+			if got := rec.Code != http.StatusMisdirectedRequest; got != want {
+				t.Errorf("GET %s Host %q: status = %d, allowed = %v, want allowed = %v", path, host, rec.Code, got, want)
+			}
+		}
+	}
 }
 
 // sentinel reports whether the wrapped next-handler was reached.
@@ -356,6 +380,7 @@ func TestBuildRouter_AllAppRoutesRequireAuth(t *testing.T) {
 		} else {
 			req = httptest.NewRequest(method, path, nil)
 		}
+		req.Host = "localhost:4568"
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
