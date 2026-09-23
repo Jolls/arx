@@ -28,10 +28,28 @@ func isolateStores(t *testing.T) {
 
 func TestResolveSessionSecret_EnvWins(t *testing.T) {
 	isolateStores(t)
-	t.Setenv("SESSION_SECRET", "from-env")
+	env := strings.Repeat("e", minSessionSecretLen)
+	t.Setenv("SESSION_SECRET", env)
 
-	if got := resolveSessionSecret(&SecretsConfig{SessionSecret: "from-local"}); got != "from-env" {
+	if got := resolveSessionSecret(&SecretsConfig{SessionSecret: "from-local"}); got != env {
 		t.Fatalf("env should win: got %q", got)
+	}
+}
+
+// A placeholder or short env value must not override the generated/persisted key (#168).
+func TestResolveSessionSecret_WeakEnvIgnored(t *testing.T) {
+	for name, env := range map[string]string{
+		"placeholder": placeholderSessionSecret,
+		"too short":   "short",
+	} {
+		t.Run(name, func(t *testing.T) {
+			isolateStores(t)
+			t.Setenv("SESSION_SECRET", env)
+
+			if got := resolveSessionSecret(&SecretsConfig{SessionSecret: "from-local"}); got != "from-local" {
+				t.Fatalf("weak env should be ignored: got %q", got)
+			}
+		})
 	}
 }
 
