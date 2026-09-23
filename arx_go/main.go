@@ -110,6 +110,7 @@ func openWhenReady(url, port string) {
 
 func buildRouter(h *Handler) *chi.Mux {
 	r := chi.NewRouter()
+	r.Use(h.RequireLocalHost)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(h.profileRequest)

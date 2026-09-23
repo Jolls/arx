@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.67] - 2026-09-23
+### Security
+- Requests whose `Host` header isn't `localhost`, `127.0.0.1` or `[::1]` on the app's port now get 421, closing a DNS-rebinding path to the loopback listener ([#167](https://github.com/Jolls/arx/issues/167))
+
+### Changed
+- Refreshed outsider-facing docs: Go version, secrets location, `SCHEMA.md` link, contribution licensing, `.env.example` and `start.ps1` ([#171](https://github.com/Jolls/arx/issues/171))
+
 ## [0.7.66] - 2026-09-23
 ### Security
 - `SESSION_SECRET` from the environment is now ignored (with a warning) when it is the old `.env.example` placeholder or under 32 bytes, so an install with a short `SESSION_SECRET` in `.env` switches to the generated key and is logged out once; `.env.example` no longer sets it ([#168](https://github.com/Jolls/arx/issues/168))
