@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.68] - 2026-09-23
+### Security
+- `build.bat` now builds with `-trimpath`, so `Arx.exe` no longer embeds the builder's local source and module-cache paths ([#163](https://github.com/Jolls/arx/issues/163))
+
 ## [0.7.67] - 2026-09-23
 ### Security
 - Requests whose `Host` header isn't `localhost`, `127.0.0.1` or `[::1]` on the app's port now get 421, closing a DNS-rebinding path to the loopback listener ([#167](https://github.com/Jolls/arx/issues/167))
