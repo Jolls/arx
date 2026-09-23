@@ -585,3 +585,28 @@ func TestPOFile_ImageInline(t *testing.T) {
 		t.Errorf("Content-Disposition = %q, want %q", got, "inline")
 	}
 }
+
+// A traversal-shaped {id} must be rejected before any directory is created (#170).
+func TestPOOpenFolder_RejectsTraversalID(t *testing.T) {
+	h := filesTestHandler()
+	parent := t.TempDir()
+	root := filepath.Join(parent, "root")
+	if err := os.Mkdir(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	h.cfg.POFolderRoot = root
+	for _, id := range []string{"..", `..\escaped`, "../escaped"} {
+		req := httptest.NewRequest(http.MethodPost, "/po/x/open-folder", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", id)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.POOpenFolder(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("id %q: status = %d, want 400", id, rec.Code)
+		}
+	}
+	if entries, _ := os.ReadDir(parent); len(entries) != 1 {
+		t.Errorf("unexpected entries created outside root: %v", entries)
+	}
+}

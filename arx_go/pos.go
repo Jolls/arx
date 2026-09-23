@@ -1122,10 +1122,20 @@ func (h *Handler) POOpenFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	num := chi.URLParam(r, "id")
+	if err := validateFolderStub(num); err != nil {
+		http.Error(w, "invalid PO number", http.StatusBadRequest)
+		return
+	}
 	var supplierID sql.NullInt64
-	h.queryRowContext(r.Context(), fmt.Sprintf(
+	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT supplier_id FROM %s WHERE number=@p1`, h.cfg.POTable(),
-	), num).Scan(&supplierID)
+	), num).Scan(&supplierID); err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	} else if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
 	supplierIDStr := ""
 	if supplierID.Valid {
 		supplierIDStr = strconv.FormatInt(supplierID.Int64, 10)
