@@ -688,6 +688,20 @@ func (h *Handler) verifyCsrf(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1
 }
 
+// RequireLocalHost rejects requests whose Host header isn't this app's own
+// loopback address. The listener is bound to 127.0.0.1, but DNS rebinding lets
+// a remote web page reach it under its own hostname (#167).
+func (h *Handler) RequireLocalHost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Host {
+		case "localhost:" + h.cfg.Port, "127.0.0.1:" + h.cfg.Port, "[::1]:" + h.cfg.Port:
+			next.ServeHTTP(w, r)
+		default:
+			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
+		}
+	})
+}
+
 // RequireCsrfOnPost is middleware that rejects any POST whose csrf_token form
 // value does not match the session token.
 func (h *Handler) RequireCsrfOnPost(next http.Handler) http.Handler {
