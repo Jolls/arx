@@ -89,7 +89,7 @@ $env:ARX_TEST_DSN="sqlserver://user:pass@server?database=ArxDev&encrypt=true"
 go test -tags integration ./arx_go/...
 ```
 
-See [`CLAUDE.md`](CLAUDE.md) for schema conventions, branching rules, and architecture decisions.
+See [`CLAUDE.md`](CLAUDE.md) for schema conventions, branching rules, and architecture decisions, and [`ROADMAP.md`](ROADMAP.md) for what's planned.
 
 ---
 

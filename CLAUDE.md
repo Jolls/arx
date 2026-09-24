@@ -152,7 +152,7 @@ BUG FIXES
 Future release targets Windows + Linux. Not needed now, but avoid design choices (cgo/native deps, OS-specific APIs, path/systray assumptions) that would block it later; flag if an approach paints us into a corner.
 
 ## Roadmap
-`docs/FUTURE_GOALS.md` — long-term roadmap, prerequisites, architecture decisions. Read before proposing structural/schema changes. On implementing a listed feature, strikethrough (`~~text~~`) rather than delete.
+`ROADMAP.md` — near-term plan by milestone. `docs/FUTURE_GOALS.md` — long-term direction and cleanup candidates. Read both before proposing structural/schema changes. On implementing a listed feature, remove it from both (no strikethroughs); items link to `Jolls/arx` issues.
 
 ## Issue Triage
 Sizing before implementing: `/evaluate-issue <NNN>` skill (cheap Sonnet-low) scopes work, recommends model/reasoning level + whether sub-agents help for the manager/impl session. Recommends only, doesn't implement.
