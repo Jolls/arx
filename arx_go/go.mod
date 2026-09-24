@@ -9,7 +9,7 @@ require (
 	github.com/klippa-app/go-pdfium v1.20.3
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	golang.org/x/crypto v0.57.0
-	golang.org/x/image v0.45.0
+	golang.org/x/image v0.46.0
 )
 
 require (
