@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/getlantern/systray v1.2.2
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.3.2
 	github.com/gorilla/sessions v1.4.0
 	github.com/klippa-app/go-pdfium v1.19.4
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
