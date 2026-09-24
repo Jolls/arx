@@ -99,6 +99,8 @@ Save implementation plans (Plan Mode, issue-tied) to `docs/plans/<issue-id>-<des
 Never commit to main. Before first commit in session, check current branch; if on main, create the branch yourself using the standard below — don't ask for a name. Naming: `feature/<issue-id>-<short-slug>` when the work maps to a GitHub issue (e.g. `feature/754-settings-backup-table-list`), else `feature/<short-description>`. Push branch + open PR, never push main directly.
 `main` = 0.8 development; `release/0.7` = maintenance (bug fixes only, PR-only, patch versions `0.7.x`, tagged `v0.7.x` on that branch). 0.7 fixes: branch from `release/0.7`, PR against it, then cherry-pick to `main`. Avoid new migrations on `release/0.7`; CHANGELOG top entry conflicts on cherry-pick — resolve by hand (each branch keeps its own version line).
 
+Commit messages: no `Claude-Session:` trailer (links a private web session; #172). The `Co-Authored-By` line stays.
+
 ## Pre-commit sequence
 1. go build/vet/test pass.
 2. If SQL/handlers/integration-covered code touched, run live ArxDev integration tests, report pass/fail; if fails on stale seed data ask user to reseed (never do it yourself).
