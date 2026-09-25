@@ -37,10 +37,10 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	// round-trip) since fetchPartBasic backs every part sub-tab page — see the
 	// Thumb subquery in PartsRows for the same pattern (#56).
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode,
+		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.dia(), h.cfg().BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode,
 		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = %s AND a.category = @p2)
 		FROM %s p WHERE id = @p1`,
-		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg.PartsTable(),
+		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg().PartsTable(),
 	), id, thumbnailCategory).Scan(&p.ID, &partNumber, &description, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode, &thumbFile)
 	p.PartNumber = partNumber.String
 	p.Description = description.String
@@ -152,8 +152,8 @@ func (h *Handler) RootRedirect(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartsList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/index.html", map[string]any{
-		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
-		"Categories": h.partCategories,
+		"ActiveTab": "parts", "TestMode": h.cfg().TestMode,
+		"Categories": h.st().partCategories,
 	})
 }
 
@@ -187,7 +187,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		       %s,
 		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = %s AND a.category = @p1)
 		FROM %s p ORDER BY part_number
-	`, h.dia().BoolFromCondition("reorder_min IS NOT NULL AND stock_on_hand < reorder_min"), h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg.PartsTable()), thumbnailCategory)
+	`, h.dia().BoolFromCondition("reorder_min IS NOT NULL AND stock_on_hand < reorder_min"), h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg().PartsTable()), thumbnailCategory)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
@@ -252,7 +252,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		unitID                                              sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
+		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg().BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
@@ -260,7 +260,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
-	`, h.cfg.PartsTable()), id).Scan(
+	`, h.cfg().PartsTable()), id).Scan(
 		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&pnDate, &pnDateModified, &filIDPrimary,
@@ -319,7 +319,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		p.UnitID = &v
 		var abbr sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT abbreviation FROM %s WHERE uom_id = @p1`, h.cfg.UomTable(),
+			`SELECT abbreviation FROM %s WHERE uom_id = @p1`, h.cfg().UomTable(),
 		), v).Scan(&abbr)
 		p.UnitAbbr = abbr.String
 	}
@@ -335,7 +335,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		var fname, fnotes, frev sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 			`SELECT id, file_name, category, part_revision FROM %s WHERE id = @p1`,
-			h.cfg.AttachmentsTable(),
+			h.cfg().AttachmentsTable(),
 		), *p.PrimaryAttachmentID).Scan(&att.ID, &fname, &fnotes, &frev); err == nil {
 			att.FileName = fname.String
 			att.Category = fnotes.String
@@ -349,7 +349,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, file_name, category, part_revision, sort_order FROM %s
 		 WHERE part_id = @p1 AND is_active = %s
 		 ORDER BY sort_order, id`,
-		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), p.ID)
+		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true)), p.ID)
 	if err == nil {
 		for rows.Next() {
 			var att models.Attachment
@@ -400,7 +400,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT MIN(price_ea) FROM %s WHERE part_id=@p1 AND is_active=%s
 		 AND supplier_id=(SELECT default_supplier_id FROM %s WHERE id=@p1)`,
-		h.cfg.PriceTable(), h.dia().BoolLiteral(true), h.cfg.PartsTable()), p.ID).Scan(&prefPrice)
+		h.cfg().PriceTable(), h.dia().BoolLiteral(true), h.cfg().PartsTable()), p.ID).Scan(&prefPrice)
 	if prefPrice.Valid && prefPrice.Float64 > 0 {
 		purchasePrice = prefPrice.Float64
 	}
@@ -458,7 +458,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "PrimaryAtt": primaryAtt, "TopAtts": topAtts, "PhotoAtts": photoAtts,
 		"ActiveTab": "parts", "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode":          h.cfg.TestMode,
+		"TestMode":          h.cfg().TestMode,
 		"RollupDelta":       rollupDelta,
 		"RollupDeltaPct":    rollupDeltaPct,
 		"RollupSignificant": rollupSignificant,
@@ -487,9 +487,9 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": p, "IsNew": true,
-		"Units": units, "Categories": h.partCategories,
+		"Units": units, "Categories": h.st().partCategories,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -513,14 +513,14 @@ func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
 	// whether to promise a BOM copy in the UI.
 	var bomLines int
 	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE parent_part_id=@p1`, h.cfg.BOMTable()), src.ID).Scan(&bomLines)
+		`SELECT COUNT(*) FROM %s WHERE parent_part_id=@p1`, h.cfg().BOMTable()), src.ID).Scan(&bomLines)
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": src, "IsNew": true, "IsDuplicate": true,
 		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.ID, "SourceHasBOM": bomLines > 0,
-		"Units": units, "Categories": h.partCategories,
+		"Units": units, "Categories": h.st().partCategories,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -532,16 +532,16 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		units, _ := h.fetchUnits(r.Context())
 		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Part Number is required",
-			"Units": units, "Categories": h.partCategories,
+			"Units": units, "Categories": h.st().partCategories,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		}))
 		return
 	}
 	now := time.Now()
 	mode := trackingModeFromForm(r)
 	var newID int
-	insertPart := h.dia().InsertReturningID(h.cfg.PartsTable(),
+	insertPart := h.dia().InsertReturningID(h.cfg().PartsTable(),
 		`part_number, revision, description, detail, category,
 		 release_status, is_active, requested_by, notes, created_date, modified_date,
 		 uom_id, current_cost, reorder_min,
@@ -564,9 +564,9 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		units, _ := h.fetchUnits(r.Context())
 		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Error creating part: " + err.Error(),
-			"Units": units, "Categories": h.partCategories,
+			"Units": units, "Categories": h.st().partCategories,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		}))
 		return
 	}
@@ -585,7 +585,7 @@ func (h *Handler) copyBOM(ctx context.Context, srcID, dstID int) error {
 	_, err := h.execContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (parent_part_id, component_part_id, line_number, qty)
 		SELECT @p1, component_part_id, line_number, qty FROM %s WHERE parent_part_id = @p2
-	`, h.cfg.BOMTable(), h.cfg.BOMTable()), dstID, srcID)
+	`, h.cfg().BOMTable(), h.cfg().BOMTable()), dstID, srcID)
 	return err
 }
 
@@ -623,10 +623,10 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": full, "IsNew": false,
-		"Units": units, "Categories": h.partCategories,
+		"Units": units, "Categories": h.st().partCategories,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		// keep p.ID available even though full has it too
 		"PartBasic": p,
 	})
@@ -644,10 +644,10 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		pf.ThumbnailURL = p.ThumbnailURL
 		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Part Number is required",
-			"Categories": h.partCategories,
+			"Categories": h.st().partCategories,
 			"ActiveTab":  "parts", "ActiveSubTab": "edit",
 			"NavBackURL": backURL, "NavBackLabel": backLabel,
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 			"PartBasic": p,
 		})
 		return
@@ -662,7 +662,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23,
 		  is_lot_tracked=@p24, tracking_mode=@p25
 		WHERE id=@p26
-	`, h.cfg.PartsTable()),
+	`, h.cfg().PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), fv(r, "category"),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		time.Now(),
@@ -680,10 +680,10 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		pf.ThumbnailURL = p.ThumbnailURL
 		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Error saving part: " + err.Error(),
-			"Units": units, "Categories": h.partCategories,
+			"Units": units, "Categories": h.st().partCategories,
 			"ActiveTab": "parts", "ActiveSubTab": "edit",
 			"NavBackURL": backURL, "NavBackLabel": backLabel,
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 			"PartBasic": p,
 		})
 		return
@@ -769,13 +769,13 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		currentCost, reorderMin                             sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg.BOMTable(), "p.id")+`,
+		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg().BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       uom_id, current_cost, reorder_min, tracking_mode,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
 		FROM %s p WHERE id = @p1
-	`, h.cfg.PartsTable()), id).Scan(
+	`, h.cfg().PartsTable()), id).Scan(
 		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
 		&unitID, &currentCost, &reorderMin, &trackingMode,
@@ -841,7 +841,7 @@ func bomLeafCost(childHasBOM bool, lastRollupCost float64, preferredPrice sql.Nu
 // read-only BOM view (PartBOM) and its lazy-loaded children endpoint
 // (APIPartBOMChildren).
 func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BOMItem, float64, error) {
-	pl, pn, prc := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
+	pl, pn, prc := h.cfg().BOMTable(), h.cfg().PartsTable(), h.cfg().PriceTable()
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.description, pn.revision, pn.category,
@@ -905,7 +905,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_bom.html", map[string]any{
 		"Part": p, "BOMItems": items, "BOMTotal": bomTotal,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -915,7 +915,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pl.parent_part_id,
 		       pn.part_number, pn.description, pn.revision, pn.category
@@ -947,7 +947,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_where_used.html", map[string]any{
 		"Part": p, "WhereUsedItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "where-used",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -1001,7 +1001,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
 		       pn.part_number, pn.description
@@ -1041,7 +1041,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "BOMItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"TestMode": h.cfg.TestMode, "CSRFToken": h.csrfToken(w, r),
+		"TestMode": h.cfg().TestMode, "CSRFToken": h.csrfToken(w, r),
 	})
 }
 
@@ -1069,7 +1069,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
 
 	deleteSet := map[string]bool{}
 	for _, plidStr := range r.Form["delete_pl[]"] {
@@ -1233,7 +1233,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
 
 	type existingLine struct {
 		ID  int
@@ -1334,7 +1334,7 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	pl, pn, pr := h.cfg.BOMTable(), h.cfg.PartsTable(), h.cfg.PriceTable()
+	pl, pn, pr := h.cfg().BOMTable(), h.cfg().PartsTable(), h.cfg().PriceTable()
 	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pn.id")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, pn.current_cost,
@@ -1409,7 +1409,7 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	// Write rollup cost back to every assembly visited during the walk (root + all
 	// sub-assemblies), using a single timestamp so the BOM view is consistent.
 	now := time.Now()
-	pn := h.cfg.PartsTable()
+	pn := h.cfg().PartsTable()
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
@@ -1484,7 +1484,7 @@ func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty floa
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	pl := h.cfg.BOMTable()
+	pl := h.cfg().BOMTable()
 	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pl.component_part_id")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, %s
@@ -1552,7 +1552,7 @@ func (h *Handler) fetchPartInfoByID(ctx context.Context, ids []int) (map[int]bui
 	placeholders, args := sqlInClause(ids)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT id, part_number, description, default_supplier_id FROM %s WHERE id IN (%s)`,
-		h.cfg.PartsTable(), placeholders), args...)
+		h.cfg().PartsTable(), placeholders), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1588,7 +1588,7 @@ func (h *Handler) fetchPriceTiersByPart(ctx context.Context, ids []int) (map[par
 	placeholders, args := sqlInClause(ids)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT part_id, supplier_id, price_ea, pack_size FROM %s WHERE is_active = %s AND part_id IN (%s)`,
-		h.cfg.PriceTable(), h.dia().BoolLiteral(true), placeholders), args...)
+		h.cfg().PriceTable(), h.dia().BoolLiteral(true), placeholders), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1696,7 +1696,7 @@ func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_build_cost.html", map[string]any{
 		"Part": p, "BuildQty": qty, "Lines": res.Lines, "Total": res.Total,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -1721,8 +1721,8 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		LEFT JOIN %s mp ON mp.id = a.mfg_part_id
 		LEFT JOIN %s mc ON mc.id = mp.mfg_id
 		WHERE a.part_id = @p1 AND a.is_active = %s ORDER BY a.sort_order, a.id
-	`, h.cfg.AttachmentsTable(), h.cfg.SupplierPartTable(), h.cfg.CompanyTable(),
-		h.cfg.MfgPartTable(), h.cfg.CompanyTable(), h.dia().BoolLiteral(true)), id)
+	`, h.cfg().AttachmentsTable(), h.cfg().SupplierPartTable(), h.cfg().CompanyTable(),
+		h.cfg().MfgPartTable(), h.cfg().CompanyTable(), h.dia().BoolLiteral(true)), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
@@ -1797,9 +1797,9 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		"AttachmentCategories":     cats,
 		"AttachmentCategoriesJSON": template.JS(catsJSON),
 		"VendorScopeOptions":       vendorOptions,
-		"DocControlConfigured": h.cfg.DocControlRoot != "",
+		"DocControlConfigured": h.cfg().DocControlRoot != "",
 		"HasThumbnail":         hasThumbnail,
-		"TestMode":             h.cfg.TestMode,
+		"TestMode":             h.cfg().TestMode,
 		"NextOrderID":          nextOrderID,
 	}
 	maps.Copy(data, extra)
@@ -1811,7 +1811,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID any, comment string, supplierPartID, mfgPartID any, hash string) error {
 	return h.execThenEnsurePrimary(ctx, h.ensurePartPrimary, partID, fmt.Sprintf(
 		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)`,
-		h.cfg.AttachmentsTable(),
+		h.cfg().AttachmentsTable(),
 	), partID, fileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash)
 }
 
@@ -1823,8 +1823,8 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	// unless some other active row already links the same name.
 	if link := fv(r, "discard_import"); link != "" {
 		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
-			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
-				0, link, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(link))
+			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().AttachmentsTable(), "id", "file_name",
+				0, link, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(link))
 		}
 		http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
 		return
@@ -1908,7 +1908,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := computeAttachmentHash(h.cfg.DocControlRoot, in.FileName)
+	hash := computeAttachmentHash(h.cfg().DocControlRoot, in.FileName)
 	if h.partAttachmentDuplicateWarning(w, r, id, "", hash, 0, upload, in.FileName, category, rev, comment) {
 		return
 	}
@@ -1973,7 +1973,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 
 	var oldFileNameNS, oldCategoryNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name, category FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(),
+		`SELECT file_name, category FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg().AttachmentsTable(),
 	), attIDInt, id).Scan(&oldFileNameNS, &oldCategoryNS); err != nil {
 		h.renderError(w, r, "Error loading attachment: "+err.Error())
 		return
@@ -2016,7 +2016,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	contentChanged := fileChanged || upload != nil
 	var hash string
 	if contentChanged {
-		hash = computeAttachmentHash(h.cfg.DocControlRoot, in.FileName)
+		hash = computeAttachmentHash(h.cfg().DocControlRoot, in.FileName)
 		if h.partAttachmentDuplicateWarning(w, r, id, attID, hash, attIDInt, upload, in.FileName, category, rev, comment) {
 			return
 		}
@@ -2025,12 +2025,12 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	if contentChanged {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
 			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6, file_name=@p7, hash=@p8 WHERE id=@p9`,
-			h.cfg.AttachmentsTable(),
+			h.cfg().AttachmentsTable(),
 		), rev, category, oID, comment, supplierPartID, mfgPartID, in.FileName, hash, attIDInt)
 	} else {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
 			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6 WHERE id=@p7`,
-			h.cfg.AttachmentsTable(),
+			h.cfg().AttachmentsTable(),
 		), rev, category, oID, comment, supplierPartID, mfgPartID, attIDInt)
 	}
 	if err != nil {
@@ -2039,8 +2039,8 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if fileChanged && replaceName != "" {
-		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
-			attIDInt, oldFileName, h.cfg.DocControlRoot, replaceName); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().AttachmentsTable(), "id", "file_name",
+			attIDInt, oldFileName, h.cfg().DocControlRoot, replaceName); err != nil {
 			h.renderPartAttachments(w, r, id, map[string]any{
 				"Error": "Attachment updated, but the old file could not be removed: " + err.Error()})
 			return
@@ -2053,7 +2053,7 @@ func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
 	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
-		`UPDATE %s SET is_active=%s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(false),
+		`UPDATE %s SET is_active=%s WHERE id=@p1 AND part_id=@p2`, h.cfg().AttachmentsTable(), h.dia().BoolLiteral(false),
 	), attIDInt, id); err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
@@ -2069,7 +2069,7 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 	if n, err2 := strconv.Atoi(filID); err2 == nil && n != 0 {
 		val = n
 	}
-	if err := h.setPrimaryAttachment(r.Context(), h.cfg.PartsTable(), "id", "primary_attachment_id", idInt, val); err != nil {
+	if err := h.setPrimaryAttachment(r.Context(), h.cfg().PartsTable(), "id", "primary_attachment_id", idInt, val); err != nil {
 		h.renderError(w, r, "Error setting primary attachment: "+err.Error())
 		return
 	}
@@ -2082,7 +2082,7 @@ func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request
 	id := chi.URLParam(r, "id")
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
 		`SELECT id, file_name FROM %s WHERE part_id = @p1 AND is_active = %s ORDER BY sort_order, id`,
-		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), id)
+		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true)), id)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
@@ -2119,7 +2119,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	pol, po := h.cfg().POLineTable(), h.cfg().POTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT po.number, po.supplier_name, po.date_ordered, po.date_closed, po.status,
 		       pol.line_number, pol.qty, pol.unit_cost, pol.description, pol.vendor_part_number
@@ -2161,7 +2161,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_orders.html", map[string]any{
 		"Part": p, "OrderItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "orders",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -2181,7 +2181,7 @@ func (h *Handler) PartRecords(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_records.html", map[string]any{
 		"Part": p, "TypeOptions": typeOptions,
 		"ActiveTab": "parts", "ActiveSubTab": "records",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -2214,7 +2214,7 @@ type partPOSummary struct {
 // recentPartPOs returns the most recent PO lines for a part, newest first,
 // capped at limit. Returns nil on error so the caller can omit the card.
 func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) []partPOSummary {
-	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	pol, po := h.cfg().POLineTable(), h.cfg().POTable()
 	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %spo.number, po.supplier_name, po.status, po.date_ordered,
@@ -2261,7 +2261,7 @@ func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) 
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %stxn_type, qty, txn_date
 		FROM %s WHERE part_id = @p1 ORDER BY txn_date DESC, id DESC
-	`+limitClause, top, h.cfg.InventoryTxnTable()), partID, limit)
+	`+limitClause, top, h.cfg().InventoryTxnTable()), partID, limit)
 	if err != nil {
 		return nil
 	}
@@ -2302,7 +2302,7 @@ type preferredSupplierSummary struct {
 // default_supplier_id). Price is filled in by the caller.
 func (h *Handler) preferredSupplier(ctx context.Context, partID string) *preferredSupplierSummary {
 	top, limitClause := h.topLimit("@p2")
-	pt, co, sp := h.cfg.PartsTable(), h.cfg.CompanyTable(), h.cfg.SupplierPartTable()
+	pt, co, sp := h.cfg().PartsTable(), h.cfg().CompanyTable(), h.cfg().SupplierPartTable()
 	var s preferredSupplierSummary
 	var name, pn, desc sql.NullString
 	var spID sql.NullInt64
@@ -2341,7 +2341,7 @@ type pricePoint struct {
 func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoint {
 	var points []pricePoint
 
-	pol, po := h.cfg.POLineTable(), h.cfg.POTable()
+	pol, po := h.cfg().POLineTable(), h.cfg().POTable()
 	if rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT po.number, po.supplier_name, po.date_ordered, pol.unit_cost
 		FROM %s pol
@@ -2363,7 +2363,7 @@ func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoi
 		rows.Close()
 	}
 
-	pr, comp := h.cfg.PriceTable(), h.cfg.CompanyTable()
+	pr, comp := h.cfg().PriceTable(), h.cfg().CompanyTable()
 	if prRows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT c.name, p.effective_date, p.price_ea, p.pack_size
 		FROM %s p
@@ -2408,7 +2408,7 @@ func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_price_history.html", map[string]any{
 		"Part": p, "PriceDataJSON": template.JS(data), "HasData": len(points) > 0,
 		"ActiveTab": "parts", "ActiveSubTab": "price-history",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -2426,7 +2426,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pr, su := h.cfg.PriceTable(), h.cfg.CompanyTable()
+	pr, su := h.cfg().PriceTable(), h.cfg().CompanyTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
 		FROM %s p
@@ -2487,7 +2487,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	}
 	var defSup sql.NullInt64
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT default_supplier_id FROM %s WHERE id=@p1`, h.cfg.PartsTable()), id).Scan(&defSup)
+		`SELECT default_supplier_id FROM %s WHERE id=@p1`, h.cfg().PartsTable()), id).Scan(&defSup)
 	for i := range groups {
 		allInactive := true
 		for _, r := range groups[i].Rows {
@@ -2503,7 +2503,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "PriceGroups": groups,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -2519,7 +2519,7 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Price": models.Price{}, "IsNew": true,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -2528,7 +2528,7 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID any) {
 	_, _ = h.execContext(ctx, fmt.Sprintf(
 		`UPDATE %s SET default_supplier_id=@p1 WHERE id=@p2 AND default_supplier_id IS NULL`,
-		h.cfg.PartsTable()), supplierID, partID)
+		h.cfg().PartsTable()), supplierID, partID)
 }
 
 // PricePreferred — POST /part/{id}/pricing/preferred. Sets the preferred supplier
@@ -2544,7 +2544,7 @@ func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET default_supplier_id=@p1 WHERE id=@p2`, h.cfg.PartsTable(),
+		`UPDATE %s SET default_supplier_id=@p1 WHERE id=@p2`, h.cfg().PartsTable(),
 	), supplierID, partID); err != nil {
 		h.renderError(w, r, "Error setting preferred supplier: "+err.Error())
 		return
@@ -2570,7 +2570,7 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	_, err = h.execContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
-	`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)),
+	`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)),
 		partID, supplierID,
 		nullableFloat(r.FormValue("pack_size")), priceEA, pricePack,
 		effectiveDate,
@@ -2605,7 +2605,7 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		FROM %s p
 		LEFT JOIN %s s ON p.supplier_id = s.id
 		WHERE p.id = @p1 AND p.part_id = @p2
-	`, h.cfg.PriceTable(), h.cfg.CompanyTable()), priceID, partID).Scan(
+	`, h.cfg().PriceTable(), h.cfg().CompanyTable()), priceID, partID).Scan(
 		&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID, &supplierName,
 	)
 	if err == sql.ErrNoRows {
@@ -2638,7 +2638,7 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Price": price, "IsNew": false,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -2657,7 +2657,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	if effectiveDate == "" {
 		effectiveDate = time.Now().Format("2006-01-02")
 	}
-	pr := h.cfg.PriceTable()
+	pr := h.cfg().PriceTable()
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		h.renderError(w, r, "Error starting transaction: "+err.Error())
@@ -2704,7 +2704,7 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(), h.dia().BoolLiteral(false),
+		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg().PriceTable(), h.dia().BoolLiteral(false),
 	), priceID, partID)
 	if err != nil {
 		h.renderError(w, r, "Error deactivating price: "+err.Error())
@@ -2722,7 +2722,7 @@ func (h *Handler) PriceDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`DELETE FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`, h.cfg.PriceTable(), h.dia().BoolLiteral(false),
+		`DELETE FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`, h.cfg().PriceTable(), h.dia().BoolLiteral(false),
 	), priceID, partID)
 	if err != nil {
 		h.renderError(w, r, "Error deleting price: "+err.Error())
@@ -2738,7 +2738,7 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg.PriceTable(), h.dia().BoolLiteral(true),
+		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg().PriceTable(), h.dia().BoolLiteral(true),
 	), priceID, partID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UQ_price") {
@@ -2758,7 +2758,7 @@ func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 		SELECT part_number, revision, description, detail,
 		       requested_by, created_date, category, modified_date, is_active
 		FROM %s ORDER BY part_number
-	`, h.cfg.PartsTable()))
+	`, h.cfg().PartsTable()))
 	if err != nil {
 		serverError(w, "database error", err)
 		return
@@ -2799,14 +2799,14 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireTab(w, r, id, "bom"); !ok {
 		return
 	}
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
 	var parentPN string
 	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT part_number FROM %s WHERE id = @p1`, h.cfg.PartsTable()), id).Scan(&parentPN)
+		`SELECT part_number FROM %s WHERE id = @p1`, h.cfg().PartsTable()), id).Scan(&parentPN)
 	if parentPN == "" {
 		parentPN = id
 	}
-	prc := h.cfg.PriceTable()
+	prc := h.cfg().PriceTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT pl.line_number, pl.qty, pn.part_number, pn.description, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,

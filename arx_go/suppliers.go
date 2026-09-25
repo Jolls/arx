@@ -39,7 +39,7 @@ func validateFolderStub(code string) error {
 
 func (h *Handler) SuppliersList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers/suppliers.html", map[string]any{
-		"ActiveTab": "suppliers", "TestMode": h.cfg.TestMode,
+		"ActiveTab": "suppliers", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -55,7 +55,7 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 		Contact string `json:"contact"`
 		Code    string `json:"code"`
 	}
-	su, cn := h.cfg.CompanyTable(), h.cfg.ContactTable()
+	su, cn := h.cfg().CompanyTable(), h.cfg().ContactTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, su.SUSupplierCode, su.SUNumOfLNKs, su.SUNumOfPOs,
 		       su.is_active, CN.display_name, CN.country
@@ -108,7 +108,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 		var fp, notes sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 			`SELECT supplier_attachment_id, supplier_id, file_path, notes FROM %s WHERE supplier_attachment_id = @p1`,
-			h.cfg.CompanyAttachmentsTable(),
+			h.cfg().CompanyAttachmentsTable(),
 		), *s.PrimaryAttachmentID).Scan(&att.SupplierAttachmentID, &att.SupplierID, &fp, &notes); err == nil {
 			att.FilePath = fp.String
 			att.Notes = notes.String
@@ -135,7 +135,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 		"Supplier": s, "PrimaryAtt": primaryAtt,
 		"RecentPOs": recentPOs, "TopParts": topParts, "OtherContacts": otherContacts,
 		"ActiveTab": "suppliers", "ActiveSubTab": "details",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -160,7 +160,7 @@ func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limi
 		SELECT %snumber, status, date_ordered, total_cost
 		FROM %s WHERE supplier_id = @p1
 		ORDER BY date_ordered DESC, ID DESC
-	`, top, h.cfg.POTable())+limitClause, args...)
+	`, top, h.cfg().POTable())+limitClause, args...)
 	if err != nil {
 		return nil
 	}
@@ -191,7 +191,7 @@ type supplierPartSummary struct {
 }
 
 func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit int) []supplierPartSummary {
-	sp, pn := h.cfg.SupplierPartTable(), h.cfg.PartsTable()
+	sp, pn := h.cfg().SupplierPartTable(), h.cfg().PartsTable()
 	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT %spn.id, pn.part_number, pn.description
@@ -220,7 +220,7 @@ func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 		"Supplier": models.Supplier{}, "IsNew": true, "Contacts": nil,
 		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -230,7 +230,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": "Supplier name is required",
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -238,12 +238,12 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
 	var newID int
-	insertSupplier := h.dia().InsertReturningID(h.cfg.CompanyTable(),
+	insertSupplier := h.dia().InsertReturningID(h.cfg().CompanyTable(),
 		`name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8`,
 		false)
@@ -260,7 +260,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 			"Supplier": supplierFromForm(r), "IsNew": true, "Contacts": nil,
 			"Error":     "Error creating supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -281,7 +281,7 @@ func (h *Handler) SupplierEdit(w http.ResponseWriter, r *http.Request) {
 		"Supplier": s, "IsNew": false, "Contacts": contacts,
 		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -298,7 +298,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     "Supplier name is required",
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -307,7 +307,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -317,7 +317,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		              SUNotes=@p7, date_modified=@p8,
 		              bulk_order_delimiter=@p9, bulk_order_pn_source=@p10
 		WHERE id=@p11
-	`, h.cfg.CompanyTable()),
+	`, h.cfg().CompanyTable()),
 		name, fv(r, "SUSupplierCode"),
 		nullableInt(fv(r, "default_contact")),
 		r.FormValue("is_active") == "1",
@@ -333,7 +333,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     "Error saving supplier: " + err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -345,7 +345,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	var s models.Supplier
 	var name sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT id, name FROM %s WHERE id = @p1`, h.cfg.CompanyTable(),
+		`SELECT id, name FROM %s WHERE id = @p1`, h.cfg().CompanyTable(),
 	), id).Scan(&s.ID, &name)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Supplier not found")
@@ -357,7 +357,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Name = name.String
 
-	sp, pn, ut, at := h.cfg.SupplierPartTable(), h.cfg.PartsTable(), h.cfg.UomTable(), h.cfg.AttachmentsTable()
+	sp, pn, ut, at := h.cfg().SupplierPartTable(), h.cfg().PartsTable(), h.cfg().UomTable(), h.cfg().AttachmentsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment,
@@ -430,7 +430,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 		JOIN %s po ON pol.po_id = po.ID
 		WHERE po.supplier_id = @p1 AND po.rfq_group_id IS NULL
 		ORDER BY po.number DESC
-	`, h.cfg.POLineTable(), h.cfg.POTable()), id)
+	`, h.cfg().POLineTable(), h.cfg().POTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving PO links: "+err.Error())
 		return
@@ -462,7 +462,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers/supplier_parts.html", map[string]any{
 		"Supplier": s, "Links": links,
 		"ActiveTab": "suppliers", "ActiveSubTab": "parts",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -481,7 +481,7 @@ func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers/supplier_pos.html", map[string]any{
 		"Supplier": s, "Orders": orders,
 		"ActiveTab": "suppliers", "ActiveSubTab": "pos",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -498,7 +498,7 @@ func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tbl := h.cfg.CompanyAttachmentsTable()
+	tbl := h.cfg().CompanyAttachmentsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT supplier_attachment_id, supplier_id, file_path, notes, sort_order
 		FROM %s WHERE supplier_id = @p1 AND is_active = %s
@@ -554,9 +554,9 @@ func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Reque
 		"EditingAtt":  editingAtt,
 		"ActiveTab":   "suppliers", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		"NextOrderID":              nextOrderID,
-		"SupplierFilesConfigured": h.cfg.SupplierFilesRoot != "",
+		"SupplierFilesConfigured": h.cfg().SupplierFilesRoot != "",
 	}
 	maps.Copy(data, extra)
 	h.render(w, r, "suppliers/supplier_attachments.html", data)
@@ -568,7 +568,7 @@ func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Reque
 // per-part naming convention to render a destination-name collision banner
 // against). Returns the LOCAL:<name> value to store.
 func (h *Handler) saveSupplierUpload(hdr *multipart.FileHeader) (filePath string, err error) {
-	if h.cfg.SupplierFilesRoot == "" {
+	if h.cfg().SupplierFilesRoot == "" {
 		return "", fmt.Errorf("Supplier Files Root is not configured; cannot import files")
 	}
 	ext := filepath.Ext(hdr.Filename)
@@ -581,7 +581,7 @@ func (h *Handler) saveSupplierUpload(hdr *multipart.FileHeader) (filePath string
 		return "", fmt.Errorf("error reading upload: %w", err)
 	}
 	defer f.Close()
-	name, err := copyReaderIntoDocControlUnique(h.cfg.SupplierFilesRoot, base+ext, ext, f)
+	name, err := copyReaderIntoDocControlUnique(h.cfg().SupplierFilesRoot, base+ext, ext, f)
 	if err != nil {
 		return "", fmt.Errorf("error copying file: %w", err)
 	}
@@ -596,7 +596,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 	// it unless some other active row already links the same name.
 	if link := fv(r, "discard_import"); link != "" {
 		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
-			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
+			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
 				0, link, h.companyAttachmentRoot(), urlutil.StripLocalPrefix(link))
 		}
 		http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
@@ -639,7 +639,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 	err := h.execThenEnsurePrimary(r.Context(), h.ensureSupplierPrimary, id, fmt.Sprintf(`
 		INSERT INTO %s (supplier_id, file_path, notes, sort_order, hash)
 		VALUES (@p1, @p2, @p3, @p4, @p5)
-	`, h.cfg.CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal, hash)
+	`, h.cfg().CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal, hash)
 	if err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
@@ -685,7 +685,7 @@ func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Reques
 	err := h.execThenEnsurePrimary(r.Context(), h.ensureSupplierPrimary, id, fmt.Sprintf(`
 		UPDATE %s SET is_active = %s
 		WHERE supplier_attachment_id = @p1 AND supplier_id = @p2
-	`, h.cfg.CompanyAttachmentsTable(), h.dia().BoolLiteral(false)), attID, id)
+	`, h.cfg().CompanyAttachmentsTable(), h.dia().BoolLiteral(false)), attID, id)
 	if err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
@@ -722,7 +722,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 
 	var oldFilePath string
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_path FROM %s WHERE supplier_attachment_id=@p1 AND supplier_id=@p2`, h.cfg.CompanyAttachmentsTable(),
+		`SELECT file_path FROM %s WHERE supplier_attachment_id=@p1 AND supplier_id=@p2`, h.cfg().CompanyAttachmentsTable(),
 	), attID, id).Scan(&oldFilePath); err != nil {
 		h.renderError(w, r, "Error loading attachment: "+err.Error())
 		return
@@ -741,12 +741,12 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 		_, err = h.execContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET notes=@p1, sort_order=@p2, file_path=@p3, hash=@p4
 			WHERE supplier_attachment_id=@p5 AND supplier_id=@p6
-		`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, newFilePath, hash, attID, id)
+		`, h.cfg().CompanyAttachmentsTable()), notes, sortOrderVal, newFilePath, hash, attID, id)
 	} else {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(`
 			UPDATE %s SET notes=@p1, sort_order=@p2
 			WHERE supplier_attachment_id=@p3 AND supplier_id=@p4
-		`, h.cfg.CompanyAttachmentsTable()), notes, sortOrderVal, attID, id)
+		`, h.cfg().CompanyAttachmentsTable()), notes, sortOrderVal, attID, id)
 	}
 	if err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
@@ -754,8 +754,8 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	}
 
 	if fileChanged && urlutil.IsLocalFile(oldFilePath) {
-		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
-			attID, oldFilePath, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(oldFilePath)); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
+			attID, oldFilePath, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFilePath)); err != nil {
 			h.renderError(w, r, "Attachment updated, but the old file could not be removed: "+err.Error())
 			return
 		}
@@ -785,7 +785,7 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		FROM %s su
 		LEFT JOIN %s cn ON su.default_contact = cn.id
 		WHERE su.id = @p1
-	`, h.cfg.CompanyTable(), h.cfg.ContactTable()), id).Scan(
+	`, h.cfg().CompanyTable(), h.cfg().ContactTable()), id).Scan(
 		&s.ID, &name, &code, &notes,
 		&defaultContact, &isActive, &isSupplier, &isManufacturer,
 		&numLNKs, &numPOs, &dateModified,
@@ -837,7 +837,7 @@ func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Re
 	if n, err2 := strconv.Atoi(attIDStr); err2 == nil && n != 0 {
 		val = n
 	}
-	if err := h.setPrimaryAttachment(r.Context(), h.cfg.CompanyTable(), "id", "primary_attachment_id", idInt, val); err != nil {
+	if err := h.setPrimaryAttachment(r.Context(), h.cfg().CompanyTable(), "id", "primary_attachment_id", idInt, val); err != nil {
 		h.renderError(w, r, "Error setting primary attachment: "+err.Error())
 		return
 	}
@@ -847,9 +847,9 @@ func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Re
 // ── Supplier folder ──────────────────────────────────────────────────────────
 
 func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s models.Supplier, subParts []string) {
-	root := h.cfg.SupplierFilesRoot
+	root := h.cfg().SupplierFilesRoot
 	if root == "" {
-		root = h.cfg.DocControlRoot
+		root = h.cfg().DocControlRoot
 	}
 	if root == "" {
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
@@ -929,9 +929,9 @@ func (h *Handler) supplierFolderUpload(w http.ResponseWriter, r *http.Request, s
 	if !ok {
 		return
 	}
-	root := h.cfg.SupplierFilesRoot
+	root := h.cfg().SupplierFilesRoot
 	if root == "" {
-		root = h.cfg.DocControlRoot
+		root = h.cfg().DocControlRoot
 	}
 	if root == "" {
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
@@ -994,9 +994,9 @@ func (h *Handler) SupplierFile(w http.ResponseWriter, r *http.Request) {
 // serveSupplierFile holds SupplierFile's logic once the supplier row is in
 // hand, split out so it can be exercised in tests without a DB (#863).
 func (h *Handler) serveSupplierFile(w http.ResponseWriter, r *http.Request, s models.Supplier, id string) {
-	root := h.cfg.SupplierFilesRoot
+	root := h.cfg().SupplierFilesRoot
 	if root == "" {
-		root = h.cfg.DocControlRoot
+		root = h.cfg().DocControlRoot
 	}
 	if root == "" {
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)

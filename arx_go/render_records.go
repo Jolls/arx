@@ -16,9 +16,10 @@ import (
 // renderRecords renders a Test Records nav-section page using its layout and template funcs.
 func (h *Handler) renderRecords(w http.ResponseWriter, r *http.Request, page string, data any) {
 	if m, ok := data.(map[string]any); ok {
-		m["AppVersion"] = h.cfg.Version
-		m["SchemaMismatch"] = h.schemaMismatch
-		m["DBConnError"] = h.dbConnError
+		s := h.st()
+		m["AppVersion"] = s.cfg.Version
+		m["SchemaMismatch"] = s.schemaMismatch
+		m["DBConnError"] = s.dbConnError
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()

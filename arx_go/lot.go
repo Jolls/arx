@@ -43,7 +43,7 @@ func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args 
 	if poLineID != nil {
 		poArg = *poLineID
 	}
-	insert := h.dia().InsertReturningID(h.cfg.LotTable(),
+	insert := h.dia().InsertReturningID(h.cfg().LotTable(),
 		`part_id, lot_number, lot_description, vendor_lot_number, po_line_id, created_at, is_active`,
 		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`,
 		false)
@@ -55,7 +55,7 @@ func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args 
 		return lotID, err
 	}
 	_, err = tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET lot_number = @p1 WHERE id = @p2`, h.cfg.LotTable()),
+		`UPDATE %s SET lot_number = @p1 WHERE id = @p2`, h.cfg().LotTable()),
 		strconv.Itoa(lotID), lotID)
 	return lotID, err
 }
@@ -67,7 +67,7 @@ func (h *Handler) activeLotsForPart(ctx context.Context, partID int) ([]LotOptio
 		SELECT id, lot_number, vendor_lot_number
 		FROM %s WHERE part_id = @p1 AND is_active = %s
 		ORDER BY created_at DESC, id DESC
-	`, h.cfg.LotTable(), h.dia().BoolLiteral(true)), partID)
+	`, h.cfg().LotTable(), h.dia().BoolLiteral(true)), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (h *Handler) lotBelongsToPart(ctx context.Context, tx *txLogger, lotID, par
 	var n int
 	err := tx.QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT COUNT(*) FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`,
-		h.cfg.LotTable(), h.dia().BoolLiteral(true)), lotID, partID).Scan(&n)
+		h.cfg().LotTable(), h.dia().BoolLiteral(true)), lotID, partID).Scan(&n)
 	return n == 1, err
 }
 
@@ -105,7 +105,7 @@ func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (parent_lot_id, child_lot_id, qty_consumed)
 		VALUES (@p1, @p2, @p3)
-	`, h.cfg.GenealogyTable()), parentLotID, childLotID, qtyConsumed)
+	`, h.cfg().GenealogyTable()), parentLotID, childLotID, qtyConsumed)
 	return err
 }
 
@@ -136,7 +136,7 @@ func (h *Handler) lotRowSelect() string {
 		       p.part_number, p.description, l.lot_description, l.notes, l.created_at, l.is_active
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
-	`, h.cfg.LotTable(), h.cfg.PartsTable())
+	`, h.cfg().LotTable(), h.cfg().PartsTable())
 }
 
 // scanLotRow reads one LotRow from a row cursor over lotRowSelect's columns.
@@ -183,7 +183,7 @@ func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
 		WHERE l.part_id = @p1 ORDER BY l.created_at DESC, l.id DESC
-	`+limitClause, top, h.cfg.LotTable(), h.cfg.PartsTable()), partID, limit)
+	`+limitClause, top, h.cfg().LotTable(), h.cfg().PartsTable()), partID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]
 func (h *Handler) lotCountForPart(ctx context.Context, partID int) (int, error) {
 	var count int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg.LotTable()), partID).Scan(&count)
+		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg().LotTable()), partID).Scan(&count)
 	return count, err
 }
 
@@ -270,7 +270,7 @@ func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, a
 		JOIN %[4]s p ON p.id = u.part_id
 		WHERE g.%[5]s = @p1
 		ORDER BY 1, 2
-	`, h.cfg.GenealogyTable(), h.cfg.LotTable(), joinPrefix, h.cfg.PartsTable(), filterCol, h.cfg.UnitTable()), id)
+	`, h.cfg().GenealogyTable(), h.cfg().LotTable(), joinPrefix, h.cfg().PartsTable(), filterCol, h.cfg().UnitTable()), id)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +366,7 @@ func (h *Handler) PartLots(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_lots.html", map[string]any{
 		"Part": p, "Lots": lots,
 		"ActiveTab": "parts", "ActiveSubTab": "lots",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -411,7 +411,7 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Lot": lot, "Ancestors": ancestors, "Descendants": descendants,
 		"TypeOptions": typeOptions,
 		"ActiveTab":   "parts", "ActiveSubTab": "lots",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -457,7 +457,7 @@ func (h *Handler) LotEdit(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_lot_edit.html", map[string]any{
 		"Part": p, "Lot": lot,
 		"ActiveTab": "parts", "ActiveSubTab": "lots",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -489,7 +489,7 @@ func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
 	notes := fv(r, "notes")
 	_, err = h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET lot_description = @p1, vendor_lot_number = @p2, notes = @p3 WHERE id = @p4 AND part_id = @p5`,
-		h.cfg.LotTable()), description, nullableText(vendorLot), nullableText(notes), lotID, p.ID)
+		h.cfg().LotTable()), description, nullableText(vendorLot), nullableText(notes), lotID, p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error saving lot: "+err.Error())
 		return
@@ -510,7 +510,7 @@ func (h *Handler) appendLotNote(ctx context.Context, tx *txLogger, lotID int, te
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		UPDATE %s SET notes = CASE WHEN COALESCE(notes, '') = '' THEN @p1 ELSE CONCAT(notes, @p2) END
 		WHERE id = @p3
-	`, h.cfg.LotTable()), entry, "\n\n"+entry, lotID)
+	`, h.cfg().LotTable()), entry, "\n\n"+entry, lotID)
 	return err
 }
 
@@ -540,6 +540,6 @@ func (h *Handler) AllLots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, r, "parts/all_lots.html", map[string]any{
-		"Lots": lots, "ActiveTab": "parts", "TestMode": h.cfg.TestMode,
+		"Lots": lots, "ActiveTab": "parts", "TestMode": h.cfg().TestMode,
 	})
 }

@@ -49,7 +49,7 @@ const (
 func checkArxDevSentinel(ctx context.Context, h *Handler) error {
 	var gotNum, gotDescription string
 	err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT part_number, description FROM %s WHERE id = @p1", h.cfg.PartsTable()),
+		fmt.Sprintf("SELECT part_number, description FROM %s WHERE id = @p1", h.cfg().PartsTable()),
 		arxDevSentinelPartID,
 	).Scan(&gotNum, &gotDescription)
 	if err != nil {
@@ -249,8 +249,8 @@ func assertFloatEqual(t *testing.T, label string, got, want float64) {
 // trips instead of recursing forever.
 func seedCyclePair(t *testing.T, h *Handler, ctx context.Context) (idA, idB int, cleanup func()) {
 	t.Helper()
-	pn := h.cfg.PartsTable()
-	pl := h.cfg.BOMTable()
+	pn := h.cfg().PartsTable()
+	pl := h.cfg().BOMTable()
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
@@ -320,7 +320,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	defer func() {
 		deletePartAttachments(ctx, h, pnID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), pnID)
 	}()
 
 	// ── 2. Update ─────────────────────────────────────────────────────────────
@@ -337,7 +337,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 
 	var gotDescription string
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT description FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
+		fmt.Sprintf(`SELECT description FROM %s WHERE id=@p1`, h.cfg().PartsTable()), pnID,
 	).Scan(&gotDescription)
 	if err != nil {
 		t.Fatalf("SELECT description after PartUpdate: %v", err)
@@ -358,7 +358,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 
 	var filLinks int
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
+		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg().PartsTable()), pnID,
 	).Scan(&filLinks)
 	if err != nil {
 		t.Fatalf("SELECT AttachmentCount after attach create: %v", err)
@@ -370,7 +370,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	// Capture the new ID for the delete step.
 	var filID int
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), pnID,
+		fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), pnID,
 	).Scan(&filID)
 	if err != nil || filID == 0 {
 		t.Fatalf("could not retrieve id after attach create: %v", err)
@@ -380,7 +380,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	// "category" form value, not an unrelated field.
 	var attCategory string
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT category FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), filID,
+		fmt.Sprintf(`SELECT category FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), filID,
 	).Scan(&attCategory)
 	if err != nil {
 		t.Fatalf("SELECT category after attach create: %v", err)
@@ -398,7 +398,7 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	assert302(t, "PartAttachmentDelete", rec)
 
 	err = h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg.PartsTable()), pnID,
+		fmt.Sprintf(`SELECT attachment_count FROM %s WHERE id=@p1`, h.cfg().PartsTable()), pnID,
 	).Scan(&filLinks)
 	if err != nil {
 		t.Fatalf("SELECT AttachmentCount after attach delete: %v", err)
@@ -423,7 +423,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
@@ -439,18 +439,18 @@ func TestIntegration_YieldSummary(t *testing.T) {
 	// result.form_row_id FKs to form_row.id, so results need a real step to point at.
 	var testID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, type) OUTPUT INSERTED.id VALUES (@p1, 0)`, h.cfg.StepsTable()),
+		`INSERT INTO %s (form_id, type) OUTPUT INSERTED.id VALUES (@p1, 0)`, h.cfg().StepsTable()),
 		formID).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
 
 	defer func() {
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
-			h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+			h.cfg().ResultsTable(), h.cfg().RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}()
 
 	// Three records: one all-pass, one with a failing result, one with no
@@ -469,14 +469,14 @@ func TestIntegration_YieldSummary(t *testing.T) {
 		var recordID int
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (form_id, record_date, serial_number, is_active)
-			 OUTPUT INSERTED.id VALUES (@p1, @p2, '1', 1)`, h.cfg.RecordsTable()),
+			 OUTPUT INSERTED.id VALUES (@p1, @p2, '1', 1)`, h.cfg().RecordsTable()),
 			formID, s.date).Scan(&recordID); err != nil {
 			t.Fatalf("seed record: %v", err)
 		}
 		for _, pf := range s.passFails {
 			if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
 				`INSERT INTO %s (form_record_id, form_row_id, pass_fail) VALUES (@p1, @p2, @p3)`,
-				h.cfg.ResultsTable()), recordID, testID, pf); err != nil {
+				h.cfg().ResultsTable()), recordID, testID, pf); err != nil {
 				t.Fatalf("seed result: %v", err)
 			}
 		}
@@ -492,7 +492,7 @@ func TestIntegration_YieldSummary(t *testing.T) {
 		LEFT JOIN %s res ON res.form_record_id = trec.id
 		WHERE form_id = @p1 AND is_active = 1%s
 		GROUP BY trec.id, record_date`,
-		h.cfg.RecordsTable(), h.cfg.ResultsTable(), dateClause), args...)
+		h.cfg().RecordsTable(), h.cfg().ResultsTable(), dateClause), args...)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -535,7 +535,7 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
@@ -543,17 +543,17 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	defer func() {
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().RecordsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}()
 
 	// Seed four records: WIP/Complete/Approved + a type/date spread.
@@ -572,7 +572,7 @@ func TestIntegration_RecordFilters(t *testing.T) {
 	for _, s := range seeds {
 		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (form_id, record_date, serial_number, record_type, is_locked, is_approved, is_active)
-			 VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)`, h.cfg.RecordsTable()),
+			 VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 1)`, h.cfg().RecordsTable()),
 			formID, s.date, s.sn, s.recordType, s.locked, s.app); err != nil {
 			t.Fatalf("seed record %s: %v", s.sn, err)
 		}
@@ -584,7 +584,7 @@ func TestIntegration_RecordFilters(t *testing.T) {
 		clauses, fargs := f.whereClauses(h.dia(), 2)
 		query := fmt.Sprintf(
 			`SELECT serial_number FROM %s WHERE form_id = @p1 AND is_active = 1%s
-			 ORDER BY TRY_CAST(serial_number AS INT)`, h.cfg.RecordsTable(), clauses)
+			 ORDER BY TRY_CAST(serial_number AS INT)`, h.cfg().RecordsTable(), clauses)
 		rows, err := h.queryContext(ctx, query, append([]any{formID}, fargs...)...)
 		if err != nil {
 			t.Fatalf("query: %v", err)
@@ -631,7 +631,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
@@ -639,35 +639,35 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	defer func() {
 		_, _ = h.DB().ExecContext(ctx,
 			fmt.Sprintf(`DELETE FROM %s WHERE form_record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
-				h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
+				h.cfg().ResultsTable(), h.cfg().RecordsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().RecordsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.StepsTable()), formID)
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().StepsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}()
 
 	var testID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter, pf_type)
 		 OUTPUT INSERTED.id VALUES (@p1, 0, 'Screenshot/File Panel Photo', 'attach')`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
 
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()),
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg().FormsTable()),
 		strconv.Itoa(testID), formID); err != nil {
 		t.Fatalf("set form test_order: %v", err)
 	}
@@ -675,7 +675,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, test_order, record_type, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587', '', '', @p2, '', 0, 1)`, h.cfg.RecordsTable()),
+		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587', '', '', @p2, '', 0, 1)`, h.cfg().RecordsTable()),
 		formID, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
 		t.Fatalf("seed form_record: %v", err)
@@ -693,7 +693,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 	var passFail sql.NullBool
 	err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT result, pass_fail FROM %s WHERE form_record_id=@p1 AND form_row_id=@p2`,
-		h.cfg.ResultsTable()), recordID, testID,
+		h.cfg().ResultsTable()), recordID, testID,
 	).Scan(&result, &passFail)
 	if err != nil {
 		t.Fatalf("SELECT result/pass_fail after filled save: %v", err)
@@ -714,7 +714,7 @@ func TestIntegration_AttachStepPassFail(t *testing.T) {
 
 	err = h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT result, pass_fail FROM %s WHERE form_record_id=@p1 AND form_row_id=@p2`,
-		h.cfg.ResultsTable()), recordID, testID,
+		h.cfg().ResultsTable()), recordID, testID,
 	).Scan(&result, &passFail)
 	if err != nil {
 		t.Fatalf("SELECT result/pass_fail after clearing: %v", err)
@@ -735,7 +735,7 @@ func TestIntegration_PasteResultImageGuards(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	h.cfg.ImageRoot = t.TempDir() // non-empty so the ImageRoot-configured check passes; never written to
+	h.cfg().ImageRoot = t.TempDir() // non-empty so the ImageRoot-configured check passes; never written to
 
 	// 1x1 transparent PNG, base64-encoded — small valid image_data payload.
 	const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -769,33 +769,33 @@ func TestIntegration_PasteResultImageGuards(t *testing.T) {
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
 	defer func() {
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}()
 
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	defer func() {
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
+			fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().RecordsTable()), formID)
 		_, _ = h.DB().ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+			fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
 	}()
 
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587-LOCKED', '', '', 1, 1)`, h.cfg.RecordsTable()), formID,
+		 OUTPUT INSERTED.id VALUES (@p1, 'ITEST-587-LOCKED', '', '', 1, 1)`, h.cfg().RecordsTable()), formID,
 	).Scan(&recordID); err != nil {
 		t.Fatalf("seed locked form_record: %v", err)
 	}
@@ -823,11 +823,11 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 		idCol string
 		ids   []int
 	}{
-		{h.cfg.ContactTable(), "id", []int{2001, 2002, 2003, 2004, 2005}},
-		{h.cfg.UsersTable(), "id", []int{8001, 8002}},
-		{h.cfg.StepsTable(), "id", []int{6101, 6102, 6103, 6104, 6105, 6106, 6107, 6108}},
-		{h.cfg.RecordsTable(), "id", []int{7001, 7002, 7003, 7004, 7005}},
-		{h.cfg.ResultsTable(), "id", []int{
+		{h.cfg().ContactTable(), "id", []int{2001, 2002, 2003, 2004, 2005}},
+		{h.cfg().UsersTable(), "id", []int{8001, 8002}},
+		{h.cfg().StepsTable(), "id", []int{6101, 6102, 6103, 6104, 6105, 6106, 6107, 6108}},
+		{h.cfg().RecordsTable(), "id", []int{7001, 7002, 7003, 7004, 7005}},
+		{h.cfg().ResultsTable(), "id", []int{
 			7101, 7102, 7103, 7104, 7105, 7106, 7107, 7108,
 			7109, 7110, 7111, 7112, 7113, 7114, 7115, 7116,
 		}},
@@ -853,7 +853,7 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 	// app_config and named_queries key off setting_key/name, not id.
 	var appConfigUpdated sql.NullTime
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT updated_at FROM %s WHERE setting_key=@p1`, h.cfg.AppConfigTable()), "schema_version",
+		fmt.Sprintf(`SELECT updated_at FROM %s WHERE setting_key=@p1`, h.cfg().AppConfigTable()), "schema_version",
 	).Scan(&appConfigUpdated); err != nil {
 		t.Fatalf("SELECT updated_at FROM app_config: %v", err)
 	}
@@ -864,7 +864,7 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 
 	var namedQueryUpdated sql.NullTime
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT updated_at FROM %s WHERE name=@p1`, h.cfg.NamedQueriesTable()), "fil_category_for_pn",
+		fmt.Sprintf(`SELECT updated_at FROM %s WHERE name=@p1`, h.cfg().NamedQueriesTable()), "fil_category_for_pn",
 	).Scan(&namedQueryUpdated); err != nil {
 		t.Fatalf("SELECT updated_at FROM named_queries: %v", err)
 	}
@@ -1136,7 +1136,7 @@ func TestIntegration_BuildCostDoesNotWriteRollup(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	pn := h.cfg.PartsTable()
+	pn := h.cfg().PartsTable()
 
 	readRollup := func(id int) (sql.NullFloat64, sql.NullTime) {
 		var cost sql.NullFloat64
@@ -1250,7 +1250,7 @@ func TestIntegration_PartRollupCostHandler(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	pn := h.cfg.PartsTable()
+	pn := h.cfg().PartsTable()
 
 	readRollup := func(id int) (sql.NullFloat64, sql.NullTime) {
 		var cost sql.NullFloat64
@@ -1313,7 +1313,7 @@ func TestIntegration_PartRollupCostHandlerCycleDoesNotWrite(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	pn := h.cfg.PartsTable()
+	pn := h.cfg().PartsTable()
 
 	idA, idB, cleanupCycle := seedCyclePair(t, h, ctx)
 	defer cleanupCycle()
@@ -1492,9 +1492,9 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 func seedThrowawayPO(t *testing.T, h *Handler, ctx context.Context) (id int, number string, cleanup func()) {
 	t.Helper()
 
-	savedRoot := h.cfg.POFolderRoot
-	h.cfg.POFolderRoot = ""
-	defer func() { h.cfg.POFolderRoot = savedRoot }()
+	savedRoot := h.cfg().POFolderRoot
+	h.cfg().POFolderRoot = ""
+	defer func() { h.cfg().POFolderRoot = savedRoot }()
 
 	rec := httptest.NewRecorder()
 	h.POCreate(rec, postForm("/pos", url.Values{
@@ -1507,15 +1507,15 @@ func seedThrowawayPO(t *testing.T, h *Handler, ctx context.Context) (id int, num
 	}
 
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg.POTable()), number,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number,
 	).Scan(&id); err != nil {
 		t.Fatalf("look up created PO id: %v", err)
 	}
 
 	cleanup = func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POLineTable()), id)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POHistoryTable()), id)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg.POTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POLineTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POHistoryTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg().POTable()), id)
 	}
 	return id, number, cleanup
 }
@@ -1532,7 +1532,7 @@ func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
 	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
 	defer poCleanup()
 
-	before := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), poID))
+	before := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POLineTable(), poID))
 
 	numID, err := strconv.Atoi(poNumber)
 	if err != nil {
@@ -1549,7 +1549,7 @@ func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
 	}), numID))
 	assert302(t, "POUpdate blank line", rec)
 
-	after := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), poID))
+	after := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POLineTable(), poID))
 	if after != before {
 		t.Errorf("po_line count for PO %d changed from %d to %d; whitespace-only new line should not be saved", poID, before, after)
 	}
@@ -1701,7 +1701,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
@@ -1709,22 +1709,22 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	var testID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Audit Seed')`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg().FormRowHistoryTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}()
 
 	// Set the acting user, then UPDATE the step — both inside one tx, so the
@@ -1740,7 +1740,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 		t.Fatalf("SetAuditUser exec: %v", err)
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET parameter=@p1 WHERE id=@p2`, h.cfg.StepsTable()), "Audit Changed", testID); err != nil {
+		`UPDATE %s SET parameter=@p1 WHERE id=@p2`, h.cfg().StepsTable()), "Audit Changed", testID); err != nil {
 		tx.Rollback()
 		t.Fatalf("update step: %v", err)
 	}
@@ -1751,7 +1751,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 	// Exactly one snapshot row, holding the PRE-update value and attributed to actor.
 	var count int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID,
+		`SELECT COUNT(*) FROM %s WHERE form_row_id=@p1`, h.cfg().FormRowHistoryTable()), testID,
 	).Scan(&count); err != nil {
 		t.Fatalf("count history: %v", err)
 	}
@@ -1761,7 +1761,7 @@ func TestIntegration_TestDefinitionHistoryAudit(t *testing.T) {
 
 	var changedBy, snapParam string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT changed_by, parameter FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID,
+		`SELECT changed_by, parameter FROM %s WHERE form_row_id=@p1`, h.cfg().FormRowHistoryTable()), testID,
 	).Scan(&changedBy, &snapParam); err != nil {
 		t.Fatalf("select history: %v", err)
 	}
@@ -1784,9 +1784,9 @@ func TestIntegration_BuildConsumesOnlyStockedComponents(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	inv := h.cfg.InventoryTxnTable()
-	bt := h.cfg.BuildTable()
-	pn := h.cfg.PartsTable()
+	inv := h.cfg().InventoryTxnTable()
+	bt := h.cfg().BuildTable()
+	pn := h.cfg().PartsTable()
 
 	const outputPart = 3005
 	const buildQty = 3.0
@@ -1907,11 +1907,11 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	inv := h.cfg.InventoryTxnTable()
-	bt := h.cfg.BuildTable()
-	lt := h.cfg.LotTable()
-	lg := h.cfg.GenealogyTable()
-	pn := h.cfg.PartsTable()
+	inv := h.cfg().InventoryTxnTable()
+	bt := h.cfg().BuildTable()
+	lt := h.cfg().LotTable()
+	lg := h.cfg().GenealogyTable()
+	pn := h.cfg().PartsTable()
 
 	const outputPart = 3012  // ASM-1002 sub-assembly, is_lot_tracked in seed
 	const trackedComp = 3007 // RAW-1002 component, is_lot_tracked; seed lot 8301
@@ -2050,12 +2050,12 @@ func TestIntegration_BuildReturnsToRecord(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	rt := h.cfg.RecordsTable()
-	bt := h.cfg.BuildTable()
-	lt := h.cfg.LotTable()
-	lg := h.cfg.GenealogyTable()
-	inv := h.cfg.InventoryTxnTable()
-	pn := h.cfg.PartsTable()
+	rt := h.cfg().RecordsTable()
+	bt := h.cfg().BuildTable()
+	lt := h.cfg().LotTable()
+	lg := h.cfg().GenealogyTable()
+	inv := h.cfg().InventoryTxnTable()
+	pn := h.cfg().PartsTable()
 
 	const outputPart = 3012  // ASM-1002, is_lot_tracked + has a BOM in seed
 	const trackedComp = 3007 // lot-tracked component; seed lot 8301
@@ -2155,7 +2155,7 @@ func TestIntegration_RecordLinkageSave(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	rt := h.cfg.RecordsTable()
+	rt := h.cfg().RecordsTable()
 
 	const testedPart = 3012 // ASM-1002; seed lot 8302 + build 8202 belong to it
 	const goodLot = 8302
@@ -2218,8 +2218,8 @@ func TestIntegration_SerialUnitCreationAndRetest(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	rt := h.cfg.RecordsTable()
-	ut := h.cfg.UnitTable()
+	rt := h.cfg().RecordsTable()
+	ut := h.cfg().UnitTable()
 
 	const testedPart = 3013 // ASM-1003, tracking_mode lot_serial in seed
 	const provLot = 8306    // a lot of 3013
@@ -2320,15 +2320,15 @@ func TestIntegration_SaveDoesNotDuplicateUnitOnSerialMismatch(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	rt := h.cfg.RecordsTable()
-	ut := h.cfg.UnitTable()
+	rt := h.cfg().RecordsTable()
+	ut := h.cfg().UnitTable()
 
 	const testedPart = 3013 // ASM-1003, tracking_mode lot_serial in seed
 	const provBuild = 8203  // a build of 3013
 	origSerial := smokeUniq("SN-MISMATCH-ORIG")
 
 	// Mint a unit directly (as upsertUnitForRecord would) and a record linked to it.
-	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
+	insertUnit := h.dia().InsertReturningID(h.cfg().UnitTable(),
 		`part_id, build_id, serial_number, source`, `@p1, @p2, @p3, 'test'`, false)
 	var unitID int
 	if err := h.DB().QueryRowContext(ctx, insertUnit, testedPart, provBuild, origSerial).Scan(&unitID); err != nil {
@@ -2431,13 +2431,13 @@ func TestIntegration_BuildAtTestTime(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	rt := h.cfg.RecordsTable()
-	ut := h.cfg.UnitTable()
-	bt := h.cfg.BuildTable()
-	lt := h.cfg.LotTable()
-	lg := h.cfg.GenealogyTable()
-	inv := h.cfg.InventoryTxnTable()
-	pn := h.cfg.PartsTable()
+	rt := h.cfg().RecordsTable()
+	ut := h.cfg().UnitTable()
+	bt := h.cfg().BuildTable()
+	lt := h.cfg().LotTable()
+	lg := h.cfg().GenealogyTable()
+	inv := h.cfg().InventoryTxnTable()
+	pn := h.cfg().PartsTable()
 
 	const testedPart = 3013
 	const comp1, comp1Lot = 3012, 8302
@@ -2536,7 +2536,7 @@ func TestIntegration_ManualUnitCreate(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	ut := h.cfg.UnitTable()
+	ut := h.cfg().UnitTable()
 
 	const partID = 3005 // tracking_mode 'serial'
 	serial := smokeUniq("SN-MANUAL")
@@ -2607,7 +2607,7 @@ func TestIntegration_ManualUnitTestedCountUnaffected(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	ut := h.cfg.UnitTable()
+	ut := h.cfg().UnitTable()
 
 	const partID = 3013
 	const buildID = 8203
@@ -2626,7 +2626,7 @@ func TestIntegration_ManualUnitTestedCountUnaffected(t *testing.T) {
 	}
 
 	serial := smokeUniq("SN-MANUAL-BUILD")
-	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
+	insertUnit := h.dia().InsertReturningID(h.cfg().UnitTable(),
 		`part_id, build_id, serial_number, source`, `@p1, @p2, @p3, 'manual'`, false)
 	var unitID int
 	if err := h.DB().QueryRowContext(ctx, insertUnit, partID, buildID, serial).Scan(&unitID); err != nil {
@@ -2653,7 +2653,7 @@ func TestIntegration_UnitSerialLocked(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	rt := h.cfg.RecordsTable()
+	rt := h.cfg().RecordsTable()
 
 	const lockedUnit = 8501
 	const unlockedUnit = 8504 // manual unit, #799 — no records reference it
@@ -2699,7 +2699,7 @@ func TestIntegration_LoginPost_ValidCredentials(t *testing.T) {
 		t.Fatalf("createUser: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2726,7 +2726,7 @@ func TestIntegration_LoginPost_InvalidPassword(t *testing.T) {
 		t.Fatalf("createUser: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2794,14 +2794,14 @@ func TestIntegration_SettingsUsersCreate_Success(t *testing.T) {
 
 	var isAdmin bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT is_admin FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&isAdmin); err != nil {
 		t.Fatalf("SELECT after create: %v", err)
 	}
 	if isAdmin {
 		t.Error("user created via SettingsUsersCreate has is_admin=1, want 0 (only bootstrap creates an admin)")
 	}
-	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username)
 }
 
 func TestIntegration_SettingsUsersCreate_MissingFields(t *testing.T) {
@@ -2821,7 +2821,7 @@ func TestIntegration_SettingsUsersCreate_MissingFields(t *testing.T) {
 
 	var n int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT COUNT(*) FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&n); err != nil {
 		t.Fatalf("count after rejected create: %v", err)
 	}
@@ -2843,12 +2843,12 @@ func TestIntegration_SettingsUsersResetPassword_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2859,7 +2859,7 @@ func TestIntegration_SettingsUsersResetPassword_Success(t *testing.T) {
 
 	var hash string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT password_hash FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+		`SELECT password_hash FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID,
 	).Scan(&hash); err != nil {
 		t.Fatalf("SELECT password_hash: %v", err)
 	}
@@ -2880,12 +2880,12 @@ func TestIntegration_SettingsUsersResetPassword_EmptyPassword(t *testing.T) {
 	var userID int
 	var beforeHash string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, password_hash FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT id, password_hash FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&userID, &beforeHash); err != nil {
 		t.Fatalf("look up created user: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2899,7 +2899,7 @@ func TestIntegration_SettingsUsersResetPassword_EmptyPassword(t *testing.T) {
 
 	var afterHash string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT password_hash FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+		`SELECT password_hash FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID,
 	).Scan(&afterHash); err != nil {
 		t.Fatalf("SELECT password_hash after rejected reset: %v", err)
 	}
@@ -2921,18 +2921,18 @@ func TestIntegration_SettingsUsersToggleActive_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID)
 	}()
 
 	readActive := func() bool {
 		var active bool
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT is_active FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+			`SELECT is_active FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID,
 		).Scan(&active); err != nil {
 			t.Fatalf("read is_active: %v", err)
 		}
@@ -2970,7 +2970,7 @@ func TestIntegration_SettingsUsersToggleActive_CannotDeactivateSelf(t *testing.T
 
 	var before bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_active FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+		`SELECT is_active FROM %s WHERE id=8001`, h.cfg().UsersTable()),
 	).Scan(&before); err != nil {
 		t.Fatalf("read admin is_active: %v", err)
 	}
@@ -2986,7 +2986,7 @@ func TestIntegration_SettingsUsersToggleActive_CannotDeactivateSelf(t *testing.T
 
 	var after bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_active FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+		`SELECT is_active FROM %s WHERE id=8001`, h.cfg().UsersTable()),
 	).Scan(&after); err != nil {
 		t.Fatalf("re-read admin is_active: %v", err)
 	}
@@ -3010,12 +3010,12 @@ func TestIntegration_SettingsUsersToggleApprove_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -3026,7 +3026,7 @@ func TestIntegration_SettingsUsersToggleApprove_Success(t *testing.T) {
 
 	var canApprove bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT can_approve_po FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+		`SELECT can_approve_po FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID,
 	).Scan(&canApprove); err != nil {
 		t.Fatalf("read can_approve_po: %v", err)
 	}
@@ -3046,12 +3046,12 @@ func TestIntegration_SettingsUsersToggleApproveRecords_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -3062,7 +3062,7 @@ func TestIntegration_SettingsUsersToggleApproveRecords_Success(t *testing.T) {
 
 	var canApprove bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT can_approve_records FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+		`SELECT can_approve_records FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID,
 	).Scan(&canApprove); err != nil {
 		t.Fatalf("read can_approve_records: %v", err)
 	}
@@ -3082,12 +3082,12 @@ func TestIntegration_SettingsUsersToggleAdmin_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=@p1`, h.cfg.UsersTable()), username,
+		`SELECT id FROM %s WHERE username=@p1`, h.cfg().UsersTable()), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -3098,7 +3098,7 @@ func TestIntegration_SettingsUsersToggleAdmin_Success(t *testing.T) {
 
 	var isAdmin bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE id=@p1`, h.cfg.UsersTable()), userID,
+		`SELECT is_admin FROM %s WHERE id=@p1`, h.cfg().UsersTable()), userID,
 	).Scan(&isAdmin); err != nil {
 		t.Fatalf("read is_admin: %v", err)
 	}
@@ -3114,7 +3114,7 @@ func TestIntegration_SettingsUsersToggleAdmin_CannotRemoveOwnAdmin(t *testing.T)
 
 	var before bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg().UsersTable()),
 	).Scan(&before); err != nil {
 		t.Fatalf("read admin is_admin: %v", err)
 	}
@@ -3130,7 +3130,7 @@ func TestIntegration_SettingsUsersToggleAdmin_CannotRemoveOwnAdmin(t *testing.T)
 
 	var after bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg.UsersTable()),
+		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg().UsersTable()),
 	).Scan(&after); err != nil {
 		t.Fatalf("re-read admin is_admin: %v", err)
 	}
@@ -3151,27 +3151,27 @@ func TestIntegration_RunNamedQuery_SingleResult(t *testing.T) {
 	var partID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, description, is_active) OUTPUT INSERTED.id VALUES (@p1, @p2, 1)`,
-		h.cfg.PartsTable()), pn, "807 test part",
+		h.cfg().PartsTable()), pn, "807 test part",
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.PartsTable()), partID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().PartsTable()), partID)
 
 	var attID int
-	insertAtt := h.dia().InsertReturningID(h.cfg.AttachmentsTable(),
+	insertAtt := h.dia().InsertReturningID(h.cfg().AttachmentsTable(),
 		"part_id, file_name, category, sort_order, is_active", "@p1, @p2, @p3, 1, 1", true)
 	if err := h.DB().QueryRowContext(ctx, insertAtt, partID, "drawing.pdf", "Drawing").Scan(&attID); err != nil {
 		t.Fatalf("seed attachment: %v", err)
 	}
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.AttachmentsTable()), attID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().AttachmentsTable()), attID)
 
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET primary_attachment_id=@p1 WHERE id=@p2`, h.cfg.PartsTable()), attID, partID); err != nil {
+		`UPDATE %s SET primary_attachment_id=@p1 WHERE id=@p2`, h.cfg().PartsTable()), attID, partID); err != nil {
 		t.Fatalf("set primary attachment: %v", err)
 	}
 	// Clear primary_attachment_id before the attachment is deleted below (FK_part_primary_attachment,
 	// #735) — deferred after the attachment-delete defer so it runs first (LIFO).
-	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1", h.cfg.PartsTable()), partID)
+	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1", h.cfg().PartsTable()), partID)
 
 	qr, err := h.runNamedQuery(ctx, fmt.Sprintf("query:pn_primary_attachment(@pn=%s)", pn))
 	if err != nil {
@@ -3259,11 +3259,11 @@ func TestIntegration_RunNamedQuery_StaleSpecNomParamRename(t *testing.T) {
 	name := fmt.Sprintf("itest_stale_param_%d", time.Now().UnixNano())
 	if _, err := h.execContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (name, sql, params, result_type, is_active) VALUES (@p1, @p2, @p3, 'single', 1)`,
-		h.cfg.NamedQueriesTable()), name, "SELECT 1 AS val WHERE @new_param = @new_param", "new_param",
+		h.cfg().NamedQueriesTable()), name, "SELECT 1 AS val WHERE @new_param = @new_param", "new_param",
 	); err != nil {
 		t.Fatalf("seed named_queries row: %v", err)
 	}
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE name=@p1", h.cfg.NamedQueriesTable()), name)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE name=@p1", h.cfg().NamedQueriesTable()), name)
 
 	_, err := h.runNamedQuery(ctx, fmt.Sprintf("query:%s(@old_param=1)", name))
 	if err == nil {
@@ -3295,7 +3295,7 @@ func TestIntegration_APINamedQuery_EndToEnd(t *testing.T) {
 func seedPOLine(t *testing.T, h *Handler, ctx context.Context, poID, partID int, partNumber string, qty, unitCost float64) int {
 	t.Helper()
 	var id int
-	insert := h.dia().InsertReturningID(h.cfg.POLineTable(),
+	insert := h.dia().InsertReturningID(h.cfg().POLineTable(),
 		"po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, received_qty",
 		"@p1, @p2, 'A', @p3, 1, 'test line', @p4, @p5, 0", true)
 	if err := h.DB().QueryRowContext(ctx, insert, poID, partNumber, partID, qty, unitCost).Scan(&id); err != nil {
@@ -3309,7 +3309,7 @@ func seedPOLine(t *testing.T, h *Handler, ctx context.Context, poID, partID int,
 func setPOStatus(t *testing.T, h *Handler, ctx context.Context, poID int, status, approval string) {
 	t.Helper()
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET status=@p1, approval_status=@p2 WHERE ID=@p3", h.cfg.POTable()),
+		"UPDATE %s SET status=@p1, approval_status=@p2 WHERE ID=@p3", h.cfg().POTable()),
 		status, approval, poID); err != nil {
 		t.Fatalf("setPOStatus: %v", err)
 	}
@@ -3335,7 +3335,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 
 	// Rejected transition: draft -> sent must go through open first, and must
 	// not write a history row or change status.
-	histBefore := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POHistoryTable(), poID))
+	histBefore := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POHistoryTable(), poID))
 	rec := httptest.NewRecorder()
 	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"sent"}}), numID))
 	assertStatus(t, "draft->sent rejected", rec, http.StatusOK)
@@ -3343,14 +3343,14 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 		t.Errorf("draft->sent: expected rejection message in body, got: %s", rec.Body.String())
 	}
 	var statusAfterReject string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).
+	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).
 		Scan(&statusAfterReject); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
 	if statusAfterReject != "draft" {
 		t.Errorf("draft->sent rejected: status = %q, want unchanged draft", statusAfterReject)
 	}
-	histAfterReject := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POHistoryTable(), poID))
+	histAfterReject := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POHistoryTable(), poID))
 	if histAfterReject != histBefore {
 		t.Errorf("draft->sent rejected: history rows = %d, want unchanged %d", histAfterReject, histBefore)
 	}
@@ -3363,7 +3363,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	var status string
 	var isActive bool
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf("SELECT status, is_active FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+		fmt.Sprintf("SELECT status, is_active FROM %s WHERE ID=@p1", h.cfg().POTable()), poID,
 	).Scan(&status, &isActive); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
@@ -3374,7 +3374,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	var fromStatus, toStatus, changedBy string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 from_status, to_status, changed_by FROM %s WHERE po_id=@p1 AND event_type='status' ORDER BY id DESC`,
-		h.cfg.POHistoryTable()), poID,
+		h.cfg().POHistoryTable()), poID,
 	).Scan(&fromStatus, &toStatus, &changedBy); err != nil {
 		t.Fatalf("read history: %v", err)
 	}
@@ -3389,7 +3389,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	assert302(t, "sent->closed", rec)
 	var dateClosed sql.NullTime
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=@p1", h.cfg().POTable()), poID,
 	).Scan(&status, &dateClosed); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
@@ -3401,7 +3401,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"open"}}), numID))
 	assert302(t, "closed->open reopen", rec)
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=@p1", h.cfg().POTable()), poID,
 	).Scan(&status, &dateClosed); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
@@ -3428,7 +3428,7 @@ func TestIntegration_POStatusTransition_ApprovalGateForSent(t *testing.T) {
 		t.Errorf("open->sent without approval: expected approval-gate message, got: %s", rec.Body.String())
 	}
 	var status string
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&status)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).Scan(&status)
 	if status != "open" {
 		t.Errorf("open->sent without approval: status = %q, want unchanged open", status)
 	}
@@ -3455,7 +3455,7 @@ func TestIntegration_POStatusTransition_CancelClearsApproval(t *testing.T) {
 
 	var status, approval string
 	h.DB().QueryRowContext(ctx,
-		fmt.Sprintf("SELECT status, approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID,
+		fmt.Sprintf("SELECT status, approval_status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID,
 	).Scan(&status, &approval)
 	if status != "cancelled" || approval != "not_submitted" {
 		t.Errorf("cancel: got status=%q approval=%q, want cancelled/not_submitted", status, approval)
@@ -3464,7 +3464,7 @@ func TestIntegration_POStatusTransition_CancelClearsApproval(t *testing.T) {
 	var resetAction string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 action FROM %s WHERE po_id=@p1 AND event_type='approval' ORDER BY id DESC`,
-		h.cfg.POHistoryTable()), poID,
+		h.cfg().POHistoryTable()), poID,
 	).Scan(&resetAction); err != nil {
 		t.Fatalf("read reset history: %v", err)
 	}
@@ -3483,10 +3483,10 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 	numID, _ := strconv.Atoi(poNumber)
 
 	lineID := seedPOLine(t, h, ctx, poID, 3001, "RAW-1001", 10, 2.50) // not lot-tracked
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg.InventoryTxnTable()), lineID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg().InventoryTxnTable()), lineID)
 	// stock_on_hand is app-maintained, not reversed by deleting the ledger row above —
 	// restore it explicitly so this test doesn't leak +10 onto part 3001.
-	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 10 WHERE id = 3001", h.cfg.PartsTable()))
+	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 10 WHERE id = 3001", h.cfg().PartsTable()))
 	setPOStatus(t, h, ctx, poID, "sent", "approved")
 
 	// Partial receipt: 4 of 10.
@@ -3498,15 +3498,15 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 
 	var status string
 	var receivedQty float64
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&status)
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=@p1", h.cfg.POLineTable()), lineID).Scan(&receivedQty)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).Scan(&status)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=@p1", h.cfg().POLineTable()), lineID).Scan(&receivedQty)
 	if status != "partially_received" {
 		t.Errorf("after partial receive: PO status = %q, want partially_received", status)
 	}
 	if receivedQty != 4 {
 		t.Errorf("after partial receive: line received_qty = %v, want 4", receivedQty)
 	}
-	invAfterPartial := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg.InventoryTxnTable(), lineID))
+	invAfterPartial := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg().InventoryTxnTable(), lineID))
 	if invAfterPartial != 1 {
 		t.Fatalf("after partial receive: inventory_transaction rows for line = %d, want 1", invAfterPartial)
 	}
@@ -3514,7 +3514,7 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 	var txnQty float64
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 txn_type, qty, reference FROM %s WHERE po_line_id=@p1 ORDER BY id DESC`,
-		h.cfg.InventoryTxnTable()), lineID,
+		h.cfg().InventoryTxnTable()), lineID,
 	).Scan(&txnType, &txnQty, &reference)
 	if txnType != "receipt" || txnQty != 4 || reference != poNumber {
 		t.Errorf("inventory_transaction row = {type:%q qty:%v ref:%q}, want {receipt 4 %q}", txnType, txnQty, reference, poNumber)
@@ -3526,25 +3526,25 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 		fmt.Sprintf("recv[%d]", lineID): {"6"},
 	}), numID))
 	assert302(t, "final receive", rec)
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&status)
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=@p1", h.cfg.POLineTable()), lineID).Scan(&receivedQty)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).Scan(&status)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=@p1", h.cfg().POLineTable()), lineID).Scan(&receivedQty)
 	if status != "closed" {
 		t.Errorf("after full receive: PO status = %q, want closed", status)
 	}
 	if receivedQty != 10 {
 		t.Errorf("after full receive: line received_qty = %v, want 10", receivedQty)
 	}
-	invAfterFull := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg.InventoryTxnTable(), lineID))
+	invAfterFull := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg().InventoryTxnTable(), lineID))
 	if invAfterFull != 2 {
 		t.Errorf("after full receive: inventory_transaction rows for line = %d, want 2", invAfterFull)
 	}
 
 	partialEvent := countRows(t, h, ctx, fmt.Sprintf(
 		"%s WHERE po_id=%d AND event_type='status' AND from_status='sent' AND to_status='partially_received'",
-		h.cfg.POHistoryTable(), poID))
+		h.cfg().POHistoryTable(), poID))
 	closedEvent := countRows(t, h, ctx, fmt.Sprintf(
 		"%s WHERE po_id=%d AND event_type='status' AND from_status='partially_received' AND to_status='closed'",
-		h.cfg.POHistoryTable(), poID))
+		h.cfg().POHistoryTable(), poID))
 	if partialEvent != 1 || closedEvent != 1 {
 		t.Errorf("PO_history status events: sent->partially_received=%d, partially_received->closed=%d, want 1 each", partialEvent, closedEvent)
 	}
@@ -3562,9 +3562,9 @@ func TestIntegration_POReceive_CreatesLotForLotTrackedPart(t *testing.T) {
 	lineID := seedPOLine(t, h, ctx, poID, 3007, "RAW-1002", 5, 4.10) // tracking_mode = 'lot'
 	// stock_on_hand is app-maintained, not reversed by deleting the ledger row below —
 	// restore it explicitly so this test doesn't leak +5 onto part 3007.
-	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 5 WHERE id = 3007", h.cfg.PartsTable()))
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg.LotTable()), lineID)
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg.InventoryTxnTable()), lineID)
+	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 5 WHERE id = 3007", h.cfg().PartsTable()))
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg().LotTable()), lineID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=@p1", h.cfg().InventoryTxnTable()), lineID)
 	setPOStatus(t, h, ctx, poID, "sent", "approved")
 
 	rec := httptest.NewRecorder()
@@ -3579,7 +3579,7 @@ func TestIntegration_POReceive_CreatesLotForLotTrackedPart(t *testing.T) {
 	var lotPOLineID sql.NullInt64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 id, lot_description, vendor_lot_number, po_line_id FROM %s WHERE po_line_id=@p1 ORDER BY id DESC`,
-		h.cfg.LotTable()), lineID,
+		h.cfg().LotTable()), lineID,
 	).Scan(&lotID, &lotDesc, &vendorLot, &lotPOLineID); err != nil {
 		t.Fatalf("read created lot: %v", err)
 	}
@@ -3591,7 +3591,7 @@ func TestIntegration_POReceive_CreatesLotForLotTrackedPart(t *testing.T) {
 
 	var invLotID sql.NullInt64
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT TOP 1 lot_id FROM %s WHERE po_line_id=@p1 ORDER BY id DESC`, h.cfg.InventoryTxnTable()), lineID,
+		`SELECT TOP 1 lot_id FROM %s WHERE po_line_id=@p1 ORDER BY id DESC`, h.cfg().InventoryTxnTable()), lineID,
 	).Scan(&invLotID)
 	if !invLotID.Valid || int(invLotID.Int64) != lotID {
 		t.Errorf("inventory_transaction.lot_id = %v, want %d", invLotID, lotID)
@@ -3628,7 +3628,7 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	h.POApprovalAction(rec, withID(postForm("/po/{id}/approval", url.Values{"action": {"submit"}}), numID))
 	assert302(t, "submit", rec)
 	var approval string
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).Scan(&approval)
 	if approval != "pending" {
 		t.Errorf("after submit: approval_status = %q, want pending", approval)
 	}
@@ -3640,7 +3640,7 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "not authorized") {
 		t.Errorf("reject without approver: expected authorization error, got: %s", rec.Body.String())
 	}
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).Scan(&approval)
 	if approval != "pending" {
 		t.Errorf("after unauthorized reject: approval_status = %q, want unchanged pending", approval)
 	}
@@ -3650,14 +3650,14 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	h.POApprovalAction(rec, approverCtx(withID(postForm("/po/{id}/approval",
 		url.Values{"action": {"reject"}, "note": {"needs rework"}}), numID)))
 	assert302(t, "reject as approver", rec)
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).Scan(&approval)
 	if approval != "rejected" {
 		t.Errorf("after reject: approval_status = %q, want rejected", approval)
 	}
 	var lastAction, lastNote string
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 action, note FROM %s WHERE po_id=@p1 AND event_type='approval' ORDER BY id DESC`,
-		h.cfg.POHistoryTable()), poID,
+		h.cfg().POHistoryTable()), poID,
 	).Scan(&lastAction, &lastNote)
 	if lastAction != "rejected" || lastNote != "needs rework" {
 		t.Errorf("history row = {action:%q note:%q}, want {rejected \"needs rework\"}", lastAction, lastNote)
@@ -3671,7 +3671,7 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.POApprovalAction(rec, approverCtx(withID(postForm("/po/{id}/approval", url.Values{"action": {"approve"}}), numID)))
 	assert302(t, "approve as approver", rec)
-	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg.POTable()), poID).Scan(&approval)
+	h.DB().QueryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=@p1", h.cfg().POTable()), poID).Scan(&approval)
 	if approval != "approved" {
 		t.Errorf("after approve: approval_status = %q, want approved", approval)
 	}
@@ -3692,9 +3692,9 @@ func withGroupParam(req *http.Request, group string) *http.Request {
 // PO id and number.
 func seedRFQQuote(t *testing.T, h *Handler, ctx context.Context, supplierID, groupID int, qty, unitCost float64) (id int, number string) {
 	t.Helper()
-	savedRoot := h.cfg.POFolderRoot
-	h.cfg.POFolderRoot = ""
-	defer func() { h.cfg.POFolderRoot = savedRoot }()
+	savedRoot := h.cfg().POFolderRoot
+	h.cfg().POFolderRoot = ""
+	defer func() { h.cfg().POFolderRoot = savedRoot }()
 
 	supplierName := "Acme Fasteners"
 	if supplierID == 1002 {
@@ -3723,7 +3723,7 @@ func seedRFQQuote(t *testing.T, h *Handler, ctx context.Context, supplierID, gro
 		t.Fatalf("could not parse RFQ quote number from Location %q", loc)
 	}
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg.POTable()), number,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number,
 	).Scan(&id); err != nil {
 		t.Fatalf("look up created RFQ quote id: %v", err)
 	}
@@ -3734,9 +3734,9 @@ func seedRFQQuote(t *testing.T, h *Handler, ctx context.Context, supplierID, gro
 // the given PO id — the same cleanup seedThrowawayPO uses, exposed here for
 // tests that manage several PO ids directly (RFQ groups, converted POs).
 func cleanupPO(ctx context.Context, h *Handler, id int) {
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POLineTable()), id)
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg.POHistoryTable()), id)
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg.POTable()), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POLineTable()), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POHistoryTable()), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg().POTable()), id)
 }
 
 func TestIntegration_RFQNew_RendersRFQForm(t *testing.T) {
@@ -3812,7 +3812,7 @@ func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T)
 
 	var lineID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT id FROM %s WHERE po_id=@p1", h.cfg.POLineTable()), quoteID,
+		"SELECT id FROM %s WHERE po_id=@p1", h.cfg().POLineTable()), quoteID,
 	).Scan(&lineID); err != nil {
 		t.Fatalf("look up seeded line id: %v", err)
 	}
@@ -3830,7 +3830,7 @@ func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T)
 	var unitCost float64
 	var leadDays sql.NullInt64
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT unit_cost, lead_time_days FROM %s WHERE id=@p1", h.cfg.POLineTable()), lineID,
+		"SELECT unit_cost, lead_time_days FROM %s WHERE id=@p1", h.cfg().POLineTable()), lineID,
 	).Scan(&unitCost, &leadDays)
 	if unitCost != 3.25 {
 		t.Errorf("unit_cost = %v, want 3.25", unitCost)
@@ -3841,7 +3841,7 @@ func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T)
 
 	var totalCost float64
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT total_cost FROM %s WHERE ID=@p1", h.cfg.POTable()), quoteID,
+		"SELECT total_cost FROM %s WHERE ID=@p1", h.cfg().POTable()), quoteID,
 	).Scan(&totalCost)
 	if totalCost != 32.50 { // 10 qty * 3.25
 		t.Errorf("total_cost = %v, want 32.50", totalCost)
@@ -3862,9 +3862,9 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	savedRoot := h.cfg.POFolderRoot
-	h.cfg.POFolderRoot = ""
-	defer func() { h.cfg.POFolderRoot = savedRoot }()
+	savedRoot := h.cfg().POFolderRoot
+	h.cfg().POFolderRoot = ""
+	defer func() { h.cfg().POFolderRoot = savedRoot }()
 
 	acmeID, _ := seedRFQQuote(t, h, ctx, 1001, 0, 10, 2.75)             // Acme, total 27.50
 	pmcID, pmcNumber := seedRFQQuote(t, h, ctx, 1002, acmeID, 10, 2.40) // Precision, total 24.00 (winner)
@@ -3879,7 +3879,7 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 
 	var newID int
 	if err := h.DB().QueryRowContext(ctx,
-		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg.POTable()), base,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), base,
 	).Scan(&newID); err != nil {
 		t.Fatalf("look up converted PO: %v", err)
 	}
@@ -3891,7 +3891,7 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 	var newSupplierID sql.NullInt64
 	var newGroupID sql.NullInt64
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT status, supplier_id, rfq_group_id FROM %s WHERE ID=@p1", h.cfg.POTable()), newID,
+		"SELECT status, supplier_id, rfq_group_id FROM %s WHERE ID=@p1", h.cfg().POTable()), newID,
 	).Scan(&newStatus, &newSupplierID, &newGroupID)
 	if newStatus != "draft" {
 		t.Errorf("new PO status = %q, want draft", newStatus)
@@ -3902,14 +3902,14 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 	if newGroupID.Valid {
 		t.Errorf("new PO rfq_group_id = %v, want NULL", newGroupID)
 	}
-	newLines := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POLineTable(), newID))
+	newLines := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POLineTable(), newID))
 	if newLines != 1 {
 		t.Errorf("new PO line count = %d, want 1", newLines)
 	}
 
 	var pmcStatus, pmcActive string
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT status, CAST(is_active AS VARCHAR) FROM %s WHERE ID=@p1", h.cfg.POTable()), pmcID,
+		"SELECT status, CAST(is_active AS VARCHAR) FROM %s WHERE ID=@p1", h.cfg().POTable()), pmcID,
 	).Scan(&pmcStatus, &pmcActive)
 	if pmcStatus != "closed" {
 		t.Errorf("awarded quote status = %q, want closed", pmcStatus)
@@ -3917,21 +3917,21 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 
 	var acmeStatus string
 	h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT status FROM %s WHERE ID=@p1", h.cfg.POTable()), acmeID,
+		"SELECT status FROM %s WHERE ID=@p1", h.cfg().POTable()), acmeID,
 	).Scan(&acmeStatus)
 	if acmeStatus != "cancelled" {
 		t.Errorf("sibling quote status = %q, want cancelled", acmeStatus)
 	}
 
-	newPOHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg.POHistoryTable(), newID))
+	newPOHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POHistoryTable(), newID))
 	if newPOHistory != 1 {
 		t.Errorf("new PO history rows = %d, want 1 (draft creation)", newPOHistory)
 	}
-	pmcHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='closed'", h.cfg.POHistoryTable(), pmcID))
+	pmcHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='closed'", h.cfg().POHistoryTable(), pmcID))
 	if pmcHistory != 1 {
 		t.Errorf("awarded quote history 'closed' rows = %d, want 1", pmcHistory)
 	}
-	acmeHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='cancelled'", h.cfg.POHistoryTable(), acmeID))
+	acmeHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='cancelled'", h.cfg().POHistoryTable(), acmeID))
 	if acmeHistory != 1 {
 		t.Errorf("sibling quote history 'cancelled' rows = %d, want 1", acmeHistory)
 	}
@@ -3967,7 +3967,7 @@ func TestIntegration_RFQConvert_RejectsWhenBaseNumberTaken(t *testing.T) {
 	collisionID, _, collisionCleanup := seedThrowawayPO(t, h, ctx)
 	defer collisionCleanup()
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET number=@p1 WHERE ID=@p2", h.cfg.POTable()), base, collisionID); err != nil {
+		"UPDATE %s SET number=@p1 WHERE ID=@p2", h.cfg().POTable()), base, collisionID); err != nil {
 		t.Fatalf("force collision PO number: %v", err)
 	}
 
@@ -4095,7 +4095,7 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
@@ -4103,7 +4103,7 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
@@ -4111,16 +4111,16 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	var testID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter, spec_max) OUTPUT INSERTED.id VALUES (@p1, 0, 'Historical Step', '100')`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
 
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg().FormRowHistoryTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}()
 
 	// Raw UPDATE triggers trg_form_row_history, snapshotting the OLD spec_max='100'.
@@ -4132,7 +4132,7 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	}
 	h.setAuditUser(ctx, tx, "itest")
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET spec_max='150' WHERE id=@p1`, h.cfg.StepsTable()), testID); err != nil {
+		`UPDATE %s SET spec_max='150' WHERE id=@p1`, h.cfg().StepsTable()), testID); err != nil {
 		tx.Rollback()
 		t.Fatalf("update form_row: %v", err)
 	}
@@ -4239,7 +4239,7 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
@@ -4247,7 +4247,7 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
@@ -4255,13 +4255,13 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 	var stepAID, stepBID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Old A')`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&stepAID); err != nil {
 		t.Fatalf("seed stepA: %v", err)
 	}
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Keep B')`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&stepBID); err != nil {
 		t.Fatalf("seed stepB: %v", err)
 	}
@@ -4274,7 +4274,7 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 	}
 	h.setAuditUser(ctx, sentinelTx, "itest")
 	if _, err := sentinelTx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET updated_at='2020-01-01T00:00:00' WHERE id=@p1`, h.cfg.StepsTable()), stepBID); err != nil {
+		`UPDATE %s SET updated_at='2020-01-01T00:00:00' WHERE id=@p1`, h.cfg().StepsTable()), stepBID); err != nil {
 		sentinelTx.Rollback()
 		t.Fatalf("set stepB sentinel updated_at: %v", err)
 	}
@@ -4282,17 +4282,17 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 		t.Fatalf("commit stepB sentinel update: %v", err)
 	}
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()),
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg().FormsTable()),
 		fmt.Sprintf("%d,%d", stepAID, stepBID), formID); err != nil {
 		t.Fatalf("set form test_order: %v", err)
 	}
 
 	defer func() {
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
-			h.cfg.FormRowHistoryTable(), h.cfg.StepsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.StepsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+			h.cfg().FormRowHistoryTable(), h.cfg().StepsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().StepsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}()
 
 	vals := url.Values{
@@ -4310,7 +4310,7 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 
 	var gotParamA string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT parameter FROM %s WHERE id=@p1`, h.cfg.StepsTable()), stepAID,
+		`SELECT parameter FROM %s WHERE id=@p1`, h.cfg().StepsTable()), stepAID,
 	).Scan(&gotParamA); err != nil {
 		t.Fatalf("select stepA: %v", err)
 	}
@@ -4320,7 +4320,7 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 
 	var gotParamB, gotUpdatedAtB string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT parameter, CONVERT(varchar, updated_at, 120) FROM %s WHERE id=@p1`, h.cfg.StepsTable()), stepBID,
+		`SELECT parameter, CONVERT(varchar, updated_at, 120) FROM %s WHERE id=@p1`, h.cfg().StepsTable()), stepBID,
 	).Scan(&gotParamB, &gotUpdatedAtB); err != nil {
 		t.Fatalf("select stepB: %v", err)
 	}
@@ -4333,14 +4333,14 @@ func TestIntegration_SaveFormDef_UpdatesStepSkipsUnchangedAndReordersWithNewRow(
 
 	var newStepID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE form_id=@p1 AND parameter='New Step'`, h.cfg.StepsTable()), formID,
+		`SELECT id FROM %s WHERE form_id=@p1 AND parameter='New Step'`, h.cfg().StepsTable()), formID,
 	).Scan(&newStepID); err != nil {
 		t.Fatalf("select new step: %v", err)
 	}
 
 	var gotOrder string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT test_order FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID,
+		`SELECT test_order FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID,
 	).Scan(&gotOrder); err != nil {
 		t.Fatalf("select form test_order: %v", err)
 	}
@@ -4370,7 +4370,7 @@ func TestIntegration_ArchiveStep_TogglesArchivedFlag(t *testing.T) {
 
 	var archived bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT archived FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+		`SELECT archived FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID,
 	).Scan(&archived); err != nil {
 		t.Fatalf("select archived: %v", err)
 	}
@@ -4385,7 +4385,7 @@ func TestIntegration_ArchiveStep_TogglesArchivedFlag(t *testing.T) {
 	assertStatus(t, "ArchiveStep (unarchive)", rec2, http.StatusSeeOther)
 
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT archived FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+		`SELECT archived FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID,
 	).Scan(&archived); err != nil {
 		t.Fatalf("select archived: %v", err)
 	}
@@ -4404,14 +4404,14 @@ func TestIntegration_ArchiveStep_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 	partID, formID, testID := seedThrowawayForm(t, h, ctx, "ITEST-ASL")
 	recordID := seedLockedFormRecord(t, h, ctx, formID, testID)
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID)
 		cleanupThrowawayForm(ctx, h, partID, formID, testID)
 	}()
 
 	var beforeOrder string
 	var beforeRev sql.NullInt32
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&beforeOrder, &beforeRev); err != nil {
 		t.Fatalf("select before: %v", err)
 	}
@@ -4425,7 +4425,7 @@ func TestIntegration_ArchiveStep_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 	var afterOrder string
 	var afterRev sql.NullInt32
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&afterOrder, &afterRev); err != nil {
 		t.Fatalf("select after: %v", err)
 	}
@@ -4438,7 +4438,7 @@ func TestIntegration_ArchiveStep_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 
 	var archived bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT archived FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+		`SELECT archived FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID,
 	).Scan(&archived); err != nil {
 		t.Fatalf("select archived: %v", err)
 	}
@@ -4456,14 +4456,14 @@ func TestIntegration_SaveFormDef_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 	partID, formID, testID := seedThrowawayForm(t, h, ctx, "ITEST-SFDL")
 	recordID := seedLockedFormRecord(t, h, ctx, formID, testID)
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID)
 		cleanupThrowawayForm(ctx, h, partID, formID, testID)
 	}()
 
 	var beforeOrder string
 	var beforeRev sql.NullInt32
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&beforeOrder, &beforeRev); err != nil {
 		t.Fatalf("select before: %v", err)
 	}
@@ -4478,7 +4478,7 @@ func TestIntegration_SaveFormDef_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 
 	var gotParam string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT parameter FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID,
+		`SELECT parameter FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID,
 	).Scan(&gotParam); err != nil {
 		t.Fatalf("select step: %v", err)
 	}
@@ -4489,7 +4489,7 @@ func TestIntegration_SaveFormDef_DoesNotAlterLockedRecordSnapshot(t *testing.T) 
 	var afterOrder string
 	var afterRev sql.NullInt32
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT test_order, form_revision FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&afterOrder, &afterRev); err != nil {
 		t.Fatalf("select after: %v", err)
 	}
@@ -4510,24 +4510,24 @@ func seedThrowawayForm(t *testing.T, h *Handler, ctx context.Context, label stri
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter, archived) OUTPUT INSERTED.id VALUES (@p1, 0, 'Step', 0)`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()), strconv.Itoa(testID), formID); err != nil {
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg().FormsTable()), strconv.Itoa(testID), formID); err != nil {
 		t.Fatalf("set form test_order: %v", err)
 	}
 	return partID, formID, testID
@@ -4535,10 +4535,10 @@ func seedThrowawayForm(t *testing.T, h *Handler, ctx context.Context, label stri
 
 // cleanupThrowawayForm deletes the rows created by seedThrowawayForm, best-effort.
 func cleanupThrowawayForm(ctx context.Context, h *Handler, partID, formID, testID int) {
-	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg.FormRowHistoryTable()), testID)
-	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
-	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
-	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_row_id=@p1`, h.cfg().FormRowHistoryTable()), testID)
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID)
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
+	smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 }
 
 // seedLockedFormRecord inserts one locked form_record under formID with a frozen
@@ -4549,7 +4549,7 @@ func seedLockedFormRecord(t *testing.T, h *Handler, ctx context.Context, formID,
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, record_date, serial_number, is_active, is_locked, test_order, form_revision)
 		 OUTPUT INSERTED.id VALUES (@p1, '2026-07-01', '1', 1, 1, @p2, 1)`,
-		h.cfg.RecordsTable()), formID, strconv.Itoa(testID),
+		h.cfg().RecordsTable()), formID, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
 		t.Fatalf("seed locked form_record: %v", err)
 	}
@@ -4655,11 +4655,11 @@ func TestIntegration_LotBelongsToPart(t *testing.T) {
 	var inactiveLotID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) OUTPUT INSERTED.id VALUES (@p1, 'ITEST-INACTIVE', 'itest inactive lot', 0)`,
-		h.cfg.LotTable()), 3007,
+		h.cfg().LotTable()), 3007,
 	).Scan(&inactiveLotID); err != nil {
 		t.Fatalf("seed inactive lot: %v", err)
 	}
-	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.LotTable()), inactiveLotID)
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().LotTable()), inactiveLotID)
 
 	tx, err := h.beginTx(ctx)
 	if err != nil {
@@ -4757,11 +4757,11 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 	var throwawayLotID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) OUTPUT INSERTED.id VALUES (@p1, 'ITEST-LOTUPD', 'orig desc', 1)`,
-		h.cfg.LotTable()), 3007,
+		h.cfg().LotTable()), 3007,
 	).Scan(&throwawayLotID); err != nil {
 		t.Fatalf("seed throwaway lot: %v", err)
 	}
-	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.LotTable()), throwawayLotID)
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().LotTable()), throwawayLotID)
 
 	updateRec := httptest.NewRecorder()
 	h.LotUpdate(updateRec, withIDAndLotID(postForm(fmt.Sprintf("/part/3007/lots/%d", throwawayLotID), url.Values{
@@ -4771,7 +4771,7 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 
 	var gotDesc, gotVendor string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT lot_description, vendor_lot_number FROM %s WHERE id=@p1`, h.cfg.LotTable()), throwawayLotID,
+		`SELECT lot_description, vendor_lot_number FROM %s WHERE id=@p1`, h.cfg().LotTable()), throwawayLotID,
 	).Scan(&gotDesc, &gotVendor); err != nil {
 		t.Fatalf("select updated lot: %v", err)
 	}
@@ -4789,7 +4789,7 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 	}
 	var afterDesc string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT lot_description FROM %s WHERE id=@p1`, h.cfg.LotTable()), throwawayLotID,
+		`SELECT lot_description FROM %s WHERE id=@p1`, h.cfg().LotTable()), throwawayLotID,
 	).Scan(&afterDesc); err != nil {
 		t.Fatalf("select lot after wrong-part update: %v", err)
 	}
@@ -4847,7 +4847,7 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	const nonLotTrackedPart = 3002
 	var stockBefore float64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), nonLotTrackedPart,
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg().PartsTable()), nonLotTrackedPart,
 	).Scan(&stockBefore); err != nil {
 		t.Fatalf("select stock_on_hand before: %v", err)
 	}
@@ -4860,7 +4860,7 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	var txnID int
 	var stockAfter float64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), nonLotTrackedPart,
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg().PartsTable()), nonLotTrackedPart,
 	).Scan(&stockAfter); err != nil {
 		t.Fatalf("select stock_on_hand after: %v", err)
 	}
@@ -4872,13 +4872,13 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	var lotIDNull sql.NullInt64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 id, qty, note, lot_id FROM %s WHERE part_id=@p1 AND txn_type='adjustment' ORDER BY id DESC`,
-		h.cfg.InventoryTxnTable()), nonLotTrackedPart,
+		h.cfg().InventoryTxnTable()), nonLotTrackedPart,
 	).Scan(&txnID, &qty, &note, &lotIDNull); err != nil {
 		t.Fatalf("select new ledger row: %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.InventoryTxnTable()), txnID)
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=@p1 WHERE id=@p2`, h.cfg.PartsTable()), stockBefore, nonLotTrackedPart)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().InventoryTxnTable()), txnID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=@p1 WHERE id=@p2`, h.cfg().PartsTable()), stockBefore, nonLotTrackedPart)
 	}()
 	if qty != 5 || note != "itest count correction" || lotIDNull.Valid {
 		t.Errorf("ledger row: qty=%v note=%q lot_id.Valid=%v, want 5/\"itest count correction\"/false", qty, note, lotIDNull.Valid)
@@ -4906,7 +4906,7 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	const lotTrackedPart = 3007
 	var lotStockBefore float64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart,
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg().PartsTable()), lotTrackedPart,
 	).Scan(&lotStockBefore); err != nil {
 		t.Fatalf("select stock_on_hand before (lot-tracked): %v", err)
 	}
@@ -4920,7 +4920,7 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	var pickLotID int64
 	var lotStockAfter float64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart,
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg().PartsTable()), lotTrackedPart,
 	).Scan(&lotStockAfter); err != nil {
 		t.Fatalf("select stock_on_hand after (lot-tracked): %v", err)
 	}
@@ -4929,13 +4929,13 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	}
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 id, lot_id FROM %s WHERE part_id=@p1 AND txn_type='adjustment' ORDER BY id DESC`,
-		h.cfg.InventoryTxnTable()), lotTrackedPart,
+		h.cfg().InventoryTxnTable()), lotTrackedPart,
 	).Scan(&pickTxnID, &pickLotID); err != nil {
 		t.Fatalf("select new ledger row (lot-tracked): %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.InventoryTxnTable()), pickTxnID)
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=@p1 WHERE id=@p2`, h.cfg.PartsTable()), lotStockBefore, lotTrackedPart)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().InventoryTxnTable()), pickTxnID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=@p1 WHERE id=@p2`, h.cfg().PartsTable()), lotStockBefore, lotTrackedPart)
 	}()
 	if pickLotID != 8301 {
 		t.Errorf("ledger row lot_id = %d, want 8301", pickLotID)
@@ -4951,7 +4951,7 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	}
 	var afterWrongLotStock float64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart,
+		`SELECT stock_on_hand FROM %s WHERE id=@p1`, h.cfg().PartsTable()), lotTrackedPart,
 	).Scan(&afterWrongLotStock); err != nil {
 		t.Fatalf("select stock_on_hand after wrong-lot attempt: %v", err)
 	}
@@ -4987,13 +4987,13 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 
 	var newLotID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE part_id=@p1 AND lot_number=@p2`, h.cfg.LotTable()), lotTrackedPart, newLotNumber,
+		`SELECT id FROM %s WHERE part_id=@p1 AND lot_number=@p2`, h.cfg().LotTable()), lotTrackedPart, newLotNumber,
 	).Scan(&newLotID); err != nil {
 		t.Fatalf("select new lot: %v", err)
 	}
 	var newLotDesc string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT lot_description FROM %s WHERE id=@p1`, h.cfg.LotTable()), newLotID,
+		`SELECT lot_description FROM %s WHERE id=@p1`, h.cfg().LotTable()), newLotID,
 	).Scan(&newLotDesc); err != nil {
 		t.Fatalf("select new lot description: %v", err)
 	}
@@ -5004,14 +5004,14 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	var newLotTxnLotID int64
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 id, lot_id FROM %s WHERE part_id=@p1 AND txn_type='adjustment' ORDER BY id DESC`,
-		h.cfg.InventoryTxnTable()), lotTrackedPart,
+		h.cfg().InventoryTxnTable()), lotTrackedPart,
 	).Scan(&newLotTxnID, &newLotTxnLotID); err != nil {
 		t.Fatalf("select new-lot ledger row: %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.InventoryTxnTable()), newLotTxnID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.LotTable()), newLotID)
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=stock_on_hand-2 WHERE id=@p1`, h.cfg.PartsTable()), lotTrackedPart)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().InventoryTxnTable()), newLotTxnID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().LotTable()), newLotID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=stock_on_hand-2 WHERE id=@p1`, h.cfg().PartsTable()), lotTrackedPart)
 	}()
 	if int(newLotTxnLotID) != newLotID {
 		t.Errorf("new-lot ledger row lot_id = %d, want %d", newLotTxnLotID, newLotID)
@@ -5042,12 +5042,12 @@ func seedThrowawayPart(t *testing.T, h *Handler, ctx context.Context, issue stri
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&id); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
 	return id, partNumber, func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), id)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), id)
 	}
 }
 
@@ -5058,12 +5058,12 @@ func seedThrowawayPart(t *testing.T, h *Handler, ctx context.Context, issue stri
 func seedThrowawayAttachment(t *testing.T, h *Handler, ctx context.Context, partID int, fileName, category string) (id int, cleanup func()) {
 	t.Helper()
 	if err := h.DB().QueryRowContext(ctx, h.dia().InsertReturningID(
-		h.cfg.AttachmentsTable(), "part_id, file_name, category, sort_order", "@p1,@p2,@p3,1", true,
+		h.cfg().AttachmentsTable(), "part_id, file_name, category, sort_order", "@p1,@p2,@p3,1", true,
 	), partID, fileName, category).Scan(&id); err != nil {
 		t.Fatalf("seed part_attachment: %v", err)
 	}
 	return id, func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), id)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), id)
 	}
 }
 
@@ -5071,23 +5071,23 @@ func seedThrowawayAttachment(t *testing.T, h *Handler, ctx context.Context, part
 // the part's primary_attachment_id first: handler-created attachments now auto-set
 // the primary (#121), and part.primary_attachment_id has a plain FK to the row.
 func deletePartAttachments(ctx context.Context, h *Handler, partID int) {
-	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1`, h.cfg.PartsTable()), partID)
-	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1`, h.cfg().PartsTable()), partID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partID)
 }
 
 // deleteAttachmentRow / deleteCompanyAttachmentRow hard-delete one attachment row,
 // clearing any parent primary pointer at it first (see deletePartAttachments).
 func deleteAttachmentRow(ctx context.Context, h *Handler, attID int) {
-	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=@p1`, h.cfg.PartsTable()), attID)
-	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=@p1`, h.cfg().PartsTable()), attID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), attID)
 }
 
 func deleteCompanyAttachmentRow(ctx context.Context, h *Handler, attID int) {
-	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=@p1`, h.cfg.CompanyTable()), attID)
-	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), attID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=@p1`, h.cfg().CompanyTable()), attID)
+	_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg().CompanyAttachmentsTable()), attID)
 }
 
-// tempDocControlRoot points h.cfg.DocControlRoot at a fresh t.TempDir() and
+// tempDocControlRoot points h.cfg().DocControlRoot at a fresh t.TempDir() and
 // returns the path, so file-writing #809/#821 attachment tests never touch
 // the real doc-control tree. No restore is needed: t.TempDir() is unique per
 // call and every subtest that needs a non-empty DocControlRoot calls this
@@ -5095,7 +5095,7 @@ func deleteCompanyAttachmentRow(ctx context.Context, h *Handler, attID int) {
 func tempDocControlRoot(t *testing.T, h *Handler) string {
 	t.Helper()
 	dir := t.TempDir()
-	h.cfg.DocControlRoot = dir
+	h.cfg().DocControlRoot = dir
 	return dir
 }
 
@@ -5121,9 +5121,9 @@ func TestIntegration_ResolveAttachmentFileInput(t *testing.T) {
 	})
 
 	t.Run("doc_control_root_not_configured", func(t *testing.T) {
-		orig := h.cfg.DocControlRoot
-		h.cfg.DocControlRoot = ""
-		defer func() { h.cfg.DocControlRoot = orig }()
+		orig := h.cfg().DocControlRoot
+		h.cfg().DocControlRoot = ""
+		defer func() { h.cfg().DocControlRoot = orig }()
 		req := postMultipart(t, "/x", url.Values{}, "upload_file", "path.txt", []byte("x"))
 		upload := multipartUploadSource(attachmentUploads(req, "upload_file")[0])
 		result := h.resolveAttachmentFileInput(ctx, req, partIDStr, "A", "Datasheet", "", "", &upload, true)
@@ -5265,7 +5265,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 
 	var attIDA int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partA,
+		`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partA,
 	).Scan(&attIDA); err != nil || attIDA == 0 {
 		t.Fatalf("could not retrieve first attachment id: %v", err)
 	}
@@ -5275,7 +5275,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 
 	var hashA sql.NullString
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDA,
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), attIDA,
 	).Scan(&hashA); err != nil {
 		t.Fatalf("select hash: %v", err)
 	}
@@ -5288,12 +5288,12 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	companyName := "ITEST-71-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	var companyID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()), companyName,
+		`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg().CompanyTable()), companyName,
 	).Scan(&companyID); err != nil {
 		t.Fatalf("seed company: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), companyID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), companyID)
 	}()
 
 	rec = httptest.NewRecorder()
@@ -5303,7 +5303,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 
 	var companyAttID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT MAX(supplier_attachment_id) FROM %s WHERE supplier_id=@p1`, h.cfg.CompanyAttachmentsTable()), companyID,
+		`SELECT MAX(supplier_attachment_id) FROM %s WHERE supplier_id=@p1`, h.cfg().CompanyAttachmentsTable()), companyID,
 	).Scan(&companyAttID); err != nil || companyAttID == 0 {
 		t.Fatalf("could not retrieve company attachment id: %v", err)
 	}
@@ -5320,7 +5320,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	}
 	var countB int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partB,
+		`SELECT COUNT(*) FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partB,
 	).Scan(&countB); err != nil {
 		t.Fatalf("count part B attachments: %v", err)
 	}
@@ -5337,7 +5337,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	var attIDB int
 	var hashB sql.NullString
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, hash FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partB,
+		`SELECT id, hash FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partB,
 	).Scan(&attIDB, &hashB); err != nil {
 		t.Fatalf("select part B attachment: %v", err)
 	}
@@ -5351,7 +5351,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	// 5. Soft-deleting every existing active row with this hash means a new
 	// create with the same link is no longer flagged.
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET is_active=%s WHERE id IN (@p1,@p2)`, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(false)),
+		`UPDATE %s SET is_active=%s WHERE id IN (@p1,@p2)`, h.cfg().AttachmentsTable(), h.dia().BoolLiteral(false)),
 		attIDA, attIDB,
 	); err != nil {
 		t.Fatalf("soft-delete attIDA/attIDB: %v", err)
@@ -5363,7 +5363,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 
 	var attIDC int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partC,
+		`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partC,
 	).Scan(&attIDC); err != nil || attIDC == 0 {
 		t.Fatalf("could not retrieve third attachment id: %v", err)
 	}
@@ -5374,7 +5374,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	// 6. A metadata-only edit (comment change, same link) leaves hash untouched.
 	var hashCBefore sql.NullString
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDC,
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), attIDC,
 	).Scan(&hashCBefore); err != nil {
 		t.Fatalf("select hash before update: %v", err)
 	}
@@ -5387,7 +5387,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 
 	var hashCAfter sql.NullString
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDC,
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), attIDC,
 	).Scan(&hashCAfter); err != nil {
 		t.Fatalf("select hash after update: %v", err)
 	}
@@ -5412,7 +5412,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	var attIDD int
 	var hashDBefore sql.NullString
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, hash FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partD,
+		`SELECT id, hash FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partD,
 	).Scan(&attIDD, &hashDBefore); err != nil {
 		t.Fatalf("select part D attachment: %v", err)
 	}
@@ -5428,7 +5428,7 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 
 	var hashDAfter sql.NullString
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT hash FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attIDD,
+		`SELECT hash FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), attIDD,
 	).Scan(&hashDAfter); err != nil {
 		t.Fatalf("select hash after in-place replace: %v", err)
 	}
@@ -5465,7 +5465,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
@@ -5485,7 +5485,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); err != nil {
@@ -5502,13 +5502,13 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		defer cleanup1()
 		att2, cleanup2 := seedAttachment(t, partID, "LOCAL:"+name)
 		defer cleanup2()
-		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET is_active=0 WHERE id=@p1`, h.cfg.AttachmentsTable()), att2); err != nil {
+		if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET is_active=0 WHERE id=@p1`, h.cfg().AttachmentsTable()), att2); err != nil {
 			t.Fatalf("soft-delete second row: %v", err)
 		}
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
@@ -5523,7 +5523,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		const name = "never-existed.txt"
 		attID, cleanupAtt := seedAttachment(t, partID, "LOCAL:"+name)
 		defer cleanupAtt()
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Errorf("expected nil error for already-gone file, got %v", err)
 		}
 	})
@@ -5533,7 +5533,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		supplierName := "ITEST-809-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 		var supplierID int
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()), supplierName,
+			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg().CompanyTable()), supplierName,
 		).Scan(&supplierID); err != nil {
 			t.Fatalf("seed company: %v", err)
 		}
@@ -5541,18 +5541,18 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		var attID int
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (supplier_id, file_path) OUTPUT INSERTED.supplier_attachment_id VALUES (@p1,@p2)`,
-			h.cfg.CompanyAttachmentsTable()), supplierID, "LOCAL:"+name,
+			h.cfg().CompanyAttachmentsTable()), supplierID, "LOCAL:"+name,
 		).Scan(&attID); err != nil {
 			t.Fatalf("seed company_attachment: %v", err)
 		}
 		defer func() {
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), attID)
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg().CompanyAttachmentsTable()), attID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID)
 		}()
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path", attID, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "file_path", attID, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
@@ -5574,21 +5574,21 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 		attID, attCleanup := seedThrowawayAttachment(t, h, ctx, partID, "LOCAL:primary-test.txt", "Test")
 		defer attCleanup()
 
-		if err := h.setPrimaryAttachment(ctx, h.cfg.PartsTable(), "id", "primary_attachment_id", partID, attID); err != nil {
+		if err := h.setPrimaryAttachment(ctx, h.cfg().PartsTable(), "id", "primary_attachment_id", partID, attID); err != nil {
 			t.Fatalf("setPrimaryAttachment(set): %v", err)
 		}
 		var gotPrimary sql.NullInt64
-		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID).Scan(&gotPrimary); err != nil {
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID).Scan(&gotPrimary); err != nil {
 			t.Fatalf("select primary_attachment_id: %v", err)
 		}
 		if !gotPrimary.Valid || int(gotPrimary.Int64) != attID {
 			t.Errorf("primary_attachment_id = %+v, want %d", gotPrimary, attID)
 		}
 
-		if err := h.setPrimaryAttachment(ctx, h.cfg.PartsTable(), "id", "primary_attachment_id", partID, nil); err != nil {
+		if err := h.setPrimaryAttachment(ctx, h.cfg().PartsTable(), "id", "primary_attachment_id", partID, nil); err != nil {
 			t.Fatalf("setPrimaryAttachment(clear): %v", err)
 		}
-		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID).Scan(&gotPrimary); err != nil {
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID).Scan(&gotPrimary); err != nil {
 			t.Fatalf("select primary_attachment_id after clear: %v", err)
 		}
 		if gotPrimary.Valid {
@@ -5600,27 +5600,27 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 		supplierName := "ITEST-809-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 		var supplierID int
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()), supplierName,
+			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg().CompanyTable()), supplierName,
 		).Scan(&supplierID); err != nil {
 			t.Fatalf("seed company: %v", err)
 		}
 		var attID int
 		defer func() {
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg.CompanyAttachmentsTable()), attID)
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=@p1`, h.cfg().CompanyAttachmentsTable()), attID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID)
 		}()
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (supplier_id, file_path) OUTPUT INSERTED.supplier_attachment_id VALUES (@p1,@p2)`,
-			h.cfg.CompanyAttachmentsTable()), supplierID, "LOCAL:supplier-primary-test.txt",
+			h.cfg().CompanyAttachmentsTable()), supplierID, "LOCAL:supplier-primary-test.txt",
 		).Scan(&attID); err != nil {
 			t.Fatalf("seed company_attachment: %v", err)
 		}
 
-		if err := h.setPrimaryAttachment(ctx, h.cfg.CompanyTable(), "id", "primary_attachment_id", supplierID, attID); err != nil {
+		if err := h.setPrimaryAttachment(ctx, h.cfg().CompanyTable(), "id", "primary_attachment_id", supplierID, attID); err != nil {
 			t.Fatalf("setPrimaryAttachment: %v", err)
 		}
 		var gotPrimary sql.NullInt64
-		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID).Scan(&gotPrimary); err != nil {
+		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID).Scan(&gotPrimary); err != nil {
 			t.Fatalf("select primary_attachment_id: %v", err)
 		}
 		if !gotPrimary.Valid || int(gotPrimary.Int64) != attID {
@@ -5629,7 +5629,7 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 	})
 
 	t.Run("noop_on_nonexistent_parent", func(t *testing.T) {
-		if err := h.setPrimaryAttachment(ctx, h.cfg.PartsTable(), "id", "primary_attachment_id", 999999999, nil); err != nil {
+		if err := h.setPrimaryAttachment(ctx, h.cfg().PartsTable(), "id", "primary_attachment_id", 999999999, nil); err != nil {
 			t.Errorf("expected nil error for nonexistent parentID, got %v", err)
 		}
 	})
@@ -5676,7 +5676,7 @@ func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
 				t.Fatalf("insertAttachmentRow: %v", err)
 			}
 			var id int
-			if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID).Scan(&id); err != nil {
+			if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partID).Scan(&id); err != nil {
 				t.Fatalf("select new attachment id: %v", err)
 			}
 			return id
@@ -5690,33 +5690,33 @@ func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
 		}
 
 		first := insert("LOCAL:auto-primary-1.txt", "Test")
-		wantPrimary(t, "after first insert", h.cfg.PartsTable(), partID, first)
+		wantPrimary(t, "after first insert", h.cfg().PartsTable(), partID, first)
 
 		second := insert("LOCAL:auto-primary-2.txt", "Test")
-		wantPrimary(t, "after second insert", h.cfg.PartsTable(), partID, first)
+		wantPrimary(t, "after second insert", h.cfg().PartsTable(), partID, first)
 
 		insert("LOCAL:auto-primary-thumb.png", thumbnailCategory)
-		wantPrimary(t, "generated thumbnail does not displace", h.cfg.PartsTable(), partID, first)
+		wantPrimary(t, "generated thumbnail does not displace", h.cfg().PartsTable(), partID, first)
 
 		remove(first)
-		wantPrimary(t, "after deleting primary", h.cfg.PartsTable(), partID, second)
+		wantPrimary(t, "after deleting primary", h.cfg().PartsTable(), partID, second)
 
 		remove(second)
-		wantPrimary(t, "only a generated thumbnail left", h.cfg.PartsTable(), partID, 0)
+		wantPrimary(t, "only a generated thumbnail left", h.cfg().PartsTable(), partID, 0)
 	})
 
 	t.Run("supplier", func(t *testing.T) {
 		var supplierID int
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg.CompanyTable()),
+			`INSERT INTO %s (name, is_active) OUTPUT INSERTED.id VALUES (@p1,1)`, h.cfg().CompanyTable()),
 			"ITEST-121-"+strconv.FormatInt(time.Now().UnixNano(), 10),
 		).Scan(&supplierID); err != nil {
 			t.Fatalf("seed company: %v", err)
 		}
 		defer func() {
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=@p1`, h.cfg.CompanyAttachmentsTable()), supplierID)
-			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=@p1`, h.cfg().CompanyTable()), supplierID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=@p1`, h.cfg().CompanyAttachmentsTable()), supplierID)
+			_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID)
 		}()
 
 		insert := func(link string) int {
@@ -5727,7 +5727,7 @@ func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
 			assert302(t, "SupplierAttachmentCreate", rec)
 			var id int
 			if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-				`SELECT MAX(supplier_attachment_id) FROM %s WHERE supplier_id=@p1`, h.cfg.CompanyAttachmentsTable()), supplierID).Scan(&id); err != nil {
+				`SELECT MAX(supplier_attachment_id) FROM %s WHERE supplier_id=@p1`, h.cfg().CompanyAttachmentsTable()), supplierID).Scan(&id); err != nil {
 				t.Fatalf("select new attachment id: %v", err)
 			}
 			return id
@@ -5741,16 +5741,16 @@ func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
 		}
 
 		first := insert("LOCAL:auto-primary-supplier-1.txt")
-		wantPrimary(t, "after first insert", h.cfg.CompanyTable(), supplierID, first)
+		wantPrimary(t, "after first insert", h.cfg().CompanyTable(), supplierID, first)
 
 		second := insert("LOCAL:auto-primary-supplier-2.txt")
-		wantPrimary(t, "after second insert", h.cfg.CompanyTable(), supplierID, first)
+		wantPrimary(t, "after second insert", h.cfg().CompanyTable(), supplierID, first)
 
 		remove(first)
-		wantPrimary(t, "after deleting primary", h.cfg.CompanyTable(), supplierID, second)
+		wantPrimary(t, "after deleting primary", h.cfg().CompanyTable(), supplierID, second)
 
 		remove(second)
-		wantPrimary(t, "no active attachments left", h.cfg.CompanyTable(), supplierID, 0)
+		wantPrimary(t, "no active attachments left", h.cfg().CompanyTable(), supplierID, 0)
 	})
 }
 
@@ -5842,14 +5842,14 @@ func TestIntegration_APIPartPasteAttachment(t *testing.T) {
 		}
 
 		wantName := buildAttachmentFileName(partNumber, "B", "Integration Test Part", "Photo", ".png")
-		if _, err := os.Stat(filepath.Join(h.cfg.DocControlRoot, wantName)); err != nil {
+		if _, err := os.Stat(filepath.Join(h.cfg().DocControlRoot, wantName)); err != nil {
 			t.Fatalf("expected file at %s, stat err = %v", wantName, err)
 		}
 
 		var fileName, category, comment sql.NullString
 		var sortOrder sql.NullInt64
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT file_name, category, comment, sort_order FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID,
+			`SELECT file_name, category, comment, sort_order FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partID,
 		).Scan(&fileName, &category, &comment, &sortOrder); err != nil {
 			t.Fatalf("select attachment row: %v", err)
 		}
@@ -5868,9 +5868,9 @@ func TestIntegration_APIPartPasteAttachment(t *testing.T) {
 	})
 
 	t.Run("doc_control_root_not_configured", func(t *testing.T) {
-		orig := h.cfg.DocControlRoot
-		h.cfg.DocControlRoot = ""
-		defer func() { h.cfg.DocControlRoot = orig }()
+		orig := h.cfg().DocControlRoot
+		h.cfg().DocControlRoot = ""
+		defer func() { h.cfg().DocControlRoot = orig }()
 		partID, _, cleanupPart := seedPart(t)
 		defer cleanupPart()
 		rec := postPaste(partID, fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
@@ -5907,7 +5907,7 @@ func TestIntegration_APIPartPasteAttachment(t *testing.T) {
 		}
 		var sortOrder sql.NullInt64
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT sort_order FROM %s WHERE part_id=@p1`, h.cfg.AttachmentsTable()), partID,
+			`SELECT sort_order FROM %s WHERE part_id=@p1`, h.cfg().AttachmentsTable()), partID,
 		).Scan(&sortOrder); err != nil {
 			t.Fatalf("select attachment row: %v", err)
 		}
@@ -5968,7 +5968,7 @@ func TestIntegration_APIPartPasteAttachmentReplace(t *testing.T) {
 
 		var fileName, category, comment, rev sql.NullString
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT file_name, category, comment, part_revision FROM %s WHERE id=@p1`, h.cfg.AttachmentsTable()), attID,
+			`SELECT file_name, category, comment, part_revision FROM %s WHERE id=@p1`, h.cfg().AttachmentsTable()), attID,
 		).Scan(&fileName, &category, &comment, &rev); err != nil {
 			t.Fatalf("select attachment row: %v", err)
 		}
@@ -6036,9 +6036,9 @@ func TestIntegration_APIPartPasteAttachmentReplace(t *testing.T) {
 	})
 
 	t.Run("doc_control_root_not_configured", func(t *testing.T) {
-		orig := h.cfg.DocControlRoot
-		h.cfg.DocControlRoot = ""
-		defer func() { h.cfg.DocControlRoot = orig }()
+		orig := h.cfg().DocControlRoot
+		h.cfg().DocControlRoot = ""
+		defer func() { h.cfg().DocControlRoot = orig }()
 		partID, cleanupPart := seedPart(t)
 		defer cleanupPart()
 		rec := postReplace(partID, 1, fmt.Sprintf(`{"image_data":%q}`, tinyPNG))
@@ -6115,7 +6115,7 @@ func TestIntegration_APIPartGenerateThumbnail(t *testing.T) {
 		t.Helper()
 		rows, err := h.DB().QueryContext(ctx, fmt.Sprintf(
 			`SELECT id, category, file_name FROM %s WHERE part_id=@p1 AND category IN (@p2,@p3) AND is_active=%s`,
-			h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), partID, previewCategory, thumbnailCategory)
+			h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true)), partID, previewCategory, thumbnailCategory)
 		if err != nil {
 			t.Fatalf("query generated rows: %v", err)
 		}
@@ -6206,9 +6206,9 @@ func TestIntegration_APIPartGenerateThumbnail(t *testing.T) {
 	})
 
 	t.Run("doc_control_root_not_configured", func(t *testing.T) {
-		orig := h.cfg.DocControlRoot
-		h.cfg.DocControlRoot = ""
-		defer func() { h.cfg.DocControlRoot = orig }()
+		orig := h.cfg().DocControlRoot
+		h.cfg().DocControlRoot = ""
+		defer func() { h.cfg().DocControlRoot = orig }()
 		rec := postThumbnail(1, 1)
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
@@ -6294,7 +6294,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyImport(t *testing.T) {
 	defer cleanupPart()
 	defer func() {
 		deletePartAttachments(ctx, h, partID)
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg.SupplierPartTable()), partID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=@p1`, h.cfg().SupplierPartTable()), partID)
 	}()
 
 	form := url.Values{
@@ -6312,7 +6312,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyImport(t *testing.T) {
 
 	rows, err := h.DB().QueryContext(ctx, fmt.Sprintf(
 		`SELECT category, file_name FROM %s WHERE part_id=@p1 AND is_active=%s`,
-		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true)), partID)
+		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true)), partID)
 	if err != nil {
 		t.Fatalf("query attachments: %v", err)
 	}
@@ -6382,7 +6382,7 @@ func TestIntegration_UpsertGeneratedAttachment(t *testing.T) {
 		}
 		var fileName string
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2`, h.cfg.AttachmentsTable()), partID, thumbnailCategory,
+			`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2`, h.cfg().AttachmentsTable()), partID, thumbnailCategory,
 		).Scan(&fileName); err != nil {
 			t.Fatalf("select inserted row: %v", err)
 		}
@@ -6408,7 +6408,7 @@ func TestIntegration_UpsertGeneratedAttachment(t *testing.T) {
 		var gotID int
 		var fileName string
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT id, file_name FROM %s WHERE part_id=@p1 AND category=@p2`, h.cfg.AttachmentsTable()), partID, thumbnailCategory,
+			`SELECT id, file_name FROM %s WHERE part_id=@p1 AND category=@p2`, h.cfg().AttachmentsTable()), partID, thumbnailCategory,
 		).Scan(&gotID, &fileName); err != nil {
 			t.Fatalf("select updated row: %v", err)
 		}
@@ -6453,7 +6453,7 @@ func TestIntegration_PasteResultImageWrite(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	h.cfg.ImageRoot = t.TempDir()
+	h.cfg().ImageRoot = t.TempDir()
 
 	const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
@@ -6463,20 +6463,20 @@ func TestIntegration_PasteResultImageWrite(t *testing.T) {
 	var formID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	defer func() {
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
-		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().RecordsTable()), formID)
+		_, _ = h.DB().ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
 	}()
 
 	const serial = "ITEST-821-UNLOCKED"
 	var recordID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, serial_number, subject_part_number, subject_pn_description, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, @p2, '', '', 0, 1)`, h.cfg.RecordsTable()), formID, serial,
+		 OUTPUT INSERTED.id VALUES (@p1, @p2, '', '', 0, 1)`, h.cfg().RecordsTable()), formID, serial,
 	).Scan(&recordID); err != nil {
 		t.Fatalf("seed unlocked form_record: %v", err)
 	}
@@ -6511,7 +6511,7 @@ func TestIntegration_PasteResultImageWrite(t *testing.T) {
 		if !re.MatchString(resp.Filename) {
 			t.Errorf("filename = %q, want to match %s", resp.Filename, re.String())
 		}
-		gotBytes, err := os.ReadFile(filepath.Join(h.cfg.ImageRoot, sanitizeFileNamePart(partNumber), resp.Filename))
+		gotBytes, err := os.ReadFile(filepath.Join(h.cfg().ImageRoot, sanitizeFileNamePart(partNumber), resp.Filename))
 		if err != nil {
 			t.Fatalf("read written image: %v", err)
 		}

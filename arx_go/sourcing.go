@@ -31,7 +31,7 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
-	digiKeyEnabled := h.cfg.DigiKeyEnabled()
+	digiKeyEnabled := h.cfg().DigiKeyEnabled()
 	var manufacturers []manufacturerOption
 	if digiKeyEnabled {
 		// Only fetched for the DigiKey manufacturer picker — skip the query
@@ -48,7 +48,7 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		"DigiKeyEnabled":    digiKeyEnabled,
 		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -90,7 +90,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
-	`, h.cfg.SupplierPartTable()),
+	`, h.cfg().SupplierPartTable()),
 		supplierID, id,
 		nullableInt(r.FormValue("preference")),
 		strings.TrimSpace(r.FormValue("supplier_pn")),
@@ -192,7 +192,7 @@ func (h *Handler) prepareDigiKeyFiles(ctx context.Context, r *http.Request, part
 		if fileURL == "" {
 			continue
 		}
-		if h.cfg.DocControlRoot == "" {
+		if h.cfg().DocControlRoot == "" {
 			return nil, nil, fmt.Errorf("DOC_CONTROL_ROOT is not configured; cannot import DigiKey files")
 		}
 		if part == nil {
@@ -213,7 +213,7 @@ func (h *Handler) prepareDigiKeyFiles(ctx context.Context, r *http.Request, part
 			}
 		}
 		name := buildAttachmentFileName(part.PartNumber, "", part.Description, imp.category, ext)
-		finalName, werr := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
+		finalName, werr := writeIntoDocControlUnique(h.cfg().DocControlRoot, name, ext, data)
 		if werr != nil {
 			return nil, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(imp.category), werr)
 		}
@@ -251,7 +251,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
 				VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
-			`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)),
+			`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)),
 				partID, supplierID, b.BreakQuantity, b.UnitPrice, b.TotalPrice, effectiveDate,
 			); err != nil {
 				if strings.Contains(err.Error(), "UQ_price") {
@@ -266,7 +266,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 	for _, pf := range preparedFiles {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (part_id, file_name, part_revision, category, comment, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
-			h.cfg.AttachmentsTable(),
+			h.cfg().AttachmentsTable(),
 		), partID, pf.fileName, "", pf.category, "Imported from DigiKey", pf.hash); err != nil {
 			return false, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(pf.category), err)
 		}
@@ -284,7 +284,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 			if mfgName == "" {
 				return pricesInserted, nil, fmt.Errorf("manufacturer name is required to create a new manufacturer")
 			}
-			insertMfg := h.dia().InsertReturningID(h.cfg.CompanyTable(),
+			insertMfg := h.dia().InsertReturningID(h.cfg().CompanyTable(),
 				`name, is_supplier, is_manufacturer`, `@p1,@p2,@p3`, false)
 			var newID int
 			if err := tx.QueryRowContext(ctx, insertMfg, mfgName, false, true).Scan(&newID); err != nil {
@@ -297,7 +297,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 		}
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (part_id, mfg_id, mfg_part_number, is_active) VALUES (@p1,@p2,@p3,%s)`,
-			h.cfg.MfgPartTable(), h.dia().BoolLiteral(true),
+			h.cfg().MfgPartTable(), h.dia().BoolLiteral(true),
 		), partID, mfgID, mfgPartNumber); err != nil && !strings.Contains(err.Error(), "UQ_mfg_part") {
 			return pricesInserted, nil, fmt.Errorf("could not save manufacturer part: %w", err)
 		}
@@ -326,7 +326,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		FROM %s sp
 		JOIN %s c ON sp.supplier_id = c.id
 		WHERE sp.id = @p1 AND sp.part_id = @p2
-	`, h.cfg.SupplierPartTable(), h.cfg.CompanyTable()), spID, id).Scan(
+	`, h.cfg().SupplierPartTable(), h.cfg().CompanyTable()), spID, id).Scan(
 		&sp.ID, &sp.SupplierID, &sp.PartID, &pref, &supplierPN, &supplierDesc, &leadTime, &minIncr, &unitID, &supplierName,
 	)
 	if err == sql.ErrNoRows {
@@ -359,7 +359,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	units, _ := h.fetchUnits(r.Context())
-	digiKeyEnabled := h.cfg.DigiKeyEnabled()
+	digiKeyEnabled := h.cfg().DigiKeyEnabled()
 	var manufacturers []manufacturerOption
 	if digiKeyEnabled {
 		manufacturers, _ = h.fetchManufacturers(r)
@@ -375,7 +375,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		"DigiKeyEnabled":    digiKeyEnabled,
 		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -418,7 +418,7 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET supplier_id=@p1, preference=@p2, supplier_pn=@p3, supplier_desc=@p4,
 		              lead_time=@p5, min_increment=@p6, uom_id=@p7
 		WHERE id=@p8 AND part_id=@p9
-	`, h.cfg.SupplierPartTable()),
+	`, h.cfg().SupplierPartTable()),
 		supplierID,
 		nullableInt(r.FormValue("preference")),
 		strings.TrimSpace(r.FormValue("supplier_pn")),
@@ -462,7 +462,7 @@ func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 	spID := chi.URLParam(r, "spID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		DELETE FROM %s WHERE id=@p1 AND part_id=@p2
-	`, h.cfg.SupplierPartTable()), spID, id)
+	`, h.cfg().SupplierPartTable()), spID, id)
 	if err != nil {
 		h.renderError(w, r, "Error deleting supplier link: "+err.Error())
 		return
@@ -473,7 +473,7 @@ func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.SupplierPart, error) {
-	sp, co, ut, pn := h.cfg.SupplierPartTable(), h.cfg.CompanyTable(), h.cfg.UomTable(), h.cfg.PartsTable()
+	sp, co, ut, pn := h.cfg().SupplierPartTable(), h.cfg().CompanyTable(), h.cfg().UomTable(), h.cfg().PartsTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
 		       sp.lead_time, sp.min_increment, sp.uom_id,
@@ -537,7 +537,7 @@ func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) ma
 		FROM %s
 		WHERE part_id = @p1 AND is_active = %s
 		ORDER BY supplier_id, pack_size
-	`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)), partID)
+	`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)), partID)
 	if err != nil {
 		return nil
 	}
@@ -576,7 +576,7 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	}
 	links, _ := h.fetchSupplierLinks(r, partID)
 	units, _ := h.fetchUnits(r.Context())
-	digiKeyEnabled := h.cfg.DigiKeyEnabled()
+	digiKeyEnabled := h.cfg().DigiKeyEnabled()
 	var manufacturers []manufacturerOption
 	if digiKeyEnabled {
 		manufacturers, _ = h.fetchManufacturers(r)
@@ -594,7 +594,7 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 		"Error":             errMsg,
 		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 

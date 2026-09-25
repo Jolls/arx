@@ -41,7 +41,7 @@ func validResultType(rt string) bool {
 func (h *Handler) loadNamedQueriesFull(ctx context.Context) ([]NamedQueryRow, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT id, name, COALESCE(description,''), sql, COALESCE(params,''), result_type, is_active, updated_at
-		 FROM %s ORDER BY name`, h.cfg.NamedQueriesTable()))
+		 FROM %s ORDER BY name`, h.cfg().NamedQueriesTable()))
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 	active := r.FormValue("active") == "1"
 
 	ctx := r.Context()
-	tbl := h.cfg.NamedQueriesTable()
+	tbl := h.cfg().NamedQueriesTable()
 	id, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("id")))
 	now := time.Now()
 

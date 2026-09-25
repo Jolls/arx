@@ -49,7 +49,7 @@ func TestRequireAdminOnceConnected(t *testing.T) {
 
 	t.Run("broken connection: anyone may fix it", func(t *testing.T) {
 		h := testHandlerWithDB()
-		h.dbConnError = "could not read schema_version (connection refused)"
+		h.update(func(s *runtimeState) { s.dbConnError = "could not read schema_version (connection refused)" })
 		var reached bool
 		rec := httptest.NewRecorder()
 		h.RequireAdminOnceConnected(sentinel(&reached)).ServeHTTP(

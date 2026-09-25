@@ -48,7 +48,7 @@ func TestServeLocalFile_RootUnconfigured(t *testing.T) {
 
 func TestServeLocalFile_NotFound(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.DocControlRoot = t.TempDir()
+	h.cfg().DocControlRoot = t.TempDir()
 	req := httptest.NewRequest(http.MethodGet, "/local/missing.txt", nil)
 	rec := httptest.NewRecorder()
 	h.ServeLocalFile(rec, req)
@@ -60,7 +60,7 @@ func TestServeLocalFile_NotFound(t *testing.T) {
 func TestServeLocalFile_DirectoryIsNotFound(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	if err := os.Mkdir(filepath.Join(root, "sub"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestServeLocalFile_DirectoryIsNotFound(t *testing.T) {
 func TestServeLocalFile_DotDotInURLRejectedByServeFile(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	etcDir := filepath.Join(root, "etc")
 	if err := os.Mkdir(etcDir, 0755); err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestServeLocalFile_DotDotInURLRejectedByServeFile(t *testing.T) {
 func TestServeLocalFile_PDFInline(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	writeTempFile(t, root, "doc.pdf", "%PDF-1.4")
 	req := httptest.NewRequest(http.MethodGet, "/local/doc.pdf", nil)
 	rec := httptest.NewRecorder()
@@ -122,7 +122,7 @@ func TestServeLocalFile_PDFInline(t *testing.T) {
 func TestServeLocalFile_ImageInline(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	writeTempFile(t, root, "pic.png", "fake-png")
 	req := httptest.NewRequest(http.MethodGet, "/local/pic.png", nil)
 	rec := httptest.NewRecorder()
@@ -135,7 +135,7 @@ func TestServeLocalFile_ImageInline(t *testing.T) {
 func TestServeLocalFile_OtherAttachment(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	writeTempFile(t, root, "notes.txt", "hi")
 	req := httptest.NewRequest(http.MethodGet, "/local/notes.txt", nil)
 	rec := httptest.NewRecorder()
@@ -161,7 +161,7 @@ func TestServeSupplierFile_RootUnconfigured(t *testing.T) {
 func TestServeSupplierFile_FallsBackToDocControlRoot(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	writeTempFile(t, root, "doc.pdf", "%PDF-1.4")
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local/doc.pdf", nil)
 	rec := httptest.NewRecorder()
@@ -173,7 +173,7 @@ func TestServeSupplierFile_FallsBackToDocControlRoot(t *testing.T) {
 
 func TestServeSupplierFile_NotFound(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.SupplierFilesRoot = t.TempDir()
+	h.cfg().SupplierFilesRoot = t.TempDir()
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local/missing.txt", nil)
 	rec := httptest.NewRecorder()
 	h.ServeSupplierFile(rec, req)
@@ -188,7 +188,7 @@ func TestServeSupplierFile_NotFound(t *testing.T) {
 func TestServeSupplierFile_DotDotInURLRejectedByServeFile(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	etcDir := filepath.Join(root, "etc")
 	if err := os.Mkdir(etcDir, 0755); err != nil {
 		t.Fatal(err)
@@ -208,7 +208,7 @@ func TestServeSupplierFile_DotDotInURLRejectedByServeFile(t *testing.T) {
 func TestServeSupplierFile_PDFInline(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	writeTempFile(t, root, "doc.pdf", "%PDF-1.4")
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local/doc.pdf", nil)
 	rec := httptest.NewRecorder()
@@ -222,7 +222,7 @@ func TestServeSupplierFile_PDFInline(t *testing.T) {
 func TestServeSupplierFile_ImageInline(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	writeTempFile(t, root, "pic.png", "fake-png")
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local/pic.png", nil)
 	rec := httptest.NewRecorder()
@@ -246,7 +246,7 @@ func TestServeSupplierDir_RootUnconfigured(t *testing.T) {
 
 func TestServeSupplierDir_NotFound(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.SupplierFilesRoot = t.TempDir()
+	h.cfg().SupplierFilesRoot = t.TempDir()
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local-dir/missing", nil)
 	rec := httptest.NewRecorder()
 	h.ServeSupplierDir(rec, req)
@@ -258,7 +258,7 @@ func TestServeSupplierDir_NotFound(t *testing.T) {
 func TestServeSupplierDir_FileIsNotFound(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	writeTempFile(t, root, "file.txt", "hi")
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local-dir/file.txt", nil)
 	rec := httptest.NewRecorder()
@@ -271,7 +271,7 @@ func TestServeSupplierDir_FileIsNotFound(t *testing.T) {
 func TestServeSupplierDir_DotDotSegmentsStayUnderRoot(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	if err := os.Mkdir(filepath.Join(root, "etc"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestServeSupplierDir_DotDotSegmentsStayUnderRoot(t *testing.T) {
 func TestServeSupplierDir_FallsBackToDocControlRoot(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	req := httptest.NewRequest(http.MethodGet, "/supplier-local-dir/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeSupplierDir(rec, req)
@@ -298,7 +298,7 @@ func TestServeSupplierDir_FallsBackToDocControlRoot(t *testing.T) {
 func TestServeSupplierDir_SortOrderAndListing(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	if err := os.Mkdir(filepath.Join(root, "zzz-dir"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func TestServeSupplierDir_SortOrderAndListing(t *testing.T) {
 func TestServeSupplierDir_ParentURLAtDepth(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	if err := os.MkdirAll(filepath.Join(root, "a", "b"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestServeLocalDir_RootUnconfigured(t *testing.T) {
 
 func TestServeLocalDir_NotFound(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.DocControlRoot = t.TempDir()
+	h.cfg().DocControlRoot = t.TempDir()
 	req := httptest.NewRequest(http.MethodGet, "/local-dir/missing", nil)
 	rec := httptest.NewRecorder()
 	h.ServeLocalDir(rec, req)
@@ -382,7 +382,7 @@ func TestServeLocalDir_NotFound(t *testing.T) {
 func TestServeLocalDir_FileIsNotFound(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	writeTempFile(t, root, "file.txt", "hi")
 	req := httptest.NewRequest(http.MethodGet, "/local-dir/file.txt", nil)
 	rec := httptest.NewRecorder()
@@ -395,7 +395,7 @@ func TestServeLocalDir_FileIsNotFound(t *testing.T) {
 func TestServeLocalDir_DotDotSegmentsStayUnderRoot(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	if err := os.Mkdir(filepath.Join(root, "etc"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +410,7 @@ func TestServeLocalDir_DotDotSegmentsStayUnderRoot(t *testing.T) {
 func TestServeLocalDir_SortOrderAndListing(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	if err := os.Mkdir(filepath.Join(root, "zzz-dir"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +444,7 @@ func TestServeLocalDir_SortOrderAndListing(t *testing.T) {
 func TestServeLocalDir_ParentURLAtDepth(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.DocControlRoot = root
+	h.cfg().DocControlRoot = root
 	if err := os.MkdirAll(filepath.Join(root, "a", "b"), 0755); err != nil {
 		t.Fatal(err)
 	}

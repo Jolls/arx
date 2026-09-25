@@ -31,41 +31,41 @@ func seedLockTestForm(t *testing.T, h *Handler, ctx context.Context) (partID, fo
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number, revision, description, release_status, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, 'A', 'Integration Test Part', 'U', 1)`,
-		h.cfg.PartsTable()), partNumber,
+		h.cfg().PartsTable()), partNumber,
 	).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), partID,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), partID,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Output Voltage')`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()), strconv.Itoa(testID), formID); err != nil {
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg().FormsTable()), strconv.Itoa(testID), formID); err != nil {
 		t.Fatalf("set form test_order: %v", err)
 	}
 
 	cleanup = func() {
 		smokeExec(ctx, h, fmt.Sprintf(
 			`DELETE FROM %s WHERE event_id IN (SELECT id FROM %s WHERE form_record_id IN (SELECT id FROM %s WHERE form_id=@p1))`,
-			h.cfg.RecordEventResultsTable(), h.cfg.RecordEventsTable(), h.cfg.RecordsTable()), formID)
+			h.cfg().RecordEventResultsTable(), h.cfg().RecordEventsTable(), h.cfg().RecordsTable()), formID)
 		smokeExec(ctx, h, fmt.Sprintf(
 			`DELETE FROM %s WHERE form_record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
-			h.cfg.RecordEventsTable(), h.cfg.RecordsTable()), formID)
+			h.cfg().RecordEventsTable(), h.cfg().RecordsTable()), formID)
 		smokeExec(ctx, h, fmt.Sprintf(
 			`DELETE FROM %s WHERE form_record_id IN (SELECT id FROM %s WHERE form_id=@p1)`,
-			h.cfg.ResultsTable(), h.cfg.RecordsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg.RecordsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.PartsTable()), partID)
+			h.cfg().ResultsTable(), h.cfg().RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_id=@p1`, h.cfg().RecordsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().PartsTable()), partID)
 	}
 	return partID, formID, testID, cleanup
 }
@@ -79,13 +79,13 @@ func seedWIPRecord(t *testing.T, h *Handler, ctx context.Context, formID, testID
 		`INSERT INTO %s (form_id, record_date, serial_number, subject_part_number, subject_pn_description,
 		 test_order, record_type, is_locked, is_approved, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, '2026-07-01', @p2, '', '', @p3, 'New Release', 0, 0, 1)`,
-		h.cfg.RecordsTable()), formID, serial, strconv.Itoa(testID),
+		h.cfg().RecordsTable()), formID, serial, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
 		t.Fatalf("seed WIP record: %v", err)
 	}
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_record_id, form_row_id, result, pass_fail, parameter) VALUES (@p1, @p2, '5.00', 1, 'Output Voltage')`,
-		h.cfg.ResultsTable()), recordID, testID); err != nil {
+		h.cfg().ResultsTable()), recordID, testID); err != nil {
 		t.Fatalf("seed WIP record result: %v", err)
 	}
 	return recordID
@@ -122,7 +122,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 
 	var isLocked, isApproved bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_locked, is_approved FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT is_locked, is_approved FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&isLocked, &isApproved); err != nil {
 		t.Fatalf("select after lock: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	var snapResult string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 rer.result FROM %s rer JOIN %s re ON re.id=rer.event_id WHERE re.form_record_id=@p1`,
-		h.cfg.RecordEventResultsTable(), h.cfg.RecordEventsTable()), recordID,
+		h.cfg().RecordEventResultsTable(), h.cfg().RecordEventsTable()), recordID,
 	).Scan(&snapResult); err != nil {
 		t.Fatalf("select snapshot result: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	h.ApproveRecord(rec3, nonReviewerCtx(withID(postForm(fmt.Sprintf("/records/%d/approve", recordID), url.Values{}), recordID)))
 	assertStatus(t, "ApproveRecord (no permission)", rec3, http.StatusForbidden)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_approved FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT is_approved FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&isApproved); err != nil {
 		t.Fatalf("select after forbidden approve: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	h.ApproveRecord(rec4, reviewerCtx(withID(postForm(fmt.Sprintf("/records/%d/approve", recordID), url.Values{}), recordID)))
 	assertStatus(t, "ApproveRecord", rec4, http.StatusSeeOther)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_approved FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT is_approved FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&isApproved); err != nil {
 		t.Fatalf("select after approve: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	h.UnlockRecord(rec6, nonReviewerCtx(withID(postForm(fmt.Sprintf("/records/%d/unlock", recordID), url.Values{"comment": {"trying to unlock"}}), recordID)))
 	assertStatus(t, "UnlockRecord (no permission)", rec6, http.StatusForbidden)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_locked, is_approved FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT is_locked, is_approved FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&isLocked, &isApproved); err != nil {
 		t.Fatalf("select after forbidden unlock: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	h.UnlockRecord(rec8, reviewerCtx(withID(postForm(fmt.Sprintf("/records/%d/unlock", recordID), url.Values{"comment": {"correcting a reading"}}), recordID)))
 	assertStatus(t, "UnlockRecord", rec8, http.StatusSeeOther)
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_locked, is_approved FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT is_locked, is_approved FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&isLocked, &isApproved); err != nil {
 		t.Fatalf("select after unlock: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	assertEventCount(t, h, ctx, recordID, "unlocked", 1)
 	var unlockComment string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT TOP 1 comments FROM %s WHERE form_record_id=@p1 AND event_type='unlocked'`, h.cfg.RecordEventsTable()), recordID,
+		`SELECT TOP 1 comments FROM %s WHERE form_record_id=@p1 AND event_type='unlocked'`, h.cfg().RecordEventsTable()), recordID,
 	).Scan(&unlockComment); err != nil {
 		t.Fatalf("select unlock comment: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	// 9. Re-lock (second WIP -> Complete) creates a second snapshot. Change the seeded
 	// result value first so the second snapshot differs from the first.
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET result='5.05' WHERE form_record_id=@p1 AND form_row_id=@p2`, h.cfg.ResultsTable()),
+		`UPDATE %s SET result='5.05' WHERE form_record_id=@p1 AND form_row_id=@p2`, h.cfg().ResultsTable()),
 		recordID, testID); err != nil {
 		t.Fatalf("update result before re-lock: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestIntegration_LockApproveUnlockLifecycle(t *testing.T) {
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT TOP 1 rer.result FROM %s rer JOIN %s re ON re.id=rer.event_id
 		 WHERE re.form_record_id=@p1 ORDER BY re.id DESC`,
-		h.cfg.RecordEventResultsTable(), h.cfg.RecordEventsTable()), recordID,
+		h.cfg().RecordEventResultsTable(), h.cfg().RecordEventsTable()), recordID,
 	).Scan(&secondSnapResult); err != nil {
 		t.Fatalf("select second snapshot result: %v", err)
 	}
@@ -253,7 +253,7 @@ func assertEventCount(t *testing.T, h *Handler, ctx context.Context, recordID in
 	t.Helper()
 	var got int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE form_record_id=@p1 AND event_type=@p2`, h.cfg.RecordEventsTable()),
+		`SELECT COUNT(*) FROM %s WHERE form_record_id=@p1 AND event_type=@p2`, h.cfg().RecordEventsTable()),
 		recordID, eventType,
 	).Scan(&got); err != nil {
 		t.Fatalf("count %s events: %v", eventType, err)
@@ -270,7 +270,7 @@ func assertSnapshotRowCount(t *testing.T, h *Handler, ctx context.Context, recor
 	var got int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT COUNT(*) FROM %s rer JOIN %s re ON re.id=rer.event_id WHERE re.form_record_id=@p1`,
-		h.cfg.RecordEventResultsTable(), h.cfg.RecordEventsTable()), recordID,
+		h.cfg().RecordEventResultsTable(), h.cfg().RecordEventsTable()), recordID,
 	).Scan(&got); err != nil {
 		t.Fatalf("count snapshot rows: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestIntegration_BulkLockRecords(t *testing.T) {
 	for _, id := range []int{id1, id2, id3} {
 		var isLocked bool
 		if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT is_locked FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), id,
+			`SELECT is_locked FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), id,
 		).Scan(&isLocked); err != nil {
 			t.Fatalf("select record %d: %v", id, err)
 		}
@@ -323,7 +323,7 @@ func TestIntegration_BulkLockRecords(t *testing.T) {
 
 	var id4Locked bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_locked FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), id4,
+		`SELECT is_locked FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), id4,
 	).Scan(&id4Locked); err != nil {
 		t.Fatalf("select record %d: %v", id4, err)
 	}
@@ -349,18 +349,18 @@ func TestIntegration_LockLotTrackedRecordWithNoLot(t *testing.T) {
 	var formID, testID int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_number_id, test_order, is_locked, is_active)
-		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg.FormsTable()), lotTrackedPart,
+		 OUTPUT INSERTED.id VALUES (@p1, '', 0, 1)`, h.cfg().FormsTable()), lotTrackedPart,
 	).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, type, parameter) OUTPUT INSERTED.id VALUES (@p1, 0, 'Weight')`,
-		h.cfg.StepsTable()), formID,
+		h.cfg().StepsTable()), formID,
 	).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
 	if _, err := h.DB().ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg.FormsTable()), strconv.Itoa(testID), formID); err != nil {
+		`UPDATE %s SET test_order=@p1 WHERE id=@p2`, h.cfg().FormsTable()), strconv.Itoa(testID), formID); err != nil {
 		t.Fatalf("set form test_order: %v", err)
 	}
 	// part_id/lot_id/unit_id NULL — no lot linked, the scenario the issue describes.
@@ -369,7 +369,7 @@ func TestIntegration_LockLotTrackedRecordWithNoLot(t *testing.T) {
 		`INSERT INTO %s (form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description,
 		 test_order, record_type, is_locked, is_approved, is_active)
 		 OUTPUT INSERTED.id VALUES (@p1, @p2, '2026-07-01', 'NL1', '', '', @p3, 'New Release', 0, 0, 1)`,
-		h.cfg.RecordsTable()), formID, lotTrackedPart, strconv.Itoa(testID),
+		h.cfg().RecordsTable()), formID, lotTrackedPart, strconv.Itoa(testID),
 	).Scan(&recordID); err != nil {
 		t.Fatalf("seed lot-tracked WIP record: %v", err)
 	}
@@ -377,11 +377,11 @@ func TestIntegration_LockLotTrackedRecordWithNoLot(t *testing.T) {
 	defer func() {
 		smokeExec(ctx, h, fmt.Sprintf(
 			`DELETE FROM %s WHERE event_id IN (SELECT id FROM %s WHERE form_record_id=@p1)`,
-			h.cfg.RecordEventResultsTable(), h.cfg.RecordEventsTable()), recordID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_record_id=@p1`, h.cfg.RecordEventsTable()), recordID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.StepsTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg.FormsTable()), formID)
+			h.cfg().RecordEventResultsTable(), h.cfg().RecordEventsTable()), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_record_id=@p1`, h.cfg().RecordEventsTable()), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().StepsTable()), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=@p1`, h.cfg().FormsTable()), formID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -392,7 +392,7 @@ func TestIntegration_LockLotTrackedRecordWithNoLot(t *testing.T) {
 
 	var isLocked bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_locked FROM %s WHERE id=@p1`, h.cfg.RecordsTable()), recordID,
+		`SELECT is_locked FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), recordID,
 	).Scan(&isLocked); err != nil {
 		t.Fatalf("select after lock: %v", err)
 	}

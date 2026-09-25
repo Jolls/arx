@@ -62,7 +62,7 @@ func (h *Handler) unitRowSelect() string {
 		FROM %s u
 		JOIN %s p ON p.id = u.part_id
 		LEFT JOIN %s l ON l.id = u.lot_id
-	`, h.cfg.UnitTable(), h.cfg.PartsTable(), h.cfg.LotTable())
+	`, h.cfg().UnitTable(), h.cfg().PartsTable(), h.cfg().LotTable())
 }
 
 // scanUnitRow reads one UnitRow from a cursor over unitRowSelect's columns.
@@ -118,7 +118,7 @@ func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([
 		JOIN %s p ON p.id = u.part_id
 		LEFT JOIN %s l ON l.id = u.lot_id
 		WHERE u.part_id = @p1 ORDER BY u.created_at DESC, u.id DESC
-	`+limitClause, top, h.cfg.UnitTable(), h.cfg.PartsTable(), h.cfg.LotTable()), partID, limit)
+	`+limitClause, top, h.cfg().UnitTable(), h.cfg().PartsTable(), h.cfg().LotTable()), partID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([
 func (h *Handler) unitCountForPart(ctx context.Context, partID int) (int, error) {
 	var count int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg.UnitTable()), partID).Scan(&count)
+		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg().UnitTable()), partID).Scan(&count)
 	return count, err
 }
 
@@ -172,7 +172,7 @@ func (h *Handler) PartUnits(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_units.html", map[string]any{
 		"Part": p, "Units": units,
 		"ActiveTab": "parts", "ActiveSubTab": "units",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -234,7 +234,7 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Unit": unit, "Build": build, "Ancestors": ancestors, "Descendants": descendants,
 		"TypeOptions": typeOptions,
 		"ActiveTab": "parts", "ActiveSubTab": "units",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -261,7 +261,7 @@ func (h *Handler) unitSerialLocked(ctx context.Context, unitID int) (bool, error
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT COUNT(*) FROM %s WHERE unit_id = @p1 AND is_locked = %s`,
-		h.cfg.RecordsTable(), h.dia().BoolLiteral(true)), unitID).Scan(&n)
+		h.cfg().RecordsTable(), h.dia().BoolLiteral(true)), unitID).Scan(&n)
 	return n > 0, err
 }
 
@@ -292,7 +292,7 @@ func (h *Handler) UnitNew(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Unit": UnitRow{}, "IsNew": true, "Lots": lots, "Builds": builds,
 		"ActiveTab": "parts", "ActiveSubTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -317,7 +317,7 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)
 		return
 	}
-	insertUnit := h.dia().InsertReturningID(h.cfg.UnitTable(),
+	insertUnit := h.dia().InsertReturningID(h.cfg().UnitTable(),
 		`part_id, serial_number, lot_id, build_id, source`, `@p1, @p2, @p3, @p4, 'manual'`, false)
 	var unitID int
 	if err := h.queryRowContext(r.Context(), insertUnit, p.ID, serial, lotArg, buildArg).Scan(&unitID); err != nil {
@@ -372,7 +372,7 @@ func (h *Handler) UnitEdit(w http.ResponseWriter, r *http.Request) {
 		"Part": p, "Unit": unit, "IsNew": false, "SerialLocked": locked,
 		"ActiveTab": "parts", "ActiveSubTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -408,7 +408,7 @@ func (h *Handler) UnitUpdate(w http.ResponseWriter, r *http.Request) {
 	if locked {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
 			`UPDATE %s SET is_active = @p1 WHERE id = @p2 AND part_id = @p3`,
-			h.cfg.UnitTable()), isActive, unitID, p.ID)
+			h.cfg().UnitTable()), isActive, unitID, p.ID)
 	} else {
 		serial := fv(r, "serial_number")
 		if serial == "" {
@@ -417,7 +417,7 @@ func (h *Handler) UnitUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
 			`UPDATE %s SET is_active = @p1, serial_number = @p2 WHERE id = @p3 AND part_id = @p4`,
-			h.cfg.UnitTable()), isActive, serial, unitID, p.ID)
+			h.cfg().UnitTable()), isActive, serial, unitID, p.ID)
 	}
 	if err != nil {
 		h.renderUnitSaveErr(w, r, err)

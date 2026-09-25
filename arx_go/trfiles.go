@@ -9,7 +9,7 @@ import (
 // ServeImage — GET /images/*
 // Serves image files from IMAGE_ROOT. Auto-appends .PNG if the exact path is missing.
 func (h *Handler) ServeImage(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.ImageRoot
+	root := h.cfg().ImageRoot
 	if root == "" {
 		http.Error(w, "IMAGE_ROOT is not configured — set it in Settings", http.StatusServiceUnavailable)
 		return

@@ -136,8 +136,8 @@ func (h *Handler) fetchDigiKeyToken(ctx context.Context) (string, error) {
 
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
-		"client_id":     {h.cfg.DigiKeyClientID},
-		"client_secret": {h.cfg.DigiKeyClientSecret},
+		"client_id":     {h.cfg().DigiKeyClientID},
+		"client_secret": {h.cfg().DigiKeyClientSecret},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, digikeyTokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -175,7 +175,7 @@ func (h *Handler) fetchDigiKeyToken(ctx context.Context) (string, error) {
 // fetchDigiKeyProduct looks up one product by DigiKey part number and maps
 // the response onto Arx's sourcing/pricing/attachment fields.
 func (h *Handler) fetchDigiKeyProduct(ctx context.Context, productNumber string) (*digikeyResult, error) {
-	if !h.cfg.DigiKeyEnabled() {
+	if !h.cfg().DigiKeyEnabled() {
 		return nil, fmt.Errorf("DigiKey is not configured — add a client ID and secret in Settings")
 	}
 
@@ -190,7 +190,7 @@ func (h *Handler) fetchDigiKeyProduct(ctx context.Context, productNumber string)
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-DIGIKEY-Client-Id", h.cfg.DigiKeyClientID)
+	req.Header.Set("X-DIGIKEY-Client-Id", h.cfg().DigiKeyClientID)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := digikeyHTTPClient.Do(req)

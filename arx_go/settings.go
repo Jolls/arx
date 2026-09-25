@@ -104,7 +104,7 @@ type supplierOption struct {
 // When companyID > 0 it is scoped to that company's contacts (the configured
 // default receiver); companyID == 0 returns all contacts as a fallback.
 func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactOption {
-	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = %s`, h.cfg.ContactTable(), h.dia().BoolLiteral(true))
+	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = %s`, h.cfg().ContactTable(), h.dia().BoolLiteral(true))
 	var args []any
 	if companyID > 0 {
 		q += ` AND company_id = @p1`
@@ -129,7 +129,7 @@ func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactO
 func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 	rows, err := h.queryContext(r.Context(),
 		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = %s ORDER BY name`,
-			h.cfg.CompanyTable(), h.dia().BoolLiteral(true)))
+			h.cfg().CompanyTable(), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil
 	}
@@ -197,35 +197,35 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		// stored password (an authenticated caller, or a working connection
 		// with no dbConnError). An unauthenticated caller during a #852
 		// connection-error bypass must type the password (see SettingsSave).
-		"PasswordOptional":      connected && (h.dbConnError == "" || h.currentUser(r) != nil),
+		"PasswordOptional":      connected && (h.st().dbConnError == "" || h.currentUser(r) != nil),
 		// Same predicate RequireAdminOnceConnected gates POST /settings with, so the
 		// Connection tab is only offered to someone who can actually save it (#106).
 		"CanEditConnection":      h.canEditConnection(r),
-		"DBConnError":           h.dbConnError,
-		"DBServer":              h.cfg.DBServer,
-		"DBName":                h.cfg.DBName,
-		"DBEngine":              h.cfg.DBEngine(),
-		"TestDBServer":          h.cfg.TestDBServer,
-		"TestEngine":            h.cfg.TestEngine,
-		"TestDBName":            h.cfg.TestDBName,
-		"TestDBUser":            h.cfg.TestDBUser,
-		"TestDBPasswordSet":     h.cfg.TestDBPassword != "",
-		"ActiveDBName":          h.cfg.ActiveDBName(),
-		"DBUser":                h.cfg.DBUser,
-		"DocControlRoot":        h.cfg.DocControlRoot,
-		"POFolderRoot":          h.cfg.POFolderRoot,
-		"SupplierFilesRoot":     h.cfg.SupplierFilesRoot,
-		"ImageRoot":             h.cfg.ImageRoot,
-		"TestMode":              h.cfg.TestMode,
-		"DebugMode":             h.cfg.DebugMode,
+		"DBConnError":           h.st().dbConnError,
+		"DBServer":              h.cfg().DBServer,
+		"DBName":                h.cfg().DBName,
+		"DBEngine":              h.cfg().DBEngine(),
+		"TestDBServer":          h.cfg().TestDBServer,
+		"TestEngine":            h.cfg().TestEngine,
+		"TestDBName":            h.cfg().TestDBName,
+		"TestDBUser":            h.cfg().TestDBUser,
+		"TestDBPasswordSet":     h.cfg().TestDBPassword != "",
+		"ActiveDBName":          h.cfg().ActiveDBName(),
+		"DBUser":                h.cfg().DBUser,
+		"DocControlRoot":        h.cfg().DocControlRoot,
+		"POFolderRoot":          h.cfg().POFolderRoot,
+		"SupplierFilesRoot":     h.cfg().SupplierFilesRoot,
+		"ImageRoot":             h.cfg().ImageRoot,
+		"TestMode":              h.cfg().TestMode,
+		"DebugMode":             h.cfg().DebugMode,
 		"PODefaultContactID":    poContactID,
 		"PODefaultReceiverID":   poReceiverID,
 		"PODefaultReceiverName": poReceiverName,
 		"POContacts":            poContacts,
 		"POSuppliers":           poSuppliers,
 		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
-		"DigiKeyClientID":       h.cfg.DigiKeyClientID,
-		"DigiKeyClientSecretSet": h.cfg.DigiKeyClientSecret != "",
+		"DigiKeyClientID":       h.cfg().DigiKeyClientID,
+		"DigiKeyClientSecretSet": h.cfg().DigiKeyClientSecret != "",
 		"CompanyLogo":           h.companyLogoURL(),
 		"AccentColor":           accentColor,
 		"AccentThemes":          accentThemes,
@@ -234,7 +234,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"LandingPresets":        landingPresets,
 		"Timezone":              timezonePref,
 		"Timezones":             commonTimezones,
-		"PartCategories":        h.partCategories,
+		"PartCategories":        h.st().partCategories,
 		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
 		"PartNumberingPreview":  partNumberingPreview,
 		"NamedQueries":          namedQueries,
@@ -319,7 +319,7 @@ func (h *Handler) SettingsAccentColorSave(w http.ResponseWriter, r *http.Request
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET accent_color = @p1 WHERE id = @p2`,
-		h.cfg.UsersTable()), color, u.ID); err != nil {
+		h.cfg().UsersTable()), color, u.ID); err != nil {
 		log.Printf("warning: could not save accent_color: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
@@ -344,7 +344,7 @@ func (h *Handler) SettingsTimezoneSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET timezone = @p1 WHERE id = @p2`,
-		h.cfg.UsersTable()), tz, u.ID); err != nil {
+		h.cfg().UsersTable()), tz, u.ID); err != nil {
 		log.Printf("warning: could not save timezone: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
@@ -379,7 +379,7 @@ func (h *Handler) SettingsDefaultRouteSave(w http.ResponseWriter, r *http.Reques
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET default_route = @p1 WHERE id = @p2`,
-		h.cfg.UsersTable()), route, u.ID); err != nil {
+		h.cfg().UsersTable()), route, u.ID); err != nil {
 		log.Printf("warning: could not save default_route: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
@@ -421,7 +421,7 @@ func (h *Handler) SettingsCompanyLogoSave(w http.ResponseWriter, r *http.Request
 	if err := h.appConfigSet(r.Context(), "company_logo", dataURI); err != nil {
 		log.Printf("warning: could not save company_logo: %v", err)
 	}
-	h.companyLogo = dataURI
+	h.update(func(s *runtimeState) { s.companyLogo = dataURI })
 	http.Redirect(w, r, "/settings", http.StatusFound)
 }
 
@@ -431,7 +431,7 @@ func (h *Handler) SettingsCompanyLogoRemove(w http.ResponseWriter, r *http.Reque
 		if err := h.appConfigSet(r.Context(), "company_logo", ""); err != nil {
 			log.Printf("warning: could not clear company_logo: %v", err)
 		}
-		h.companyLogo = ""
+		h.update(func(s *runtimeState) { s.companyLogo = "" })
 	}
 	http.Redirect(w, r, "/settings", http.StatusFound)
 }
@@ -463,51 +463,66 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		secrets = &arxbase.SecretsConfig{}
 	}
 
+	// The live config is republished as one snapshot after local is built.
 	if dbServer != "" {
 		local.DBServer = dbServer
-		h.cfg.DBServer = dbServer
 	}
 	if dbName != "" {
 		local.DBName = dbName
-		h.cfg.DBName = dbName
 	}
 	if dbUser != "" {
 		local.DBUser = dbUser
-		h.cfg.DBUser = dbUser
 	}
 
 	// Test-profile server/engine/user are written verbatim (blank clears the
 	// override). TestDBName keeps the "only if non-empty" guard so the ArxDev
 	// default is never wiped by an empty submit.
 	local.TestDBServer = testDBServer
-	h.cfg.TestDBServer = testDBServer
 	local.TestEngine = testEngine
-	h.cfg.TestEngine = testEngine
 	local.TestDBUser = testDBUser
-	h.cfg.TestDBUser = testDBUser
 	if testDBName != "" {
 		local.TestDBName = testDBName
-		h.cfg.TestDBName = testDBName
 	}
 
 	debugMode := r.FormValue("debug_mode") == "1"
 	testMode := r.FormValue("test_mode") == "1"
-	testModeChanged := testMode != h.cfg.TestMode
+	testModeChanged := testMode != h.cfg().TestMode
 	// Tokenize a leading %USERPROFILE% before persisting so a shared
-	// config/local.json stays portable across users (#731); h.cfg keeps the
-	// expanded, absolute path the handlers already expect.
+	// config/local.json stays portable across users (#731); the live config keeps
+	// the expanded, absolute path the handlers already expect.
 	local.DocControlRoot = arxbase.TokenizeUserPath(docRoot)
 	local.POFolderRoot = arxbase.TokenizeUserPath(poRoot)
 	local.SupplierFilesRoot = arxbase.TokenizeUserPath(supplierFilesRoot)
 	local.ImageRoot = arxbase.TokenizeUserPath(imageRoot)
 	local.DebugMode = debugMode
 	local.TestMode = &testMode
-	h.cfg.DocControlRoot = docRoot
-	h.cfg.POFolderRoot = poRoot
-	h.cfg.SupplierFilesRoot = supplierFilesRoot
-	h.cfg.ImageRoot = imageRoot
-	h.cfg.DebugMode = debugMode
-	h.cfg.TestMode = testMode
+	applyCfg := func(c *arxbase.Config) {
+		if dbServer != "" {
+			c.DBServer = dbServer
+		}
+		if dbName != "" {
+			c.DBName = dbName
+		}
+		if dbUser != "" {
+			c.DBUser = dbUser
+		}
+		c.TestDBServer = testDBServer
+		c.TestEngine = testEngine
+		c.TestDBUser = testDBUser
+		if testDBName != "" {
+			c.TestDBName = testDBName
+		}
+		c.DocControlRoot = docRoot
+		c.POFolderRoot = poRoot
+		c.SupplierFilesRoot = supplierFilesRoot
+		c.ImageRoot = imageRoot
+		c.DebugMode = debugMode
+		c.TestMode = testMode
+	}
+	// Dial with a candidate copy so the live snapshot only changes once, together
+	// with the connection swap (or on its own if there's nothing to connect).
+	cfg := *h.cfg()
+	applyCfg(&cfg)
 
 	// Connect with the active profile's password: prefer a freshly-entered value,
 	// then the stored one. This lets test-mode toggles take effect immediately
@@ -523,27 +538,35 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	// blank-means-reuse-stored-password convenience is limited to a logged-in
 	// admin; anonymous callers must type the password to trigger any connect.
 	authenticated := h.currentUser(r) != nil
-	connectWith := selectConnectPassword(h.cfg.TestMode, authenticated, testPassword, h.cfg.TestDBPassword, password, h.cfg.DBPassword)
+	connectWith := selectConnectPassword(cfg.TestMode, authenticated, testPassword, cfg.TestDBPassword, password, cfg.DBPassword)
 
 	var connErr string
 	dbSwapped := false
 	if connectWith != "" {
-		dsn := h.cfg.BuildDSN(connectWith)
-		newDB, newDialect, err := h.connectDB(h.cfg.DBEngine(), dsn)
+		dsn := cfg.BuildDSN(connectWith)
+		newDB, newDialect, err := h.connectDB(cfg.DBEngine(), dsn)
 		if err != nil {
 			connErr = err.Error()
 		} else {
-			old := h.conn.Load()
-			h.conn.Store(&dbConn{db: newDB, dialect: newDialect})
-			dbSwapped = true
+			var old *dbConn
 			if password != "" {
 				secrets.DBPassword = password
-				h.cfg.DBPassword = password
 			}
 			if testPassword != "" {
 				secrets.TestDBPassword = testPassword
-				h.cfg.TestDBPassword = testPassword
 			}
+			h.update(func(s *runtimeState) {
+				old = s.conn
+				applyCfg(s.cfg)
+				s.conn = &dbConn{db: newDB, dialect: newDialect}
+				if password != "" {
+					s.cfg.DBPassword = password
+				}
+				if testPassword != "" {
+					s.cfg.TestDBPassword = testPassword
+				}
+			})
+			dbSwapped = true
 			h.CheckSchemaVersion(r.Context())
 			h.loadCompanyLogo(r.Context())
 			h.loadPartCategories(r.Context())
@@ -552,6 +575,9 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 				old.db.Close()
 			}
 		}
+	}
+	if !dbSwapped {
+		h.update(func(s *runtimeState) { applyCfg(s.cfg) })
 	}
 
 	if err := arxbase.SaveLocal(local); err != nil {
@@ -586,7 +612,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		delete(sess.Values, "user_id")
 		delete(sess.Values, "csrf_token")
 		sess.Save(r, w)
-		msg := "Test Mode switched the active database to " + h.cfg.ActiveDBName() + ". Please sign in again."
+		msg := "Test Mode switched the active database to " + h.cfg().ActiveDBName() + ". Please sign in again."
 		http.Redirect(w, r, "/login?notice="+url.QueryEscape(msg), http.StatusSeeOther)
 		return
 	}
@@ -621,7 +647,7 @@ func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request
 
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET default_po_contact_id = @p1, default_po_receiver_id = @p2 WHERE id = @p3`,
-		h.cfg.UsersTable()), contactArg, receiverArg, u.ID); err != nil {
+		h.cfg().UsersTable()), contactArg, receiverArg, u.ID); err != nil {
 		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
 			"Error": "Could not save preferences: " + err.Error(),
 		}))
@@ -643,16 +669,16 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 	defer zw.Close()
 
 	tables := []string{
-		h.cfg.PartsTable(), h.cfg.BOMTable(), h.cfg.CompanyTable(),
-		h.cfg.ContactTable(), h.cfg.POTable(), h.cfg.POLineTable(),
-		h.cfg.AttachmentsTable(), h.cfg.PriceTable(),
-		h.cfg.MfgPartTable(), h.cfg.SupplierPartTable(), h.cfg.CompanyAttachmentsTable(),
-		h.cfg.UomTable(),
-		h.cfg.FormsTable(), h.cfg.RecordsTable(), h.cfg.ResultsTable(),
-		h.cfg.StepsTable(), h.cfg.FormEventsTable(), h.cfg.RecordEventsTable(),
-		h.cfg.NamedQueriesTable(), h.cfg.FormRowHistoryTable(),
-		h.cfg.InventoryTxnTable(), h.cfg.BuildTable(), h.cfg.LotTable(),
-		h.cfg.GenealogyTable(), h.cfg.POHistoryTable(), h.cfg.RecordEventResultsTable(),
+		h.cfg().PartsTable(), h.cfg().BOMTable(), h.cfg().CompanyTable(),
+		h.cfg().ContactTable(), h.cfg().POTable(), h.cfg().POLineTable(),
+		h.cfg().AttachmentsTable(), h.cfg().PriceTable(),
+		h.cfg().MfgPartTable(), h.cfg().SupplierPartTable(), h.cfg().CompanyAttachmentsTable(),
+		h.cfg().UomTable(),
+		h.cfg().FormsTable(), h.cfg().RecordsTable(), h.cfg().ResultsTable(),
+		h.cfg().StepsTable(), h.cfg().FormEventsTable(), h.cfg().RecordEventsTable(),
+		h.cfg().NamedQueriesTable(), h.cfg().FormRowHistoryTable(),
+		h.cfg().InventoryTxnTable(), h.cfg().BuildTable(), h.cfg().LotTable(),
+		h.cfg().GenealogyTable(), h.cfg().POHistoryTable(), h.cfg().RecordEventResultsTable(),
 	}
 
 	for _, tbl := range tables {
@@ -660,13 +686,13 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 			log.Printf("backup: error exporting %s: %v", tbl, err)
 		}
 	}
-	if err := h.writeTableCSV(r, zw, h.cfg.UsersTable(), nil, "password_hash"); err != nil {
-		log.Printf("backup: error exporting %s: %v", h.cfg.UsersTable(), err)
+	if err := h.writeTableCSV(r, zw, h.cfg().UsersTable(), nil, "password_hash"); err != nil {
+		log.Printf("backup: error exporting %s: %v", h.cfg().UsersTable(), err)
 	}
 	// app_config is key/value, so its credential rows can't be dropped by column
 	// exclusion the way users.password_hash is — they need a row filter (#104).
-	if err := h.writeTableCSV(r, zw, h.cfg.AppConfigTable(), skipAppConfigSecret); err != nil {
-		log.Printf("backup: error exporting %s: %v", h.cfg.AppConfigTable(), err)
+	if err := h.writeTableCSV(r, zw, h.cfg().AppConfigTable(), skipAppConfigSecret); err != nil {
+		log.Printf("backup: error exporting %s: %v", h.cfg().AppConfigTable(), err)
 	}
 }
 

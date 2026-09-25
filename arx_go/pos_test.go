@@ -324,7 +324,7 @@ func TestRenderPOFolder_RootUnconfigured(t *testing.T) {
 
 func TestRenderPOFolder_NoMatchingBaseFolder(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.POFolderRoot = t.TempDir()
+	h.cfg().POFolderRoot = t.TempDir()
 	po := models.PurchaseOrder{ID: 1, Number: "PO-100"}
 	req := httptest.NewRequest(http.MethodGet, "/po/PO-100/folder", nil)
 	rec := httptest.NewRecorder()
@@ -337,7 +337,7 @@ func TestRenderPOFolder_NoMatchingBaseFolder(t *testing.T) {
 func TestRenderPOFolder_SubpathNotFound(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	if err := os.Mkdir(filepath.Join(root, "PO-100 Vendor"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +363,7 @@ func TestRenderPOFolder_SubpathNotFound(t *testing.T) {
 func TestRenderPOFolder_SortOrderAndListing(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	base := filepath.Join(root, "PO-100 Vendor")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -401,7 +401,7 @@ func TestRenderPOFolder_SortOrderAndListing(t *testing.T) {
 func TestRenderPOFolder_ParentURLAtDepth(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	base := filepath.Join(root, "PO-100 Vendor")
 	if err := os.MkdirAll(filepath.Join(base, "a", "b"), 0755); err != nil {
 		t.Fatal(err)
@@ -454,7 +454,7 @@ func TestPOFile_RootUnconfigured(t *testing.T) {
 
 func TestPOFile_NoMatchingBaseFolder(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.POFolderRoot = t.TempDir()
+	h.cfg().POFolderRoot = t.TempDir()
 	req := poFileRequest(t, "PO-100", "doc.pdf")
 	rec := httptest.NewRecorder()
 	h.POFile(rec, req)
@@ -470,7 +470,7 @@ func TestPOFile_NoMatchingBaseFolder(t *testing.T) {
 func TestPOFile_DotDotInURLRejectedByServeFile(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	base := filepath.Join(root, "PO-100 Vendor")
 	etcDir := filepath.Join(base, "etc")
 	if err := os.MkdirAll(etcDir, 0755); err != nil {
@@ -491,7 +491,7 @@ func TestPOFile_DotDotInURLRejectedByServeFile(t *testing.T) {
 func TestPOFile_NotFound(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	if err := os.Mkdir(filepath.Join(root, "PO-100 Vendor"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +506,7 @@ func TestPOFile_NotFound(t *testing.T) {
 func TestPOFile_PDFInline(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	base := filepath.Join(root, "PO-100 Vendor")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -531,7 +531,7 @@ func TestPOFile_PDFInline(t *testing.T) {
 func TestPOFile_OtherAttachment(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	base := filepath.Join(root, "PO-100 Vendor")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -549,7 +549,7 @@ func TestPOFile_OtherAttachment(t *testing.T) {
 func TestPOFile_NonASCIIFilenameEncoded(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	base := filepath.Join(root, "PO-100 Vendor")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -572,7 +572,7 @@ func TestPOFile_NonASCIIFilenameEncoded(t *testing.T) {
 func TestPOFile_ImageInline(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	base := filepath.Join(root, "PO-100 Vendor")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -594,7 +594,7 @@ func TestPOOpenFolder_RejectsTraversalID(t *testing.T) {
 	if err := os.Mkdir(root, 0755); err != nil {
 		t.Fatal(err)
 	}
-	h.cfg.POFolderRoot = root
+	h.cfg().POFolderRoot = root
 	for _, id := range []string{"..", `..\escaped`, "../escaped"} {
 		req := httptest.NewRequest(http.MethodPost, "/po/x/open-folder", nil)
 		rctx := chi.NewRouteContext()

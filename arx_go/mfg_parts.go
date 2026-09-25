@@ -39,7 +39,7 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, mfgScopeCol),
 		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -61,7 +61,7 @@ func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, mfg_id, mfg_part_number, description, is_active)
 		VALUES (@p1, @p2, @p3, @p4, %s)
-	`, h.cfg.MfgPartTable(), h.dia().BoolLiteral(true)),
+	`, h.cfg().MfgPartTable(), h.dia().BoolLiteral(true)),
 		id, mfgID, mpn, strings.TrimSpace(r.FormValue("description")),
 	)
 	if err != nil {
@@ -86,7 +86,7 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_id, mfg_id, mfg_part_number, description
 		FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s
-	`, h.cfg.MfgPartTable(), h.dia().BoolLiteral(true)), mid, id).Scan(
+	`, h.cfg().MfgPartTable(), h.dia().BoolLiteral(true)), mid, id).Scan(
 		&mp.ID, &mp.PartID, &mp.MfgID, &mpn, &desc,
 	)
 	if err == sql.ErrNoRows {
@@ -120,7 +120,7 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, mfgScopeCol),
 		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -143,7 +143,7 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET mfg_id=@p1, mfg_part_number=@p2, description=@p3
 		WHERE id=@p4 AND part_id=@p5 AND is_active=%s
-	`, h.cfg.MfgPartTable(), h.dia().BoolLiteral(true)),
+	`, h.cfg().MfgPartTable(), h.dia().BoolLiteral(true)),
 		mfgID, mpn, strings.TrimSpace(r.FormValue("description")), mid, id,
 	)
 	if err != nil {
@@ -164,7 +164,7 @@ func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET is_active=%s WHERE id=@p1 AND part_id=@p2
-	`, h.cfg.MfgPartTable(), h.dia().BoolLiteral(false)), mid, id)
+	`, h.cfg().MfgPartTable(), h.dia().BoolLiteral(false)), mid, id)
 	if err != nil {
 		h.renderError(w, r, "Error deleting manufacturer part: "+err.Error())
 		return
@@ -181,7 +181,7 @@ func (h *Handler) fetchMfgParts(r *http.Request, partID string) ([]models.MfgPar
 		JOIN %s c ON mp.mfg_id = c.id
 		WHERE mp.part_id = @p1 AND mp.is_active = %s
 		ORDER BY c.name, mp.mfg_part_number
-	`, h.cfg.MfgPartTable(), h.cfg.CompanyTable(), h.dia().BoolLiteral(true)), partID)
+	`, h.cfg().MfgPartTable(), h.cfg().CompanyTable(), h.dia().BoolLiteral(true)), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (h *Handler) fetchManufacturers(r *http.Request) ([]manufacturerOption, err
 		SELECT id, name FROM %s
 		WHERE is_manufacturer = %s AND is_active = %s
 		ORDER BY name
-	`, h.cfg.CompanyTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
+	`, h.cfg().CompanyTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -248,6 +248,6 @@ func (h *Handler) renderMfgPartsWithError(w http.ResponseWriter, r *http.Request
 		"Error":             errMsg,
 		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }

@@ -226,7 +226,7 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 		if name == "" {
 			return attachmentFileInput{ErrMsg: "That file no longer exists in Doc Control."}
 		}
-		if _, err := os.Stat(filepath.Join(h.cfg.DocControlRoot, name)); err != nil {
+		if _, err := os.Stat(filepath.Join(h.cfg().DocControlRoot, name)); err != nil {
 			return attachmentFileInput{ErrMsg: "That file no longer exists in Doc Control."}
 		}
 		return attachmentFileInput{FileName: "LOCAL:" + name}
@@ -235,7 +235,7 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 	if upload == nil {
 		return attachmentFileInput{FileName: urlutil.NormalizeLink(fv(r, "FILFileName"))}
 	}
-	if h.cfg.DocControlRoot == "" {
+	if h.cfg().DocControlRoot == "" {
 		return attachmentFileInput{ErrMsg: "DOC_CONTROL_ROOT is not configured; cannot import files."}
 	}
 	p, err := h.fetchPartBasic(ctx, partID)
@@ -250,11 +250,11 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 	defer f.Close()
 
 	if replaceName != "" && strings.EqualFold(name, replaceName) {
-		if err := replaceLocalFileFrom(h.cfg.DocControlRoot, name, f); err != nil {
+		if err := replaceLocalFileFrom(h.cfg().DocControlRoot, name, f); err != nil {
 			return attachmentFileInput{ErrMsg: "Error replacing file: " + err.Error()}
 		}
 	} else {
-		existed, err := copyReaderIntoDocControl(h.cfg.DocControlRoot, name, f)
+		existed, err := copyReaderIntoDocControl(h.cfg().DocControlRoot, name, f)
 		if err != nil {
 			return attachmentFileInput{ErrMsg: "Error copying file: " + err.Error()}
 		}
@@ -444,7 +444,7 @@ func (h *Handler) importAttachmentBatch(w http.ResponseWriter, r *http.Request, 
 	// Batch imports record the hash but do not warn on a duplicate (#71): the
 	// mid-batch collision-resume state machine is already the most intricate
 	// code in this file, and a second interrupt state would double it.
-	hash := computeAttachmentHash(h.cfg.DocControlRoot, in.FileName)
+	hash := computeAttachmentHash(h.cfg().DocControlRoot, in.FileName)
 	if err := h.insertAttachmentRow(r.Context(), id, in.FileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash); err != nil {
 		os.RemoveAll(dir)
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
@@ -550,15 +550,15 @@ func primaryAttachmentEnsureSQL(d arxdb.Dialect, parentTable, primaryCol, attTab
 // PDF Preview / Thumbnail rows never become the auto-set primary — they are
 // derived images, not the part's own files.
 func (h *Handler) ensurePartPrimary(ctx context.Context, exec execFunc, partID any) error {
-	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg.PartsTable(), "primary_attachment_id",
-		h.cfg.AttachmentsTable(), "id", "part_id",
+	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg().PartsTable(), "primary_attachment_id",
+		h.cfg().AttachmentsTable(), "id", "part_id",
 		fmt.Sprintf(" AND COALESCE(a.category, '') NOT IN ('%s', '%s')", previewCategory, thumbnailCategory)), partID)
 	return err
 }
 
 func (h *Handler) ensureSupplierPrimary(ctx context.Context, exec execFunc, supplierID any) error {
-	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg.CompanyTable(), "primary_attachment_id",
-		h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "supplier_id", ""), supplierID)
+	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg().CompanyTable(), "primary_attachment_id",
+		h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "supplier_id", ""), supplierID)
 	return err
 }
 
@@ -656,9 +656,9 @@ func (h *Handler) resolveVendorScope(ctx context.Context, partID, token string) 
 	var table string
 	switch kind {
 	case "s":
-		table = h.cfg.SupplierPartTable()
+		table = h.cfg().SupplierPartTable()
 	case "m":
-		table = h.cfg.MfgPartTable()
+		table = h.cfg().MfgPartTable()
 	default:
 		return nil, nil, fmt.Errorf("invalid linked vendor selection")
 	}
@@ -686,7 +686,7 @@ func (h *Handler) fetchAttachmentsByVendor(r *http.Request, partID, col string) 
 		FROM %s
 		WHERE part_id = @p1 AND is_active = %s AND %s IS NOT NULL
 		ORDER BY sort_order, id
-	`, col, h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true), col), partID)
+	`, col, h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true), col), partID)
 	if err != nil {
 		return nil
 	}
@@ -733,8 +733,8 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 		FROM %s ca JOIN %s c ON c.id = ca.supplier_id
 		WHERE ca.is_active = %s AND ca.file_path = @p1
 		ORDER BY 1, 4
-	`, h.cfg.AttachmentsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true),
-		h.cfg.CompanyAttachmentsTable(), h.cfg.CompanyTable(), h.dia().BoolLiteral(true)), file)
+	`, h.cfg().AttachmentsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true),
+		h.cfg().CompanyAttachmentsTable(), h.cfg().CompanyTable(), h.dia().BoolLiteral(true)), file)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
 		return
@@ -754,7 +754,7 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/attachment_where_used.html", map[string]any{
 		"FileLink": file, "Usages": usages,
-		"ActiveTab": "parts", "TestMode": h.cfg.TestMode,
+		"ActiveTab": "parts", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -777,10 +777,10 @@ func hashLinkString(link string) string {
 // companyAttachmentRoot is the filesystem root company_attachment LOCAL: links
 // resolve against: SUPPLIER_FILES_ROOT, falling back to DOC_CONTROL_ROOT.
 func (h *Handler) companyAttachmentRoot() string {
-	if h.cfg.SupplierFilesRoot != "" {
-		return h.cfg.SupplierFilesRoot
+	if h.cfg().SupplierFilesRoot != "" {
+		return h.cfg().SupplierFilesRoot
 	}
-	return h.cfg.DocControlRoot
+	return h.cfg().DocControlRoot
 }
 
 // computeAttachmentHash returns the hash identifying one attachment link (#71):
@@ -867,10 +867,10 @@ func (h *Handler) findDuplicateAttachment(ctx context.Context, hash string, excl
 
 func (h *Handler) findDuplicatePartAttachment(ctx context.Context, hash string, excludeID int) (*duplicateAttachment, error) {
 	return h.findDuplicateAttachment(ctx, hash, excludeID,
-		h.cfg.AttachmentsTable(), "id", h.cfg.PartsTable(), "part_id", "part_number", "/part/%d/attachments")
+		h.cfg().AttachmentsTable(), "id", h.cfg().PartsTable(), "part_id", "part_number", "/part/%d/attachments")
 }
 
 func (h *Handler) findDuplicateCompanyAttachment(ctx context.Context, hash string, excludeID int) (*duplicateAttachment, error) {
 	return h.findDuplicateAttachment(ctx, hash, excludeID,
-		h.cfg.CompanyAttachmentsTable(), "supplier_attachment_id", h.cfg.CompanyTable(), "supplier_id", "name", "/supplier/%d/attachments")
+		h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", h.cfg().CompanyTable(), "supplier_id", "name", "/supplier/%d/attachments")
 }

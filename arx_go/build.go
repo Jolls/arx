@@ -43,7 +43,7 @@ func buildOptionLabel(id int, qty float64, date sql.NullTime) string {
 func (h *Handler) activeBuildsForPart(ctx context.Context, partID int) ([]BuildOption, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT id, qty, build_date FROM %s WHERE part_id = @p1 ORDER BY build_date DESC, id DESC
-	`, h.cfg.BuildTable()), partID)
+	`, h.cfg().BuildTable()), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (h *Handler) fetchBuildOption(ctx context.Context, buildID int) (*BuildOpti
 	var qty float64
 	var date sql.NullTime
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, qty, build_date FROM %s WHERE id = @p1`, h.cfg.BuildTable()), buildID).
+		`SELECT id, qty, build_date FROM %s WHERE id = @p1`, h.cfg().BuildTable()), buildID).
 		Scan(&b.ID, &qty, &date)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -107,7 +107,7 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
 		WHERE b.parent_part_id = @p1
 		ORDER BY b.line_number
-	`, h.cfg.BOMTable(), h.cfg.PartsTable()), outputPartID)
+	`, h.cfg().BOMTable(), h.cfg().PartsTable()), outputPartID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 			rows.Close()
 			return nil, err
 		}
-		if !models.TabsForCategory(h.partCategories, c.Category).Inventory {
+		if !models.TabsForCategory(h.st().partCategories, c.Category).Inventory {
 			continue // non-stocked line (labor/doc/…) — not consumed from stock.
 		}
 		c.Description = description.String
@@ -164,7 +164,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		SELECT b.id, b.qty, b.build_date, b.username, b.note,
 		       (SELECT COUNT(*) FROM %s u WHERE u.build_id = b.id AND u.source <> 'manual') AS tested_count
 		FROM %s b WHERE b.part_id = @p1 ORDER BY b.build_date DESC, b.id DESC
-	`, h.cfg.UnitTable(), h.cfg.BuildTable()), id)
+	`, h.cfg().UnitTable(), h.cfg().BuildTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving builds: "+err.Error())
 		return
@@ -210,7 +210,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		"BuiltQty":     r.URL.Query().Get("built"),
 		"ReturnRecord": r.URL.Query().Get("return_record"), // #677: link build back to the test record that launched it
 		"ActiveTab":    "parts", "ActiveSubTab": "build",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -233,7 +233,7 @@ func (h *Handler) loadBuildLines(ctx context.Context, partID int) ([]bomLine, er
 		SELECT b.component_part_id, p.part_number, b.qty, p.category, p.tracking_mode
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
 		WHERE b.parent_part_id = @p1
-	`, h.cfg.BOMTable(), h.cfg.PartsTable()), partID)
+	`, h.cfg().BOMTable(), h.cfg().PartsTable()), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (h *Handler) loadBuildLines(ctx context.Context, partID int) ([]bomLine, er
 func (h *Handler) collectLotPicks(r *http.Request, lines []bomLine) (map[int]int, string) {
 	lotPicks := map[int]int{}
 	for _, l := range lines {
-		if !l.isLotTracked || !models.TabsForCategory(h.partCategories, l.category).Inventory {
+		if !l.isLotTracked || !models.TabsForCategory(h.st().partCategories, l.category).Inventory {
 			continue
 		}
 		lotID, err := strconv.Atoi(fv(r, fmt.Sprintf("lot[%d]", l.componentPartID)))
@@ -280,7 +280,7 @@ func (h *Handler) collectLotPicks(r *http.Request, lines []bomLine) (map[int]int
 // owns those, so the same helper serves both the standalone build and the record save.
 func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, outputLotTracked bool, qty float64, buildDate time.Time, note string, lines []bomLine, lotPicks map[int]int) (buildID, outputLotID int, err error) {
 	// Record the build event first so its id can label the ledger rows and output lot.
-	insertBuild := h.dia().InsertReturningID(h.cfg.BuildTable(),
+	insertBuild := h.dia().InsertReturningID(h.cfg().BuildTable(),
 		`part_id, output_lot_id, qty, build_date, username, note, created_at`,
 		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`, false)
 	if err = tx.QueryRowContext(r.Context(), insertBuild,
@@ -296,7 +296,7 @@ func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, output
 			return 0, 0, fmt.Errorf("creating output lot: %w", err)
 		}
 		if _, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET output_lot_id = @p1 WHERE id = @p2`, h.cfg.BuildTable()), outputLotID, buildID); err != nil {
+			`UPDATE %s SET output_lot_id = @p1 WHERE id = @p2`, h.cfg().BuildTable()), outputLotID, buildID); err != nil {
 			return 0, 0, fmt.Errorf("linking output lot: %w", err)
 		}
 	}
@@ -310,7 +310,7 @@ func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, output
 	// go negative (matching manual adjustments). Non-stocked lines (OPS/TOOL/SVC/DOC)
 	// draw no stock, so no ledger row.
 	for _, l := range lines {
-		if !models.TabsForCategory(h.partCategories, l.category).Inventory {
+		if !models.TabsForCategory(h.st().partCategories, l.category).Inventory {
 			continue
 		}
 		consumed := l.qty * qty
@@ -434,7 +434,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 			var recPart int
 			var recLocked bool
 			err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT COALESCE(part_id,0), is_locked FROM %s WHERE id = @p1`, h.cfg.RecordsTable()), recID).
+				`SELECT COALESCE(part_id,0), is_locked FROM %s WHERE id = @p1`, h.cfg().RecordsTable()), recID).
 				Scan(&recPart, &recLocked)
 			if err == nil && recPart == partID && !recLocked {
 				var lotArg any
@@ -443,7 +443,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 				}
 				if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
 					`UPDATE %s SET lot_id = @p1, build_id = @p2, updated_at = GETDATE() WHERE id = @p3`,
-					h.cfg.RecordsTable()), lotArg, buildID, recID); err != nil {
+					h.cfg().RecordsTable()), lotArg, buildID, recID); err != nil {
 					h.renderError(w, r, "Error linking build to test record: "+err.Error())
 					return
 				}

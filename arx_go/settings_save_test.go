@@ -165,7 +165,7 @@ func TestSettingsSave_AnonymousNoStoredPasswordReconnect(t *testing.T) {
 	cfg := &arxbase.Config{}
 	cfg.DBPassword = "stored-secret"
 	h := isolatedSettingsHandler(t, cfg)
-	h.dbConnError = "could not read schema_version (connection refused)"
+	h.update(func(s *runtimeState) { s.dbConnError = "could not read schema_version (connection refused)" })
 
 	var dialed []string
 	h.connectDB = func(engine, dsn string) (*sql.DB, arxdb.Dialect, error) {

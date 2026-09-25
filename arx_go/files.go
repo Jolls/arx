@@ -141,7 +141,7 @@ func (h *Handler) serveLocalizedFile(w http.ResponseWriter, r *http.Request, p f
 // ServeLocalFile — GET /local/*
 // Serves a single file from DOC_CONTROL_ROOT.
 func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.DocControlRoot
+	root := h.cfg().DocControlRoot
 	if root == "" {
 		http.Error(w, "DOC_CONTROL_ROOT is not configured", http.StatusServiceUnavailable)
 		return
@@ -153,9 +153,9 @@ func (h *Handler) ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 // ServeSupplierFile — GET /supplier-local/*
 // Serves a single file from SUPPLIER_FILES_ROOT (falls back to DOC_CONTROL_ROOT).
 func (h *Handler) ServeSupplierFile(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.SupplierFilesRoot
+	root := h.cfg().SupplierFilesRoot
 	if root == "" {
-		root = h.cfg.DocControlRoot
+		root = h.cfg().DocControlRoot
 	}
 	if root == "" {
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
@@ -260,7 +260,7 @@ func (h *Handler) renderDirListing(w http.ResponseWriter, r *http.Request, p dir
 		"ActiveSubTab":     p.ActiveSubTab,
 		"NavBackURL":       p.NavBackURL,
 		"NavBackLabel":     p.NavBackLabel,
-		"TestMode":         h.cfg.TestMode,
+		"TestMode":         h.cfg().TestMode,
 		"UploadFormAction": uploadURL,
 		// CSRFToken is not set here — h.render() (handlers.go) unconditionally
 		// injects it into every page's data map.
@@ -352,7 +352,7 @@ func (h *Handler) handleDirUpload(w http.ResponseWriter, r *http.Request, dir, r
 
 // ServeLocalDirUpload — POST /local-dir-upload/*
 func (h *Handler) ServeLocalDirUpload(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.DocControlRoot
+	root := h.cfg().DocControlRoot
 	if root == "" {
 		http.Error(w, "DOC_CONTROL_ROOT is not configured", http.StatusServiceUnavailable)
 		return
@@ -368,9 +368,9 @@ func (h *Handler) ServeLocalDirUpload(w http.ResponseWriter, r *http.Request) {
 
 // ServeSupplierDirUpload — POST /supplier-local-dir-upload/*
 func (h *Handler) ServeSupplierDirUpload(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.SupplierFilesRoot
+	root := h.cfg().SupplierFilesRoot
 	if root == "" {
-		root = h.cfg.DocControlRoot
+		root = h.cfg().DocControlRoot
 	}
 	if root == "" {
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
@@ -388,9 +388,9 @@ func (h *Handler) ServeSupplierDirUpload(w http.ResponseWriter, r *http.Request)
 // ServeSupplierDir — GET /supplier-local-dir/*
 // Renders a directory listing from SUPPLIER_FILES_ROOT (falls back to DOC_CONTROL_ROOT).
 func (h *Handler) ServeSupplierDir(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.SupplierFilesRoot
+	root := h.cfg().SupplierFilesRoot
 	if root == "" {
-		root = h.cfg.DocControlRoot
+		root = h.cfg().DocControlRoot
 	}
 	if root == "" {
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
@@ -433,7 +433,7 @@ func (h *Handler) ServeSupplierDir(w http.ResponseWriter, r *http.Request) {
 // ServeLocalDir — GET /local-dir/*
 // Renders a directory listing from DOC_CONTROL_ROOT.
 func (h *Handler) ServeLocalDir(w http.ResponseWriter, r *http.Request) {
-	root := h.cfg.DocControlRoot
+	root := h.cfg().DocControlRoot
 	if root == "" {
 		http.Error(w, "DOC_CONTROL_ROOT is not configured", http.StatusServiceUnavailable)
 		return
