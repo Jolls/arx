@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	arxbase "arx/arxlib/config"
+	arxbase "arx/internal/config"
 )
 
 // A directory under IMAGE_ROOT must 404, not render a listing.

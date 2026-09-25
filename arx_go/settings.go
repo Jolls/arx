@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	arxbase "arx/arxlib/config"
+	arxbase "arx/internal/config"
 )
 
 // landingPreset is one selectable landing-page option (issue #282): a major

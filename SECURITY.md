@@ -12,6 +12,6 @@ Arx is maintained by one person. Reports are acknowledged on a best-effort basis
 
 ## Scope
 
-In scope: the Arx application (`arx_go/`) and shared library (`arxlib/`).
+In scope: the Arx application (`arx_go/`) and internal packages (`internal/`).
 
 Arx assumes a trusted, single-shop deployment and binds to localhost. Findings that require local administrator access, or write access to the configured file roots or the database, are low severity by design.

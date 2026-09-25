@@ -20,8 +20,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
-	arxdb "arx/arxlib/db"
-	"arx/arxlib/urlutil"
+	arxdb "arx/internal/db"
+	"arx/internal/urlutil"
 )
 
 // ── Shared helpers ──────────────────────────────────────────────────────────

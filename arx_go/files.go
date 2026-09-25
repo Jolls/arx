@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"arx/arx_go/models"
-	"arx/arxlib/urlutil"
+	"arx/internal/urlutil"
 )
 
 // maxUploadBytes bounds a single directory-listing upload's memory/disk use.

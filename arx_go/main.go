@@ -15,8 +15,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/pkg/browser"
 
-	arxbase "arx/arxlib/config"
-	arxdb "arx/arxlib/db"
+	arxbase "arx/internal/config"
+	arxdb "arx/internal/db"
 )
 
 // AppVersion is set at build time via -ldflags from the top entry in CHANGELOG.md.

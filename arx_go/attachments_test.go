@@ -12,7 +12,7 @@ import (
 	"testing"
 	"testing/iotest"
 
-	arxdb "arx/arxlib/db"
+	arxdb "arx/internal/db"
 )
 
 func TestBuildAttachmentFileName(t *testing.T) {

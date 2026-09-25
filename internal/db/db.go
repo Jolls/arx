@@ -1,4 +1,4 @@
-// Package db provides a SQL Server connection helper shared across Arx apps.
+// Package db provides a SQL Server connection helper for Arx.
 package db
 
 import (

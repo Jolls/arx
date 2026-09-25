@@ -17,7 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
-	"arx/arxlib/urlutil"
+	"arx/internal/urlutil"
 )
 
 // validateFolderStub ensures SUSupplierCode is safe to use as a single filesystem

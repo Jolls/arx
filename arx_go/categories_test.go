@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	arxbase "arx/arxlib/config"
+	arxbase "arx/internal/config"
 )
 
 // TestSettingsCategoriesSave_NoDatabaseRedirects covers the h.database() == nil

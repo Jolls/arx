@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	arxbase "arx/arxlib/config"
+	arxbase "arx/internal/config"
 )
 
 // filesTestHandler builds a Handler with no DB, real templates, and a session

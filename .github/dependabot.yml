@@ -1,9 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: gomod
-    directories:
-      - /arx_go
-      - /arxlib
+    directory: /
     schedule:
       interval: weekly
 

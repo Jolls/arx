@@ -26,9 +26,9 @@ import (
 	"github.com/gorilla/sessions"
 
 	"arx/arx_go/models"
-	arxbase "arx/arxlib/config"
-	arxdb "arx/arxlib/db"
-	"arx/arxlib/urlutil"
+	arxbase "arx/internal/config"
+	arxdb "arx/internal/db"
+	"arx/internal/urlutil"
 )
 
 // dbConn is an immutable snapshot of the active connection + its dialect,

@@ -14,7 +14,7 @@ The `FILFileName` column in `FIL` (and the equivalent field in `company_attachme
 | `LOCAL:path\to\file` | `LOCAL:Engineering\spec.pdf` | Served via `GET /local/*` from `DOC_CONTROL_ROOT` |
 | `LOCAL:path\to\folder\` (trailing slash or backslash) | `LOCAL:Engineering\drawings\` | Directory listing via `GET /local-dir/*` from `DOC_CONTROL_ROOT` |
 
-**Invariant:** values stored in `FILFileName` are trimmed and use the uppercase prefix `LOCAL:`. The app never writes lowercase variants. Helper functions in `arxlib/urlutil` (`IsLocalFile`, `IsLocalDir`, `IsHTTPURL`, `LocalFileURL`, `LocalDirURL`) accept any case defensively but the stored data is always uppercase.
+**Invariant:** values stored in `FILFileName` are trimmed and use the uppercase prefix `LOCAL:`. The app never writes lowercase variants. Helper functions in `internal/urlutil` (`IsLocalFile`, `IsLocalDir`, `IsHTTPURL`, `LocalFileURL`, `LocalDirURL`) accept any case defensively but the stored data is always uppercase.
 
 ### Content hash / duplicate detection (#71)
 
@@ -74,7 +74,7 @@ since there is no user-typed title to dedupe on, repeated pastes for the same
 part/rev auto-append `" (2)"`, `" (3)"`, ... before the extension instead of
 surfacing the import collision prompt.
 
-`arxlib/urlutil.IsImage` (extensions: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`,
+`internal/urlutil.IsImage` (extensions: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`,
 case-insensitive) is the canonical check for whether an attachment is a
 displayable image — used to filter the part detail page's Photos thumbnail
 grid and to show a hover-preview popup on the Attachments list page.

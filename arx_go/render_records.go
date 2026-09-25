@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"arx/arx_go/models"
-	"arx/arxlib/urlutil"
+	"arx/internal/urlutil"
 )
 
 // renderRecords renders a Test Records nav-section page using its layout and template funcs.
