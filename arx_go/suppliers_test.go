@@ -60,7 +60,7 @@ func TestRenderSupplierFolder_RootUnconfigured(t *testing.T) {
 
 func TestRenderSupplierFolder_EmptySupplierCode(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.SupplierFilesRoot = t.TempDir()
+	h.cfg().SupplierFilesRoot = t.TempDir()
 	s := models.Supplier{ID: 1}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder", nil)
 	rec := httptest.NewRecorder()
@@ -80,7 +80,7 @@ func TestRenderSupplierFolder_EmptySupplierCode(t *testing.T) {
 func TestRenderSupplierFolder_DotDotSegmentsStayUnderRoot(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	// safePath strips ".." segments and resolves the rest under base
 	// (root/ACME), so the traversal attempt lands on root/ACME/etc.
 	if err := os.MkdirAll(filepath.Join(root, "ACME", "etc"), 0755); err != nil {
@@ -97,7 +97,7 @@ func TestRenderSupplierFolder_DotDotSegmentsStayUnderRoot(t *testing.T) {
 
 func TestRenderSupplierFolder_NotFound(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.SupplierFilesRoot = t.TempDir()
+	h.cfg().SupplierFilesRoot = t.TempDir()
 	s := models.Supplier{ID: 1, SUSupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder", nil)
 	rec := httptest.NewRecorder()
@@ -116,7 +116,7 @@ func TestRenderSupplierFolder_NotFound(t *testing.T) {
 func TestRenderSupplierFolder_SortOrderAndListing(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	base := filepath.Join(root, "ACME")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -154,7 +154,7 @@ func TestRenderSupplierFolder_SortOrderAndListing(t *testing.T) {
 func TestRenderSupplierFolder_ParentURLAtDepth(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	base := filepath.Join(root, "ACME")
 	if err := os.MkdirAll(filepath.Join(base, "a", "b"), 0755); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestServeSupplierFile_RootUnconfiguredNoDB(t *testing.T) {
 
 func TestServeSupplierFile_EmptySupplierCode(t *testing.T) {
 	h := filesTestHandler()
-	h.cfg.SupplierFilesRoot = t.TempDir()
+	h.cfg().SupplierFilesRoot = t.TempDir()
 	s := models.Supplier{}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/doc.pdf", nil)
 	rec := httptest.NewRecorder()
@@ -217,7 +217,7 @@ func TestServeSupplierFile_EmptySupplierCode(t *testing.T) {
 func TestServeSupplierFile_DotDotInURLRejectedByServeFileNoDB(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	base := filepath.Join(root, "ACME")
 	etcDir := filepath.Join(base, "etc")
 	if err := os.MkdirAll(etcDir, 0755); err != nil {
@@ -239,7 +239,7 @@ func TestServeSupplierFile_DotDotInURLRejectedByServeFileNoDB(t *testing.T) {
 func TestServeSupplierFile_NotFoundNoDB(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	if err := os.Mkdir(filepath.Join(root, "ACME"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestServeSupplierFile_NotFoundNoDB(t *testing.T) {
 func TestServeSupplierFile_PDFInlineNoDB(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	base := filepath.Join(root, "ACME")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -281,7 +281,7 @@ func TestServeSupplierFile_PDFInlineNoDB(t *testing.T) {
 func TestServeSupplierFile_OtherAttachmentNoDB(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	base := filepath.Join(root, "ACME")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -300,7 +300,7 @@ func TestServeSupplierFile_OtherAttachmentNoDB(t *testing.T) {
 func TestServeSupplierFile_NonASCIIFilenameEncodedNoDB(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	base := filepath.Join(root, "ACME")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)
@@ -324,7 +324,7 @@ func TestServeSupplierFile_NonASCIIFilenameEncodedNoDB(t *testing.T) {
 func TestServeSupplierFile_ImageInlineNoDB(t *testing.T) {
 	h := filesTestHandler()
 	root := t.TempDir()
-	h.cfg.SupplierFilesRoot = root
+	h.cfg().SupplierFilesRoot = root
 	base := filepath.Join(root, "ACME")
 	if err := os.Mkdir(base, 0755); err != nil {
 		t.Fatal(err)

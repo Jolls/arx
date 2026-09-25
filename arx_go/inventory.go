@@ -35,14 +35,14 @@ func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, 
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (part_id, txn_type, qty, txn_date, username, reference, note, po_line_id, lot_id, build_id, created_at)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)
-	`, h.cfg.InventoryTxnTable()),
+	`, h.cfg().InventoryTxnTable()),
 		partID, txnType, qty, txnDate, h.actorName(r),
 		nullableText(reference), nullableText(note), poArg, lotArg, buildArg, time.Now(),
 	); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET stock_on_hand = stock_on_hand + @p1 WHERE id = @p2`, h.cfg.PartsTable()),
+		`UPDATE %s SET stock_on_hand = stock_on_hand + @p1 WHERE id = @p2`, h.cfg().PartsTable()),
 		qty, partID)
 	return err
 }
@@ -90,7 +90,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 		FROM %s it
 		LEFT JOIN %s l ON l.id = it.lot_id
 		WHERE it.part_id = @p1 ORDER BY it.txn_date ASC, it.id ASC
-	`, h.cfg.InventoryTxnTable(), h.cfg.LotTable()), id)
+	`, h.cfg().InventoryTxnTable(), h.cfg().LotTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving transactions: "+err.Error())
 		return
@@ -130,7 +130,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_transactions.html", map[string]any{
 		"Part": p, "Txns": txns, "Lots": lots, "Today": time.Now().Format("2006-01-02"),
 		"ActiveTab": "parts", "ActiveSubTab": "transactions",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
 

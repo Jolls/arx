@@ -20,7 +20,7 @@ var errRecordNeedsLot = errors.New("a lot must be selected before this record ca
 func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, eventID, recordID int) error {
 	var testOrder string
 	if err := tx.QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT COALESCE(test_order,'') FROM %s WHERE id=@p1", h.cfg.RecordsTable()), recordID).
+		"SELECT COALESCE(test_order,'') FROM %s WHERE id=@p1", h.cfg().RecordsTable()), recordID).
 		Scan(&testOrder); err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 		SELECT form_row_id, COALESCE(parameter,''), COALESCE(specification,''), COALESCE(spec_units,''),
 		       COALESCE(result,''), pass_fail, COALESCE(comment,'')
-		FROM %s WHERE form_record_id=@p1 AND COALESCE(type,0)=0`, h.cfg.ResultsTable()), recordID)
+		FROM %s WHERE form_record_id=@p1 AND COALESCE(type,0)=0`, h.cfg().ResultsTable()), recordID)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, event
 	}
 
 	ins := fmt.Sprintf(`INSERT INTO %s (event_id, form_row_id, parameter, specification, spec_units, result, pass_fail, comment)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)`, h.cfg.RecordEventResultsTable())
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)`, h.cfg().RecordEventResultsTable())
 	for _, tid := range orderedResultIDs(testOrder, byTest) {
 		s := byTest[tid]
 		if _, err := tx.ExecContext(ctx, ins, eventID, tid, s.Parameter, s.Specification, s.SpecUnits,
@@ -92,7 +92,7 @@ func (h *Handler) loadEventSnapshots(ctx context.Context, recordID int) (map[int
 		JOIN %s re ON re.id = rer.event_id
 		WHERE re.form_record_id = @p1
 		ORDER BY re.event_date ASC, re.id ASC, rer.id ASC`,
-		h.cfg.RecordEventResultsTable(), h.cfg.RecordEventsTable()), recordID)
+		h.cfg().RecordEventResultsTable(), h.cfg().RecordEventsTable()), recordID)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 
 	res, err := tx.ExecContext(ctx, fmt.Sprintf(
 		"UPDATE %s SET is_locked=%s, updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s"+guard,
-		h.cfg.RecordsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), args...)
+		h.cfg().RecordsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), args...)
 	if err != nil {
 		return false, err
 	}
@@ -171,7 +171,7 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 // captures its result snapshot, within the caller's tx. Shared by single + bulk lock.
 func (h *Handler) logCompletionSnapshot(ctx context.Context, tx *txLogger, recordID int, username string) error {
 	var eventID int
-	insertEvent := h.dia().InsertReturningID(h.cfg.RecordEventsTable(),
+	insertEvent := h.dia().InsertReturningID(h.cfg().RecordEventsTable(),
 		"form_record_id, event_type, username, event_date",
 		"@p1, 'completed', @p2, GETDATE()",
 		false)

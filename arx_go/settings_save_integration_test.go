@@ -70,12 +70,12 @@ func isolatedIntegrationSettingsHandler(t *testing.T) *Handler {
 func TestIntegration_SettingsSave_TestModeSwap(t *testing.T) {
 	server, user, password, database := arxDevProfile(t)
 	h := isolatedIntegrationSettingsHandler(t)
-	h.cfg.TestMode = true
-	h.cfg.TestDBServer = server
-	h.cfg.TestDBUser = user
-	h.cfg.TestDBName = database
+	h.cfg().TestMode = true
+	h.cfg().TestDBServer = server
+	h.cfg().TestDBUser = user
+	h.cfg().TestDBName = database
 
-	oldConn := h.conn.Load()
+	oldConn := h.st().conn
 
 	vals := url.Values{
 		"test_mode":        {"1"},
@@ -94,7 +94,7 @@ func TestIntegration_SettingsSave_TestModeSwap(t *testing.T) {
 		t.Errorf("SettingsSave(test-mode swap): redirect Location = %q, want \"/\"", loc)
 	}
 
-	newConn := h.conn.Load()
+	newConn := h.st().conn
 	if newConn == oldConn {
 		t.Error("SettingsSave(test-mode swap): h.conn was not swapped to a new pointer")
 	}
@@ -121,7 +121,7 @@ func TestIntegration_SettingsSave_TestModeSwap(t *testing.T) {
 		t.Errorf("local test profile = %+v, want server=%q user=%q name=%q", local, server, user, database)
 	}
 
-	if h.partCategories == nil {
+	if h.st().partCategories == nil {
 		t.Error("SettingsSave(test-mode swap): partCategories not populated — loadPartCategories side effect did not run")
 	}
 }
@@ -133,11 +133,11 @@ func TestIntegration_SettingsSave_TestModeSwap(t *testing.T) {
 func TestIntegration_SettingsSave_TestModeToggleForcesRelogin(t *testing.T) {
 	server, user, password, database := arxDevProfile(t)
 	h := isolatedIntegrationSettingsHandler(t)
-	h.cfg.TestMode = false
-	h.cfg.DBServer = server
-	h.cfg.DBUser = user
-	h.cfg.DBName = database
-	h.cfg.DBPassword = password
+	h.cfg().TestMode = false
+	h.cfg().DBServer = server
+	h.cfg().DBUser = user
+	h.cfg().DBName = database
+	h.cfg().DBPassword = password
 
 	seed := httptest.NewRequest(http.MethodPost, "/settings/save", nil)
 	seedRec := httptest.NewRecorder()

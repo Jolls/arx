@@ -41,7 +41,7 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 		WHERE su.name LIKE @p1 AND su.is_active = %s`+supplierFilter+`
 		ORDER BY su.name
 		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
-	`, h.cfg.CompanyTable(), h.cfg.ContactTable(), h.dia().BoolLiteral(true)), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
+	`, h.cfg().CompanyTable(), h.cfg().ContactTable(), h.dia().BoolLiteral(true)), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -73,7 +73,7 @@ func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
 		FROM %s
 		WHERE company_id = @p1 AND is_active = %s
 		ORDER BY display_name
-	`, h.cfg.ContactTable(), h.dia().BoolLiteral(true)), id)
+	`, h.cfg().ContactTable(), h.dia().BoolLiteral(true)), id)
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -126,7 +126,7 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		WHERE %s
 		ORDER BY part_number
 		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY
-	`, h.cfg.PartsTable(), where), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
+	`, h.cfg().PartsTable(), where), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -172,7 +172,7 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 		FROM %s
 		WHERE part_id = @p1 AND supplier_id = @p2
 		ORDER BY preference ASC
-	`, h.cfg.SupplierPartTable()), partID, supplierID).Scan(&pn, &minIncrement)
+	`, h.cfg().SupplierPartTable()), partID, supplierID).Scan(&pn, &minIncrement)
 	if err != nil {
 		writeJSON(w, map[string]string{"supplier_pn": ""})
 		return
@@ -183,7 +183,7 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 		FROM %s
 		WHERE part_id = @p1 AND supplier_id = @p2 AND is_active = %s
 		ORDER BY pack_size ASC
-	`, h.cfg.PriceTable(), h.dia().BoolLiteral(true)), partID, supplierID).Scan(&priceEa)
+	`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)), partID, supplierID).Scan(&priceEa)
 
 	resp := map[string]any{"supplier_pn": pn.String}
 	if minIncrement.Valid && minIncrement.Float64 > 0 {
@@ -272,7 +272,7 @@ func (h *Handler) APIPartAttachmentName(w http.ResponseWriter, r *http.Request) 
 // row with category "Photo". POST /api/part/{id}/paste-attachment.
 func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if h.cfg.DocControlRoot == "" {
+	if h.cfg().DocControlRoot == "" {
 		writeJSONError(w, http.StatusBadRequest, "DOC_CONTROL_ROOT is not configured; cannot save pasted images.")
 		return
 	}
@@ -300,7 +300,7 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 	}
 
 	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Description, "Photo", ext)
-	finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
+	finalName, err := writeIntoDocControlUnique(h.cfg().DocControlRoot, name, ext, data)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
 		return
@@ -312,7 +312,7 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 	}
 	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
 		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7)`,
-		h.cfg.AttachmentsTable(),
+		h.cfg().AttachmentsTable(),
 	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment, hashBytes(data)); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error adding attachment: "+err.Error())
 		return
@@ -331,14 +331,14 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 		writeJSONError(w, http.StatusBadRequest, "Invalid attachment id")
 		return
 	}
-	if h.cfg.DocControlRoot == "" {
+	if h.cfg().DocControlRoot == "" {
 		writeJSONError(w, http.StatusBadRequest, "DOC_CONTROL_ROOT is not configured; cannot save pasted images.")
 		return
 	}
 
 	var oldFileNameNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg.AttachmentsTable(),
+		`SELECT file_name FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg().AttachmentsTable(),
 	), attID, id).Scan(&oldFileNameNS); err != nil {
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Attachment not found")
@@ -372,7 +372,7 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 	}
 
 	name := buildAttachmentFileName(p.PartNumber, body.Rev, p.Description, "Photo", ext)
-	finalName, err := writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ext, data)
+	finalName, err := writeIntoDocControlUnique(h.cfg().DocControlRoot, name, ext, data)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
 		return
@@ -384,15 +384,15 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, file_name=@p5, hash=@p6 WHERE id=@p7`,
-		h.cfg.AttachmentsTable(),
+		h.cfg().AttachmentsTable(),
 	), body.Rev, "Photo", oID, body.Comment, "LOCAL:"+finalName, hashBytes(data), attID); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error updating attachment: "+err.Error())
 		return
 	}
 
 	if urlutil.IsLocalFile(oldFileName) {
-		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg.AttachmentsTable(), "id", "file_name",
-			attID, oldFileName, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(oldFileName)); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().AttachmentsTable(), "id", "file_name",
+			attID, oldFileName, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFileName)); err != nil {
 			writeJSON(w, map[string]any{"ok": true, "warning": "Attachment updated, but the old file could not be removed: " + err.Error()})
 			return
 		}
@@ -456,7 +456,7 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 		writeJSONError(w, http.StatusBadRequest, "Invalid attachment id")
 		return
 	}
-	if h.cfg.DocControlRoot == "" {
+	if h.cfg().DocControlRoot == "" {
 		writeJSONError(w, http.StatusBadRequest, "DOC_CONTROL_ROOT is not configured; cannot generate thumbnails.")
 		return
 	}
@@ -464,7 +464,7 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 	var fileNameNS, revNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT file_name, part_revision FROM %s WHERE id=@p1 AND part_id=@p2 AND is_active=%s`,
-		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
+		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true),
 	), attID, id).Scan(&fileNameNS, &revNS); err != nil {
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Attachment not found")
@@ -480,7 +480,7 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	path, ok := safePath(h.cfg.DocControlRoot, urlutil.LocalFileURL(srcFile, ""))
+	path, ok := safePath(h.cfg().DocControlRoot, urlutil.LocalFileURL(srcFile, ""))
 	if !ok {
 		writeJSONError(w, http.StatusBadRequest, "Invalid attachment path.")
 		return
@@ -535,12 +535,12 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 	var oldFileNS sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s ORDER BY id`,
-		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
+		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true),
 	), partID, category).Scan(&existingID, &oldFileNS)
 	if err == sql.ErrNoRows {
 		_, err = h.execContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (part_id, file_name, part_revision, category, hash) VALUES (@p1,@p2,@p3,@p4,@p5)`,
-			h.cfg.AttachmentsTable(),
+			h.cfg().AttachmentsTable(),
 		), partID, newFile, rev, category, hash)
 		return err
 	}
@@ -548,7 +548,7 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 		return err
 	}
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET file_name=@p1, part_revision=@p2, hash=@p3 WHERE id=@p4`, h.cfg.AttachmentsTable(),
+		`UPDATE %s SET file_name=@p1, part_revision=@p2, hash=@p3 WHERE id=@p4`, h.cfg().AttachmentsTable(),
 	), newFile, rev, hash, existingID); err != nil {
 		return err
 	}
@@ -558,8 +558,8 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 	// treatment of the same failure mode instead of hard-failing the request.
 	oldFile := oldFileNS.String
 	if urlutil.IsLocalFile(oldFile) && oldFile != newFile {
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg.AttachmentsTable(), "id", "file_name",
-			existingID, oldFile, h.cfg.DocControlRoot, urlutil.StripLocalPrefix(oldFile)); err != nil {
+		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name",
+			existingID, oldFile, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFile)); err != nil {
 			log.Printf("[thumbnail] part %s: attachment %d updated, but old file %q could not be removed: %v", partID, existingID, oldFile, err)
 		}
 	}
@@ -578,19 +578,19 @@ func (h *Handler) saveGeneratedAttachment(ctx context.Context, partID, rev, cate
 	var oldFileNS sql.NullString
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s`,
-		h.cfg.AttachmentsTable(), h.dia().BoolLiteral(true),
+		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true),
 	), partID, category).Scan(&oldFileNS); err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("Error loading existing attachment: %w", err)
 	}
 
 	finalName := name
 	if urlutil.IsLocalFile(oldFileNS.String) && strings.EqualFold(urlutil.StripLocalPrefix(oldFileNS.String), name) {
-		if err := replaceDocControlData(h.cfg.DocControlRoot, name, data); err != nil {
+		if err := replaceDocControlData(h.cfg().DocControlRoot, name, data); err != nil {
 			return fmt.Errorf("Error saving image: %w", err)
 		}
 	} else {
 		var err error
-		finalName, err = writeIntoDocControlUnique(h.cfg.DocControlRoot, name, ".png", data)
+		finalName, err = writeIntoDocControlUnique(h.cfg().DocControlRoot, name, ".png", data)
 		if err != nil {
 			return fmt.Errorf("Error saving image: %w", err)
 		}
@@ -611,7 +611,7 @@ func (h *Handler) saveGeneratedAttachment(ctx context.Context, partID, rev, cate
 // must not undo a supplier link that already saved successfully, so it only
 // logs instead of surfacing an error to the user.
 func (h *Handler) generateThumbnailFromPhoto(ctx context.Context, partID string, part models.Part, photoData []byte) {
-	if h.cfg.DocControlRoot == "" {
+	if h.cfg().DocControlRoot == "" {
 		return
 	}
 	img, _, err := image.Decode(bytes.NewReader(photoData))
@@ -650,7 +650,7 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 		writeJSONError(w, http.StatusBadRequest, "Invalid test id")
 		return
 	}
-	if h.cfg.ImageRoot == "" {
+	if h.cfg().ImageRoot == "" {
 		writeJSONError(w, http.StatusBadRequest, "IMAGE_ROOT is not configured; cannot save pasted images.")
 		return
 	}
@@ -665,7 +665,7 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 		JOIN %s f ON r.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE r.id = @p1`,
-		h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable()), recordID).
+		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()), recordID).
 		Scan(&serial, &locked, &partNumber)
 	if err == sql.ErrNoRows {
 		writeJSONError(w, http.StatusNotFound, "Record not found")
@@ -696,7 +696,7 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 	// sanitizeFileNamePart here must match the folder name the "imageURL" and
 	// "sanitizedPartNumber" template funcs build for display (render_tr.go), so
 	// both sides of the write/read path use the same folder.
-	dir := filepath.Join(h.cfg.ImageRoot, sanitizeFileNamePart(partNumber))
+	dir := filepath.Join(h.cfg().ImageRoot, sanitizeFileNamePart(partNumber))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error creating image folder: "+err.Error())
 		return

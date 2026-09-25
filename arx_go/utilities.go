@@ -49,7 +49,7 @@ func (h *Handler) UtilitiesReport(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "settings/utilities.html", map[string]any{
 		"ActiveTab": "settings",
-		"TestMode":  h.cfg.TestMode,
+		"TestMode":  h.cfg().TestMode,
 		"Checks":    checks,
 		"Errors":    errs,
 	})
@@ -125,21 +125,21 @@ func (h *Handler) checkDeadLinks(ctx context.Context) (utilCheck, error) {
 		`SELECT f.file_name, p.id, p.part_number
 		 FROM %s f JOIN %s p ON f.part_id = p.id
 		 WHERE f.is_active = %s`,
-		h.cfg.AttachmentsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true))
-	if err := scan(partQuery, h.cfg.DocControlRoot, "/part/"); err != nil {
+		h.cfg().AttachmentsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true))
+	if err := scan(partQuery, h.cfg().DocControlRoot, "/part/"); err != nil {
 		return check, err
 	}
 
 	// Company attachments resolve against SUPPLIER_FILES_ROOT (fallback DOC_CONTROL_ROOT).
-	supplierRoot := h.cfg.SupplierFilesRoot
+	supplierRoot := h.cfg().SupplierFilesRoot
 	if supplierRoot == "" {
-		supplierRoot = h.cfg.DocControlRoot
+		supplierRoot = h.cfg().DocControlRoot
 	}
 	compQuery := fmt.Sprintf(
 		`SELECT a.file_path, c.id, c.name
 		 FROM %s a JOIN %s c ON a.supplier_id = c.id
 		 WHERE a.is_active = %s`,
-		h.cfg.CompanyAttachmentsTable(), h.cfg.CompanyTable(), h.dia().BoolLiteral(true))
+		h.cfg().CompanyAttachmentsTable(), h.cfg().CompanyTable(), h.dia().BoolLiteral(true))
 	if err := scan(compQuery, supplierRoot, "/supplier/"); err != nil {
 		return check, err
 	}
@@ -157,9 +157,9 @@ func (h *Handler) checkOrphanPointers(ctx context.Context) (utilCheck, error) {
 		Desc:  "Parts whose supplier / price / primary-attachment pointer references a row that no longer exists.",
 	}
 	specs := []struct{ column, target, targetTable string }{
-		{"default_supplier_id", "company", h.cfg.CompanyTable()},
-		{"price_id", "price", h.cfg.PriceTable()},
-		{"primary_attachment_id", "part_attachment", h.cfg.AttachmentsTable()},
+		{"default_supplier_id", "company", h.cfg().CompanyTable()},
+		{"price_id", "price", h.cfg().PriceTable()},
+		{"primary_attachment_id", "part_attachment", h.cfg().AttachmentsTable()},
 	}
 	for _, s := range specs {
 		q := fmt.Sprintf(
@@ -167,7 +167,7 @@ func (h *Handler) checkOrphanPointers(ctx context.Context) (utilCheck, error) {
 			 FROM %[2]s p
 			 WHERE p.%[1]s > 0
 			   AND NOT EXISTS (SELECT 1 FROM %[3]s t WHERE t.id = p.%[1]s)`,
-			s.column, h.cfg.PartsTable(), s.targetTable)
+			s.column, h.cfg().PartsTable(), s.targetTable)
 		rows, err := h.queryContext(ctx, q)
 		if err != nil {
 			return check, err
@@ -233,7 +233,7 @@ func (h *Handler) checkSoftDeletedAttachmentPointers(ctx context.Context) (utilC
 		`SELECT p.id, p.part_number
 		 FROM %[1]s p JOIN %[2]s f ON f.id = p.primary_attachment_id
 		 WHERE p.primary_attachment_id > 0 AND f.is_active = %[3]s`,
-		h.cfg.PartsTable(), h.cfg.AttachmentsTable(), h.dia().BoolLiteral(false))
+		h.cfg().PartsTable(), h.cfg().AttachmentsTable(), h.dia().BoolLiteral(false))
 	if err := scan(partQuery, "/part/"); err != nil {
 		return check, err
 	}
@@ -242,7 +242,7 @@ func (h *Handler) checkSoftDeletedAttachmentPointers(ctx context.Context) (utilC
 		`SELECT c.id, c.name
 		 FROM %[1]s c JOIN %[2]s a ON a.supplier_attachment_id = c.primary_attachment_id
 		 WHERE c.primary_attachment_id > 0 AND a.is_active = %[3]s`,
-		h.cfg.CompanyTable(), h.cfg.CompanyAttachmentsTable(), h.dia().BoolLiteral(false))
+		h.cfg().CompanyTable(), h.cfg().CompanyAttachmentsTable(), h.dia().BoolLiteral(false))
 	if err := scan(compQuery, "/supplier/"); err != nil {
 		return check, err
 	}
@@ -260,7 +260,7 @@ func (h *Handler) checkPOActiveDrift(ctx context.Context) (utilCheck, error) {
 		Desc:  "POs whose is_active flag disagrees with their status. status is authoritative; is_active should be kept in sync by the app.",
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, number, status, is_active FROM %s`, h.cfg.POTable()))
+		`SELECT id, number, status, is_active FROM %s`, h.cfg().POTable()))
 	if err != nil {
 		return check, err
 	}

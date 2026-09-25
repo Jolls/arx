@@ -39,17 +39,26 @@ type dbConn struct {
 	dialect arxdb.Dialect
 }
 
-type Handler struct {
-	conn           atomic.Pointer[dbConn] // holds the live *dbConn; nil => not connected
+// runtimeState is the immutable snapshot of everything SettingsSave and the
+// startup loaders change at runtime (#196). Readers Load() it once and never see
+// a half-applied save; writers go through Handler.update. Never mutate a
+// snapshot obtained from st()/cfg() in production code.
+type runtimeState struct {
 	cfg            *arxbase.Config
+	conn           *dbConn // nil => not connected
+	schemaMismatch string
+	dbConnError    string
+	companyLogo    string
+	partCategories []models.Category
+}
+
+type Handler struct {
+	state          atomic.Pointer[runtimeState]
+	stateMu        sync.Mutex // serializes update()'s copy-and-swap
 	store          *sessions.CookieStore
 	tmplFS         ioFS.FS
 	tmpls          map[string]*template.Template // parsed once by loadTemplates
-	schemaMismatch string
-	dbConnError    string
 	releaseNotes   string
-	companyLogo    string
-	partCategories []models.Category
 
 	// connectDB opens a new DB connection; defaults to arxdb.Connect in New().
 	// Overridable in tests so SettingsSave's failure path needs no real dial.
@@ -67,9 +76,35 @@ type Handler struct {
 	digikeyToken digikeyTokenCache
 }
 
+// st returns the current runtime snapshot. A zero-value Handler (tests) yields
+// an empty, config-less snapshot rather than nil.
+func (h *Handler) st() *runtimeState {
+	if s := h.state.Load(); s != nil {
+		return s
+	}
+	return &runtimeState{}
+}
+
+// cfg returns the current config snapshot; treat it as read-only (use update).
+func (h *Handler) cfg() *arxbase.Config { return h.st().cfg }
+
+// update applies fn to a private copy of the state (and of the config, so fn may
+// assign cfg fields) and atomically publishes it.
+func (h *Handler) update(fn func(s *runtimeState)) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+	next := *h.st()
+	if next.cfg != nil {
+		c := *next.cfg
+		next.cfg = &c
+	}
+	fn(&next)
+	h.state.Store(&next)
+}
+
 // database returns the live *sql.DB, or nil when not connected.
 func (h *Handler) database() *sql.DB {
-	if c := h.conn.Load(); c != nil {
+	if c := h.st().conn; c != nil {
 		return c.db
 	}
 	return nil
@@ -79,14 +114,14 @@ func (h *Handler) database() *sql.DB {
 // connection exists but doesn't actually work (h.dbConnError, #852) — the
 // shared condition every auth-bypass-to-/settings check gates on.
 func (h *Handler) dbUnusable() bool {
-	return h.database() == nil || h.dbConnError != ""
+	return h.database() == nil || h.st().dbConnError != ""
 }
 
 // dia returns the live dialect, or a default SQL Server dialect when not
 // connected (mirrors New()'s nil-dialect fallback so template/query building
 // never nil-panics).
 func (h *Handler) dia() arxdb.Dialect {
-	if c := h.conn.Load(); c != nil && c.dialect != nil {
+	if c := h.st().conn; c != nil && c.dialect != nil {
 		return c.dialect
 	}
 	return arxdb.NewSQLServerDialect()
@@ -107,18 +142,18 @@ func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS,
 		dialect = arxdb.NewSQLServerDialect()
 	}
 	h := &Handler{
-		cfg: cfg, store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
+		store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
 		routeStats:    make(map[int]*routeAccumulator),
 		userCache:     make(map[int]*userCacheEntry),
 		loginAttempts: make(map[string]*loginAttempt),
 		connectDB:     arxdb.Connect,
 	}
-	h.conn.Store(&dbConn{db: db, dialect: dialect})
+	h.state.Store(&runtimeState{cfg: cfg, conn: &dbConn{db: db, dialect: dialect}})
 	return h
 }
 
 func (h *Handler) logSQL(query string, args ...any) {
-	if !h.cfg.DebugMode {
+	if !h.cfg().DebugMode {
 		return
 	}
 	log.Printf("[SQL] %s | args=%v", strings.Join(strings.Fields(query), " "), args)
@@ -180,21 +215,21 @@ func (h *Handler) topLimit(ph string) (top, limit string) {
 }
 
 func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	c := h.conn.Load()
+	c := h.st().conn
 	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return c.db.QueryContext(ctx, query, args...) })
 }
 
 func (h *Handler) queryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	c := h.conn.Load()
+	c := h.st().conn
 	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQuery(ctx, query, func() *sql.Row { return c.db.QueryRowContext(ctx, query, args...) })
 }
 
 func (h *Handler) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	c := h.conn.Load()
+	c := h.st().conn
 	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQueryErr(ctx, query, func() (sql.Result, error) { return c.db.ExecContext(ctx, query, args...) })
@@ -228,7 +263,7 @@ func (t *txLogger) Commit() error   { t.logFn("COMMIT"); return t.Tx.Commit() }
 func (t *txLogger) Rollback() error { t.logFn("ROLLBACK"); return t.Tx.Rollback() }
 
 func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
-	c := h.conn.Load()
+	c := h.st().conn
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -240,32 +275,37 @@ func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
 // message if it doesn't match ExpectedSchemaVersion. Safe to call when db is nil.
 func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 	if h.database() == nil {
-		h.schemaMismatch = ""
-		h.dbConnError = ""
+		h.update(func(s *runtimeState) { s.schemaMismatch, s.dbConnError = "", "" })
 		return
 	}
-	h.schemaMismatch, h.dbConnError = arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg.AppConfigTable())
+	mismatch, connErr := arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg().AppConfigTable())
+	h.update(func(s *runtimeState) { s.schemaMismatch, s.dbConnError = mismatch, connErr })
 }
 
 // loadCompanyLogo caches the company logo data URI from app_config on the Handler
 // so the hot render path stays DB-free. Safe to call when db is nil.
 func (h *Handler) loadCompanyLogo(ctx context.Context) {
-	h.companyLogo = h.appConfigGetOr(ctx, "company_logo", "")
+	logo := h.appConfigGetOr(ctx, "company_logo", "")
+	h.update(func(s *runtimeState) { s.companyLogo = logo })
 }
 
 // loadDigiKeyCredentials loads the shop's DigiKey API client ID/secret from
 // app_config onto cfg (issue #60 — shared across every user, unlike a DB
 // password). Safe to call when db is nil.
 func (h *Handler) loadDigiKeyCredentials(ctx context.Context) {
-	h.cfg.DigiKeyClientID = h.appConfigGetOr(ctx, "digikey_client_id", "")
-	h.cfg.DigiKeyClientSecret = h.appConfigGetOr(ctx, digikeyClientSecretKey, "")
+	id := h.appConfigGetOr(ctx, "digikey_client_id", "")
+	secret := h.appConfigGetOr(ctx, digikeyClientSecretKey, "")
+	h.update(func(s *runtimeState) {
+		s.cfg.DigiKeyClientID = id
+		s.cfg.DigiKeyClientSecret = secret
+	})
 }
 
 // companyLogoURL returns the cached company logo as a template.URL. html/template's
 // URL-context filter defangs any src/href value whose scheme isn't http(s)/mailto,
 // which would otherwise strip our data: URI; template.URL marks it as pre-vetted.
 func (h *Handler) companyLogoURL() template.URL {
-	return template.URL(h.companyLogo)
+	return template.URL(h.st().companyLogo)
 }
 
 // accentTheme is one preset accent color option offered in Settings (#537).
@@ -363,7 +403,7 @@ func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) 
 	}
 	var val string
 	err := h.queryRowContext(ctx,
-		`SELECT setting_value FROM `+h.cfg.AppConfigTable()+` WHERE setting_key = @p1`, key,
+		`SELECT setting_value FROM `+h.cfg().AppConfigTable()+` WHERE setting_key = @p1`, key,
 	).Scan(&val)
 	return val, err
 }
@@ -379,7 +419,7 @@ func (h *Handler) appConfigGetOr(ctx context.Context, key, def string) string {
 
 // appConfigSet upserts a key/value pair in app_config.
 func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
-	_, err := h.execContext(ctx, h.dia().UpsertAppConfig(h.cfg.AppConfigTable()), key, value)
+	_, err := h.execContext(ctx, h.dia().UpsertAppConfig(h.cfg().AppConfigTable()), key, value)
 	return err
 }
 
@@ -403,7 +443,7 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/settings", http.StatusSeeOther)
 			return
 		}
-		if h.schemaMismatch != "" {
+		if h.st().schemaMismatch != "" {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
@@ -557,7 +597,7 @@ func (h *Handler) logRouteSummary(r *http.Request, count int, total time.Duratio
 // DebugMode is on, plus a running per-route summary. See sqlStats/recordRoundTrip.
 func (h *Handler) profileRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.cfg.DebugMode || isFileServingPath(r.URL.Path) {
+		if !h.cfg().DebugMode || isFileServingPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -597,9 +637,10 @@ var pmTabFavicons = map[string]string{
 // render executes "layout" from the pre-parsed layout + partials + page template.
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	if m, ok := data.(map[string]any); ok {
-		m["AppVersion"] = h.cfg.Version
-		m["SchemaMismatch"] = h.schemaMismatch
-		m["DBConnError"] = h.dbConnError
+		s := h.st()
+		m["AppVersion"] = s.cfg.Version
+		m["SchemaMismatch"] = s.schemaMismatch
+		m["DBConnError"] = s.dbConnError
 		m["CurrentUser"] = h.currentUser(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
@@ -626,7 +667,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	h.render(w, r, "shared/not_found.html", map[string]any{
-		"ActiveTab": "", "TestMode": h.cfg.TestMode,
+		"ActiveTab": "", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -644,7 +685,7 @@ func sameOriginRefererPath(r *http.Request) string {
 func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, msg string) {
 	h.render(w, r, "shared/error.html", map[string]any{
 		"Error":    msg,
-		"TestMode": h.cfg.TestMode,
+		"TestMode": h.cfg().TestMode,
 		"BackURL":  sameOriginRefererPath(r),
 	})
 }
@@ -687,7 +728,7 @@ func (h *Handler) verifyCsrf(r *http.Request) bool {
 func (h *Handler) RequireLocalHost(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Host {
-		case "localhost:" + h.cfg.Port, "127.0.0.1:" + h.cfg.Port, "[::1]:" + h.cfg.Port:
+		case "localhost:" + h.cfg().Port, "127.0.0.1:" + h.cfg().Port, "[::1]:" + h.cfg().Port:
 			next.ServeHTTP(w, r)
 		default:
 			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
@@ -971,7 +1012,7 @@ type UnitOption struct {
 func (h *Handler) fetchUnits(ctx context.Context) ([]UnitOption, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT uom_id, abbreviation, display_name, unit_type FROM %s ORDER BY unit_type, abbreviation`,
-		h.cfg.UomTable(),
+		h.cfg().UomTable(),
 	))
 	if err != nil {
 		return nil, err

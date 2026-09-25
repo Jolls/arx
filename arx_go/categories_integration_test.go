@@ -47,7 +47,7 @@ func readPersistedCategories(t *testing.T, h *Handler) []models.Category {
 	t.Helper()
 	var raw string
 	err := h.DB().QueryRowContext(context.Background(),
-		`SELECT setting_value FROM `+h.cfg.AppConfigTable()+` WHERE setting_key=@p1`, partCategoriesKey,
+		`SELECT setting_value FROM `+h.cfg().AppConfigTable()+` WHERE setting_key=@p1`, partCategoriesKey,
 	).Scan(&raw)
 	if err != nil {
 		t.Fatalf("SELECT part_categories from app_config: %v", err)
@@ -102,8 +102,8 @@ func TestIntegration_SettingsCategoriesSave_PersistsRows(t *testing.T) {
 		t.Errorf("SettingsCategoriesSave: redirect Location = %q, want \"/settings\"", loc)
 	}
 
-	if !reflect.DeepEqual(h.partCategories, want) {
-		t.Errorf("h.partCategories after save = %+v, want %+v", h.partCategories, want)
+	if got := h.st().partCategories; !reflect.DeepEqual(got, want) {
+		t.Errorf("h.partCategories after save = %+v, want %+v", got, want)
 	}
 
 	if got := readPersistedCategories(t, h); !reflect.DeepEqual(got, want) {
@@ -112,10 +112,10 @@ func TestIntegration_SettingsCategoriesSave_PersistsRows(t *testing.T) {
 
 	// Simulate a cold cache (fresh process) to prove the DB write itself, not
 	// just the in-request h.loadPartCategories refresh, is what's asserted.
-	h.partCategories = nil
+	h.update(func(s *runtimeState) { s.partCategories = nil })
 	h.loadPartCategories(context.Background())
-	if !reflect.DeepEqual(h.partCategories, want) {
-		t.Errorf("loadPartCategories after fresh call = %+v, want %+v", h.partCategories, want)
+	if got := h.st().partCategories; !reflect.DeepEqual(got, want) {
+		t.Errorf("loadPartCategories after fresh call = %+v, want %+v", got, want)
 	}
 }
 

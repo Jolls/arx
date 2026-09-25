@@ -15,7 +15,7 @@ import (
 
 func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "contacts/contacts.html", map[string]any{
-		"ActiveTab": "contacts", "TestMode": h.cfg.TestMode,
+		"ActiveTab": "contacts", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -36,7 +36,7 @@ func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
 		Notes    string `json:"notes"`
 		Active   bool   `json:"active"`
 	}
-	cn, su := h.cfg.ContactTable(), h.cfg.CompanyTable()
+	cn, su := h.cfg().ContactTable(), h.cfg().CompanyTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT cn.id, cn.company_id, cn.display_name, cn.email, cn.phone_1,
 		       cn.city, cn.state, cn.country, cn.website,
@@ -103,7 +103,7 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "contacts/contact_detail.html", map[string]any{
 		"Contact": c, "ActiveTab": "contacts",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 		"Siblings": siblings,
 		"POs":      h.contactPOs(r.Context(), c.ID),
 	})
@@ -132,7 +132,7 @@ func (h *Handler) contactPOs(ctx context.Context, contactID int) []contactPO {
 		FROM %s
 		WHERE supplier_contact_id = @p1 OR receiver_contact_id = @p1
 		ORDER BY date_ordered DESC, ID DESC
-	`, h.cfg.POTable()), contactID)
+	`, h.cfg().POTable()), contactID)
 	if err != nil {
 		return nil
 	}
@@ -171,7 +171,7 @@ func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContac
 		SELECT id, display_name FROM %s
 		WHERE company_id = @p1 AND id <> @p2 AND is_active = %s
 		ORDER BY display_name
-	`, h.cfg.ContactTable(), h.dia().BoolLiteral(true)), supplierID, excludeContactID)
+	`, h.cfg().ContactTable(), h.dia().BoolLiteral(true)), supplierID, excludeContactID)
 	if err != nil {
 		return nil
 	}
@@ -193,7 +193,7 @@ func (h *Handler) ContactsNew(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "contacts/contact_edit.html", map[string]any{
 		"Contact": models.Contact{}, "IsNew": true,
 		"ActiveTab": "contacts",
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -203,12 +203,12 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": true,
 			"Error": "Contact name is required", "ActiveTab": "contacts",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
 	var newID int
-	insertContact := h.dia().InsertReturningID(h.cfg.ContactTable(),
+	insertContact := h.dia().InsertReturningID(h.cfg().ContactTable(),
 		`display_name, company_id, email, phone_1, phone_2, fax,
 		 address, city, state, zipcode, country,
 		 website, is_active, notes, updated_at`,
@@ -226,7 +226,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": true,
 			"Error": "Error creating contact: " + err.Error(), "ActiveTab": "contacts",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -246,7 +246,7 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 		"Contact": c, "IsNew": false,
 		"ActiveTab":  "contacts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
-		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -257,7 +257,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": false,
 			"Error": "Contact name is required", "ActiveTab": "contacts",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -267,7 +267,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 		  address=@p7, city=@p8, state=@p9, zipcode=@p10, country=@p11,
 		  website=@p12, is_active=@p13, notes=@p14, updated_at=@p15
 		WHERE id=@p16
-	`, h.cfg.ContactTable()),
+	`, h.cfg().ContactTable()),
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
 		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
@@ -279,7 +279,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": false,
 			"Error": "Error saving contact: " + err.Error(), "ActiveTab": "contacts",
-			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg.TestMode,
+			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
 	}
@@ -289,7 +289,7 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string) (models.Contact, bool) {
-	cn, su := h.cfg.ContactTable(), h.cfg.CompanyTable()
+	cn, su := h.cfg().ContactTable(), h.cfg().CompanyTable()
 	var c models.Contact
 	var cnsuid sql.NullInt64
 	var name, email, phone1, phone2, fax, address, city, state, zip, country sql.NullString

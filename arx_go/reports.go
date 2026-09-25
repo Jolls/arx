@@ -149,7 +149,7 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) dashboardOpenPOCount(ctx context.Context) (int, error) {
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE status = 'open'`, h.cfg.POTable()),
+		`SELECT COUNT(*) FROM %s WHERE status = 'open'`, h.cfg().POTable()),
 	).Scan(&n)
 	return n, err
 }
@@ -160,7 +160,7 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT COUNT(DISTINCT po_id) FROM %s WHERE date_received >= %s`,
-		h.cfg.POLineTable(), h.dia().MonthStartExpr()),
+		h.cfg().POLineTable(), h.dia().MonthStartExpr()),
 	).Scan(&n)
 	return n, err
 }
@@ -183,8 +183,8 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 		GROUP BY f.id, pn.part_number, res.form_row_id
 		HAVING SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) > 0
 		ORDER BY failure_count DESC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.dia().TopClause("1"), h.cfg.ResultsTable(), h.dia().LimitClause("1"),
-		h.dia().BoolLiteral(false), h.cfg.ResultsTable(), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit)
+		h.dia().TopClause("@p1"), h.dia().TopClause("1"), h.cfg().ResultsTable(), h.dia().LimitClause("1"),
+		h.dia().BoolLiteral(false), h.cfg().ResultsTable(), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]d
 		LEFT JOIN %s res ON res.form_record_id = trec.id
 		WHERE trec.is_active = %s
 		GROUP BY trec.id, trec.form_id, pn.part_number`,
-		h.dia().BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.cfg.ResultsTable(), h.dia().BoolLiteral(true)))
+		h.dia().BoolLiteral(false), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.cfg().ResultsTable(), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]da
 		WHERE trec.is_active = %s AND trec.is_locked = %s
 			AND trec.created_at <= DATEADD(day, -@p2, GETDATE())
 		ORDER BY trec.created_at ASC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg.RecordsTable(), h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit, staleWIPThresholdDays)
+		h.dia().TopClause("@p1"), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit, staleWIPThresholdDays)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +298,7 @@ func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([
 		FROM %s po
 		WHERE po.approval_status = 'pending'
 		ORDER BY submitted_at ASC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
+		h.dia().TopClause("@p1"), h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +328,7 @@ func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]
 		FROM %s
 		WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
 		ORDER BY (stock_on_hand - reorder_min) ASC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg.PartsTable()), limit)
+		h.dia().TopClause("@p1"), h.cfg().PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	partRows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT %sid, part_number, description, modified_date
 		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg.PartsTable()), limit)
+		h.dia().TopClause("@p1"), h.cfg().PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	poRows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT %sh.po_id, po.number, h.event_type, h.to_status, h.action, h.changed_at
 		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg.POHistoryTable(), h.cfg.POTable()), limit)
+		h.dia().TopClause("@p1"), h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +517,7 @@ func (h *Handler) querySpendBySupplier(ctx context.Context, rng reportDateRange)
 		WHERE 1=1%s
 		GROUP BY po.supplier_name
 		ORDER BY total_spend DESC
-	`, h.cfg.POLineTable(), h.cfg.POTable(), where), args...)
+	`, h.cfg().POLineTable(), h.cfg().POTable(), where), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +551,7 @@ func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]
 		GROUP BY COALESCE(CAST(pol.part_id AS VARCHAR(20)), CONCAT('snap:', pol.part_number_snapshot)),
 			p.part_number, p.description, pol.part_number_snapshot
 		ORDER BY total_spend DESC
-	`, h.cfg.POLineTable(), h.cfg.POTable(), h.cfg.PartsTable(), where), args...)
+	`, h.cfg().POLineTable(), h.cfg().POTable(), h.cfg().PartsTable(), where), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +624,7 @@ func (h *Handler) queryOnTimeDelivery(ctx context.Context, rng reportDateRange) 
 		  AND pol.date_received IS NOT NULL
 		  AND po.date_ordered IS NOT NULL%s
 		GROUP BY po.supplier_name
-	`, h.cfg.POLineTable(), h.cfg.POTable(), where), args...)
+	`, h.cfg().POLineTable(), h.cfg().POTable(), where), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -745,7 +745,7 @@ func (h *Handler) queryPOCycleTime(ctx context.Context, rng reportDateRange) ([]
 			WHEN 'partially_received' THEN 4
 			WHEN 'closed' THEN 5
 		END
-	`, h.cfg.POHistoryTable(), where), args...)
+	`, h.cfg().POHistoryTable(), where), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -814,7 +814,7 @@ func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]da
 		FROM %s p
 		WHERE p.is_active = %s AND %s
 		ORDER BY p.part_number ASC
-	`, h.cfg.PartsTable(), h.dia().BoolLiteral(true), where))
+	`, h.cfg().PartsTable(), h.dia().BoolLiteral(true), where))
 	if err != nil {
 		return nil, err
 	}
@@ -943,7 +943,7 @@ func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, erro
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
 		ORDER BY pn.part_number ASC`,
-		h.cfg.FormsTable(), h.cfg.PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
+		h.cfg().FormsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}

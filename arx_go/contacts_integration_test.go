@@ -26,7 +26,7 @@ func seedContact(t *testing.T, h *Handler, ctx context.Context, companyID int) (
 	}))
 	id := locID(t, rec, "/contact/")
 	return id, func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.ContactTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().ContactTable()), id)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestIntegration_ContactUpdate(t *testing.T) {
 	var companyID int
 	var active bool
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT display_name, email, company_id, is_active FROM %s WHERE id=@p1`, h.cfg.ContactTable()), contactID,
+		`SELECT display_name, email, company_id, is_active FROM %s WHERE id=@p1`, h.cfg().ContactTable()), contactID,
 	).Scan(&name, &email, &companyID, &active); err != nil {
 		t.Fatalf("select updated contact: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestIntegration_ContactUpdate_MissingName(t *testing.T) {
 
 	var before string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT display_name FROM %s WHERE id=@p1`, h.cfg.ContactTable()), contactID,
+		`SELECT display_name FROM %s WHERE id=@p1`, h.cfg().ContactTable()), contactID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed contact: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestIntegration_ContactUpdate_MissingName(t *testing.T) {
 
 	var after string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT display_name FROM %s WHERE id=@p1`, h.cfg.ContactTable()), contactID,
+		`SELECT display_name FROM %s WHERE id=@p1`, h.cfg().ContactTable()), contactID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select contact after rejected update: %v", err)
 	}

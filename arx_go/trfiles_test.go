@@ -23,7 +23,8 @@ func TestServeImage_DirectoryNotListed(t *testing.T) {
 
 func serveImage(t *testing.T, root, urlPath string) int {
 	t.Helper()
-	h := &Handler{cfg: &arxbase.Config{ImageRoot: root}}
+	h := &Handler{}
+	h.state.Store(&runtimeState{cfg: &arxbase.Config{ImageRoot: root}})
 	rec := httptest.NewRecorder()
 	h.ServeImage(rec, httptest.NewRequest(http.MethodGet, urlPath, nil))
 	return rec.Code

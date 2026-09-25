@@ -53,7 +53,7 @@ func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 	var accentColor, defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, username, display_name, can_approve_po, can_approve_records, is_admin, default_po_contact_id, default_po_receiver_id, accent_color, default_route, timezone FROM %s WHERE id = @p1 AND is_active = %s`,
-		h.cfg.UsersTable(), h.dia().BoolLiteral(true)), id,
+		h.cfg().UsersTable(), h.dia().BoolLiteral(true)), id,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &u.IsAdmin, &defContact, &defReceiver, &accentColor, &defaultRoute, &u.Timezone)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -109,7 +109,7 @@ func (h *Handler) userByUsername(ctx context.Context, username string) (*User, s
 	var defaultRoute sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, username, display_name, password_hash, default_route FROM %s WHERE username = @p1 AND is_active = %s`,
-		h.cfg.UsersTable(), h.dia().BoolLiteral(true)), username,
+		h.cfg().UsersTable(), h.dia().BoolLiteral(true)), username,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &hash, &defaultRoute)
 	if err == sql.ErrNoRows {
 		return nil, "", nil
@@ -121,7 +121,7 @@ func (h *Handler) userByUsername(ctx context.Context, username string) (*User, s
 func (h *Handler) userCount(ctx context.Context) (int, error) {
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE is_active = %s`, h.cfg.UsersTable(), h.dia().BoolLiteral(true)),
+		`SELECT COUNT(*) FROM %s WHERE is_active = %s`, h.cfg().UsersTable(), h.dia().BoolLiteral(true)),
 	).Scan(&n)
 	return n, err
 }
@@ -241,7 +241,7 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
-	if _, u := h.withUser(w, r); u != nil && h.schemaMismatch == "" {
+	if _, u := h.withUser(w, r); u != nil && h.st().schemaMismatch == "" {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -255,8 +255,8 @@ func (h *Handler) LoginGet(w http.ResponseWriter, r *http.Request) {
 		"Bootstrap":       n == 0,
 		"Error":           r.URL.Query().Get("error"),
 		"Notice":          r.URL.Query().Get("notice"),
-		"TestMode":        h.cfg.TestMode,
-		"AppVersion":      h.cfg.Version,
+		"TestMode":        h.cfg().TestMode,
+		"AppVersion":      h.cfg().Version,
 		"DefaultUsername": os.Getenv("USERNAME"),
 	})
 }
@@ -367,14 +367,14 @@ func (h *Handler) createUser(ctx context.Context, username, displayName, passwor
 	}
 	_, err = h.execContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (username, display_name, password_hash, is_admin) VALUES (@p1, @p2, @p3, @p4)`,
-		h.cfg.UsersTable()), username, displayName, string(hash), admin)
+		h.cfg().UsersTable()), username, displayName, string(hash), admin)
 	return err
 }
 
 func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT id, username, display_name, is_active, can_approve_po, can_approve_records, is_admin FROM %s ORDER BY username`,
-		h.cfg.UsersTable()))
+		h.cfg().UsersTable()))
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +450,7 @@ func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Requ
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET password_hash=@p1, updated_at=GETDATE() WHERE id=@p2`,
-		h.cfg.UsersTable()), string(hash), id); err != nil {
+		h.cfg().UsersTable()), string(hash), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+reset+password", http.StatusSeeOther)
 		return
 	}
@@ -470,7 +470,7 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_active = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("is_active")), id); err != nil {
+		h.cfg().UsersTable(), h.dia().ToggleBoolExpr("is_active")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -487,7 +487,7 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET can_approve_po = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("can_approve_po")), id); err != nil {
+		h.cfg().UsersTable(), h.dia().ToggleBoolExpr("can_approve_po")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -504,7 +504,7 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET can_approve_records = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("can_approve_records")), id); err != nil {
+		h.cfg().UsersTable(), h.dia().ToggleBoolExpr("can_approve_records")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -527,7 +527,7 @@ func (h *Handler) SettingsUsersToggleAdmin(w http.ResponseWriter, r *http.Reques
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
 		`UPDATE %s SET is_admin = %s, updated_at = GETDATE() WHERE id = @p1`,
-		h.cfg.UsersTable(), h.dia().ToggleBoolExpr("is_admin")), id); err != nil {
+		h.cfg().UsersTable(), h.dia().ToggleBoolExpr("is_admin")), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -540,7 +540,7 @@ func (h *Handler) SettingsUsersToggleAdmin(w http.ResponseWriter, r *http.Reques
 func (h *Handler) renderLogin(w http.ResponseWriter, r *http.Request, data map[string]any) {
 	data["CSRFToken"] = h.csrfToken(w, r)
 	data["CompanyLogo"] = h.companyLogoURL()
-	data["SchemaMismatch"] = h.schemaMismatch
+	data["SchemaMismatch"] = h.st().schemaMismatch
 	tmpl := h.tmpl(w, "login")
 	if tmpl == nil {
 		return

@@ -145,7 +145,7 @@ func TestIntegration_SupplierUpdate(t *testing.T) {
 	var defaultContact *int
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
 		`SELECT name, SUSupplierCode, is_active, is_supplier, is_manufacturer, default_contact FROM %s WHERE id=@p1`,
-		h.cfg.CompanyTable()), supplierID,
+		h.cfg().CompanyTable()), supplierID,
 	).Scan(&name, &code, &active, &isSupplier, &isManufacturer, &defaultContact); err != nil {
 		t.Fatalf("select updated supplier: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 
 	var before string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT name FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID,
+		`SELECT name FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 
 	var after string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT name FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID,
+		`SELECT name FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 
 	var before string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID,
+		`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 
 	var after string
 	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg.CompanyTable()), supplierID,
+		`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
 	}

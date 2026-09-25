@@ -78,7 +78,7 @@ func seedPart(t *testing.T, h *Handler, ctx context.Context, category string) (i
 	}))
 	id := locID(t, rec, "/part/")
 	return id, func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.PartsTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().PartsTable()), id)
 	}
 }
 
@@ -95,7 +95,7 @@ func seedSupplier(t *testing.T, h *Handler, ctx context.Context) (int, func()) {
 	}))
 	id := locID(t, rec, "/supplier/")
 	return id, func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.CompanyTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().CompanyTable()), id)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 	cases := []smokePost{
 		{
 			name:  "PartsCreate",
-			table: h.cfg.PartsTable,
+			table: h.cfg().PartsTable,
 			invoke: func(t *testing.T) (*httptest.ResponseRecorder, func()) {
 				rec := httptest.NewRecorder()
 				h.PartsCreate(rec, postForm("/parts", url.Values{
@@ -126,13 +126,13 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 				}))
 				id := locID(t, rec, "/part/")
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.PartsTable()), id)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().PartsTable()), id)
 				}
 			},
 		},
 		{
 			name:  "SuppliersCreate",
-			table: h.cfg.CompanyTable,
+			table: h.cfg().CompanyTable,
 			invoke: func(t *testing.T) (*httptest.ResponseRecorder, func()) {
 				rec := httptest.NewRecorder()
 				h.SuppliersCreate(rec, postForm("/suppliers", url.Values{
@@ -140,13 +140,13 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 				}))
 				id := locID(t, rec, "/supplier/")
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.CompanyTable()), id)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().CompanyTable()), id)
 				}
 			},
 		},
 		{
 			name:  "ContactsCreate",
-			table: h.cfg.ContactTable,
+			table: h.cfg().ContactTable,
 			invoke: func(t *testing.T) (*httptest.ResponseRecorder, func()) {
 				rec := httptest.NewRecorder()
 				h.ContactsCreate(rec, postForm("/contacts", url.Values{
@@ -154,13 +154,13 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 				}))
 				id := locID(t, rec, "/contact/")
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg.ContactTable()), id)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().ContactTable()), id)
 				}
 			},
 		},
 		{
 			name:  "SupplierPartCreate",
-			table: h.cfg.SupplierPartTable,
+			table: h.cfg().SupplierPartTable,
 			invoke: func(t *testing.T) (*httptest.ResponseRecorder, func()) {
 				partID, pc := seedPart(t, h, ctx, "BUY")
 				supID, sc := seedSupplier(t, h, ctx)
@@ -174,7 +174,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 						"lead_time":     {"5"},
 					}), partID))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg.SupplierPartTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg().SupplierPartTable()), partID)
 					pc()
 					sc()
 				}
@@ -182,7 +182,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 		},
 		{
 			name:  "PriceCreate",
-			table: h.cfg.PriceTable,
+			table: h.cfg().PriceTable,
 			invoke: func(t *testing.T) (*httptest.ResponseRecorder, func()) {
 				partID, pc := seedPart(t, h, ctx, "BUY")
 				supID, sc := seedSupplier(t, h, ctx)
@@ -196,7 +196,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 						"effective_date": {time.Now().Format("2006-01-02")},
 					}), partID))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg.PriceTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg().PriceTable()), partID)
 					pc()
 					sc()
 				}
@@ -204,7 +204,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 		},
 		{
 			name:  "MfgPartCreate",
-			table: h.cfg.MfgPartTable,
+			table: h.cfg().MfgPartTable,
 			invoke: func(t *testing.T) (*httptest.ResponseRecorder, func()) {
 				partID, pc := seedPart(t, h, ctx, "BUY")
 				mfgID, mc := seedSupplier(t, h, ctx)
@@ -216,7 +216,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 						"description":     {"smoke"},
 					}), partID))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg.MfgPartTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg().MfgPartTable()), partID)
 					pc()
 					mc()
 				}
@@ -224,7 +224,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 		},
 		{
 			name:  "CreateForm",
-			table: h.cfg.FormsTable,
+			table: h.cfg().FormsTable,
 			invoke: func(t *testing.T) (*httptest.ResponseRecorder, func()) {
 				partID, pc := seedPart(t, h, ctx, "FORM")
 				rec := httptest.NewRecorder()
@@ -232,7 +232,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 					"pnid": {strconv.Itoa(partID)},
 				}))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_number_id=@p1", h.cfg.FormsTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_number_id=@p1", h.cfg().FormsTable()), partID)
 					pc()
 				}
 			},

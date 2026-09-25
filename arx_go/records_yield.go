@@ -101,7 +101,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE f.id = @p1`,
-		h.cfg.FormsTable(), h.cfg.PartsTable()), formID).
+		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
 		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
@@ -124,7 +124,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN %s res ON res.form_record_id = trec.id
 		WHERE form_id = @p1 AND is_active = %s%s
 		GROUP BY trec.id, record_date`,
-		h.dia().BoolLiteral(false), h.cfg.RecordsTable(), h.cfg.ResultsTable(), h.dia().BoolLiteral(true), dateClause), args...)
+		h.dia().BoolLiteral(false), h.cfg().RecordsTable(), h.cfg().ResultsTable(), h.dia().BoolLiteral(true), dateClause), args...)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
@@ -152,6 +152,6 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		"FromStr":   filters.FromStr,
 		"ToStr":     filters.ToStr,
 		"ActiveTab": "records",
-		"TestMode":  h.cfg.TestMode,
+		"TestMode":  h.cfg().TestMode,
 	})
 }

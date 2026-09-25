@@ -98,7 +98,7 @@ func TestRequireAuth_RedirectsWhenNoDB(t *testing.T) {
 
 func TestRequireAuth_RedirectsOnSchemaMismatch(t *testing.T) {
 	h := testHandlerWithDB()
-	h.schemaMismatch = "expected v5, found v4"
+	h.update(func(s *runtimeState) { s.schemaMismatch = "expected v5, found v4" })
 
 	var reached bool
 	req := httptest.NewRequest(http.MethodGet, "/part/1", nil)
@@ -118,7 +118,7 @@ func TestRequireAuth_RedirectsOnSchemaMismatch(t *testing.T) {
 
 func TestRequireAuth_RedirectsToSettingsOnConnError(t *testing.T) {
 	h := testHandlerWithDB()
-	h.dbConnError = "could not read schema_version (connection refused)"
+	h.update(func(s *runtimeState) { s.dbConnError = "could not read schema_version (connection refused)" })
 
 	var reached bool
 	req := httptest.NewRequest(http.MethodGet, "/part/1", nil)
@@ -138,7 +138,7 @@ func TestRequireAuth_RedirectsToSettingsOnConnError(t *testing.T) {
 
 func TestRequireAuthOnceConnected_AllowsOnConnError(t *testing.T) {
 	h := testHandlerWithDB()
-	h.dbConnError = "could not read schema_version (connection refused)"
+	h.update(func(s *runtimeState) { s.dbConnError = "could not read schema_version (connection refused)" })
 
 	var reached bool
 	req := httptest.NewRequest(http.MethodPost, "/settings", nil)
@@ -152,7 +152,7 @@ func TestRequireAuthOnceConnected_AllowsOnConnError(t *testing.T) {
 
 func TestRequireAuthOnceConnected_StillRedirectsOnSchemaMismatchAlone(t *testing.T) {
 	h := testHandlerWithDB()
-	h.schemaMismatch = "DB schema v4, app expects v5" // working connection, just old schema
+	h.update(func(s *runtimeState) { s.schemaMismatch = "DB schema v4, app expects v5" }) // working connection, just old schema
 
 	var reached bool
 	req := httptest.NewRequest(http.MethodPost, "/settings", nil)

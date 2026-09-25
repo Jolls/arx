@@ -122,7 +122,7 @@ func planRFQLines(root int, n float64, edges map[int][]bomEdge, parts map[int]rf
 }
 
 func (h *Handler) isPurchasedCategory(code string) bool {
-	for _, c := range h.partCategories {
+	for _, c := range h.st().partCategories {
 		if c.Code == code {
 			return c.Purchased
 		}
@@ -133,7 +133,7 @@ func (h *Handler) isPurchasedCategory(code string) bool {
 // loadRFQGraph loads the BOM edges below root and the part data of every
 // component. Purchased parts are leaves: their own BOMs are never loaded.
 func (h *Handler) loadRFQGraph(ctx context.Context, root int) (map[int][]bomEdge, map[int]rfqPart, error) {
-	pl, pn := h.cfg.BOMTable(), h.cfg.PartsTable()
+	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
 	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pn.id")
 	edges := map[int][]bomEdge{}
 	parts := map[int]rfqPart{}
@@ -203,7 +203,7 @@ func (h *Handler) buildRFQPlan(ctx context.Context, root int, n float64) (rfqPla
 		if g == nil {
 			g = &rfqSupplierGroup{SupplierID: sid}
 			bySupplier[sid] = g
-			h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = @p1`, h.cfg.CompanyTable()), sid).Scan(&g.SupplierName)
+			h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = @p1`, h.cfg().CompanyTable()), sid).Scan(&g.SupplierName)
 		}
 		g.Lines = append(g.Lines, l)
 	}
@@ -225,7 +225,7 @@ func (h *Handler) PartCreateRFQs(w http.ResponseWriter, r *http.Request) {
 	}
 	data := map[string]any{
 		"Part": p, "ActiveTab": "parts", "ActiveSubTab": "bom",
-		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg.TestMode,
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	}
 	if nStr := fv(r, "n"); nStr != "" {
@@ -319,7 +319,7 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 	committed = true
 
 	h.render(w, r, "parts/part_create_rfqs.html", map[string]any{
-		"Part": p, "ActiveTab": "parts", "ActiveSubTab": "bom", "TestMode": h.cfg.TestMode,
+		"Part": p, "ActiveTab": "parts", "ActiveSubTab": "bom", "TestMode": h.cfg().TestMode,
 		"Created": made, "Unsupplied": plan.Unsupplied,
 	})
 }
@@ -337,7 +337,7 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	number := base + "R1"
 
 	var defaultContact sql.NullInt64
-	h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id = @p1`, h.cfg.CompanyTable()), g.SupplierID).Scan(&defaultContact)
+	h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id = @p1`, h.cfg().CompanyTable()), g.SupplierID).Scan(&defaultContact)
 	var sc ContactSummary
 	if defaultContact.Valid {
 		for _, c := range h.contactsForSupplier(r, g.SupplierID) {
@@ -350,7 +350,7 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 
 	now := time.Now()
 	var poID int
-	insertPO := h.dia().InsertReturningID(h.cfg.POTable(),
+	insertPO := h.dia().InsertReturningID(h.cfg().POTable(),
 		`number, status, is_active, orderer, account_id,
 		 supplier_id, supplier_name, supplier_contact, supplier_email,
 		 supplier_address, supplier_city, supplier_state, supplier_zipcode,
@@ -387,20 +387,20 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	).Scan(&poID); err != nil {
 		return "", err
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET rfq_group_id=@p1 WHERE ID=@p2`, h.cfg.POTable()), poID, poID); err != nil {
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET rfq_group_id=@p1 WHERE ID=@p2`, h.cfg().POTable()), poID, poID); err != nil {
 		return "", err
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
 		VALUES (@p1, 'status', NULL, 'rfq', @p2, @p3)
-	`, h.cfg.POHistoryTable()), poID, h.actorName(r), now); err != nil {
+	`, h.cfg().POHistoryTable()), poID, h.actorName(r), now); err != nil {
 		return "", err
 	}
 	for i, l := range lines {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
 			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
-		`, h.cfg.POLineTable()), poID, i+1, l.Part.PartNumber, l.Part.Revision, l.Part.Description, l.Qty, 0.0, "", l.Part.ID); err != nil {
+		`, h.cfg().POLineTable()), poID, i+1, l.Part.PartNumber, l.Part.Revision, l.Part.Description, l.Qty, 0.0, "", l.Part.ID); err != nil {
 			return "", err
 		}
 	}
