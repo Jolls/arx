@@ -46,6 +46,9 @@ func onReady() {
 	}
 
 	h = New(database, dbDialect, cfg, templatesFS, releaseNotesData)
+	if err := h.loadTemplates(); err != nil {
+		log.Fatalf("arx: template parse error: %v", err)
+	}
 	h.CheckSchemaVersion(context.Background())
 	h.loadCompanyLogo(context.Background())
 	h.loadPartCategories(context.Background())

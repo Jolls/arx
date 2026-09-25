@@ -18,7 +18,11 @@ import (
 func filesTestHandler() *Handler {
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
-	return New(nil, nil, cfg, templatesFS, nil)
+	h := New(nil, nil, cfg, templatesFS, nil)
+	if err := h.loadTemplates(); err != nil {
+		panic(err)
+	}
+	return h
 }
 
 func writeTempFile(t *testing.T, dir, name, content string) string {

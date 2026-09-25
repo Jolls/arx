@@ -57,6 +57,9 @@ func isolatedIntegrationSettingsHandler(t *testing.T) *Handler {
 		t.Fatalf("initial db.Connect: %v", err)
 	}
 	h := New(database, dialect, cfg, templatesFS, nil)
+	if err := h.loadTemplates(); err != nil {
+		panic(err)
+	}
 	return h
 }
 

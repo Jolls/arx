@@ -78,6 +78,10 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 		h := New(database, dialect, cfg, templatesFS, nil)
+		if err := h.loadTemplates(); err != nil {
+			fmt.Fprintln(os.Stderr, "integration tests:", err)
+			os.Exit(1)
+		}
 		if err := checkArxDevSentinel(context.Background(), h); err != nil {
 			fmt.Fprintln(os.Stderr, "integration tests:", err)
 			database.Close()
@@ -107,6 +111,10 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 	}
 
 	h := New(database, dialect, cfg, templatesFS, nil)
+	if err := h.loadTemplates(); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
 
 	if err := checkArxDevSentinel(context.Background(), h); err != nil {
 		database.Close()

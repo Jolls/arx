@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -542,9 +541,8 @@ func (h *Handler) renderLogin(w http.ResponseWriter, r *http.Request, data map[s
 	data["CSRFToken"] = h.csrfToken(w, r)
 	data["CompanyLogo"] = h.companyLogoURL()
 	data["SchemaMismatch"] = h.schemaMismatch
-	tmpl, err := template.New("").ParseFS(h.tmplFS, "templates/shared/login.html")
-	if err != nil {
-		serverError(w, "template error", err)
+	tmpl := h.tmpl(w, "login")
+	if tmpl == nil {
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, "login.html", data); err != nil {

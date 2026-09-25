@@ -4,15 +4,40 @@ import (
 	"html/template"
 	"io/fs"
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 
 	"arx/arx_go/models"
 )
 
-// coreTabDirs are the tab-based template subfolders rendered via render()/renderPrint()
-// (i.e. everything except templates/shared and templates/records).
-var coreTabDirs = []string{"parts", "suppliers", "pos", "contacts", "settings", "reports"}
+// TestParseTemplates checks parseTemplates succeeds and yields a template for
+// every key the render functions look up.
+func TestParseTemplates(t *testing.T) {
+	m, err := parseTemplates(templatesFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"login", "recordsprint:record_print.html", "records:yield.html", "layout:shared/error.html", "layout:shared/not_found.html", "layout:shared/local_dir.html"}
+	for _, p := range corePrintPages {
+		want = append(want, "print:"+p)
+	}
+	for _, dir := range coreTabDirs {
+		pages, _ := fs.Glob(templatesFS, "templates/"+dir+"/*.html")
+		for _, page := range pages {
+			rel := strings.TrimPrefix(page, "templates/")
+			if slices.Contains(corePrintPages, rel) {
+				continue
+			}
+			want = append(want, "layout:"+rel)
+		}
+	}
+	for _, k := range want {
+		if m[k] == nil {
+			t.Errorf("missing template key %q", k)
+		}
+	}
+}
 
 // TestCoreTemplatesParse parses every core page template together with the layout
 // and partials, catching missing/renamed template definitions (e.g. shared

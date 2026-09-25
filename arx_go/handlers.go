@@ -44,6 +44,7 @@ type Handler struct {
 	cfg            *arxbase.Config
 	store          *sessions.CookieStore
 	tmplFS         ioFS.FS
+	tmpls          map[string]*template.Template // parsed once by loadTemplates
 	schemaMismatch string
 	dbConnError    string
 	releaseNotes   string
@@ -570,14 +571,11 @@ func (h *Handler) profileRequest(next http.Handler) http.Handler {
 	})
 }
 
-// renderPrint parses a single standalone template (no layout wrapper) and executes it.
+// renderPrint executes a pre-parsed standalone template (no layout wrapper).
 // Used for print views that ship their own full HTML document.
 func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
-	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/"+page,
-	)
-	if err != nil {
-		serverError(w, "template parse error", err)
+	tmpl := h.tmpl(w, "print:"+page)
+	if tmpl == nil {
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, path.Base(page), data); err != nil {
@@ -596,7 +594,7 @@ var pmTabFavicons = map[string]string{
 	"reports":   "/static/shared/icons/reports.svg",
 }
 
-// render parses layout + partials + the named page template and executes "layout".
+// render executes "layout" from the pre-parsed layout + partials + page template.
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	if m, ok := data.(map[string]any); ok {
 		m["AppVersion"] = h.cfg.Version
@@ -616,13 +614,8 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 			}
 		}
 	}
-	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/shared/layout.html",
-		"templates/shared/partials.html",
-		"templates/"+page,
-	)
-	if err != nil {
-		serverError(w, "template parse error", err)
+	tmpl := h.tmpl(w, "layout:"+page)
+	if tmpl == nil {
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, "layout", data); err != nil {

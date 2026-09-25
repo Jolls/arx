@@ -28,12 +28,8 @@ func (h *Handler) renderRecords(w http.ResponseWriter, r *http.Request, page str
 		m["FaviconType"] = "image/svg+xml"
 		m["ExtraScript"] = "/static/records/app.js"
 	}
-	tmpl, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/shared/layout.html",
-		"templates/records/"+page,
-	)
-	if err != nil {
-		serverError(w, "template parse error", err)
+	tmpl := h.tmpl(w, "records:"+page)
+	if tmpl == nil {
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, "layout", data); err != nil {
@@ -43,11 +39,8 @@ func (h *Handler) renderRecords(w http.ResponseWriter, r *http.Request, page str
 
 // renderPrintRecords renders a standalone Test Records print template (no layout wrapper).
 func (h *Handler) renderPrintRecords(w http.ResponseWriter, page string, data any) {
-	tmpl, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(h.tmplFS,
-		"templates/records/"+page,
-	)
-	if err != nil {
-		serverError(w, "template parse error", err)
+	tmpl := h.tmpl(w, "recordsprint:"+page)
+	if tmpl == nil {
 		return
 	}
 	if err := tmpl.ExecuteTemplate(w, page, data); err != nil {
