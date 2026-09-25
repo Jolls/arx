@@ -2,11 +2,10 @@
 
 ## Build and test
 
-The repo root is a Go workspace (`go.work`) spanning two modules, not a module itself — `go build ./...` from the root fails. Run inside each module:
+The repo is a single Go module rooted at the repo root. From the root:
 
 ```
-cd arx_go && go vet ./... && go build ./... && go test ./...
-cd ../arxlib && go vet ./... && go build ./... && go test ./...
+go vet ./... && go build ./... && go test ./...
 ```
 
 On Linux you also need `libayatana-appindicator3-dev` (systray's cgo dependency). Windows-only source files need a `!windows`-tagged counterpart so the Linux CI job compiles.

@@ -1,4 +1,4 @@
-// Package urlutil provides URL and file-path helpers shared across Arx apps.
+// Package urlutil provides URL and file-path helpers for Arx.
 // All functions are pure (no side effects) and safe to call from templates.
 package urlutil
 

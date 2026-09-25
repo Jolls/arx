@@ -20,8 +20,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
-	"arx/arxlib/folderpick"
-	"arx/arxlib/urlutil"
+	"arx/internal/folderpick"
+	"arx/internal/urlutil"
 )
 
 func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {

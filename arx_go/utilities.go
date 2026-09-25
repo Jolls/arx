@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"arx/arxlib/urlutil"
+	"arx/internal/urlutil"
 )
 
 // utilCheck is one diagnostic on the Settings → Utilities page: a titled group of

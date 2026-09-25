@@ -27,9 +27,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	arxbase "arx/arxlib/config"
-	arxdb "arx/arxlib/db"
-	"arx/arxlib/urlutil"
+	arxbase "arx/internal/config"
+	arxdb "arx/internal/db"
+	"arx/internal/urlutil"
 )
 
 // arxDevSentinelPartID/Number/Description identify a fixed-ID row that only exists in

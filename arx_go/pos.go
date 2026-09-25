@@ -20,7 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
-	"arx/arxlib/urlutil"
+	"arx/internal/urlutil"
 )
 
 // ── ContactSummary is used for supplier/receiver contact dropdowns ──────────

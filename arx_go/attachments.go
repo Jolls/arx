@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"arx/arx_go/models"
-	arxdb "arx/arxlib/db"
-	"arx/arxlib/urlutil"
+	arxdb "arx/internal/db"
+	"arx/internal/urlutil"
 )
 
 // illegalFileNameChars are characters not permitted in a Windows filename.

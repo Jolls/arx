@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	arxdb "arx/arxlib/db"
+	arxdb "arx/internal/db"
 )
 
 // recordFilters holds the parsed, validated filter selections from the

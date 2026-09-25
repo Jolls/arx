@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	arxbase "arx/arxlib/config"
-	arxdb "arx/arxlib/db"
+	arxbase "arx/internal/config"
+	arxdb "arx/internal/db"
 )
 
 // arxDevProfile parses ARX_TEST_DSN (e.g.

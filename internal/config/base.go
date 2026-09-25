@@ -1,4 +1,4 @@
-// Package config provides configuration types and helpers shared across Arx apps.
+// Package config provides configuration types and helpers for Arx.
 package config
 
 import (
@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-// SessionCookieName is the single gorilla/sessions cookie name shared by all
-// Arx apps so the merged single-origin app carries one session + CSRF token.
+// SessionCookieName is the single gorilla/sessions cookie name, so the
+// single-origin app carries one session + CSRF token.
 const SessionCookieName = "arx-session"
 
-// Base holds configuration fields common to all Arx apps.
+// Base holds configuration fields common to all Arx configuration.
 //
 // The Test* connection fields form a second connection profile used while test
 // mode is active. Each Test* field overrides its prod counterpart only when

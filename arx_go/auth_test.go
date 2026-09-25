@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	arxbase "arx/arxlib/config"
+	arxbase "arx/internal/config"
 )
 
 // failingDriver's Open always fails with an error shaped like a real driver

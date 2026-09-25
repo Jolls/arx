@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	arxbase "arx/arxlib/config"
-	arxdb "arx/arxlib/db"
+	arxbase "arx/internal/config"
+	arxdb "arx/internal/db"
 )
 
 // isolatedSettingsHandler returns a Handler whose config/local.json and

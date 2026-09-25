@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	arxdb "arx/arxlib/db"
+	arxdb "arx/internal/db"
 )
 
 func TestParseRecordFilters_DefaultsToWIP(t *testing.T) {

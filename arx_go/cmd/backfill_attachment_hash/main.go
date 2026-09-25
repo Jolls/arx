@@ -28,9 +28,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	arxbase "arx/arxlib/config"
-	arxdb "arx/arxlib/db"
-	"arx/arxlib/urlutil"
+	arxbase "arx/internal/config"
+	arxdb "arx/internal/db"
+	"arx/internal/urlutil"
 )
 
 func hashLinkString(link string) string {
