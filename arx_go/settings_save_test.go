@@ -23,7 +23,11 @@ func isolatedSettingsHandler(t *testing.T, cfg *arxbase.Config) *Handler {
 	t.Setenv("AppData", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg.SessionSecret = "test-secret"
-	return New(nil, nil, cfg, templatesFS, nil)
+	h := New(nil, nil, cfg, templatesFS, nil)
+	if err := h.loadTemplates(); err != nil {
+		panic(err)
+	}
+	return h
 }
 
 // postSettings builds a POST /settings/save request with a URL-encoded body.

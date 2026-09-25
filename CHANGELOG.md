@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.71] - 2026-09-24
+### Changed
+- Templates are now parsed once at startup instead of on every request; a broken template fails at startup ([#197](https://github.com/Jolls/arx/issues/197))
+
 ## [0.7.70] - 2026-09-24
 ### Changed
 - Merged `arxlib` and `go.work` into a single Go module at the repo root; `arxlib/*` moved to `internal/*`, CI/build/dependabot simplified ([#195](https://github.com/Jolls/arx/issues/195))
