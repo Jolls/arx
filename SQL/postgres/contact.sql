@@ -18,7 +18,7 @@ CREATE TABLE contact (
   email               VARCHAR(127),
   is_active           BOOLEAN        DEFAULT TRUE,
   company_id          INTEGER,                       -- FK to company.id.
-  updated_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TIMESTAMPTZ    DEFAULT now(),
   notes               VARCHAR(4000)
 );
 

@@ -21,6 +21,7 @@ func (h *Handler) renderRecords(w http.ResponseWriter, r *http.Request, page str
 		m["SchemaMismatch"] = s.schemaMismatch
 		m["DBConnError"] = s.dbConnError
 		m["CurrentUser"] = h.currentUser(r)
+		m["UserLoc"] = h.userLocation(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
 		m["AccentThemeClass"] = h.accentThemeClass(r)
@@ -52,7 +53,8 @@ func (h *Handler) renderPrintRecords(w http.ResponseWriter, page string, data an
 // recordsTemplateFuncs returns the template function map for Test Records views.
 func recordsTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"formatDate": recordsFormatDate,
+		"localTimePtr": localTimePtr,
+		"formatDate":   recordsFormatDate,
 		"formatDateInput": func(t *time.Time) string {
 			if t == nil {
 				return ""

@@ -20,7 +20,7 @@ import (
 	"arx/internal/urlutil"
 )
 
-// validateFolderStub ensures SUSupplierCode is safe to use as a single filesystem
+// validateFolderStub ensures supplier_code is safe to use as a single filesystem
 // path component (see renderSupplierFolder / createPOFolder) — it must not contain
 // path separators, "." / "..", or other characters that break folder names on
 // Windows, macOS, or Linux.
@@ -57,7 +57,7 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 	}
 	su, cn := h.cfg().CompanyTable(), h.cfg().ContactTable()
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT su.id, su.name, su.SUSupplierCode, su.SUNumOfLNKs, su.SUNumOfPOs,
+		SELECT su.id, su.name, su.supplier_code, su.supplier_part_count, su.po_count,
 		       su.is_active, CN.display_name, CN.country
 		FROM %s su
 		LEFT JOIN %s CN ON su.default_contact = CN.id
@@ -234,7 +234,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := validateFolderStub(fv(r, "SUSupplierCode")); err != nil {
+	if err := validateFolderStub(fv(r, "supplier_code")); err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": err.Error(),
 			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
@@ -244,16 +244,16 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	var newID int
 	insertSupplier := h.dia().InsertReturningID(h.cfg().CompanyTable(),
-		`name, SUSupplierCode, default_contact, is_active, is_supplier, is_manufacturer, SUNotes, date_modified`,
-		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8`,
+		`name, supplier_code, default_contact, is_active, is_supplier, is_manufacturer, notes`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7`,
 		false)
 	err := h.queryRowContext(r.Context(), insertSupplier,
-		name, fv(r, "SUSupplierCode"),
+		name, fv(r, "supplier_code"),
 		nullableInt(fv(r, "default_contact")),
 		r.FormValue("is_active") == "1",
 		r.FormValue("is_supplier") == "1",
 		r.FormValue("is_manufacturer") == "1",
-		fv(r, "SUNotes"), time.Now(),
+		fv(r, "notes"),
 	).Scan(&newID)
 	if err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
@@ -302,7 +302,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := validateFolderStub(fv(r, "SUSupplierCode")); err != nil {
+	if err := validateFolderStub(fv(r, "supplier_code")); err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     err.Error(),
@@ -312,18 +312,18 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET name=@p1, SUSupplierCode=@p2, default_contact=@p3,
+		UPDATE %s SET name=@p1, supplier_code=@p2, default_contact=@p3,
 		              is_active=@p4, is_supplier=@p5, is_manufacturer=@p6,
-		              SUNotes=@p7, date_modified=@p8,
-		              bulk_order_delimiter=@p9, bulk_order_pn_source=@p10
-		WHERE id=@p11
+		              notes=@p7, date_modified=GETDATE(),
+		              bulk_order_delimiter=@p8, bulk_order_pn_source=@p9
+		WHERE id=@p10
 	`, h.cfg().CompanyTable()),
-		name, fv(r, "SUSupplierCode"),
+		name, fv(r, "supplier_code"),
 		nullableInt(fv(r, "default_contact")),
 		r.FormValue("is_active") == "1",
 		r.FormValue("is_supplier") == "1",
 		r.FormValue("is_manufacturer") == "1",
-		fv(r, "SUNotes"), time.Now(),
+		fv(r, "notes"),
 		bulkOrderDelimiterOrDefault(fv(r, "bulk_order_delimiter")),
 		bulkOrderPNSourceOrDefault(fv(r, "bulk_order_pn_source")),
 		id,
@@ -776,9 +776,9 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 	var cnName, cnPhone, cnEmail, cnCity sql.NullString
 	var bulkOrderDelimiter, bulkOrderPNSource sql.NullString
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT su.id, su.name, su.SUSupplierCode, su.SUNotes,
+		SELECT su.id, su.name, su.supplier_code, su.notes,
 		       su.default_contact, su.is_active, su.is_supplier, su.is_manufacturer,
-		       su.SUNumOfLNKs, su.SUNumOfPOs, su.date_modified,
+		       su.supplier_part_count, su.po_count, su.date_modified,
 		       su.primary_attachment_id,
 		       su.bulk_order_delimiter, su.bulk_order_pn_source,
 		       cn.display_name, cn.phone_1, cn.email, cn.city
@@ -802,8 +802,8 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 		return s, false
 	}
 	s.Name = name.String
-	s.SUSupplierCode = code.String
-	s.SUNotes = notes.String
+	s.SupplierCode = code.String
+	s.Notes = notes.String
 	s.DisplayName = cnName.String
 	s.Phone1 = cnPhone.String
 	s.Email = cnEmail.String
@@ -811,8 +811,8 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 	s.IsActive = isActive.Bool
 	s.IsSupplier = isSupplier.Bool
 	s.IsManufacturer = isManufacturer.Bool
-	s.SUNumOfLNKs = int(numLNKs.Int64)
-	s.SUNumOfPOs = int(numPOs.Int64)
+	s.SupplierPartCount = int(numLNKs.Int64)
+	s.POCount = int(numPOs.Int64)
 	if defaultContact.Valid {
 		v := int(defaultContact.Int64)
 		s.DefaultContact = &v
@@ -855,12 +855,12 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	if s.SUSupplierCode == "" {
+	if s.SupplierCode == "" {
 		http.Error(w, "Supplier has no supplier code — cannot determine folder name", http.StatusBadRequest)
 		return
 	}
 
-	base := filepath.Join(root, s.SUSupplierCode)
+	base := filepath.Join(root, s.SupplierCode)
 	path, ok := safePath(base, strings.Join(subParts, "/"))
 	if !ok {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -881,7 +881,7 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	dirName := s.SUSupplierCode
+	dirName := s.SupplierCode
 	if len(subParts) > 0 {
 		dirName = subParts[len(subParts)-1]
 	}
@@ -937,11 +937,11 @@ func (h *Handler) supplierFolderUpload(w http.ResponseWriter, r *http.Request, s
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	if s.SUSupplierCode == "" {
+	if s.SupplierCode == "" {
 		http.Error(w, "Supplier has no supplier code — cannot determine folder name", http.StatusBadRequest)
 		return
 	}
-	base := filepath.Join(root, s.SUSupplierCode)
+	base := filepath.Join(root, s.SupplierCode)
 	dir, ok := resolveUploadDir(base, strings.Join(subParts, "/"))
 	if !ok {
 		http.NotFound(w, r)
@@ -1002,20 +1002,20 @@ func (h *Handler) serveSupplierFile(w http.ResponseWriter, r *http.Request, s mo
 		http.Error(w, "SUPPLIER_FILES_ROOT is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	if s.SUSupplierCode == "" {
+	if s.SupplierCode == "" {
 		http.Error(w, "Supplier has no supplier code", http.StatusBadRequest)
 		return
 	}
 
-	base := filepath.Join(root, s.SUSupplierCode)
+	base := filepath.Join(root, s.SupplierCode)
 	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/supplier/%s/file/", id))
 	h.serveLocalizedFile(w, r, fileServingParams{Root: base, Splat: splat})
 }
 
 func supplierFromForm(r *http.Request) models.Supplier {
 	s := models.Supplier{
-		Name: fv(r, "name"), SUSupplierCode: fv(r, "SUSupplierCode"),
-		SUNotes:            fv(r, "SUNotes"),
+		Name: fv(r, "name"), SupplierCode: fv(r, "supplier_code"),
+		Notes:              fv(r, "notes"),
 		IsActive:           r.FormValue("is_active") == "1",
 		IsSupplier:         r.FormValue("is_supplier") == "1",
 		IsManufacturer:     r.FormValue("is_manufacturer") == "1",

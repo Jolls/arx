@@ -20,13 +20,13 @@ erDiagram
     company {
         int     id                    PK
         varchar name                  "UNIQUE"
-        varchar SUNotes
+        varchar notes
         bit     is_active
         bit     is_supplier
         bit     is_manufacturer
-        int     SUNumOfLNKs           "denormalized, trigger-maintained"
-        int     SUNumOfPOs            "denormalized, trigger-maintained"
-        varchar SUSupplierCode
+        int     supplier_part_count   "denormalized, trigger-maintained"
+        int     po_count              "denormalized, trigger-maintained"
+        varchar supplier_code
         int     default_contact       FK
         int     primary_attachment_id FK
     }
@@ -56,7 +56,7 @@ erDiagram
     part {
         int     id                    PK
         varchar part_number           "UNIQUE"
-        varchar category              "ASM/BUY/DWG/DOC/FORM/MFG/OPS/RAW/SVC/TOOL"
+        varchar category              "FK part_category.code"
         varchar revision
         varchar description
         varchar release_status        "U/A/D"
@@ -68,7 +68,6 @@ erDiagram
         int     po_line_count         "denormalized, trigger-maintained"
         decimal stock_on_hand         "cached SUM(inventory_transaction.qty)"
         decimal reorder_min
-        bit     is_lot_tracked
         varchar tracking_mode         "none/lot/serial/lot_serial"
         decimal last_rollup_cost
         bit     is_active
@@ -343,6 +342,19 @@ erDiagram
 
     %% ===== App config, users & audit =====
 
+    part_category {
+        varchar code                  PK
+        varchar label
+        bit     is_purchased
+        bit     is_bom_visible        "plus orders/pricing/mfg_parts/suppliers/inventory tab flags"
+        int     sort_order
+    }
+
+    attachment_category {
+        varchar display_name          PK
+        int     sort_order
+    }
+
     app_config {
         varchar  setting_key   PK
         varchar  setting_value
@@ -375,22 +387,6 @@ erDiagram
         varchar timezone
     }
 
-    logs {
-        int      id          PK
-        varchar  username
-        datetime date_logged
-        varchar  sql_string
-    }
-
-    release_notes {
-        int     id           PK
-        varchar version
-        varchar notes
-        date    date_changed
-        bit     show_users
-        varchar username
-    }
-
     %% ===== Relationships: companies & contacts =====
     company             ||--o{ company_attachment : "attachments (supplier_id)"
     company_attachment  ||--o{ company             : "primary attachment for (primary_attachment_id)"
@@ -414,6 +410,7 @@ erDiagram
     part             ||--o{ price            : "pricing (part_id)"
     part             ||--o{ po_line          : "PO lines (part_id)"
     uom               ||--o{ part            : "base unit (uom_id)"
+    part_category     ||--o{ part            : "category (code)"
     uom               ||--o{ supplier_part   : "purchase unit (uom_id)"
     mfg_part          ||--o{ supplier_part   : "manufacturer PN (mfg_part_id)"
 
@@ -473,10 +470,9 @@ erDiagram
 - **`genealogy`** endpoints are polymorphic: `CK_gen_one_parent`/`CK_gen_one_child` each
   enforce exactly one of the lot/unit FK pair being set per edge, so a single edge is
   lot→lot, lot→unit, unit→lot, or unit→unit.
-- **`company.SUWeb` / `SUContact1`** are dead columns (see `docs/FUTURE_GOALS.md`).
-- **`app_config`**, **`named_queries`**, **`users`**, **`logs`**, and **`release_notes`**
+- **`app_config`**, **`named_queries`**, and **`users`**
   have no foreign key relationships to other tables.
-- Denormalized/trigger-maintained columns (`company.SUNumOfLNKs`/`SUNumOfPOs`,
+- Denormalized/trigger-maintained columns (`company.supplier_part_count`/`po_count`,
   `part.attachment_count`/`po_line_count`) are recalculated by triggers in
   `SQL/azure/triggers.sql` — never updated directly in application code.
 - Per-table column semantics, trigger side-effects, and full DDL live in `SQL/SCHEMA.md`
@@ -496,7 +492,7 @@ erDiagram
     part {
         int     id                    PK
         varchar part_number           "UNIQUE"
-        varchar category              "ASM/BUY/DWG/DOC/FORM/MFG/OPS/RAW/SVC/TOOL"
+        varchar category              "FK part_category.code"
         varchar release_status        "U/A/D"
         int     uom_id                FK
         int     price_id              FK "deferred, not enforced"
@@ -533,11 +529,16 @@ erDiagram
         varchar supplier_part
     }
 
+    part_category {
+        varchar code PK
+    }
+
     part                ||--o{ part_attachment    : "attached files (part_id)"
     part_attachment     ||--o{ part               : "primary attachment for (primary_attachment_id)"
     part                ||--o{ bom                : "as parent assembly (parent_part_id)"
     part                ||--o{ bom                : "as component (component_part_id)"
     uom                 ||--o{ part               : "base unit (uom_id)"
+    part_category       ||--o{ part               : "category (code)"
     part                ||--o{ company_schematic  : "pricing (price.part_id)"
     part                ||--o{ company_schematic  : "sourcing links (supplier_part.part_id, uom_id)"
     part                ||--o{ company_schematic  : "manufacturer PNs (mfg_part.part_id)"
@@ -685,7 +686,7 @@ rows, individual tested units get a `unit` row, and `genealogy` records which lo
 consumed into which. `po_line` and `form_record` are PK-only stubs — `po_line` is fully
 defined in "Purchasing" above, `form_record` in "Test forms & execution" below. `part` is
 scoped to just its lot-tracking columns here (full definition in "Parts & sourcing" above) —
-`is_lot_tracked`/`tracking_mode` are why a part enters this flow at all, so they're kept
+`tracking_mode` is why a part enters this flow at all, so it's kept
 rather than trimmed to a bare stub.
 
 ```mermaid
@@ -694,7 +695,6 @@ erDiagram
     part {
         int     id             PK
         varchar part_number
-        bit     is_lot_tracked
         varchar tracking_mode  "none/lot/serial/lot_serial"
         decimal stock_on_hand  "cached SUM(inventory_transaction.qty)"
     }

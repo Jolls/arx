@@ -47,6 +47,7 @@ func (h *Handler) loadNamedQueriesFull(ctx context.Context) ([]NamedQueryRow, er
 	}
 	defer rows.Close()
 
+	loc := h.userLocationCtx(ctx)
 	var out []NamedQueryRow
 	for rows.Next() {
 		var q NamedQueryRow
@@ -55,7 +56,7 @@ func (h *Handler) loadNamedQueriesFull(ctx context.Context) ([]NamedQueryRow, er
 			continue
 		}
 		if updated.Valid {
-			q.Updated = updated.Time.Format(nqDateFormat)
+			q.Updated = updated.Time.In(loc).Format(nqDateFormat)
 		}
 		out = append(out, q)
 	}
@@ -103,13 +104,12 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	tbl := h.cfg().NamedQueriesTable()
 	id, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("id")))
-	now := time.Now()
 
 	if id > 0 {
 		res, err := h.execContext(ctx, fmt.Sprintf(
 			`UPDATE %s SET name=@p1, description=@p2, sql=@p3, params=@p4,
-			 result_type=@p5, is_active=@p6, updated_at=@p7 WHERE id=@p8`, tbl),
-			name, description, sqlText, params, resultType, active, now, id)
+			 result_type=@p5, is_active=@p6, updated_at=GETDATE() WHERE id=@p7`, tbl),
+			name, description, sqlText, params, resultType, active, id)
 		if err != nil {
 			writeErr(http.StatusBadRequest, namedQuerySaveError(name, err))
 			return
@@ -120,17 +120,17 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 		}
 	} else {
 		insertQuery := h.dia().InsertReturningID(tbl,
-			"name, description, sql, params, result_type, is_active, created_at, updated_at",
-			"@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
+			"name, description, sql, params, result_type, is_active",
+			"@p1,@p2,@p3,@p4,@p5,@p6",
 			false)
 		err := h.queryRowContext(ctx, insertQuery,
-			name, description, sqlText, params, resultType, active, now, now).Scan(&id)
+			name, description, sqlText, params, resultType, active).Scan(&id)
 		if err != nil {
 			writeErr(http.StatusBadRequest, namedQuerySaveError(name, err))
 			return
 		}
 	}
-	json.NewEncoder(w).Encode(map[string]any{"id": id, "updated": now.Format(nqDateFormat)})
+	json.NewEncoder(w).Encode(map[string]any{"id": id, "updated": time.Now().In(h.userLocation(r)).Format(nqDateFormat)})
 }
 
 // namedQuerySaveError turns a unique-constraint violation into a readable message

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"arx/arx_go/models"
 )
@@ -258,5 +259,44 @@ func TestSharedStandaloneTemplatesParse(t *testing.T) {
 		); err != nil {
 			t.Errorf("parse %s: %v", page, err)
 		}
+	}
+}
+
+// allLotsCreatedCell renders parts/all_lots.html with one lot created at
+// 2026-01-02 03:00 UTC, viewed in loc (#192).
+func allLotsCreatedCell(t *testing.T, loc *time.Location) string {
+	t.Helper()
+	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS,
+		"templates/shared/layout.html",
+		"templates/shared/partials.html",
+		"templates/parts/all_lots.html",
+	)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	data := coreLayoutFakeData(map[string]any{
+		"Lots":      []LotRow{{ID: 1, PartID: 1, LotNumber: "L-192", CreatedAt: time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC), IsActive: true}},
+		"UserLoc":   loc,
+		"ActiveTab": "parts",
+	})
+	return renderToString(t, tmpl, "layout", data)
+}
+
+func TestAllLotsTemplateRenders_UTCLocation(t *testing.T) {
+	if out := allLotsCreatedCell(t, time.UTC); !strings.Contains(out, "<td>2026-01-02</td>") {
+		t.Errorf("all_lots.html in UTC: missing <td>2026-01-02</td>")
+	}
+}
+
+// TestAllLotsTemplateRenders_UserZone: audit timestamps display in the viewing
+// user's zone (#192) — 03:00 UTC on Jan 2 is still Jan 1 in Los Angeles.
+func TestAllLotsTemplateRenders_UserZone(t *testing.T) {
+	la, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Skipf("no tzdata: %v", err)
+	}
+	out := allLotsCreatedCell(t, la)
+	if !strings.Contains(out, "<td>2026-01-01</td>") || strings.Contains(out, "2026-01-02") {
+		t.Errorf("all_lots.html in America/Los_Angeles: want created date 2026-01-01, not 2026-01-02")
 	}
 }

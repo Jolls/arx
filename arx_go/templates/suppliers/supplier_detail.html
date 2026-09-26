@@ -16,7 +16,7 @@
                 <div class="card-header">Supplier</div>
                 <div class="card-body">
                     <div class="detail-row"><strong>Name:</strong><span>{{.Supplier.Name}}</span></div>
-                    <div class="detail-row"><strong data-bs-toggle="tooltip" title="Short code used to name this supplier's attachment and PO folders">Folder Stub:</strong><span>{{.Supplier.SUSupplierCode}}</span></div>
+                    <div class="detail-row"><strong data-bs-toggle="tooltip" title="Short code used to name this supplier's attachment and PO folders">Folder Stub:</strong><span>{{.Supplier.SupplierCode}}</span></div>
                     <div class="detail-row"><strong>Status:</strong>
                         <span>{{if .Supplier.IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span></div>
                     <div class="detail-row"><strong>Roles:</strong>
@@ -25,7 +25,7 @@
                             {{if .Supplier.IsManufacturer}}<span class="badge bg-success">Manufacturer</span>{{end}}
                             {{if and (not .Supplier.IsSupplier) (not .Supplier.IsManufacturer)}}—{{end}}
                         </span></div>
-                    <div class="detail-row"><strong>Last Modified:</strong><span>{{formatDate .Supplier.DateModified}}</span></div>
+                    <div class="detail-row"><strong>Last Modified:</strong><span>{{formatDate (localTimePtr $.UserLoc .Supplier.DateModified)}}</span></div>
                 </div>
             </div>
         </div>
@@ -72,8 +72,8 @@
             <div class="card h-100">
                 <div class="card-header">Statistics</div>
                 <div class="card-body">
-                    <div class="detail-row"><strong>Linked Parts:</strong><span>{{.Supplier.SUNumOfLNKs}}</span></div>
-                    <div class="detail-row"><strong>Purchase Orders:</strong><span>{{.Supplier.SUNumOfPOs}}</span></div>
+                    <div class="detail-row"><strong>Linked Parts:</strong><span>{{.Supplier.SupplierPartCount}}</span></div>
+                    <div class="detail-row"><strong>Purchase Orders:</strong><span>{{.Supplier.POCount}}</span></div>
                 </div>
             </div>
         </div>
@@ -149,11 +149,11 @@
         </div>
 
         {{/* Notes — full width */}}
-        {{if .Supplier.SUNotes}}
+        {{if .Supplier.Notes}}
         <div class="col-12">
             <div class="card">
                 <div class="card-header">Notes</div>
-                <div class="card-body"><p class="mb-0" style="white-space:pre-wrap; word-break:break-word;">{{.Supplier.SUNotes}}</p></div>
+                <div class="card-body"><p class="mb-0" style="white-space:pre-wrap; word-break:break-word;">{{.Supplier.Notes}}</p></div>
             </div>
         </div>
         {{end}}

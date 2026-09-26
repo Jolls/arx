@@ -32,3 +32,41 @@ jobs:
 
       - name: Vulnerability check
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  # Integration suite (-tags integration) against a seeded Postgres container (#19).
+  # Non-blocking until the test helpers are Postgres-clean (#32/#33); then drop
+  # continue-on-error and add this job to the required checks.
+  postgres-integration:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: arxdev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ARX_TEST_DSN: postgres://postgres:postgres@localhost:5432/arxdev?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.0'
+
+      - name: Install systray cgo dependency and psql
+        run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev postgresql-client
+
+      - name: Load schema, triggers, and seed data
+        run: bash SQL/postgres/build_schema.sh | psql "$ARX_TEST_DSN" -q -v ON_ERROR_STOP=1
+
+      - name: Integration test
+        run: go test -tags integration ./arx_go/...

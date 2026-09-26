@@ -18,7 +18,7 @@ import (
 // binary can no longer run against the migrated DB (dropped/renamed columns or tables,
 // type changes, repurposed columns). Additive changes (new nullable or defaulted columns,
 // new tables) are backward-compatible and must NOT bump this — the old binary ignores them.
-const ExpectedSchemaVersion = "10"
+const ExpectedSchemaVersion = "12"
 
 // Config holds all configuration for the merged Arx application.
 type Config struct {
@@ -224,6 +224,8 @@ func (c *Config) LotTable() string                { return "lot" }
 func (c *Config) GenealogyTable() string          { return "genealogy" }
 func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
+func (c *Config) PartCategoryTable() string       { return "part_category" }
+func (c *Config) AttachmentCategoryTable() string { return "attachment_category" }
 func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "supplier_part" }
 

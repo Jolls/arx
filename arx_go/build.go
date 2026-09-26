@@ -103,7 +103,7 @@ type buildComponent struct {
 // always draws from a specific lot regardless of whether the output is lot-tracked.
 func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]buildComponent, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT b.component_part_id, p.part_number, p.description, p.category, b.qty, p.stock_on_hand, p.tracking_mode
+		SELECT b.component_part_id, p.part_number, p.description, COALESCE(p.category, '') AS category, b.qty, p.stock_on_hand, p.tracking_mode
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
 		WHERE b.parent_part_id = @p1
 		ORDER BY b.line_number
@@ -230,7 +230,7 @@ type bomLine struct {
 // extraction). Empty result (nil error) when the part has no BOM.
 func (h *Handler) loadBuildLines(ctx context.Context, partID int) ([]bomLine, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT b.component_part_id, p.part_number, b.qty, p.category, p.tracking_mode
+		SELECT b.component_part_id, p.part_number, b.qty, COALESCE(p.category, '') AS category, p.tracking_mode
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
 		WHERE b.parent_part_id = @p1
 	`, h.cfg().BOMTable(), h.cfg().PartsTable()), partID)
@@ -281,10 +281,10 @@ func (h *Handler) collectLotPicks(r *http.Request, lines []bomLine) (map[int]int
 func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, outputLotTracked bool, qty float64, buildDate time.Time, note string, lines []bomLine, lotPicks map[int]int) (buildID, outputLotID int, err error) {
 	// Record the build event first so its id can label the ledger rows and output lot.
 	insertBuild := h.dia().InsertReturningID(h.cfg().BuildTable(),
-		`part_id, output_lot_id, qty, build_date, username, note, created_at`,
-		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`, false)
+		`part_id, output_lot_id, qty, build_date, username, note`,
+		`@p1, @p2, @p3, @p4, @p5, @p6`, false)
 	if err = tx.QueryRowContext(r.Context(), insertBuild,
-		partID, nil, qty, buildDate, h.actorName(r), nullableText(note), time.Now()).Scan(&buildID); err != nil {
+		partID, nil, qty, buildDate, h.actorName(r), nullableText(note)).Scan(&buildID); err != nil {
 		return 0, 0, fmt.Errorf("recording build: %w", err)
 	}
 
@@ -417,6 +417,17 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// #191: lock the return record before performBuild locks part rows — the same
+	// order SaveResults uses (record, then parts), so the two can't deadlock.
+	if recID, convErr := strconv.Atoi(fv(r, "return_record")); convErr == nil {
+		var id int
+		if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
+			`SELECT id FROM %s WHERE id = @p1 FOR UPDATE`, h.cfg().RecordsTable()), recID).Scan(&id); err != nil && err != sql.ErrNoRows {
+			h.renderError(w, r, "Error locking test record: "+err.Error())
+			return
+		}
+	}
+
 	buildID, outputLotID, err := h.performBuild(r, tx, partID, outputLotTracked, qty, *buildDate, note, lines, lotPicks)
 	if err != nil {
 		h.renderError(w, r, "Error recording build: "+err.Error())
@@ -431,22 +442,19 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 	linkedRecord := 0
 	if rr := fv(r, "return_record"); rr != "" {
 		if recID, convErr := strconv.Atoi(rr); convErr == nil {
-			var recPart int
-			var recLocked bool
-			err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT COALESCE(part_id,0), is_locked FROM %s WHERE id = @p1`, h.cfg().RecordsTable()), recID).
-				Scan(&recPart, &recLocked)
-			if err == nil && recPart == partID && !recLocked {
-				var lotArg any
-				if outputLotTracked {
-					lotArg = outputLotID
-				}
-				if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-					`UPDATE %s SET lot_id = @p1, build_id = @p2, updated_at = GETDATE() WHERE id = @p3`,
-					h.cfg().RecordsTable()), lotArg, buildID, recID); err != nil {
-					h.renderError(w, r, "Error linking build to test record: "+err.Error())
-					return
-				}
+			var lotArg any
+			if outputLotTracked {
+				lotArg = outputLotID
+			}
+			// #191: one conditional write, so a lock landing mid-build is honored.
+			res, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+				`UPDATE %s SET lot_id = @p1, build_id = @p2, updated_at = GETDATE() WHERE id = @p3 AND part_id = @p4 AND is_locked = %s`,
+				h.cfg().RecordsTable(), h.dia().BoolLiteral(false)), lotArg, buildID, recID, partID)
+			if err != nil {
+				h.renderError(w, r, "Error linking build to test record: "+err.Error())
+				return
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
 				linkedRecord = recID
 			}
 		}

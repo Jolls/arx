@@ -1,3 +1,13 @@
+Arx v0.8.1 — September 2026
+========================
+
+BUG FIXES
+
+  Parts can now use part categories added in Settings.
+  Removing a part category that parts still use now shows a clear message.
+  Saving test results, receiving a PO or converting an RFQ no longer half-saves on an error.
+  Created/changed times now show in your own timezone.
+
 Arx v0.7.60 — September 2026
 ========================
 

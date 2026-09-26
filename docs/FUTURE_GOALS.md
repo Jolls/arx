@@ -57,14 +57,13 @@ Arx grows from a parts catalog + purchasing + test data tool into a full enginee
 - Package Postgres as a StartOS service ([#24](https://github.com/Jolls/arx/issues/24))
 - Backup/restore ([#26](https://github.com/Jolls/arx/issues/26))
 - JSON endpoints for external clients ([#15](https://github.com/Jolls/arx/issues/15)); mobile-responsive UI ([#16](https://github.com/Jolls/arx/issues/16))
-- Migration runner instead of hand-run portal scripts ([#91](https://github.com/Jolls/arx/issues/91)); integration tests in CI ([#19](https://github.com/Jolls/arx/issues/19))
+- Migration runner instead of hand-run portal scripts ([#91](https://github.com/Jolls/arx/issues/91))
 - Structured `app_config` instead of a flat key-value table ([#17](https://github.com/Jolls/arx/issues/17))
 
 ---
 
 ## Cleanup Candidates
 
-- `is_lot_tracked` dead column ([#31](https://github.com/Jolls/arx/issues/31)); Arx header icon ([#22](https://github.com/Jolls/arx/issues/22))
-- **Drop `company.SUWeb` and `company.SUContact1`** (no issue) — dead columns, no Go references (still in `SQL/azure/company.sql`). Verify no orphan references first.
+- Arx header icon ([#22](https://github.com/Jolls/arx/issues/22))
 - **Records index query refactor** (no issue) — the `RecordsIndex` SQL in `records.go` is verbose inline SQL; candidate for a view or stored proc once the schema stabilises.
 - **Debug fields on `TestStep`** (`ArchiveID`, `Revision`, `Category`, `SheetName`) (no issue) — loaded but only needed during form-def authoring; remove once the edit UI stabilises.

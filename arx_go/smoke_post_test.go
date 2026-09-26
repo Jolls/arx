@@ -39,13 +39,13 @@ func smokeUniq(prefix string) string {
 }
 
 func smokeExec(ctx context.Context, h *Handler, query string, args ...any) {
-	_, _ = h.DB().ExecContext(ctx, query, args...)
+	_, _ = h.execContext(ctx, query, args...)
 }
 
 func countRows(t *testing.T, h *Handler, ctx context.Context, table string) int {
 	t.Helper()
 	var n int
-	if err := h.DB().QueryRowContext(ctx,
+	if err := h.queryRowContext(ctx,
 		fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&n); err != nil {
 		t.Fatalf("count %s: %v", table, err)
 	}

@@ -90,3 +90,19 @@ func TestResolveSpendDateRange_ThisQuarterBoundary(t *testing.T) {
 		t.Errorf("got From=%q To=%q, want From=2026-01-01 To=2026-03-31", got.FromStr, got.ToStr)
 	}
 }
+
+// TestResolveSpendDateRange_CustomUsesNowLocation: custom from/to dates are
+// midnight in the user's zone (now's location), since the cycle-time report
+// compares them against timestamptz changed_at (#192).
+func TestResolveSpendDateRange_CustomUsesNowLocation(t *testing.T) {
+	la, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Skipf("no tzdata: %v", err)
+	}
+	now := time.Date(2026, 7, 10, 15, 0, 0, 0, la)
+	q, _ := url.ParseQuery("range=custom&from=2026-02-01&to=2026-02-28")
+	got := resolveSpendDateRange(q, now)
+	if want := time.Date(2026, 2, 1, 0, 0, 0, 0, la); !got.From.Equal(want) {
+		t.Errorf("From = %v, want %v", got.From, want)
+	}
+}

@@ -8,6 +8,6 @@ CREATE TABLE record_events (
   form_record_id INTEGER      NOT NULL REFERENCES form_record (id),  -- FK to form_record.id.
   event_type     VARCHAR(50)  NOT NULL,                              -- 'locked', 'unlocked', …
   username       VARCHAR(255),                                       -- OS username at time of event.
-  event_date     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  event_date     TIMESTAMPTZ  NOT NULL DEFAULT now(),
   comments       TEXT                                                -- User-supplied comment.
 );

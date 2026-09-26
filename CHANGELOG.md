@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-09-26
+### Added
+- CI job `postgres-integration` runs the `-tags integration` suite against a seeded `postgres:17` container on every push/PR, non-blocking until the test helpers are Postgres-clean; `SQL/postgres/build_schema.sh` loads the DDL with FKs deferred, since FK cycles break the per-file run order ([#19](https://github.com/Jolls/arx/issues/19))
+- `SQL/postgres/migrations/` for Postgres schema changes, linted by `TestMigrationsSelfRegister` ([#201](https://github.com/Jolls/arx/issues/201))
+### Changed
+- `main` is Postgres-only; `SQL/azure` and T-SQL migrations continue on `release/0.7` ([#201](https://github.com/Jolls/arx/issues/201))
+- Renamed legacy `company` columns to `notes`, `supplier_code`, `supplier_part_count`, `po_count`; schema_version 11 ([#31](https://github.com/Jolls/arx/issues/31))
+- Audit timestamps are UTC `timestamptz` assigned by the database instead of the desktop clock, shown in each user's timezone ([#192](https://github.com/Jolls/arx/issues/192))
+- Part and attachment categories moved from `app_config` JSON to `part_category`/`attachment_category` tables; `part.category` is an FK and an empty category is stored as NULL; schema_version 12 ([#194](https://github.com/Jolls/arx/issues/194))
+- The Settings backup's `company.csv`/`part.csv` headers change with the column renames, and it now includes the two category tables
+### Fixed
+- A part saved with a category added in Settings is no longer rejected by the database; removing a category parts still use is refused with a clear message ([#194](https://github.com/Jolls/arx/issues/194))
+- Saving test results, receiving a PO, converting an RFQ and linking a build to a record are now all-or-nothing and can't write to a record/PO that was locked or changed at the same moment ([#191](https://github.com/Jolls/arx/issues/191))
+### Removed
+- Dead `company.SUWeb`/`SUContact1` and `part.is_lot_tracked` columns and the unused `logs`/`release_notes` tables ([#31](https://github.com/Jolls/arx/issues/31))
+
 ## [0.8.0] - 2026-09-26
 ### Added
 - Integration tests can run from the saved test-mode connection (`ARX_TEST_FROM_CONFIG=1`) instead of a hand-built `ARX_TEST_DSN`; engine now comes from the DSN scheme, and any database other than ArxDev is refused before connecting ([#207](https://github.com/Jolls/arx/issues/207))

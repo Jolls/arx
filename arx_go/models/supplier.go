@@ -5,15 +5,15 @@ import "time"
 type Supplier struct {
 	ID                  int
 	Name                string
-	SUSupplierCode      string
-	SUNotes             string
+	SupplierCode        string
+	Notes               string
 	IsActive            bool
 	IsSupplier          bool
 	IsManufacturer      bool
 	DefaultContact      *int
 	DateModified        *time.Time
-	SUNumOfLNKs         int
-	SUNumOfPOs          int
+	SupplierPartCount   int
+	POCount             int
 	PrimaryAttachmentID *int
 	BulkOrderDelimiter  string // "comma" | "tab" | "newline" — PO "Copy for Ordering" clipboard format (#80)
 	BulkOrderPNSource   string // "internal" | "vendor" — which PN the bulk-order copy uses (#80)

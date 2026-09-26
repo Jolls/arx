@@ -359,11 +359,11 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 		 receiver_address, receiver_city, receiver_state, receiver_zipcode,
 		 receiver_country, receiver_phone, receiver_fax,
 		 tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
-		 date_requested, date_closed, date_modified, total_cost,
+		 date_requested, date_closed, total_cost,
 		 supplier_contact_id, receiver_contact_id`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,
 		 @p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,@p27,
-		 @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38,@p39`,
+		 @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38`,
 		true)
 	var supplierContactID any
 	if sc.ID > 0 {
@@ -382,7 +382,7 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 		po.ReceiverAddress, po.ReceiverCity, po.ReceiverState, po.ReceiverZipcode,
 		po.ReceiverCountry, po.ReceiverPhone, po.ReceiverFax,
 		0.0, 0.0, 0.0, "", "Created from BOM of "+root.PartNumber, nil,
-		now, nil, now, 0.0,
+		now, nil, 0.0,
 		supplierContactID, nil,
 	).Scan(&poID); err != nil {
 		return "", err
@@ -391,9 +391,9 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 		return "", err
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
-		VALUES (@p1, 'status', NULL, 'rfq', @p2, @p3)
-	`, h.cfg().POHistoryTable()), poID, h.actorName(r), now); err != nil {
+		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by)
+		VALUES (@p1, 'status', NULL, 'rfq', @p2)
+	`, h.cfg().POHistoryTable()), poID, h.actorName(r)); err != nil {
 		return "", err
 	}
 	for i, l := range lines {

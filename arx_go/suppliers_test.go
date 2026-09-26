@@ -49,7 +49,7 @@ func TestValidateFolderStub(t *testing.T) {
 
 func TestRenderSupplierFolder_RootUnconfigured(t *testing.T) {
 	h := filesTestHandler()
-	s := models.Supplier{ID: 1, SUSupplierCode: "ACME"}
+	s := models.Supplier{ID: 1, SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder", nil)
 	rec := httptest.NewRecorder()
 	h.renderSupplierFolder(rec, req, s, nil)
@@ -86,7 +86,7 @@ func TestRenderSupplierFolder_DotDotSegmentsStayUnderRoot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "ACME", "etc"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	s := models.Supplier{ID: 1, SUSupplierCode: "ACME"}
+	s := models.Supplier{ID: 1, SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder/../../etc", nil)
 	rec := httptest.NewRecorder()
 	h.renderSupplierFolder(rec, req, s, []string{"..", "..", "etc"})
@@ -98,7 +98,7 @@ func TestRenderSupplierFolder_DotDotSegmentsStayUnderRoot(t *testing.T) {
 func TestRenderSupplierFolder_NotFound(t *testing.T) {
 	h := filesTestHandler()
 	h.cfg().SupplierFilesRoot = t.TempDir()
-	s := models.Supplier{ID: 1, SUSupplierCode: "ACME"}
+	s := models.Supplier{ID: 1, SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder", nil)
 	rec := httptest.NewRecorder()
 	h.renderSupplierFolder(rec, req, s, nil)
@@ -130,7 +130,7 @@ func TestRenderSupplierFolder_SortOrderAndListing(t *testing.T) {
 	writeTempFile(t, base, "Banana.txt", "b")
 	writeTempFile(t, base, "apple.txt", "a")
 
-	s := models.Supplier{ID: 1, SUSupplierCode: "ACME"}
+	s := models.Supplier{ID: 1, SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder", nil)
 	rec := httptest.NewRecorder()
 	h.renderSupplierFolder(rec, req, s, nil)
@@ -159,7 +159,7 @@ func TestRenderSupplierFolder_ParentURLAtDepth(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(base, "a", "b"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	s := models.Supplier{ID: 1, SUSupplierCode: "ACME"}
+	s := models.Supplier{ID: 1, SupplierCode: "ACME"}
 
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/folder", nil)
 	rec := httptest.NewRecorder()
@@ -190,7 +190,7 @@ func TestRenderSupplierFolder_ParentURLAtDepth(t *testing.T) {
 
 func TestServeSupplierFile_RootUnconfiguredNoDB(t *testing.T) {
 	h := filesTestHandler()
-	s := models.Supplier{SUSupplierCode: "ACME"}
+	s := models.Supplier{SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/doc.pdf", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")
@@ -224,7 +224,7 @@ func TestServeSupplierFile_DotDotInURLRejectedByServeFileNoDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTempFile(t, etcDir, "secret.txt", "under-root")
-	s := models.Supplier{SUSupplierCode: "ACME"}
+	s := models.Supplier{SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/../../etc/secret.txt", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")
@@ -243,7 +243,7 @@ func TestServeSupplierFile_NotFoundNoDB(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "ACME"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	s := models.Supplier{SUSupplierCode: "ACME"}
+	s := models.Supplier{SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/missing.txt", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")
@@ -261,7 +261,7 @@ func TestServeSupplierFile_PDFInlineNoDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTempFile(t, base, "doc.pdf", "%PDF-1.4")
-	s := models.Supplier{SUSupplierCode: "ACME"}
+	s := models.Supplier{SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/doc.pdf", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")
@@ -287,7 +287,7 @@ func TestServeSupplierFile_OtherAttachmentNoDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTempFile(t, base, "notes.txt", "hi")
-	s := models.Supplier{SUSupplierCode: "ACME"}
+	s := models.Supplier{SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/notes.txt", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")
@@ -309,7 +309,7 @@ func TestServeSupplierFile_NonASCIIFilenameEncodedNoDB(t *testing.T) {
 	// `filename="` + name + `"` concatenation (#363); mime.FormatMediaType
 	// RFC 6266-encodes it correctly.
 	writeTempFile(t, base, "café.txt", "hi")
-	s := models.Supplier{SUSupplierCode: "ACME"}
+	s := models.Supplier{SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/café.txt", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")
@@ -330,7 +330,7 @@ func TestServeSupplierFile_ImageInlineNoDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTempFile(t, base, "pic.png", "fake-png")
-	s := models.Supplier{SUSupplierCode: "ACME"}
+	s := models.Supplier{SupplierCode: "ACME"}
 	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file/pic.png", nil)
 	rec := httptest.NewRecorder()
 	h.serveSupplierFile(rec, req, s, "1")

@@ -66,7 +66,7 @@
     <div class="detail-section" style="margin-top:1.5rem;">
         <h3>Rollup Cost</h3>
         {{if .Part.LastRollupAt}}
-        <div class="detail-row"><strong>Last Rollup:</strong> <span>${{printf "%.4f" .Part.LastRollupCost}} &mdash; {{.Part.LastRollupAt.Format "2006-01-02 15:04"}}</span></div>
+        <div class="detail-row"><strong>Last Rollup:</strong> <span>${{printf "%.4f" .Part.LastRollupCost}} &mdash; {{(localTimePtr $.UserLoc .Part.LastRollupAt).Format "2006-01-02 15:04"}}</span></div>
         {{else}}
         <div class="detail-row"><strong>Last Rollup:</strong> <span class="muted">Never run</span></div>
         {{end}}

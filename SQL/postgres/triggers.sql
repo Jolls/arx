@@ -1,8 +1,8 @@
 -- Postgres port of SQL/triggers.sql (issue #625, #670).
 -- Maintains the denormalized counts on company and part, plus the
 -- form_row audit-history snapshot.
---   company.SUNumOfLNKs    — supplier_part rows for a supplier
---   company.SUNumOfPOs     — purchase_order rows for a supplier
+--   company.supplier_part_count — supplier_part rows for a supplier
+--   company.po_count            — purchase_order rows for a supplier
 --   part.attachment_count  — active (is_active) part_attachment rows for a part
 --   part.po_line_count     — po_line rows for a part
 --   form_row_history       — snapshot of form_row rows on UPDATE
@@ -20,28 +20,25 @@
 -- separate INSERT / UPDATE / DELETE trigger sharing one function; the function
 -- branches on TG_OP and only touches the transition table valid for that branch.
 --
--- Mixed-case count columns (SUNumOfLNKs, SUNumOfPOs) are written unquoted, so
--- Postgres folds them to lowercase — matching how the table DDL defines them.
---
 -- Human-run reference DDL, like the rest of SQL/postgres. Run last, after all
 -- table DDL exists. Re-runnable: CREATE OR REPLACE FUNCTION + DROP TRIGGER IF
 -- EXISTS. The seed script assumes these already exist and lets them fire on its
 -- INSERTs (bare table names in the Postgres ArxDev database).
 
--- supplier_part → company.SUNumOfLNKs
+-- supplier_part → company.supplier_part_count
 CREATE OR REPLACE FUNCTION trg_supplier_part_company_count() RETURNS trigger AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
         UPDATE company s
-        SET SUNumOfLNKs = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id)
+        SET supplier_part_count = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id)
         WHERE s.id IN (SELECT supplier_id FROM newtab WHERE supplier_id IS NOT NULL);
     ELSIF TG_OP = 'DELETE' THEN
         UPDATE company s
-        SET SUNumOfLNKs = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id)
+        SET supplier_part_count = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id)
         WHERE s.id IN (SELECT supplier_id FROM oldtab WHERE supplier_id IS NOT NULL);
     ELSE  -- UPDATE: a moved row changes the count of both the old and new supplier.
         UPDATE company s
-        SET SUNumOfLNKs = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id)
+        SET supplier_part_count = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id)
         WHERE s.id IN (
             SELECT supplier_id FROM newtab WHERE supplier_id IS NOT NULL
             UNION
@@ -69,20 +66,20 @@ CREATE TRIGGER trg_supplier_part_company_count_del
     REFERENCING OLD TABLE AS oldtab
     FOR EACH STATEMENT EXECUTE FUNCTION trg_supplier_part_company_count();
 
--- purchase_order → company.SUNumOfPOs
+-- purchase_order → company.po_count
 CREATE OR REPLACE FUNCTION trg_PO_company_count() RETURNS trigger AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
         UPDATE company s
-        SET SUNumOfPOs = (SELECT COUNT(*) FROM purchase_order p WHERE p.supplier_id = s.id)
+        SET po_count = (SELECT COUNT(*) FROM purchase_order p WHERE p.supplier_id = s.id)
         WHERE s.id IN (SELECT supplier_id FROM newtab WHERE supplier_id IS NOT NULL);
     ELSIF TG_OP = 'DELETE' THEN
         UPDATE company s
-        SET SUNumOfPOs = (SELECT COUNT(*) FROM purchase_order p WHERE p.supplier_id = s.id)
+        SET po_count = (SELECT COUNT(*) FROM purchase_order p WHERE p.supplier_id = s.id)
         WHERE s.id IN (SELECT supplier_id FROM oldtab WHERE supplier_id IS NOT NULL);
     ELSE  -- UPDATE
         UPDATE company s
-        SET SUNumOfPOs = (SELECT COUNT(*) FROM purchase_order p WHERE p.supplier_id = s.id)
+        SET po_count = (SELECT COUNT(*) FROM purchase_order p WHERE p.supplier_id = s.id)
         WHERE s.id IN (
             SELECT supplier_id FROM newtab WHERE supplier_id IS NOT NULL
             UNION
@@ -226,8 +223,8 @@ CREATE TRIGGER trg_form_row_history
 -- One-time recalibration: corrects any counts that drifted before triggers
 -- existed (or were seeded with explicit values). Safe to re-run at any time.
 UPDATE company s
-SET SUNumOfLNKs = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id),
-    SUNumOfPOs  = (SELECT COUNT(*) FROM purchase_order p  WHERE p.supplier_id  = s.id);
+SET supplier_part_count = (SELECT COUNT(*) FROM supplier_part sp WHERE sp.supplier_id = s.id),
+    po_count            = (SELECT COUNT(*) FROM purchase_order p  WHERE p.supplier_id  = s.id);
 
 UPDATE part p
 SET attachment_count = (SELECT COUNT(*) FROM part_attachment f WHERE f.part_id = p.id AND f.is_active),

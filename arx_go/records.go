@@ -569,8 +569,8 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		step.SpecMax = substituteRefs(step.SpecMax, nil, stepsMap, nil, &form)
 	}
 
-	// Load history timestamps for timeline dots. changed_at is stamped by
-	// trg_form_row_history with GETDATE() = UTC on Azure SQL, so the calendar-day
+	// Load history timestamps for timeline dots. changed_at is a timestamptz
+	// assigned by the database (#192), so the calendar-day
 	// bucketing happens in Go in the viewing user's timezone (#847) — SQL-side
 	// AT TIME ZONE would need Windows zone names, not the IANA names we store.
 	type HistoryPoint struct {
@@ -659,8 +659,8 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	// `at` is a calendar day in the viewing user's timezone (#847); changed_at is UTC
-	// (GETDATE() on Azure SQL), so resolve the day to a half-open UTC range in Go rather
+	// `at` is a calendar day in the viewing user's timezone (#847); changed_at is a
+	// timestamptz assigned by the database (#192), so resolve the day to a half-open UTC range in Go rather
 	// than CAST(changed_at AS DATE) — SQL Server's AT TIME ZONE wants Windows zone names,
 	// not the IANA names we store.
 	atStr := r.URL.Query().Get("at")
@@ -2454,8 +2454,27 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// #191: every write below happens in this one transaction.
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		serverError(w, "could not start transaction", err)
+		return
+	}
+	defer tx.Rollback()
+
+	// #191: claim the WIP record inside the tx. The row lock serializes against
+	// Lock/Complete; 0 rows = locked (or missing — told apart by the SELECT below).
+	guard, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+		"UPDATE %s SET updated_at=GETDATE() WHERE id=@p1 AND is_locked=%s",
+		h.cfg().RecordsTable(), h.dia().BoolLiteral(false)), recordID)
+	if err != nil {
+		serverError(w, "could not save record", err)
+		return
+	}
+	claimed, _ := guard.RowsAffected()
+
 	var record models.TestRecord
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
+	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
 		       record_date, record_type, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
 		       unit_id, build_id
@@ -2472,21 +2491,24 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
-	if record.IsLocked {
+	if claimed == 0 {
 		http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
 		return
 	}
 
 	// Form context for resolving {form.X} tokens when snapshotting (#487).
 	var form models.TestForm
-	h.queryRowContext(r.Context(), fmt.Sprintf(`
+	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT f.id, f.part_number_id, pn.part_number
 		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = @p1`,
 		h.cfg().FormsTable(), h.cfg().PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.PartNumber)
+		Scan(&form.ID, &form.PartNumberID, &form.PartNumber); err != nil && err != sql.ErrNoRows {
+		serverError(w, "query error", err) // a failed statement aborts the Postgres tx
+		return
+	}
 
 	// Load steps for pass_fail computation and INSERT snapshots.
-	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
+	stepRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
 		       spec_min, spec_max, pf_type, spec_units, spec_nom, archived
 		FROM %s WHERE form_id = @p1`, h.cfg().StepsTable()), record.FormID)
@@ -2536,7 +2558,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		PFType  string
 	}
 	existing := map[int]savedResult{}
-	exRows, err := h.queryContext(r.Context(), fmt.Sprintf(
+	exRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
 		"SELECT id, form_row_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE form_record_id = @p1", h.cfg().ResultsTable()), recordID)
 	if err != nil {
 		serverError(w, "query error", err)
@@ -2588,7 +2610,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 					passFail = models.ComputePassFail(result, pfStep)
 				}
 				// #251: insert into TestResultHistory here when per-result change history is added
-				if _, err := h.execContext(r.Context(), fmt.Sprintf(`
+				if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 					UPDATE %s SET result=@p1, comment=@p2, pass_fail=@p3, updated_at=GETDATE()
 					WHERE id=@p4`, h.cfg().ResultsTable()),
 					result, comment, passFail, prev.ID); err != nil {
@@ -2605,7 +2627,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			if result != "" {
 				passFail = models.ComputePassFail(result, step)
 			}
-			if _, err := h.execContext(r.Context(), fmt.Sprintf(`
+			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
 				INSERT INTO %s
 				  (form_record_id, form_row_id, result, comment, pass_fail, type,
 				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, pf_type, format,
@@ -2640,7 +2662,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	// The record then points at the unit via unit_id and leaves lot_id/build_id NULL —
 	// lot/build are read through the unit (Q8 FK-consistency invariant).
 	var trackingMode string
-	if e := h.queryRowContext(r.Context(), fmt.Sprintf(
+	if e := tx.QueryRowContext(r.Context(), fmt.Sprintf(
 		`SELECT tracking_mode FROM %s WHERE id = @p1`, h.cfg().PartsTable()), record.PartNumberID).Scan(&trackingMode); e != nil && e != sql.ErrNoRows {
 		http.Error(w, "could not read part tracking mode: "+e.Error(), http.StatusInternalServerError)
 		return
@@ -2654,13 +2676,6 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			rd = &t
 		}
 	}
-
-	tx, err := h.beginTx(r.Context())
-	if err != nil {
-		serverError(w, "could not start transaction", err)
-		return
-	}
-	defer tx.Rollback()
 
 	// #747: build-at-test-time. When the inline build panel was submitted, build this
 	// part in the same transaction and use the new build (and its output lot) as the

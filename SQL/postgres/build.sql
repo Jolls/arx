@@ -18,7 +18,7 @@ CREATE TABLE build (
   build_date     DATE          NOT NULL DEFAULT CURRENT_DATE,
   username       VARCHAR(128)  NOT NULL DEFAULT '',               -- App user login handle.
   note           TEXT,                                            -- Optional free-text comment.
-  created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at     TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
 ALTER TABLE build ADD CONSTRAINT FK_build_part FOREIGN KEY (part_id) REFERENCES part (id);

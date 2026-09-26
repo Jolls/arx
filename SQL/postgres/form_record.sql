@@ -19,8 +19,8 @@ CREATE TABLE form_record (
   is_locked              BOOLEAN      NOT NULL DEFAULT FALSE, -- TRUE = locked (Complete or Approved).
   is_approved            BOOLEAN      NOT NULL DEFAULT FALSE, -- TRUE = reviewer-approved.
   is_active              BOOLEAN      NOT NULL DEFAULT TRUE,  -- FALSE = soft-deleted.
-  created_at             TIMESTAMP,
-  updated_at             TIMESTAMP,
+  created_at             TIMESTAMPTZ DEFAULT now(),
+  updated_at             TIMESTAMPTZ DEFAULT now(),
   form_revision          INTEGER,                            -- Snapshot of form.revision (#260). NULL pre-#260.
   lot_id                 INTEGER,                            -- FK to lot.id (#677, nullable). Lot the tested unit belongs to.
   build_id               INTEGER,                            -- FK to build.id (#677, nullable). Build that produced the tested unit.

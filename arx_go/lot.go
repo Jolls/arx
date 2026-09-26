@@ -13,7 +13,7 @@ import (
 )
 
 // Lot control (#676, part of the #568 lot epic). A lot is one batch instance of a
-// lot-tracked part (part.is_lot_tracked). Purchased lots are created at goods
+// lot-tracked part (part.tracking_mode lot/lot_serial). Purchased lots are created at goods
 // receipt (po_line_id set); manufactured lots are created by a build that produces
 // a lot-tracked output part. Auto-issued lot_number defaults to the lot's own id
 // (#687); lot_description carries the human-readable provenance. The genealogy
@@ -44,12 +44,12 @@ func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args 
 		poArg = *poLineID
 	}
 	insert := h.dia().InsertReturningID(h.cfg().LotTable(),
-		`part_id, lot_number, lot_description, vendor_lot_number, po_line_id, created_at, is_active`,
-		`@p1, @p2, @p3, @p4, @p5, @p6, @p7`,
+		`part_id, lot_number, lot_description, vendor_lot_number, po_line_id, is_active`,
+		`@p1, @p2, @p3, @p4, @p5, @p6`,
 		false)
 	var lotID int
 	err := tx.QueryRowContext(ctx, insert,
-		partID, args.LotNumber, args.Description, nullableText(args.VendorLot), poArg, time.Now(), true,
+		partID, args.LotNumber, args.Description, nullableText(args.VendorLot), poArg, true,
 	).Scan(&lotID)
 	if err != nil || args.LotNumber != "" {
 		return lotID, err

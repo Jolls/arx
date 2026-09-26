@@ -17,6 +17,6 @@ CREATE TABLE named_queries (
   params      VARCHAR(255),                   -- comma-separated expected param names.
   result_type VARCHAR(10)  NOT NULL DEFAULT 'list', -- 'list' | 'single' | 'multi'.
   is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
-  created_at  TIMESTAMP,
-  updated_at  TIMESTAMP
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
 );

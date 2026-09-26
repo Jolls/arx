@@ -3,7 +3,7 @@
 -- PO numbers are auto-assigned via po_number_seq. The app call site currently
 -- emits T-SQL 'NEXT VALUE FOR'; on Postgres it must use nextval('po_number_seq')
 -- (app-side change, not covered by this DDL - see SQL/postgres/README.md).
--- SUNumOfPOs on company is a denormalized count maintained by a trigger
+-- po_count on company is a denormalized count maintained by a trigger
 -- (SQL/postgres/triggers.sql).
 
 -- Sequence used to generate PO numbers.
@@ -51,7 +51,7 @@ CREATE TABLE purchase_order (
   date_requested        DATE,
   date_closed           DATE,
   date_printed          DATE,
-  date_modified         TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+  date_modified         TIMESTAMPTZ    DEFAULT now(),
 
   -- Financials
   tax1                  NUMERIC(10,5),
@@ -87,7 +87,7 @@ CREATE TABLE purchase_order_history (
   action      VARCHAR(20),
   note        TEXT,
   changed_by  VARCHAR(128) NOT NULL DEFAULT '',
-  changed_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+  changed_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 ALTER TABLE purchase_order_history ADD CONSTRAINT FK_purchase_order_history_po FOREIGN KEY (po_id) REFERENCES purchase_order (id);
