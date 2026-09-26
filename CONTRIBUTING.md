@@ -18,7 +18,7 @@ On Linux you also need `libayatana-appindicator3-dev` (systray's cgo dependency)
 
 ## Integration tests
 
-`go test -tags integration ./arx_go/...` needs `ARX_TEST_DSN` pointing at a seeded test database. The seed data uses fixed IDs that the tests assert against (e.g. part `3005`), so don't renumber seed rows. They are excluded from the default `go test ./...`.
+`go test -tags integration ./arx_go/...` needs `ARX_TEST_DSN` pointing at a seeded test database (or `ARX_TEST_FROM_CONFIG=1` to use the test-mode connection saved via Settings). The database must be named `ArxDev` (any case); anything else, and anything containing `arxprod`, is refused. The seed data uses fixed IDs that the tests assert against (e.g. part `3005`), so don't renumber seed rows. They are excluded from the default `go test ./...`.
 
 ## Licensing
 

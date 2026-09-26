@@ -68,11 +68,25 @@ func checkArxDevSentinel(ctx context.Context, h *Handler) error {
 // independently redial and fail the same way via liveHandler, turning one bad
 // credential into a very slow way to find that out.
 func TestMain(m *testing.M) {
-	if dsn := os.Getenv("ARX_TEST_DSN"); dsn != "" {
+	dsn, err := integrationDSN()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "integration tests:", err)
+		os.Exit(1)
+	}
+	if dsn != "" {
+		engine, err := integrationEngine(dsn)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "integration tests:", err)
+			os.Exit(1)
+		}
+		// Export a config-derived DSN in-process so every test reads the same
+		// target from ARX_TEST_DSN.
+		os.Setenv("ARX_TEST_DSN", dsn)
+
 		cfg := arxbase.Load("dev")
 		cfg.TestMode = true
 
-		database, dialect, err := arxdb.Connect(cfg.DBEngine(), dsn)
+		database, dialect, err := arxdb.Connect(engine, dsn)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "integration tests: db.Connect: %v\n", err)
 			os.Exit(1)
@@ -102,10 +116,15 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 		t.Skip("set ARX_TEST_DSN to run integration tests")
 	}
 
+	engine, err := integrationEngine(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	cfg := arxbase.Load("dev")
 	cfg.TestMode = true
 
-	database, dialect, err := arxdb.Connect(cfg.DBEngine(), dsn)
+	database, dialect, err := arxdb.Connect(engine, dsn)
 	if err != nil {
 		t.Fatalf("db.Connect: %v", err)
 	}
