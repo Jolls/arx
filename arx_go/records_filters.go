@@ -108,7 +108,7 @@ func (f recordFilters) dateRangeClauses(startArg int) (string, []any) {
 		n++
 	}
 	if !f.To.IsZero() {
-		fmt.Fprintf(&sb, " AND record_date < DATEADD(day, 1, @p%d)", n)
+		fmt.Fprintf(&sb, " AND record_date < (CAST(@p%d AS DATE) + 1)", n)
 		args = append(args, f.To)
 		n++
 	}

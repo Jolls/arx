@@ -266,7 +266,7 @@ func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]da
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
 		WHERE trec.is_active = %s AND trec.is_locked = %s
-			AND trec.created_at <= DATEADD(day, -@p2, GETDATE())
+			AND trec.created_at <= CURRENT_TIMESTAMP - make_interval(days => @p2)
 		ORDER BY trec.created_at ASC`+h.dia().LimitClause("@p1"),
 		h.dia().TopClause("@p1"), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit, staleWIPThresholdDays)
 	if err != nil {
@@ -425,7 +425,7 @@ const spendDateLayout = "2006-01-02"
 // date-range-filterable reports (Spend Analysis #283, On-Time Delivery and
 // PO Cycle Time #659/RPT-8). From/To follow the same inclusive-day convention
 // as recordFilters (records_filters.go): zero value means no bound, and an
-// inclusive To is applied in SQL via DATEADD(day, 1, ...).
+// inclusive To is applied as an exclusive bound on the following day.
 type reportDateRange struct {
 	Preset  string // "this_month" | "this_quarter" | "ytd" | "custom"
 	From    time.Time
@@ -493,8 +493,8 @@ func (rng reportDateRange) whereClause(column string, startArg int) (string, []a
 		n++
 	}
 	if !rng.To.IsZero() {
-		fmt.Fprintf(&sb, " AND %s < DATEADD(day, 1, @p%d)", column, n)
-		args = append(args, rng.To)
+		fmt.Fprintf(&sb, " AND %s < @p%d", column, n)
+		args = append(args, rng.To.AddDate(0, 0, 1))
 		n++
 	}
 	return sb.String(), args
@@ -621,8 +621,8 @@ func (h *Handler) queryOnTimeDelivery(ctx context.Context, rng reportDateRange) 
 		SELECT
 			po.supplier_name,
 			COUNT(*) AS total_lines,
-			SUM(CASE WHEN pol.date_received <= DATEADD(day, pol.lead_time_days, po.date_ordered) THEN 1 ELSE 0 END) AS on_time_lines,
-			AVG(CAST(DATEDIFF(day, DATEADD(day, pol.lead_time_days, po.date_ordered), pol.date_received) AS FLOAT)) AS avg_days_late
+			SUM(CASE WHEN pol.date_received <= po.date_ordered + pol.lead_time_days THEN 1 ELSE 0 END) AS on_time_lines,
+			AVG(CAST(pol.date_received - (po.date_ordered + pol.lead_time_days) AS DOUBLE PRECISION)) AS avg_days_late
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.id
 		WHERE pol.lead_time_days IS NOT NULL
@@ -739,7 +739,7 @@ func (h *Handler) queryPOCycleTime(ctx context.Context, rng reportDateRange) ([]
 		SELECT
 			stage,
 			COUNT(*) AS po_count,
-			AVG(CAST(DATEDIFF(hour, entered_at, exited_at) AS FLOAT) / 24.0) AS avg_days
+			AVG(CAST(EXTRACT(EPOCH FROM (date_trunc('hour', exited_at AT TIME ZONE 'UTC') - date_trunc('hour', entered_at AT TIME ZONE 'UTC'))) AS DOUBLE PRECISION) / 3600.0 / 24.0) AS avg_days
 		FROM stage_durations
 		WHERE exited_at IS NOT NULL%s
 		GROUP BY stage
