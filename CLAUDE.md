@@ -64,12 +64,12 @@ WHERE child.<fk_col> IS NOT NULL AND p.id IS NULL;
 ```
 
 ### Integration tests (live DB, test data only)
-Build-tagged `arx_go/integration_test.go` (`//go:build integration`), excluded from default `go test ./...` and build.bat. Run manually:
+Build-tagged `arx_go/integration_test.go` (`//go:build integration`), excluded from default `go test ./...` and build.bat. Claude runs these itself (Bash tool, from repo root, pre-approved in `.claude/settings.local.json`):
 ```
-$env:ARX_TEST_DSN="sqlserver://user:pass@server?database=arxv&encrypt=true"
-go test -tags integration ./arx_go/...
+ARX_TEST_FROM_CONFIG=1 go test -tags integration ./arx_go/...
 ```
-`liveHandler` doesn't trust the DSN's database name (a target may just be called `arx`, not literally "ArxDev") — after connecting it queries the fixed-ID seed part `id=3005` and `t.Fatal`s unless it matches `part_number='ASM-1001'`/`title='Skyrunner Standard Drone'`, the same row seeded identically in `SQL/azure/seed_test_data.sql` and `SQL/postgres/seed_test_data.sql`. That's the safeguard against accidentally running against a real database — keep the sentinel values in sync if that seed row ever changes. db_user/db_server from arx_go/config/local.json; the password (db_password) is in the per-user secrets store `%APPDATA%\Arx\local.json` (#732), both gitignored — use database=ArxDev not ArxProd.
+`ARX_TEST_FROM_CONFIG=1` builds the DSN in-process from the test-mode profile (`config/local.json` + per-user secrets store) — never read the secrets file or construct/echo a DSN yourself (#207). An explicit `ARX_TEST_DSN` still overrides. Engine comes from the DSN scheme, not `test_engine`; `TestMain` refuses, before connecting, any database name containing `arxprod` and anything not exactly `ArxDev` (case-insensitive).
+`liveHandler` also doesn't trust the DSN's database name alone — after connecting it queries the fixed-ID seed part `id=3005` and `t.Fatal`s unless it matches `part_number='ASM-1001'`/`title='Skyrunner Standard Drone'`, the same row seeded identically in `SQL/azure/seed_test_data.sql` and `SQL/postgres/seed_test_data.sql`. That's the safeguard against accidentally running against a real database — keep the sentinel values in sync if that seed row ever changes. db_user/db_server from arx_go/config/local.json; the password (db_password) is in the per-user secrets store `%APPDATA%\Arx\local.json` (#732), both gitignored — use database=ArxDev not ArxProd.
 Any ad-hoc script/DSN outside integration_test.go should verify it's pointed at test data before running — don't rely on the database name alone.
 Reseeding ArxDev is a human action — no sqlcmd/Invoke-Sqlcmd available; don't script SQL/azure/seed_test_data.sql yourself. If a test fails on stale seed data (e.g. TestIntegration_UpdatedAtSentinel), tell user to reseed, don't do it yourself.
 
@@ -97,7 +97,7 @@ Save implementation plans (Plan Mode, issue-tied) to `docs/plans/<issue-id>-<des
 
 ## Branching
 Never commit to main. Before first commit in session, check current branch; if on main, create the branch yourself using the standard below — don't ask for a name. Naming: `feature/<issue-id>-<short-slug>` when the work maps to a GitHub issue (e.g. `feature/754-settings-backup-table-list`), else `feature/<short-description>`. Push branch + open PR, never push main directly.
-`main` = 0.8 development; `release/0.7` = maintenance (bug fixes only, PR-only, patch versions `0.7.x`, tagged `v0.7.x` on that branch). 0.7 fixes: branch from `release/0.7`, PR against it, then cherry-pick to `main`. Avoid new migrations on `release/0.7`; CHANGELOG top entry conflicts on cherry-pick — resolve by hand (each branch keeps its own version line).
+`main` = 0.8 development (CHANGELOG versions `0.8.x`, starting at 0.8.0); `release/0.7` = maintenance (bug fixes only, PR-only, patch versions `0.7.x`, tagged `v0.7.x` on that branch). 0.7 fixes: branch from `release/0.7`, PR against it, then cherry-pick to `main`. Avoid new migrations on `release/0.7`; CHANGELOG top entry conflicts on cherry-pick — resolve by hand (each branch keeps its own version line).
 
 Commit messages: no `Claude-Session:` trailer (links a private web session; #172). The `Co-Authored-By` line stays.
 
@@ -128,7 +128,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Update 
 ```
 Link is a pointer to the issue; omit only if no issue. No comparison links in the footer — the repo doesn't tag every version, so they'd mostly be dead links.
 After committing a version bump, tag it: `git tag vX.Y.Z` (push with the branch/PR, not force). Going forward only — no retroactive tagging of historical versions.
-While major `x` is 0 (pre-1.0), `z` (patch) increments with every PR; `y` (minor) only bumps for a deliberate milestone release (e.g. 0.6.0).
+While major `x` is 0 (pre-1.0), `z` (patch) increments with every PR; `y` (minor) only bumps for a deliberate milestone release (e.g. 0.6.0), or when `main` starts a new line that can't ship on the maintenance branch (0.8.0: `main` PRs are 0.8.x, `release/0.7` PRs are 0.7.x).
 
 ## Release Notes
 `arx_go/RELEASE_NOTES.md`, embedded at compile time, shown in-app. Update per user-facing release (not per patch), one entry covering all changes since last public release, grouped NEW FEATURES/BUG FIXES, plain text (no markdown), user-facing language:

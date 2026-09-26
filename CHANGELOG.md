@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-26
+### Added
+- Integration tests can run from the saved test-mode connection (`ARX_TEST_FROM_CONFIG=1`) instead of a hand-built `ARX_TEST_DSN`; engine now comes from the DSN scheme, and any database other than ArxDev is refused before connecting ([#207](https://github.com/Jolls/arx/issues/207))
+
 ## [0.7.72] - 2026-09-25
 ### Changed
 - Config, DB connection and cached settings data (schema status, logo, part categories) now live in one immutable snapshot swapped atomically on save, removing data races between Settings saves and in-flight requests; CI now runs `go test -race` ([#196](https://github.com/Jolls/arx/issues/196))

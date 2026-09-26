@@ -49,10 +49,14 @@ func isolatedIntegrationSettingsHandler(t *testing.T) *Handler {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	dsn := os.Getenv("ARX_TEST_DSN")
+	engine, err := integrationEngine(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := arxbase.Load("dev")
 	cfg.SessionSecret = "test-secret"
 
-	database, dialect, err := arxdb.Connect(cfg.DBEngine(), dsn)
+	database, dialect, err := arxdb.Connect(engine, dsn)
 	if err != nil {
 		t.Fatalf("initial db.Connect: %v", err)
 	}
