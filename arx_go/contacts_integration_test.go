@@ -152,7 +152,7 @@ func TestIntegration_ContactUpdate(t *testing.T) {
 	var name, email string
 	var companyID int
 	var active bool
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT display_name, email, company_id, is_active FROM %s WHERE id=@p1`, h.cfg().ContactTable()), contactID,
 	).Scan(&name, &email, &companyID, &active); err != nil {
 		t.Fatalf("select updated contact: %v", err)
@@ -174,7 +174,7 @@ func TestIntegration_ContactUpdate_MissingName(t *testing.T) {
 	defer cl()
 
 	var before string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT display_name FROM %s WHERE id=@p1`, h.cfg().ContactTable()), contactID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed contact: %v", err)
@@ -190,7 +190,7 @@ func TestIntegration_ContactUpdate_MissingName(t *testing.T) {
 	}
 
 	var after string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT display_name FROM %s WHERE id=@p1`, h.cfg().ContactTable()), contactID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select contact after rejected update: %v", err)

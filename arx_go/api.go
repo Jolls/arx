@@ -168,10 +168,11 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 	var pn sql.NullString
 	var minIncrement sql.NullFloat64
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT TOP 1 supplier_pn, min_increment
+		SELECT supplier_pn, min_increment
 		FROM %s
 		WHERE part_id = @p1 AND supplier_id = @p2
 		ORDER BY preference ASC
+		LIMIT 1
 	`, h.cfg().SupplierPartTable()), partID, supplierID).Scan(&pn, &minIncrement)
 	if err != nil {
 		writeJSON(w, map[string]string{"supplier_pn": ""})
@@ -179,10 +180,11 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 	}
 	var priceEa sql.NullFloat64
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT TOP 1 price_ea
+		SELECT price_ea
 		FROM %s
 		WHERE part_id = @p1 AND supplier_id = @p2 AND is_active = %s
 		ORDER BY pack_size ASC
+		LIMIT 1
 	`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)), partID, supplierID).Scan(&priceEa)
 
 	resp := map[string]any{"supplier_pn": pn.String}

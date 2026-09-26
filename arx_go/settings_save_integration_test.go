@@ -35,6 +35,9 @@ func arxDevProfile(t *testing.T) (server, user, password, database string) {
 		password, _ = u.User.Password()
 	}
 	database = u.Query().Get("database")
+	if database == "" { // postgres://user:pass@host/dbname
+		database = strings.TrimPrefix(u.Path, "/")
+	}
 	return server, user, password, database
 }
 
@@ -55,6 +58,7 @@ func isolatedIntegrationSettingsHandler(t *testing.T) *Handler {
 	}
 	cfg := arxbase.Load("dev")
 	cfg.SessionSecret = "test-secret"
+	cfg.Engine = engine // SettingsSave's reconnect builds its DSN from the config engine
 
 	database, dialect, err := arxdb.Connect(engine, dsn)
 	if err != nil {

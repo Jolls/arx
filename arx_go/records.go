@@ -109,6 +109,10 @@ func substituteStepSelf(s string, step *models.TestStep) string {
 	return s
 }
 
+// serialAllocLockNS namespaces the per-form advisory lock that serializes
+// auto serial allocation in CreateRecord (arx-legacy#369, #33).
+const serialAllocLockNS = 369
+
 // isAutoSerial reports whether the submitted serial number is the unchanged
 // GET-time suggestion (the user accepted the default), meaning the server should
 // re-derive it atomically. A differing value is a deliberate manual override.
@@ -1653,14 +1657,18 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	// concurrent creates for the same form get N and N+1, not the same value.
 	// A user-typed override (serialNumber != suggestedSN) is inserted as-is.
 	if isAutoSerial(serialNumber, suggestedSN) {
+		// Serialize concurrent auto-allocations for this form: the xact-scoped
+		// advisory lock is held until tx commit/rollback, so the MAX()+1 read and
+		// the INSERT below are atomic w.r.t. other creates on the same form.
+		if _, err = tx.ExecContext(r.Context(),
+			`SELECT pg_advisory_xact_lock(@p1, @p2)`, serialAllocLockNS, formID); err != nil {
+			serverError(w, "serial lock error", err)
+			return
+		}
 		var nextSN int
-		// WITH (UPDLOCK, HOLDLOCK) is a SQL Server locking hint with no textual
-		// Postgres equivalent; the #369 concurrency guarantee has no Postgres
-		// story yet (needs a design decision: advisory lock / SERIALIZABLE /
-		// dedicated sequence) — tracked as a follow-up for the #625 cutover.
 		err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
 			SELECT COALESCE(MAX(%s), 0) + 1
-			FROM %s WITH (UPDLOCK, HOLDLOCK) WHERE form_id = @p1`,
+			FROM %s WHERE form_id = @p1`,
 			h.dia().TryCastInt("serial_number"), h.cfg().RecordsTable()), formID).Scan(&nextSN)
 		if err != nil {
 			serverError(w, "serial number error", err)

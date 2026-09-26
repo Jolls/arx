@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	arxdb "arx/internal/db"
 )
 
 // Sentinel errors runNamedQuery/execQuery return for caller-fixable problems
@@ -165,10 +167,17 @@ func (h *Handler) execQuery(ctx context.Context, sqlText, resultType string, par
 	// fails at the driver instead of silently binding an empty string (see
 	// TestIntegration_RunNamedQuery_StaleSpecNomParamRename). Postgres binds
 	// parameters positionally and has no @name placeholder syntax, so the query
-	// text is rewritten to match this same order.
+	// text is rewritten to match this same order. Params the query text doesn't
+	// reference are dropped: Postgres rejects extra positional args (#28).
+	refs := map[string]bool{}
+	for _, name := range arxdb.NamedParamRefs(sqlText) {
+		refs[name] = true
+	}
 	names := make([]string, 0, len(params))
 	for name := range params {
-		names = append(names, name)
+		if refs[name] {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
 	args := make([]any, len(names))

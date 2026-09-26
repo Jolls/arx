@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-09-26
+### Added
+- Migration `20260926120000_28_named_queries_postgres_text.sql` rewrites the 10 canonical named queries copied from Azure to their Postgres text ([#28](https://github.com/Jolls/arx/issues/28))
+### Changed
+- CI `postgres-integration` is now blocking (required check) and runs Postgres with TLS; integration-test helpers use Postgres SQL through the handler wrappers ([#32](https://github.com/Jolls/arx/issues/32))
+### Fixed
+- Creating a new test record on Postgres no longer fails; concurrent creates on one form still get distinct serial numbers ([#33](https://github.com/Jolls/arx/issues/33))
+- On-Time Delivery, PO Cycle Time, stale-WIP dashboard, report/record date filters and PO-line supplier autofill work on Postgres ([#32](https://github.com/Jolls/arx/issues/32))
+- Named queries: unused params no longer break Postgres execution, `@` inside quotes/comments is left alone, and `max_subbatch_result` handles empty dates and any server DateStyle ([#28](https://github.com/Jolls/arx/issues/28))
+- Postgres seed: po_line 5504 carries `lead_time_days` like the Azure seed ([#32](https://github.com/Jolls/arx/issues/32))
+
 ## [0.8.1] - 2026-09-26
 ### Added
 - CI job `postgres-integration` runs the `-tags integration` suite against a seeded `postgres:17` container on every push/PR, non-blocking until the test helpers are Postgres-clean; `SQL/postgres/build_schema.sh` loads the DDL with FKs deferred, since FK cycles break the per-file run order ([#19](https://github.com/Jolls/arx/issues/19))

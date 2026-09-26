@@ -115,10 +115,12 @@ SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
     INSERT INTO app_config (setting_key, setting_value, updated_at) VALUES
         ('schema_version', '12', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
-    -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
+    -- config, not throwaway test data — the canonical set lives in SQL/azure/named_queries.sql;
     -- keep the two in sync. Postgres translation (#830) of the T-SQL query text: TRY_CAST →
     -- the regex-guard CAST pattern, `+` string concat → `||`, `TOP N` → trailing `LIMIT N`,
     -- `is_active = 1` → `is_active = TRUE`. Identity-assigned (looked up by unique `name`).
+    -- max_subbatch_result's @record_date is always MM/DD/YYYY (from {record.date}); TO_DATE
+    -- keeps it DateStyle-independent and NULLIF makes an empty date match no rows (#28).
     INSERT INTO named_queries (name, description, sql, params, result_type, created_at, updated_at) VALUES
         ('fil_category_for_pn', 'Comments of active Attachments for a given part number',
          'SELECT comment FROM part_attachment WHERE part_id = (SELECT id FROM part WHERE part_number = @pn) AND is_active = TRUE',
@@ -142,7 +144,7 @@ SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
          'SELECT serial_number FROM form_record WHERE form_id = @form_id AND is_active = TRUE ORDER BY CASE WHEN serial_number ~ ''^[0-9]+$'' THEN CAST(serial_number AS INTEGER) END DESC NULLS LAST, record_date DESC LIMIT 20',
          'form_id', 'multi', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
         ('max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
-         'SELECT MAX(CASE WHEN r.result ~ ''^[0-9]+$'' THEN CAST(r.result AS INTEGER) END) FROM result r JOIN form_record tr ON r.form_record_id = tr.id WHERE r.form_row_id = @form_row_id AND tr.is_active = TRUE AND CAST(tr.record_date AS DATE) <= CAST(@record_date AS DATE)',
+         'SELECT MAX(CASE WHEN r.result ~ ''^[0-9]+$'' THEN CAST(r.result AS INTEGER) END) FROM result r JOIN form_record tr ON r.form_record_id = tr.id WHERE r.form_row_id = @form_row_id AND tr.is_active = TRUE AND CAST(tr.record_date AS DATE) <= TO_DATE(NULLIF(@record_date, ''''), ''MM/DD/YYYY'')',
          'form_row_id, record_date', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
         ('vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
          'SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' || @pn || ''%'' ORDER BY po_id DESC',
@@ -378,11 +380,16 @@ SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
 
     -- lead_time_days is captured per line on the RFQ comparison grid (#270); set on the
     -- in-flight quote lines so the grid renders differing price + lead time per supplier.
+    -- 5504 also carries lead_time_days (#815) so it's the one seed row with lead_time_days,
+    -- date_received, and its PO's date_ordered all set — the On-Time Delivery report
+    -- (queryOnTimeDelivery) needs at least one such row to exercise its on-time-% math;
+    -- quoted 50 days against 2026-04-01 date_ordered vs. actual 2026-05-15 date_received
+    -- means it arrived 6 days early (on time).
     INSERT INTO po_line (id, po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, vendor_part_number, lead_time_days, received_qty, date_received) VALUES
         (5501, 5001, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       10,  2.50,  'ACME-AL6061', NULL, 0,  NULL),
         (5502, 5002, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       20,  2.50,  'ACME-AL6061', NULL, 0,  NULL),
         (5503, 5002, 'BUY-1001', 'A', 3002, 2, 'M3x8 SHCS',                 200, 0.05,  'PMC-M3X8',    NULL, 0,  NULL),
-        (5504, 5003, 'RAW-1002', 'A', 3007, 1, 'Stainless Steel Bar Stock', 50,  4.10,  'ACME-SS304',  NULL, 20, '2026-05-15'),
+        (5504, 5003, 'RAW-1002', 'A', 3007, 1, 'Stainless Steel Bar Stock', 50,  4.10,  'ACME-SS304',  50,   20, '2026-05-15'),
         (5505, 5004, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       10,  2.50,  'ACME-AL6061', NULL, 10, '2026-01-18'),
         (5506, 5008, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.048, 'PMC-M3X8',    NULL, 0,  NULL),
         (5511, 5010, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.055, 'ACME-M3X8',   14,   0,  NULL),
