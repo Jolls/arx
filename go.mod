@@ -6,7 +6,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/gorilla/sessions v1.4.0
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/klippa-app/go-pdfium v1.20.3
 	github.com/microsoft/go-mssqldb v1.7.2
