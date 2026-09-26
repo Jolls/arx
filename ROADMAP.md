@@ -11,7 +11,7 @@ Move off SQL Server/Azure to Postgres, and make self-hosting practical.
 - Postgres support ([#21](https://github.com/Jolls/arx/issues/21)): dialect gaps ([#32](https://github.com/Jolls/arx/issues/32)), serial allocation ([#33](https://github.com/Jolls/arx/issues/33)), end-to-end verification ([#28](https://github.com/Jolls/arx/issues/28)), then cutover to Postgres-only ([#29](https://github.com/Jolls/arx/issues/29))
 - Package Postgres as a StartOS service ([#24](https://github.com/Jolls/arx/issues/24))
 - Backup/restore ([#26](https://github.com/Jolls/arx/issues/26))
-- Cleanup: dead `is_lot_tracked` column ([#31](https://github.com/Jolls/arx/issues/31)), Arx header icon ([#22](https://github.com/Jolls/arx/issues/22))
+- Cleanup: Arx header icon ([#22](https://github.com/Jolls/arx/issues/22))
 
 ## v0.9.0 — Parts, sourcing, and audit
 
@@ -21,7 +21,7 @@ New user-facing features for the parts catalog and supplier layer.
 - **Sourcing:** AVL attributes on sourcing links ([#4](https://github.com/Jolls/arx/issues/4))
 - **Audit:** change log ([#12](https://github.com/Jolls/arx/issues/12)), multi-table audit trigger design ([#25](https://github.com/Jolls/arx/issues/25))
 - **Test records:** result snapshots as revision-controlled definitions ([#18](https://github.com/Jolls/arx/issues/18))
-- **Schema/infra:** flexible part user fields ([#14](https://github.com/Jolls/arx/issues/14)), integration tests in CI ([#19](https://github.com/Jolls/arx/issues/19))
+- **Schema/infra:** flexible part user fields ([#14](https://github.com/Jolls/arx/issues/14))
 
 ## Later (unscheduled)
 

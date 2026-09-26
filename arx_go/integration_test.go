@@ -855,13 +855,13 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 	for _, c := range checks {
 		for _, id := range c.ids {
 			var got sql.NullTime
-			err := h.DB().QueryRowContext(ctx,
+			err := h.queryRowContext(ctx,
 				fmt.Sprintf(`SELECT updated_at FROM %s WHERE %s=@p1`, c.table, c.idCol), id,
 			).Scan(&got)
 			if err != nil {
 				t.Fatalf("SELECT updated_at FROM %s WHERE %s=%d: %v", c.table, c.idCol, id, err)
 			}
-			if !got.Valid || got.Time.Format("2006-01-02T15:04:05") != sentinel {
+			if !got.Valid || got.Time.UTC().Format("2006-01-02T15:04:05") != sentinel {
 				t.Errorf("%s id %d: updated_at = %v, want sentinel %s (row was touched by something, "+
 					"or ArxDev needs SQL/azure/seed_test_data.sql re-run)",
 					c.table, id, got, sentinel)
@@ -871,23 +871,23 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 
 	// app_config and named_queries key off setting_key/name, not id.
 	var appConfigUpdated sql.NullTime
-	if err := h.DB().QueryRowContext(ctx,
+	if err := h.queryRowContext(ctx,
 		fmt.Sprintf(`SELECT updated_at FROM %s WHERE setting_key=@p1`, h.cfg().AppConfigTable()), "schema_version",
 	).Scan(&appConfigUpdated); err != nil {
 		t.Fatalf("SELECT updated_at FROM app_config: %v", err)
 	}
-	if !appConfigUpdated.Valid || appConfigUpdated.Time.Format("2006-01-02T15:04:05") != sentinel {
+	if !appConfigUpdated.Valid || appConfigUpdated.Time.UTC().Format("2006-01-02T15:04:05") != sentinel {
 		t.Errorf("app_config schema_version: updated_at = %v, want sentinel %s (or ArxDev needs reseeding)",
 			appConfigUpdated, sentinel)
 	}
 
 	var namedQueryUpdated sql.NullTime
-	if err := h.DB().QueryRowContext(ctx,
+	if err := h.queryRowContext(ctx,
 		fmt.Sprintf(`SELECT updated_at FROM %s WHERE name=@p1`, h.cfg().NamedQueriesTable()), "fil_category_for_pn",
 	).Scan(&namedQueryUpdated); err != nil {
 		t.Fatalf("SELECT updated_at FROM named_queries: %v", err)
 	}
-	if !namedQueryUpdated.Valid || namedQueryUpdated.Time.Format("2006-01-02T15:04:05") != sentinel {
+	if !namedQueryUpdated.Valid || namedQueryUpdated.Time.UTC().Format("2006-01-02T15:04:05") != sentinel {
 		t.Errorf("named_queries fil_category_for_pn: updated_at = %v, want sentinel %s (or ArxDev needs reseeding)",
 			namedQueryUpdated, sentinel)
 	}
@@ -1525,7 +1525,7 @@ func seedThrowawayPO(t *testing.T, h *Handler, ctx context.Context) (id int, num
 		t.Fatalf("could not parse PO number from Location %q", loc)
 	}
 
-	if err := h.DB().QueryRowContext(ctx,
+	if err := h.queryRowContext(ctx,
 		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number,
 	).Scan(&id); err != nil {
 		t.Fatalf("look up created PO id: %v", err)
@@ -1932,8 +1932,8 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 	lg := h.cfg().GenealogyTable()
 	pn := h.cfg().PartsTable()
 
-	const outputPart = 3012  // ASM-1002 sub-assembly, is_lot_tracked in seed
-	const trackedComp = 3007 // RAW-1002 component, is_lot_tracked; seed lot 8301
+	const outputPart = 3012  // ASM-1002 sub-assembly, lot-tracked in seed
+	const trackedComp = 3007 // RAW-1002 component, lot-tracked; seed lot 8301
 	const compLot = 8301     // 3007's active seed lot
 	const buildQty = 2.0
 
@@ -2076,7 +2076,7 @@ func TestIntegration_BuildReturnsToRecord(t *testing.T) {
 	inv := h.cfg().InventoryTxnTable()
 	pn := h.cfg().PartsTable()
 
-	const outputPart = 3012  // ASM-1002, is_lot_tracked + has a BOM in seed
+	const outputPart = 3012  // ASM-1002, lot-tracked + has a BOM in seed
 	const trackedComp = 3007 // lot-tracked component; seed lot 8301
 	const compLot = 8301
 
@@ -3317,7 +3317,7 @@ func seedPOLine(t *testing.T, h *Handler, ctx context.Context, poID, partID int,
 	insert := h.dia().InsertReturningID(h.cfg().POLineTable(),
 		"po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, received_qty",
 		"@p1, @p2, 'A', @p3, 1, 'test line', @p4, @p5, 0", true)
-	if err := h.DB().QueryRowContext(ctx, insert, poID, partNumber, partID, qty, unitCost).Scan(&id); err != nil {
+	if err := h.queryRowContext(ctx, insert, poID, partNumber, partID, qty, unitCost).Scan(&id); err != nil {
 		t.Fatalf("seedPOLine: %v", err)
 	}
 	return id
@@ -3741,7 +3741,7 @@ func seedRFQQuote(t *testing.T, h *Handler, ctx context.Context, supplierID, gro
 	if number == "" || number == loc {
 		t.Fatalf("could not parse RFQ quote number from Location %q", loc)
 	}
-	if err := h.DB().QueryRowContext(ctx,
+	if err := h.queryRowContext(ctx,
 		fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number,
 	).Scan(&id); err != nil {
 		t.Fatalf("look up created RFQ quote id: %v", err)

@@ -77,7 +77,7 @@
         </div>
         <div class="part-status-cell">
             <div class="part-status-label">Last Modified</div>
-            <div class="part-status-value">{{formatDate .PO.DateModified}}</div>
+            <div class="part-status-value">{{formatDate (localTimePtr $.UserLoc .PO.DateModified)}}</div>
         </div>
         <div class="part-status-cell ms-auto">
             <div class="part-status-label">PO Total</div>
@@ -351,7 +351,7 @@
                 <tbody>
                     {{range .History}}
                     <tr>
-                        <td>{{formatDateTime .ChangedAt}}</td>
+                        <td>{{formatDateTime (localTime $.UserLoc .ChangedAt)}}</td>
                         <td>
                             {{if eq .EventType "status"}}
                                 {{if .FromStatus}}{{template "po_status_badge" .FromStatus}} &rarr; {{end}}{{template "po_status_badge" .ToStatus}}

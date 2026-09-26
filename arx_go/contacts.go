@@ -80,7 +80,7 @@ func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
 		c.Active = active.Bool
 		c.Supplier = suName.String
 		if modified.Valid {
-			c.Modified = modified.Time.Format("2006-01-02")
+			c.Modified = modified.Time.In(h.userLocation(r)).Format("2006-01-02")
 		}
 		out = append(out, c)
 	}
@@ -211,8 +211,8 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 	insertContact := h.dia().InsertReturningID(h.cfg().ContactTable(),
 		`display_name, company_id, email, phone_1, phone_2, fax,
 		 address, city, state, zipcode, country,
-		 website, is_active, notes, updated_at`,
-		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15`,
+		 website, is_active, notes`,
+		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14`,
 		false)
 	err := h.queryRowContext(r.Context(), insertContact,
 		name, nullableInt(fv(r, "CNSUID")),
@@ -220,7 +220,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
 		fv(r, "CNWeb"),
 		r.FormValue("CNActive") == "1",
-		fv(r, "CNNotes"), time.Now(),
+		fv(r, "CNNotes"),
 	).Scan(&newID)
 	if err != nil {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
@@ -265,15 +265,15 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 		UPDATE %s SET
 		  display_name=@p1, company_id=@p2, email=@p3, phone_1=@p4, phone_2=@p5, fax=@p6,
 		  address=@p7, city=@p8, state=@p9, zipcode=@p10, country=@p11,
-		  website=@p12, is_active=@p13, notes=@p14, updated_at=@p15
-		WHERE id=@p16
+		  website=@p12, is_active=@p13, notes=@p14, updated_at=GETDATE()
+		WHERE id=@p15
 	`, h.cfg().ContactTable()),
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
 		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
 		fv(r, "CNWeb"),
 		r.FormValue("CNActive") == "1",
-		fv(r, "CNNotes"), time.Now(), id,
+		fv(r, "CNNotes"), id,
 	)
 	if err != nil {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{

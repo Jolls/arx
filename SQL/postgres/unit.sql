@@ -19,7 +19,7 @@ CREATE TABLE unit (
   lot_id         INTEGER       NULL,                            -- FK to lot.id; set for a serialized unit inside a lot, NULL for serial-only parts.
   build_id       INTEGER       NULL,                            -- FK to build.id; set for a build-sourced unit, NULL otherwise.
   serial_number  VARCHAR(255)  NOT NULL,                        -- Serial entered at test time; STRING (non-numeric allowed), UNIQUE per part_id.
-  created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
   is_active      BOOLEAN       NOT NULL DEFAULT TRUE,           -- Soft-delete / scrap flag.
   source         VARCHAR(10)   NOT NULL DEFAULT 'test' CHECK (source IN ('test', 'manual')), -- How the unit was minted (#799): test (test-record save) or manual (back-filled pre-existing serial, no test record).
   CONSTRAINT UQ_unit_serial     UNIQUE (part_id, serial_number)

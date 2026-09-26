@@ -7,8 +7,7 @@ DROP TABLE IF EXISTS app_config CASCADE;
 CREATE TABLE app_config (
     setting_key   VARCHAR(100) NOT NULL PRIMARY KEY,
     setting_value TEXT         NOT NULL,
-    updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-INSERT INTO app_config (setting_key, setting_value) VALUES ('schema_version', '8');
-INSERT INTO app_config (setting_key, setting_value) VALUES ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail');
+INSERT INTO app_config (setting_key, setting_value) VALUES ('schema_version', '12');

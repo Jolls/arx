@@ -352,8 +352,8 @@
                 <tbody id="cat-rows">
                     {{range .PartCategories}}
                     <tr class="cat-row">
-                        <td style="padding:2px 8px;"><input class="form-control" data-f="code" value="{{.Code}}" style="width:80px; text-transform:uppercase;"></td>
-                        <td style="padding:2px 8px;"><input class="form-control" data-f="label" value="{{.Label}}"></td>
+                        <td style="padding:2px 8px;"><input class="form-control" data-f="code" maxlength="10" value="{{.Code}}" style="width:80px; text-transform:uppercase;"></td>
+                        <td style="padding:2px 8px;"><input class="form-control" data-f="label" maxlength="255" value="{{.Label}}"></td>
                         <td class="text-center"><input type="checkbox" data-f="purchased" {{if .Purchased}}checked{{end}}></td>
                         <td class="text-center"><input type="checkbox" data-f="bom" {{if .BOM}}checked{{end}}></td>
                         <td class="text-center"><input type="checkbox" data-f="orders" {{if .Orders}}checked{{end}}></td>
@@ -368,8 +368,8 @@
             </table>
             <template id="cat-row-tmpl">
                 <tr class="cat-row">
-                    <td style="padding:2px 8px;"><input class="form-control" data-f="code" style="width:80px; text-transform:uppercase;"></td>
-                    <td style="padding:2px 8px;"><input class="form-control" data-f="label"></td>
+                    <td style="padding:2px 8px;"><input class="form-control" data-f="code" maxlength="10" style="width:80px; text-transform:uppercase;"></td>
+                    <td style="padding:2px 8px;"><input class="form-control" data-f="label" maxlength="255"></td>
                     <td class="text-center"><input type="checkbox" data-f="purchased"></td>
                     <td class="text-center"><input type="checkbox" data-f="bom"></td>
                     <td class="text-center"><input type="checkbox" data-f="orders" checked></td>

@@ -33,11 +33,11 @@ func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, 
 		buildArg = *buildID
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (part_id, txn_type, qty, txn_date, username, reference, note, po_line_id, lot_id, build_id, created_at)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)
+		INSERT INTO %s (part_id, txn_type, qty, txn_date, username, reference, note, po_line_id, lot_id, build_id)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10)
 	`, h.cfg().InventoryTxnTable()),
 		partID, txnType, qty, txnDate, h.actorName(r),
-		nullableText(reference), nullableText(note), poArg, lotArg, buildArg, time.Now(),
+		nullableText(reference), nullableText(note), poArg, lotArg, buildArg,
 	); err != nil {
 		return err
 	}

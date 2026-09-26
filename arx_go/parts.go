@@ -546,19 +546,19 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		 release_status, is_active, requested_by, notes, created_date, modified_date,
 		 uom_id, current_cost, reorder_min,
 		 user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
-		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, is_lot_tracked, tracking_mode`,
+		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, tracking_mode`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
 		 @p12,@p13,@p14,
-		 @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26`,
+		 @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25`,
 		false)
 	err := h.queryRowContext(r.Context(), insertPart,
-		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), fv(r, "category"),
+		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), nullableText(fv(r, "category")),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		now, now,
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
-		models.TracksLots(mode), mode,
+		mode,
 	).Scan(&newID)
 	if err != nil {
 		units, _ := h.fetchUnits(r.Context())
@@ -660,16 +660,16 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		  uom_id=@p11, current_cost=@p12, reorder_min=@p13,
 		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
 		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23,
-		  is_lot_tracked=@p24, tracking_mode=@p25
-		WHERE id=@p26
+		  tracking_mode=@p24
+		WHERE id=@p25
 	`, h.cfg().PartsTable()),
-		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), fv(r, "category"),
+		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), nullableText(fv(r, "category")),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
 		time.Now(),
 		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
 		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
 		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
-		models.TracksLots(mode), mode,
+		mode,
 		id,
 	)
 	if err != nil {
@@ -1407,8 +1407,7 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Write rollup cost back to every assembly visited during the walk (root + all
-	// sub-assemblies), using a single timestamp so the BOM view is consistent.
-	now := time.Now()
+	// sub-assemblies) in one transaction, so now() gives every assembly the same timestamp.
 	pn := h.cfg().PartsTable()
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
@@ -1423,8 +1422,8 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	}()
 	for partID, result := range memo {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET last_rollup_cost=@p1, last_rollup_at=@p2 WHERE id=@p3`, pn,
-		), result.cost, now, partID); err != nil {
+			`UPDATE %s SET last_rollup_cost=@p1, last_rollup_at=GETDATE() WHERE id=@p2`, pn,
+		), result.cost, partID); err != nil {
 			h.renderError(w, r, "Error saving rollup cost: "+err.Error())
 			return
 		}
@@ -1782,7 +1781,10 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 			break
 		}
 	}
-	cats := splitCSV(h.appConfigGetOr(r.Context(), "attachment_categories", ""))
+	cats := h.loadAttachmentCategories(r.Context())
+	if cats == nil {
+		cats = []string{} // keep the JS ATT_CATEGORIES an array
+	}
 	catsJSON, _ := json.Marshal(cats)
 	vendorOptions, err := h.fetchVendorScopeOptions(r, id)
 	if err != nil {

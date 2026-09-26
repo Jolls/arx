@@ -27,8 +27,8 @@ CREATE TABLE form_row (
   instrument_types    VARCHAR(255),
   format              VARCHAR(255),
   comment             VARCHAR(500),
-  created_at          TIMESTAMP,
-  updated_at          TIMESTAMP
+  created_at          TIMESTAMPTZ DEFAULT now(),
+  updated_at          TIMESTAMPTZ DEFAULT now()
 );
 
 -- FK deferred (mirrors SQL Server set):

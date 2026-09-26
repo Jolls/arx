@@ -34,7 +34,7 @@
                     <td>{{if .LotID}}<a href="/part/{{$.Part.ID}}/lots/{{.LotIDVal}}">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{if .BuildID}}Build #{{.BuildIDVal}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{if .IsManual}}<span class="badge bg-secondary">manual</span>{{else}}test{{end}}</td>
-                    <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+                    <td>{{(localTime $.UserLoc .CreatedAt).Format "2006-01-02"}}</td>
                     <td>{{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Scrapped</span>{{end}}</td>
                     <td><a href="/part/{{$.Part.ID}}/units/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
                 </tr>

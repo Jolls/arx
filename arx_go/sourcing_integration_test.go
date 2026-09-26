@@ -41,7 +41,7 @@ func seedSupplierPart(t *testing.T, h *Handler, ctx context.Context, partID, sup
 		t.Fatalf("seedSupplierPart: SupplierPartCreate status %d, body: %s", rec.Code, rec.Body.String())
 	}
 	var spID int
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT MAX(id) FROM %s WHERE part_id=@p1`, h.cfg().SupplierPartTable()), partID,
 	).Scan(&spID); err != nil {
 		t.Fatalf("seedSupplierPart: capture new id: %v", err)
@@ -162,7 +162,7 @@ func TestIntegration_SupplierPartUpdate(t *testing.T) {
 
 	var supplierPN, leadTime string
 	var minIncrement float64
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT supplier_pn, lead_time, min_increment FROM %s WHERE id=@p1`, h.cfg().SupplierPartTable()), spID,
 	).Scan(&supplierPN, &leadTime, &minIncrement); err != nil {
 		t.Fatalf("select updated supplier_part: %v", err)
@@ -188,7 +188,7 @@ func TestIntegration_SupplierPartUpdate_MissingSupplier(t *testing.T) {
 	defer spc()
 
 	var before string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT supplier_pn FROM %s WHERE id=@p1`, h.cfg().SupplierPartTable()), spID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seeded supplier_part: %v", err)
@@ -205,7 +205,7 @@ func TestIntegration_SupplierPartUpdate_MissingSupplier(t *testing.T) {
 	}
 
 	var after string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT supplier_pn FROM %s WHERE id=@p1`, h.cfg().SupplierPartTable()), spID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier_part after rejected update: %v", err)
@@ -238,7 +238,7 @@ func TestIntegration_SupplierPartDelete(t *testing.T) {
 	assert302(t, "SupplierPartDelete", rec)
 
 	var remaining int
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT COUNT(*) FROM %s WHERE part_id=@p1`, h.cfg().SupplierPartTable()), partID,
 	).Scan(&remaining); err != nil {
 		t.Fatalf("count remaining supplier_part rows: %v", err)
@@ -247,7 +247,7 @@ func TestIntegration_SupplierPartDelete(t *testing.T) {
 		t.Fatalf("remaining supplier_part rows for part %d = %d, want 1", partID, remaining)
 	}
 	var remainingID int
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id FROM %s WHERE part_id=@p1`, h.cfg().SupplierPartTable()), partID,
 	).Scan(&remainingID); err != nil {
 		t.Fatalf("select remaining supplier_part row: %v", err)

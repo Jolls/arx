@@ -357,6 +357,7 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	if err != nil {
 		return nil, err
 	}
+	loc := h.userLocationCtx(ctx)
 	for partRows.Next() {
 		var id int
 		var partNumber, description sql.NullString
@@ -371,7 +372,10 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 		}
 		items = append(items, dashboardActivityItem{
 			Label: label, URL: fmt.Sprintf("/part/%d", id),
-			Detail: "modified", When: formatDate(&modified), Timestamp: modified,
+			// modified_date is a DATE: place it at midnight in the user's zone so it
+			// sorts correctly against PO changed_at instants (#192).
+			Detail: "modified", When: formatDate(&modified),
+			Timestamp: time.Date(modified.Year(), modified.Month(), modified.Day(), 0, 0, 0, 0, loc),
 		})
 	}
 	partRows.Close()
@@ -398,9 +402,10 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 		case eventType.String == "approval" && action.String != "":
 			detail = action.String
 		}
+		local := changedAt.In(loc)
 		items = append(items, dashboardActivityItem{
 			Label: "PO " + number.String, URL: fmt.Sprintf("/po/%d", poID),
-			Detail: detail, When: formatDate(&changedAt), Timestamp: changedAt,
+			Detail: detail, When: formatDate(&local), Timestamp: changedAt,
 		})
 	}
 	poRows.Close()
@@ -450,13 +455,13 @@ func resolveSpendDateRange(q url.Values, now time.Time) reportDateRange {
 	case "custom":
 		rng.Preset = "custom"
 		rng.FromStr = q.Get("from")
-		if t, err := time.Parse(spendDateLayout, rng.FromStr); err == nil {
+		if t, err := time.ParseInLocation(spendDateLayout, rng.FromStr, now.Location()); err == nil {
 			rng.From = t
 		} else {
 			rng.FromStr = ""
 		}
 		rng.ToStr = q.Get("to")
-		if t, err := time.Parse(spendDateLayout, rng.ToStr); err == nil {
+		if t, err := time.ParseInLocation(spendDateLayout, rng.ToStr, now.Location()); err == nil {
 			rng.To = t
 		} else {
 			rng.ToStr = ""
@@ -764,7 +769,7 @@ func (h *Handler) queryPOCycleTime(ctx context.Context, rng reportDateRange) ([]
 
 // ReportsCycleTime is the PO Cycle Time report page — GET /reports/cycle-time.
 func (h *Handler) ReportsCycleTime(w http.ResponseWriter, r *http.Request) {
-	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rng := resolveSpendDateRange(r.URL.Query(), time.Now().In(h.userLocation(r)))
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "cycle-time", "Range": rng, "DateRangeAction": "/reports/cycle-time"}
 	if h.database() == nil {
 		h.render(w, r, "reports/cycle_time.html", data)
@@ -783,7 +788,7 @@ func (h *Handler) ReportsCycleTime(w http.ResponseWriter, r *http.Request) {
 // ReportsCycleTimeExportCSV streams the PO Cycle Time table as CSV — GET
 // /reports/cycle-time/export.csv.
 func (h *Handler) ReportsCycleTimeExportCSV(w http.ResponseWriter, r *http.Request) {
-	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rng := resolveSpendDateRange(r.URL.Query(), time.Now().In(h.userLocation(r)))
 	rows, err := h.queryPOCycleTime(r.Context(), rng)
 	if err != nil {
 		serverError(w, "database error", err)

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -132,7 +134,7 @@ func TestIntegration_SupplierUpdate(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.SupplierUpdate(rec, withID(postForm(fmt.Sprintf("/supplier/%d", supplierID), url.Values{
 		"name":            {newName},
-		"SUSupplierCode":  {"UPD1"},
+		"supplier_code":   {"UPD1"},
 		"is_active":       {"0"},
 		"is_supplier":     {"1"},
 		"is_manufacturer": {"0"},
@@ -143,8 +145,8 @@ func TestIntegration_SupplierUpdate(t *testing.T) {
 	var name, code string
 	var active, isSupplier, isManufacturer bool
 	var defaultContact *int
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT name, SUSupplierCode, is_active, is_supplier, is_manufacturer, default_contact FROM %s WHERE id=@p1`,
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT name, supplier_code, is_active, is_supplier, is_manufacturer, default_contact FROM %s WHERE id=@p1`,
 		h.cfg().CompanyTable()), supplierID,
 	).Scan(&name, &code, &active, &isSupplier, &isManufacturer, &defaultContact); err != nil {
 		t.Fatalf("select updated supplier: %v", err)
@@ -166,7 +168,7 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 	defer cl()
 
 	var before string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT name FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
@@ -182,7 +184,7 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 	}
 
 	var after string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT name FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
@@ -203,8 +205,8 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 	defer cl()
 
 	var before string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT supplier_code FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
 	}
@@ -212,7 +214,7 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.SupplierUpdate(rec, withID(postForm(fmt.Sprintf("/supplier/%d", supplierID), url.Values{
 		"name":           {"Still Valid Name"},
-		"SUSupplierCode": {"a/b"},
+		"supplier_code":  {"a/b"},
 	}), supplierID))
 	assertStatus(t, "SupplierUpdate invalid folder stub", rec, http.StatusOK)
 	if !strings.Contains(rec.Body.String(), `folder stub cannot contain`) {
@@ -220,13 +222,13 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 	}
 
 	var after string
-	if err := h.DB().QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT supplier_code FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
 	}
 	if after != before {
-		t.Errorf("SUSupplierCode changed on rejected update: %q -> %q, want unchanged", before, after)
+		t.Errorf("supplier_code changed on rejected update: %q -> %q, want unchanged", before, after)
 	}
 }
 
@@ -239,4 +241,96 @@ func TestIntegration_SuppliersNew(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.SuppliersNew(rec, httptest.NewRequest(http.MethodGet, "/suppliers/new", nil))
 	assertStatus(t, "SuppliersNew", rec, http.StatusOK)
+}
+
+// TestIntegration_SupplierNotesCodeAndCounts pins the supplier code, notes and
+// the trigger-maintained link/PO counts through update + detail render.
+func TestIntegration_SupplierNotesCodeAndCounts(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	supplierID, cl := seedSupplier(t, h, ctx)
+	defer cl()
+
+	rec := httptest.NewRecorder()
+	h.SupplierUpdate(rec, withID(postForm(fmt.Sprintf("/supplier/%d", supplierID), url.Values{
+		"name":           {smokeUniq("CHR-SUP")},
+		"supplier_code":  {"CHR1"},
+		"notes":          {"characterization note"},
+		"is_active":      {"1"},
+		"is_supplier":    {"1"},
+	}), supplierID))
+	assert302(t, "SupplierUpdate", rec)
+
+	partID, clPart := seedPart(t, h, ctx, "BUY")
+	defer clPart()
+	_, clSP := seedSupplierPart(t, h, ctx, partID, supplierID)
+	defer clSP()
+
+	savedRoot := h.cfg().POFolderRoot
+	h.cfg().POFolderRoot = ""
+	rec = httptest.NewRecorder()
+	h.POCreate(rec, postForm("/pos", url.Values{"supplier_id": {strconv.Itoa(supplierID)}}))
+	h.cfg().POFolderRoot = savedRoot
+	number := strings.TrimSuffix(strings.TrimPrefix(rec.Header().Get("Location"), "/po/"), "?suggest_links=1")
+	var poID int
+	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number).Scan(&poID); err != nil {
+		t.Fatalf("look up created PO %q: %v", number, err)
+	}
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POLineTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POHistoryTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg().POTable()), poID)
+	}()
+
+	rec = httptest.NewRecorder()
+	h.SupplierDetail(rec, withID(httptest.NewRequest(http.MethodGet, fmt.Sprintf("/supplier/%d", supplierID), nil), supplierID))
+	assertStatus(t, "SupplierDetail", rec, http.StatusOK)
+	body := rec.Body.String()
+	for _, want := range []string{
+		"characterization note", "CHR1",
+		"Linked Parts:</strong><span>1</span>", "Purchase Orders:</strong><span>1</span>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("SupplierDetail body missing %q", want)
+		}
+	}
+}
+
+// TestIntegration_POCreate_FolderUsesSupplierCode pins that createPOFolder
+// names the PO folder "<number> <supplier code>" (seed 1001 = ACME).
+func TestIntegration_POCreate_FolderUsesSupplierCode(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	root := t.TempDir()
+	savedRoot := h.cfg().POFolderRoot
+	h.cfg().POFolderRoot = root
+	defer func() { h.cfg().POFolderRoot = savedRoot }()
+
+	rec := httptest.NewRecorder()
+	h.POCreate(rec, postForm("/pos", url.Values{"supplier_id": {"1001"}}))
+	number := strings.TrimSuffix(strings.TrimPrefix(rec.Header().Get("Location"), "/po/"), "?suggest_links=1")
+	var poID int
+	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number).Scan(&poID); err != nil {
+		t.Fatalf("look up created PO %q: %v", number, err)
+	}
+	defer func() {
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POLineTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POHistoryTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg().POTable()), poID)
+	}()
+
+	entries, _ := os.ReadDir(root)
+	var found bool
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), number) && strings.Contains(e.Name(), " ACME") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no PO folder starting %q containing \" ACME\" under %s (entries: %v)", number, root, entries)
+	}
 }

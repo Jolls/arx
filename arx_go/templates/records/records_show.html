@@ -233,7 +233,7 @@
       <td data-col="col-pf" class="text-center">{{pfBadge .}}</td>
       <td data-col="col-comment" style="word-break:break-word">{{if .Result}}{{.Result.Comment}}{{end}}</td>
       <td data-col="col-updated" class="text-nowrap small text-muted">
-        {{if .Result}}{{formatDateTime .Result.UpdatedAt}}{{end}}
+        {{if .Result}}{{formatDateTime (localTimePtr $.UserLoc .Result.UpdatedAt)}}{{end}}
       </td>
     </tr>
     {{if $.DebugMode}}
@@ -259,8 +259,8 @@
             <tr><th class="text-muted fw-normal">instrument_types</th>      <td>{{.Step.InstrumentTypes}}</td></tr>
             <tr><th class="text-muted fw-normal">format</th>                <td>{{.Step.Format}}</td></tr>
             <tr><th class="text-muted fw-normal">comment</th>               <td>{{.Step.StepComment}}</td></tr>
-            <tr><th class="text-muted fw-normal">created_at</th>            <td>{{formatDateTime .Step.StepCreatedAt}}</td></tr>
-            <tr><th class="text-muted fw-normal">updated_at</th>            <td>{{formatDateTime .Step.StepUpdatedAt}}</td></tr>
+            <tr><th class="text-muted fw-normal">created_at</th>            <td>{{formatDateTime (localTimePtr $.UserLoc .Step.StepCreatedAt)}}</td></tr>
+            <tr><th class="text-muted fw-normal">updated_at</th>            <td>{{formatDateTime (localTimePtr $.UserLoc .Step.StepUpdatedAt)}}</td></tr>
           </tbody>
         </table>
       </td>
@@ -334,7 +334,7 @@
         {{range .Events}}
         {{$snap := index $.Snapshots .ID}}
         <tr>
-          <td class="text-nowrap text-muted">{{formatDateTime .EventDate}}</td>
+          <td class="text-nowrap text-muted">{{formatDateTime (localTimePtr $.UserLoc .EventDate)}}</td>
           <td>
             {{if eq .EventType "approved"}}<span class="badge bg-success">approved</span>
             {{else if eq .EventType "completed"}}<span class="badge bg-secondary">completed</span>

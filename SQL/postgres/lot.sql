@@ -2,7 +2,7 @@
 -- Created at goods receipt for a lot-tracked purchased part (po_line_id set,
 -- lot_number defaults to the PO number) or by a build producing a lot-tracked output
 -- (po_line_id NULL). vendor_lot_number captures the supplier's own lot ID.
--- part.is_lot_tracked gates which parts get a lot. Requires part and po_line first;
+-- part.tracking_mode (lot/lot_serial) gates which parts get a lot. Requires part and po_line first;
 -- build must also exist for the deferred output-lot FK at the bottom.
 
 DROP TABLE IF EXISTS lot CASCADE;
@@ -16,7 +16,7 @@ CREATE TABLE lot (
   source             VARCHAR(10)   NULL CONSTRAINT CK_lot_source CHECK (source IN ('purchase', 'build', 'adjust')), -- How the lot originated (#744): purchase/build/adjust. NULL = not yet classified.
   po_line_id         INTEGER       NULL,                            -- FK to po_line.id for purchased receipts; NULL for manufactured lots.
   notes              TEXT          NULL,                            -- Free-text batch notes (#872). Rewritten in full on the lot edit page; appended to (server-side) from a test record's edit page.
-  created_at         TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at         TIMESTAMPTZ   NOT NULL DEFAULT now(),
   is_active          BOOLEAN       NOT NULL DEFAULT TRUE
 );
 

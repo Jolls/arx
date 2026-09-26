@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/base64"
 	"encoding/csv"
 	"fmt"
@@ -223,7 +224,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PODefaultReceiverName": poReceiverName,
 		"POContacts":            poContacts,
 		"POSuppliers":           poSuppliers,
-		"AttachmentCategories":  h.appConfigGetOr(r.Context(), "attachment_categories", ""),
+		"AttachmentCategories":  strings.Join(h.loadAttachmentCategories(r.Context()), ","),
 		"DigiKeyClientID":       h.cfg().DigiKeyClientID,
 		"DigiKeyClientSecretSet": h.cfg().DigiKeyClientSecret != "",
 		"CompanyLogo":           h.companyLogoURL(),
@@ -264,17 +265,71 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "settings/settings.html", h.settingsData(w, r, nil))
 }
 
-// SettingsAttachmentCategoriesSave persists the attachment-category list to
-// app_config. It has its own endpoint so this partial form can't blank the
-// path fields that SettingsSave writes from the main settings form.
+// SettingsAttachmentCategoriesSave persists the attachment-category list to the
+// attachment_category table (#194). It has its own endpoint so this partial form
+// can't blank the path fields that SettingsSave writes from the main settings form.
 func (h *Handler) SettingsAttachmentCategoriesSave(w http.ResponseWriter, r *http.Request) {
 	if h.database() != nil {
-		cats := strings.Join(splitCSV(r.FormValue("attachment_categories")), ",")
-		if err := h.appConfigSet(r.Context(), "attachment_categories", cats); err != nil {
-			log.Printf("warning: could not save attachment_categories: %v", err)
+		if err := h.saveAttachmentCategories(r.Context(), splitCSV(r.FormValue("attachment_categories"))); err != nil {
+			log.Printf("warning: could not save attachment categories: %v", err)
 		}
 	}
 	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+// loadAttachmentCategories returns the attachment Category dropdown options in
+// order; nil when no DB is connected or the read fails.
+func (h *Handler) loadAttachmentCategories(ctx context.Context) []string {
+	if h.database() == nil {
+		return nil
+	}
+	rows, err := h.queryContext(ctx, fmt.Sprintf(
+		`SELECT display_name FROM %s ORDER BY sort_order, display_name`, h.cfg().AttachmentCategoryTable()))
+	if err != nil {
+		log.Printf("warning: could not load attachment categories: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var cats []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			log.Printf("warning: could not load attachment categories: %v", err)
+			return nil
+		}
+		cats = append(cats, c)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("warning: could not load attachment categories: %v", err)
+		return nil
+	}
+	return cats
+}
+
+// saveAttachmentCategories replaces the attachment_category rows with cats, in
+// order, keeping the first of any repeated name.
+func (h *Handler) saveAttachmentCategories(ctx context.Context, cats []string) error {
+	tbl := h.cfg().AttachmentCategoryTable()
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, tbl)); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, c := range cats {
+		if seen[c] {
+			continue
+		}
+		seen[c] = true
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+			`INSERT INTO %s (display_name, sort_order) VALUES (@p1, @p2)`, tbl), c, len(seen)-1); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // SettingsDigiKeySave persists the shop's DigiKey API client ID/secret to
@@ -679,6 +734,7 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 		h.cfg().NamedQueriesTable(), h.cfg().FormRowHistoryTable(),
 		h.cfg().InventoryTxnTable(), h.cfg().BuildTable(), h.cfg().LotTable(),
 		h.cfg().GenealogyTable(), h.cfg().POHistoryTable(), h.cfg().RecordEventResultsTable(),
+		h.cfg().PartCategoryTable(), h.cfg().AttachmentCategoryTable(),
 	}
 
 	for _, tbl := range tables {

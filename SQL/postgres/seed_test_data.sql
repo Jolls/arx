@@ -26,13 +26,14 @@
 --
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
 -- one with a comment, one without. company_attachment is NOT seeded (would require real
--- files/URLs on companies too) and is cleared and left empty, along with logs and release_notes.
+-- files/URLs on companies too) and is cleared and left empty.
 -- form_row_history gets one row written by trg_form_row_history (the seed
 -- updates step 6103 after insert precisely to exercise the definition-history timeline).
 --
 -- Login (ArxDev only): admin/admin (PO + record approver), tester/tester (no approvals).
 
 BEGIN;
+SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
 
     -- ============================================================
     -- 1. DELETE existing rows, children-first (schema/constraints/triggers stay).
@@ -51,6 +52,7 @@ BEGIN;
     -- side of all three first so those earlier deletes don't fail on a dangling reference.
     UPDATE part SET default_supplier_id = NULL, price_id = NULL, primary_attachment_id = NULL;
     DELETE FROM part_attachment;
+    DELETE FROM attachment_category;
     DELETE FROM supplier_part;
     DELETE FROM mfg_part;
     DELETE FROM bom;
@@ -77,11 +79,10 @@ BEGIN;
     DELETE FROM form_row;
     DELETE FROM form;                               -- form.part_number_id FKs part, so before part
     DELETE FROM part;
+    DELETE FROM part_category;                      -- after part, which FKs it
     DELETE FROM named_queries;
     DELETE FROM app_config;
     DELETE FROM uom;
-    DELETE FROM release_notes;
-    DELETE FROM logs;
     DELETE FROM users;
 
     -- ============================================================
@@ -112,8 +113,7 @@ BEGIN;
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
     -- swamp this file's diff) — run SQL/postgres/seed_company_logo.sql separately, after this script.
     INSERT INTO app_config (setting_key, setting_value, updated_at) VALUES
-        ('schema_version', '10', '2020-01-01T00:00:00'),
-        ('attachment_categories', 'Vendor Link,Drawing,CAD,Datasheet,Vendor Document,Fabrication,Schematic,Quote,BOM,SOP,Certificate,Photo,PDF Preview,Thumbnail', '2020-01-01T00:00:00');
+        ('schema_version', '12', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data — the canonical set lives in SQL/named_queries.sql;
     -- keep the two in sync. Postgres translation (#830) of the T-SQL query text: TRY_CAST →
@@ -168,7 +168,7 @@ BEGIN;
     -- ============================================================
     -- 4. Companies (suppliers / manufacturers)
     -- ============================================================
-    INSERT INTO company (id, name, SUNotes, is_active, is_supplier, is_manufacturer, SUSupplierCode) VALUES
+    INSERT INTO company (id, name, notes, is_active, is_supplier, is_manufacturer, supplier_code) VALUES
         (1001, 'Acme Fasteners',         'Reference test supplier - screws, fasteners.', TRUE, TRUE, FALSE, 'ACME'),
         (1002, 'Precision Machining Co', 'Reference test supplier + manufacturer.',       TRUE, TRUE, TRUE, 'PMC'),
         (1003, 'Global Distribution',    'Reference test receiver / ship-to.',            TRUE, TRUE, FALSE, 'GDIST'),
@@ -202,6 +202,36 @@ BEGIN;
     -- ============================================================
     -- 6. Parts
     -- ============================================================
+    -- part_category / attachment_category (#194): mirror models.DefaultCategories() and the
+    -- former app_config attachment list. Before part, which FKs part_category.
+    INSERT INTO part_category (code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
+                               is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible, sort_order, created_at, updated_at) VALUES
+        ('ASM', 'Assembly', FALSE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE, 0, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('BUY', 'Purchased', TRUE,FALSE,TRUE,TRUE,TRUE,TRUE,TRUE, 1, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('DWG', 'Drawing', FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE, 2, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('DOC', 'Document', FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE, 3, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('FORM', 'Test Form', FALSE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE, 4, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('MFG', 'Manufactured', FALSE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE, 5, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('OPS', 'Operation / Labor', FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE, 6, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('RAW', 'Raw Material', TRUE,FALSE,TRUE,TRUE,TRUE,TRUE,TRUE, 7, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('SVC', 'Service', TRUE,FALSE,TRUE,TRUE,TRUE,TRUE,FALSE, 8, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('TOOL', 'Tooling', TRUE,FALSE,TRUE,TRUE,TRUE,TRUE,FALSE, 9, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z');
+    INSERT INTO attachment_category (display_name, sort_order, created_at, updated_at) VALUES
+        ('Vendor Link', 0, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Drawing', 1, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('CAD', 2, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Datasheet', 3, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Vendor Document', 4, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Fabrication', 5, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Schematic', 6, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Quote', 7, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('BOM', 8, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('SOP', 9, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Certificate', 10, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Photo', 11, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('PDF Preview', 12, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),
+        ('Thumbnail', 13, '2020-01-01T00:00:00Z','2020-01-01T00:00:00Z');
+
     INSERT INTO part (id, part_number, category, revision, description, release_status, is_active, uom_id, current_cost, default_supplier_id, last_rollup_cost, last_rollup_at) VALUES
         (3001, 'RAW-1001', 'RAW', 'A', 'Aluminum Stock 6061',        'A', TRUE, 6,  2.50,   1001, NULL, NULL),
         (3002, 'BUY-1001', 'BUY', 'A', 'M3x8 SHCS',                  'A', TRUE, 1,  0.05,   1002, NULL, NULL),
@@ -412,16 +442,12 @@ BEGIN;
     -- machinery only engages when the OUTPUT part is lot-tracked, and 3005's own BOM
     -- components (3002/3003) are deliberately left un-tracked as well so that existing
     -- app-driven build integration tests don't need an extra lot pick per component.
-    UPDATE part SET is_lot_tracked = TRUE WHERE id IN (3007, 3012, 3013);
-
-    -- tracking_mode backfill (#743): mirrors is_lot_tracked (FALSE->'none', TRUE->'lot') until
-    -- the slice 8 read-swap; is_lot_tracked keeps driving reads until then.
+    -- tracking_mode (#743): 3007/3012/3013 are lot-tracked.
     UPDATE part SET tracking_mode = 'lot' WHERE id IN (3007, 3012, 3013);
 
     -- Serial coverage for slice 8 (#745): 3013 → lot_serial (its unit 8501 carries BOTH a lot
     -- and a build), 3005 → serial (its unit 8503 is build-only). TracksLots('serial') is false,
-    -- so 3005 stays un-lot-tracked and the #675 app build test is unaffected; is_lot_tracked
-    -- stays in sync (3013 already TRUE; 3005 stays FALSE — serial does not imply lot control).
+    -- so 3005 stays un-lot-tracked and the #675 app build test is unaffected.
     UPDATE part SET tracking_mode = 'lot_serial' WHERE id = 3013;
     UPDATE part SET tracking_mode = 'serial'     WHERE id = 3005;
 

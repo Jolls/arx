@@ -120,7 +120,7 @@ IMAGE_ROOT\<form part_number>\SN<Serial>_rID<recordID>_tID<testID>_YYYYMMDD_HHMM
 When a new PO is created, the app auto-creates a folder in `PO_FOLDER_ROOT` named:
 
 ```
-<PO number> <company SUSupplierCode>
+<PO number> <company supplier_code>
 ```
 
 Folder lookup matches any directory whose name **starts with** the PO number (the company code suffix may vary). In test mode, `-testmode` is appended to the folder name.

@@ -24,7 +24,7 @@
                     <div class="detail-row"><strong>Web:</strong><span>{{.Contact.Website}}</span></div>
                     <div class="detail-row"><strong>Status:</strong>
                         <span>{{if .Contact.IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-danger">Inactive</span>{{end}}</span></div>
-                    <div class="detail-row"><strong>Last Modified:</strong><span>{{formatDate .Contact.UpdatedAt}}</span></div>
+                    <div class="detail-row"><strong>Last Modified:</strong><span>{{formatDate (localTimePtr $.UserLoc .Contact.UpdatedAt)}}</span></div>
                 </div>
             </div>
         </div>

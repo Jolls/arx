@@ -384,17 +384,30 @@ func isValidTimezone(key string) bool {
 // (should not happen: main.go blank-imports time/tzdata so the zone data is
 // compiled into the binary).
 func (h *Handler) userLocation(r *http.Request) *time.Location {
+	return h.userLocationCtx(r.Context())
+}
+
+// userLocationCtx is userLocation for code that only has the request context.
+func (h *Handler) userLocationCtx(ctx context.Context) *time.Location {
 	tz := defaultTimezone
-	if u := h.currentUser(r); u != nil && isValidTimezone(u.Timezone) {
+	if u, _ := ctx.Value(ctxUserKey).(*User); u != nil && isValidTimezone(u.Timezone) {
 		tz = u.Timezone
+	}
+	if loc, ok := tzCache.Load(tz); ok {
+		return loc.(*time.Location)
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
 		log.Printf("warning: could not load timezone %q: %v", tz, err)
 		return time.UTC
 	}
+	tzCache.Store(tz, loc)
 	return loc
 }
+
+// tzCache memoizes time.LoadLocation (uncached in the stdlib); every page render
+// resolves the viewer's zone (#192).
+var tzCache sync.Map
 
 // appConfigGet reads a single key from app_config.
 func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) {
@@ -642,6 +655,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["SchemaMismatch"] = s.schemaMismatch
 		m["DBConnError"] = s.dbConnError
 		m["CurrentUser"] = h.currentUser(r)
+		m["UserLoc"] = h.userLocation(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
 		m["CompanyLogo"] = h.companyLogoURL()
 		m["AccentThemeClass"] = h.accentThemeClass(r)
@@ -823,8 +837,28 @@ func navBack(sess *sessions.Session) (url, label string) {
 
 // --- Template functions (core) ---------------------------------------------
 
+// localTime converts an audit timestamp (timestamptz; pgx scans it in time.Local) to the
+// viewing user's zone for display (#192). A nil loc (template tests not going through
+// render) leaves t unchanged.
+func localTime(loc *time.Location, t time.Time) time.Time {
+	if loc == nil {
+		return t
+	}
+	return t.In(loc)
+}
+
+func localTimePtr(loc *time.Location, t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	lt := localTime(loc, *t)
+	return &lt
+}
+
 func coreTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"localTime":    localTime,
+		"localTimePtr": localTimePtr,
 		// dict builds a map from alternating string-key/value pairs so a
 		// {{template}} call can pass more than one value to a named template
 		// (a Go html/template block only ever receives a single ".").

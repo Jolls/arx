@@ -23,7 +23,7 @@ CREATE TABLE result (
   type           INTEGER NOT NULL DEFAULT 0,        -- Snapshot of form_row.type.
   hide_formula   VARCHAR(255),                      -- Snapshot of form_row.hide_formula.
   default_result VARCHAR(255),                      -- Snapshot of form_row.default_result.
-  updated_at     TIMESTAMP
+  updated_at     TIMESTAMPTZ DEFAULT now()
 );
 
 -- FKs deferred (mirror SQL Server set):

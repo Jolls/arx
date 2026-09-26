@@ -1,5 +1,5 @@
 -- supplier_part: sourcing links - maps internal parts to supplier catalog entries.
--- SUNumOfLNKs on company is a denormalized count maintained by a trigger
+-- supplier_part_count on company is a denormalized count maintained by a trigger
 -- (SQL/postgres/triggers.sql).
 
 DROP TABLE IF EXISTS supplier_part CASCADE;

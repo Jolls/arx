@@ -563,7 +563,6 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	now := time.Now()
 	// OUTPUT INSERTED.ID is blocked on tables with triggers; combine INSERT + SCOPE_IDENTITY()
 	// in one batch so they share the same scope.
 	// New POs start as 'draft'; RFQs (#270) start as 'rfq'. Later status changes go
@@ -582,11 +581,11 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		 receiver_address, receiver_city, receiver_state, receiver_zipcode,
 		 receiver_country, receiver_phone, receiver_fax,
 		 tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
-		 date_requested, date_closed, date_modified, total_cost,
+		 date_requested, date_closed, total_cost,
 		 supplier_contact_id, receiver_contact_id`,
 		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,
 		 @p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,@p27,
-		 @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38,@p39`,
+		 @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38`,
 		true)
 	if err := tx.QueryRowContext(r.Context(), insertPO,
 		newNumber, newStatus, statusIsActive(newStatus), fv(r, "orderer"), fv(r, "account_id"),
@@ -599,7 +598,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		parseFormFloat(fv(r, "tax1")), parseFormFloat(fv(r, "shipping_cost")), parseFormFloat(fv(r, "misc_cost")),
 		fv(r, "notes"), fv(r, "internal_notes"),
 		parseFormDate(fv(r, "date_ordered")), parseFormDate(fv(r, "date_requested")), parseFormDate(fv(r, "date_closed")),
-		now, 0.0,
+		0.0,
 		nullableInt(fv(r, "supplier_contact_id")), nullableInt(fv(r, "receiver_contact_id")),
 	).Scan(&newID); err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
@@ -608,9 +607,9 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Record the creation as the first history entry (status event, from_status NULL).
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
-		VALUES (@p1, 'status', NULL, @p2, @p3, @p4)
-	`, h.cfg().POHistoryTable()), newID, newStatus, h.actorName(r), now); err != nil {
+		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by)
+		VALUES (@p1, 'status', NULL, @p2, @p3)
+	`, h.cfg().POHistoryTable()), newID, newStatus, h.actorName(r)); err != nil {
 		h.renderError(w, r, "Error recording PO status: "+err.Error())
 		return
 	}
@@ -823,9 +822,9 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		  tax1=@p25, shipping_cost=@p26, misc_cost=@p27,
 		  notes=@p28, internal_notes=@p29,
 		  date_ordered=@p30, date_requested=@p31, date_closed=@p32, date_printed=@p33,
-		  date_modified=@p34, total_cost=@p35,
-		  supplier_contact_id=@p37, receiver_contact_id=@p38
-		WHERE number=@p36
+		  date_modified=GETDATE(), total_cost=@p34,
+		  supplier_contact_id=@p36, receiver_contact_id=@p37
+		WHERE number=@p35
 	`, h.cfg().POTable()),
 		fv(r, "orderer"), fv(r, "account_id"),
 		nullableInt(fv(r, "supplier_id")), fv(r, "supplier_name"), fv(r, "supplier_contact"), fv(r, "supplier_email"),
@@ -837,7 +836,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		parseFormFloat(fv(r, "tax1")), parseFormFloat(fv(r, "shipping_cost")), parseFormFloat(fv(r, "misc_cost")),
 		fv(r, "notes"), fv(r, "internal_notes"),
 		parseFormDate(fv(r, "date_ordered")), parseFormDate(fv(r, "date_requested")), parseFormDate(fv(r, "date_closed")), parseFormDate(fv(r, "date_printed")),
-		time.Now(), totalCost, num,
+		totalCost, num,
 		nullableInt(fv(r, "supplier_contact_id")), nullableInt(fv(r, "receiver_contact_id")),
 	); err != nil {
 		h.renderError(w, r, "Error saving PO: "+err.Error())
@@ -1061,7 +1060,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 	if po.SupplierID != nil {
 		var code sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg().CompanyTable(),
+			`SELECT supplier_code FROM %s WHERE id=@p1`, h.cfg().CompanyTable(),
 		), *po.SupplierID).Scan(&code)
 		supplierCode = code.String
 	}
@@ -1526,22 +1525,22 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) recordPOStatusChange(r *http.Request, tx *txLogger, poID int, from, to string) error {
 	ctx := r.Context()
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by, changed_at)
-		VALUES (@p1, 'status', @p2, @p3, @p4, @p5)
-	`, h.cfg().POHistoryTable()), poID, from, to, h.actorName(r), time.Now()); err != nil {
+		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by)
+		VALUES (@p1, 'status', @p2, @p3, @p4)
+	`, h.cfg().POHistoryTable()), poID, from, to, h.actorName(r)); err != nil {
 		return err
 	}
 	// date_closed mirrors the closed state: set it when closing (if unset),
 	// clear it when reopening from closed.
-	query := fmt.Sprintf(`UPDATE %s SET status=@p1, is_active=@p2, date_modified=@p3`, h.cfg().POTable())
+	query := fmt.Sprintf(`UPDATE %s SET status=@p1, is_active=@p2, date_modified=GETDATE()`, h.cfg().POTable())
 	switch {
 	case to == "closed":
 		query += `, date_closed=COALESCE(date_closed, CAST(GETDATE() AS DATE))`
 	case from == "closed":
 		query += `, date_closed=NULL`
 	}
-	query += ` WHERE ID=@p4`
-	_, err := tx.ExecContext(ctx, query, to, statusIsActive(to), time.Now(), poID)
+	query += ` WHERE ID=@p3`
+	_, err := tx.ExecContext(ctx, query, to, statusIsActive(to), poID)
 	return err
 }
 
@@ -1660,6 +1659,17 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// #191: lock the PO row and re-check its status inside the tx.
+	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
+		`SELECT status FROM %s WHERE ID = @p1 FOR UPDATE`, h.cfg().POTable()), poID).Scan(&status); err != nil {
+		h.renderError(w, r, "Error loading PO: "+err.Error())
+		return
+	}
+	if status.String != "sent" && status.String != "partially_received" {
+		h.renderError(w, r, "Only a sent or partially-received PO can receive goods.")
+		return
+	}
+
 	for i := range items {
 		d, ok := deltas[items[i].ID]
 		if !ok {
@@ -1694,11 +1704,32 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error updating line item: "+err.Error())
 			return
 		}
-		items[i].ReceivedQty += d // keep in-memory copy current for status derivation
 	}
 
-	// Re-derive the PO status from the now-updated line receipts.
-	if target := derivePOReceiptStatus(items); target != "" && target != status.String &&
+	// Re-derive the PO status from the committed-plus-this-tx line receipts (#191:
+	// not the pre-tx copy, which can miss a concurrent receipt).
+	lineRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
+		`SELECT COALESCE(qty,0), COALESCE(received_qty,0) FROM %s WHERE po_id = @p1`, h.cfg().POLineTable()), poID)
+	if err != nil {
+		h.renderError(w, r, "Error reloading PO lines: "+err.Error())
+		return
+	}
+	var current []models.PurchaseOrderLine
+	for lineRows.Next() {
+		var l models.PurchaseOrderLine
+		if err := lineRows.Scan(&l.Qty, &l.ReceivedQty); err != nil {
+			lineRows.Close()
+			h.renderError(w, r, "Error reloading PO lines: "+err.Error())
+			return
+		}
+		current = append(current, l)
+	}
+	lineRows.Close()
+	if err := lineRows.Err(); err != nil {
+		h.renderError(w, r, "Error reloading PO lines: "+err.Error())
+		return
+	}
+	if target := derivePOReceiptStatus(current); target != "" && target != status.String &&
 		poCanTransition(status.String, target) {
 		if err := h.recordPOStatusChange(r, tx, poID, status.String, target); err != nil {
 			h.renderError(w, r, "Error updating PO status: "+err.Error())
@@ -1757,9 +1788,9 @@ func (h *Handler) resetApproval(r *http.Request, tx *txLogger, poID int, note st
 		return err
 	}
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, action, note, changed_by, changed_at)
-		VALUES (@p1, 'approval', 'reset', @p2, @p3, @p4)
-	`, h.cfg().POHistoryTable()), poID, note, h.actorName(r), time.Now())
+		INSERT INTO %s (po_id, event_type, action, note, changed_by)
+		VALUES (@p1, 'approval', 'reset', @p2, @p3)
+	`, h.cfg().POHistoryTable()), poID, note, h.actorName(r))
 	return err
 }
 
@@ -1843,9 +1874,9 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, action, note, changed_by, changed_at)
-		VALUES (@p1, 'approval', @p2, @p3, @p4, @p5)
-	`, h.cfg().POHistoryTable()), poID, logged, nullableText(note), h.actorName(r), time.Now()); err != nil {
+		INSERT INTO %s (po_id, event_type, action, note, changed_by)
+		VALUES (@p1, 'approval', @p2, @p3, @p4)
+	`, h.cfg().POHistoryTable()), poID, logged, nullableText(note), h.actorName(r)); err != nil {
 		h.renderError(w, r, "Error recording approval: "+err.Error())
 		return
 	}
@@ -2135,7 +2166,7 @@ func (h *Handler) createPOFolder(r *http.Request, poNumber, supplierIDStr string
 	if supplierIDStr != "" {
 		var code sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT SUSupplierCode FROM %s WHERE id=@p1`, h.cfg().CompanyTable(),
+			`SELECT supplier_code FROM %s WHERE id=@p1`, h.cfg().CompanyTable(),
 		), supplierIDStr).Scan(&code)
 		if code.String != "" {
 			folderName += " " + code.String
@@ -2548,8 +2579,39 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	now := time.Now()
 	actor := h.actorName(r)
+
+	// #191: lock the whole RFQ group in ID order first, so two quotes of one group
+	// converted at once queue up instead of deadlocking on each other's rows.
+	if groupID.Valid {
+		lockRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
+			`SELECT ID FROM %s WHERE rfq_group_id=@p1 ORDER BY ID FOR UPDATE`, h.cfg().POTable()), groupID.Int64)
+		if err != nil {
+			h.renderError(w, r, "Error locking RFQ group: "+err.Error())
+			return
+		}
+		for lockRows.Next() {
+		}
+		lockRows.Close()
+		if err := lockRows.Err(); err != nil {
+			h.renderError(w, r, "Error locking RFQ group: "+err.Error())
+			return
+		}
+	}
+
+	// #191: claim the quote — only a still-'rfq' quote can be awarded. Closes out the
+	// awarded quote (retained for the record) and locks it for the rest of the tx.
+	res, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+		`UPDATE %s SET status='closed', is_active=%s, date_modified=GETDATE() WHERE ID=@p1 AND status='rfq'`,
+		h.cfg().POTable(), h.dia().BoolLiteral(false)), poID)
+	if err != nil {
+		h.renderError(w, r, "Error closing awarded quote: "+err.Error())
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		h.renderError(w, r, "Only an RFQ can be converted to a PO.")
+		return
+	}
 
 	// Duplicate the winning quote's header into a new real PO: bare base number,
 	// draft, no rfq_group_id (so it always shows on the PO list).
@@ -2575,11 +2637,11 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
 		  receiver_country, receiver_phone, receiver_fax,
 		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
-		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, @p2,
+		  CAST(GETDATE() AS DATE), date_requested, NULL, NULL, GETDATE(),
 		  supplier_contact_id, receiver_contact_id
-		FROM %s WHERE id=@p3`, h.dia().BoolLiteral(true), h.cfg().POTable()),
+		FROM %s WHERE id=@p2`, h.dia().BoolLiteral(true), h.cfg().POTable()),
 		true)
-	if err := tx.QueryRowContext(r.Context(), insertPO, base, now, poID).Scan(&newID); err != nil {
+	if err := tx.QueryRowContext(r.Context(), insertPO, base, poID).Scan(&newID); err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
 		return
 	}
@@ -2598,25 +2660,19 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 
 	// Record the new PO's creation, noting the RFQ it came from.
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by, changed_at)
-		VALUES (@p1, 'status', NULL, 'draft', @p2, @p3, @p4)
-	`, h.cfg().POHistoryTable()), newID, "Converted from RFQ "+num, actor, now); err != nil {
+		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by)
+		VALUES (@p1, 'status', NULL, 'draft', @p2, @p3)
+	`, h.cfg().POHistoryTable()), newID, "Converted from RFQ "+num, actor); err != nil {
 		h.renderError(w, r, "Error recording PO creation: "+err.Error())
 		return
 	}
 
 	// Close out the awarded quote (retained for the record).
 	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by, changed_at)
-		VALUES (@p1, 'status', 'rfq', 'closed', @p2, @p3, @p4)
-	`, h.cfg().POHistoryTable()), poID, "Awarded — converted to PO #"+base, actor, now); err != nil {
+		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by)
+		VALUES (@p1, 'status', 'rfq', 'closed', @p2, @p3)
+	`, h.cfg().POHistoryTable()), poID, "Awarded — converted to PO #"+base, actor); err != nil {
 		h.renderError(w, r, "Error recording award: "+err.Error())
-		return
-	}
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET status='closed', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg().POTable(), h.dia().BoolLiteral(false)),
-		now, poID); err != nil {
-		h.renderError(w, r, "Error closing awarded quote: "+err.Error())
 		return
 	}
 
@@ -2647,17 +2703,22 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		sibRows.Close()
 		note := "Not awarded — PO #" + base + " issued"
 		for _, id := range sibIDs {
-			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-				INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by, changed_at)
-				VALUES (@p1, 'status', 'rfq', 'cancelled', @p2, @p3, @p4)
-			`, h.cfg().POHistoryTable()), id, note, actor, now); err != nil {
-				h.renderError(w, r, "Error recording decline: "+err.Error())
+			// #191: only decline a quote still in 'rfq' — one changed meanwhile is left alone.
+			res, err := tx.ExecContext(r.Context(), fmt.Sprintf(
+				`UPDATE %s SET status='cancelled', is_active=%s, date_modified=GETDATE() WHERE ID=@p1 AND status='rfq'`, h.cfg().POTable(), h.dia().BoolLiteral(false)),
+				id)
+			if err != nil {
+				h.renderError(w, r, "Error declining quote: "+err.Error())
 				return
 			}
-			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-				`UPDATE %s SET status='cancelled', is_active=%s, date_modified=@p1 WHERE ID=@p2`, h.cfg().POTable(), h.dia().BoolLiteral(false)),
-				now, id); err != nil {
-				h.renderError(w, r, "Error declining quote: "+err.Error())
+			if n, _ := res.RowsAffected(); n == 0 {
+				continue
+			}
+			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
+				INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by)
+				VALUES (@p1, 'status', 'rfq', 'cancelled', @p2, @p3)
+			`, h.cfg().POHistoryTable()), id, note, actor); err != nil {
+				h.renderError(w, r, "Error recording decline: "+err.Error())
 				return
 			}
 		}

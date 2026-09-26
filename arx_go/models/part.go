@@ -22,7 +22,7 @@ type Part struct {
 	PrimaryAttachmentID *int // part_attachment.id of the primary attachment; nil = none set
 	StockOnHand         float64
 	ReorderMin          *float64 // reorder point (#273); nil = none set, never flagged below-min
-	IsLotTracked        bool     // DEPRECATED (#745): derived from TrackingMode; kept in sync for back-compat until a later cleanup slice drops the column. Read TrackingMode / TracksLots / TracksSerials for new logic.
+	IsLotTracked        bool     // derived from TrackingMode via TracksLots (#745); not a DB column
 	TrackingMode        string   // lot/serial control (#743): none|lot|serial|lot_serial; drives reads as of slice 8 (#745)
 	CurrentCost         float64
 	LastRollupCost      float64
@@ -61,8 +61,8 @@ type CategoryTabs struct {
 }
 
 // Category is a configurable part category: a code, a display label, and the
-// subtabs it exposes. Stored as JSON in app_config (key part_categories); when
-// nothing is saved the built-in DefaultCategories are used.
+// subtabs it exposes. Stored in the part_category table (#194); DefaultCategories
+// is the fallback when no DB is connected.
 type Category struct {
 	Code  string `json:"code"`
 	Label string `json:"label"`
@@ -77,8 +77,8 @@ type Category struct {
 // BOM left data-driven. We only hide tabs for categories explicitly configured.
 var DefaultCategoryTabs = CategoryTabs{Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true}
 
-// DefaultCategories is the seed list shown until an admin customizes it in
-// Settings. It reproduces the original hardcoded behavior.
+// DefaultCategories is the built-in list used when no DB is connected; it
+// mirrors the part_category seed rows and reproduces the original hardcoded behavior.
 func DefaultCategories() []Category {
 	proc := DefaultCategoryTabs                                                                                     // purchased + stocked: procurement tabs + inventory, BOM data-driven
 	built := CategoryTabs{BOM: true, Orders: true, Pricing: true, MfgParts: true, Suppliers: true, Inventory: true} // made + stocked
@@ -158,7 +158,7 @@ func (p Part) ShowLots() bool { return p.IsLotTracked }
 func (p Part) ShowUnits() bool { return TracksSerials(p.TrackingMode) }
 
 // TracksLots reports whether a tracking_mode value implies lot/batch control:
-// receipt/build create a lot row. Replaces the is_lot_tracked read (#745).
+// receipt/build create a lot row.
 func TracksLots(mode string) bool { return mode == "lot" || mode == "lot_serial" }
 
 // TracksSerials reports whether a tracking_mode value implies serialized units:

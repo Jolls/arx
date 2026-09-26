@@ -8,7 +8,7 @@ migration; the T-SQL set is deleted at cutover (Phase 3).
 Jolls concluded all 5 SQL Server triggers (`SQL/azure/triggers.sql`) are still needed
 and stay triggers (see `docs/plans/625-postgres-migration-design.md` §3). The
 4 count triggers keep the denormalized columns (`part.attachment_count`,
-`part.po_line_count`, `company.SUNumOfLNKs`, `company.SUNumOfPOs`) in sync; the
+`part.po_line_count`, `company.supplier_part_count`, `company.po_count`) in sync; the
 `form_row_history` audit trigger snapshots pre-update rows, reading the
 app user from the `arx.username` session GUC (set by the app via the dialect's
 `SetAuditUser`) in place of SQL Server's `CONTEXT_INFO()`. Postgres uses
@@ -27,9 +27,9 @@ the audit trigger for future audited tables is deferred to #669.
 | `BIT`, `DEFAULT 1` / `DEFAULT 0` | `BOOLEAN`, `DEFAULT TRUE` / `DEFAULT FALSE` |
 | `VARCHAR(MAX)` | `TEXT` |
 | `NVARCHAR(n)` | `VARCHAR(n)` |
-| `DATETIME` | `TIMESTAMP` |
+| `DATETIME` | `TIMESTAMPTZ DEFAULT now()` for audit/event columns (#192); `TIMESTAMP` only for `form_record.record_date` |
 | `DECIMAL(p,s)` | `NUMERIC(p,s)` |
-| `DEFAULT GETDATE()` on `DATETIME` / `DATE` | `DEFAULT CURRENT_TIMESTAMP` / `DEFAULT CURRENT_DATE` |
+| `DEFAULT GETDATE()` on `DATETIME` / `DATE` | `DEFAULT now()` / `DEFAULT CURRENT_DATE` |
 | `DEFAULT SYSTEM_USER` | `DEFAULT CURRENT_USER` |
 | named `CONSTRAINT DF_x DEFAULT ...` | bare `DEFAULT ...` (Postgres does not name column defaults) |
 | named `CHECK` / `UNIQUE` / FK constraints | kept (Postgres names them) |
@@ -45,14 +45,6 @@ the audit trigger for future audited tables is deferred to #669.
   `is_active = 1 - is_active`) that Postgres rejects on a boolean column. They
   need a boolean treatment (a Tier-2 `dialect` helper fits the plan's pattern) or
   a rewrite (`WHERE is_active`, `SET is_active = NOT is_active`).
-
-- **Mixed-case column names** (`SUWeb`, `SUContact1`, `SUNotes`, `SUNumOfLNKs`,
-  `SUNumOfPOs`, `SUSupplierCode`) are left **unquoted**, so Postgres folds them to
-  lowercase. Unquoted references in app SQL fold the same way, so ordinary
-  queries match. The exception is the two dynamic paths that read
-  `rows.Columns()` (`arx_go/named_query.go`, `arx_go/settings.go`): those will see
-  lowercase names on Postgres where SQL Server preserved the original case -
-  verify in the integration session.
 
 - **`_Test` clone tables** (`app_config_Test`, `uom_Test`,
   `company_attachment_Test`) are **not** ported. Postgres test mode uses a
@@ -103,11 +95,24 @@ Postgres DDL — added here since no Postgres deployment has run this DDL yet.
 
 ## Suggested run order
 
+The FKs now form cycles (`company` ↔ `contact`, `part` ↔ `part_attachment`), so
+loading file by file in this order fails on a fresh database. Use
+`bash SQL/postgres/build_schema.sh | psql "$DSN" -q -v ON_ERROR_STOP=1`, which
+holds every `ALTER TABLE ... FOREIGN KEY` back until all tables exist (the CI
+`postgres-integration` job, #19, uses it). Table order:
+
 Parents before children (each file adds its outgoing FKs, so the referenced
 table must already exist): `uom`, `contact`, `company_attachment`, `company`,
-`part`, `mfg_part`, `supplier_part`, `price`, `bom`, `part_attachment`,
+`part_category`, `part`, `mfg_part`, `supplier_part`, `price`, `bom`,
+`attachment_category`, `part_attachment`,
 `purchase_order` (creates `po_number_seq` + `purchase_order_history`), `po_line`,
 `inventory_transaction`, `build`, `lot`, `unit`, `form`, `form_row`, `form_record`,
 `result`, `genealogy`, `form_row_history`, `form_events`, `record_events`,
-`record_event_results`, `app_config`, `named_queries`, `users`, `logs`,
-`release_notes`. Run `triggers.sql` **last**, after every table above exists.
+`record_event_results`, `app_config`, `named_queries`, `users`,
+`schema_migrations`. Run `triggers.sql` **last**, after every table above exists.
+
+## Migrations
+
+Schema changes to an existing Postgres database ship as
+`SQL/postgres/migrations/YYYYMMDDHHMMSS_<issue>_<description>.sql`, human-run with
+`psql -v ON_ERROR_STOP=1 -d ArxDev -f <file>`. See `SQL/SCHEMA.md#migrations`.
