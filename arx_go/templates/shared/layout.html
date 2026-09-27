@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{.Title}}</title>
+    <script src="/static/shared/theme.js?v={{.AppVersion}}"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" integrity="sha384-XGjxtQfXaH2tnPFa9x+ruJTuLE3Aa6LhHSWRr1XeTyhezb4abCG4ccI5AkVDxqC+" crossorigin="anonymous">
     <link rel="icon" type="{{.FaviconType}}" href="{{.Favicon}}">
@@ -12,7 +13,7 @@
 </head>
 <body class="{{.AccentThemeClass}}">
     <div class="app-header{{if .TestMode}} app-header--testmode{{end}}">
-        <a href="/" class="app-header-home" title="Home"><img src="{{.Favicon}}" alt="" class="app-header-icon">Arx</a>{{if .TestMode}} &mdash; TEST MODE{{end}}
+        <a href="/" class="app-header-home" title="Home"><img src="/static/shared/icons/arx-brand.svg" alt="" class="app-header-icon">Arx</a>{{if .TestMode}} &mdash; TEST MODE{{end}}
         <div class="header-actions">
             {{if .CompanyLogo}}<img src="{{.CompanyLogo}}" alt="" class="company-logo">{{end}}
             {{if .CurrentUser}}<a href="/settings#preferences" style="font-size:0.8em; color:rgba(255,255,255,0.75); margin-right:4px; text-decoration:none;" title="My Preferences">{{.CurrentUser.DisplayName}}</a>
@@ -21,6 +22,7 @@
                 <button type="submit" style="background:none; border:none; color:rgba(255,255,255,0.75);
                         font-size:0.78em; cursor:pointer; padding:2px 6px; text-decoration:underline;">Sign out</button>
             </form>{{end}}
+            <button type="button" class="header-theme-toggle" data-theme-toggle title="Theme: Auto" aria-label="Theme: Auto"><i class="bi bi-circle-half"></i></button>
             <a href="/settings" class="header-settings-link{{if eq .ActiveTab "settings"}} active{{end}}" title="Settings"><i class="bi bi-gear-fill"></i></a>
         </div>
     </div>

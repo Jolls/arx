@@ -158,7 +158,7 @@
 
 {{/* po_approval_badge — pass the approval_status code string as the pipeline (.) */}}
 {{define "po_approval_badge"}}
-{{if eq . "not_submitted"}}<span class="badge bg-light text-dark border">Not Submitted</span>
+{{if eq . "not_submitted"}}<span class="badge bg-body-tertiary text-body border">Not Submitted</span>
 {{else if eq . "pending"}}<span class="badge bg-warning text-dark">Pending Approval</span>
 {{else if eq . "approved"}}<span class="badge bg-success">Approved</span>
 {{else if eq . "rejected"}}<span class="badge bg-danger">Rejected</span>

@@ -73,7 +73,7 @@
                     {{end}}
                 </select>
                 {{else}}
-                <span style="color:#888; font-size:0.9em;">
+                <span class="text-body-secondary" style="font-size:0.9em;">
                     No manufacturers found. Edit a company and enable <em>Manufacturer (makes parts)</em>.
                 </span>
                 <input type="hidden" name="mfg_id" value="">
@@ -103,7 +103,7 @@
         <summary style="cursor:pointer; font-weight:600; font-size:1em; padding:8px 0;">Add Manufacturer Part</summary>
         <div class="detail-section" style="margin-top:8px;">
             {{if not .Manufacturers}}
-            <p style="color:#888; font-size:0.9em; margin-bottom:12px;">
+            <p class="text-body-secondary" style="font-size:0.9em; margin-bottom:12px;">
                 No manufacturers found. Edit a company and enable <em>Manufacturer (makes parts)</em> first.
             </p>
             {{end}}
