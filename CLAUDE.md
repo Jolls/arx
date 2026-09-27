@@ -136,7 +136,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Update 
 - <one-line summary> ([#NNN](https://github.com/Jolls/arx/issues/NNN))
 ```
 Link is a pointer to the issue; omit only if no issue. No comparison links in the footer — the repo doesn't tag every version, so they'd mostly be dead links.
-After committing a version bump, tag it: `git tag vX.Y.Z` (push with the branch/PR, not force). Going forward only — no retroactive tagging of historical versions.
+Don't tag per PR/version bump. Tag `vX.Y.Z` only when a user release ships (the version that gets a `RELEASE_NOTES.md` entry and goes out to users), and only when the user asks. No retroactive tagging of historical versions.
 While major `x` is 0 (pre-1.0), `z` (patch) increments with every PR; `y` (minor) only bumps for a deliberate milestone release (e.g. 0.6.0), or when `main` starts a new line that can't ship on the maintenance branch (0.8.0: `main` PRs are 0.8.x, `release/0.7` PRs are 0.7.x).
 
 ## Release Notes
