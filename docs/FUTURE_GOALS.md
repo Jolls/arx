@@ -53,7 +53,6 @@ Arx grows from a parts catalog + purchasing + test data tool into a full enginee
 
 ## Platform
 
-- Postgres migration ([#21](https://github.com/Jolls/arx/issues/21)): dialect gaps ([#32](https://github.com/Jolls/arx/issues/32), [#33](https://github.com/Jolls/arx/issues/33)), seeded verification ([#28](https://github.com/Jolls/arx/issues/28)), cutover to Postgres-only ([#29](https://github.com/Jolls/arx/issues/29))
 - Package Postgres as a StartOS service ([#24](https://github.com/Jolls/arx/issues/24))
 - Backup/restore ([#26](https://github.com/Jolls/arx/issues/26))
 - JSON endpoints for external clients ([#15](https://github.com/Jolls/arx/issues/15)); mobile-responsive UI ([#16](https://github.com/Jolls/arx/issues/16))

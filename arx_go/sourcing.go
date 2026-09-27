@@ -89,7 +89,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, h.cfg().SupplierPartTable()),
 		supplierID, id,
 		nullableInt(r.FormValue("preference")),
@@ -250,8 +250,8 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 		for _, b := range breaks {
 			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-				VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
-			`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)),
+				VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+			`, h.cfg().PriceTable()),
 				partID, supplierID, b.BreakQuantity, b.UnitPrice, b.TotalPrice, effectiveDate,
 			); err != nil {
 				if strings.Contains(err.Error(), "UQ_price") {
@@ -265,7 +265,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 
 	for _, pf := range preparedFiles {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, file_name, part_revision, category, comment, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)`,
+			`INSERT INTO %s (part_id, file_name, part_revision, category, comment, hash) VALUES ($1,$2,$3,$4,$5,$6)`,
 			h.cfg().AttachmentsTable(),
 		), partID, pf.fileName, "", pf.category, "Imported from DigiKey", pf.hash); err != nil {
 			return false, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(pf.category), err)
@@ -284,8 +284,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 			if mfgName == "" {
 				return pricesInserted, nil, fmt.Errorf("manufacturer name is required to create a new manufacturer")
 			}
-			insertMfg := h.dia().InsertReturningID(h.cfg().CompanyTable(),
-				`name, is_supplier, is_manufacturer`, `@p1,@p2,@p3`, false)
+			insertMfg := fmt.Sprintf(`INSERT INTO %s (name, is_supplier, is_manufacturer) VALUES ($1,$2,$3) RETURNING id`, h.cfg().CompanyTable())
 			var newID int
 			if err := tx.QueryRowContext(ctx, insertMfg, mfgName, false, true).Scan(&newID); err != nil {
 				if strings.Contains(err.Error(), "UQ_company_name") {
@@ -296,8 +295,8 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 			mfgID = strconv.Itoa(newID)
 		}
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, mfg_id, mfg_part_number, is_active) VALUES (@p1,@p2,@p3,%s)`,
-			h.cfg().MfgPartTable(), h.dia().BoolLiteral(true),
+			`INSERT INTO %s (part_id, mfg_id, mfg_part_number, is_active) VALUES ($1,$2,$3,TRUE)`,
+			h.cfg().MfgPartTable(),
 		), partID, mfgID, mfgPartNumber); err != nil && !strings.Contains(err.Error(), "UQ_mfg_part") {
 			return pricesInserted, nil, fmt.Errorf("could not save manufacturer part: %w", err)
 		}
@@ -325,7 +324,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		       sp.lead_time, sp.min_increment, sp.uom_id, c.name
 		FROM %s sp
 		JOIN %s c ON sp.supplier_id = c.id
-		WHERE sp.id = @p1 AND sp.part_id = @p2
+		WHERE sp.id = $1 AND sp.part_id = $2
 	`, h.cfg().SupplierPartTable(), h.cfg().CompanyTable()), spID, id).Scan(
 		&sp.ID, &sp.SupplierID, &sp.PartID, &pref, &supplierPN, &supplierDesc, &leadTime, &minIncr, &unitID, &supplierName,
 	)
@@ -415,9 +414,9 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET supplier_id=@p1, preference=@p2, supplier_pn=@p3, supplier_desc=@p4,
-		              lead_time=@p5, min_increment=@p6, uom_id=@p7
-		WHERE id=@p8 AND part_id=@p9
+		UPDATE %s SET supplier_id=$1, preference=$2, supplier_pn=$3, supplier_desc=$4,
+		              lead_time=$5, min_increment=$6, uom_id=$7
+		WHERE id=$8 AND part_id=$9
 	`, h.cfg().SupplierPartTable()),
 		supplierID,
 		nullableInt(r.FormValue("preference")),
@@ -461,7 +460,7 @@ func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	spID := chi.URLParam(r, "spID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		DELETE FROM %s WHERE id=@p1 AND part_id=@p2
+		DELETE FROM %s WHERE id=$1 AND part_id=$2
 	`, h.cfg().SupplierPartTable()), spID, id)
 	if err != nil {
 		h.renderError(w, r, "Error deleting supplier link: "+err.Error())
@@ -479,15 +478,15 @@ func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.S
 		       sp.lead_time, sp.min_increment, sp.uom_id,
 		       c.name AS supplier_name,
 		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
-		       %s AS unit_is_explicit
+		       (sp.uom_id IS NOT NULL) AS unit_is_explicit
 		FROM %s sp
 		JOIN %s c  ON sp.supplier_id = c.id
 		LEFT JOIN %s pu ON sp.uom_id   = pu.uom_id
 		LEFT JOIN %s p  ON sp.part_id  = p.id
 		LEFT JOIN %s bu ON p.uom_id    = bu.uom_id
-		WHERE sp.part_id = @p1
+		WHERE sp.part_id = $1
 		ORDER BY c.name, sp.supplier_pn
-	`, h.dia().BoolFromCondition("sp.uom_id IS NOT NULL"), sp, co, ut, pn, ut), partID)
+	`, sp, co, ut, pn, ut), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -535,9 +534,9 @@ func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) ma
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT supplier_id, price_ea, pack_size, effective_date
 		FROM %s
-		WHERE part_id = @p1 AND is_active = %s
+		WHERE part_id = $1 AND is_active = TRUE
 		ORDER BY supplier_id, pack_size
-	`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)), partID)
+	`, h.cfg().PriceTable()), partID)
 	if err != nil {
 		return nil
 	}

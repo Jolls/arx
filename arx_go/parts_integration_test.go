@@ -30,7 +30,7 @@ func TestIntegration_PartTrackingModeRoundTrip(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.PartsCreate(rec, postForm("/parts", vals))
 	id := locID(t, rec, "/part/")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().PartsTable()), id)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().PartsTable()), id)
 
 	check := func(step, wantMode string, wantLot bool) {
 		t.Helper()
@@ -66,7 +66,7 @@ func TestIntegration_DeadSchemaObjectsGone(t *testing.T) {
 
 	columns := func(table string) map[string]bool {
 		rows, err := h.queryContext(ctx,
-			`SELECT lower(column_name) FROM information_schema.columns WHERE lower(table_name)=@p1`, table)
+			`SELECT lower(column_name) FROM information_schema.columns WHERE lower(table_name)=$1`, table)
 		if err != nil {
 			t.Fatalf("columns of %s: %v", table, err)
 		}

@@ -20,7 +20,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
-	arxdb "arx/internal/db"
 	"arx/internal/urlutil"
 )
 
@@ -37,10 +36,10 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	// round-trip) since fetchPartBasic backs every part sub-tab page — see the
 	// Thumb subquery in PartsRows for the same pattern (#56).
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.dia(), h.cfg().BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode,
-		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = %s AND a.category = @p2)
-		FROM %s p WHERE id = @p1`,
-		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg().PartsTable(),
+		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.cfg().BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode,
+		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = $2)
+		FROM %s p WHERE id = $1`,
+		h.cfg().AttachmentsTable(), h.cfg().PartsTable(),
 	), id, thumbnailCategory).Scan(&p.ID, &partNumber, &description, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode, &thumbFile)
 	p.PartNumber = partNumber.String
 	p.Description = description.String
@@ -184,10 +183,10 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 		SELECT id, part_number, revision, description, detail,
 		       requested_by, created_date, category, modified_date, is_active,
 		       attachment_count, po_line_count,
-		       %s,
-		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = %s AND a.category = @p1)
+		       (reorder_min IS NOT NULL AND stock_on_hand < reorder_min),
+		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = $1)
 		FROM %s p ORDER BY part_number
-	`, h.dia().BoolFromCondition("reorder_min IS NOT NULL AND stock_on_hand < reorder_min"), h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true), h.cfg().PartsTable()), thumbnailCategory)
+	`, h.cfg().AttachmentsTable(), h.cfg().PartsTable()), thumbnailCategory)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
@@ -252,14 +251,14 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		unitID                                              sql.NullInt64
 	)
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg().BOMTable(), "p.id")+`,
+		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.cfg().BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       created_date, modified_date, primary_attachment_id,
 		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
 		       uom_id, stock_on_hand, reorder_min, tracking_mode,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s p WHERE id = @p1
+		FROM %s p WHERE id = $1
 	`, h.cfg().PartsTable()), id).Scan(
 		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
@@ -319,7 +318,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		p.UnitID = &v
 		var abbr sql.NullString
 		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT abbreviation FROM %s WHERE uom_id = @p1`, h.cfg().UomTable(),
+			`SELECT abbreviation FROM %s WHERE uom_id = $1`, h.cfg().UomTable(),
 		), v).Scan(&abbr)
 		p.UnitAbbr = abbr.String
 	}
@@ -334,7 +333,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		var att models.Attachment
 		var fname, fnotes, frev sql.NullString
 		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT id, file_name, category, part_revision FROM %s WHERE id = @p1`,
+			`SELECT id, file_name, category, part_revision FROM %s WHERE id = $1`,
 			h.cfg().AttachmentsTable(),
 		), *p.PrimaryAttachmentID).Scan(&att.ID, &fname, &fnotes, &frev); err == nil {
 			att.FileName = fname.String
@@ -347,9 +346,9 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	var topAtts, photoAtts []models.Attachment
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
 		`SELECT id, file_name, category, part_revision, sort_order FROM %s
-		 WHERE part_id = @p1 AND is_active = %s
+		 WHERE part_id = $1 AND is_active = TRUE
 		 ORDER BY sort_order, id`,
-		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true)), p.ID)
+		h.cfg().AttachmentsTable()), p.ID)
 	if err == nil {
 		for rows.Next() {
 			var att models.Attachment
@@ -398,9 +397,9 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	purchasePrice := p.CurrentCost
 	var prefPrice sql.NullFloat64
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT MIN(price_ea) FROM %s WHERE part_id=@p1 AND is_active=%s
-		 AND supplier_id=(SELECT default_supplier_id FROM %s WHERE id=@p1)`,
-		h.cfg().PriceTable(), h.dia().BoolLiteral(true), h.cfg().PartsTable()), p.ID).Scan(&prefPrice)
+		`SELECT MIN(price_ea) FROM %s WHERE part_id=$1 AND is_active=TRUE
+		 AND supplier_id=(SELECT default_supplier_id FROM %s WHERE id=$1)`,
+		h.cfg().PriceTable(), h.cfg().PartsTable()), p.ID).Scan(&prefPrice)
 	if prefPrice.Valid && prefPrice.Float64 > 0 {
 		purchasePrice = prefPrice.Float64
 	}
@@ -513,7 +512,7 @@ func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
 	// whether to promise a BOM copy in the UI.
 	var bomLines int
 	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE parent_part_id=@p1`, h.cfg().BOMTable()), src.ID).Scan(&bomLines)
+		`SELECT COUNT(*) FROM %s WHERE parent_part_id=$1`, h.cfg().BOMTable()), src.ID).Scan(&bomLines)
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": src, "IsNew": true, "IsDuplicate": true,
@@ -541,16 +540,13 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	mode := trackingModeFromForm(r)
 	var newID int
-	insertPart := h.dia().InsertReturningID(h.cfg().PartsTable(),
-		`part_number, revision, description, detail, category,
+	insertPart := fmt.Sprintf(`INSERT INTO %s (part_number, revision, description, detail, category,
 		 release_status, is_active, requested_by, notes, created_date, modified_date,
 		 uom_id, current_cost, reorder_min,
 		 user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
-		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, tracking_mode`,
-		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,
-		 @p12,@p13,@p14,
-		 @p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25`,
-		false)
+		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, tracking_mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+		 $12,$13,$14,
+		 $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING id`, h.cfg().PartsTable())
 	err := h.queryRowContext(r.Context(), insertPart,
 		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), nullableText(fv(r, "category")),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
@@ -584,7 +580,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) copyBOM(ctx context.Context, srcID, dstID int) error {
 	_, err := h.execContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (parent_part_id, component_part_id, line_number, qty)
-		SELECT @p1, component_part_id, line_number, qty FROM %s WHERE parent_part_id = @p2
+		SELECT $1, component_part_id, line_number, qty FROM %s WHERE parent_part_id = $2
 	`, h.cfg().BOMTable(), h.cfg().BOMTable()), dstID, srcID)
 	return err
 }
@@ -655,13 +651,13 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	mode := trackingModeFromForm(r)
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  part_number=@p1, revision=@p2, description=@p3, detail=@p4, category=@p5,
-		  release_status=@p6, is_active=@p7, requested_by=@p8, notes=@p9, modified_date=@p10,
-		  uom_id=@p11, current_cost=@p12, reorder_min=@p13,
-		  user_field_1=@p14, user_field_2=@p15, user_field_3=@p16, user_field_4=@p17, user_field_5=@p18,
-		  user_field_6=@p19, user_field_7=@p20, user_field_8=@p21, user_field_9=@p22, user_field_10=@p23,
-		  tracking_mode=@p24
-		WHERE id=@p25
+		  part_number=$1, revision=$2, description=$3, detail=$4, category=$5,
+		  release_status=$6, is_active=$7, requested_by=$8, notes=$9, modified_date=$10,
+		  uom_id=$11, current_cost=$12, reorder_min=$13,
+		  user_field_1=$14, user_field_2=$15, user_field_3=$16, user_field_4=$17, user_field_5=$18,
+		  user_field_6=$19, user_field_7=$20, user_field_8=$21, user_field_9=$22, user_field_10=$23,
+		  tracking_mode=$24
+		WHERE id=$25
 	`, h.cfg().PartsTable()),
 		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), nullableText(fv(r, "category")),
 		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
@@ -769,12 +765,12 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		currentCost, reorderMin                             sql.NullFloat64
 	)
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.dia(), h.cfg().BOMTable(), "p.id")+`,
+		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.cfg().BOMTable(), "p.id")+`,
 		       release_status, is_active, requested_by, notes,
 		       uom_id, current_cost, reorder_min, tracking_mode,
 		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s p WHERE id = @p1
+		FROM %s p WHERE id = $1
 	`, h.cfg().PartsTable()), id).Scan(
 		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
 		&status, &active, &reqBy, &notes,
@@ -847,14 +843,14 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 		       pn.part_number, pn.description, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
+		        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       %s,
 		       pn.attachment_count, pn.po_line_count
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = @p1
+		WHERE pl.parent_part_id = $1
 		ORDER BY pl.line_number
-	`, prc, h.dia().BoolLiteral(true), hasOwnBOMExpr(h.dia(), pl, "pn.id"), pl, pn), partID)
+	`, prc, hasOwnBOMExpr(pl, "pn.id"), pl, pn), partID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -921,7 +917,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		       pn.part_number, pn.description, pn.revision, pn.category
 		FROM %s pl
 		JOIN %s pn ON pl.parent_part_id = pn.id
-		WHERE pl.component_part_id = @p1
+		WHERE pl.component_part_id = $1
 		ORDER BY pn.part_number
 	`, pl, pn), id)
 	if err != nil {
@@ -1007,7 +1003,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 		       pn.part_number, pn.description
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = @p1
+		WHERE pl.parent_part_id = $1
 		ORDER BY pl.line_number
 	`, pl, pn), id)
 	if err != nil {
@@ -1031,7 +1027,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	var lastRollupCost sql.NullFloat64
 	var lastRollupAt sql.NullTime
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id = @p1`, pn,
+		`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id = $1`, pn,
 	), id).Scan(&lastRollupCost, &lastRollupAt)
 	p.LastRollupCost = lastRollupCost.Float64
 	if lastRollupAt.Valid {
@@ -1075,7 +1071,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	for _, plidStr := range r.Form["delete_pl[]"] {
 		deleteSet[plidStr] = true
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE id=@p1 AND parent_part_id=@p2`, pl,
+			`DELETE FROM %s WHERE id=$1 AND parent_part_id=$2`, pl,
 		), plidStr, id); err != nil {
 			h.renderError(w, r, "Error deleting BOM row: "+err.Error())
 			return
@@ -1094,14 +1090,14 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 		if pnid == 0 && row.PartPN != "" {
 			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT id FROM %s WHERE part_number = @p1`, pn,
+				`SELECT id FROM %s WHERE part_number = $1`, pn,
 			), row.PartPN).Scan(&pnid)
 		}
 		if pnid == 0 {
 			continue
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET line_number=@p1, qty=@p2, component_part_id=@p3 WHERE id=@p4 AND parent_part_id=@p5
+			UPDATE %s SET line_number=$1, qty=$2, component_part_id=$3 WHERE id=$4 AND parent_part_id=$5
 		`, pl), item, qty, pnid, plidStr, id); err != nil {
 			h.renderError(w, r, "Error updating BOM row: "+err.Error())
 			return
@@ -1121,14 +1117,14 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 		if pnid == 0 && row.PartPN != "" {
 			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT id FROM %s WHERE part_number = @p1`, pn,
+				`SELECT id FROM %s WHERE part_number = $1`, pn,
 			), row.PartPN).Scan(&pnid)
 		}
 		if pnid == 0 {
 			continue
 		}
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES (@p1,@p2,@p3,@p4)
+			INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES ($1,$2,$3,$4)
 		`, pl), parentID, pnid, item, qty); err != nil {
 			h.renderError(w, r, "Error inserting BOM row: "+err.Error())
 			return
@@ -1241,7 +1237,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 	}
 	existing := map[int]existingLine{}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT id, component_part_id, qty FROM %s WHERE parent_part_id = @p1`, pl,
+		`SELECT id, component_part_id, qty FROM %s WHERE parent_part_id = $1`, pl,
 	), id)
 	if err != nil {
 		serverError(w, "Error retrieving BOM", err)
@@ -1268,7 +1264,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		var partNumber, description sql.NullString
 		if line.PartNumber != "" {
 			if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT id, part_number, description FROM %s WHERE part_number = @p1`, pn,
+				`SELECT id, part_number, description FROM %s WHERE part_number = $1`, pn,
 			), line.PartNumber).Scan(&pnid, &partNumber, &description); err != nil && err != sql.ErrNoRows {
 				serverError(w, "Error looking up part number", err)
 				return
@@ -1311,9 +1307,9 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 // hasOwnBOMExpr is the "does this part have its own BOM" EXISTS check shared by
 // getPart, rollupCost and aggregateLeafQty — both walk the same bom table shape
 // to decide whether to recurse into a sub-assembly or treat a component as a leaf.
-func hasOwnBOMExpr(d arxdb.Dialect, bomTable, parentIDCol string) string {
-	return d.BoolFromCondition(fmt.Sprintf(
-		"EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = %s)", bomTable, parentIDCol))
+func hasOwnBOMExpr(bomTable, parentIDCol string) string {
+	return fmt.Sprintf(
+		"(EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = %s))", bomTable, parentIDCol)
 }
 
 type rollupResult struct {
@@ -1335,16 +1331,16 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	defer delete(visited, pnid)
 
 	pl, pn, pr := h.cfg().BOMTable(), h.cfg().PartsTable(), h.cfg().PriceTable()
-	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pn.id")
+	hasBOM := hasOwnBOMExpr(pl, "pn.id")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, pn.current_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
+		        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       %s
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = @p1
-	`, pr, h.dia().BoolLiteral(true), hasBOM, pl, pn), pnid)
+		WHERE pl.parent_part_id = $1
+	`, pr, hasBOM, pl, pn), pnid)
 	if err != nil {
 		return rollupResult{}, err
 	}
@@ -1422,7 +1418,7 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	}()
 	for partID, result := range memo {
 		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET last_rollup_cost=@p1, last_rollup_at=GETDATE() WHERE id=@p2`, pn,
+			`UPDATE %s SET last_rollup_cost=$1, last_rollup_at=CURRENT_TIMESTAMP WHERE id=$2`, pn,
 		), result.cost, partID); err != nil {
 			h.renderError(w, r, "Error saving rollup cost: "+err.Error())
 			return
@@ -1484,11 +1480,11 @@ func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty floa
 	defer delete(visited, pnid)
 
 	pl := h.cfg().BOMTable()
-	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pl.component_part_id")
+	hasBOM := hasOwnBOMExpr(pl, "pl.component_part_id")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT pl.component_part_id, pl.qty, %s
 		FROM %s pl
-		WHERE pl.parent_part_id = @p1
+		WHERE pl.parent_part_id = $1
 	`, hasBOM, pl), pnid)
 	if err != nil {
 		return false, err
@@ -1586,8 +1582,8 @@ func (h *Handler) fetchPriceTiersByPart(ctx context.Context, ids []int) (map[par
 	}
 	placeholders, args := sqlInClause(ids)
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT part_id, supplier_id, price_ea, pack_size FROM %s WHERE is_active = %s AND part_id IN (%s)`,
-		h.cfg().PriceTable(), h.dia().BoolLiteral(true), placeholders), args...)
+		`SELECT part_id, supplier_id, price_ea, pack_size FROM %s WHERE is_active = TRUE AND part_id IN (%s)`,
+		h.cfg().PriceTable(), placeholders), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1603,13 +1599,13 @@ func (h *Handler) fetchPriceTiersByPart(ctx context.Context, ids []int) (map[par
 	return out, rows.Err()
 }
 
-// sqlInClause builds a "@p1,@p2,..." placeholder list and matching args slice
+// sqlInClause builds a "$1,$2,..." placeholder list and matching args slice
 // for a dynamic-length IN (...) clause.
 func sqlInClause(ids []int) (string, []any) {
 	placeholders := make([]string, len(ids))
 	args := make([]any, len(ids))
 	for i, id := range ids {
-		placeholders[i] = fmt.Sprintf("@p%d", i+1)
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
 		args[i] = id
 	}
 	return strings.Join(placeholders, ","), args
@@ -1719,9 +1715,9 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		LEFT JOIN %s sc ON sc.id = sp.supplier_id
 		LEFT JOIN %s mp ON mp.id = a.mfg_part_id
 		LEFT JOIN %s mc ON mc.id = mp.mfg_id
-		WHERE a.part_id = @p1 AND a.is_active = %s ORDER BY a.sort_order, a.id
+		WHERE a.part_id = $1 AND a.is_active = TRUE ORDER BY a.sort_order, a.id
 	`, h.cfg().AttachmentsTable(), h.cfg().SupplierPartTable(), h.cfg().CompanyTable(),
-		h.cfg().MfgPartTable(), h.cfg().CompanyTable(), h.dia().BoolLiteral(true)), id)
+		h.cfg().MfgPartTable(), h.cfg().CompanyTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
@@ -1812,7 +1808,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 // PartAttachmentCreate's single-file path and importAttachmentBatch (#70).
 func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID any, comment string, supplierPartID, mfgPartID any, hash string) error {
 	return h.execThenEnsurePrimary(ctx, h.ensurePartPrimary, partID, fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id, hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
 		h.cfg().AttachmentsTable(),
 	), partID, fileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash)
 }
@@ -1975,7 +1971,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 
 	var oldFileNameNS, oldCategoryNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name, category FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg().AttachmentsTable(),
+		`SELECT file_name, category FROM %s WHERE id=$1 AND part_id=$2`, h.cfg().AttachmentsTable(),
 	), attIDInt, id).Scan(&oldFileNameNS, &oldCategoryNS); err != nil {
 		h.renderError(w, r, "Error loading attachment: "+err.Error())
 		return
@@ -2026,12 +2022,12 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if contentChanged {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6, file_name=@p7, hash=@p8 WHERE id=@p9`,
+			`UPDATE %s SET part_revision=$1, category=$2, sort_order=$3, comment=$4, supplier_part_id=$5, mfg_part_id=$6, file_name=$7, hash=$8 WHERE id=$9`,
 			h.cfg().AttachmentsTable(),
 		), rev, category, oID, comment, supplierPartID, mfgPartID, in.FileName, hash, attIDInt)
 	} else {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, supplier_part_id=@p5, mfg_part_id=@p6 WHERE id=@p7`,
+			`UPDATE %s SET part_revision=$1, category=$2, sort_order=$3, comment=$4, supplier_part_id=$5, mfg_part_id=$6 WHERE id=$7`,
 			h.cfg().AttachmentsTable(),
 		), rev, category, oID, comment, supplierPartID, mfgPartID, attIDInt)
 	}
@@ -2055,7 +2051,7 @@ func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
 	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
-		`UPDATE %s SET is_active=%s WHERE id=@p1 AND part_id=@p2`, h.cfg().AttachmentsTable(), h.dia().BoolLiteral(false),
+		`UPDATE %s SET is_active=FALSE WHERE id=$1 AND part_id=$2`, h.cfg().AttachmentsTable(),
 	), attIDInt, id); err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
@@ -2083,8 +2079,8 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT id, file_name FROM %s WHERE part_id = @p1 AND is_active = %s ORDER BY sort_order, id`,
-		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true)), id)
+		`SELECT id, file_name FROM %s WHERE part_id = $1 AND is_active = TRUE ORDER BY sort_order, id`,
+		h.cfg().AttachmentsTable()), id)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
@@ -2127,7 +2123,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 		       pol.line_number, pol.qty, pol.unit_cost, pol.description, pol.vendor_part_number
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
-		WHERE pol.part_id = @p1
+		WHERE pol.part_id = $1
 		ORDER BY po.date_ordered DESC
 	`, pol, po), id)
 	if err != nil {
@@ -2217,15 +2213,14 @@ type partPOSummary struct {
 // capped at limit. Returns nil on error so the caller can omit the card.
 func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) []partPOSummary {
 	pol, po := h.cfg().POLineTable(), h.cfg().POTable()
-	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %spo.number, po.supplier_name, po.status, po.date_ordered,
+		SELECT po.number, po.supplier_name, po.status, po.date_ordered,
 		       pol.qty, pol.unit_cost
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
-		WHERE pol.part_id = @p1
-		ORDER BY po.date_ordered DESC, po.ID DESC
-	`+limitClause, top, pol, po), partID, limit)
+		WHERE pol.part_id = $1
+		ORDER BY po.date_ordered DESC, po.ID DESC LIMIT $2
+	`, pol, po), partID, limit)
 	if err != nil {
 		return nil
 	}
@@ -2259,11 +2254,10 @@ type partTxnSummary struct {
 // recentPartTxns returns the most recent inventory transactions for a part,
 // newest first, capped at limit. Returns nil on error.
 func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) []partTxnSummary {
-	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %stxn_type, qty, txn_date
-		FROM %s WHERE part_id = @p1 ORDER BY txn_date DESC, id DESC
-	`+limitClause, top, h.cfg().InventoryTxnTable()), partID, limit)
+		SELECT txn_type, qty, txn_date
+		FROM %s WHERE part_id = $1 ORDER BY txn_date DESC, id DESC LIMIT $2
+	`, h.cfg().InventoryTxnTable()), partID, limit)
 	if err != nil {
 		return nil
 	}
@@ -2303,19 +2297,18 @@ type preferredSupplierSummary struct {
 // preferred supplier is pinned (the JOIN drops the row on a NULL
 // default_supplier_id). Price is filled in by the caller.
 func (h *Handler) preferredSupplier(ctx context.Context, partID string) *preferredSupplierSummary {
-	top, limitClause := h.topLimit("@p2")
 	pt, co, sp := h.cfg().PartsTable(), h.cfg().CompanyTable(), h.cfg().SupplierPartTable()
 	var s preferredSupplierSummary
 	var name, pn, desc sql.NullString
 	var spID sql.NullInt64
 	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT %sc.id, c.name, sp.id, sp.supplier_pn, sp.supplier_desc
+		SELECT c.id, c.name, sp.id, sp.supplier_pn, sp.supplier_desc
 		FROM %s p
 		JOIN %s c ON c.id = p.default_supplier_id
 		LEFT JOIN %s sp ON sp.part_id = p.id AND sp.supplier_id = c.id
-		WHERE p.id = @p1
-		ORDER BY sp.preference, sp.id
-	`+limitClause, top, pt, co, sp), partID, 1).Scan(&s.SupplierID, &name, &spID, &pn, &desc)
+		WHERE p.id = $1
+		ORDER BY sp.preference, sp.id LIMIT 1
+	`, pt, co, sp), partID).Scan(&s.SupplierID, &name, &spID, &pn, &desc)
 	if err != nil {
 		return nil
 	}
@@ -2348,7 +2341,7 @@ func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoi
 		SELECT po.number, po.supplier_name, po.date_ordered, pol.unit_cost
 		FROM %s pol
 		JOIN %s po ON pol.po_id = po.ID
-		WHERE pol.part_id = @p1 AND po.date_ordered IS NOT NULL
+		WHERE pol.part_id = $1 AND po.date_ordered IS NOT NULL
 		ORDER BY po.date_ordered
 	`, pol, po), partID); err == nil {
 		for rows.Next() {
@@ -2370,9 +2363,9 @@ func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoi
 		SELECT c.name, p.effective_date, p.price_ea, p.pack_size
 		FROM %s p
 		LEFT JOIN %s c ON p.supplier_id = c.id
-		WHERE p.part_id = @p1 AND p.is_active = %s AND p.effective_date IS NOT NULL
+		WHERE p.part_id = $1 AND p.is_active = TRUE AND p.effective_date IS NOT NULL
 		ORDER BY p.effective_date
-	`, pr, comp, h.dia().BoolLiteral(true)), partID); err == nil {
+	`, pr, comp), partID); err == nil {
 		for prRows.Next() {
 			var sup sql.NullString
 			var d sql.NullTime
@@ -2433,7 +2426,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
 		FROM %s p
 		LEFT JOIN %s s ON p.supplier_id = s.id
-		WHERE p.part_id = @p1
+		WHERE p.part_id = $1
 		ORDER BY s.name, p.effective_date DESC, p.pack_size
 	`, pr, su), id)
 	if err != nil {
@@ -2489,7 +2482,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	}
 	var defSup sql.NullInt64
 	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT default_supplier_id FROM %s WHERE id=@p1`, h.cfg().PartsTable()), id).Scan(&defSup)
+		`SELECT default_supplier_id FROM %s WHERE id=$1`, h.cfg().PartsTable()), id).Scan(&defSup)
 	for i := range groups {
 		allInactive := true
 		for _, r := range groups[i].Rows {
@@ -2529,7 +2522,7 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 // rollup the first time a price is added (#465). No-op once one is already set.
 func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID any) {
 	_, _ = h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET default_supplier_id=@p1 WHERE id=@p2 AND default_supplier_id IS NULL`,
+		`UPDATE %s SET default_supplier_id=$1 WHERE id=$2 AND default_supplier_id IS NULL`,
 		h.cfg().PartsTable()), supplierID, partID)
 }
 
@@ -2546,7 +2539,7 @@ func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET default_supplier_id=@p1 WHERE id=@p2`, h.cfg().PartsTable(),
+		`UPDATE %s SET default_supplier_id=$1 WHERE id=$2`, h.cfg().PartsTable(),
 	), supplierID, partID); err != nil {
 		h.renderError(w, r, "Error setting preferred supplier: "+err.Error())
 		return
@@ -2571,8 +2564,8 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	priceEA, pricePack := resolvePriceFields(r)
 	_, err = h.execContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
-	`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)),
+		VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+	`, h.cfg().PriceTable()),
 		partID, supplierID,
 		nullableFloat(r.FormValue("pack_size")), priceEA, pricePack,
 		effectiveDate,
@@ -2606,7 +2599,7 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
 		FROM %s p
 		LEFT JOIN %s s ON p.supplier_id = s.id
-		WHERE p.id = @p1 AND p.part_id = @p2
+		WHERE p.id = $1 AND p.part_id = $2
 	`, h.cfg().PriceTable(), h.cfg().CompanyTable()), priceID, partID).Scan(
 		&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID, &supplierName,
 	)
@@ -2666,7 +2659,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, pr, h.dia().BoolLiteral(false),
+		`UPDATE %s SET is_active = FALSE WHERE id = $1 AND part_id = $2`, pr,
 	), priceID, partID)
 	if err != nil {
 		tx.Rollback()
@@ -2676,8 +2669,8 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	priceEA, pricePack := resolvePriceFields(r)
 	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
 		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, %s)
-	`, pr, h.dia().BoolLiteral(true)),
+		VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+	`, pr),
 		partID, supplierID,
 		nullableFloat(r.FormValue("pack_size")), priceEA, pricePack,
 		effectiveDate,
@@ -2706,7 +2699,7 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg().PriceTable(), h.dia().BoolLiteral(false),
+		`UPDATE %s SET is_active = FALSE WHERE id = $1 AND part_id = $2`, h.cfg().PriceTable(),
 	), priceID, partID)
 	if err != nil {
 		h.renderError(w, r, "Error deactivating price: "+err.Error())
@@ -2724,7 +2717,7 @@ func (h *Handler) PriceDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`DELETE FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`, h.cfg().PriceTable(), h.dia().BoolLiteral(false),
+		`DELETE FROM %s WHERE id = $1 AND part_id = $2 AND is_active = FALSE`, h.cfg().PriceTable(),
 	), priceID, partID)
 	if err != nil {
 		h.renderError(w, r, "Error deleting price: "+err.Error())
@@ -2740,7 +2733,7 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	}
 	priceID := chi.URLParam(r, "priceID")
 	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = %s WHERE id = @p1 AND part_id = @p2`, h.cfg().PriceTable(), h.dia().BoolLiteral(true),
+		`UPDATE %s SET is_active = TRUE WHERE id = $1 AND part_id = $2`, h.cfg().PriceTable(),
 	), priceID, partID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UQ_price") {
@@ -2804,7 +2797,7 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
 	var parentPN string
 	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT part_number FROM %s WHERE id = @p1`, h.cfg().PartsTable()), id).Scan(&parentPN)
+		`SELECT part_number FROM %s WHERE id = $1`, h.cfg().PartsTable()), id).Scan(&parentPN)
 	if parentPN == "" {
 		parentPN = id
 	}
@@ -2813,13 +2806,13 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 		SELECT pl.line_number, pl.qty, pn.part_number, pn.description, pn.revision, pn.category,
 		       pn.current_cost, pn.last_rollup_cost,
 		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = %s AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
+		        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
 		       %s
 		FROM %s pl
 		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = @p1
+		WHERE pl.parent_part_id = $1
 		ORDER BY pl.line_number
-	`, prc, h.dia().BoolLiteral(true), hasOwnBOMExpr(h.dia(), pl, "pn.id"), pl, pn), id)
+	`, prc, hasOwnBOMExpr(pl, "pn.id"), pl, pn), id)
 	if err != nil {
 		serverError(w, "database error", err)
 		return

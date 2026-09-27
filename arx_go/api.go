@@ -32,16 +32,16 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	supplierFilter := ""
 	if r.URL.Query().Get("supplier_only") == "1" {
-		supplierFilter = " AND su.is_supplier = " + h.dia().BoolLiteral(true)
+		supplierFilter = " AND su.is_supplier = TRUE"
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT su.id, su.name, cn.city
 		FROM %s su
 		LEFT JOIN %s cn ON su.default_contact = cn.id
-		WHERE su.name LIKE @p1 AND su.is_active = %s`+supplierFilter+`
+		WHERE su.name LIKE $1 AND su.is_active = TRUE`+supplierFilter+`
 		ORDER BY su.name
-		OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
-	`, h.cfg().CompanyTable(), h.cfg().ContactTable(), h.dia().BoolLiteral(true)), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
+		LIMIT 20
+	`, h.cfg().CompanyTable(), h.cfg().ContactTable()), "%"+q+"%")
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -71,9 +71,9 @@ func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
 		SELECT id, display_name, address, city, state, zipcode,
 		       country, phone_1, fax, email
 		FROM %s
-		WHERE company_id = @p1 AND is_active = %s
+		WHERE company_id = $1 AND is_active = TRUE
 		ORDER BY display_name
-	`, h.cfg().ContactTable(), h.dia().BoolLiteral(true)), id)
+	`, h.cfg().ContactTable()), id)
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -117,16 +117,16 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []any{})
 		return
 	}
-	where := "part_number LIKE @p1"
+	where := "part_number LIKE $1"
 	if r.URL.Query().Get("by") == "desc" {
-		where = "description LIKE @p1 OR detail LIKE @p1"
+		where = "description LIKE $1 OR detail LIKE $1"
 	}
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT id, part_number, revision, description, detail FROM %s
 		WHERE %s
 		ORDER BY part_number
-		OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY
-	`, h.cfg().PartsTable(), where), "%"+q+"%") // #625: portable OFFSET/FETCH, revisited in Phase 2
+		LIMIT 25
+	`, h.cfg().PartsTable(), where), "%"+q+"%")
 	if err != nil {
 		writeJSON(w, []any{})
 		return
@@ -170,7 +170,7 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT supplier_pn, min_increment
 		FROM %s
-		WHERE part_id = @p1 AND supplier_id = @p2
+		WHERE part_id = $1 AND supplier_id = $2
 		ORDER BY preference ASC
 		LIMIT 1
 	`, h.cfg().SupplierPartTable()), partID, supplierID).Scan(&pn, &minIncrement)
@@ -182,10 +182,10 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 	h.queryRowContext(r.Context(), fmt.Sprintf(`
 		SELECT price_ea
 		FROM %s
-		WHERE part_id = @p1 AND supplier_id = @p2 AND is_active = %s
+		WHERE part_id = $1 AND supplier_id = $2 AND is_active = TRUE
 		ORDER BY pack_size ASC
 		LIMIT 1
-	`, h.cfg().PriceTable(), h.dia().BoolLiteral(true)), partID, supplierID).Scan(&priceEa)
+	`, h.cfg().PriceTable()), partID, supplierID).Scan(&priceEa)
 
 	resp := map[string]any{"supplier_pn": pn.String}
 	if minIncrement.Valid && minIncrement.Float64 > 0 {
@@ -313,7 +313,7 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 		oID = n
 	}
 	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, hash) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7)`,
+		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, hash) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 		h.cfg().AttachmentsTable(),
 	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment, hashBytes(data)); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error adding attachment: "+err.Error())
@@ -340,7 +340,7 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 
 	var oldFileNameNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name FROM %s WHERE id=@p1 AND part_id=@p2`, h.cfg().AttachmentsTable(),
+		`SELECT file_name FROM %s WHERE id=$1 AND part_id=$2`, h.cfg().AttachmentsTable(),
 	), attID, id).Scan(&oldFileNameNS); err != nil {
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Attachment not found")
@@ -385,7 +385,7 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 		oID = n
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET part_revision=@p1, category=@p2, sort_order=@p3, comment=@p4, file_name=@p5, hash=@p6 WHERE id=@p7`,
+		`UPDATE %s SET part_revision=$1, category=$2, sort_order=$3, comment=$4, file_name=$5, hash=$6 WHERE id=$7`,
 		h.cfg().AttachmentsTable(),
 	), body.Rev, "Photo", oID, body.Comment, "LOCAL:"+finalName, hashBytes(data), attID); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error updating attachment: "+err.Error())
@@ -465,8 +465,8 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 
 	var fileNameNS, revNS sql.NullString
 	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name, part_revision FROM %s WHERE id=@p1 AND part_id=@p2 AND is_active=%s`,
-		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true),
+		`SELECT file_name, part_revision FROM %s WHERE id=$1 AND part_id=$2 AND is_active=TRUE`,
+		h.cfg().AttachmentsTable(),
 	), attID, id).Scan(&fileNameNS, &revNS); err != nil {
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Attachment not found")
@@ -536,12 +536,12 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 	var existingID int
 	var oldFileNS sql.NullString
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s ORDER BY id`,
-		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true),
+		`SELECT id, file_name FROM %s WHERE part_id=$1 AND category=$2 AND is_active=TRUE ORDER BY id`,
+		h.cfg().AttachmentsTable(),
 	), partID, category).Scan(&existingID, &oldFileNS)
 	if err == sql.ErrNoRows {
 		_, err = h.execContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, file_name, part_revision, category, hash) VALUES (@p1,@p2,@p3,@p4,@p5)`,
+			`INSERT INTO %s (part_id, file_name, part_revision, category, hash) VALUES ($1,$2,$3,$4,$5)`,
 			h.cfg().AttachmentsTable(),
 		), partID, newFile, rev, category, hash)
 		return err
@@ -550,7 +550,7 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 		return err
 	}
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET file_name=@p1, part_revision=@p2, hash=@p3 WHERE id=@p4`, h.cfg().AttachmentsTable(),
+		`UPDATE %s SET file_name=$1, part_revision=$2, hash=$3 WHERE id=$4`, h.cfg().AttachmentsTable(),
 	), newFile, rev, hash, existingID); err != nil {
 		return err
 	}
@@ -579,8 +579,8 @@ func (h *Handler) saveGeneratedAttachment(ctx context.Context, partID, rev, cate
 
 	var oldFileNS sql.NullString
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT file_name FROM %s WHERE part_id=@p1 AND category=@p2 AND is_active=%s`,
-		h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true),
+		`SELECT file_name FROM %s WHERE part_id=$1 AND category=$2 AND is_active=TRUE`,
+		h.cfg().AttachmentsTable(),
 	), partID, category).Scan(&oldFileNS); err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("Error loading existing attachment: %w", err)
 	}
@@ -666,7 +666,7 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 		FROM %s r
 		JOIN %s f ON r.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE r.id = @p1`,
+		WHERE r.id = $1`,
 		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()), recordID).
 		Scan(&serial, &locked, &partNumber)
 	if err == sql.ErrNoRows {

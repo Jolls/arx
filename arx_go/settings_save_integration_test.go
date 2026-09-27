@@ -16,7 +16,7 @@ import (
 )
 
 // arxDevProfile parses ARX_TEST_DSN (e.g.
-// sqlserver://user:pass@server?database=ArxDev&...) into its component
+// postgres://user:pass@server/ArxDev?...) into its component
 // fields. TestMain already confirmed ARX_TEST_DSN points at seeded test data
 // (see checkArxDevSentinel in integration_test.go) before any test runs.
 func arxDevProfile(t *testing.T) (server, user, password, database string) {
@@ -34,10 +34,7 @@ func arxDevProfile(t *testing.T) (server, user, password, database string) {
 		user = u.User.Username()
 		password, _ = u.User.Password()
 	}
-	database = u.Query().Get("database")
-	if database == "" { // postgres://user:pass@host/dbname
-		database = strings.TrimPrefix(u.Path, "/")
-	}
+	database = strings.TrimPrefix(u.Path, "/")
 	return server, user, password, database
 }
 
@@ -52,19 +49,17 @@ func isolatedIntegrationSettingsHandler(t *testing.T) *Handler {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	dsn := os.Getenv("ARX_TEST_DSN")
-	engine, err := integrationEngine(dsn)
-	if err != nil {
+	if err := checkIntegrationTarget(dsn); err != nil {
 		t.Fatal(err)
 	}
 	cfg := arxbase.Load("dev")
 	cfg.SessionSecret = "test-secret"
-	cfg.Engine = engine // SettingsSave's reconnect builds its DSN from the config engine
 
-	database, dialect, err := arxdb.Connect(engine, dsn)
+	database, err := arxdb.Connect(dsn)
 	if err != nil {
 		t.Fatalf("initial db.Connect: %v", err)
 	}
-	h := New(database, dialect, cfg, templatesFS, nil)
+	h := New(database, cfg, templatesFS, nil)
 	if err := h.loadTemplates(); err != nil {
 		panic(err)
 	}

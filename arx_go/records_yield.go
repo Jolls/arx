@@ -100,7 +100,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = @p1`,
+		WHERE f.id = $1`,
 		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
 		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
@@ -119,12 +119,12 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 	args := append([]any{formID}, dateArgs...)
 
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT record_date, MAX(CASE WHEN pass_fail = %s THEN 1 ELSE 0 END)
+		SELECT record_date, MAX(CASE WHEN pass_fail = FALSE THEN 1 ELSE 0 END)
 		FROM %s trec
 		LEFT JOIN %s res ON res.form_record_id = trec.id
-		WHERE form_id = @p1 AND is_active = %s%s
+		WHERE form_id = $1 AND is_active = TRUE%s
 		GROUP BY trec.id, record_date`,
-		h.dia().BoolLiteral(false), h.cfg().RecordsTable(), h.cfg().ResultsTable(), h.dia().BoolLiteral(true), dateClause), args...)
+		h.cfg().RecordsTable(), h.cfg().ResultsTable(), dateClause), args...)
 	if err != nil {
 		serverError(w, "query error", err)
 		return

@@ -27,7 +27,7 @@ func TestBuildDSN_DatabaseSwap(t *testing.T) {
 	}
 
 	prod := b.BuildDSN("secret")
-	if !strings.Contains(prod, "database=ArxProd") {
+	if !strings.Contains(prod, "/ArxProd") {
 		t.Errorf("prod DSN missing ArxProd: %s", prod)
 	}
 	if strings.Contains(prod, "ArxDev") {
@@ -36,7 +36,7 @@ func TestBuildDSN_DatabaseSwap(t *testing.T) {
 
 	b.TestMode = true
 	dev := b.BuildDSN("secret")
-	if !strings.Contains(dev, "database=ArxDev") {
+	if !strings.Contains(dev, "/ArxDev") {
 		t.Errorf("test DSN missing ArxDev: %s", dev)
 	}
 	if strings.Contains(dev, "ArxProd") {
@@ -51,9 +51,18 @@ func TestBuildDSN_DatabaseSwap(t *testing.T) {
 	}
 }
 
+// TestBuildDSN_AlwaysPostgres: with no engine configured the DSN is a
+// postgres:// URL with TLS required — there is no other engine (#29).
+func TestBuildDSN_AlwaysPostgres(t *testing.T) {
+	b := Base{DBServer: "pghost:5432", DBName: "ArxDev", DBUser: "arx"}
+	dsn := b.BuildDSN("pw")
+	if !strings.HasPrefix(dsn, "postgres://") || !strings.Contains(dsn, "sslmode=require") {
+		t.Errorf("BuildDSN = %q, want postgres:// with sslmode=require", dsn)
+	}
+}
+
 func TestBuildDSN_Postgres(t *testing.T) {
 	b := Base{
-		Engine:     "postgres",
 		DBServer:   "pghost:5432",
 		DBName:     "ArxProd",
 		TestDBName: "ArxDev",
@@ -79,13 +88,11 @@ func TestBuildDSN_Postgres(t *testing.T) {
 }
 
 func TestBuildDSN_TestProfileSeparateServer(t *testing.T) {
-	// Prod on SQL Server; test profile on a Postgres host with its own creds.
+	// Test profile on a separate Postgres host with its own creds.
 	b := Base{
-		Engine:         "sqlserver",
 		DBServer:       "sqlhost",
 		DBName:         "ArxProd",
 		DBUser:         "sa",
-		TestEngine:     "postgres",
 		TestDBServer:   "pghost:5432",
 		TestDBName:     "ArxDev",
 		TestDBUser:     "arxdev",
@@ -93,14 +100,11 @@ func TestBuildDSN_TestProfileSeparateServer(t *testing.T) {
 	}
 
 	prod := b.BuildDSN("prodpass")
-	if !strings.HasPrefix(prod, "sqlserver://") || !strings.Contains(prod, "sa:prodpass@sqlhost") {
-		t.Errorf("prod DSN should target the SQL Server profile: %s", prod)
+	if !strings.Contains(prod, "sa:prodpass@sqlhost") {
+		t.Errorf("prod DSN should target the prod profile: %s", prod)
 	}
 
 	b.TestMode = true
-	if got := b.DBEngine(); got != "postgres" {
-		t.Errorf("test-mode engine: got %q, want postgres", got)
-	}
 	dev := b.DSN() // uses the stored test password
 	if !strings.HasPrefix(dev, "postgres://") {
 		t.Errorf("test DSN should use the postgres:// scheme: %s", dev)
@@ -115,9 +119,8 @@ func TestBuildDSN_TestProfileSeparateServer(t *testing.T) {
 
 func TestBuildDSN_TestProfileInheritsProd(t *testing.T) {
 	// Only TestDBName set: the historical same-server, name-only swap must still
-	// work — server, engine, user, and password all inherit prod.
+	// work — server, user, and password all inherit prod.
 	b := Base{
-		Engine:     "sqlserver",
 		DBServer:   "sqlhost",
 		DBName:     "ArxProd",
 		DBUser:     "sa",
@@ -130,11 +133,8 @@ func TestBuildDSN_TestProfileInheritsProd(t *testing.T) {
 	if !strings.Contains(dev, "sa:prodpass@sqlhost") {
 		t.Errorf("blank test fields should inherit prod host/creds: %s", dev)
 	}
-	if !strings.Contains(dev, "database=ArxDev") {
+	if !strings.Contains(dev, "/ArxDev") {
 		t.Errorf("test DSN should swap to ArxDev: %s", dev)
-	}
-	if b.DBEngine() != "sqlserver" {
-		t.Errorf("blank TestEngine should inherit prod engine, got %q", b.DBEngine())
 	}
 }
 
@@ -148,27 +148,5 @@ func TestConnectionSummary(t *testing.T) {
 	b.TestMode = true
 	if got := b.ConnectionSummary(); got != "myserver / ArxDev (TEST)" {
 		t.Errorf("test summary: got %q", got)
-	}
-}
-
-func TestDBEngineDefaultsToSQLServer(t *testing.T) {
-	b := &Base{}
-	if got := b.DBEngine(); got != "sqlserver" {
-		t.Fatalf("empty engine: got %q, want %q", got, "sqlserver")
-	}
-}
-
-func TestDBEngineNormalizes(t *testing.T) {
-	cases := map[string]string{
-		"postgres":  "postgres",
-		"POSTGRES":  "postgres",
-		"sqlserver": "sqlserver",
-		"nonsense":  "sqlserver",
-	}
-	for in, want := range cases {
-		b := &Base{Engine: in}
-		if got := b.DBEngine(); got != want {
-			t.Errorf("engine %q: got %q, want %q", in, got, want)
-		}
 	}
 }

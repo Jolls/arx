@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	arxbase "arx/internal/config"
-	arxdb "arx/internal/db"
 )
 
 // isolatedSettingsHandler returns a Handler whose config/local.json and
@@ -23,7 +22,7 @@ func isolatedSettingsHandler(t *testing.T, cfg *arxbase.Config) *Handler {
 	t.Setenv("AppData", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg.SessionSecret = "test-secret"
-	h := New(nil, nil, cfg, templatesFS, nil)
+	h := New(nil, cfg, templatesFS, nil)
 	if err := h.loadTemplates(); err != nil {
 		panic(err)
 	}
@@ -46,8 +45,8 @@ func TestSettingsSave_ConnectFailure(t *testing.T) {
 	cfg.TestMode = true
 	cfg.TestDBName = "ArxDev"
 	h := isolatedSettingsHandler(t, cfg)
-	h.connectDB = func(engine, dsn string) (*sql.DB, arxdb.Dialect, error) {
-		return nil, nil, errors.New("connection refused")
+	h.connectDB = func(dsn string) (*sql.DB, error) {
+		return nil, errors.New("connection refused")
 	}
 
 	vals := url.Values{
@@ -168,9 +167,9 @@ func TestSettingsSave_AnonymousNoStoredPasswordReconnect(t *testing.T) {
 	h.update(func(s *runtimeState) { s.dbConnError = "could not read schema_version (connection refused)" })
 
 	var dialed []string
-	h.connectDB = func(engine, dsn string) (*sql.DB, arxdb.Dialect, error) {
+	h.connectDB = func(dsn string) (*sql.DB, error) {
 		dialed = append(dialed, dsn)
-		return nil, nil, errors.New("should not be dialed")
+		return nil, errors.New("should not be dialed")
 	}
 
 	vals := url.Values{
@@ -201,9 +200,9 @@ func TestSettingsSave_AuthenticatedReusesStoredPassword(t *testing.T) {
 	h := isolatedSettingsHandler(t, cfg)
 
 	var dialed []string
-	h.connectDB = func(engine, dsn string) (*sql.DB, arxdb.Dialect, error) {
+	h.connectDB = func(dsn string) (*sql.DB, error) {
 		dialed = append(dialed, dsn)
-		return nil, nil, errors.New("connection refused")
+		return nil, errors.New("connection refused")
 	}
 
 	vals := url.Values{

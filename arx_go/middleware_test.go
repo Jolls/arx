@@ -20,7 +20,7 @@ import (
 func testHandler() *Handler {
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
-	return New(nil, nil, cfg, nil, nil)
+	return New(nil, cfg, nil, nil)
 }
 
 // nopDriver is a database/sql driver that is never actually dialed; it exists
@@ -43,7 +43,7 @@ func testHandlerWithDB() *Handler {
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
 	cfg.Port = "4568"
-	return New(db, nil, cfg, nil, nil)
+	return New(db, cfg, nil, nil)
 }
 
 func TestBuildRouter_RejectsForeignHost(t *testing.T) {

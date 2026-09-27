@@ -1,7 +1,8 @@
 # Database Schema
 
-Reflects the SQL Server DDL in `SQL/azure/*.sql` (the standard; `SQL/postgres/*.sql` is a
-dialect-translated port of the same tables). Solid relationship lines (`--`) are enforced
+Reflects the DDL in `SQL/postgres/*.sql`. Column types keep their original SQL Server
+spelling: `bit` = `BOOLEAN`, `datetime` = `TIMESTAMPTZ`, `decimal` = `NUMERIC`,
+`nvarchar` = `VARCHAR`. Solid relationship lines (`--`) are enforced
 FOREIGN KEY constraints; dotted lines (`..`) are logical-only references with no DB-level
 constraint — see "Non-enforced references" in Notes.
 
@@ -474,9 +475,9 @@ erDiagram
   have no foreign key relationships to other tables.
 - Denormalized/trigger-maintained columns (`company.supplier_part_count`/`po_count`,
   `part.attachment_count`/`po_line_count`) are recalculated by triggers in
-  `SQL/azure/triggers.sql` — never updated directly in application code.
+  `SQL/postgres/triggers.sql` — never updated directly in application code.
 - Per-table column semantics, trigger side-effects, and full DDL live in `SQL/SCHEMA.md`
-  and `SQL/azure/*.sql`.
+  and `SQL/postgres/*.sql`.
 
 ## Diagrams by domain
 

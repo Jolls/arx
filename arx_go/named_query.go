@@ -29,7 +29,7 @@ var (
 // OPENROWSET/OPENDATASOURCE/OPENQUERY/BULK block SQL Server's file-read and
 // remote-provider surface, which needs neither EXEC nor a semicolon; the PG_*
 // entries are the Postgres equivalents (file read, directory list, sleep DoS) —
-// one list for both engines, since this guard is dialect-independent (#146).
+// SQL Server's entries are kept as harmless defense in depth (#146).
 // Word boundaries avoid false positives on column names that contain keyword
 // substrings (e.g. created_at, updated_at, alternate, bulk_order_delimiter).
 var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE|INTO|MERGE|GRANT|REVOKE|DENY|WAITFOR|DBCC|BACKUP|RESTORE|SHUTDOWN|OPENROWSET|OPENDATASOURCE|OPENQUERY|BULK|PG_READ_FILE|PG_LS_DIR|PG_SLEEP)\b|;`)
@@ -59,7 +59,7 @@ type NamedQueryInfo struct {
 func (h *Handler) listNamedQueries(ctx context.Context) ([]NamedQueryInfo, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(
 		`SELECT name, COALESCE(description,''), COALESCE(params,''), result_type
-		 FROM %s WHERE is_active = %s ORDER BY name`, h.cfg().NamedQueriesTable(), h.dia().BoolLiteral(true)))
+		 FROM %s WHERE is_active = TRUE ORDER BY name`, h.cfg().NamedQueriesTable()))
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 
 	var storedSQL, resultType string
 	err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT sql, result_type FROM %s WHERE name = @p1 AND is_active = %s", h.cfg().NamedQueriesTable(), h.dia().BoolLiteral(true)),
+		fmt.Sprintf("SELECT sql, result_type FROM %s WHERE name = $1 AND is_active = TRUE", h.cfg().NamedQueriesTable()),
 		name,
 	).Scan(&storedSQL, &resultType)
 	if err == sql.ErrNoRows {
@@ -184,7 +184,7 @@ func (h *Handler) execQuery(ctx context.Context, sqlText, resultType string, par
 	for i, name := range names {
 		args[i] = sql.Named(name, params[name])
 	}
-	sqlText = h.dia().RewriteNamedParams(sqlText, names)
+	sqlText = arxdb.RewriteNamedParams(sqlText, names)
 
 	rows, err := h.queryContext(ctx, sqlText, args...)
 	if err != nil {

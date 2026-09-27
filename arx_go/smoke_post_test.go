@@ -78,7 +78,7 @@ func seedPart(t *testing.T, h *Handler, ctx context.Context, category string) (i
 	}))
 	id := locID(t, rec, "/part/")
 	return id, func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().PartsTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().PartsTable()), id)
 	}
 }
 
@@ -95,7 +95,7 @@ func seedSupplier(t *testing.T, h *Handler, ctx context.Context) (int, func()) {
 	}))
 	id := locID(t, rec, "/supplier/")
 	return id, func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().CompanyTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().CompanyTable()), id)
 	}
 }
 
@@ -126,7 +126,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 				}))
 				id := locID(t, rec, "/part/")
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().PartsTable()), id)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().PartsTable()), id)
 				}
 			},
 		},
@@ -140,7 +140,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 				}))
 				id := locID(t, rec, "/supplier/")
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().CompanyTable()), id)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().CompanyTable()), id)
 				}
 			},
 		},
@@ -154,7 +154,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 				}))
 				id := locID(t, rec, "/contact/")
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=@p1", h.cfg().ContactTable()), id)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().ContactTable()), id)
 				}
 			},
 		},
@@ -174,7 +174,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 						"lead_time":     {"5"},
 					}), partID))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg().SupplierPartTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", h.cfg().SupplierPartTable()), partID)
 					pc()
 					sc()
 				}
@@ -196,7 +196,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 						"effective_date": {time.Now().Format("2006-01-02")},
 					}), partID))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg().PriceTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", h.cfg().PriceTable()), partID)
 					pc()
 					sc()
 				}
@@ -216,7 +216,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 						"description":     {"smoke"},
 					}), partID))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=@p1", h.cfg().MfgPartTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", h.cfg().MfgPartTable()), partID)
 					pc()
 					mc()
 				}
@@ -232,7 +232,7 @@ func TestIntegration_PostRoutesSmoke(t *testing.T) {
 					"pnid": {strconv.Itoa(partID)},
 				}))
 				return rec, func() {
-					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_number_id=@p1", h.cfg().FormsTable()), partID)
+					smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_number_id=$1", h.cfg().FormsTable()), partID)
 					pc()
 				}
 			},

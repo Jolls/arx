@@ -127,10 +127,10 @@ func (h *Handler) contactPOs(ctx context.Context, contactID int) []contactPO {
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT number,
-		       CASE WHEN supplier_contact_id = @p1 THEN 'Supplier' ELSE 'Receiver' END AS role,
+		       CASE WHEN supplier_contact_id = $1 THEN 'Supplier' ELSE 'Receiver' END AS role,
 		       supplier_name, status, date_ordered, total_cost
 		FROM %s
-		WHERE supplier_contact_id = @p1 OR receiver_contact_id = @p1
+		WHERE supplier_contact_id = $1 OR receiver_contact_id = $1
 		ORDER BY date_ordered DESC, ID DESC
 	`, h.cfg().POTable()), contactID)
 	if err != nil {
@@ -169,9 +169,9 @@ func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContac
 	}
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT id, display_name FROM %s
-		WHERE company_id = @p1 AND id <> @p2 AND is_active = %s
+		WHERE company_id = $1 AND id <> $2 AND is_active = TRUE
 		ORDER BY display_name
-	`, h.cfg().ContactTable(), h.dia().BoolLiteral(true)), supplierID, excludeContactID)
+	`, h.cfg().ContactTable()), supplierID, excludeContactID)
 	if err != nil {
 		return nil
 	}
@@ -208,12 +208,9 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var newID int
-	insertContact := h.dia().InsertReturningID(h.cfg().ContactTable(),
-		`display_name, company_id, email, phone_1, phone_2, fax,
+	insertContact := fmt.Sprintf(`INSERT INTO %s (display_name, company_id, email, phone_1, phone_2, fax,
 		 address, city, state, zipcode, country,
-		 website, is_active, notes`,
-		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14`,
-		false)
+		 website, is_active, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, h.cfg().ContactTable())
 	err := h.queryRowContext(r.Context(), insertContact,
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
@@ -263,10 +260,10 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.execContext(r.Context(), fmt.Sprintf(`
 		UPDATE %s SET
-		  display_name=@p1, company_id=@p2, email=@p3, phone_1=@p4, phone_2=@p5, fax=@p6,
-		  address=@p7, city=@p8, state=@p9, zipcode=@p10, country=@p11,
-		  website=@p12, is_active=@p13, notes=@p14, updated_at=GETDATE()
-		WHERE id=@p15
+		  display_name=$1, company_id=$2, email=$3, phone_1=$4, phone_2=$5, fax=$6,
+		  address=$7, city=$8, state=$9, zipcode=$10, country=$11,
+		  website=$12, is_active=$13, notes=$14, updated_at=CURRENT_TIMESTAMP
+		WHERE id=$15
 	`, h.cfg().ContactTable()),
 		name, nullableInt(fv(r, "CNSUID")),
 		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
@@ -304,7 +301,7 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 		       su.name
 		FROM %s cn
 		LEFT JOIN %s su ON cn.company_id = su.id
-		WHERE cn.id = @p1
+		WHERE cn.id = $1
 	`, cn, su), id).Scan(
 		&c.ID, &cnsuid, &name, &email,
 		&phone1, &phone2, &fax,

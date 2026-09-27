@@ -146,7 +146,7 @@ func TestIntegration_SupplierUpdate(t *testing.T) {
 	var active, isSupplier, isManufacturer bool
 	var defaultContact *int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT name, supplier_code, is_active, is_supplier, is_manufacturer, default_contact FROM %s WHERE id=@p1`,
+		`SELECT name, supplier_code, is_active, is_supplier, is_manufacturer, default_contact FROM %s WHERE id=$1`,
 		h.cfg().CompanyTable()), supplierID,
 	).Scan(&name, &code, &active, &isSupplier, &isManufacturer, &defaultContact); err != nil {
 		t.Fatalf("select updated supplier: %v", err)
@@ -169,7 +169,7 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 
 	var before string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT name FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
+		`SELECT name FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 
 	var after string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT name FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
+		`SELECT name FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 
 	var before string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT supplier_code FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
+		`SELECT supplier_code FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 
 	var after string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT supplier_code FROM %s WHERE id=@p1`, h.cfg().CompanyTable()), supplierID,
+		`SELECT supplier_code FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
 	}
@@ -275,13 +275,13 @@ func TestIntegration_SupplierNotesCodeAndCounts(t *testing.T) {
 	h.cfg().POFolderRoot = savedRoot
 	number := strings.TrimSuffix(strings.TrimPrefix(rec.Header().Get("Location"), "/po/"), "?suggest_links=1")
 	var poID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number).Scan(&poID); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", h.cfg().POTable()), number).Scan(&poID); err != nil {
 		t.Fatalf("look up created PO %q: %v", number, err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POLineTable()), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POHistoryTable()), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg().POTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POLineTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POHistoryTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", h.cfg().POTable()), poID)
 	}()
 
 	rec = httptest.NewRecorder()
@@ -314,13 +314,13 @@ func TestIntegration_POCreate_FolderUsesSupplierCode(t *testing.T) {
 	h.POCreate(rec, postForm("/pos", url.Values{"supplier_id": {"1001"}}))
 	number := strings.TrimSuffix(strings.TrimPrefix(rec.Header().Get("Location"), "/po/"), "?suggest_links=1")
 	var poID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=@p1", h.cfg().POTable()), number).Scan(&poID); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", h.cfg().POTable()), number).Scan(&poID); err != nil {
 		t.Fatalf("look up created PO %q: %v", number, err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POLineTable()), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=@p1", h.cfg().POHistoryTable()), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=@p1", h.cfg().POTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POLineTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POHistoryTable()), poID)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", h.cfg().POTable()), poID)
 	}()
 
 	entries, _ := os.ReadDir(root)

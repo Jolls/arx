@@ -1,11 +1,9 @@
 -- named_queries: library of named, parameterized SELECT queries used for
 -- spec_nom auto-fill. Referenced in spec_nom as: query:name(@param={test_id}).
 --
--- Structure only. The SQL Server seed rows are intentionally NOT ported: the
--- stored `sql` column holds engine-specific query text (TRY_CAST, CONVERT,
--- LIKE '%' + @pn + '%', is_active = 1) that will not run on Postgres. Those rows
--- are reference *data* carrying T-SQL and belong to the ArxProd -> Postgres data
--- migration, translated there (see SQL/postgres/README.md).
+-- Structure only. The standard rows are seeded in seed_test_data.sql; a
+-- migrated ArxProd gets their Postgres text from
+-- migrations/20260926120000_28_named_queries_postgres_text.sql.
 
 DROP TABLE IF EXISTS named_queries CASCADE;
 

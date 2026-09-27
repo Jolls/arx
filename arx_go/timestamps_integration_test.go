@@ -49,16 +49,13 @@ var auditTimestampColumns = []struct {
 func TestIntegration_AuditColumnsAreTimestamptz(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
-	if h.dia().Name() != "postgres" {
-		t.Skip("postgres-only")
-	}
 	ctx := context.Background()
 
 	colInfo := func(table, column string) (dataType, def, nullable string) {
 		t.Helper()
 		if err := h.queryRowContext(ctx,
 			`SELECT data_type, COALESCE(column_default,''), is_nullable FROM information_schema.columns
-			 WHERE table_schema = current_schema() AND table_name=@p1 AND column_name=@p2`, table, column,
+			 WHERE table_schema = current_schema() AND table_name=$1 AND column_name=$2`, table, column,
 		).Scan(&dataType, &def, &nullable); err != nil {
 			t.Fatalf("%s.%s: %v", table, column, err)
 		}
@@ -88,7 +85,7 @@ func TestIntegration_RecordDateStaysWallClock(t *testing.T) {
 	defer cleanup()
 	var got time.Time
 	if err := h.queryRowContext(context.Background(),
-		fmt.Sprintf(`SELECT record_date FROM %s WHERE id=@p1`, h.cfg().RecordsTable()), 7001).Scan(&got); err != nil {
+		fmt.Sprintf(`SELECT record_date FROM %s WHERE id=$1`, h.cfg().RecordsTable()), 7001).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if s := got.Format("2006-01-02 15:04"); s != "2026-06-01 00:00" {
@@ -102,9 +99,6 @@ func TestIntegration_RecordDateStaysWallClock(t *testing.T) {
 func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
-	if h.dia().Name() != "postgres" {
-		t.Skip("postgres-only")
-	}
 	ctx := context.Background()
 	req := userCtxTZ(httptest.NewRequest(http.MethodPost, "/", nil), "America/Los_Angeles")
 
@@ -132,7 +126,7 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 			t.Fatalf("createLot: %v", err)
 		}
 		var at time.Time
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT created_at FROM %s WHERE id=@p1`, h.cfg().LotTable()), id).Scan(&at); err != nil {
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT created_at FROM %s WHERE id=$1`, h.cfg().LotTable()), id).Scan(&at); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{at}
@@ -144,7 +138,7 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 		}
 		var at time.Time
 		if err := tx.QueryRowContext(ctx,
-			fmt.Sprintf(`SELECT created_at FROM %s WHERE part_id=@p1 ORDER BY id DESC LIMIT 1`, h.cfg().InventoryTxnTable()), 3007).Scan(&at); err != nil {
+			fmt.Sprintf(`SELECT created_at FROM %s WHERE part_id=$1 ORDER BY id DESC LIMIT 1`, h.cfg().InventoryTxnTable()), 3007).Scan(&at); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{at}
@@ -156,10 +150,10 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 		}
 		var changed, modified time.Time
 		if err := tx.QueryRowContext(ctx,
-			fmt.Sprintf(`SELECT changed_at FROM %s WHERE po_id=@p1 ORDER BY id DESC LIMIT 1`, h.cfg().POHistoryTable()), 5002).Scan(&changed); err != nil {
+			fmt.Sprintf(`SELECT changed_at FROM %s WHERE po_id=$1 ORDER BY id DESC LIMIT 1`, h.cfg().POHistoryTable()), 5002).Scan(&changed); err != nil {
 			t.Fatal(err)
 		}
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT date_modified FROM %s WHERE ID=@p1`, h.cfg().POTable()), 5002).Scan(&modified); err != nil {
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT date_modified FROM %s WHERE ID=$1`, h.cfg().POTable()), 5002).Scan(&modified); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{changed, modified}

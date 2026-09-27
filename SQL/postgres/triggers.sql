@@ -192,8 +192,8 @@ CREATE TRIGGER trg_POL_part_count_del
 -- form_row → form_row_history
 -- Snapshot pre-update values into form_row_history on every UPDATE, using
 -- the OLD TABLE transition table (set-based; handles bulk updates correctly).
--- changed_by comes from the session GUC arx.username set by the app (dialect
--- SetAuditUser); it is empty when unset, matching the SQL Server CONTEXT_INFO path.
+-- changed_by comes from the session GUC arx.username set by the app
+-- (setAuditUser); it is empty when unset.
 CREATE OR REPLACE FUNCTION trg_form_row_history() RETURNS trigger AS $$
 BEGIN
     INSERT INTO form_row_history

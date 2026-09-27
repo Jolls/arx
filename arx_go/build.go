@@ -42,7 +42,7 @@ func buildOptionLabel(id int, qty float64, date sql.NullTime) string {
 // build picker (#677). Empty (not an error) when the part has no builds.
 func (h *Handler) activeBuildsForPart(ctx context.Context, partID int) ([]BuildOption, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, qty, build_date FROM %s WHERE part_id = @p1 ORDER BY build_date DESC, id DESC
+		SELECT id, qty, build_date FROM %s WHERE part_id = $1 ORDER BY build_date DESC, id DESC
 	`, h.cfg().BuildTable()), partID)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (h *Handler) fetchBuildOption(ctx context.Context, buildID int) (*BuildOpti
 	var qty float64
 	var date sql.NullTime
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, qty, build_date FROM %s WHERE id = @p1`, h.cfg().BuildTable()), buildID).
+		`SELECT id, qty, build_date FROM %s WHERE id = $1`, h.cfg().BuildTable()), buildID).
 		Scan(&b.ID, &qty, &date)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -105,7 +105,7 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT b.component_part_id, p.part_number, p.description, COALESCE(p.category, '') AS category, b.qty, p.stock_on_hand, p.tracking_mode
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
-		WHERE b.parent_part_id = @p1
+		WHERE b.parent_part_id = $1
 		ORDER BY b.line_number
 	`, h.cfg().BOMTable(), h.cfg().PartsTable()), outputPartID)
 	if err != nil {
@@ -163,7 +163,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT b.id, b.qty, b.build_date, b.username, b.note,
 		       (SELECT COUNT(*) FROM %s u WHERE u.build_id = b.id AND u.source <> 'manual') AS tested_count
-		FROM %s b WHERE b.part_id = @p1 ORDER BY b.build_date DESC, b.id DESC
+		FROM %s b WHERE b.part_id = $1 ORDER BY b.build_date DESC, b.id DESC
 	`, h.cfg().UnitTable(), h.cfg().BuildTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving builds: "+err.Error())
@@ -232,7 +232,7 @@ func (h *Handler) loadBuildLines(ctx context.Context, partID int) ([]bomLine, er
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT b.component_part_id, p.part_number, b.qty, COALESCE(p.category, '') AS category, p.tracking_mode
 		FROM %s b JOIN %s p ON b.component_part_id = p.id
-		WHERE b.parent_part_id = @p1
+		WHERE b.parent_part_id = $1
 	`, h.cfg().BOMTable(), h.cfg().PartsTable()), partID)
 	if err != nil {
 		return nil, err
@@ -280,9 +280,7 @@ func (h *Handler) collectLotPicks(r *http.Request, lines []bomLine) (map[int]int
 // owns those, so the same helper serves both the standalone build and the record save.
 func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, outputLotTracked bool, qty float64, buildDate time.Time, note string, lines []bomLine, lotPicks map[int]int) (buildID, outputLotID int, err error) {
 	// Record the build event first so its id can label the ledger rows and output lot.
-	insertBuild := h.dia().InsertReturningID(h.cfg().BuildTable(),
-		`part_id, output_lot_id, qty, build_date, username, note`,
-		`@p1, @p2, @p3, @p4, @p5, @p6`, false)
+	insertBuild := fmt.Sprintf(`INSERT INTO %s (part_id, output_lot_id, qty, build_date, username, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, h.cfg().BuildTable())
 	if err = tx.QueryRowContext(r.Context(), insertBuild,
 		partID, nil, qty, buildDate, h.actorName(r), nullableText(note)).Scan(&buildID); err != nil {
 		return 0, 0, fmt.Errorf("recording build: %w", err)
@@ -296,7 +294,7 @@ func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, output
 			return 0, 0, fmt.Errorf("creating output lot: %w", err)
 		}
 		if _, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET output_lot_id = @p1 WHERE id = @p2`, h.cfg().BuildTable()), outputLotID, buildID); err != nil {
+			`UPDATE %s SET output_lot_id = $1 WHERE id = $2`, h.cfg().BuildTable()), outputLotID, buildID); err != nil {
 			return 0, 0, fmt.Errorf("linking output lot: %w", err)
 		}
 	}
@@ -422,7 +420,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 	if recID, convErr := strconv.Atoi(fv(r, "return_record")); convErr == nil {
 		var id int
 		if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT id FROM %s WHERE id = @p1 FOR UPDATE`, h.cfg().RecordsTable()), recID).Scan(&id); err != nil && err != sql.ErrNoRows {
+			`SELECT id FROM %s WHERE id = $1 FOR UPDATE`, h.cfg().RecordsTable()), recID).Scan(&id); err != nil && err != sql.ErrNoRows {
 			h.renderError(w, r, "Error locking test record: "+err.Error())
 			return
 		}
@@ -448,8 +446,8 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 			}
 			// #191: one conditional write, so a lock landing mid-build is honored.
 			res, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-				`UPDATE %s SET lot_id = @p1, build_id = @p2, updated_at = GETDATE() WHERE id = @p3 AND part_id = @p4 AND is_locked = %s`,
-				h.cfg().RecordsTable(), h.dia().BoolLiteral(false)), lotArg, buildID, recID, partID)
+				`UPDATE %s SET lot_id = $1, build_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND part_id = $4 AND is_locked = FALSE`,
+				h.cfg().RecordsTable()), lotArg, buildID, recID, partID)
 			if err != nil {
 				h.renderError(w, r, "Error linking build to test record: "+err.Error())
 				return

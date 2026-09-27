@@ -8,7 +8,6 @@ Plans can change; nothing here is a commitment.
 
 Move off SQL Server/Azure to Postgres, and make self-hosting practical.
 
-- Postgres support ([#21](https://github.com/Jolls/arx/issues/21)): dialect gaps ([#32](https://github.com/Jolls/arx/issues/32)), serial allocation ([#33](https://github.com/Jolls/arx/issues/33)), end-to-end verification ([#28](https://github.com/Jolls/arx/issues/28)), then cutover to Postgres-only ([#29](https://github.com/Jolls/arx/issues/29))
 - Package Postgres as a StartOS service ([#24](https://github.com/Jolls/arx/issues/24))
 - Backup/restore ([#26](https://github.com/Jolls/arx/issues/26))
 - Cleanup: Arx header icon ([#22](https://github.com/Jolls/arx/issues/22))

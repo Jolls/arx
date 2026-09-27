@@ -8,7 +8,7 @@
 //
 // Reads DOC_CONTROL_ROOT / SUPPLIER_FILES_ROOT the same way the app does, which is
 // why this is a Go command and not part of the SQL migration. Set TEST_MODE=true
-// (or test_engine/test_db_name in local.json) to target ArxDev.
+// (or test_db_name in local.json) to target ArxDev.
 //
 // This command is standalone (does not import the arx_go package) so it restates
 // the attachment hashing rule from arx_go/attachments.go's computeAttachmentHash;
@@ -91,10 +91,10 @@ func computeAttachmentHash(root, link string) string {
 	return hex.EncodeToString(sum.Sum(nil))
 }
 
-func backfillTable(ctx context.Context, db *sql.DB, dialect arxdb.Dialect, table, idCol, linkCol, root string, apply bool) (updated, failed int) {
-	rows, err := db.QueryContext(ctx, dialect.Rewrite(
+func backfillTable(ctx context.Context, db *sql.DB, table, idCol, linkCol, root string, apply bool) (updated, failed int) {
+	rows, err := db.QueryContext(ctx,
 		fmt.Sprintf(`SELECT %s, %s FROM %s WHERE hash IS NULL`, idCol, linkCol, table),
-	))
+	)
 	if err != nil {
 		log.Fatalf("querying %s: %v", table, err)
 	}
@@ -120,9 +120,9 @@ func backfillTable(ctx context.Context, db *sql.DB, dialect arxdb.Dialect, table
 			updated++
 			continue
 		}
-		if _, err := db.ExecContext(ctx, dialect.Rewrite(
-			fmt.Sprintf(`UPDATE %s SET hash=@p1 WHERE %s=@p2`, table, idCol),
-		), hash, p.id); err != nil {
+		if _, err := db.ExecContext(ctx,
+			fmt.Sprintf(`UPDATE %s SET hash=$1 WHERE %s=$2`, table, idCol),
+			hash, p.id); err != nil {
 			log.Printf("updating %s %v: %v", table, p.id, err)
 			failed++
 			continue
@@ -141,7 +141,7 @@ func main() {
 	if dsn == "" {
 		log.Fatal("no database password configured — run the app once and configure it via Settings first")
 	}
-	db, dialect, err := arxdb.Connect(cfg.DBEngine(), dsn)
+	db, err := arxdb.Connect(dsn)
 	if err != nil {
 		log.Fatalf("connecting to database: %v", err)
 	}
@@ -159,9 +159,9 @@ func main() {
 		supplierRoot = cfg.DocControlRoot
 	}
 
-	pu, pf := backfillTable(ctx, db, dialect, cfg.AttachmentsTable(), "id", "file_name", cfg.DocControlRoot, *apply)
+	pu, pf := backfillTable(ctx, db, cfg.AttachmentsTable(), "id", "file_name", cfg.DocControlRoot, *apply)
 	fmt.Printf("%s: %d updated, %d failed\n", cfg.AttachmentsTable(), pu, pf)
 
-	cu, cf := backfillTable(ctx, db, dialect, cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path", supplierRoot, *apply)
+	cu, cf := backfillTable(ctx, db, cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path", supplierRoot, *apply)
 	fmt.Printf("%s: %d updated, %d failed\n", cfg.CompanyAttachmentsTable(), cu, cf)
 }

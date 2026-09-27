@@ -13,7 +13,6 @@ const localConfigPath = "config/local.json"
 // the exe runs from a shared folder (#732).
 type LocalConfig struct {
 	DBServer          string  `json:"db_server"`
-	Engine            *string `json:"engine,omitempty"`
 	DBName            string  `json:"db_name"`
 	DBUser            string  `json:"db_user"`
 	DocControlRoot    string  `json:"doc_control_root"`
@@ -23,7 +22,6 @@ type LocalConfig struct {
 	DebugMode         bool    `json:"debug_mode"`
 	TestMode          *bool   `json:"test_mode,omitempty"`
 	TestDBServer      string  `json:"test_db_server,omitempty"`
-	TestEngine        string  `json:"test_engine,omitempty"`
 	TestDBName        string  `json:"test_db_name,omitempty"`
 	TestDBUser        string  `json:"test_db_user,omitempty"`
 }

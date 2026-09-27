@@ -1,6 +1,5 @@
 -- app_config: key/value application settings (edited via the Settings UI).
 -- setting_key is the primary key; the app upserts via ON CONFLICT (setting_key).
--- (The SQL Server _Test clone table is intentionally not ported - see README.)
 
 DROP TABLE IF EXISTS app_config CASCADE;
 

@@ -1,8 +1,8 @@
 -- form_row_history: audit trail for changes to form_row rows.
 -- Populated by trg_form_row_history (AFTER UPDATE) in
 -- SQL/postgres/triggers.sql. It reads the app user from the session GUC
--- current_setting('arx.username') — set by the app via the dialect's
--- SetAuditUser — in place of SQL Server's CONTEXT_INFO().
+-- current_setting('arx.username') — set by the app's setAuditUser
+-- (arx_go/records.go).
 
 DROP TABLE IF EXISTS form_row_history CASCADE;
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
 )
 
 // SessionCookieName is the single gorilla/sessions cookie name, so the
@@ -17,19 +16,16 @@ const SessionCookieName = "arx-session"
 // The Test* connection fields form a second connection profile used while test
 // mode is active. Each Test* field overrides its prod counterpart only when
 // non-empty; a blank field inherits the prod value. This lets test mode point
-// at an entirely separate server/engine/credentials (e.g. ArxDev on Postgres on
-// a different host during the #625 migration) while keeping the historical
+// at an entirely separate server/credentials while keeping the historical
 // same-server, name-only swap working when only TestDBName is set.
 type Base struct {
 	Version        string
 	Port           string
 	DBServer       string
-	Engine         string // "sqlserver" (default) | "postgres"
 	DBName         string
 	DBUser         string
 	DBPassword     string // from local.json only — never stored in .env
 	TestDBServer   string // test-mode override; inherits DBServer when blank
-	TestEngine     string // test-mode override; inherits Engine when blank
 	TestDBName     string // database to use in test mode (default "ArxDev")
 	TestDBUser     string // test-mode override; inherits DBUser when blank
 	TestDBPassword string // from local.json only; inherits DBPassword when blank
@@ -59,43 +55,18 @@ func (b *Base) activeServer() string   { return b.testOverride(b.TestDBServer, b
 func (b *Base) activeUser() string     { return b.testOverride(b.TestDBUser, b.DBUser) }
 func (b *Base) activePassword() string { return b.testOverride(b.TestDBPassword, b.DBPassword) }
 
-// DBEngine returns the normalized database engine id for the active profile,
-// defaulting to "sqlserver". Unknown values fall back to "sqlserver" so a typo
-// cannot silently select an unbuilt backend.
-func (b *Base) DBEngine() string {
-	switch strings.ToLower(b.testOverride(b.TestEngine, b.Engine)) {
-	case "postgres":
-		return "postgres"
-	default:
-		return "sqlserver"
-	}
-}
-
-// BuildDSN constructs a connection string for the active profile from the
-// config fields + a password, in the scheme the active engine's driver expects.
+// BuildDSN constructs a postgres:// connection string for the active profile
+// from the config fields + a password. sslmode=require forces TLS and refuses a
+// plaintext fallback (#757). (require encrypts but does not verify the server
+// cert; #666 puts the DB on a separate box, so plaintext must never be silently
+// used.)
 func (b *Base) BuildDSN(password string) string {
-	if b.DBEngine() == "postgres" {
-		// pgx/stdlib accepts a postgres:// URL. sslmode=require forces TLS and
-		// refuses a plaintext fallback, matching the SQL Server path's encrypt=true
-		// (#757). (require encrypts but does not verify the server cert; #666 puts
-		// the DB on a separate box, so plaintext must never be silently used.)
-		u := &url.URL{
-			Scheme:   "postgres",
-			User:     url.UserPassword(b.activeUser(), password),
-			Host:     b.activeServer(),
-			Path:     "/" + b.ActiveDBName(),
-			RawQuery: url.Values{"sslmode": {"require"}}.Encode(),
-		}
-		return u.String()
-	}
 	u := &url.URL{
-		Scheme: "sqlserver",
-		User:   url.UserPassword(b.activeUser(), password),
-		Host:   b.activeServer(),
-		RawQuery: url.Values{
-			"database": {b.ActiveDBName()},
-			"encrypt":  {"true"},
-		}.Encode(),
+		Scheme:   "postgres",
+		User:     url.UserPassword(b.activeUser(), password),
+		Host:     b.activeServer(),
+		Path:     "/" + b.ActiveDBName(),
+		RawQuery: url.Values{"sslmode": {"require"}}.Encode(),
 	}
 	return u.String()
 }

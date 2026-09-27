@@ -11,7 +11,7 @@ import (
 // piece of runtime state. It only proves anything under `go test -race` (CI
 // runs it), where the pre-#196 plain-field writes fail immediately.
 func TestRuntimeState_ConcurrentUpdate(t *testing.T) {
-	h := New(nil, nil, &arxbase.Config{}, templatesFS, nil)
+	h := New(nil, &arxbase.Config{}, templatesFS, nil)
 
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
@@ -31,7 +31,6 @@ func TestRuntimeState_ConcurrentUpdate(t *testing.T) {
 				_ = h.st().partCategories
 				_ = h.companyLogoURL()
 				_ = h.dbUnusable()
-				_ = h.dia()
 			}
 		}()
 	}
@@ -55,7 +54,7 @@ func TestRuntimeState_ConcurrentUpdate(t *testing.T) {
 // TestRuntimeState_UpdateDoesNotMutatePublishedSnapshot checks the copy-on-write
 // contract: a snapshot a reader already holds never changes under it.
 func TestRuntimeState_UpdateDoesNotMutatePublishedSnapshot(t *testing.T) {
-	h := New(nil, nil, &arxbase.Config{}, templatesFS, nil)
+	h := New(nil, &arxbase.Config{}, templatesFS, nil)
 	before := h.cfg()
 	h.update(func(s *runtimeState) { s.cfg.DBServer = "changed" })
 	if before.DBServer != "" {

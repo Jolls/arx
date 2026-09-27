@@ -37,7 +37,7 @@ func TestLoginPost_DBErrorDoesNotLeakConnectionDetails(t *testing.T) {
 	}
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
-	h := New(db, nil, cfg, nil, nil)
+	h := New(db, cfg, nil, nil)
 
 	var logBuf bytes.Buffer
 	prev := log.Writer()

@@ -115,7 +115,7 @@ func (h *Handler) savePartCategories(ctx context.Context, cats []models.Category
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s (code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
 			                is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible, sort_order)
-			VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			ON CONFLICT (code) DO UPDATE SET label=EXCLUDED.label, is_purchased=EXCLUDED.is_purchased,
 			  is_bom_visible=EXCLUDED.is_bom_visible, is_orders_visible=EXCLUDED.is_orders_visible,
 			  is_pricing_visible=EXCLUDED.is_pricing_visible, is_mfg_parts_visible=EXCLUDED.is_mfg_parts_visible,
@@ -127,7 +127,7 @@ func (h *Handler) savePartCategories(ctx context.Context, cats []models.Category
 	}
 	for _, code := range existing {
 		if !keep[code] {
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE code=@p1`, tbl), code); err != nil {
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE code=$1`, tbl), code); err != nil {
 				return err
 			}
 		}
