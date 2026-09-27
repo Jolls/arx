@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-09-26
+### Added
+- Dark mode: follows the OS light/dark setting by default, with a header toggle (Auto/Light/Dark) remembered per browser; the login page follows it too, print pages stay light ([#202](https://github.com/Jolls/arx/issues/202))
+### Changed
+- Header home link shows a fixed Arx brand icon instead of the per-section favicon ([#22](https://github.com/Jolls/arx/issues/22))
+- Hardcoded light colors in `app.css` and templates replaced with Bootstrap theme variables/classes; `TestTemplates_NoHardcodedLightColors` guards against regressions ([#202](https://github.com/Jolls/arx/issues/202))
+
 ## [0.8.4] - 2026-09-26
 ### Added
 - `migrate status` / `migrate up` command (`arx_go/cmd/migrate`, logic in `internal/migrate`) applies the embedded `SQL/postgres/migrations/` with goose, one transaction per file, recording each in `schema_migrations`; credentials only from `ARX_MIGRATE_DSN`, typed confirmation for any database but ArxDev ([#91](https://github.com/Jolls/arx/issues/91))

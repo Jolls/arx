@@ -1,3 +1,14 @@
+Arx v0.8.5 — September 2026
+========================
+
+NEW FEATURES
+
+  Dark Mode
+  Arx follows your system's light or dark setting; the header button switches it.
+
+  Arx Home Icon
+  The Arx logo in the top-left corner no longer changes as you switch tabs.
+
 Arx v0.8.1 — September 2026
 ========================
 

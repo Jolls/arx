@@ -239,7 +239,7 @@
     {{if $.DebugMode}}
     {{if not .Level}}
     <tr class="collapse" id="step-debug-{{$sid}}">
-      <td colspan="6" class="bg-light py-2 px-3">
+      <td colspan="6" class="bg-body-tertiary py-2 px-3">
         <table class="table table-sm table-bordered border-secondary mb-0 small">
           <tbody>
             <tr><th class="text-muted fw-normal w-25">id</th>               <td>{{.Step.ID}}</td></tr>
@@ -281,7 +281,7 @@
     <div class="card h-100">
       <a href="{{$imgURL}}" target="_blank">
         <img src="{{$imgURL}}" class="card-img-top" alt="{{.EffectiveParameter}}"
-             style="object-fit:contain; max-height:330px; background:#f8f8f8;">
+             style="object-fit:contain; max-height:330px; background:var(--bs-tertiary-bg);">
       </a>
       <div class="card-body p-2">
         <p class="card-text small text-muted mb-0">{{.EffectiveParameter}}</p>
@@ -340,7 +340,7 @@
             {{else if eq .EventType "completed"}}<span class="badge bg-secondary">completed</span>
             {{else if eq .EventType "unlocked"}}<span class="badge bg-warning text-dark">unlocked</span>
             {{else if eq .EventType "locked"}}<span class="badge bg-secondary">locked</span>
-            {{else}}<span class="badge bg-light text-dark border">{{.EventType}}</span>{{end}}
+            {{else}}<span class="badge bg-body-tertiary text-body border">{{.EventType}}</span>{{end}}
           </td>
           <td>{{.Username}}</td>
           <td>{{.Comments}}</td>
@@ -354,7 +354,7 @@
         </tr>
         {{if $snap}}
         <tr class="collapse" id="snap{{.ID}}">
-          <td colspan="5" class="bg-light">
+          <td colspan="5" class="bg-body-tertiary">
             <table class="table table-sm small mb-0 w-auto">
               <thead>
                 <tr><th>Parameter</th><th>Spec</th><th>Units</th><th>Result</th><th>P/F</th><th>Comment</th><th></th></tr>

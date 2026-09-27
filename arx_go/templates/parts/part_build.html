@@ -15,7 +15,7 @@
     <div class="part-status-bar mb-3">
         <div class="part-status-cell">
             <div class="part-status-label">Stock on hand</div>
-            <div style="font-size:1.4em; font-weight:700; color:#333;">{{printf "%.2f" .Part.StockOnHand}}</div>
+            <div style="font-size:1.4em; font-weight:700;">{{printf "%.2f" .Part.StockOnHand}}</div>
         </div>
         <div class="part-status-cell part-status-cell--flex">
             <div class="part-status-label">Build from BOM{{if .Part.IsLotTracked}} <span class="badge bg-info text-dark">lot controlled</span>{{end}}</div>

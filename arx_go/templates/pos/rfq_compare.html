@@ -23,7 +23,7 @@
                         {{range .Suppliers}}
                         <th style="min-width:150px;{{if .Best}}background:#198754;{{end}}">
                             <a href="/po/{{.Number}}" class="text-white">{{if .SupplierName}}{{.SupplierName}}{{else}}(no supplier){{end}}</a>
-                            <div class="mt-1">{{template "po_status_badge" .Status}}{{if .Best}} <span class="badge bg-light text-success">Lowest</span>{{end}}</div>
+                            <div class="mt-1">{{template "po_status_badge" .Status}}{{if .Best}} <span class="badge bg-white text-success">Lowest</span>{{end}}</div>
                             <div class="small fw-normal">PO #{{.Number}}</div>
                         </th>
                         {{end}}
@@ -60,7 +60,7 @@
                     {{end}}
                 </tbody>
                 <tfoot>
-                    <tr class="fw-bold" style="background:#f5f5f5;">
+                    <tr class="bg-body-tertiary fw-bold">
                         <td colspan="3" style="text-align:right;">Quote Total</td>
                         {{range .Suppliers}}
                         <td {{if .Best}}class="table-success"{{end}}>${{printf "%.2f" .TotalCost}}</td>

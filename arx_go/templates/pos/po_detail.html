@@ -81,7 +81,7 @@
         </div>
         <div class="part-status-cell ms-auto">
             <div class="part-status-label">PO Total</div>
-            <div class="fw-bold" style="font-size:1.4em; color:#333;">${{printf "%.2f" (deref .PO.TotalCost)}}</div>
+            <div class="fw-bold" style="font-size:1.4em;">${{printf "%.2f" (deref .PO.TotalCost)}}</div>
         </div>
     </div>
 
@@ -262,23 +262,23 @@
                     {{end}}
                 </tbody>
                 <tfoot>
-                    <tr class="fw-bold" style="border-top:2px solid var(--accent-1); background:#f5f5f5;">
+                    <tr class="bg-body-tertiary fw-bold" style="border-top:2px solid var(--accent-1);">
                         <td colspan="8" class="text-end" style="padding:10px;">Line Items Subtotal:</td>
                         <td class="text-end" style="padding:10px;">${{printf "%.2f" .LineTotal}}</td>
                     </tr>
-                    <tr style="background:#fafafa;">
+                    <tr class="bg-body-tertiary">
                         <td colspan="8" class="text-end text-muted" style="padding:5px 10px;">Tax:</td>
                         <td class="text-end text-muted" style="padding:5px 10px;">${{printf "%.2f" (deref .PO.Tax1)}}</td>
                     </tr>
-                    <tr style="background:#fafafa;">
+                    <tr class="bg-body-tertiary">
                         <td colspan="8" class="text-end text-muted" style="padding:5px 10px;">Shipping:</td>
                         <td class="text-end text-muted" style="padding:5px 10px;">${{printf "%.2f" (deref .PO.ShippingCost)}}</td>
                     </tr>
-                    <tr style="background:#fafafa;">
+                    <tr class="bg-body-tertiary">
                         <td colspan="8" class="text-end text-muted" style="padding:5px 10px;">Misc:</td>
                         <td class="text-end text-muted" style="padding:5px 10px;">${{printf "%.2f" (deref .PO.MiscCost)}}</td>
                     </tr>
-                    <tr class="fw-bold" style="background:#f0f4ff; border-top:1px solid #c7d2fe;">
+                    <tr class="fw-bold bg-primary-subtle" style="border-top:1px solid var(--bs-border-color);">
                         <td colspan="8" class="text-end" style="padding:10px; color:var(--accent-1);">PO Total:</td>
                         <td class="text-end" style="padding:10px; color:var(--accent-1);">${{printf "%.2f" (deref .PO.TotalCost)}}</td>
                     </tr>

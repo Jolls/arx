@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="content">
-    <h2 class="mb-1" style="color:#333;">Settings</h2>
+    <h2 class="mb-1">Settings</h2>
     <p class="text-muted mb-4" style="font-size:0.85em;">Arx Parts Master v{{.AppVersion}}</p>
 
     {{if not .Connected}}
@@ -551,7 +551,7 @@
         </div>
 
         <!-- Shared Test Drive panel — populated by the Test button on any row -->
-        <div id="nq-test-panel" class="mt-4 p-3 border rounded" style="display:none; background:#f8f9fa;">
+        <div id="nq-test-panel" class="bg-body-tertiary mt-4 p-3 border rounded" style="display:none;">
             <h4 class="mb-2" style="font-size:0.95em;">Test Drive: <span id="nq-test-name" class="font-monospace"></span></h4>
             <div id="nq-test-params" class="d-flex flex-wrap gap-2 mb-2"></div>
             <div class="d-flex gap-2 mb-2">
@@ -830,7 +830,7 @@
         <p class="text-muted" style="margin:0 0 12px; font-size:0.85em;">
             <a href="/whats-new" target="_blank" class="text-muted">Open full page &#8599;</a>
         </p>
-        <div style="white-space:pre-wrap; overflow-wrap:break-word; line-height:1.7; color:#333; font-size:0.88em;">{{.ReleaseNotes}}</div>
+        <div style="white-space:pre-wrap; overflow-wrap:break-word; line-height:1.7; font-size:0.88em;">{{.ReleaseNotes}}</div>
     </div>
     </div><!-- /tab-release-notes -->
     {{end}}
