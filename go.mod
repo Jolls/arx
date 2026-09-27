@@ -10,6 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/klippa-app/go-pdfium v1.20.3
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
+	github.com/pressly/goose/v3 v3.27.3
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.46.0
 )
@@ -28,8 +29,11 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jolestar/go-commons-pool/v2 v2.1.2 // indirect
+	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
+	github.com/sethvargo/go-retry v0.4.0 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect

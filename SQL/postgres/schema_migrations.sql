@@ -1,6 +1,7 @@
--- schema_migrations: ledger of applied migrations (#48). Postgres migrations in
--- SQL/postgres/migrations/ register into it (first: #31).
--- Column shape follows goose's ledger (id / version_id / is_applied / tstamp).
+-- schema_migrations: ledger of applied migrations (#48), written by the goose-backed
+-- migrate runner (internal/migrate, #91); build_schema.sh baselines a fresh DB.
+-- Column shape is goose's ledger (id / version_id / is_applied / tstamp). goose never
+-- inserts tstamp, so the NULL/TIMESTAMPTZ difference from goose's own DDL is harmless.
 --
 -- Unlike every other DDL file this one does NOT drop the table first: re-running the
 -- reference DDL must never wipe the ledger. It is also excluded from seed_test_data.sql.

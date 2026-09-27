@@ -5,17 +5,10 @@
 -- max_subbatch_result's DateStyle-independent TO_DATE(NULLIF(@record_date, ''), ...).
 -- Only rows with these canonical names are touched; user-authored queries are left alone.
 --
--- Pinned to ArxDev: the guard below aborts on any other database. A human edits the guard
--- to run it elsewhere (never default to ArxProd). Idempotent; runs in one transaction:
---   psql -v ON_ERROR_STOP=1 -d ArxDev -f 20260926120000_28_named_queries_postgres_text.sql
+-- Idempotent. Applied by the migrate runner (arx_go/cmd/migrate, #91), one transaction per file.
 
-BEGIN;
-
-DO $$ BEGIN
-  IF lower(current_database()) <> 'arxdev' THEN
-    RAISE EXCEPTION 'Pinned to ArxDev (connected to %); edit this guard to run elsewhere', current_database();
-  END IF;
-END $$;
+-- +goose Up
+-- +goose StatementBegin
 
 UPDATE named_queries nq
 SET sql = v.sql, params = v.params, updated_at = CURRENT_TIMESTAMP
@@ -53,9 +46,4 @@ FROM (VALUES
 ) AS v(name, sql, params)
 WHERE nq.name = v.name
   AND (nq.sql, nq.params) IS DISTINCT FROM (v.sql, v.params);
-
-INSERT INTO schema_migrations (version_id, is_applied)
-SELECT 20260926120000, TRUE
-WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version_id = 20260926120000);
-
-COMMIT;
+-- +goose StatementEnd
