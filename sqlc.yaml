@@ -41,6 +41,7 @@ sql:
       - SQL/postgres/triggers.sql
     queries:
       - internal/contacts/contacts.sql
+      - internal/parts/parts.sql
     gen:
       go:
         package: dbq

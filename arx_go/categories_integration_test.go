@@ -89,6 +89,17 @@ func withExtraCategory(code, label string, extra map[string]string) url.Values {
 	return vals
 }
 
+// defaultCategoriesWithout returns the default categories minus code.
+func defaultCategoriesWithout(code string) []models.Category {
+	var cats []models.Category
+	for _, c := range models.DefaultCategories() {
+		if c.Code != code {
+			cats = append(cats, c)
+		}
+	}
+	return cats
+}
+
 // readPersistedCategories reads part_category directly (bypassing the cache).
 func readPersistedCategories(t *testing.T, h *Handler) []models.Category {
 	t.Helper()
@@ -175,14 +186,8 @@ func TestIntegration_SettingsCategoriesSave_RejectsRemovingInUse(t *testing.T) {
 	h.loadPartCategories(context.Background())
 	before := h.st().partCategories
 
-	var kept []models.Category
-	for _, c := range models.DefaultCategories() {
-		if c.Code != "BUY" {
-			kept = append(kept, c)
-		}
-	}
 	rec := httptest.NewRecorder()
-	h.SettingsCategoriesSave(rec, postCategoriesSave(categoryFormValues(kept)))
+	h.SettingsCategoriesSave(rec, postCategoriesSave(categoryFormValues(defaultCategoriesWithout("BUY"))))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, want 200 (re-rendered Settings)", rec.Code)
 	}
@@ -214,6 +219,107 @@ func TestIntegration_SettingsCategoriesSave_RejectsEmpty(t *testing.T) {
 	}
 	if got := readPersistedCategories(t, h); !reflect.DeepEqual(got, models.DefaultCategories()) {
 		t.Errorf("part_category changed on rejected save: %+v", got)
+	}
+}
+
+// TestIntegration_SettingsCategoriesSave_ReordersAndUpdatesExisting: saving the
+// existing codes reordered, with one label/flag changed, updates those rows in
+// place (label, flags, sort_order) and the cache matches.
+func TestIntegration_SettingsCategoriesSave_ReordersAndUpdatesExisting(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	withRestoredPartCategories(t, h)
+
+	defaults := models.DefaultCategories()
+	var want []models.Category
+	for i := len(defaults) - 1; i >= 0; i-- {
+		c := defaults[i]
+		if c.Code == "OPS" {
+			c.Label = "Ops Changed"
+			c.BOM = true
+		}
+		want = append(want, c)
+	}
+	rec := httptest.NewRecorder()
+	h.SettingsCategoriesSave(rec, postCategoriesSave(categoryFormValues(want)))
+	assert302(t, "SettingsCategoriesSave", rec)
+	if got := readPersistedCategories(t, h); !reflect.DeepEqual(got, want) {
+		t.Errorf("persisted part_category = %+v, want %+v", got, want)
+	}
+	if got := h.st().partCategories; !reflect.DeepEqual(got, want) {
+		t.Errorf("cache = %+v, want %+v", got, want)
+	}
+}
+
+// TestIntegration_SettingsCategoriesSave_RemovesUnusedCategory: a code no part
+// uses is deleted when left out of the saved list.
+func TestIntegration_SettingsCategoriesSave_RemovesUnusedCategory(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	withRestoredPartCategories(t, h)
+
+	rec := httptest.NewRecorder()
+	h.SettingsCategoriesSave(rec, postCategoriesSave(withExtraCategory("ZZR", "Removable", nil)))
+	assert302(t, "SettingsCategoriesSave (add)", rec)
+	rec = httptest.NewRecorder()
+	h.SettingsCategoriesSave(rec, postCategoriesSave(categoryFormValues(models.DefaultCategories())))
+	assert302(t, "SettingsCategoriesSave (remove)", rec)
+	if got := readPersistedCategories(t, h); !reflect.DeepEqual(got, models.DefaultCategories()) {
+		t.Errorf("persisted part_category = %+v, want the defaults", got)
+	}
+}
+
+// TestIntegration_SettingsCategoriesSave_IgnoresUncategorizedParts: parts with a
+// NULL category don't count as usage, so they never block a save.
+func TestIntegration_SettingsCategoriesSave_IgnoresUncategorizedParts(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	withRestoredPartCategories(t, h)
+	_, cl := seedPart(t, h, context.Background(), "")
+	t.Cleanup(cl)
+
+	rec := httptest.NewRecorder()
+	h.SettingsCategoriesSave(rec, postCategoriesSave(withExtraCategory("ZZN", "Null Guard", nil)))
+	assert302(t, "SettingsCategoriesSave", rec)
+}
+
+// TestIntegration_SettingsCategoriesSave_InUseMessageCountsParts: the refusal
+// names the exact number of parts using the removed code.
+func TestIntegration_SettingsCategoriesSave_InUseMessageCountsParts(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	withRestoredPartCategories(t, h)
+
+	var n int
+	if err := h.queryRowContext(context.Background(), fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE category='BUY'`, h.cfg().PartsTable())).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	h.SettingsCategoriesSave(rec, postCategoriesSave(categoryFormValues(defaultCategoriesWithout("BUY"))))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (re-rendered Settings)", rec.Code)
+	}
+	if want := fmt.Sprintf("BUY (%d parts)", n); !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("body missing %q", want)
+	}
+}
+
+// TestIntegration_SavePartCategories_RollsBackOnDeleteFailure: the upserts and
+// deletes share one transaction, so an FK failure on the delete also discards
+// the upserts.
+func TestIntegration_SavePartCategories_RollsBackOnDeleteFailure(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	withRestoredPartCategories(t, h)
+
+	cats := append(defaultCategoriesWithout("BUY"), models.Category{Code: "ZZF", Label: "Rollback Probe"})
+	err := h.savePartCategories(context.Background(), cats)
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "fk_part_category") {
+		t.Fatalf("savePartCategories err = %v, want an fk_part_category violation", err)
+	}
+	if got := readPersistedCategories(t, h); !reflect.DeepEqual(got, models.DefaultCategories()) {
+		t.Errorf("part_category changed after failed save: %+v", got)
 	}
 }
 

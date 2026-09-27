@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8] - 2026-09-27
+### Changed
+- Data-access layer: part-category queries moved to sqlc (`internal/parts`); `TestSQLCConvertedFilesHaveNoRawSQL` keeps converted handler files free of raw SQL ([#190](https://github.com/Jolls/arx/issues/190))
+### Fixed
+- Test seed gives `named_queries` rows fixed ids 1-10, so a reseed matches a fresh build ([#213](https://github.com/Jolls/arx/issues/213))
+
 ## [0.8.7] - 2026-09-26
 ### Changed
 - Data-access layer, first domain: contacts queries live in `internal/contacts/contacts.sql` and run through sqlc-generated typed Go (`internal/dbq`, config `sqlc.yaml`) instead of `fmt.Sprintf` SQL in handlers; CI fails when the generated code is stale; a non-numeric contact id in the URL shows "Contact not found" ([#190](https://github.com/Jolls/arx/issues/190))
