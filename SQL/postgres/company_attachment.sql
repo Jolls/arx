@@ -1,6 +1,5 @@
 -- company_attachment: file and URL attachments linked to a company.
 -- file_path holds either a LOCAL:... path or a full https:// URL.
--- (The SQL Server _Test clone table is intentionally not ported - see README.)
 
 DROP TABLE IF EXISTS company_attachment CASCADE;
 

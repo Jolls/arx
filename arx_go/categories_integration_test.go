@@ -232,7 +232,7 @@ func TestIntegration_PartCreate_SettingsAddedCategorySucceeds(t *testing.T) {
 	id, cl := seedPart(t, h, ctx, "ZZT")
 	t.Cleanup(cl) // runs before the category restore (cleanups are LIFO)
 	var got string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT category FROM %s WHERE id=@p1`, h.cfg().PartsTable()), id).Scan(&got); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT category FROM %s WHERE id=$1`, h.cfg().PartsTable()), id).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if got != "ZZT" {
@@ -250,7 +250,7 @@ func TestIntegration_PartCreate_EmptyCategoryStoresNull(t *testing.T) {
 	id, cl := seedPart(t, h, ctx, "")
 	t.Cleanup(cl)
 	var isNull bool
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT category IS NULL FROM %s WHERE id=@p1`, h.cfg().PartsTable()), id).Scan(&isNull); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT category IS NULL FROM %s WHERE id=$1`, h.cfg().PartsTable()), id).Scan(&isNull); err != nil {
 		t.Fatal(err)
 	}
 	if !isNull {
@@ -272,16 +272,16 @@ func TestIntegration_LoadBuildComponents_NullCategory(t *testing.T) {
 	t.Cleanup(clParent)
 	comp, clComp := seedPart(t, h, ctx, "BUY")
 	t.Cleanup(clComp)
-	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET category=NULL WHERE id=@p1`, h.cfg().PartsTable()), comp); err != nil {
+	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET category=NULL WHERE id=$1`, h.cfg().PartsTable()), comp); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES (@p1, @p2, 1, 1)`,
+		`INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES ($1, $2, 1, 1)`,
 		h.cfg().BOMTable()), parent, comp); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id=@p1`, h.cfg().BOMTable()), parent)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id=$1`, h.cfg().BOMTable()), parent)
 	})
 
 	comps, err := h.loadBuildComponents(ctx, parent)

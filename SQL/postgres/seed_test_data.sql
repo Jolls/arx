@@ -1,6 +1,5 @@
 -- seed_test_data.sql (Postgres) — Wipe ArxDev row data and load a fixed, synthetic
--- reference dataset. Postgres port of SQL/seed_test_data.sql (#829) — same shape, same
--- pinned IDs, translated per SQL/postgres/README.md's rules. This script assumes the
+-- reference dataset (#829). This script assumes the
 -- ArxDev SCHEMA (tables/constraints/triggers/po_number_seq) already exists — created
 -- once from the SQL/postgres/*.sql DDL files — and only owns row data: DELETE
 -- everything, INSERT a documented set of records at pinned IDs.
@@ -115,10 +114,9 @@ SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
     INSERT INTO app_config (setting_key, setting_value, updated_at) VALUES
         ('schema_version', '12', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
-    -- config, not throwaway test data — the canonical set lives in SQL/azure/named_queries.sql;
-    -- keep the two in sync. Postgres translation (#830) of the T-SQL query text: TRY_CAST →
-    -- the regex-guard CAST pattern, `+` string concat → `||`, `TOP N` → trailing `LIMIT N`,
-    -- `is_active = 1` → `is_active = TRUE`. Identity-assigned (looked up by unique `name`).
+    -- config, not throwaway test data; a text change here also needs a migration that
+    -- patches existing databases (see migrations/20260926120000_28_named_queries_postgres_text.sql).
+    -- Identity-assigned (looked up by unique `name`).
     -- max_subbatch_result's @record_date is always MM/DD/YYYY (from {record.date}); TO_DATE
     -- keeps it DateStyle-independent and NULLIF makes an empty date match no rows (#28).
     INSERT INTO named_queries (name, description, sql, params, result_type, created_at, updated_at) VALUES
@@ -719,9 +717,8 @@ SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
     SELECT setval(pg_get_serial_sequence('users', 'id'), 8099);
     SELECT setval(pg_get_serial_sequence('part_attachment', 'id'), 8199);
     SELECT setval(pg_get_serial_sequence('named_queries', 'id'), 99);
-    -- lot / genealogy / unit are not reseeded here — the SQL Server original's DBCC
-    -- CHECKIDENT list doesn't cover them either (added after the reseed block was last
-    -- updated); mirrored as-is rather than fixed here, since fixing it is out of #829's scope.
+    -- lot / genealogy / unit are not reseeded here (added after the reseed block was
+    -- last updated); out of #829's scope.
 
     -- po_number_seq: restart well above the highest fixed PO base number (5010).
     -- The sequence itself is created unconditionally in SQL/postgres/purchase_order.sql.

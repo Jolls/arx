@@ -43,10 +43,7 @@ func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args 
 	if poLineID != nil {
 		poArg = *poLineID
 	}
-	insert := h.dia().InsertReturningID(h.cfg().LotTable(),
-		`part_id, lot_number, lot_description, vendor_lot_number, po_line_id, is_active`,
-		`@p1, @p2, @p3, @p4, @p5, @p6`,
-		false)
+	insert := fmt.Sprintf(`INSERT INTO %s (part_id, lot_number, lot_description, vendor_lot_number, po_line_id, is_active) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, h.cfg().LotTable())
 	var lotID int
 	err := tx.QueryRowContext(ctx, insert,
 		partID, args.LotNumber, args.Description, nullableText(args.VendorLot), poArg, true,
@@ -55,7 +52,7 @@ func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args 
 		return lotID, err
 	}
 	_, err = tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET lot_number = @p1 WHERE id = @p2`, h.cfg().LotTable()),
+		`UPDATE %s SET lot_number = $1 WHERE id = $2`, h.cfg().LotTable()),
 		strconv.Itoa(lotID), lotID)
 	return lotID, err
 }
@@ -65,9 +62,9 @@ func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args 
 func (h *Handler) activeLotsForPart(ctx context.Context, partID int) ([]LotOption, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT id, lot_number, vendor_lot_number
-		FROM %s WHERE part_id = @p1 AND is_active = %s
+		FROM %s WHERE part_id = $1 AND is_active = TRUE
 		ORDER BY created_at DESC, id DESC
-	`, h.cfg().LotTable(), h.dia().BoolLiteral(true)), partID)
+	`, h.cfg().LotTable()), partID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +90,8 @@ func (h *Handler) activeLotsForPart(ctx context.Context, partID int) ([]LotOptio
 func (h *Handler) lotBelongsToPart(ctx context.Context, tx *txLogger, lotID, partID int) (bool, error) {
 	var n int
 	err := tx.QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE id = @p1 AND part_id = @p2 AND is_active = %s`,
-		h.cfg().LotTable(), h.dia().BoolLiteral(true)), lotID, partID).Scan(&n)
+		`SELECT COUNT(*) FROM %s WHERE id = $1 AND part_id = $2 AND is_active = TRUE`,
+		h.cfg().LotTable()), lotID, partID).Scan(&n)
 	return n == 1, err
 }
 
@@ -104,7 +101,7 @@ func (h *Handler) lotBelongsToPart(ctx context.Context, tx *txLogger, lotID, par
 func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID, childLotID int, qtyConsumed float64) error {
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (parent_lot_id, child_lot_id, qty_consumed)
-		VALUES (@p1, @p2, @p3)
+		VALUES ($1, $2, $3)
 	`, h.cfg().GenealogyTable()), parentLotID, childLotID, qtyConsumed)
 	return err
 }
@@ -157,7 +154,7 @@ func scanLotRow(sc interface{ Scan(...any) error }) (LotRow, error) {
 // lotsForPart returns every lot of a part, newest first, for the Lots subtab list.
 func (h *Handler) lotsForPart(ctx context.Context, partID int) ([]LotRow, error) {
 	rows, err := h.queryContext(ctx, h.lotRowSelect()+
-		`WHERE l.part_id = @p1 ORDER BY l.created_at DESC, l.id DESC`, partID)
+		`WHERE l.part_id = $1 ORDER BY l.created_at DESC, l.id DESC`, partID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,14 +173,13 @@ func (h *Handler) lotsForPart(ctx context.Context, partID int) ([]LotRow, error)
 // recentPartLots returns the most recent lots for a part, newest first, capped
 // at limit, for the Part dashboard "Lots" card (#798).
 func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]LotRow, error) {
-	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %sl.id, l.lot_number, l.vendor_lot_number, l.part_id,
+		SELECT l.id, l.lot_number, l.vendor_lot_number, l.part_id,
 		       p.part_number, p.description, l.lot_description, l.notes, l.created_at, l.is_active
 		FROM %s l
 		JOIN %s p ON p.id = l.part_id
-		WHERE l.part_id = @p1 ORDER BY l.created_at DESC, l.id DESC
-	`+limitClause, top, h.cfg().LotTable(), h.cfg().PartsTable()), partID, limit)
+		WHERE l.part_id = $1 ORDER BY l.created_at DESC, l.id DESC LIMIT $2
+	`, h.cfg().LotTable(), h.cfg().PartsTable()), partID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -204,14 +200,14 @@ func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]
 func (h *Handler) lotCountForPart(ctx context.Context, partID int) (int, error) {
 	var count int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg().LotTable()), partID).Scan(&count)
+		`SELECT COUNT(*) FROM %s WHERE part_id = $1`, h.cfg().LotTable()), partID).Scan(&count)
 	return count, err
 }
 
 // fetchLotRow loads a single lot for the genealogy trace header. ok=false (nil
 // error) when the lot does not exist.
 func (h *Handler) fetchLotRow(ctx context.Context, lotID int) (LotRow, bool, error) {
-	lr, err := scanLotRow(h.queryRowContext(ctx, h.lotRowSelect()+`WHERE l.id = @p1`, lotID))
+	lr, err := scanLotRow(h.queryRowContext(ctx, h.lotRowSelect()+`WHERE l.id = $1`, lotID))
 	if err == sql.ErrNoRows {
 		return LotRow{}, false, nil
 	}
@@ -261,14 +257,14 @@ func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, a
 		FROM %[1]s g
 		JOIN %[2]s l ON l.id = g.%[3]s_lot_id
 		JOIN %[4]s p ON p.id = l.part_id
-		WHERE g.%[5]s = @p1
+		WHERE g.%[5]s = $1
 		UNION ALL
 		SELECT 'unit' AS node_type, u.id, u.serial_number, NULL, NULL, NULL,
 		       p.id, p.part_number, p.description, g.qty_consumed
 		FROM %[1]s g
 		JOIN %[6]s u ON u.id = g.%[3]s_unit_id
 		JOIN %[4]s p ON p.id = u.part_id
-		WHERE g.%[5]s = @p1
+		WHERE g.%[5]s = $1
 		ORDER BY 1, 2
 	`, h.cfg().GenealogyTable(), h.cfg().LotTable(), joinPrefix, h.cfg().PartsTable(), filterCol, h.cfg().UnitTable()), id)
 	if err != nil {
@@ -488,7 +484,7 @@ func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
 	vendorLot := fv(r, "vendor_lot")
 	notes := fv(r, "notes")
 	_, err = h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET lot_description = @p1, vendor_lot_number = @p2, notes = @p3 WHERE id = @p4 AND part_id = @p5`,
+		`UPDATE %s SET lot_description = $1, vendor_lot_number = $2, notes = $3 WHERE id = $4 AND part_id = $5`,
 		h.cfg().LotTable()), description, nullableText(vendorLot), nullableText(notes), lotID, p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error saving lot: "+err.Error())
@@ -502,14 +498,13 @@ func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
 // rewritten field: a test record's edit page stays open for a whole session, so a
 // full-field write would silently drop anything another tester appended in the
 // meantime. Entries carry a [username date] prefix — a multi-author free-text field
-// is unreadable without attribution. CASE/COALESCE/CONCAT all work on both engines,
-// so no Dialect hook is needed. Takes the caller's tx so an append made while saving
+// is unreadable without attribution. Takes the caller's tx so an append made while saving
 // a record rolls back with the record if that save fails.
 func (h *Handler) appendLotNote(ctx context.Context, tx *txLogger, lotID int, text, username string) error {
 	entry := fmt.Sprintf("[%s %s] %s", username, time.Now().Format("2006-01-02"), strings.TrimSpace(text))
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		UPDATE %s SET notes = CASE WHEN COALESCE(notes, '') = '' THEN @p1 ELSE CONCAT(notes, @p2) END
-		WHERE id = @p3
+		UPDATE %s SET notes = CASE WHEN COALESCE(notes, '') = '' THEN $1 ELSE CONCAT(notes, $2) END
+		WHERE id = $3
 	`, h.cfg().LotTable()), entry, "\n\n"+entry, lotID)
 	return err
 }

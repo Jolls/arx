@@ -1,6 +1,6 @@
 # Arx
 
-Parts catalog, purchasing, and test-record management for an engineering/manufacturing shop. One Windows desktop app — single executable, no installer, SQL Server backend, running at `http://localhost:4568`.
+Parts catalog, purchasing, and test-record management for an engineering/manufacturing shop. One Windows desktop app — single executable, no installer, PostgreSQL backend, running at `http://localhost:4568`.
 
 ![Screenshot: Parts view (default `/` route)](docs/screenshots/PartsView.png)
 
@@ -44,7 +44,7 @@ Cross-cutting: session-based login, local file/folder browsing for attachments, 
 
 ## Build
 
-Requires Go 1.27+ and a SQL Server instance.
+Requires Go 1.27+ and a PostgreSQL database (TLS required).
 
 ```bat
 cd arx_go
@@ -59,7 +59,7 @@ Outputs `arx_go\Arx.exe`. Runs all tests before building.
 
 1. Copy `Arx.exe` to a folder and run it. A tray icon appears.
 2. Open `http://localhost:4568` in a browser.
-3. The app redirects to `/settings` — enter your SQL Server connection details.
+3. The app redirects to `/settings` — enter your PostgreSQL connection details.
 4. Connection settings are saved to `config\local.json`; the DB password is saved per-user to `%APPDATA%\Arx\local.json`. Neither is committed.
 
 ---
@@ -85,7 +85,7 @@ cd arx_go
 go test ./...
 
 # Integration tests (live ArxDev DB)
-$env:ARX_TEST_DSN="sqlserver://user:pass@server?database=ArxDev&encrypt=true"
+$env:ARX_TEST_DSN="postgres://user:pass@server:5432/ArxDev?sslmode=require"
 go test -tags integration ./arx_go/...
 # ...or use the test-mode connection saved via Settings instead of a DSN
 $env:ARX_TEST_FROM_CONFIG="1"; go test -tags integration ./arx_go/...

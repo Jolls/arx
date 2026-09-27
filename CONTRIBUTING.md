@@ -12,8 +12,8 @@ On Linux you also need `libayatana-appindicator3-dev` (systray's cgo dependency)
 
 ## Database and migrations
 
-- Schema changes ship as a migration in `SQL/azure/migrations/`. Migrations are authored, never run automatically — the maintainer runs them by hand.
-- `SQL/azure/*.sql` and `SQL/postgres/*.sql` are reference DDL, not migration runners; keep them in sync.
+- Schema changes ship as a migration in `SQL/postgres/migrations/`. Migrations are authored, never run automatically — the maintainer runs them by hand.
+- `SQL/postgres/*.sql` is reference DDL, not a migration runner; keep it in sync with the migrations.
 - Details: [`SQL/SCHEMA.md`](SQL/SCHEMA.md).
 
 ## Integration tests

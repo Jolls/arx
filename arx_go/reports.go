@@ -159,8 +159,8 @@ func (h *Handler) dashboardOpenPOCount(ctx context.Context) (int, error) {
 func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error) {
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(DISTINCT po_id) FROM %s WHERE date_received >= %s`,
-		h.cfg().POLineTable(), h.dia().MonthStartExpr()),
+		`SELECT COUNT(DISTINCT po_id) FROM %s WHERE date_received >= date_trunc('month', CURRENT_DATE)::date`,
+		h.cfg().POLineTable()),
 	).Scan(&n)
 	return n, err
 }
@@ -171,20 +171,19 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 // #245).
 func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]dashboardFailureModeItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %sf.id, pn.part_number, (SELECT %sr2.parameter FROM %s r2
+		SELECT f.id, pn.part_number, (SELECT r2.parameter FROM %s r2
 			WHERE r2.form_row_id = res.form_row_id
-			ORDER BY r2.id DESC%s) AS parameter,
-			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count
+			ORDER BY r2.id DESC LIMIT 1) AS parameter,
+			SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) AS failure_count
 		FROM %s res
 		JOIN %s trec ON res.form_record_id = trec.id
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE trec.is_active = %s AND res.pass_fail IS NOT NULL
+		WHERE trec.is_active = TRUE AND res.pass_fail IS NOT NULL
 		GROUP BY f.id, pn.part_number, res.form_row_id
-		HAVING SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) > 0
-		ORDER BY failure_count DESC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.dia().TopClause("1"), h.cfg().ResultsTable(), h.dia().LimitClause("1"),
-		h.dia().BoolLiteral(false), h.cfg().ResultsTable(), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit)
+		HAVING SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) > 0
+		ORDER BY failure_count DESC LIMIT $1`,
+		h.cfg().ResultsTable(), h.cfg().ResultsTable(), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -209,14 +208,14 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 // record), matching computeYieldBuckets in records_yield.go.
 func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]dashboardYieldItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT trec.form_id, pn.part_number, MAX(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END)
+		SELECT trec.form_id, pn.part_number, MAX(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END)
 		FROM %s trec
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
 		LEFT JOIN %s res ON res.form_record_id = trec.id
-		WHERE trec.is_active = %s
+		WHERE trec.is_active = TRUE
 		GROUP BY trec.id, trec.form_id, pn.part_number`,
-		h.dia().BoolLiteral(false), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.cfg().ResultsTable(), h.dia().BoolLiteral(true)))
+		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.cfg().ResultsTable()))
 	if err != nil {
 		return nil, err
 	}
@@ -261,14 +260,14 @@ func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]d
 // surface on the Reports dashboard (issue #658, RPT-7).
 func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]dashboardStaleWIPItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %strec.id, trec.form_id, pn.part_number, trec.created_at
+		SELECT trec.id, trec.form_id, pn.part_number, trec.created_at
 		FROM %s trec
 		JOIN %s f ON trec.form_id = f.id
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE trec.is_active = %s AND trec.is_locked = %s
-			AND trec.created_at <= CURRENT_TIMESTAMP - make_interval(days => @p2)
-		ORDER BY trec.created_at ASC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(false)), limit, staleWIPThresholdDays)
+		WHERE trec.is_active = TRUE AND trec.is_locked = FALSE
+			AND trec.created_at <= CURRENT_TIMESTAMP - make_interval(days => $2)
+		ORDER BY trec.created_at ASC LIMIT $1`,
+		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()), limit, staleWIPThresholdDays)
 	if err != nil {
 		return nil, err
 	}
@@ -292,13 +291,13 @@ func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]da
 // measured from the most recent 'submitted' approval event on each PO.
 func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([]dashboardPendingApprovalItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %spo.number,
+		SELECT po.number,
 			(SELECT MAX(h.changed_at) FROM %s h
 			 WHERE h.po_id = po.id AND h.event_type = 'approval' AND h.action = 'submitted') AS submitted_at
 		FROM %s po
 		WHERE po.approval_status = 'pending'
-		ORDER BY submitted_at ASC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
+		ORDER BY submitted_at ASC LIMIT $1`,
+		h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -324,11 +323,11 @@ func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([
 // reorder point set (reorder_min IS NULL) are excluded.
 func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]dashboardBelowReorderItem, error) {
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %sid, part_number, stock_on_hand, reorder_min
+		SELECT id, part_number, stock_on_hand, reorder_min
 		FROM %s
 		WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
-		ORDER BY (stock_on_hand - reorder_min) ASC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg().PartsTable()), limit)
+		ORDER BY (stock_on_hand - reorder_min) ASC LIMIT $1`,
+		h.cfg().PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -351,9 +350,9 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	var items []dashboardActivityItem
 
 	partRows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT %sid, part_number, description, modified_date
-		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg().PartsTable()), limit)
+		`SELECT id, part_number, description, modified_date
+		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC LIMIT $1`,
+		h.cfg().PartsTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -381,9 +380,9 @@ func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]das
 	partRows.Close()
 
 	poRows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT %sh.po_id, po.number, h.event_type, h.to_status, h.action, h.changed_at
-		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC`+h.dia().LimitClause("@p1"),
-		h.dia().TopClause("@p1"), h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
+		`SELECT h.po_id, po.number, h.event_type, h.to_status, h.action, h.changed_at
+		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC LIMIT $1`,
+		h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -488,12 +487,12 @@ func (rng reportDateRange) whereClause(column string, startArg int) (string, []a
 	n := startArg
 
 	if !rng.From.IsZero() {
-		fmt.Fprintf(&sb, " AND %s >= @p%d", column, n)
+		fmt.Fprintf(&sb, " AND %s >= $%d", column, n)
 		args = append(args, rng.From)
 		n++
 	}
 	if !rng.To.IsZero() {
-		fmt.Fprintf(&sb, " AND %s < @p%d", column, n)
+		fmt.Fprintf(&sb, " AND %s < $%d", column, n)
 		args = append(args, rng.To.AddDate(0, 0, 1))
 		n++
 	}
@@ -817,9 +816,9 @@ func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]da
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
 		SELECT p.part_number, p.description, p.category
 		FROM %s p
-		WHERE p.is_active = %s AND %s
+		WHERE p.is_active = TRUE AND %s
 		ORDER BY p.part_number ASC
-	`, h.cfg().PartsTable(), h.dia().BoolLiteral(true), where))
+	`, h.cfg().PartsTable(), where))
 	if err != nil {
 		return nil, err
 	}
@@ -946,9 +945,9 @@ func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, erro
 		SELECT f.id, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE pn.category = 'FORM' AND pn.is_active = %s AND f.is_active = %s
+		WHERE pn.category = 'FORM' AND pn.is_active = TRUE AND f.is_active = TRUE
 		ORDER BY pn.part_number ASC`,
-		h.cfg().FormsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true), h.dia().BoolLiteral(true)))
+		h.cfg().FormsTable(), h.cfg().PartsTable()))
 	if err != nil {
 		return nil, err
 	}

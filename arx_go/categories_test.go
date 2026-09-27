@@ -15,7 +15,7 @@ import (
 // /settings without attempting any app_config write (which would nil-pointer or
 // error against a nil db).
 func TestSettingsCategoriesSave_NoDatabaseRedirects(t *testing.T) {
-	h := New(nil, nil, &arxbase.Config{}, templatesFS, nil)
+	h := New(nil, &arxbase.Config{}, templatesFS, nil)
 
 	vals := url.Values{"cat_count": {"1"}, "code_0": {"BUY"}, "label_0": {"Purchased"}}
 	req := httptest.NewRequest(http.MethodPost, "/settings/categories/save", nil)

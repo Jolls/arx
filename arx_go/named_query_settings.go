@@ -107,8 +107,8 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 
 	if id > 0 {
 		res, err := h.execContext(ctx, fmt.Sprintf(
-			`UPDATE %s SET name=@p1, description=@p2, sql=@p3, params=@p4,
-			 result_type=@p5, is_active=@p6, updated_at=GETDATE() WHERE id=@p7`, tbl),
+			`UPDATE %s SET name=$1, description=$2, sql=$3, params=$4,
+			 result_type=$5, is_active=$6, updated_at=CURRENT_TIMESTAMP WHERE id=$7`, tbl),
 			name, description, sqlText, params, resultType, active, id)
 		if err != nil {
 			writeErr(http.StatusBadRequest, namedQuerySaveError(name, err))
@@ -119,10 +119,7 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	} else {
-		insertQuery := h.dia().InsertReturningID(tbl,
-			"name, description, sql, params, result_type, is_active",
-			"@p1,@p2,@p3,@p4,@p5,@p6",
-			false)
+		insertQuery := fmt.Sprintf(`INSERT INTO %s (name, description, sql, params, result_type, is_active) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, tbl)
 		err := h.queryRowContext(ctx, insertQuery,
 			name, description, sqlText, params, resultType, active).Scan(&id)
 		if err != nil {

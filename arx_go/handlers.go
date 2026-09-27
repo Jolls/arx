@@ -31,12 +31,11 @@ import (
 	"arx/internal/urlutil"
 )
 
-// dbConn is an immutable snapshot of the active connection + its dialect,
+// dbConn is an immutable snapshot of the active connection,
 // swapped atomically so concurrent requests never see a torn pointer or use
 // a handle mid-close (#757).
 type dbConn struct {
-	db      *sql.DB
-	dialect arxdb.Dialect
+	db *sql.DB
 }
 
 // runtimeState is the immutable snapshot of everything SettingsSave and the
@@ -62,7 +61,7 @@ type Handler struct {
 
 	// connectDB opens a new DB connection; defaults to arxdb.Connect in New().
 	// Overridable in tests so SettingsSave's failure path needs no real dial.
-	connectDB func(engine, dsn string) (*sql.DB, arxdb.Dialect, error)
+	connectDB func(dsn string) (*sql.DB, error)
 
 	routeMu    sync.Mutex
 	routeStats map[int]*routeAccumulator
@@ -117,17 +116,7 @@ func (h *Handler) dbUnusable() bool {
 	return h.database() == nil || h.st().dbConnError != ""
 }
 
-// dia returns the live dialect, or a default SQL Server dialect when not
-// connected (mirrors New()'s nil-dialect fallback so template/query building
-// never nil-panics).
-func (h *Handler) dia() arxdb.Dialect {
-	if c := h.st().conn; c != nil && c.dialect != nil {
-		return c.dialect
-	}
-	return arxdb.NewSQLServerDialect()
-}
-
-func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
+func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *Handler {
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 	// Harden the session/CSRF cookie: HttpOnly blocks JS access, SameSite=Lax
 	// blunts cross-site POSTs. Secure is left off because the app is served over
@@ -138,9 +127,6 @@ func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400 * 30,
 	}
-	if dialect == nil {
-		dialect = arxdb.NewSQLServerDialect()
-	}
 	h := &Handler{
 		store: store, tmplFS: tmplFS, releaseNotes: string(releaseNotes),
 		routeStats:    make(map[int]*routeAccumulator),
@@ -148,7 +134,7 @@ func New(db *sql.DB, dialect arxdb.Dialect, cfg *arxbase.Config, tmplFS ioFS.FS,
 		loginAttempts: make(map[string]*loginAttempt),
 		connectDB:     arxdb.Connect,
 	}
-	h.state.Store(&runtimeState{cfg: cfg, conn: &dbConn{db: db, dialect: dialect}})
+	h.state.Store(&runtimeState{cfg: cfg, conn: &dbConn{db: db}})
 	return h
 }
 
@@ -205,56 +191,40 @@ func timeQueryErr[T any](ctx context.Context, query string, call func() (T, erro
 	return result, err
 }
 
-// topLimit returns the dialect's TOP and LIMIT clauses for the same
-// parameter placeholder ph, for the common TOP-N pagination pattern used
-// across recent-item queries (recentPartPOs, recentPartTxns, recentSupplierPOs,
-// topSupplierParts).
-func (h *Handler) topLimit(ph string) (top, limit string) {
-	d := h.dia()
-	return d.TopClause(ph), d.LimitClause(ph)
-}
-
 func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	c := h.st().conn
-	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return c.db.QueryContext(ctx, query, args...) })
 }
 
 func (h *Handler) queryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	c := h.st().conn
-	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQuery(ctx, query, func() *sql.Row { return c.db.QueryRowContext(ctx, query, args...) })
 }
 
 func (h *Handler) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	c := h.st().conn
-	query = c.dialect.Rewrite(query)
 	h.logSQL(query, args...)
 	return timeQueryErr(ctx, query, func() (sql.Result, error) { return c.db.ExecContext(ctx, query, args...) })
 }
 
 type txLogger struct {
 	*sql.Tx
-	logFn   func(string, ...any)
-	rewrite func(string) string
+	logFn func(string, ...any)
 }
 
 func (t *txLogger) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	query = t.rewrite(query)
 	t.logFn(query, args...)
 	return timeQueryErr(ctx, query, func() (sql.Result, error) { return t.Tx.ExecContext(ctx, query, args...) })
 }
 
 func (t *txLogger) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	query = t.rewrite(query)
 	t.logFn(query, args...)
 	return timeQuery(ctx, query, func() *sql.Row { return t.Tx.QueryRowContext(ctx, query, args...) })
 }
 
 func (t *txLogger) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	query = t.rewrite(query)
 	t.logFn(query, args...)
 	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return t.Tx.QueryContext(ctx, query, args...) })
 }
@@ -268,7 +238,7 @@ func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &txLogger{Tx: tx, logFn: h.logSQL, rewrite: c.dialect.Rewrite}, nil
+	return &txLogger{Tx: tx, logFn: h.logSQL}, nil
 }
 
 // CheckSchemaVersion queries app_config for schema_version and stores a mismatch
@@ -416,7 +386,7 @@ func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) 
 	}
 	var val string
 	err := h.queryRowContext(ctx,
-		`SELECT setting_value FROM `+h.cfg().AppConfigTable()+` WHERE setting_key = @p1`, key,
+		`SELECT setting_value FROM `+h.cfg().AppConfigTable()+` WHERE setting_key = $1`, key,
 	).Scan(&val)
 	return val, err
 }
@@ -432,7 +402,8 @@ func (h *Handler) appConfigGetOr(ctx context.Context, key, def string) string {
 
 // appConfigSet upserts a key/value pair in app_config.
 func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
-	_, err := h.execContext(ctx, h.dia().UpsertAppConfig(h.cfg().AppConfigTable()), key, value)
+	_, err := h.execContext(ctx, "INSERT INTO "+h.cfg().AppConfigTable()+" (setting_key, setting_value) VALUES ($1, $2) "+
+		"ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP", key, value)
 	return err
 }
 

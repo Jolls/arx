@@ -1,8 +1,7 @@
 -- purchase_order: Purchase Orders. 'number' is the human-readable PO number.
 -- supplier_id = who the PO is sent to; receiver_id = bill-to / ship-to.
--- PO numbers are auto-assigned via po_number_seq. The app call site currently
--- emits T-SQL 'NEXT VALUE FOR'; on Postgres it must use nextval('po_number_seq')
--- (app-side change, not covered by this DDL - see SQL/postgres/README.md).
+-- PO numbers are auto-assigned via nextval('po_number_seq') (arx_go/pos.go,
+-- arx_go/rfq_bom.go).
 -- po_count on company is a denormalized count maintained by a trigger
 -- (SQL/postgres/triggers.sql).
 

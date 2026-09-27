@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"arx/arx_go/models"
-	arxdb "arx/internal/db"
 	"arx/internal/urlutil"
 )
 
@@ -511,7 +510,7 @@ func replaceDocControlData(root, name string, data []byte) error {
 func (h *Handler) deleteAttachmentFileIfUnshared(ctx context.Context, table, idCol, fileCol string, excludeID any, fullFileName, root, strippedName string) error {
 	var count int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE %s=@p1 AND is_active=%s AND %s<>@p2`, table, fileCol, h.dia().BoolLiteral(true), idCol,
+		`SELECT COUNT(*) FROM %s WHERE %s=$1 AND is_active=TRUE AND %s<>$2`, table, fileCol, idCol,
 	), fullFileName, excludeID).Scan(&count); err != nil {
 		return err
 	}
@@ -533,31 +532,30 @@ type execFunc func(ctx context.Context, query string, args ...any) (sql.Result, 
 // current primary is NULL or no longer active. A live primary is never changed, so
 // it is safe to run after every insert and soft-delete; when no active attachment
 // remains the subselect yields NULL and the primary is cleared (#121). extraFilter
-// is an optional " AND ..." clause on the attachment alias `a`. Takes @p1 = parent id.
-func primaryAttachmentEnsureSQL(d arxdb.Dialect, parentTable, primaryCol, attTable, attPK, ownerCol, extraFilter string) string {
+// is an optional " AND ..." clause on the attachment alias `a`. Takes $1 = parent id.
+func primaryAttachmentEnsureSQL(parentTable, primaryCol, attTable, attPK, ownerCol, extraFilter string) string {
 	return fmt.Sprintf(
 		`UPDATE %[1]s SET %[2]s = (
-			SELECT %[7]sa.%[4]s FROM %[3]s a
-			WHERE a.%[5]s = %[1]s.id AND a.is_active = %[6]s%[9]s
-			ORDER BY COALESCE(a.sort_order, 0), a.%[4]s%[8]s)
-		WHERE id = @p1 AND (%[2]s IS NULL OR NOT EXISTS (
-			SELECT 1 FROM %[3]s x WHERE x.%[4]s = %[1]s.%[2]s AND x.is_active = %[6]s))`,
-		parentTable, primaryCol, attTable, attPK, ownerCol, d.BoolLiteral(true),
-		d.TopClause("1"), d.LimitClause("1"), extraFilter)
+			SELECT a.%[4]s FROM %[3]s a
+			WHERE a.%[5]s = %[1]s.id AND a.is_active = TRUE%[6]s
+			ORDER BY COALESCE(a.sort_order, 0), a.%[4]s LIMIT 1)
+		WHERE id = $1 AND (%[2]s IS NULL OR NOT EXISTS (
+			SELECT 1 FROM %[3]s x WHERE x.%[4]s = %[1]s.%[2]s AND x.is_active = TRUE))`,
+		parentTable, primaryCol, attTable, attPK, ownerCol, extraFilter)
 }
 
 // ensurePartPrimary applies primaryAttachmentEnsureSQL to a part. The generated
 // PDF Preview / Thumbnail rows never become the auto-set primary — they are
 // derived images, not the part's own files.
 func (h *Handler) ensurePartPrimary(ctx context.Context, exec execFunc, partID any) error {
-	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg().PartsTable(), "primary_attachment_id",
+	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.cfg().PartsTable(), "primary_attachment_id",
 		h.cfg().AttachmentsTable(), "id", "part_id",
 		fmt.Sprintf(" AND COALESCE(a.category, '') NOT IN ('%s', '%s')", previewCategory, thumbnailCategory)), partID)
 	return err
 }
 
 func (h *Handler) ensureSupplierPrimary(ctx context.Context, exec execFunc, supplierID any) error {
-	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.dia(), h.cfg().CompanyTable(), "primary_attachment_id",
+	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.cfg().CompanyTable(), "primary_attachment_id",
 		h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "supplier_id", ""), supplierID)
 	return err
 }
@@ -584,7 +582,7 @@ func (h *Handler) execThenEnsurePrimary(ctx context.Context, ensure func(context
 // Pass nil for attachmentID to clear the primary.
 func (h *Handler) setPrimaryAttachment(ctx context.Context, table, idCol, primaryCol string, parentID int, attachmentID any) error {
 	_, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET %s=@p1 WHERE %s=@p2`, table, primaryCol, idCol,
+		`UPDATE %s SET %s=$1 WHERE %s=$2`, table, primaryCol, idCol,
 	), attachmentID, parentID)
 	return err
 }
@@ -664,7 +662,7 @@ func (h *Handler) resolveVendorScope(ctx context.Context, partID, token string) 
 	}
 	var count int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE id=@p1 AND part_id=@p2`, table,
+		`SELECT COUNT(*) FROM %s WHERE id=$1 AND part_id=$2`, table,
 	), id, partID).Scan(&count); err != nil {
 		return nil, nil, err
 	}
@@ -684,9 +682,9 @@ func (h *Handler) fetchAttachmentsByVendor(r *http.Request, partID, col string) 
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT %s, id, file_name, category, part_revision
 		FROM %s
-		WHERE part_id = @p1 AND is_active = %s AND %s IS NOT NULL
+		WHERE part_id = $1 AND is_active = TRUE AND %s IS NOT NULL
 		ORDER BY sort_order, id
-	`, col, h.cfg().AttachmentsTable(), h.dia().BoolLiteral(true), col), partID)
+	`, col, h.cfg().AttachmentsTable(), col), partID)
 	if err != nil {
 		return nil
 	}
@@ -727,14 +725,13 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
 		SELECT 'part' AS kind, p.id, p.part_number, p.description
 		FROM %s fa JOIN %s p ON p.id = fa.part_id
-		WHERE fa.is_active = %s AND fa.file_name = @p1
+		WHERE fa.is_active = TRUE AND fa.file_name = $1
 		UNION ALL
 		SELECT 'supplier' AS kind, c.id, '', c.name
 		FROM %s ca JOIN %s c ON c.id = ca.supplier_id
-		WHERE ca.is_active = %s AND ca.file_path = @p1
+		WHERE ca.is_active = TRUE AND ca.file_path = $1
 		ORDER BY 1, 4
-	`, h.cfg().AttachmentsTable(), h.cfg().PartsTable(), h.dia().BoolLiteral(true),
-		h.cfg().CompanyAttachmentsTable(), h.cfg().CompanyTable(), h.dia().BoolLiteral(true)), file)
+	`, h.cfg().AttachmentsTable(), h.cfg().PartsTable(), h.cfg().CompanyAttachmentsTable(), h.cfg().CompanyTable()), file)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
 		return
@@ -848,11 +845,11 @@ func (h *Handler) findDuplicateAttachment(ctx context.Context, hash string, excl
 	var joinID int
 	var label string
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT %sa.%s, j.id, j.%s
+		`SELECT a.%s, j.id, j.%s
 		FROM %s a JOIN %s j ON j.id = a.%s
-		WHERE a.is_active = %s AND a.hash = @p1 AND a.%s <> @p2
-		ORDER BY a.%s`+h.dia().LimitClause("1"),
-		h.dia().TopClause("1"), idCol, labelCol, attTable, joinTable, joinCol, h.dia().BoolLiteral(true), idCol, idCol,
+		WHERE a.is_active = TRUE AND a.hash = $1 AND a.%s <> $2
+		ORDER BY a.%s LIMIT 1`,
+		idCol, labelCol, attTable, joinTable, joinCol, idCol, idCol,
 	), hash, excludeID).Scan(&dup.ID, &joinID, &label)
 	if err == sql.ErrNoRows {
 		return nil, nil

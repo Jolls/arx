@@ -5,8 +5,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	arxdb "arx/internal/db"
 )
 
 // recordFilters holds the parsed, validated filter selections from the
@@ -62,25 +60,25 @@ func (f recordFilters) StatusWIP() bool { return f.Status == "wip" }
 // whereClauses builds the SQL WHERE fragments and positional args implied by the
 // filters. Each fragment begins with " AND " so the caller can concatenate it
 // onto an existing WHERE. Placeholders are numbered starting at startArg; the
-// caller is responsible for @p1..@p(startArg-1) (formID is @p1, so pass 2).
-func (f recordFilters) whereClauses(d arxdb.Dialect, startArg int) (string, []any) {
+// caller is responsible for $1..$(startArg-1) (formID is $1, so pass 2).
+func (f recordFilters) whereClauses(startArg int) (string, []any) {
 	var sb strings.Builder
 	var args []any
 	n := startArg
 
 	switch f.Status {
 	case "wip":
-		sb.WriteString(" AND is_locked = " + d.BoolLiteral(false))
+		sb.WriteString(" AND is_locked = FALSE")
 	case "complete":
-		sb.WriteString(" AND is_locked = " + d.BoolLiteral(true) + " AND is_approved = " + d.BoolLiteral(false))
+		sb.WriteString(" AND is_locked = TRUE AND is_approved = FALSE")
 	case "approved":
-		sb.WriteString(" AND is_approved = " + d.BoolLiteral(true))
+		sb.WriteString(" AND is_approved = TRUE")
 	case "all":
 		// no clause
 	}
 
 	if f.Type != "" {
-		fmt.Fprintf(&sb, " AND record_type = @p%d", n)
+		fmt.Fprintf(&sb, " AND record_type = $%d", n)
 		args = append(args, f.Type)
 		n++
 	}
@@ -103,12 +101,12 @@ func (f recordFilters) dateRangeClauses(startArg int) (string, []any) {
 	n := startArg
 
 	if !f.From.IsZero() {
-		fmt.Fprintf(&sb, " AND record_date >= @p%d", n)
+		fmt.Fprintf(&sb, " AND record_date >= $%d", n)
 		args = append(args, f.From)
 		n++
 	}
 	if !f.To.IsZero() {
-		fmt.Fprintf(&sb, " AND record_date < (CAST(@p%d AS DATE) + 1)", n)
+		fmt.Fprintf(&sb, " AND record_date < (CAST($%d AS DATE) + 1)", n)
 		args = append(args, f.To)
 		n++
 	}

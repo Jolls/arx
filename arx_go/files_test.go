@@ -18,7 +18,7 @@ import (
 func filesTestHandler() *Handler {
 	cfg := &arxbase.Config{}
 	cfg.SessionSecret = "test-secret"
-	h := New(nil, nil, cfg, templatesFS, nil)
+	h := New(nil, cfg, templatesFS, nil)
 	if err := h.loadTemplates(); err != nil {
 		panic(err)
 	}

@@ -34,7 +34,7 @@ func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, 
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (part_id, txn_type, qty, txn_date, username, reference, note, po_line_id, lot_id, build_id)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`, h.cfg().InventoryTxnTable()),
 		partID, txnType, qty, txnDate, h.actorName(r),
 		nullableText(reference), nullableText(note), poArg, lotArg, buildArg,
@@ -42,7 +42,7 @@ func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, 
 		return err
 	}
 	_, err := tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET stock_on_hand = stock_on_hand + @p1 WHERE id = @p2`, h.cfg().PartsTable()),
+		`UPDATE %s SET stock_on_hand = stock_on_hand + $1 WHERE id = $2`, h.cfg().PartsTable()),
 		qty, partID)
 	return err
 }
@@ -89,7 +89,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 		SELECT it.txn_type, it.qty, it.txn_date, it.username, it.reference, it.note, l.id, l.lot_number
 		FROM %s it
 		LEFT JOIN %s l ON l.id = it.lot_id
-		WHERE it.part_id = @p1 ORDER BY it.txn_date ASC, it.id ASC
+		WHERE it.part_id = $1 ORDER BY it.txn_date ASC, it.id ASC
 	`, h.cfg().InventoryTxnTable(), h.cfg().LotTable()), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving transactions: "+err.Error())

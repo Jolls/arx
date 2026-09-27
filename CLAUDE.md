@@ -46,22 +46,19 @@ Secrets (`db_password`, `test_db_password`, `session_secret`) do NOT live in `co
 
 ## Test mode
 `TEST_MODE=true` in .env swaps DB connection via Base's active-profile helpers; table names identical prod/dev, only connection changes. `cfg.*Table()` helpers always return bare names regardless of TestMode — never hardcode table names.
-Full second connection profile (not just DB-name swap): TestDBServer/TestEngine/TestDBName/TestDBUser/TestDBPassword, each overriding prod counterpart only when non-empty (blank inherits prod) — so same-server name-only swap still works, but can also point at a fully separate server/engine/creds (e.g. ArxDev-on-Postgres during #625 migration, #672).
-Overrides: env (TEST_DB_SERVER/TEST_DB_ENGINE/TEST_DB_NAME[default ArxDev]/TEST_DB_USER) or local.json (test_db_server/test_engine/test_db_name/test_db_user); test password lives in the per-user secrets store (`%APPDATA%\Arx\local.json`, `test_db_password`), never in `config/local.json` or .env (#732). Editable in Settings UI Test Connection section.
+Full second connection profile (not just DB-name swap): TestDBServer/TestDBName/TestDBUser/TestDBPassword, each overriding prod counterpart only when non-empty (blank inherits prod) — so same-server name-only swap still works, but can also point at a fully separate server/creds (#672).
+Overrides: env (TEST_DB_SERVER/TEST_DB_NAME[default ArxDev]/TEST_DB_USER) or local.json (test_db_server/test_db_name/test_db_user); test password lives in the per-user secrets store (`%APPDATA%\Arx\local.json`, `test_db_password`), never in `config/local.json` or .env (#732). Editable in Settings UI Test Connection section.
 
-New table → update all 4 or test mode breaks (exception: `schema_migrations`, the migration ledger #48 — guarded DDL with no DROP, no seed block, no `*Table()` helper since nothing in Go touches it): 1) `SQL/azure/<table>.sql` DDL (same schema prod+ArxDev) 2) `SQL/azure/seed_test_data.sql` DELETE+fixed-ID INSERT block 3) `internal/config/config.go` add `*Table()` helper 4) `SQL/schema.md` table reference section.
+New table → update all 4 or test mode breaks (exception: `schema_migrations`, the migration ledger #48 — guarded DDL with no DROP, no seed block, no `*Table()` helper since nothing in Go touches it): 1) `SQL/postgres/<table>.sql` DDL (same schema prod+ArxDev) + its entry in `SQL/postgres/build_schema.sh`'s table list 2) `SQL/postgres/seed_test_data.sql` DELETE+fixed-ID INSERT block (+ `setval` sequence reset) 3) `internal/config/config.go` add `*Table()` helper 4) `SQL/schema.md` table reference section.
 
-Every schema change ships a migration in `SQL/azure/migrations/YYYYMMDDHHMMSS_<issue>_<description>.sql` (timestamp = authoring time; the 28 older `migrate_*.sql` files keep their names) for a human to run — SQL/azure/*.sql is reference DDL, never auto-run. Migrations idempotent/guarded (e.g. `IF COL_LENGTH(...) IS NULL`). Pin to ArxDev: `USE ArxDev;` at top + comment that human changes it for ArxProd. Never default a migration to ArxProd. You author these, never run them (see ArxProd rule).
-Every migration self-registers as its LAST step: `IF NOT EXISTS (SELECT 1 FROM dbo.schema_migrations WHERE version_id = <filename timestamp>) INSERT INTO dbo.schema_migrations (version_id, is_applied) VALUES (<filename timestamp>, 1);` — `TestMigrationsSelfRegister` fails the build otherwise. Breaking migrations still bump `app_config.schema_version` too (different job: binary↔DB gate). Details in `SQL/SCHEMA.md#migrations`.
-Migrations must run as a single batch, no `GO`: the human runs these through the Azure portal's query editor, which sends the whole script as one batch and does not honor `GO` as a batch separator. Any statement referencing a column added earlier in that same script (e.g. a CHECK constraint or an UPDATE backfill right after `ALTER TABLE ADD <col>`) fails with "Invalid column name" — batch compilation resolves names against pre-batch metadata, so a same-batch reference to a brand-new column doesn't resolve even though the ALTER ran first in execution order. Fix: wrap the statement referencing the new column in dynamic SQL, `EXEC(N'...')`, which defers name resolution to runtime (see `SQL/azure/migrations/migrate_743_part_tracking_mode.sql` for the pattern).
-
-Postgres (`main` is Postgres-only since #201; the Azure/T-SQL rules above apply to `release/0.7`): edit `SQL/postgres/*.sql` DDL + seed, and ship `SQL/postgres/migrations/YYYYMMDDHHMMSS_<issue>_<description>.sql` — psql `ON_ERROR_STOP`, one `BEGIN`/`COMMIT`, ArxDev-pin `DO` guard, idempotent, last statement `INSERT INTO schema_migrations (version_id, is_applied) SELECT <ts>, TRUE WHERE NOT EXISTS (...)`; column renames must `CREATE OR REPLACE` plpgsql functions naming the column and patch `named_queries`. Details in `SQL/SCHEMA.md#postgres`. Fresh DB load: `bash SQL/postgres/build_schema.sh | psql ...` (new tables go in its list).
+`main` is Postgres-only (#29); SQL Server/Azure lives on `release/0.7`, whose CLAUDE.md keeps the T-SQL/Azure migration rules. Every schema change ships a migration in `SQL/postgres/migrations/YYYYMMDDHHMMSS_<issue>_<description>.sql` (timestamp = authoring time) plus the edit to `SQL/postgres/*.sql` DDL + seed, for a human to run — `SQL/postgres/*.sql` is reference DDL, never auto-run. psql `ON_ERROR_STOP`, one `BEGIN`/`COMMIT`, a `DO` guard right after `BEGIN` that raises unless `lower(current_database()) = 'arxdev'` (human edits it for ArxProd; never default a migration to ArxProd), idempotent (`IF [NOT] EXISTS` / `information_schema` checks). You author these, never run them (see ArxProd rule).
+Every migration self-registers as its LAST statement: `INSERT INTO schema_migrations (version_id, is_applied) SELECT <ts>, TRUE WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version_id = <ts>);` — `TestMigrationsSelfRegister` fails the build otherwise. Breaking migrations still bump `app_config.schema_version` too (different job: binary↔DB gate). Column renames must `CREATE OR REPLACE` plpgsql functions naming the column and patch `named_queries`. Details in `SQL/SCHEMA.md#migrations`. Fresh DB load: `bash SQL/postgres/build_schema.sh | psql ...`.
 
 FK-promotion migrations (adding a FK constraint to a column that previously held only a historically-logical reference) need an orphan check written into the migration, run against ArxProd before the `ADD CONSTRAINT`, since ArxDev's seed is clean and won't surface orphans ArxProd may have accumulated. Include this pattern in the migration file so the human running it sees the offending rows before the constraint is added:
 ```sql
 SELECT child.id, child.<fk_col>
-FROM dbo.<child_table> child
-LEFT JOIN dbo.<parent_table> p ON p.id = child.<fk_col>
+FROM <child_table> child
+LEFT JOIN <parent_table> p ON p.id = child.<fk_col>
 WHERE child.<fk_col> IS NOT NULL AND p.id IS NULL;
 ```
 
@@ -70,17 +67,17 @@ Build-tagged `arx_go/integration_test.go` (`//go:build integration`), excluded f
 ```
 ARX_TEST_FROM_CONFIG=1 go test -tags integration ./arx_go/...
 ```
-`ARX_TEST_FROM_CONFIG=1` builds the DSN in-process from the test-mode profile (`config/local.json` + per-user secrets store) — never read the secrets file or construct/echo a DSN yourself (#207). An explicit `ARX_TEST_DSN` still overrides. Engine comes from the DSN scheme, not `test_engine`; `TestMain` refuses, before connecting, any database name containing `arxprod` and anything not exactly `ArxDev` (case-insensitive).
-`liveHandler` also doesn't trust the DSN's database name alone — after connecting it queries the fixed-ID seed part `id=3005` and `t.Fatal`s unless it matches `part_number='ASM-1001'`/`title='Skyrunner Standard Drone'`, the same row seeded identically in `SQL/azure/seed_test_data.sql` and `SQL/postgres/seed_test_data.sql`. That's the safeguard against accidentally running against a real database — keep the sentinel values in sync if that seed row ever changes. db_user/db_server from arx_go/config/local.json; the password (db_password) is in the per-user secrets store `%APPDATA%\Arx\local.json` (#732), both gitignored — use database=ArxDev not ArxProd.
+`ARX_TEST_FROM_CONFIG=1` builds the DSN in-process from the test-mode profile (`config/local.json` + per-user secrets store) — never read the secrets file or construct/echo a DSN yourself (#207). An explicit `ARX_TEST_DSN` still overrides. `TestMain` refuses, before connecting, any non-`postgres://` DSN, any database name containing `arxprod`, and anything not exactly `ArxDev` (case-insensitive).
+`liveHandler` also doesn't trust the DSN's database name alone — after connecting it queries the fixed-ID seed part `id=3005` and `t.Fatal`s unless it matches `part_number='ASM-1001'`/`title='Skyrunner Standard Drone'`, the row seeded in `SQL/postgres/seed_test_data.sql`. That's the safeguard against accidentally running against a real database — keep the sentinel values in sync if that seed row ever changes. db_user/db_server from arx_go/config/local.json; the password (db_password) is in the per-user secrets store `%APPDATA%\Arx\local.json` (#732), both gitignored — use database=ArxDev not ArxProd.
 Any ad-hoc script/DSN outside integration_test.go should verify it's pointed at test data before running — don't rely on the database name alone.
-Reseeding ArxDev is a human action — no sqlcmd/Invoke-Sqlcmd available; don't script SQL/azure/seed_test_data.sql yourself. If a test fails on stale seed data (e.g. TestIntegration_UpdatedAtSentinel), tell user to reseed, don't do it yourself.
+Reseeding ArxDev is a human action — don't run SQL/postgres/seed_test_data.sql against it yourself (a throwaway local container you created is fine). If a test fails on stale seed data (e.g. TestIntegration_UpdatedAtSentinel), tell user to reseed, don't do it yourself.
 
-## Database — SQL Server
-Driver `github.com/microsoft/go-mssqldb`. DSN: `sqlserver://user:password@host?database=MyDB&encrypt=true`.
-Column-name gotcha: driver preserves query column casing (SELECT * returns schema-defined names) — scan into struct fields by exact DB column name, never assume lowercase.
+## Database — Postgres
+Driver `github.com/jackc/pgx/v5/stdlib` (`sql.Open("pgx", dsn)`). DSN: `postgres://user:password@host:5432/MyDB?sslmode=require` (built by `Base.BuildDSN`; TLS always required). Placeholders are `$1, $2, ...`; named-query `@name` tokens are rewritten by `arxdb.RewriteNamedParams`.
+Column-name gotcha: Postgres folds unquoted identifiers to lowercase — scan by position, and match constraint names in errors case-insensitively.
 
 ## DB schema
-Naming/DDL rules: `SQL/schema.md`. ER diagram: `SQL/schema_diagram.md`. Per-table reference (PKs/trigger side-effects/column semantics): `SQL/schema.md#table-reference`. All DDL in `SQL/azure/*.sql` (reference/migration, not auto-run); Postgres equivalents in `SQL/postgres/*.sql`.
+Naming/DDL rules: `SQL/schema.md`. ER diagram: `SQL/schema_diagram.md`. Per-table reference (PKs/trigger side-effects/column semantics): `SQL/schema.md#table-reference`. All DDL in `SQL/postgres/*.sql` (reference/migration, not auto-run).
 
 ## Attachment/folder conventions
 See `docs/conventions.md`: FILFileName URL format (http, LOCAL:, LOCAL:dir/), PO folder naming.
@@ -179,4 +176,4 @@ Closes #450
 Add a one-sentence resolution comment before closing.
 
 ## What NOT to touch
-SQL/azure/*.sql and SQL/postgres/*.sql = reference DDL only, not migration runners (keep in sync but never auto-run). No DB password in .env. Never hardcode table names — use cfg.*Table(). Never query/connect ArxProd directly.
+SQL/postgres/*.sql = reference DDL only, not a migration runner (keep in sync but never auto-run). No DB password in .env. Never hardcode table names — use cfg.*Table(). Never query/connect ArxProd directly.

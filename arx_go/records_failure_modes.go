@@ -44,7 +44,7 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.description
 		FROM %s f
 		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = @p1`,
+		WHERE f.id = $1`,
 		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
 		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.PartNumber, &form.Description)
 	if err == sql.ErrNoRows {
@@ -61,18 +61,17 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 	args := append([]any{formID}, dateArgs...)
 
 	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT (SELECT %sr2.parameter FROM %s r2
+		SELECT (SELECT r2.parameter FROM %s r2
 			WHERE r2.form_row_id = res.form_row_id
-			ORDER BY r2.id DESC%s) AS parameter,
-			SUM(CASE WHEN res.pass_fail = %s THEN 1 ELSE 0 END) AS failure_count,
+			ORDER BY r2.id DESC LIMIT 1) AS parameter,
+			SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) AS failure_count,
 			COUNT(res.pass_fail) AS total_tested
 		FROM %s res
 		JOIN %s trec ON res.form_record_id = trec.id
-		WHERE trec.form_id = @p1 AND trec.is_active = %s AND res.pass_fail IS NOT NULL%s
+		WHERE trec.form_id = $1 AND trec.is_active = TRUE AND res.pass_fail IS NOT NULL%s
 		GROUP BY res.form_row_id
 		ORDER BY failure_count DESC, parameter ASC`,
-		h.dia().TopClause("1"), h.cfg().ResultsTable(), h.dia().LimitClause("1"),
-		h.dia().BoolLiteral(false), h.cfg().ResultsTable(), h.cfg().RecordsTable(), h.dia().BoolLiteral(true), dateClause), args...)
+		h.cfg().ResultsTable(), h.cfg().ResultsTable(), h.cfg().RecordsTable(), dateClause), args...)
 	if err != nil {
 		serverError(w, "query error", err)
 		return

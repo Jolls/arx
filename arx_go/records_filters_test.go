@@ -4,8 +4,6 @@ import (
 	"net/url"
 	"testing"
 	"time"
-
-	arxdb "arx/internal/db"
 )
 
 func TestParseRecordFilters_DefaultsToWIP(t *testing.T) {
@@ -50,8 +48,8 @@ func TestParseRecordFilters_ParsesGoodDates(t *testing.T) {
 
 func TestWhereClauses_WIPNoExtras(t *testing.T) {
 	f := parseRecordFilters(url.Values{}) // status=wip, nothing else
-	sql, args := f.whereClauses(arxdb.NewSQLServerDialect(), 2)
-	if sql != " AND is_locked = 0" {
+	sql, args := f.whereClauses(2)
+	if sql != " AND is_locked = FALSE" {
 		t.Errorf("sql = %q", sql)
 	}
 	if len(args) != 0 {
@@ -61,13 +59,13 @@ func TestWhereClauses_WIPNoExtras(t *testing.T) {
 
 func TestWhereClauses_StatusVariants(t *testing.T) {
 	cases := map[string]string{
-		"complete": " AND is_locked = 1 AND is_approved = 0",
-		"approved": " AND is_approved = 1",
+		"complete": " AND is_locked = TRUE AND is_approved = FALSE",
+		"approved": " AND is_approved = TRUE",
 		"all":      "",
 	}
 	for status, want := range cases {
 		f := parseRecordFilters(url.Values{"status": {status}})
-		sql, _ := f.whereClauses(arxdb.NewSQLServerDialect(), 2)
+		sql, _ := f.whereClauses(2)
 		if sql != want {
 			t.Errorf("status %q: sql = %q, want %q", status, sql, want)
 		}
@@ -82,8 +80,8 @@ func TestWhereClauses_AllFiltersNumberedFromStart(t *testing.T) {
 		"to":     {"2026-03-04"},
 	}
 	f := parseRecordFilters(q)
-	sql, args := f.whereClauses(arxdb.NewSQLServerDialect(), 2)
-	want := " AND record_type = @p2 AND record_date >= @p3 AND record_date < (CAST(@p4 AS DATE) + 1)"
+	sql, args := f.whereClauses(2)
+	want := " AND record_type = $2 AND record_date >= $3 AND record_date < (CAST($4 AS DATE) + 1)"
 	if sql != want {
 		t.Errorf("sql = %q, want %q", sql, want)
 	}

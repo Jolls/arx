@@ -134,7 +134,7 @@ func (h *Handler) isPurchasedCategory(code string) bool {
 // component. Purchased parts are leaves: their own BOMs are never loaded.
 func (h *Handler) loadRFQGraph(ctx context.Context, root int) (map[int][]bomEdge, map[int]rfqPart, error) {
 	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
-	hasBOM := hasOwnBOMExpr(h.dia(), pl, "pn.id")
+	hasBOM := hasOwnBOMExpr(pl, "pn.id")
 	edges := map[int][]bomEdge{}
 	parts := map[int]rfqPart{}
 	queue := []int{root}
@@ -147,7 +147,7 @@ func (h *Handler) loadRFQGraph(ctx context.Context, root int) (map[int][]bomEdge
 			       pn.stock_on_hand, pn.reorder_min, pn.default_supplier_id, %s
 			FROM %s pl
 			JOIN %s pn ON pl.component_part_id = pn.id
-			WHERE pl.parent_part_id = @p1
+			WHERE pl.parent_part_id = $1
 		`, hasBOM, pl, pn), id)
 		if err != nil {
 			return nil, nil, err
@@ -203,7 +203,7 @@ func (h *Handler) buildRFQPlan(ctx context.Context, root int, n float64) (rfqPla
 		if g == nil {
 			g = &rfqSupplierGroup{SupplierID: sid}
 			bySupplier[sid] = g
-			h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = @p1`, h.cfg().CompanyTable()), sid).Scan(&g.SupplierName)
+			h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = $1`, h.cfg().CompanyTable()), sid).Scan(&g.SupplierName)
 		}
 		g.Lines = append(g.Lines, l)
 	}
@@ -330,14 +330,14 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	ctx := r.Context()
 	var base string
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT CAST(%s AS VARCHAR)", h.dia().NextSequenceValueExpr("po_number_seq")),
+		"SELECT CAST(nextval('po_number_seq') AS VARCHAR)",
 	).Scan(&base); err != nil {
 		return "", err
 	}
 	number := base + "R1"
 
 	var defaultContact sql.NullInt64
-	h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id = @p1`, h.cfg().CompanyTable()), g.SupplierID).Scan(&defaultContact)
+	h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id = $1`, h.cfg().CompanyTable()), g.SupplierID).Scan(&defaultContact)
 	var sc ContactSummary
 	if defaultContact.Valid {
 		for _, c := range h.contactsForSupplier(r, g.SupplierID) {
@@ -350,8 +350,7 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 
 	now := time.Now()
 	var poID int
-	insertPO := h.dia().InsertReturningID(h.cfg().POTable(),
-		`number, status, is_active, orderer, account_id,
+	insertPO := fmt.Sprintf(`INSERT INTO %s (number, status, is_active, orderer, account_id,
 		 supplier_id, supplier_name, supplier_contact, supplier_email,
 		 supplier_address, supplier_city, supplier_state, supplier_zipcode,
 		 supplier_country, supplier_phone_number, supplier_fax_number,
@@ -360,11 +359,9 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 		 receiver_country, receiver_phone, receiver_fax,
 		 tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
 		 date_requested, date_closed, total_cost,
-		 supplier_contact_id, receiver_contact_id`,
-		`@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,
-		 @p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25,@p26,@p27,
-		 @p28,@p29,@p30,@p31,@p32,@p33,@p34,@p35,@p36,@p37,@p38`,
-		true)
+		 supplier_contact_id, receiver_contact_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+		 $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
+		 $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38) RETURNING id`, h.cfg().POTable())
 	var supplierContactID any
 	if sc.ID > 0 {
 		supplierContactID = sc.ID
@@ -387,19 +384,19 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	).Scan(&poID); err != nil {
 		return "", err
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET rfq_group_id=@p1 WHERE ID=@p2`, h.cfg().POTable()), poID, poID); err != nil {
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET rfq_group_id=$1 WHERE ID=$2`, h.cfg().POTable()), poID, poID); err != nil {
 		return "", err
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by)
-		VALUES (@p1, 'status', NULL, 'rfq', @p2)
+		VALUES ($1, 'status', NULL, 'rfq', $2)
 	`, h.cfg().POHistoryTable()), poID, h.actorName(r)); err != nil {
 		return "", err
 	}
 	for i, l := range lines {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
-			VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		`, h.cfg().POLineTable()), poID, i+1, l.Part.PartNumber, l.Part.Revision, l.Part.Description, l.Qty, 0.0, "", l.Part.ID); err != nil {
 			return "", err
 		}

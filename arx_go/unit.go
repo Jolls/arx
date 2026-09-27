@@ -91,7 +91,7 @@ func scanUnitRow(sc interface{ Scan(...any) error }) (UnitRow, error) {
 // unitsForPart returns every unit of a part, newest first, for the Units subtab list.
 func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, error) {
 	rows, err := h.queryContext(ctx, h.unitRowSelect()+
-		`WHERE u.part_id = @p1 ORDER BY u.created_at DESC, u.id DESC`, partID)
+		`WHERE u.part_id = $1 ORDER BY u.created_at DESC, u.id DESC`, partID)
 	if err != nil {
 		return nil, err
 	}
@@ -110,15 +110,14 @@ func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, erro
 // recentPartUnits returns the most recent units for a part, newest first, capped
 // at limit, for the Part dashboard "Units" card (#798).
 func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([]UnitRow, error) {
-	top, limitClause := h.topLimit("@p2")
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT %su.id, u.serial_number, u.part_id, p.part_number, p.description,
+		SELECT u.id, u.serial_number, u.part_id, p.part_number, p.description,
 		       u.lot_id, l.lot_number, u.build_id, u.is_active, u.created_at, u.source
 		FROM %s u
 		JOIN %s p ON p.id = u.part_id
 		LEFT JOIN %s l ON l.id = u.lot_id
-		WHERE u.part_id = @p1 ORDER BY u.created_at DESC, u.id DESC
-	`+limitClause, top, h.cfg().UnitTable(), h.cfg().PartsTable(), h.cfg().LotTable()), partID, limit)
+		WHERE u.part_id = $1 ORDER BY u.created_at DESC, u.id DESC LIMIT $2
+	`, h.cfg().UnitTable(), h.cfg().PartsTable(), h.cfg().LotTable()), partID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -139,14 +138,14 @@ func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([
 func (h *Handler) unitCountForPart(ctx context.Context, partID int) (int, error) {
 	var count int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id = @p1`, h.cfg().UnitTable()), partID).Scan(&count)
+		`SELECT COUNT(*) FROM %s WHERE part_id = $1`, h.cfg().UnitTable()), partID).Scan(&count)
 	return count, err
 }
 
 // fetchUnitRow loads a single unit for the trace header. ok=false (nil error) when
 // the unit does not exist.
 func (h *Handler) fetchUnitRow(ctx context.Context, unitID int) (UnitRow, bool, error) {
-	ur, err := scanUnitRow(h.queryRowContext(ctx, h.unitRowSelect()+`WHERE u.id = @p1`, unitID))
+	ur, err := scanUnitRow(h.queryRowContext(ctx, h.unitRowSelect()+`WHERE u.id = $1`, unitID))
 	if err == sql.ErrNoRows {
 		return UnitRow{}, false, nil
 	}
@@ -260,8 +259,8 @@ func (h *Handler) UnitRecordsRows(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) unitSerialLocked(ctx context.Context, unitID int) (bool, error) {
 	var n int
 	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE unit_id = @p1 AND is_locked = %s`,
-		h.cfg().RecordsTable(), h.dia().BoolLiteral(true)), unitID).Scan(&n)
+		`SELECT COUNT(*) FROM %s WHERE unit_id = $1 AND is_locked = TRUE`,
+		h.cfg().RecordsTable()), unitID).Scan(&n)
 	return n > 0, err
 }
 
@@ -317,8 +316,7 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)
 		return
 	}
-	insertUnit := h.dia().InsertReturningID(h.cfg().UnitTable(),
-		`part_id, serial_number, lot_id, build_id, source`, `@p1, @p2, @p3, @p4, 'manual'`, false)
+	insertUnit := fmt.Sprintf(`INSERT INTO %s (part_id, serial_number, lot_id, build_id, source) VALUES ($1, $2, $3, $4, 'manual') RETURNING id`, h.cfg().UnitTable())
 	var unitID int
 	if err := h.queryRowContext(r.Context(), insertUnit, p.ID, serial, lotArg, buildArg).Scan(&unitID); err != nil {
 		h.renderUnitSaveErr(w, r, err)
@@ -330,8 +328,7 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 // renderUnitSaveErr renders a friendly message for a duplicate serial
 // (UQ_unit_serial), or the raw error otherwise — shared by UnitCreate and
 // UnitUpdate, the two unit-writing handlers (#799). Matched case-insensitively:
-// Postgres folds an unquoted constraint name to lowercase (uq_unit_serial) where
-// SQL Server preserves the case as declared in SQL/azure/unit.sql.
+// Postgres folds the unquoted constraint name to lowercase (uq_unit_serial).
 func (h *Handler) renderUnitSaveErr(w http.ResponseWriter, r *http.Request, err error) {
 	if strings.Contains(strings.ToLower(err.Error()), "uq_unit_serial") {
 		h.renderError(w, r, "A unit with this serial already exists for this part.")
@@ -407,7 +404,7 @@ func (h *Handler) UnitUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if locked {
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET is_active = @p1 WHERE id = @p2 AND part_id = @p3`,
+			`UPDATE %s SET is_active = $1 WHERE id = $2 AND part_id = $3`,
 			h.cfg().UnitTable()), isActive, unitID, p.ID)
 	} else {
 		serial := fv(r, "serial_number")
@@ -416,7 +413,7 @@ func (h *Handler) UnitUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET is_active = @p1, serial_number = @p2 WHERE id = @p3 AND part_id = @p4`,
+			`UPDATE %s SET is_active = $1, serial_number = $2 WHERE id = $3 AND part_id = $4`,
 			h.cfg().UnitTable()), isActive, serial, unitID, p.ID)
 	}
 	if err != nil {

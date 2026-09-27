@@ -105,10 +105,10 @@ type supplierOption struct {
 // When companyID > 0 it is scoped to that company's contacts (the configured
 // default receiver); companyID == 0 returns all contacts as a fallback.
 func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactOption {
-	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = %s`, h.cfg().ContactTable(), h.dia().BoolLiteral(true))
+	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = TRUE`, h.cfg().ContactTable())
 	var args []any
 	if companyID > 0 {
-		q += ` AND company_id = @p1`
+		q += ` AND company_id = $1`
 		args = append(args, companyID)
 	}
 	q += ` ORDER BY display_name`
@@ -129,8 +129,8 @@ func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactO
 
 func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
 	rows, err := h.queryContext(r.Context(),
-		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = %s ORDER BY name`,
-			h.cfg().CompanyTable(), h.dia().BoolLiteral(true)))
+		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = TRUE ORDER BY name`,
+			h.cfg().CompanyTable()))
 	if err != nil {
 		return nil
 	}
@@ -205,9 +205,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"DBConnError":           h.st().dbConnError,
 		"DBServer":              h.cfg().DBServer,
 		"DBName":                h.cfg().DBName,
-		"DBEngine":              h.cfg().DBEngine(),
 		"TestDBServer":          h.cfg().TestDBServer,
-		"TestEngine":            h.cfg().TestEngine,
 		"TestDBName":            h.cfg().TestDBName,
 		"TestDBUser":            h.cfg().TestDBUser,
 		"TestDBPasswordSet":     h.cfg().TestDBPassword != "",
@@ -325,7 +323,7 @@ func (h *Handler) saveAttachmentCategories(ctx context.Context, cats []string) e
 		}
 		seen[c] = true
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (display_name, sort_order) VALUES (@p1, @p2)`, tbl), c, len(seen)-1); err != nil {
+			`INSERT INTO %s (display_name, sort_order) VALUES ($1, $2)`, tbl), c, len(seen)-1); err != nil {
 			return err
 		}
 	}
@@ -373,7 +371,7 @@ func (h *Handler) SettingsAccentColorSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET accent_color = @p1 WHERE id = @p2`,
+		`UPDATE %s SET accent_color = $1 WHERE id = $2`,
 		h.cfg().UsersTable()), color, u.ID); err != nil {
 		log.Printf("warning: could not save accent_color: %v", err)
 	}
@@ -398,7 +396,7 @@ func (h *Handler) SettingsTimezoneSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET timezone = @p1 WHERE id = @p2`,
+		`UPDATE %s SET timezone = $1 WHERE id = $2`,
 		h.cfg().UsersTable()), tz, u.ID); err != nil {
 		log.Printf("warning: could not save timezone: %v", err)
 	}
@@ -433,7 +431,7 @@ func (h *Handler) SettingsDefaultRouteSave(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET default_route = @p1 WHERE id = @p2`,
+		`UPDATE %s SET default_route = $1 WHERE id = $2`,
 		h.cfg().UsersTable()), route, u.ID); err != nil {
 		log.Printf("warning: could not save default_route: %v", err)
 	}
@@ -497,10 +495,9 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	dbName := strings.TrimSpace(r.FormValue("db_name"))
 	dbUser := strings.TrimSpace(r.FormValue("db_user"))
 	password := strings.TrimSpace(r.FormValue("db_password"))
-	// Test-mode connection profile. Server/engine/user are blank-clearable so a
+	// Test-mode connection profile. Server/user are blank-clearable so a
 	// test override can be removed; a blank field then inherits the prod value.
 	testDBServer := strings.TrimSpace(r.FormValue("test_db_server"))
-	testEngine := strings.TrimSpace(r.FormValue("test_engine"))
 	testDBName := strings.TrimSpace(r.FormValue("test_db_name"))
 	testDBUser := strings.TrimSpace(r.FormValue("test_db_user"))
 	testPassword := strings.TrimSpace(r.FormValue("test_db_password"))
@@ -529,11 +526,10 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		local.DBUser = dbUser
 	}
 
-	// Test-profile server/engine/user are written verbatim (blank clears the
+	// Test-profile server/user are written verbatim (blank clears the
 	// override). TestDBName keeps the "only if non-empty" guard so the ArxDev
 	// default is never wiped by an empty submit.
 	local.TestDBServer = testDBServer
-	local.TestEngine = testEngine
 	local.TestDBUser = testDBUser
 	if testDBName != "" {
 		local.TestDBName = testDBName
@@ -562,7 +558,6 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			c.DBUser = dbUser
 		}
 		c.TestDBServer = testDBServer
-		c.TestEngine = testEngine
 		c.TestDBUser = testDBUser
 		if testDBName != "" {
 			c.TestDBName = testDBName
@@ -599,7 +594,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	dbSwapped := false
 	if connectWith != "" {
 		dsn := cfg.BuildDSN(connectWith)
-		newDB, newDialect, err := h.connectDB(cfg.DBEngine(), dsn)
+		newDB, err := h.connectDB(dsn)
 		if err != nil {
 			connErr = err.Error()
 		} else {
@@ -613,7 +608,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			h.update(func(s *runtimeState) {
 				old = s.conn
 				applyCfg(s.cfg)
-				s.conn = &dbConn{db: newDB, dialect: newDialect}
+				s.conn = &dbConn{db: newDB}
 				if password != "" {
 					s.cfg.DBPassword = password
 				}
@@ -701,7 +696,7 @@ func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request
 	}
 
 	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET default_po_contact_id = @p1, default_po_receiver_id = @p2 WHERE id = @p3`,
+		`UPDATE %s SET default_po_contact_id = $1, default_po_receiver_id = $2 WHERE id = $3`,
 		h.cfg().UsersTable()), contactArg, receiverArg, u.ID); err != nil {
 		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
 			"Error": "Could not save preferences: " + err.Error(),
