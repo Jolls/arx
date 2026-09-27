@@ -241,6 +241,27 @@ func (h *Handler) beginTx(ctx context.Context) (*txLogger, error) {
 	return &txLogger{Tx: tx, logFn: h.logSQL}, nil
 }
 
+// handlerDB is the dbq.DBTX the sqlc-generated queries run on outside a
+// transaction (#190), routed through the same logging/timing wrappers; inside
+// one, pass the *txLogger instead.
+type handlerDB struct{ h *Handler }
+
+func (d handlerDB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return d.h.execContext(ctx, query, args...)
+}
+
+func (d handlerDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return d.h.queryContext(ctx, query, args...)
+}
+
+func (d handlerDB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return d.h.queryRowContext(ctx, query, args...)
+}
+
+func (d handlerDB) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+	return d.h.st().conn.db.PrepareContext(ctx, query)
+}
+
 // CheckSchemaVersion queries app_config for schema_version and stores a mismatch
 // message if it doesn't match ExpectedSchemaVersion. Safe to call when db is nil.
 func (h *Handler) CheckSchemaVersion(ctx context.Context) {

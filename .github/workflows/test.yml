@@ -21,6 +21,14 @@ jobs:
       - name: Install systray cgo dependency
         run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev
 
+      # Fails when internal/dbq is stale against sqlc.yaml's queries/DDL (#190).
+      - uses: sqlc-dev/setup-sqlc@v5
+        with:
+          sqlc-version: '1.31.1'
+
+      - name: sqlc generated code is current
+        run: sqlc diff
+
       - name: Vet
         run: go vet ./...
 

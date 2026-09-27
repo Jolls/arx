@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"arx/arx_go/models"
+	"arx/internal/contacts"
 )
 
 // TestParseTemplates checks parseTemplates succeeds and yields a template for
@@ -150,7 +151,7 @@ func coreLayoutFakeData(extra map[string]any) map[string]any {
 // actually appears in the output, catching wrong data binding that parse-only
 // checks miss (#825).
 func TestContactDetailTemplateRenders(t *testing.T) {
-	contact := models.Contact{ID: 1, DisplayName: "Acme Test Contact", Email: "acme@example.com", IsActive: true}
+	contact := contacts.Contact{ID: 1, DisplayName: "Acme Test Contact", Email: "acme@example.com", IsActive: true}
 	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS,
 		"templates/shared/layout.html",
 		"templates/shared/partials.html",
