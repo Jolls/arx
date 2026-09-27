@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-09-26
+### Fixed
+- Reports pages (and any page rendered via the shared layout) now show the test-mode header when Test Mode is on ([#212](https://github.com/Jolls/arx/issues/212))
+
 ## [0.8.5] - 2026-09-26
 ### Added
 - Dark mode: follows the OS light/dark setting by default, with a header toggle (Auto/Light/Dark) remembered per browser; the login page follows it too, print pages stay light ([#202](https://github.com/Jolls/arx/issues/202))
