@@ -20,8 +20,8 @@
 --   5801-5899  purchase_order_history  1-17       uom (natural identity)
 --   5901-5999  inventory_transaction   8201-8299  build
 --   8301-8399  lot                     8401-8499  genealogy
---   8501-8599  unit
---   (identity) app_config, named_queries
+--   8501-8599  unit                    1-99       named_queries
+--   (natural key) app_config
 --
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
 -- one with a comment, one without. company_attachment is NOT seeded (would require real
@@ -116,38 +116,38 @@ SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data; a text change here also needs a migration that
     -- patches existing databases (see migrations/20260926120000_28_named_queries_postgres_text.sql).
-    -- Identity-assigned (looked up by unique `name`).
+    -- Fixed ids 1-99 like every other seed block (the app looks rows up by unique `name`).
     -- max_subbatch_result's @record_date is always MM/DD/YYYY (from {record.date}); TO_DATE
     -- keeps it DateStyle-independent and NULLIF makes an empty date match no rows (#28).
-    INSERT INTO named_queries (name, description, sql, params, result_type, created_at, updated_at) VALUES
-        ('fil_category_for_pn', 'Comments of active Attachments for a given part number',
+    INSERT INTO named_queries (id, name, description, sql, params, result_type, created_at, updated_at) VALUES
+        (1, 'fil_category_for_pn', 'Comments of active Attachments for a given part number',
          'SELECT comment FROM part_attachment WHERE part_id = (SELECT id FROM part WHERE part_number = @pn) AND is_active = TRUE',
          'pn', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('parts_matching', 'Part numbers matching a LIKE pattern (caller supplies wildcards)',
+        (2, 'parts_matching', 'Part numbers matching a LIKE pattern (caller supplies wildcards)',
          'SELECT part_number FROM part WHERE part_number LIKE @pattern AND is_active = TRUE ORDER BY part_number DESC',
          'pattern', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('pos_for_pn', 'PO numbers where a line item part number prefix matches (active = not soft-deleted)',
+        (3, 'pos_for_pn', 'PO numbers where a line item part number prefix matches (active = not soft-deleted)',
          'SELECT purchase_order.number FROM po_line LEFT JOIN purchase_order ON po_line.po_id = purchase_order.id WHERE po_line.part_number_snapshot LIKE @pn || ''%'' ORDER BY po_line.po_id DESC',
          'pn', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('bom_pn_by_item', 'Part number at a specific BOM item position for a given parent assembly PN',
+        (4, 'bom_pn_by_item', 'Part number at a specific BOM item position for a given parent assembly PN',
          'SELECT part_number, description FROM bom JOIN part ON bom.component_part_id = part.id WHERE bom.parent_part_id = (SELECT id FROM part WHERE part_number = @pn) AND bom.line_number = @item',
          'pn, item', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('pn_primary_attachment', 'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
+        (5, 'pn_primary_attachment', 'Primary attachment for any part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
          'SELECT part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.part_number = @pn AND part_attachment.is_active = TRUE ORDER BY CASE WHEN part.primary_attachment_id IS NOT NULL AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC LIMIT 1',
          'pn', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('form_primary_attachment', 'Primary attachment for the form''s own part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
+        (6, 'form_primary_attachment', 'Primary attachment for the form''s own part number via part.primary_attachment_id; falls back to lowest sort_order if no primary set.',
          'SELECT part_attachment.file_name, COALESCE(part_attachment.category, part_attachment.file_name) FROM part_attachment JOIN part ON part_attachment.part_id = part.id WHERE part.id = @pnid AND part_attachment.is_active = TRUE ORDER BY CASE WHEN part.primary_attachment_id IS NOT NULL AND part_attachment.id = part.primary_attachment_id THEN 0 ELSE 1 END, part_attachment.sort_order ASC LIMIT 1',
          'pnid', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('recent_serial_numbers_for_form', 'Most recent 20 serial numbers tested against a given form (active records only, newest first). Use a literal form_id to reference a different form than the current one.',
+        (7, 'recent_serial_numbers_for_form', 'Most recent 20 serial numbers tested against a given form (active records only, newest first). Use a literal form_id to reference a different form than the current one.',
          'SELECT serial_number FROM form_record WHERE form_id = @form_id AND is_active = TRUE ORDER BY CASE WHEN serial_number ~ ''^[0-9]+$'' THEN CAST(serial_number AS INTEGER) END DESC NULLS LAST, record_date DESC LIMIT 20',
          'form_id', 'multi', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
+        (8, 'max_subbatch_result', 'Highest integer result for a test step among active records on or before the given date. Prevents later batches from inflating the max when editing historical records.',
          'SELECT MAX(CASE WHEN r.result ~ ''^[0-9]+$'' THEN CAST(r.result AS INTEGER) END) FROM result r JOIN form_record tr ON r.form_record_id = tr.id WHERE r.form_row_id = @form_row_id AND tr.is_active = TRUE AND CAST(tr.record_date AS DATE) <= TO_DATE(NULLIF(@record_date, ''''), ''MM/DD/YYYY'')',
          'form_row_id, record_date', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
+        (9, 'vendor_pns_for_pn', 'Vendor part numbers and line item description from PO lines whose part number contains the search term (wildcard both sides).',
          'SELECT vendor_part_number, description FROM po_line WHERE part_number_snapshot LIKE ''%'' || @pn || ''%'' ORDER BY po_id DESC',
          'pn', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
-        ('revision_for_pn', 'Current revision of a part, by part number',
+        (10, 'revision_for_pn', 'Current revision of a part, by part number',
          'SELECT revision FROM part WHERE part_number = @pn AND is_active = TRUE',
          'pn', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00');
 

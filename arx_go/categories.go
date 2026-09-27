@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"arx/arx_go/models"
+	"arx/internal/parts"
 )
 
 // loadPartCategories caches the part_category rows on the Handler so the hot
@@ -27,46 +28,32 @@ func (h *Handler) loadPartCategories(ctx context.Context) {
 	h.update(func(s *runtimeState) { s.partCategories = cats })
 }
 
-// fetchPartCategories reads part_category in editor order (#194).
-func (h *Handler) fetchPartCategories(ctx context.Context) ([]models.Category, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
-		        is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible
-		 FROM %s ORDER BY sort_order, code`, h.cfg().PartCategoryTable()))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	cats := []models.Category{}
-	for rows.Next() {
-		var c models.Category
-		if err := rows.Scan(&c.Code, &c.Label, &c.Purchased, &c.BOM, &c.Orders, &c.Pricing,
-			&c.MfgParts, &c.Suppliers, &c.Inventory); err != nil {
-			return nil, err
-		}
-		cats = append(cats, c)
-	}
-	return cats, rows.Err()
+func (h *Handler) parts() *parts.Service { return parts.New(handlerDB{h}) }
+
+// modelCategory and serviceCategory convert between the parts service's flat
+// Category and models.Category (which embeds CategoryTabs).
+func modelCategory(c parts.Category) models.Category {
+	return models.Category{Code: c.Code, Label: c.Label, Purchased: c.Purchased, CategoryTabs: models.CategoryTabs{
+		BOM: c.BOM, Orders: c.Orders, Pricing: c.Pricing, MfgParts: c.MfgParts, Suppliers: c.Suppliers, Inventory: c.Inventory,
+	}}
 }
 
-// partCategoryUsage counts parts per category code.
-func (h *Handler) partCategoryUsage(ctx context.Context) (map[string]int, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT category, COUNT(*) FROM %s WHERE category IS NOT NULL GROUP BY category`, h.cfg().PartsTable()))
+func serviceCategory(c models.Category) parts.Category {
+	return parts.Category{Code: c.Code, Label: c.Label, Purchased: c.Purchased,
+		BOM: c.BOM, Orders: c.Orders, Pricing: c.Pricing, MfgParts: c.MfgParts, Suppliers: c.Suppliers, Inventory: c.Inventory}
+}
+
+// fetchPartCategories reads part_category in editor order (#194).
+func (h *Handler) fetchPartCategories(ctx context.Context) ([]models.Category, error) {
+	cs, err := h.parts().ListCategories(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	usage := map[string]int{}
-	for rows.Next() {
-		var code string
-		var n int
-		if err := rows.Scan(&code, &n); err != nil {
-			return nil, err
-		}
-		usage[code] = n
+	cats := make([]models.Category, 0, len(cs))
+	for _, c := range cs {
+		cats = append(cats, modelCategory(c))
 	}
-	return usage, rows.Err()
+	return cats, nil
 }
 
 // categoriesInUse lists, sorted, the used codes that keep would remove.
@@ -84,53 +71,18 @@ func categoriesInUse(usage map[string]int, keep map[string]bool) []string {
 // savePartCategories upserts cats (in order) and deletes codes not in cats, in
 // one transaction. FK_part_category rejects deleting a code a part still uses.
 func (h *Handler) savePartCategories(ctx context.Context, cats []models.Category) error {
-	tbl := h.cfg().PartCategoryTable()
 	tx, err := h.beginTx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`SELECT code FROM %s`, tbl))
-	if err != nil {
+	svcCats := make([]parts.Category, 0, len(cats))
+	for _, c := range cats {
+		svcCats = append(svcCats, serviceCategory(c))
+	}
+	if err := parts.New(tx).SaveCategories(ctx, svcCats); err != nil {
 		return err
-	}
-	var existing []string
-	for rows.Next() {
-		var code string
-		if err := rows.Scan(&code); err != nil {
-			rows.Close()
-			return err
-		}
-		existing = append(existing, code)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	keep := map[string]bool{}
-	for i, c := range cats {
-		keep[c.Code] = true
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-			INSERT INTO %s (code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
-			                is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible, sort_order)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			ON CONFLICT (code) DO UPDATE SET label=EXCLUDED.label, is_purchased=EXCLUDED.is_purchased,
-			  is_bom_visible=EXCLUDED.is_bom_visible, is_orders_visible=EXCLUDED.is_orders_visible,
-			  is_pricing_visible=EXCLUDED.is_pricing_visible, is_mfg_parts_visible=EXCLUDED.is_mfg_parts_visible,
-			  is_suppliers_visible=EXCLUDED.is_suppliers_visible, is_inventory_visible=EXCLUDED.is_inventory_visible,
-			  sort_order=EXCLUDED.sort_order, updated_at=now()`, tbl),
-			c.Code, c.Label, c.Purchased, c.BOM, c.Orders, c.Pricing, c.MfgParts, c.Suppliers, c.Inventory, i); err != nil {
-			return err
-		}
-	}
-	for _, code := range existing {
-		if !keep[code] {
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE code=$1`, tbl), code); err != nil {
-				return err
-			}
-		}
 	}
 	return tx.Commit()
 }
@@ -178,7 +130,7 @@ func (h *Handler) SettingsCategoriesSave(w http.ResponseWriter, r *http.Request)
 		settingsError("At least one part category is required.")
 		return
 	}
-	usage, err := h.partCategoryUsage(r.Context())
+	usage, err := h.parts().CategoryUsage(r.Context())
 	if err != nil {
 		settingsError("Could not save categories: " + err.Error())
 		return

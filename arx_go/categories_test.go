@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"testing"
 
+	"arx/arx_go/models"
 	arxbase "arx/internal/config"
 )
 
@@ -29,6 +31,17 @@ func TestSettingsCategoriesSave_NoDatabaseRedirects(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); loc != "/settings" {
 		t.Errorf("SettingsCategoriesSave(no db): redirect Location = %q, want \"/settings\"", loc)
+	}
+}
+
+// TestLoadPartCategories_NoDatabaseUsesDefaults: with no DB connected the cache
+// falls back to the built-in defaults without touching the database.
+func TestLoadPartCategories_NoDatabaseUsesDefaults(t *testing.T) {
+	h := New(nil, &arxbase.Config{}, templatesFS, nil)
+	h.update(func(s *runtimeState) { s.partCategories = nil })
+	h.loadPartCategories(context.Background())
+	if got, want := h.st().partCategories, models.DefaultCategories(); !reflect.DeepEqual(got, want) {
+		t.Errorf("partCategories = %+v, want DefaultCategories", got)
 	}
 }
 

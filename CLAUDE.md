@@ -18,7 +18,7 @@
 
 Parts master/purchasing system for engineering/manufacturing shop. One Go binary (`arx_go/Arx.exe`):
 - `arx_go/` — catalog, suppliers, POs, test records. Port 4568. `package main`.
-- `internal/` — config/DB/URL utils, sqlc-generated queries, domain services. `package config / db / urlutil / folderpick / migrate / dbq / contacts`.
+- `internal/` — config/DB/URL utils, sqlc-generated queries, domain services. `package config / db / urlutil / folderpick / migrate / dbq / contacts / parts`.
 
 Archived/removed, ignore in history: Ruby Sinatra apps, VBA workbooks (`archive/`), old separate `parts_master_go/`/`test_records_go/`.
 
@@ -37,7 +37,7 @@ WSL: a native Linux Go toolchain (not the Windows `go.exe`) works directly again
 - No bulk file rewrites (`gofmt -w`, `sed -i`). Repo is NOT gofmt-clean. `.gitattributes` normalizes source files to LF in-repo (`* text=auto eol=lf`, plus explicit `eol=lf` for `.go`/`.sql`/`.md`/etc., `eol=crlf` for `.bat`/`.ps1`/`.cmd`), but a whole-file rewrite still reflows unrelated code and produces a noisy diff that violates surgical-change discipline — edit via the Edit tool instead (`replace_all` per file for bulk renames). Verify builds with `build.bat`, not gofmt.
 
 ## Key facts
-arx_go: package main, port 4568, go-chi router, getlantern/systray, templates `templates/{contacts,parts,pos,records,reports,settings,shared,suppliers}/` embedded (one nav tab per subfolder, shared layout). internal: package config/db/urlutil/folderpick/migrate/dbq/contacts.
+arx_go: package main, port 4568, go-chi router, getlantern/systray, templates `templates/{contacts,parts,pos,records,reports,settings,shared,suppliers}/` embedded (one nav tab per subfolder, shared layout). internal: package config/db/urlutil/folderpick/migrate/dbq/contacts/parts.
 
 ## Config load order (later wins)
 1. `.env` (godotenv, from `../.env` then `.env`) 2. env vars 3. `config/local.json` (always wins; gitignored) 4. per-user secrets store.
@@ -84,7 +84,7 @@ Driver `github.com/jackc/pgx/v5/stdlib` (`sql.Open("pgx", dsn)`). DSN: `postgres
 Column-name gotcha: Postgres folds unquoted identifiers to lowercase — scan by position, and match constraint names in errors case-insensitively.
 
 ## Data access (sqlc, #190)
-Converting one domain at a time (done: contacts). Per domain: queries in `internal/<domain>/<domain>.sql` (plain table names; add the file to `sqlc.yaml`'s `queries`), service in `internal/<domain>` over the generated `internal/dbq`, handlers in `arx_go` only parse/call/render. Run `sqlc generate` (repo root; installed at `~/go/bin`) after editing a query or the DDL and commit `internal/dbq`; CI's `sqlc diff` fails on stale code. Handlers pass `handlerDB{h}` (or a `*txLogger` inside a tx) as the `dbq.DBTX`, so debug logging still applies. `sqlc.yaml` overrides give `int` for `int4` and pointers for nullable int/timestamp/date columns; `COALESCE(col, '')` where Go flattens NULL to `""`; `sqlc.arg(x)::text`/`::int` to get plain Go types for params on nullable columns. Delete a `cfg.*Table()` helper once its last caller is converted.
+Converting one domain at a time (done: contacts, part categories). Per domain: queries in `internal/<domain>/<domain>.sql` (plain table names; add the file to `sqlc.yaml`'s `queries`), service in `internal/<domain>` over the generated `internal/dbq`, handlers in `arx_go` only parse/call/render. Run `sqlc generate` (repo root; installed at `~/go/bin`) after editing a query or the DDL and commit `internal/dbq`; CI's `sqlc diff` fails on stale code. Handlers pass `handlerDB{h}` (or a `*txLogger` inside a tx) as the `dbq.DBTX`, so debug logging still applies. `sqlc.yaml` overrides give `int` for `int4` and pointers for nullable int/timestamp/date columns; `COALESCE(col, '')` where Go flattens NULL to `""`; `sqlc.arg(x)::text`/`::int` to get plain Go types for params on nullable columns. Delete a `cfg.*Table()` helper once its last caller is converted. Add each converted handler file to `convertedFiles` in `arx_go/sqlc_converted_lint_test.go`.
 
 ## DB schema
 Naming/DDL rules: `SQL/schema.md`. ER diagram: `SQL/schema_diagram.md`. Per-table reference (PKs/trigger side-effects/column semantics): `SQL/schema.md#table-reference`. All DDL in `SQL/postgres/*.sql` (reference/migration, not auto-run).
