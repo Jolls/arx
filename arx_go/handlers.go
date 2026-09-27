@@ -625,6 +625,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["AppVersion"] = s.cfg.Version
 		m["SchemaMismatch"] = s.schemaMismatch
 		m["DBConnError"] = s.dbConnError
+		m["TestMode"] = s.cfg.TestMode
 		m["CurrentUser"] = h.currentUser(r)
 		m["UserLoc"] = h.userLocation(r)
 		m["CSRFToken"] = h.csrfToken(w, r)
