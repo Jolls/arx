@@ -4,11 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
-	"arx/arx_go/models"
+	"arx/internal/parts"
 )
 
 // ── PartMfgParts — GET /part/{id}/mfg-parts ─────────────────────────────────
@@ -47,7 +48,8 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "mfg-parts"); !ok {
+	p, ok := h.requireTab(w, r, id, "mfg-parts")
+	if !ok {
 		return
 	}
 	mfgID := strings.TrimSpace(r.FormValue("mfg_id"))
@@ -58,12 +60,12 @@ func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (part_id, mfg_id, mfg_part_number, description, is_active)
-		VALUES ($1, $2, $3, $4, TRUE)
-	`, h.cfg().MfgPartTable()),
-		id, mfgID, mpn, strings.TrimSpace(r.FormValue("description")),
-	)
+	mfg, err := strconv.Atoi(mfgID)
+	if err == nil {
+		err = h.parts().CreateMfgPart(r.Context(), parts.MfgPart{
+			PartID: p.ID, MfgID: mfg, MfgPartNumber: mpn, Description: strings.TrimSpace(r.FormValue("description")),
+		})
+	}
 	if err != nil {
 		h.renderMfgPartsWithError(w, r, id, "Error adding manufacturer part: "+err.Error())
 		return
@@ -81,14 +83,12 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mp models.MfgPart
-	var mpn, desc sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_id, mfg_id, mfg_part_number, description
-		FROM %s WHERE id = $1 AND part_id = $2 AND is_active = TRUE
-	`, h.cfg().MfgPartTable()), mid, id).Scan(
-		&mp.ID, &mp.PartID, &mp.MfgID, &mpn, &desc,
-	)
+	mfgPartID, err := strconv.Atoi(mid)
+	if err != nil {
+		h.renderError(w, r, "Manufacturer part not found")
+		return
+	}
+	mp, err := h.parts().GetMfgPart(r.Context(), mfgPartID, p.ID)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Manufacturer part not found")
 		return
@@ -97,8 +97,6 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving manufacturer part: "+err.Error())
 		return
 	}
-	mp.MfgPartNumber = mpn.String
-	mp.Description = desc.String
 
 	mfgParts, err := h.fetchMfgParts(r, id)
 	if err != nil {
@@ -128,10 +126,15 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "mfg-parts"); !ok {
+	p, ok := h.requireTab(w, r, id, "mfg-parts")
+	if !ok {
 		return
 	}
-	mid := chi.URLParam(r, "mid")
+	mfgPartID, err := strconv.Atoi(chi.URLParam(r, "mid"))
+	if err != nil {
+		h.renderError(w, r, "Manufacturer part not found")
+		return
+	}
 	mfgID := strings.TrimSpace(r.FormValue("mfg_id"))
 	mpn := strings.TrimSpace(r.FormValue("mfg_part_number"))
 
@@ -140,12 +143,13 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET mfg_id=$1, mfg_part_number=$2, description=$3
-		WHERE id=$4 AND part_id=$5 AND is_active=TRUE
-	`, h.cfg().MfgPartTable()),
-		mfgID, mpn, strings.TrimSpace(r.FormValue("description")), mid, id,
-	)
+	mfg, err := strconv.Atoi(mfgID)
+	if err == nil {
+		err = h.parts().UpdateMfgPart(r.Context(), parts.MfgPart{
+			ID: mfgPartID, PartID: p.ID, MfgID: mfg, MfgPartNumber: mpn,
+			Description: strings.TrimSpace(r.FormValue("description")),
+		})
+	}
 	if err != nil {
 		h.renderError(w, r, "Error updating manufacturer part: "+err.Error())
 		return
@@ -157,15 +161,17 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "mfg-parts"); !ok {
+	p, ok := h.requireTab(w, r, id, "mfg-parts")
+	if !ok {
 		return
 	}
-	mid := chi.URLParam(r, "mid")
-
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET is_active=FALSE WHERE id=$1 AND part_id=$2
-	`, h.cfg().MfgPartTable()), mid, id)
+	mfgPartID, err := strconv.Atoi(chi.URLParam(r, "mid"))
 	if err != nil {
+		h.renderError(w, r, "Manufacturer part not found")
+		return
+	}
+
+	if err := h.parts().DeleteMfgPart(r.Context(), mfgPartID, p.ID); err != nil {
 		h.renderError(w, r, "Error deleting manufacturer part: "+err.Error())
 		return
 	}
@@ -174,62 +180,16 @@ func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-func (h *Handler) fetchMfgParts(r *http.Request, partID string) ([]models.MfgPart, error) {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT mp.id, mp.part_id, mp.mfg_id, mp.mfg_part_number, mp.description, c.name
-		FROM %s mp
-		JOIN %s c ON mp.mfg_id = c.id
-		WHERE mp.part_id = $1 AND mp.is_active = TRUE
-		ORDER BY c.name, mp.mfg_part_number
-	`, h.cfg().MfgPartTable(), h.cfg().CompanyTable()), partID)
+func (h *Handler) fetchMfgParts(r *http.Request, partID string) ([]parts.MfgPart, error) {
+	id, err := strconv.Atoi(partID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var list []models.MfgPart
-	for rows.Next() {
-		var mp models.MfgPart
-		var mpn, desc, mfgName sql.NullString
-		if err := rows.Scan(&mp.ID, &mp.PartID, &mp.MfgID, &mpn, &desc, &mfgName); err != nil {
-			return nil, err
-		}
-		mp.MfgPartNumber = mpn.String
-		mp.Description = desc.String
-		mp.MfgName = mfgName.String
-		mp.IsActive = true
-		list = append(list, mp)
-	}
-	return list, rows.Err()
+	return h.parts().ListMfgParts(r.Context(), id)
 }
 
-type manufacturerOption struct {
-	ID   int
-	Name string
-}
-
-func (h *Handler) fetchManufacturers(r *http.Request) ([]manufacturerOption, error) {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, name FROM %s
-		WHERE is_manufacturer = TRUE AND is_active = TRUE
-		ORDER BY name
-	`, h.cfg().CompanyTable()))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []manufacturerOption
-	for rows.Next() {
-		var m manufacturerOption
-		var name sql.NullString
-		if err := rows.Scan(&m.ID, &name); err != nil {
-			return nil, err
-		}
-		m.Name = name.String
-		list = append(list, m)
-	}
-	return list, rows.Err()
+func (h *Handler) fetchManufacturers(r *http.Request) ([]parts.Manufacturer, error) {
+	return h.parts().ListManufacturers(r.Context())
 }
 
 // renderMfgPartsWithError re-renders the mfg_parts page with an error message.

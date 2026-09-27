@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/internal/parts"
 )
 
 // ── PartSourcing — GET /part/{id}/suppliers ──────────────────────────────────
@@ -32,7 +33,7 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 	}
 	units, _ := h.fetchUnits(r.Context())
 	digiKeyEnabled := h.cfg().DigiKeyEnabled()
-	var manufacturers []manufacturerOption
+	var manufacturers []parts.Manufacturer
 	if digiKeyEnabled {
 		// Only fetched for the DigiKey manufacturer picker — skip the query
 		// entirely on every other Sourcing tab render.
@@ -359,7 +360,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	units, _ := h.fetchUnits(r.Context())
 	digiKeyEnabled := h.cfg().DigiKeyEnabled()
-	var manufacturers []manufacturerOption
+	var manufacturers []parts.Manufacturer
 	if digiKeyEnabled {
 		manufacturers, _ = h.fetchManufacturers(r)
 	}
@@ -576,7 +577,7 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	links, _ := h.fetchSupplierLinks(r, partID)
 	units, _ := h.fetchUnits(r.Context())
 	digiKeyEnabled := h.cfg().DigiKeyEnabled()
-	var manufacturers []manufacturerOption
+	var manufacturers []parts.Manufacturer
 	if digiKeyEnabled {
 		manufacturers, _ = h.fetchManufacturers(r)
 	}

@@ -27,3 +27,33 @@ ON CONFLICT (code) DO UPDATE SET label=EXCLUDED.label, is_purchased=EXCLUDED.is_
 
 -- name: DeletePartCategory :exec
 DELETE FROM part_category WHERE code = $1;
+
+-- name: ListMfgParts :many
+SELECT mp.id, mp.part_id, mp.mfg_id, mp.mfg_part_number, COALESCE(mp.description, '') AS description,
+       mp.is_active, c.name AS mfg_name
+FROM mfg_part mp
+JOIN company c ON mp.mfg_id = c.id
+WHERE mp.part_id = $1 AND mp.is_active = TRUE
+ORDER BY c.name, mp.mfg_part_number;
+
+-- name: GetMfgPart :one
+SELECT id, part_id, mfg_id, mfg_part_number, COALESCE(description, '') AS description
+FROM mfg_part
+WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id) AND is_active = TRUE;
+
+-- name: CreateMfgPart :exec
+INSERT INTO mfg_part (part_id, mfg_id, mfg_part_number, description, is_active)
+VALUES (sqlc.arg(part_id), sqlc.arg(mfg_id), sqlc.arg(mfg_part_number), sqlc.arg(description)::text, TRUE);
+
+-- name: UpdateMfgPart :exec
+UPDATE mfg_part SET mfg_id = sqlc.arg(mfg_id), mfg_part_number = sqlc.arg(mfg_part_number),
+  description = sqlc.arg(description)::text
+WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id) AND is_active = TRUE;
+
+-- name: DeleteMfgPart :exec
+UPDATE mfg_part SET is_active = FALSE WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id);
+
+-- name: ListManufacturers :many
+SELECT id, name FROM company
+WHERE is_manufacturer = TRUE AND is_active = TRUE
+ORDER BY name;

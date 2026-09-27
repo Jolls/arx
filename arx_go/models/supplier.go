@@ -62,14 +62,3 @@ type SupplierPart struct {
 	PurchaseUnitIsExplicit bool     // true = uom_id set on supplier_part; false = inherited from part.uom_id
 	POLinks                []string // populated post-query — PO numbers placed with this vendor for the part (supplier parts view)
 }
-
-type MfgPart struct {
-	ID            int
-	PartID        int
-	MfgID         int
-	MfgPartNumber string
-	Description   string
-	IsActive      bool
-	// joined
-	MfgName string
-}
