@@ -262,6 +262,184 @@ func TestIntegration_MfgPartUpdate_WrongPartScope(t *testing.T) {
 	}
 }
 
+// createMfgPart posts MfgPartCreate for partID. Callers defer
+// deleteMfgParts(partID) before the part/supplier cleanups run (FK order).
+func createMfgPart(h *Handler, partID int, form url.Values) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	h.MfgPartCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/mfg-parts", partID), form), partID))
+	return rec
+}
+
+// deleteMfgParts hard-deletes every mfg_part row on partID.
+func deleteMfgParts(ctx context.Context, h *Handler, partID int) {
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", h.cfg().MfgPartTable()), partID)
+}
+
+// TestIntegration_MfgPartCreate pins MfgPartCreate's stored row: trimmed MPN
+// and description, the part and manufacturer ids, and is_active (#220).
+func TestIntegration_MfgPartCreate(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, pc := seedPart(t, h, ctx, "BUY")
+	defer pc()
+	mfgID, mc := seedSupplier(t, h, ctx)
+	defer mc()
+	defer deleteMfgParts(ctx, h, partID)
+
+	mpn := smokeUniq("SMOKE-MPN")
+	rec := createMfgPart(h, partID, url.Values{
+		"mfg_id":          {strconv.Itoa(mfgID)},
+		"mfg_part_number": {"  " + mpn + "  "},
+		"description":     {"  created desc  "},
+	})
+	assert302(t, "MfgPartCreate", rec)
+
+	var gotMfgID int
+	var gotMPN, gotDesc string
+	var active bool
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT mfg_id, mfg_part_number, description, is_active FROM %s WHERE part_id=$1`, h.cfg().MfgPartTable()), partID,
+	).Scan(&gotMfgID, &gotMPN, &gotDesc, &active); err != nil {
+		t.Fatalf("select created mfg_part: %v", err)
+	}
+	if gotMfgID != mfgID || gotMPN != mpn || gotDesc != "created desc" || !active {
+		t.Errorf("mfg_part = mfg_id=%d mpn=%q desc=%q active=%v, want mfg_id=%d mpn=%q desc=%q active=true",
+			gotMfgID, gotMPN, gotDesc, active, mfgID, mpn, "created desc")
+	}
+}
+
+// TestIntegration_MfgPartCreate_EmptyDescription pins that a blank description
+// is stored as an empty string rather than NULL (#220).
+func TestIntegration_MfgPartCreate_EmptyDescription(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, pc := seedPart(t, h, ctx, "BUY")
+	defer pc()
+	mfgID, mc := seedSupplier(t, h, ctx)
+	defer mc()
+	defer deleteMfgParts(ctx, h, partID)
+
+	rec := createMfgPart(h, partID, url.Values{
+		"mfg_id":          {strconv.Itoa(mfgID)},
+		"mfg_part_number": {smokeUniq("SMOKE-MPN")},
+	})
+	assert302(t, "MfgPartCreate empty description", rec)
+
+	var isNull bool
+	var desc string
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT description IS NULL, COALESCE(description, '') FROM %s WHERE part_id=$1`, h.cfg().MfgPartTable()), partID,
+	).Scan(&isNull, &desc); err != nil {
+		t.Fatalf("select created mfg_part: %v", err)
+	}
+	if isNull || desc != "" {
+		t.Errorf("description null=%v value=%q, want non-NULL ''", isNull, desc)
+	}
+}
+
+// TestIntegration_MfgPartCreate_MissingRequired verifies the required-fields
+// guard re-renders without inserting (#220).
+func TestIntegration_MfgPartCreate_MissingRequired(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, pc := seedPart(t, h, ctx, "BUY")
+	defer pc()
+	mfgID, mc := seedSupplier(t, h, ctx)
+	defer mc()
+	defer deleteMfgParts(ctx, h, partID)
+
+	rec := createMfgPart(h, partID, url.Values{
+		"mfg_id":          {strconv.Itoa(mfgID)},
+		"mfg_part_number": {"  "},
+	})
+	assertStatus(t, "MfgPartCreate missing required", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "Manufacturer and MPN are required") {
+		t.Errorf("MfgPartCreate missing required: body missing %q", "Manufacturer and MPN are required")
+	}
+
+	var n int
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE part_id=$1`, h.cfg().MfgPartTable()), partID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count mfg_part: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("mfg_part rows = %d after rejected create, want 0", n)
+	}
+}
+
+// TestIntegration_MfgPartCreate_Duplicate verifies UQ_mfg_part_combo surfaces
+// as a re-rendered error and leaves one active row (#220).
+func TestIntegration_MfgPartCreate_Duplicate(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, pc := seedPart(t, h, ctx, "BUY")
+	defer pc()
+	mfgID, mc := seedSupplier(t, h, ctx)
+	defer mc()
+	defer deleteMfgParts(ctx, h, partID)
+
+	form := url.Values{
+		"mfg_id":          {strconv.Itoa(mfgID)},
+		"mfg_part_number": {smokeUniq("SMOKE-MPN")},
+	}
+	assert302(t, "MfgPartCreate first", createMfgPart(h, partID, form))
+	rec := createMfgPart(h, partID, form)
+	assertStatus(t, "MfgPartCreate duplicate", rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "Error adding manufacturer part") {
+		t.Errorf("MfgPartCreate duplicate: body missing %q", "Error adding manufacturer part")
+	}
+
+	var n int
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE part_id=$1 AND is_active`, h.cfg().MfgPartTable()), partID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count mfg_part: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("active mfg_part rows = %d after duplicate create, want 1", n)
+	}
+}
+
+// TestIntegration_MfgPartDelete_WrongPartScope documents current behavior: a
+// delete under the wrong part id is a silent no-op (#220).
+func TestIntegration_MfgPartDelete_WrongPartScope(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, pc := seedPart(t, h, ctx, "BUY")
+	defer pc()
+	otherPartID, opc := seedPart(t, h, ctx, "BUY")
+	defer opc()
+	mfgID, mc := seedSupplier(t, h, ctx)
+	defer mc()
+	mid, mpc := seedMfgPart(t, h, ctx, partID, mfgID)
+	defer mpc()
+
+	rec := httptest.NewRecorder()
+	h.MfgPartDelete(rec, withIDAndMidID(postForm(fmt.Sprintf("/part/%d/mfg-parts/%d/delete", otherPartID, mid), nil), otherPartID, mid))
+	assert302(t, "MfgPartDelete wrong part scope", rec)
+
+	var active bool
+	if err := h.queryRowContext(ctx, fmt.Sprintf(
+		`SELECT is_active FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid,
+	).Scan(&active); err != nil {
+		t.Fatalf("select mfg_part: %v", err)
+	}
+	if !active {
+		t.Errorf("mfg_part %d is_active = false after wrong-part delete, want true (silent no-op)", mid)
+	}
+}
+
 // TestIntegration_MfgPartDelete verifies the soft-delete only affects the
 // targeted row, not a sibling mfg_part on the same part (#817).
 func TestIntegration_MfgPartDelete(t *testing.T) {

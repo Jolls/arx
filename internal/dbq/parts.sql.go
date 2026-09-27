@@ -44,6 +44,42 @@ func (q *Queries) CountPartsByCategory(ctx context.Context) ([]CountPartsByCateg
 	return items, nil
 }
 
+const createMfgPart = `-- name: CreateMfgPart :exec
+INSERT INTO mfg_part (part_id, mfg_id, mfg_part_number, description, is_active)
+VALUES ($1, $2, $3, $4::text, TRUE)
+`
+
+type CreateMfgPartParams struct {
+	PartID        int
+	MfgID         int
+	MfgPartNumber string
+	Description   string
+}
+
+func (q *Queries) CreateMfgPart(ctx context.Context, arg CreateMfgPartParams) error {
+	_, err := q.db.ExecContext(ctx, createMfgPart,
+		arg.PartID,
+		arg.MfgID,
+		arg.MfgPartNumber,
+		arg.Description,
+	)
+	return err
+}
+
+const deleteMfgPart = `-- name: DeleteMfgPart :exec
+UPDATE mfg_part SET is_active = FALSE WHERE id = $1 AND part_id = $2
+`
+
+type DeleteMfgPartParams struct {
+	ID     int
+	PartID int
+}
+
+func (q *Queries) DeleteMfgPart(ctx context.Context, arg DeleteMfgPartParams) error {
+	_, err := q.db.ExecContext(ctx, deleteMfgPart, arg.ID, arg.PartID)
+	return err
+}
+
 const deletePartCategory = `-- name: DeletePartCategory :exec
 DELETE FROM part_category WHERE code = $1
 `
@@ -51,6 +87,122 @@ DELETE FROM part_category WHERE code = $1
 func (q *Queries) DeletePartCategory(ctx context.Context, code string) error {
 	_, err := q.db.ExecContext(ctx, deletePartCategory, code)
 	return err
+}
+
+const getMfgPart = `-- name: GetMfgPart :one
+SELECT id, part_id, mfg_id, mfg_part_number, COALESCE(description, '') AS description
+FROM mfg_part
+WHERE id = $1 AND part_id = $2 AND is_active = TRUE
+`
+
+type GetMfgPartParams struct {
+	ID     int
+	PartID int
+}
+
+type GetMfgPartRow struct {
+	ID            int
+	PartID        int
+	MfgID         int
+	MfgPartNumber string
+	Description   string
+}
+
+func (q *Queries) GetMfgPart(ctx context.Context, arg GetMfgPartParams) (GetMfgPartRow, error) {
+	row := q.db.QueryRowContext(ctx, getMfgPart, arg.ID, arg.PartID)
+	var i GetMfgPartRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.MfgID,
+		&i.MfgPartNumber,
+		&i.Description,
+	)
+	return i, err
+}
+
+const listManufacturers = `-- name: ListManufacturers :many
+SELECT id, name FROM company
+WHERE is_manufacturer = TRUE AND is_active = TRUE
+ORDER BY name
+`
+
+type ListManufacturersRow struct {
+	ID   int
+	Name string
+}
+
+func (q *Queries) ListManufacturers(ctx context.Context) ([]ListManufacturersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listManufacturers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListManufacturersRow
+	for rows.Next() {
+		var i ListManufacturersRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMfgParts = `-- name: ListMfgParts :many
+SELECT mp.id, mp.part_id, mp.mfg_id, mp.mfg_part_number, COALESCE(mp.description, '') AS description,
+       mp.is_active, c.name AS mfg_name
+FROM mfg_part mp
+JOIN company c ON mp.mfg_id = c.id
+WHERE mp.part_id = $1 AND mp.is_active = TRUE
+ORDER BY c.name, mp.mfg_part_number
+`
+
+type ListMfgPartsRow struct {
+	ID            int
+	PartID        int
+	MfgID         int
+	MfgPartNumber string
+	Description   string
+	IsActive      bool
+	MfgName       string
+}
+
+func (q *Queries) ListMfgParts(ctx context.Context, partID int) ([]ListMfgPartsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMfgParts, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMfgPartsRow
+	for rows.Next() {
+		var i ListMfgPartsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartID,
+			&i.MfgID,
+			&i.MfgPartNumber,
+			&i.Description,
+			&i.IsActive,
+			&i.MfgName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPartCategories = `-- name: ListPartCategories :many
@@ -130,6 +282,31 @@ func (q *Queries) ListPartCategoryCodes(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMfgPart = `-- name: UpdateMfgPart :exec
+UPDATE mfg_part SET mfg_id = $1, mfg_part_number = $2,
+  description = $3::text
+WHERE id = $4 AND part_id = $5 AND is_active = TRUE
+`
+
+type UpdateMfgPartParams struct {
+	MfgID         int
+	MfgPartNumber string
+	Description   string
+	ID            int
+	PartID        int
+}
+
+func (q *Queries) UpdateMfgPart(ctx context.Context, arg UpdateMfgPartParams) error {
+	_, err := q.db.ExecContext(ctx, updateMfgPart,
+		arg.MfgID,
+		arg.MfgPartNumber,
+		arg.Description,
+		arg.ID,
+		arg.PartID,
+	)
+	return err
 }
 
 const upsertPartCategory = `-- name: UpsertPartCategory :exec
