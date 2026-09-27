@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2026-09-26
+### Changed
+- Data-access layer, first domain: contacts queries live in `internal/contacts/contacts.sql` and run through sqlc-generated typed Go (`internal/dbq`, config `sqlc.yaml`) instead of `fmt.Sprintf` SQL in handlers; CI fails when the generated code is stale; a non-numeric contact id in the URL shows "Contact not found" ([#190](https://github.com/Jolls/arx/issues/190))
+
 ## [0.8.6] - 2026-09-26
 ### Fixed
 - Reports pages (and any page rendered via the shared layout) now show the test-mode header when Test Mode is on ([#212](https://github.com/Jolls/arx/issues/212))

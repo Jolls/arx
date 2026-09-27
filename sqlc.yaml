@@ -1,0 +1,62 @@
+# sqlc config (#190). Regenerate internal/dbq after editing a query file or the DDL:
+#   sqlc generate
+# CI runs `sqlc diff` and fails when the generated code is stale.
+# schema: the reference DDL in build_schema.sh table order (the seed files aren't DDL, so the
+# directory can't be listed as a whole). A query against a table missing here fails generation.
+version: "2"
+sql:
+  - engine: postgresql
+    schema:
+      - SQL/postgres/uom.sql
+      - SQL/postgres/contact.sql
+      - SQL/postgres/company_attachment.sql
+      - SQL/postgres/company.sql
+      - SQL/postgres/part_category.sql
+      - SQL/postgres/part.sql
+      - SQL/postgres/mfg_part.sql
+      - SQL/postgres/supplier_part.sql
+      - SQL/postgres/price.sql
+      - SQL/postgres/bom.sql
+      - SQL/postgres/attachment_category.sql
+      - SQL/postgres/part_attachment.sql
+      - SQL/postgres/purchase_order.sql
+      - SQL/postgres/po_line.sql
+      - SQL/postgres/inventory_transaction.sql
+      - SQL/postgres/build.sql
+      - SQL/postgres/lot.sql
+      - SQL/postgres/unit.sql
+      - SQL/postgres/form.sql
+      - SQL/postgres/form_row.sql
+      - SQL/postgres/form_record.sql
+      - SQL/postgres/result.sql
+      - SQL/postgres/genealogy.sql
+      - SQL/postgres/form_row_history.sql
+      - SQL/postgres/form_events.sql
+      - SQL/postgres/record_events.sql
+      - SQL/postgres/record_event_results.sql
+      - SQL/postgres/app_config.sql
+      - SQL/postgres/named_queries.sql
+      - SQL/postgres/users.sql
+      - SQL/postgres/schema_migrations.sql
+      - SQL/postgres/triggers.sql
+    queries:
+      - internal/contacts/contacts.sql
+    gen:
+      go:
+        package: dbq
+        out: internal/dbq
+        omit_unused_structs: true
+        # Match the Go models: int (not int32, so an oversized id errors in Postgres
+        # instead of wrapping) and pointers for NULL instead of sql.Null*.
+        overrides:
+          - db_type: pg_catalog.int4
+            go_type: int
+          - db_type: pg_catalog.int4
+            nullable: true
+            go_type: { type: int, pointer: true }
+          - db_type: timestamptz
+            nullable: true
+            go_type: { import: time, type: Time, pointer: true }
+          - db_type: date
+            nullable: true
+            go_type: { import: time, type: Time, pointer: true }

@@ -9,7 +9,7 @@ All new tables use snake_case. Do not extend the legacy prefix style for new wor
 ### Tables
 - Singular noun: `purchase_order`, not `purchase_orders`
 - All lowercase snake_case: `company_attachment`, `inventory_transaction`
-- New tables must exist in both prod and `ArxDev` (add DDL to `SQL/postgres/<table>.sql`, add it to the table list in `SQL/postgres/build_schema.sh`, and add a seed block to `SQL/postgres/seed_test_data.sql`, then re-run it)
+- New tables must exist in both prod and `ArxDev` (add DDL to `SQL/postgres/<table>.sql`, add it to the table list in `SQL/postgres/build_schema.sh` and the `schema` list in `sqlc.yaml`, and add a seed block to `SQL/postgres/seed_test_data.sql`, then re-run it)
 
 ### Columns
 - All lowercase snake_case
@@ -50,7 +50,16 @@ below for each table's old name and abbreviation.
 `TEST_MODE=true` points the DSN at the `ArxDev` database instead of prod. Table names are
 identical in both databases — prod vs test is a database-level distinction, not a name suffix.
 `cfg.*Table()` helpers return bare names (`part`, `company`, etc.) regardless of test mode.
-Never hardcode a table name in Go — always call the helper.
+They are being retired domain by domain (#190): queries converted to sqlc write plain table
+names. Code not yet converted still calls the helper.
+
+## sqlc (#190)
+
+Converted domains keep their queries in `internal/<domain>/<domain>.sql`; `sqlc generate`
+(repo root, config in `sqlc.yaml`) turns them into typed Go in `internal/dbq`, checked against
+the reference DDL in `SQL/postgres/*.sql`. Commit the generated code; CI runs `sqlc diff` and
+fails when it is stale. After a schema change, regenerate too: a renamed or retyped column
+becomes a generation or compile error instead of a runtime one. Converted so far: contacts.
 
 ## Reference test data
 

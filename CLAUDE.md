@@ -18,7 +18,7 @@
 
 Parts master/purchasing system for engineering/manufacturing shop. One Go binary (`arx_go/Arx.exe`):
 - `arx_go/` — catalog, suppliers, POs, test records. Port 4568. `package main`.
-- `internal/` — config/DB/URL utils. `package config / db / urlutil / folderpick / migrate`.
+- `internal/` — config/DB/URL utils, sqlc-generated queries, domain services. `package config / db / urlutil / folderpick / migrate / dbq / contacts`.
 
 Archived/removed, ignore in history: Ruby Sinatra apps, VBA workbooks (`archive/`), old separate `parts_master_go/`/`test_records_go/`.
 
@@ -37,7 +37,7 @@ WSL: a native Linux Go toolchain (not the Windows `go.exe`) works directly again
 - No bulk file rewrites (`gofmt -w`, `sed -i`). Repo is NOT gofmt-clean. `.gitattributes` normalizes source files to LF in-repo (`* text=auto eol=lf`, plus explicit `eol=lf` for `.go`/`.sql`/`.md`/etc., `eol=crlf` for `.bat`/`.ps1`/`.cmd`), but a whole-file rewrite still reflows unrelated code and produces a noisy diff that violates surgical-change discipline — edit via the Edit tool instead (`replace_all` per file for bulk renames). Verify builds with `build.bat`, not gofmt.
 
 ## Key facts
-arx_go: package main, port 4568, go-chi router, getlantern/systray, templates `templates/{contacts,parts,pos,records,reports,settings,shared,suppliers}/` embedded (one nav tab per subfolder, shared layout). internal: package config/db/urlutil/folderpick/migrate.
+arx_go: package main, port 4568, go-chi router, getlantern/systray, templates `templates/{contacts,parts,pos,records,reports,settings,shared,suppliers}/` embedded (one nav tab per subfolder, shared layout). internal: package config/db/urlutil/folderpick/migrate/dbq/contacts.
 
 ## Config load order (later wins)
 1. `.env` (godotenv, from `../.env` then `.env`) 2. env vars 3. `config/local.json` (always wins; gitignored) 4. per-user secrets store.
@@ -45,11 +45,11 @@ local.json resolves relative to Arx.exe's cwd — run from arx_go/ or use start.
 Secrets (`db_password`, `test_db_password`, `session_secret`) do NOT live in `config/local.json` — they're per-user in `%APPDATA%\Arx\local.json` (`~/.config/arx/local.json` on Linux, via `os.UserConfigDir()`), so a shared/OneDrive exe doesn't leak them across users (#732). `internal/config/secrets.go`: `LoadSecrets`/`SaveSecrets`/`SecretsConfig`. First run after upgrade migrates any secrets out of `config/local.json` into the per-user file and scrubs them from the shared file. DB password never in `.env`; first-run prompt via /settings saves it to the per-user store.
 
 ## Test mode
-`TEST_MODE=true` in .env swaps DB connection via Base's active-profile helpers; table names identical prod/dev, only connection changes. `cfg.*Table()` helpers always return bare names regardless of TestMode — never hardcode table names.
+`TEST_MODE=true` in .env swaps DB connection via Base's active-profile helpers; table names identical prod/dev, only connection changes. `cfg.*Table()` helpers always return bare names regardless of TestMode; being retired per domain as it moves to sqlc (#190, see Data access) — unconverted code still uses them.
 Full second connection profile (not just DB-name swap): TestDBServer/TestDBName/TestDBUser/TestDBPassword, each overriding prod counterpart only when non-empty (blank inherits prod) — so same-server name-only swap still works, but can also point at a fully separate server/creds (#672).
 Overrides: env (TEST_DB_SERVER/TEST_DB_NAME[default ArxDev]/TEST_DB_USER) or local.json (test_db_server/test_db_name/test_db_user); test password lives in the per-user secrets store (`%APPDATA%\Arx\local.json`, `test_db_password`), never in `config/local.json` or .env (#732). Editable in Settings UI Test Connection section.
 
-New table → update all 4 or test mode breaks (exception: `schema_migrations`, the migration ledger #48 — guarded DDL with no DROP, no seed block, no `*Table()` helper since only the migrate runner (#91) touches it): 1) `SQL/postgres/<table>.sql` DDL (same schema prod+ArxDev) + its entry in `SQL/postgres/build_schema.sh`'s table list 2) `SQL/postgres/seed_test_data.sql` DELETE+fixed-ID INSERT block (+ `setval` sequence reset) 3) `internal/config/config.go` add `*Table()` helper 4) `SQL/schema.md` table reference section.
+New table → update all 4 or test mode breaks (exception: `schema_migrations`, the migration ledger #48 — guarded DDL with no DROP, no seed block, no `*Table()` helper since only the migrate runner (#91) touches it): 1) `SQL/postgres/<table>.sql` DDL (same schema prod+ArxDev) + its entry in `SQL/postgres/build_schema.sh`'s table list and `sqlc.yaml`'s `schema` list 2) `SQL/postgres/seed_test_data.sql` DELETE+fixed-ID INSERT block (+ `setval` sequence reset) 3) `internal/config/config.go` add `*Table()` helper (only while an unconverted domain queries it) 4) `SQL/schema.md` table reference section.
 
 `main` is Postgres-only (#29); SQL Server/Azure lives on `release/0.7`, whose CLAUDE.md keeps the T-SQL/Azure migration rules. Every schema change ships a migration in `SQL/postgres/migrations/YYYYMMDDHHMMSS_<issue>_<description>.sql` (timestamp = authoring time) plus the edit to `SQL/postgres/*.sql` DDL + seed — `SQL/postgres/*.sql` is reference DDL, never auto-run. Migrations are goose files (#91): header comments, `-- +goose Up`, `-- +goose StatementBegin`, body, `-- +goose StatementEnd` as the last line. The runner wraps each file in one transaction and writes its `schema_migrations` row, so: no `BEGIN`/`COMMIT`, no `current_database()` guard, no `INSERT INTO schema_migrations`, no `-- +goose Down`/`NO TRANSACTION`. Still idempotent (`IF [NOT] EXISTS` / `information_schema` checks). Add the file's `sha256sum --text` line to `SQL/postgres/migrations/checksums.txt`; never edit a committed migration — write a new one. `TestMigrationsGooseFormat`/`TestMigrationChecksums` fail the build otherwise. Breaking migrations still bump `app_config.schema_version` too (different job: binary↔DB gate). Column renames must `CREATE OR REPLACE` plpgsql functions naming the column and patch `named_queries`. Details in `SQL/SCHEMA.md#migrations`. Fresh DB load: `bash SQL/postgres/build_schema.sh | psql ...` (also baselines the ledger).
 Running migrations: `go run ./arx_go/cmd/migrate status` / `... up` (repo root; logic in `internal/migrate`). Credentials only from `ARX_MIGRATE_DSN` (DDL-capable login; never app config/secrets); the app never auto-applies. You may run `status`/`up` against **ArxDev only**, and only when `ARX_MIGRATE_DSN` is already set in your environment — never construct, read, or echo it; never pass `--yes`; stop if the printed `Target:` database isn't ArxDev. If it's unset, ask the user to run it. A throwaway local container you created is fine. ArxProd stays off-limits.
@@ -82,6 +82,9 @@ Reseeding ArxDev is a human action — don't run SQL/postgres/seed_test_data.sql
 ## Database — Postgres
 Driver `github.com/jackc/pgx/v5/stdlib` (`sql.Open("pgx", dsn)`). DSN: `postgres://user:password@host:5432/MyDB?sslmode=require` (built by `Base.BuildDSN`; TLS always required). Placeholders are `$1, $2, ...`; named-query `@name` tokens are rewritten by `arxdb.RewriteNamedParams`.
 Column-name gotcha: Postgres folds unquoted identifiers to lowercase — scan by position, and match constraint names in errors case-insensitively.
+
+## Data access (sqlc, #190)
+Converting one domain at a time (done: contacts). Per domain: queries in `internal/<domain>/<domain>.sql` (plain table names; add the file to `sqlc.yaml`'s `queries`), service in `internal/<domain>` over the generated `internal/dbq`, handlers in `arx_go` only parse/call/render. Run `sqlc generate` (repo root; installed at `~/go/bin`) after editing a query or the DDL and commit `internal/dbq`; CI's `sqlc diff` fails on stale code. Handlers pass `handlerDB{h}` (or a `*txLogger` inside a tx) as the `dbq.DBTX`, so debug logging still applies. `sqlc.yaml` overrides give `int` for `int4` and pointers for nullable int/timestamp/date columns; `COALESCE(col, '')` where Go flattens NULL to `""`; `sqlc.arg(x)::text`/`::int` to get plain Go types for params on nullable columns. Delete a `cfg.*Table()` helper once its last caller is converted.
 
 ## DB schema
 Naming/DDL rules: `SQL/schema.md`. ER diagram: `SQL/schema_diagram.md`. Per-table reference (PKs/trigger side-effects/column semantics): `SQL/schema.md#table-reference`. All DDL in `SQL/postgres/*.sql` (reference/migration, not auto-run).
@@ -183,4 +186,4 @@ Closes #450
 Add a one-sentence resolution comment before closing.
 
 ## What NOT to touch
-SQL/postgres/*.sql = reference DDL only, not a migration runner (keep in sync but never auto-run). No DB password in .env. Never hardcode table names — use cfg.*Table(). Never query/connect ArxProd directly.
+SQL/postgres/*.sql = reference DDL only, not a migration runner (keep in sync but never auto-run). No DB password in .env. Unconverted (non-sqlc) code: never hardcode table names — use cfg.*Table(). Never edit `internal/dbq` by hand — `sqlc generate`. Never query/connect ArxProd directly.

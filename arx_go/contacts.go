@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
-	"arx/arx_go/models"
+	"arx/internal/contacts"
 )
+
+func (h *Handler) contacts() *contacts.Service { return contacts.New(handlerDB{h}) }
 
 func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "contacts/contacts.html", map[string]any{
@@ -36,53 +40,22 @@ func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
 		Notes    string `json:"notes"`
 		Active   bool   `json:"active"`
 	}
-	cn, su := h.cfg().ContactTable(), h.cfg().CompanyTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT cn.id, cn.company_id, cn.display_name, cn.email, cn.phone_1,
-		       cn.city, cn.state, cn.country, cn.website,
-		       cn.is_active, cn.notes, cn.updated_at, su.name
-		FROM %s cn
-		LEFT JOIN %s su ON cn.company_id = su.id
-		ORDER BY su.name, cn.display_name ASC
-	`, cn, su))
+	list, err := h.contacts().List(r.Context())
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
-	out := make([]row, 0)
-	for rows.Next() {
-		var c row
-		var cnsuid sql.NullInt64
-		var name, email, phone, city, state, country, web, notes, suName sql.NullString
-		var active sql.NullBool
-		var modified sql.NullTime
-		if err := rows.Scan(
-			&c.ID, &cnsuid, &name, &email, &phone,
-			&city, &state, &country, &web,
-			&active, &notes, &modified, &suName,
-		); err != nil {
-			serverError(w, "database error", err)
-			return
+	out := make([]row, 0, len(list))
+	for _, c := range list {
+		o := row{
+			ID: c.ID, SUID: c.CompanyID, Supplier: c.SupplierName, Name: c.DisplayName,
+			Email: c.Email, Country: c.Country, State: c.State, City: c.City,
+			Phone: c.Phone1, Web: c.Website, Notes: c.Notes, Active: c.IsActive,
 		}
-		if cnsuid.Valid {
-			v := int(cnsuid.Int64)
-			c.SUID = &v
+		if c.UpdatedAt != nil {
+			o.Modified = c.UpdatedAt.In(h.userLocation(r)).Format("2006-01-02")
 		}
-		c.Name = name.String
-		c.Email = email.String
-		c.Phone = phone.String
-		c.City = city.String
-		c.State = state.String
-		c.Country = country.String
-		c.Web = web.String
-		c.Notes = notes.String
-		c.Active = active.Bool
-		c.Supplier = suName.String
-		if modified.Valid {
-			c.Modified = modified.Time.In(h.userLocation(r)).Format("2006-01-02")
-		}
-		out = append(out, c)
+		out = append(out, o)
 	}
 	log.Printf("[rows] contacts: %d rows in %v", len(out), time.Since(start))
 	writeJSON(w, out)
@@ -97,7 +70,7 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 	h.setNavContext(w, r, fmt.Sprintf("/contact/%d", c.ID), c.DisplayName)
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
-	var siblings []siblingContact
+	var siblings []contacts.Sibling
 	if c.CompanyID != nil {
 		siblings = h.siblingContacts(r.Context(), *c.CompanyID, c.ID)
 	}
@@ -109,89 +82,35 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// contactPO is one row in the Contact dashboard "Purchase Orders" card (#597).
-type contactPO struct {
-	Number       string
-	Status       string
-	Role         string // "Supplier" or "Receiver" — how this contact is linked to the PO
-	Counterparty string // supplier name snapshot, for context
-	DateOrdered  *time.Time
-	Total        float64
-}
-
 // contactPOs returns the POs a contact is linked to via supplier_contact_id or
 // receiver_contact_id, most recent first. Returns nil when none or on error.
-func (h *Handler) contactPOs(ctx context.Context, contactID int) []contactPO {
+func (h *Handler) contactPOs(ctx context.Context, contactID int) []contacts.PO {
 	if contactID <= 0 {
 		return nil
 	}
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT number,
-		       CASE WHEN supplier_contact_id = $1 THEN 'Supplier' ELSE 'Receiver' END AS role,
-		       supplier_name, status, date_ordered, total_cost
-		FROM %s
-		WHERE supplier_contact_id = $1 OR receiver_contact_id = $1
-		ORDER BY date_ordered DESC, ID DESC
-	`, h.cfg().POTable()), contactID)
+	out, err := h.contacts().POs(ctx, contactID)
 	if err != nil {
 		return nil
-	}
-	defer rows.Close()
-	var out []contactPO
-	for rows.Next() {
-		var p contactPO
-		var num, role, counterparty, status sql.NullString
-		var d sql.NullTime
-		var total sql.NullFloat64
-		if rows.Scan(&num, &role, &counterparty, &status, &d, &total) != nil {
-			continue
-		}
-		p.Number, p.Role, p.Counterparty, p.Status, p.Total = num.String, role.String, counterparty.String, status.String, total.Float64
-		if d.Valid {
-			p.DateOrdered = &d.Time
-		}
-		out = append(out, p)
 	}
 	return out
 }
 
-// siblingContact is one row in the Contact dashboard "Related" card (#521).
-type siblingContact struct {
-	ID          int
-	DisplayName string
-}
-
 // siblingContacts returns other active contacts at the same supplier, excluding
 // the current contact. Returns nil when there is no supplier or on error.
-func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContactID int) []siblingContact {
+func (h *Handler) siblingContacts(ctx context.Context, supplierID, excludeContactID int) []contacts.Sibling {
 	if supplierID <= 0 {
 		return nil
 	}
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, display_name FROM %s
-		WHERE company_id = $1 AND id <> $2 AND is_active = TRUE
-		ORDER BY display_name
-	`, h.cfg().ContactTable()), supplierID, excludeContactID)
+	out, err := h.contacts().Siblings(ctx, supplierID, excludeContactID)
 	if err != nil {
 		return nil
-	}
-	defer rows.Close()
-	var out []siblingContact
-	for rows.Next() {
-		var s siblingContact
-		var name sql.NullString
-		if rows.Scan(&s.ID, &name) != nil {
-			continue
-		}
-		s.DisplayName = name.String
-		out = append(out, s)
 	}
 	return out
 }
 
 func (h *Handler) ContactsNew(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "contacts/contact_edit.html", map[string]any{
-		"Contact": models.Contact{}, "IsNew": true,
+		"Contact": contacts.Contact{}, "IsNew": true,
 		"ActiveTab": "contacts",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -207,18 +126,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	var newID int
-	insertContact := fmt.Sprintf(`INSERT INTO %s (display_name, company_id, email, phone_1, phone_2, fax,
-		 address, city, state, zipcode, country,
-		 website, is_active, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, h.cfg().ContactTable())
-	err := h.queryRowContext(r.Context(), insertContact,
-		name, nullableInt(fv(r, "CNSUID")),
-		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
-		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
-		fv(r, "CNWeb"),
-		r.FormValue("CNActive") == "1",
-		fv(r, "CNNotes"),
-	).Scan(&newID)
+	newID, err := h.contacts().Create(r.Context(), contactInput(r))
 	if err != nil {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": true,
@@ -258,21 +166,12 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET
-		  display_name=$1, company_id=$2, email=$3, phone_1=$4, phone_2=$5, fax=$6,
-		  address=$7, city=$8, state=$9, zipcode=$10, country=$11,
-		  website=$12, is_active=$13, notes=$14, updated_at=CURRENT_TIMESTAMP
-		WHERE id=$15
-	`, h.cfg().ContactTable()),
-		name, nullableInt(fv(r, "CNSUID")),
-		fv(r, "CNEmail"), fv(r, "CNPhone1"), fv(r, "CNPhone2"), fv(r, "CNFAX"),
-		fv(r, "CNAddress"), fv(r, "CNCity"), fv(r, "CNState"), fv(r, "CNZipcode"), fv(r, "CNCountry"),
-		fv(r, "CNWeb"),
-		r.FormValue("CNActive") == "1",
-		fv(r, "CNNotes"), id,
-	)
+	contactID, err := strconv.Atoi(id)
 	if err != nil {
+		h.renderError(w, r, "Contact not found")
+		return
+	}
+	if err := h.contacts().Update(r.Context(), contactID, contactInput(r)); err != nil {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
 			"Contact": contactFromForm(r), "IsNew": false,
 			"Error": "Error saving contact: " + err.Error(), "ActiveTab": "contacts",
@@ -285,30 +184,14 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string) (models.Contact, bool) {
-	cn, su := h.cfg().ContactTable(), h.cfg().CompanyTable()
-	var c models.Contact
-	var cnsuid sql.NullInt64
-	var name, email, phone1, phone2, fax, address, city, state, zip, country sql.NullString
-	var web, notes, suName sql.NullString
-	var active sql.NullBool
-	var dateModified sql.NullTime
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT cn.id, cn.company_id, cn.display_name, cn.email,
-		       cn.phone_1, cn.phone_2, cn.fax,
-		       cn.address, cn.city, cn.state, cn.zipcode, cn.country,
-		       cn.website, cn.notes, cn.is_active, cn.updated_at,
-		       su.name
-		FROM %s cn
-		LEFT JOIN %s su ON cn.company_id = su.id
-		WHERE cn.id = $1
-	`, cn, su), id).Scan(
-		&c.ID, &cnsuid, &name, &email,
-		&phone1, &phone2, &fax,
-		&address, &city, &state, &zip, &country,
-		&web, &notes, &active, &dateModified, &suName,
-	)
-	if err == sql.ErrNoRows {
+func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string) (contacts.Contact, bool) {
+	contactID, err := strconv.Atoi(id)
+	if err != nil {
+		h.renderError(w, r, "Contact not found")
+		return contacts.Contact{}, false
+	}
+	c, err := h.contacts().Get(r.Context(), contactID)
+	if errors.Is(err, sql.ErrNoRows) {
 		h.renderError(w, r, "Contact not found")
 		return c, false
 	}
@@ -316,32 +199,20 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 		h.renderError(w, r, "Error retrieving contact: "+err.Error())
 		return c, false
 	}
-	if cnsuid.Valid {
-		v := int(cnsuid.Int64)
-		c.CompanyID = &v
-	}
-	c.DisplayName = name.String
-	c.Email = email.String
-	c.Phone1 = phone1.String
-	c.Phone2 = phone2.String
-	c.Fax = fax.String
-	c.Address = address.String
-	c.City = city.String
-	c.State = state.String
-	c.Zipcode = zip.String
-	c.Country = country.String
-	c.Website = web.String
-	c.Notes = notes.String
-	c.IsActive = active.Bool
-	c.SupplierName = suName.String
-	if dateModified.Valid {
-		c.UpdatedAt = &dateModified.Time
-	}
 	return c, true
 }
 
-func contactFromForm(r *http.Request) models.Contact {
-	c := models.Contact{
+// contactInput is contactFromForm plus the company id, for writes.
+func contactInput(r *http.Request) contacts.Contact {
+	c := contactFromForm(r)
+	if n, ok := nullableInt(fv(r, "CNSUID")).(int); ok {
+		c.CompanyID = &n
+	}
+	return c
+}
+
+func contactFromForm(r *http.Request) contacts.Contact {
+	c := contacts.Contact{
 		DisplayName: fv(r, "CNName"), Email: fv(r, "CNEmail"),
 		Phone1: fv(r, "CNPhone1"), Phone2: fv(r, "CNPhone2"), Fax: fv(r, "CNFAX"),
 		Address: fv(r, "CNAddress"), City: fv(r, "CNCity"), State: fv(r, "CNState"),
