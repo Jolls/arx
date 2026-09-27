@@ -63,3 +63,8 @@ jobs:
 
       - name: Integration test
         run: go test -tags integration ./arx_go/...
+
+      - name: Migration runner smoke test (#91)
+        run: |
+          ARX_MIGRATE_DSN="$ARX_TEST_DSN" go run ./arx_go/cmd/migrate status
+          ARX_MIGRATE_DSN="$ARX_TEST_DSN" go run ./arx_go/cmd/migrate up

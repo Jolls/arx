@@ -6,21 +6,14 @@
 --   * DB-clock columns (GETDATE()/CURRENT_TIMESTAMP): read in this session's TimeZone
 --     (the server's), so run it with the server's default TimeZone.
 --   * desktop-clock columns (Go time.Now() params): read as America/Los_Angeles, the
---     zone the shop desktops ran in. If they ran elsewhere, replace every
---     'America/Los_Angeles' below with that zone BEFORE running.
+--     zone the shop desktops ran in. Committed migrations are immutable (checksums.txt):
+--     a database whose desktops ran elsewhere needs a new migration, not an edit here.
 -- form_record.record_date is user-typed and stays a zoneless TIMESTAMP.
 --
--- Pinned to ArxDev: the guard below aborts on any other database. A human edits the guard
--- to run it elsewhere (never default to ArxProd). Idempotent; runs in one transaction:
---   psql -v ON_ERROR_STOP=1 -d ArxDev -f 20260926092835_192_timestamptz_audit_columns.sql
+-- Idempotent. Applied by the migrate runner (arx_go/cmd/migrate, #91), one transaction per file.
 
-BEGIN;
-
-DO $$ BEGIN
-  IF lower(current_database()) <> 'arxdev' THEN
-    RAISE EXCEPTION 'Pinned to ArxDev (connected to %); edit this guard to run elsewhere', current_database();
-  END IF;
-END $$;
+-- +goose Up
+-- +goose StatementBegin
 
 DO $$
 DECLARE c record;
@@ -56,9 +49,4 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
-
-INSERT INTO schema_migrations (version_id, is_applied)
-SELECT 20260926092835, TRUE
-WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version_id = 20260926092835);
-
-COMMIT;
+-- +goose StatementEnd

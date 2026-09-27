@@ -8,17 +8,10 @@
 -- Grant the app login SELECT, INSERT, UPDATE, DELETE on both new tables
 -- (SQL/SCHEMA.md "Database privileges").
 --
--- Pinned to ArxDev: the guard below aborts on any other database. A human edits the guard
--- to run it elsewhere (never default to ArxProd). Idempotent; runs in one transaction:
---   psql -v ON_ERROR_STOP=1 -d ArxDev -f 20260926093727_194_category_tables.sql
+-- Idempotent. Applied by the migrate runner (arx_go/cmd/migrate, #91), one transaction per file.
 
-BEGIN;
-
-DO $$ BEGIN
-  IF lower(current_database()) <> 'arxdev' THEN
-    RAISE EXCEPTION 'Pinned to ArxDev (connected to %); edit this guard to run elsewhere', current_database();
-  END IF;
-END $$;
+-- +goose Up
+-- +goose StatementBegin
 
 CREATE TABLE IF NOT EXISTS part_category (
   code                 VARCHAR(10)  NOT NULL PRIMARY KEY,
@@ -127,9 +120,4 @@ ALTER TABLE part ADD CONSTRAINT FK_part_category FOREIGN KEY (category) REFERENC
 DELETE FROM app_config WHERE setting_key IN ('part_categories', 'attachment_categories');
 
 UPDATE app_config SET setting_value = '12' WHERE setting_key = 'schema_version' AND setting_value = '11';
-
-INSERT INTO schema_migrations (version_id, is_applied)
-SELECT 20260926093727, TRUE
-WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version_id = 20260926093727);
-
-COMMIT;
+-- +goose StatementEnd

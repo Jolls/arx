@@ -18,7 +18,7 @@
 
 Parts master/purchasing system for engineering/manufacturing shop. One Go binary (`arx_go/Arx.exe`):
 - `arx_go/` — catalog, suppliers, POs, test records. Port 4568. `package main`.
-- `internal/` — config/DB/URL utils. `package config / db / urlutil / folderpick`.
+- `internal/` — config/DB/URL utils. `package config / db / urlutil / folderpick / migrate`.
 
 Archived/removed, ignore in history: Ruby Sinatra apps, VBA workbooks (`archive/`), old separate `parts_master_go/`/`test_records_go/`.
 
@@ -37,7 +37,7 @@ WSL: a native Linux Go toolchain (not the Windows `go.exe`) works directly again
 - No bulk file rewrites (`gofmt -w`, `sed -i`). Repo is NOT gofmt-clean. `.gitattributes` normalizes source files to LF in-repo (`* text=auto eol=lf`, plus explicit `eol=lf` for `.go`/`.sql`/`.md`/etc., `eol=crlf` for `.bat`/`.ps1`/`.cmd`), but a whole-file rewrite still reflows unrelated code and produces a noisy diff that violates surgical-change discipline — edit via the Edit tool instead (`replace_all` per file for bulk renames). Verify builds with `build.bat`, not gofmt.
 
 ## Key facts
-arx_go: package main, port 4568, go-chi router, getlantern/systray, templates `templates/{contacts,parts,pos,records,reports,settings,shared,suppliers}/` embedded (one nav tab per subfolder, shared layout). internal: package config/db/urlutil/folderpick.
+arx_go: package main, port 4568, go-chi router, getlantern/systray, templates `templates/{contacts,parts,pos,records,reports,settings,shared,suppliers}/` embedded (one nav tab per subfolder, shared layout). internal: package config/db/urlutil/folderpick/migrate.
 
 ## Config load order (later wins)
 1. `.env` (godotenv, from `../.env` then `.env`) 2. env vars 3. `config/local.json` (always wins; gitignored) 4. per-user secrets store.
@@ -49,17 +49,24 @@ Secrets (`db_password`, `test_db_password`, `session_secret`) do NOT live in `co
 Full second connection profile (not just DB-name swap): TestDBServer/TestDBName/TestDBUser/TestDBPassword, each overriding prod counterpart only when non-empty (blank inherits prod) — so same-server name-only swap still works, but can also point at a fully separate server/creds (#672).
 Overrides: env (TEST_DB_SERVER/TEST_DB_NAME[default ArxDev]/TEST_DB_USER) or local.json (test_db_server/test_db_name/test_db_user); test password lives in the per-user secrets store (`%APPDATA%\Arx\local.json`, `test_db_password`), never in `config/local.json` or .env (#732). Editable in Settings UI Test Connection section.
 
-New table → update all 4 or test mode breaks (exception: `schema_migrations`, the migration ledger #48 — guarded DDL with no DROP, no seed block, no `*Table()` helper since nothing in Go touches it): 1) `SQL/postgres/<table>.sql` DDL (same schema prod+ArxDev) + its entry in `SQL/postgres/build_schema.sh`'s table list 2) `SQL/postgres/seed_test_data.sql` DELETE+fixed-ID INSERT block (+ `setval` sequence reset) 3) `internal/config/config.go` add `*Table()` helper 4) `SQL/schema.md` table reference section.
+New table → update all 4 or test mode breaks (exception: `schema_migrations`, the migration ledger #48 — guarded DDL with no DROP, no seed block, no `*Table()` helper since only the migrate runner (#91) touches it): 1) `SQL/postgres/<table>.sql` DDL (same schema prod+ArxDev) + its entry in `SQL/postgres/build_schema.sh`'s table list 2) `SQL/postgres/seed_test_data.sql` DELETE+fixed-ID INSERT block (+ `setval` sequence reset) 3) `internal/config/config.go` add `*Table()` helper 4) `SQL/schema.md` table reference section.
 
-`main` is Postgres-only (#29); SQL Server/Azure lives on `release/0.7`, whose CLAUDE.md keeps the T-SQL/Azure migration rules. Every schema change ships a migration in `SQL/postgres/migrations/YYYYMMDDHHMMSS_<issue>_<description>.sql` (timestamp = authoring time) plus the edit to `SQL/postgres/*.sql` DDL + seed, for a human to run — `SQL/postgres/*.sql` is reference DDL, never auto-run. psql `ON_ERROR_STOP`, one `BEGIN`/`COMMIT`, a `DO` guard right after `BEGIN` that raises unless `lower(current_database()) = 'arxdev'` (human edits it for ArxProd; never default a migration to ArxProd), idempotent (`IF [NOT] EXISTS` / `information_schema` checks). You author these, never run them (see ArxProd rule).
-Every migration self-registers as its LAST statement: `INSERT INTO schema_migrations (version_id, is_applied) SELECT <ts>, TRUE WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version_id = <ts>);` — `TestMigrationsSelfRegister` fails the build otherwise. Breaking migrations still bump `app_config.schema_version` too (different job: binary↔DB gate). Column renames must `CREATE OR REPLACE` plpgsql functions naming the column and patch `named_queries`. Details in `SQL/SCHEMA.md#migrations`. Fresh DB load: `bash SQL/postgres/build_schema.sh | psql ...`.
+`main` is Postgres-only (#29); SQL Server/Azure lives on `release/0.7`, whose CLAUDE.md keeps the T-SQL/Azure migration rules. Every schema change ships a migration in `SQL/postgres/migrations/YYYYMMDDHHMMSS_<issue>_<description>.sql` (timestamp = authoring time) plus the edit to `SQL/postgres/*.sql` DDL + seed — `SQL/postgres/*.sql` is reference DDL, never auto-run. Migrations are goose files (#91): header comments, `-- +goose Up`, `-- +goose StatementBegin`, body, `-- +goose StatementEnd` as the last line. The runner wraps each file in one transaction and writes its `schema_migrations` row, so: no `BEGIN`/`COMMIT`, no `current_database()` guard, no `INSERT INTO schema_migrations`, no `-- +goose Down`/`NO TRANSACTION`. Still idempotent (`IF [NOT] EXISTS` / `information_schema` checks). Add the file's `sha256sum --text` line to `SQL/postgres/migrations/checksums.txt`; never edit a committed migration — write a new one. `TestMigrationsGooseFormat`/`TestMigrationChecksums` fail the build otherwise. Breaking migrations still bump `app_config.schema_version` too (different job: binary↔DB gate). Column renames must `CREATE OR REPLACE` plpgsql functions naming the column and patch `named_queries`. Details in `SQL/SCHEMA.md#migrations`. Fresh DB load: `bash SQL/postgres/build_schema.sh | psql ...` (also baselines the ledger).
+Running migrations: `go run ./arx_go/cmd/migrate status` / `... up` (repo root; logic in `internal/migrate`). Credentials only from `ARX_MIGRATE_DSN` (DDL-capable login; never app config/secrets); the app never auto-applies. You may run `status`/`up` against **ArxDev only**, and only when `ARX_MIGRATE_DSN` is already set in your environment — never construct, read, or echo it; never pass `--yes`; stop if the printed `Target:` database isn't ArxDev. If it's unset, ask the user to run it. A throwaway local container you created is fine. ArxProd stays off-limits.
 
-FK-promotion migrations (adding a FK constraint to a column that previously held only a historically-logical reference) need an orphan check written into the migration, run against ArxProd before the `ADD CONSTRAINT`, since ArxDev's seed is clean and won't surface orphans ArxProd may have accumulated. Include this pattern in the migration file so the human running it sees the offending rows before the constraint is added:
+FK-promotion migrations (adding a FK constraint to a column that previously held only a historically-logical reference) need an orphan check in the migration before the `ADD CONSTRAINT`, since ArxDev's seed is clean and won't surface orphans ArxProd may have accumulated. The runner discards `SELECT` output, so the check must raise:
 ```sql
-SELECT child.id, child.<fk_col>
-FROM <child_table> child
-LEFT JOIN <parent_table> p ON p.id = child.<fk_col>
-WHERE child.<fk_col> IS NOT NULL AND p.id IS NULL;
+DO $$
+DECLARE bad text;
+BEGIN
+  SELECT string_agg(child.id::text, ', ') INTO bad
+  FROM <child_table> child
+  LEFT JOIN <parent_table> p ON p.id = child.<fk_col>
+  WHERE child.<fk_col> IS NOT NULL AND p.id IS NULL;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'orphaned <child_table>.<fk_col> rows (ids: %); fix them before adding the FK', bad;
+  END IF;
+END $$;
 ```
 
 ### Integration tests (live DB, test data only)
@@ -70,7 +77,7 @@ ARX_TEST_FROM_CONFIG=1 go test -tags integration ./arx_go/...
 `ARX_TEST_FROM_CONFIG=1` builds the DSN in-process from the test-mode profile (`config/local.json` + per-user secrets store) — never read the secrets file or construct/echo a DSN yourself (#207). An explicit `ARX_TEST_DSN` still overrides. `TestMain` refuses, before connecting, any non-`postgres://` DSN, any database name containing `arxprod`, and anything not exactly `ArxDev` (case-insensitive).
 `liveHandler` also doesn't trust the DSN's database name alone — after connecting it queries the fixed-ID seed part `id=3005` and `t.Fatal`s unless it matches `part_number='ASM-1001'`/`title='Skyrunner Standard Drone'`, the row seeded in `SQL/postgres/seed_test_data.sql`. That's the safeguard against accidentally running against a real database — keep the sentinel values in sync if that seed row ever changes. db_user/db_server from arx_go/config/local.json; the password (db_password) is in the per-user secrets store `%APPDATA%\Arx\local.json` (#732), both gitignored — use database=ArxDev not ArxProd.
 Any ad-hoc script/DSN outside integration_test.go should verify it's pointed at test data before running — don't rely on the database name alone.
-Reseeding ArxDev is a human action — don't run SQL/postgres/seed_test_data.sql against it yourself (a throwaway local container you created is fine). If a test fails on stale seed data (e.g. TestIntegration_UpdatedAtSentinel), tell user to reseed, don't do it yourself.
+Reseeding ArxDev is a human action — don't run SQL/postgres/seed_test_data.sql against it yourself (a throwaway local container you created is fine). If a test fails on stale seed data (e.g. TestIntegration_UpdatedAtSentinel), tell user to reseed, don't do it yourself. Same for ArxDev's ledger baseline: if `TestIntegration_MigrationsAllApplied` or `TestIntegration_FailedMigrationLeavesNoLedgerRow` fails because the ledger isn't baselined ("missing zero version"/not applied), tell the user to backfill it (`SQL/SCHEMA.md#migrations`); don't do it yourself.
 
 ## Database — Postgres
 Driver `github.com/jackc/pgx/v5/stdlib` (`sql.Open("pgx", dsn)`). DSN: `postgres://user:password@host:5432/MyDB?sslmode=require` (built by `Base.BuildDSN`; TLS always required). Placeholders are `$1, $2, ...`; named-query `@name` tokens are rewritten by `arxdb.RewriteNamedParams`.

@@ -28,7 +28,6 @@ New user-facing features for the parts catalog and supplier layer.
 - Catalog: custom field labels ([#9](https://github.com/Jolls/arx/issues/9)), barcode/QR labels ([#11](https://github.com/Jolls/arx/issues/11))
 - Reporting/search: yield dashboard ([#3](https://github.com/Jolls/arx/issues/3)), global record search ([#2](https://github.com/Jolls/arx/issues/2))
 - Access: JSON API ([#15](https://github.com/Jolls/arx/issues/15)), mobile-responsive UI ([#16](https://github.com/Jolls/arx/issues/16))
-- Migration runner instead of hand-run scripts ([#91](https://github.com/Jolls/arx/issues/91))
 
 ## Before going public
 

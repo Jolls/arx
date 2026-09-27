@@ -56,7 +56,6 @@ Arx grows from a parts catalog + purchasing + test data tool into a full enginee
 - Package Postgres as a StartOS service ([#24](https://github.com/Jolls/arx/issues/24))
 - Backup/restore ([#26](https://github.com/Jolls/arx/issues/26))
 - JSON endpoints for external clients ([#15](https://github.com/Jolls/arx/issues/15)); mobile-responsive UI ([#16](https://github.com/Jolls/arx/issues/16))
-- Migration runner instead of hand-run portal scripts ([#91](https://github.com/Jolls/arx/issues/91))
 - Structured `app_config` instead of a flat key-value table ([#17](https://github.com/Jolls/arx/issues/17))
 
 ---

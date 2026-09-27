@@ -12,7 +12,7 @@ On Linux you also need `libayatana-appindicator3-dev` (systray's cgo dependency)
 
 ## Database and migrations
 
-- Schema changes ship as a migration in `SQL/postgres/migrations/`. Migrations are authored, never run automatically — the maintainer runs them by hand.
+- Schema changes ship as a goose migration in `SQL/postgres/migrations/`, applied with `go run ./arx_go/cmd/migrate up` (never at app startup) by a DDL-capable login from `ARX_MIGRATE_DSN`.
 - `SQL/postgres/*.sql` is reference DDL, not a migration runner; keep it in sync with the migrations.
 - Details: [`SQL/SCHEMA.md`](SQL/SCHEMA.md).
 

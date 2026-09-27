@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-09-26
+### Added
+- `migrate status` / `migrate up` command (`arx_go/cmd/migrate`, logic in `internal/migrate`) applies the embedded `SQL/postgres/migrations/` with goose, one transaction per file, recording each in `schema_migrations`; credentials only from `ARX_MIGRATE_DSN`, typed confirmation for any database but ArxDev ([#91](https://github.com/Jolls/arx/issues/91))
+- `SQL/postgres/migrations/checksums.txt`: `go test` fails when a committed migration changes or a new one isn't listed ([#91](https://github.com/Jolls/arx/issues/91))
+### Changed
+- Migrations use goose format (no `BEGIN`/`COMMIT`, ArxDev guard or self-register `INSERT`), linted by `TestMigrationsGooseFormat`; `build_schema.sh` records every migration as applied on a fresh DB ([#91](https://github.com/Jolls/arx/issues/91))
+
 ## [0.8.3] - 2026-09-26
 ### Changed
 - Postgres-only cutover: SQL is written as native Postgres (`$N` placeholders, `TRUE`/`FALSE`, `RETURNING id`, `LIMIT`) instead of passing through a runtime dialect rewrite; the connection is always `postgres://` with TLS required ([#29](https://github.com/Jolls/arx/issues/29))
