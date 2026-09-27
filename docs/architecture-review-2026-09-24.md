@@ -8,7 +8,7 @@ Assumption: several people use Arx at the same time against one shared database,
 
 | # | Change | Size | Why now |
 |---|---|---|---|
-| 1 | One central Arx server instead of a localhost exe per user | XL | Decide before #24 Phase B, because most items below depend on it |
+| 1 | One central Arx server instead of a localhost exe per user | XL | Decided 2026-09-26: deferred (#189) |
 | 2 | A single hard Postgres cutover, then delete the dialect layer and write native SQL | L | Already planned for v0.8, and running two engines side by side is the costliest state to stay in |
 | 3 | Make migrations the only schema source, applied by the binary | M | A new table touches 6 places today |
 | 4 | Move SQL out of handlers into a data-access layer (sqlc) and drop `cfg.*Table()` | L | One `Handler` has 429 methods, and CI never runs the tests that exercise the SQL |
@@ -26,6 +26,8 @@ The suggested order is at the end.
 ---
 
 ## 1. Run Arx as one server, not one localhost server per user
+
+> **Decided 2026-09-26: deferred ([#189](https://github.com/Jolls/arx/issues/189)).** Arx keeps the per-user `Arx.exe` model. Files live in OneDrive/SharePoint, users rely on Explorer-open, and remote users already reach the DB through public Azure. ArxProd goes to Azure Database for PostgreSQL (#216). The StartOS package (#24) hosts ArxDev and serves as the self-host option. Permission checks staying advisory is an accepted risk. #189 lists the triggers for revisiting this.
 
 **Current state.** Each user runs their own `Arx.exe`, bound to `127.0.0.1` ([main.go:59-62](../arx_go/main.go#L59-L62), [`RequireLocalHost`](../arx_go/handlers.go#L694)). Each copy stores the shared DB credentials in that user's `%APPDATA%\Arx\local.json` and talks directly to the shared DB. The StartOS plan (#24) keeps this model: Postgres moves to the box, while `Arx.exe` stays on each desktop "for filesystem access".
 
@@ -110,7 +112,7 @@ The Postgres DDL is open for editing anyway, and the current port copies these p
 - The check that the binary matches the DB is separate: an `ExpectedSchemaVersion` bumped by hand ([config.go:21](../arxlib/config/config.go#L21)).
 
 **Proposed change:**
-- Embed the migrations with `//go:embed`. Apply pending ones at startup while holding `pg_advisory_lock`, which is safe once there is only one server (item 1). If you want a person to approve each run, apply them from an admin button instead. Until item 1 ships, use the button: exes of different versions starting up would otherwise race each other.
+- Embed the migrations with `//go:embed`. Apply pending ones at startup while holding `pg_advisory_lock`, which is safe once there is only one server (item 1). If you want a person to approve each run, apply them from an admin button instead. Until item 1 ships, use the button: exes of different versions starting up would otherwise race each other. *(2026-09-26: item 1 is deferred (#189), so migrations stay human-run via `migrate status|up` (#91). Don't apply them at startup.)*
 - Replace `ExpectedSchemaVersion` with a check that the latest migration this build knows about has been applied.
 - Drop the hand-kept reference DDL. If a readable schema is still useful, generate one file with `pg_dump --schema-only` and have CI fail when it's out of date. Move the column notes from `SCHEMA.md` into `COMMENT ON COLUMN` statements in the migrations.
 - Turn the seed data into a fixture file that the test harness loads after migrating.
@@ -305,7 +307,7 @@ Item 1 removes most of the code that changes this state (the DB connection is no
 ## Suggested order
 
 0. **Anytime (small and independent):** item 10, item 12, and `-race` in CI.
-1. **Decide item 1**, the deployment model. It changes what #24 packages.
+1. **Decide item 1**, the deployment model. It changes what #24 packages. *(Done 2026-09-26: deferred (#189). Step 4 is off the plan.)*
 2. **v0.8 cutover (item 2).** Build items 6 and 8 and the dead-column cleanup into the Postgres DDL, and run the integration tests in CI against a Postgres container (moving #19 up).
 3. **Item 3**, the migration runner, right after the cutover. Use the admin-button form until item 1 ships.
 4. **Implement item 1:** server-side file storage, then delete the connection UI, the secrets store, the test-mode connection profile and the systray.
