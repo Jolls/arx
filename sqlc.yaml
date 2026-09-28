@@ -43,6 +43,7 @@ sql:
       - internal/contacts/contacts.sql
       - internal/parts/parts.sql
       - internal/attachments/attachments.sql
+      - internal/purchasing/purchasing.sql
     gen:
       go:
         package: dbq

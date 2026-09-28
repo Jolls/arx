@@ -204,6 +204,32 @@ func (q *Queries) FindDuplicatePartAttachment(ctx context.Context, arg FindDupli
 	return i, err
 }
 
+const getCompanyAttachment = `-- name: GetCompanyAttachment :one
+SELECT supplier_attachment_id, supplier_id, file_path, COALESCE(notes, '') AS notes, sort_order
+FROM company_attachment WHERE supplier_attachment_id = $1
+`
+
+type GetCompanyAttachmentRow struct {
+	SupplierAttachmentID int
+	SupplierID           int
+	FilePath             string
+	Notes                string
+	SortOrder            *int
+}
+
+func (q *Queries) GetCompanyAttachment(ctx context.Context, supplierAttachmentID int) (GetCompanyAttachmentRow, error) {
+	row := q.db.QueryRowContext(ctx, getCompanyAttachment, supplierAttachmentID)
+	var i GetCompanyAttachmentRow
+	err := row.Scan(
+		&i.SupplierAttachmentID,
+		&i.SupplierID,
+		&i.FilePath,
+		&i.Notes,
+		&i.SortOrder,
+	)
+	return i, err
+}
+
 const getCompanyAttachmentPath = `-- name: GetCompanyAttachmentPath :one
 SELECT file_path FROM company_attachment WHERE supplier_attachment_id = $1 AND supplier_id = $2
 `

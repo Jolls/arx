@@ -31,55 +31,30 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []any{})
 		return
 	}
-	supplierFilter := ""
-	if r.URL.Query().Get("supplier_only") == "1" {
-		supplierFilter = " AND su.is_supplier = TRUE"
-	}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT su.id, su.name, cn.city
-		FROM %s su
-		LEFT JOIN %s cn ON su.default_contact = cn.id
-		WHERE su.name LIKE $1 AND su.is_active = TRUE`+supplierFilter+`
-		ORDER BY su.name
-		LIMIT 20
-	`, h.cfg().CompanyTable(), h.cfg().ContactTable()), "%"+q+"%")
+	matches, err := h.purchasing().SearchSuppliers(r.Context(), q, r.URL.Query().Get("supplier_only") == "1", 20)
 	if err != nil {
 		writeJSON(w, []any{})
 		return
 	}
-	defer rows.Close()
 	type result struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 		City string `json:"city"`
 	}
-	var out []result
-	for rows.Next() {
-		var r result
-		var name, city sql.NullString
-		if rows.Scan(&r.ID, &name, &city) == nil {
-			r.Name = name.String
-			r.City = city.String
-			out = append(out, r)
-		}
+	out := make([]result, len(matches))
+	for i, m := range matches {
+		out[i] = result(m)
 	}
 	writeJSON(w, out)
 }
 
 func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, display_name, address, city, state, zipcode,
-		       country, phone_1, fax, email
-		FROM %s
-		WHERE company_id = $1 AND is_active = TRUE
-		ORDER BY display_name
-	`, h.cfg().ContactTable()), id)
+	id, _ := strconv.Atoi(chi.URLParam(r, "id")) // a non-numeric id matches nothing
+	contacts, err := h.contacts().ListActiveForCompany(r.Context(), id)
 	if err != nil {
 		writeJSON(w, []any{})
 		return
 	}
-	defer rows.Close()
 	type result struct {
 		ID      int    `json:"id"`
 		Name    string `json:"name"`
@@ -92,22 +67,10 @@ func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
 		Fax     string `json:"fax"`
 		Email   string `json:"email"`
 	}
-	var out []result
-	for rows.Next() {
-		var c result
-		var name, addr, city, state, zip, country, phone, fax, email sql.NullString
-		if rows.Scan(&c.ID, &name, &addr, &city, &state, &zip, &country, &phone, &fax, &email) == nil {
-			c.Name = name.String
-			c.Address = addr.String
-			c.City = city.String
-			c.State = state.String
-			c.Zipcode = zip.String
-			c.Country = country.String
-			c.Phone = phone.String
-			c.Fax = fax.String
-			c.Email = email.String
-			out = append(out, c)
-		}
+	out := make([]result, len(contacts))
+	for i, c := range contacts {
+		out[i] = result{ID: c.ID, Name: c.DisplayName, Address: c.Address, City: c.City, State: c.State,
+			Zipcode: c.Zipcode, Country: c.Country, Phone: c.Phone1, Fax: c.Fax, Email: c.Email}
 	}
 	writeJSON(w, out)
 }

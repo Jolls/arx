@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.20] - 2026-09-28
+### Changed
+- Data-access layer: the supplier pages (list, detail dashboard, create/edit, Parts and POs tabs), the supplier typeahead and supplier-contacts APIs, and the PO forms' supplier contact and bulk-order lookups moved to sqlc in a new `internal/purchasing` package; `suppliers.go` is now free of raw SQL ([#221](https://github.com/Jolls/arx/issues/221))
+### Fixed
+- Supplier typeahead and supplier-contacts lookups with no results now return an empty list instead of `null`, which raised a script error in the supplier pickers and the PO editor ([#221](https://github.com/Jolls/arx/issues/221))
+
 ## [0.8.19] - 2026-09-28
 ### Changed
 - Data-access layer: the part search autocomplete and the PO-line supplier part number/price autofill APIs moved to sqlc (`internal/parts`), completing the parts domain ([#220](https://github.com/Jolls/arx/issues/220))

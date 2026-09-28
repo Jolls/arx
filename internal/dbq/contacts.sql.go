@@ -122,6 +122,63 @@ func (q *Queries) GetContact(ctx context.Context, id int) (GetContactRow, error)
 	return i, err
 }
 
+const listActiveCompanyContacts = `-- name: ListActiveCompanyContacts :many
+SELECT id, display_name,
+       COALESCE(address, '') AS address, COALESCE(city, '') AS city, COALESCE(state, '') AS state,
+       COALESCE(zipcode, '') AS zipcode, COALESCE(country, '') AS country,
+       COALESCE(phone_1, '') AS phone_1, COALESCE(fax, '') AS fax, COALESCE(email, '') AS email
+FROM contact
+WHERE company_id = $1::int AND is_active = TRUE
+ORDER BY display_name
+`
+
+type ListActiveCompanyContactsRow struct {
+	ID          int
+	DisplayName string
+	Address     string
+	City        string
+	State       string
+	Zipcode     string
+	Country     string
+	Phone1      string
+	Fax         string
+	Email       string
+}
+
+func (q *Queries) ListActiveCompanyContacts(ctx context.Context, companyID int) ([]ListActiveCompanyContactsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveCompanyContacts, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveCompanyContactsRow
+	for rows.Next() {
+		var i ListActiveCompanyContactsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Address,
+			&i.City,
+			&i.State,
+			&i.Zipcode,
+			&i.Country,
+			&i.Phone1,
+			&i.Fax,
+			&i.Email,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listContactPOs = `-- name: ListContactPOs :many
 SELECT number,
        CASE WHEN supplier_contact_id = $1::int THEN 'Supplier' ELSE 'Receiver' END AS role,

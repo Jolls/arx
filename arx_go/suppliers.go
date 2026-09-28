@@ -1,8 +1,8 @@
 package main
 
 import (
-	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -18,6 +18,7 @@ import (
 
 	"arx/arx_go/models"
 	"arx/internal/attachments"
+	"arx/internal/purchasing"
 	"arx/internal/urlutil"
 )
 
@@ -56,41 +57,15 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 		Contact string `json:"contact"`
 		Code    string `json:"code"`
 	}
-	su, cn := h.cfg().CompanyTable(), h.cfg().ContactTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT su.id, su.name, su.supplier_code, su.supplier_part_count, su.po_count,
-		       su.is_active, CN.display_name, CN.country
-		FROM %s su
-		LEFT JOIN %s CN ON su.default_contact = CN.id
-		ORDER BY su.name ASC
-	`, su, cn))
+	suppliers, err := h.purchasing().ListSupplierRows(r.Context())
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
-	out := make([]row, 0)
-	for rows.Next() {
-		var s row
-		var name, code, cnName, cnCountry sql.NullString
-		var numLNKs, numPOs sql.NullInt64
-		var isActive sql.NullBool
-		if err := rows.Scan(&s.ID, &name, &code, &numLNKs, &numPOs, &isActive, &cnName, &cnCountry); err != nil {
-			serverError(w, "database error", err)
-			return
-		}
-		s.Name = name.String
-		s.Code = code.String
-		s.Links = int(numLNKs.Int64)
-		s.POs = int(numPOs.Int64)
-		s.Active = isActive.Bool
-		s.Contact = cnName.String
-		s.Country = cnCountry.String
-		out = append(out, s)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, "database error", err)
-		return
+	out := make([]row, len(suppliers))
+	for i, s := range suppliers {
+		out[i] = row{ID: s.ID, Name: s.Name, Active: s.IsActive, Country: s.ContactCountry,
+			Links: s.SupplierPartCount, POs: s.POCount, Contact: s.ContactName, Code: s.SupplierCode}
 	}
 	log.Printf("[rows] suppliers: %d rows in %v", len(out), time.Since(start))
 	writeJSON(w, out)
@@ -105,20 +80,15 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 
 	var primaryAtt *models.SupplierAttachment
 	if s.PrimaryAttachmentID != nil {
-		var att models.SupplierAttachment
-		var fp, notes sql.NullString
-		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT supplier_attachment_id, supplier_id, file_path, notes FROM %s WHERE supplier_attachment_id = $1`,
-			h.cfg().CompanyAttachmentsTable(),
-		), *s.PrimaryAttachmentID).Scan(&att.SupplierAttachmentID, &att.SupplierID, &fp, &notes); err == nil {
-			att.FilePath = fp.String
-			att.Notes = notes.String
-			primaryAtt = &att
+		if a, err := h.attachments().GetCompanyAttachment(r.Context(), *s.PrimaryAttachmentID); err == nil {
+			primaryAtt = &models.SupplierAttachment{SupplierAttachmentID: a.ID, SupplierID: a.SupplierID,
+				FilePath: a.FilePath, Notes: a.Notes}
 		}
 	}
 
-	recentPOs := h.recentSupplierPOs(r.Context(), id, 5)
-	topParts := h.topSupplierParts(r.Context(), id, 5)
+	// The dashboard cards are best-effort: a failed read just hides the card.
+	recentPOs, _ := h.purchasing().ListSupplierPOs(r.Context(), s.ID, 5)
+	topParts, _ := h.purchasing().ListTopSupplierParts(r.Context(), s.ID, 5)
 
 	// Active contacts for this vendor, excluding the default (shown in its own card).
 	var otherContacts []ContactSummary
@@ -140,81 +110,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// supplierPOSummary is one row in the Supplier dashboard "Recent POs" card (#521).
-type supplierPOSummary struct {
-	Number      string
-	Status      string
-	DateOrdered *time.Time
-	Total       float64
-}
-
-// recentSupplierPOs returns up to limit POs for supplierID, most recent first.
-// limit <= 0 means unlimited (used by the Order History sub-tab).
-func (h *Handler) recentSupplierPOs(ctx context.Context, supplierID string, limit int) []supplierPOSummary {
-	limitClause := ""
-	args := []any{supplierID}
-	if limit > 0 {
-		limitClause = " LIMIT $2"
-		args = append(args, limit)
-	}
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT number, status, date_ordered, total_cost
-		FROM %s WHERE supplier_id = $1
-		ORDER BY date_ordered DESC, ID DESC
-	`, h.cfg().POTable())+limitClause, args...)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []supplierPOSummary
-	for rows.Next() {
-		var s supplierPOSummary
-		var num, status sql.NullString
-		var d sql.NullTime
-		var total sql.NullFloat64
-		if rows.Scan(&num, &status, &d, &total) != nil {
-			continue
-		}
-		s.Number, s.Status, s.Total = num.String, status.String, total.Float64
-		if d.Valid {
-			s.DateOrdered = &d.Time
-		}
-		out = append(out, s)
-	}
-	return out
-}
-
-// supplierPartSummary is one row in the Supplier dashboard "Linked Parts" card (#521).
-type supplierPartSummary struct {
-	PNID        int
-	PartNumber  string
-	Description string
-}
-
-func (h *Handler) topSupplierParts(ctx context.Context, supplierID string, limit int) []supplierPartSummary {
-	sp, pn := h.cfg().SupplierPartTable(), h.cfg().PartsTable()
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pn.id, pn.part_number, pn.description
-		FROM %s sp JOIN %s pn ON sp.part_id = pn.id
-		WHERE sp.supplier_id = $1
-		ORDER BY pn.part_number LIMIT $2
-	`, sp, pn), supplierID, limit)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []supplierPartSummary
-	for rows.Next() {
-		var s supplierPartSummary
-		var num, description sql.NullString
-		if rows.Scan(&s.PNID, &num, &description) != nil {
-			continue
-		}
-		s.PartNumber, s.Description = num.String, description.String
-		out = append(out, s)
-	}
-	return out
-}
+func (h *Handler) purchasing() *purchasing.Service { return purchasing.New(handlerDB{h}) }
 
 func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
@@ -242,16 +138,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	var newID int
-	insertSupplier := fmt.Sprintf(`INSERT INTO %s (name, supplier_code, default_contact, is_active, is_supplier, is_manufacturer, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, h.cfg().CompanyTable())
-	err := h.queryRowContext(r.Context(), insertSupplier,
-		name, fv(r, "supplier_code"),
-		nullableInt(fv(r, "default_contact")),
-		r.FormValue("is_active") == "1",
-		r.FormValue("is_supplier") == "1",
-		r.FormValue("is_manufacturer") == "1",
-		fv(r, "notes"),
-	).Scan(&newID)
+	newID, err := h.purchasing().CreateSupplier(r.Context(), purchasingSupplierFromForm(r))
 	if err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Contacts": nil,
@@ -308,24 +195,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET name=$1, supplier_code=$2, default_contact=$3,
-		              is_active=$4, is_supplier=$5, is_manufacturer=$6,
-		              notes=$7, date_modified=CURRENT_TIMESTAMP,
-		              bulk_order_delimiter=$8, bulk_order_pn_source=$9
-		WHERE id=$10
-	`, h.cfg().CompanyTable()),
-		name, fv(r, "supplier_code"),
-		nullableInt(fv(r, "default_contact")),
-		r.FormValue("is_active") == "1",
-		r.FormValue("is_supplier") == "1",
-		r.FormValue("is_manufacturer") == "1",
-		fv(r, "notes"),
-		bulkOrderDelimiterOrDefault(fv(r, "bulk_order_delimiter")),
-		bulkOrderPNSourceOrDefault(fv(r, "bulk_order_pn_source")),
-		id,
-	)
-	if err != nil {
+	if err := h.purchasing().UpdateSupplier(r.Context(), idInt, purchasingSupplierFromForm(r)); err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     "Error saving supplier: " + err.Error(),
@@ -339,118 +209,34 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var s models.Supplier
-	var name sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT id, name FROM %s WHERE id = $1`, h.cfg().CompanyTable(),
-	), id).Scan(&s.ID, &name)
-	if err == sql.ErrNoRows {
-		h.renderError(w, r, "Supplier not found")
+	s, ok := h.fetchSupplier(w, r, id)
+	if !ok {
 		return
 	}
-	if err != nil {
-		h.renderError(w, r, "Error retrieving supplier: "+err.Error())
-		return
-	}
-	s.Name = name.String
 
-	sp, pn, ut, at := h.cfg().SupplierPartTable(), h.cfg().PartsTable(), h.cfg().UomTable(), h.cfg().AttachmentsTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT sp.id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
-		       sp.lead_time, sp.min_increment,
-		       pn.part_number, pn.description, pn.revision, pn.category,
-		       sp.uom_id,
-		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
-		       (sp.uom_id IS NOT NULL) AS unit_is_explicit,
-		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = pn.id AND a.is_active = TRUE AND a.category = $2) AS thumb_file
-		FROM %s sp
-		JOIN %s pn ON sp.part_id = pn.id
-		LEFT JOIN %s pu ON sp.uom_id   = pu.uom_id   -- explicit purchase unit
-		LEFT JOIN %s bu ON pn.uom_id   = bu.uom_id   -- base unit fallback
-		WHERE sp.supplier_id = $1
-		ORDER BY pn.part_number
-	`, at, sp, pn, ut, ut), id, thumbnailCategory)
+	parts, err := h.purchasing().ListLinkedParts(r.Context(), s.ID, thumbnailCategory)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving linked parts: "+err.Error())
 		return
 	}
-	defer rows.Close()
-	var links []models.SupplierPart
-	for rows.Next() {
-		var lk models.SupplierPart
-		var preference sql.NullInt64
-		var supplierPN, supplierDesc, leadTime sql.NullString
-		var minIncr sql.NullFloat64
-		var unitID sql.NullInt64
-		var partNumber, description, revision, category, unitAbbr, thumbFile sql.NullString
-		var unitIsExplicit bool
-		if err := rows.Scan(
-			&lk.ID, &lk.PartID, &preference, &supplierPN, &supplierDesc,
-			&leadTime, &minIncr,
-			&partNumber, &description, &revision, &category,
-			&unitID, &unitAbbr, &unitIsExplicit, &thumbFile,
-		); err != nil {
-			h.renderError(w, r, "Error reading linked parts: "+err.Error())
-			return
-		}
-		if preference.Valid {
-			v := int(preference.Int64)
-			lk.Preference = &v
-		}
-		lk.SupplierPN = supplierPN.String
-		lk.SupplierDesc = supplierDesc.String
-		lk.LeadTime = leadTime.String
-		if minIncr.Valid {
-			lk.MinIncrement = &minIncr.Float64
-		}
-		lk.PartNumber = partNumber.String
-		lk.Description = description.String
-		lk.Revision = revision.String
-		lk.Category = category.String
-		if unitID.Valid {
-			v := int(unitID.Int64)
-			lk.UnitID = &v
-		}
-		lk.PurchaseUnitAbbr = unitAbbr.String
-		lk.PurchaseUnitIsExplicit = unitIsExplicit
-		if urlutil.IsLocalFile(thumbFile.String) {
-			lk.Thumb = urlutil.LocalFileURL(thumbFile.String, "/local/")
-		}
-		links = append(links, lk)
-	}
-
 	// PO links: numbers of POs placed with this vendor for each part (RFQ quotes excluded).
-	poByPart := map[int][]string{}
-	poRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pol.part_id, po.number
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.ID
-		WHERE po.supplier_id = $1 AND po.rfq_group_id IS NULL
-		ORDER BY po.number DESC
-	`, h.cfg().POLineTable(), h.cfg().POTable()), id)
+	poByPart, err := h.purchasing().SupplierPOLinks(r.Context(), s.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving PO links: "+err.Error())
 		return
 	}
-	defer poRows.Close()
-	for poRows.Next() {
-		var partID sql.NullInt64
-		var number sql.NullString
-		if err := poRows.Scan(&partID, &number); err != nil {
-			h.renderError(w, r, "Error reading PO links: "+err.Error())
-			return
+	links := make([]models.SupplierPart, len(parts))
+	for i, p := range parts {
+		links[i] = models.SupplierPart{
+			ID: p.ID, PartID: p.PartID, Preference: p.Preference, SupplierPN: p.SupplierPN,
+			SupplierDesc: p.SupplierDesc, LeadTime: p.LeadTime, MinIncrement: p.MinIncrement,
+			PartNumber: p.PartNumber, Description: p.Description, Revision: p.Revision, Category: p.Category,
+			UnitID: p.UnitID, PurchaseUnitAbbr: p.UnitAbbr, PurchaseUnitIsExplicit: p.UnitIsExplicit,
+			POLinks: poByPart[p.PartID],
 		}
-		if partID.Valid && number.Valid {
-			pid := int(partID.Int64)
-			poByPart[pid] = append(poByPart[pid], number.String)
+		if urlutil.IsLocalFile(p.ThumbFile) {
+			links[i].Thumb = urlutil.LocalFileURL(p.ThumbFile, "/local/")
 		}
-	}
-	if err := poRows.Err(); err != nil {
-		h.renderError(w, r, "Error reading PO links: "+err.Error())
-		return
-	}
-	for i := range links {
-		links[i].POLinks = poByPart[links[i].PartID]
 	}
 
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
@@ -470,7 +256,7 @@ func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orders := h.recentSupplierPOs(r.Context(), id, 0)
+	orders, _ := h.purchasing().ListSupplierPOs(r.Context(), s.ID, 0)
 
 	h.setNavContext(w, r, fmt.Sprintf("/supplier/%d", s.ID), s.Name)
 	sess := h.session(r)
@@ -747,67 +533,25 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id string) (models.Supplier, bool) {
-	var s models.Supplier
-	var name, code, notes sql.NullString
-	var defaultContact sql.NullInt64
-	var isActive, isSupplier, isManufacturer sql.NullBool
-	var numLNKs, numPOs sql.NullInt64
-	var dateModified sql.NullTime
-	var primaryAttID sql.NullInt64
-	var cnName, cnPhone, cnEmail, cnCity sql.NullString
-	var bulkOrderDelimiter, bulkOrderPNSource sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT su.id, su.name, su.supplier_code, su.notes,
-		       su.default_contact, su.is_active, su.is_supplier, su.is_manufacturer,
-		       su.supplier_part_count, su.po_count, su.date_modified,
-		       su.primary_attachment_id,
-		       su.bulk_order_delimiter, su.bulk_order_pn_source,
-		       cn.display_name, cn.phone_1, cn.email, cn.city
-		FROM %s su
-		LEFT JOIN %s cn ON su.default_contact = cn.id
-		WHERE su.id = $1
-	`, h.cfg().CompanyTable(), h.cfg().ContactTable()), id).Scan(
-		&s.ID, &name, &code, &notes,
-		&defaultContact, &isActive, &isSupplier, &isManufacturer,
-		&numLNKs, &numPOs, &dateModified,
-		&primaryAttID,
-		&bulkOrderDelimiter, &bulkOrderPNSource,
-		&cnName, &cnPhone, &cnEmail, &cnCity,
-	)
-	if err == sql.ErrNoRows {
+	n, _ := strconv.Atoi(id) // a non-numeric id reads as 0: not found
+	su, err := h.purchasing().GetSupplier(r.Context(), n)
+	if errors.Is(err, sql.ErrNoRows) {
 		h.renderError(w, r, "Supplier not found")
-		return s, false
+		return models.Supplier{}, false
 	}
 	if err != nil {
 		h.renderError(w, r, "Error retrieving supplier: "+err.Error())
-		return s, false
+		return models.Supplier{}, false
 	}
-	s.Name = name.String
-	s.SupplierCode = code.String
-	s.Notes = notes.String
-	s.DisplayName = cnName.String
-	s.Phone1 = cnPhone.String
-	s.Email = cnEmail.String
-	s.City = cnCity.String
-	s.IsActive = isActive.Bool
-	s.IsSupplier = isSupplier.Bool
-	s.IsManufacturer = isManufacturer.Bool
-	s.SupplierPartCount = int(numLNKs.Int64)
-	s.POCount = int(numPOs.Int64)
-	if defaultContact.Valid {
-		v := int(defaultContact.Int64)
-		s.DefaultContact = &v
-	}
-	if dateModified.Valid {
-		s.DateModified = &dateModified.Time
-	}
-	if primaryAttID.Valid {
-		v := int(primaryAttID.Int64)
-		s.PrimaryAttachmentID = &v
-	}
-	s.BulkOrderDelimiter = bulkOrderDelimiter.String
-	s.BulkOrderPNSource = bulkOrderPNSource.String
-	return s, true
+	return models.Supplier{
+		ID: su.ID, Name: su.Name, SupplierCode: su.SupplierCode, Notes: su.Notes,
+		IsActive: su.IsActive, IsSupplier: su.IsSupplier, IsManufacturer: su.IsManufacturer,
+		DefaultContact: su.DefaultContact, DateModified: su.DateModified,
+		SupplierPartCount: su.SupplierPartCount, POCount: su.POCount,
+		PrimaryAttachmentID: su.PrimaryAttachmentID,
+		BulkOrderDelimiter:  su.BulkOrderDelimiter, BulkOrderPNSource: su.BulkOrderPNSource,
+		DisplayName: su.ContactName, Phone1: su.ContactPhone, Email: su.ContactEmail, City: su.ContactCity,
+	}, true
 }
 
 func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Request) {
@@ -1008,6 +752,20 @@ func supplierFromForm(r *http.Request) models.Supplier {
 		s.DefaultContact = &i
 	}
 	return s
+}
+
+// purchasingSupplierFromForm reads the supplier edit form's editable fields.
+func purchasingSupplierFromForm(r *http.Request) purchasing.Supplier {
+	return purchasing.Supplier{
+		Name: fv(r, "name"), SupplierCode: fv(r, "supplier_code"),
+		DefaultContact:     intPtrOrNil(fv(r, "default_contact")),
+		IsActive:           r.FormValue("is_active") == "1",
+		IsSupplier:         r.FormValue("is_supplier") == "1",
+		IsManufacturer:     r.FormValue("is_manufacturer") == "1",
+		Notes:              fv(r, "notes"),
+		BulkOrderDelimiter: bulkOrderDelimiterOrDefault(fv(r, "bulk_order_delimiter")),
+		BulkOrderPNSource:  bulkOrderPNSourceOrDefault(fv(r, "bulk_order_pn_source")),
+	}
 }
 
 // bulkOrderDelimiterOrDefault restricts the PO "Copy for Ordering" delimiter (#80) to known values.

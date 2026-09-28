@@ -59,3 +59,12 @@ SELECT number,
 FROM purchase_order
 WHERE supplier_contact_id = sqlc.arg(contact_id)::int OR receiver_contact_id = sqlc.arg(contact_id)::int
 ORDER BY date_ordered DESC, id DESC;
+
+-- name: ListActiveCompanyContacts :many
+SELECT id, display_name,
+       COALESCE(address, '') AS address, COALESCE(city, '') AS city, COALESCE(state, '') AS state,
+       COALESCE(zipcode, '') AS zipcode, COALESCE(country, '') AS country,
+       COALESCE(phone_1, '') AS phone_1, COALESCE(fax, '') AS fax, COALESCE(email, '') AS email
+FROM contact
+WHERE company_id = sqlc.arg(company_id)::int AND is_active = TRUE
+ORDER BY display_name;

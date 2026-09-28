@@ -42,36 +42,15 @@ func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []Contact
 	if supplierID <= 0 {
 		return nil
 	}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, display_name, address, city, state, zipcode,
-		       country, phone_1, fax, email
-		FROM %s WHERE company_id = $1 AND is_active = TRUE ORDER BY display_name
-	`, h.cfg().ContactTable()), supplierID)
+	contacts, err := h.contacts().ListActiveForCompany(r.Context(), supplierID)
 	if err != nil {
+		log.Printf("contactsForSupplier: %v", err)
 		return nil
 	}
-	defer rows.Close()
-	var out []ContactSummary
-	for rows.Next() {
-		var c ContactSummary
-		var name, addr, city, state, zip, country, phone, fax, email sql.NullString
-		if err := rows.Scan(&c.ID, &name, &addr, &city, &state, &zip, &country, &phone, &fax, &email); err != nil {
-			log.Printf("contactsForSupplier: scan error: %v", err)
-			break
-		}
-		c.DisplayName = name.String
-		c.Address = addr.String
-		c.City = city.String
-		c.State = state.String
-		c.Zipcode = zip.String
-		c.Country = country.String
-		c.Phone = phone.String
-		c.Fax = fax.String
-		c.Email = email.String
-		out = append(out, c)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("contactsForSupplier: rows error: %v", err)
+	out := make([]ContactSummary, len(contacts))
+	for i, c := range contacts {
+		out[i] = ContactSummary{ID: c.ID, DisplayName: c.DisplayName, Address: c.Address, City: c.City,
+			State: c.State, Zipcode: c.Zipcode, Country: c.Country, Phone: c.Phone1, Fax: c.Fax, Email: c.Email}
 	}
 	return out
 }
@@ -419,18 +398,15 @@ func (h *Handler) fetchSupplierBulkOrderOptions(r *http.Request, supplierID *int
 	if supplierID == nil {
 		return
 	}
-	var d, s sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT bulk_order_delimiter, bulk_order_pn_source FROM %s WHERE id = $1`, h.cfg().CompanyTable(),
-	), *supplierID).Scan(&d, &s)
+	su, err := h.purchasing().GetSupplier(r.Context(), *supplierID)
 	if err != nil {
 		return
 	}
-	if d.String != "" {
-		delimiter = d.String
+	if su.BulkOrderDelimiter != "" {
+		delimiter = su.BulkOrderDelimiter
 	}
-	if s.String != "" {
-		pnSource = s.String
+	if su.BulkOrderPNSource != "" {
+		pnSource = su.BulkOrderPNSource
 	}
 	return
 }

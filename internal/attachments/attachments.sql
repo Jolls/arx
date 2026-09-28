@@ -102,6 +102,10 @@ SELECT supplier_attachment_id, supplier_id, file_path, COALESCE(notes, '') AS no
 FROM company_attachment WHERE supplier_id = $1 AND is_active = TRUE
 ORDER BY sort_order, supplier_attachment_id;
 
+-- name: GetCompanyAttachment :one
+SELECT supplier_attachment_id, supplier_id, file_path, COALESCE(notes, '') AS notes, sort_order
+FROM company_attachment WHERE supplier_attachment_id = $1;
+
 -- name: GetCompanyAttachmentPath :one
 SELECT file_path FROM company_attachment WHERE supplier_attachment_id = $1 AND supplier_id = $2;
 
