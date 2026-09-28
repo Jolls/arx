@@ -3,14 +3,16 @@
 // manufacturer parts, sourcing (supplier links, their prices and the
 // DigiKey import), the RFQ planner's BOM reads, the part-number list, the
 // parts list/CSV export, the single-part read/create/update, the BOM
-// lines (view, where-used, edit, paste preview, copy, export) and the
-// pricing tab's price CRUD are converted.
+// lines (view, where-used, edit, paste preview, copy, export), the
+// pricing tab's price CRUD and the BOM cost rollup/build cost are converted.
 package parts
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"arx/internal/dbq"
@@ -211,6 +213,22 @@ type PartRef struct {
 	ID          int
 	PartNumber  string
 	Description string
+}
+
+// BuildCostPart is what build cost needs of a leaf part: its number,
+// description (NULL reads as "") and default supplier.
+type BuildCostPart struct {
+	PartNumber        string
+	Description       string
+	DefaultSupplierID *int
+}
+
+// PriceTier is an active price row's per-unit price at its pack size.
+type PriceTier struct {
+	PartID     int
+	SupplierID int
+	PriceEA    float64
+	PackSize   float64
 }
 
 type Service struct{ q *dbq.Queries }
@@ -636,4 +654,48 @@ func (s *Service) SetPriceActive(ctx context.Context, id, partID int, active boo
 // DeleteInactivePrice hard-deletes price id of partID; an active price is left alone.
 func (s *Service) DeleteInactivePrice(ctx context.Context, id, partID int) error {
 	return s.q.DeleteInactivePrice(ctx, dbq.DeleteInactivePriceParams{ID: id, PartID: partID})
+}
+
+// SetPartRollup stores cost as part id's rolled-up cost, stamped now.
+func (s *Service) SetPartRollup(ctx context.Context, id int, cost float64) error {
+	return s.q.SetPartRollup(ctx, dbq.SetPartRollupParams{Cost: cost, ID: id})
+}
+
+// idList joins ids with commas for a string_to_array(...)::int[] param.
+func idList(ids []int) string {
+	s := make([]string, len(ids))
+	for i, id := range ids {
+		s[i] = strconv.Itoa(id)
+	}
+	return strings.Join(s, ",")
+}
+
+// BuildCostParts returns the parts in ids keyed by id; unknown ids are absent.
+func (s *Service) BuildCostParts(ctx context.Context, ids []int) (map[int]BuildCostPart, error) {
+	rows, err := s.q.ListBuildCostParts(ctx, idList(ids))
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int]BuildCostPart, len(rows))
+	for _, r := range rows {
+		out[r.ID] = BuildCostPart{PartNumber: r.PartNumber, Description: r.Description, DefaultSupplierID: r.DefaultSupplierID}
+	}
+	return out, nil
+}
+
+// ActivePriceTiers returns the active price rows of the parts in partIDs,
+// skipping any without a price or pack size (as MIN(price_ea) does for rollup).
+func (s *Service) ActivePriceTiers(ctx context.Context, partIDs []int) ([]PriceTier, error) {
+	rows, err := s.q.ListActivePriceTiers(ctx, idList(partIDs))
+	if err != nil {
+		return nil, err
+	}
+	var out []PriceTier
+	for _, r := range rows {
+		if r.PriceEa == nil || r.PackSize == nil {
+			continue
+		}
+		out = append(out, PriceTier{PartID: r.PartID, SupplierID: r.SupplierID, PriceEA: *r.PriceEa, PackSize: *r.PackSize})
+	}
+	return out, nil
 }

@@ -292,3 +292,16 @@ UPDATE price SET is_active = sqlc.arg(is_active)::boolean WHERE id = sqlc.arg(id
 
 -- name: DeleteInactivePrice :exec
 DELETE FROM price WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id) AND is_active = FALSE;
+
+-- name: SetPartRollup :exec
+UPDATE part SET last_rollup_cost = sqlc.arg(cost)::numeric, last_rollup_at = CURRENT_TIMESTAMP WHERE id = sqlc.arg(id);
+
+-- ListBuildCostParts and ListActivePriceTiers take their ids comma-separated: sqlc's
+-- database/sql output would pass an int[] param through lib/pq's pq.Array.
+-- name: ListBuildCostParts :many
+SELECT id, part_number, COALESCE(description, '') AS description, default_supplier_id
+FROM part WHERE id = ANY(string_to_array(sqlc.arg(ids)::text, ',')::int[]);
+
+-- name: ListActivePriceTiers :many
+SELECT part_id, supplier_id, price_ea, pack_size
+FROM price WHERE is_active = TRUE AND part_id = ANY(string_to_array(sqlc.arg(part_ids)::text, ',')::int[]);

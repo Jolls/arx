@@ -1015,14 +1015,6 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 
 // ── BOM cost rollup ──────────────────────────────────────────────────────────
 
-// hasOwnBOMExpr is the "does this part have its own BOM" EXISTS check shared by
-// getPart, rollupCost and aggregateLeafQty — both walk the same bom table shape
-// to decide whether to recurse into a sub-assembly or treat a component as a leaf.
-func hasOwnBOMExpr(bomTable, parentIDCol string) string {
-	return fmt.Sprintf(
-		"(EXISTS(SELECT 1 FROM %s c WHERE c.parent_part_id = %s))", bomTable, parentIDCol)
-}
-
 type rollupResult struct {
 	cost  float64
 	cycle bool
@@ -1041,35 +1033,17 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	pl, pn, pr := h.cfg().BOMTable(), h.cfg().PartsTable(), h.cfg().PriceTable()
-	hasBOM := hasOwnBOMExpr(pl, "pn.id")
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pl.component_part_id, pl.qty, pn.current_cost,
-		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
-		       %s
-		FROM %s pl
-		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = $1
-	`, pr, hasBOM, pl, pn), pnid)
+	lines, err := h.parts().ListBOMLines(ctx, pnid)
 	if err != nil {
 		return rollupResult{}, err
 	}
-	defer rows.Close()
 
 	var total float64
 	var hasCycle bool
-	for rows.Next() {
-		var childID int
-		var qty float64
-		var currentCost, preferredPrice sql.NullFloat64
-		var childHasBOM sql.NullBool
-		if err := rows.Scan(&childID, &qty, &currentCost, &preferredPrice, &childHasBOM); err != nil {
-			return rollupResult{}, err
-		}
+	for _, l := range lines {
 		var unitCost float64
-		if childHasBOM.Bool {
-			res, err := h.rollupCost(ctx, childID, visited, memo)
+		if l.HasBOM {
+			res, err := h.rollupCost(ctx, l.ComponentPartID, visited, memo)
 			if err != nil {
 				return rollupResult{}, err
 			}
@@ -1078,12 +1052,9 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 			}
 			unitCost = res.cost
 		} else {
-			unitCost, _ = bomLeafCost(false, 0, preferredPrice.Float64, currentCost.Float64, "")
+			unitCost, _ = bomLeafCost(false, 0, l.PreferredPrice, l.CurrentCost, "")
 		}
-		total += unitCost * qty
-	}
-	if err := rows.Err(); err != nil {
-		return rollupResult{}, err
+		total += unitCost * l.Qty
 	}
 
 	result := rollupResult{cost: total, cycle: hasCycle}
@@ -1115,7 +1086,6 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 	}
 	// Write rollup cost back to every assembly visited during the walk (root + all
 	// sub-assemblies) in one transaction, so now() gives every assembly the same timestamp.
-	pn := h.cfg().PartsTable()
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
@@ -1127,10 +1097,9 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 			tx.Rollback()
 		}
 	}()
+	svc := parts.New(tx)
 	for partID, result := range memo {
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET last_rollup_cost=$1, last_rollup_at=CURRENT_TIMESTAMP WHERE id=$2`, pn,
-		), result.cost, partID); err != nil {
+		if err := svc.SetPartRollup(r.Context(), partID, result.cost); err != nil {
 			h.renderError(w, r, "Error saving rollup cost: "+err.Error())
 			return
 		}
@@ -1190,29 +1159,16 @@ func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty floa
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	pl := h.cfg().BOMTable()
-	hasBOM := hasOwnBOMExpr(pl, "pl.component_part_id")
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pl.component_part_id, pl.qty, %s
-		FROM %s pl
-		WHERE pl.parent_part_id = $1
-	`, hasBOM, pl), pnid)
+	lines, err := h.parts().ListBOMLines(ctx, pnid)
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
 
 	var hasCycle bool
-	for rows.Next() {
-		var childID int
-		var qty float64
-		var childHasBOM sql.NullBool
-		if err := rows.Scan(&childID, &qty, &childHasBOM); err != nil {
-			return false, err
-		}
-		extQty := qty * parentQty
-		if childHasBOM.Bool {
-			cycle, err := h.aggregateLeafQty(ctx, childID, extQty, visited, leaves)
+	for _, l := range lines {
+		extQty := l.Qty * parentQty
+		if l.HasBOM {
+			cycle, err := h.aggregateLeafQty(ctx, l.ComponentPartID, extQty, visited, leaves)
 			if err != nil {
 				return false, err
 			}
@@ -1226,54 +1182,10 @@ func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty floa
 				break
 			}
 		} else {
-			leaves[childID] += extQty
+			leaves[l.ComponentPartID] += extQty
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return false, err
 	}
 	return hasCycle, nil
-}
-
-// buildCost computes the consolidated cost to build qty units of pnid: it
-// aggregates each leaf part's total demand across every occurrence in the tree
-// (Pass 1), then prices each leaf once at its aggregated qty using the largest
-// qualifying pack_size tier for the part's default supplier (Pass 2). Leaves
-// below every tier's pack_size are reported as "missing" — no current_cost
-// fallback, no extrapolation.
-type buildCostPartInfo struct {
-	PartNumber        string
-	Description       string
-	DefaultSupplierID sql.NullInt64
-}
-
-// fetchPartInfoByID batches a part_number/description/default_supplier_id lookup for
-// every id in ids into a single query, keyed by id. Used by buildCost's Pass 2
-// so pricing N leaves costs O(1) round trips instead of O(N).
-func (h *Handler) fetchPartInfoByID(ctx context.Context, ids []int) (map[int]buildCostPartInfo, error) {
-	out := map[int]buildCostPartInfo{}
-	if len(ids) == 0 {
-		return out, nil
-	}
-	placeholders, args := sqlInClause(ids)
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, description, default_supplier_id FROM %s WHERE id IN (%s)`,
-		h.cfg().PartsTable(), placeholders), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int
-		var partNumber, description sql.NullString
-		var info buildCostPartInfo
-		if err := rows.Scan(&id, &partNumber, &description, &info.DefaultSupplierID); err != nil {
-			return nil, err
-		}
-		info.PartNumber, info.Description = partNumber.String, description.String
-		out[id] = info
-	}
-	return out, rows.Err()
 }
 
 // partSupplierKey identifies one part+supplier pairing, used to key batched
@@ -1283,45 +1195,13 @@ type partSupplierKey struct {
 	SupplierID int
 }
 
-// fetchPriceTiersByPart batches active price rows for every id in ids into a
-// single query, keyed by (part_id, supplier_id) so buildCost's Pass 2 can look
-// up just the tiers for each leaf's own default supplier.
-func (h *Handler) fetchPriceTiersByPart(ctx context.Context, ids []int) (map[partSupplierKey][]priceTier, error) {
-	out := map[partSupplierKey][]priceTier{}
-	if len(ids) == 0 {
-		return out, nil
-	}
-	placeholders, args := sqlInClause(ids)
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT part_id, supplier_id, price_ea, pack_size FROM %s WHERE is_active = TRUE AND part_id IN (%s)`,
-		h.cfg().PriceTable(), placeholders), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var key partSupplierKey
-		var t priceTier
-		if err := rows.Scan(&key.PartID, &key.SupplierID, &t.PriceEA, &t.PackSize); err != nil {
-			return nil, err
-		}
-		out[key] = append(out[key], t)
-	}
-	return out, rows.Err()
-}
-
-// sqlInClause builds a "$1,$2,..." placeholder list and matching args slice
-// for a dynamic-length IN (...) clause.
-func sqlInClause(ids []int) (string, []any) {
-	placeholders := make([]string, len(ids))
-	args := make([]any, len(ids))
-	for i, id := range ids {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-		args[i] = id
-	}
-	return strings.Join(placeholders, ","), args
-}
-
+// buildCost computes the consolidated cost to build qty units of pnid: it
+// aggregates each leaf part's total demand across every occurrence in the tree
+// (Pass 1), then prices each leaf once at its aggregated qty using the largest
+// qualifying pack_size tier for the part's default supplier (Pass 2). Leaves
+// below every tier's pack_size are reported as "missing" — no current_cost
+// fallback, no extrapolation. Pass 2 batches its part and price lookups, so
+// pricing N leaves costs O(1) round trips instead of O(N).
 func (h *Handler) buildCost(ctx context.Context, pnid int, qty float64) (buildCostResult, error) {
 	leaves := map[int]float64{}
 	hasCycle, err := h.aggregateLeafQty(ctx, pnid, qty, map[int]bool{}, leaves)
@@ -1336,13 +1216,18 @@ func (h *Handler) buildCost(ctx context.Context, pnid int, qty float64) (buildCo
 	for id := range leaves {
 		ids = append(ids, id)
 	}
-	partInfo, err := h.fetchPartInfoByID(ctx, ids)
+	partInfo, err := h.parts().BuildCostParts(ctx, ids)
 	if err != nil {
 		return buildCostResult{}, err
 	}
-	priceTiers, err := h.fetchPriceTiersByPart(ctx, ids)
+	tierRows, err := h.parts().ActivePriceTiers(ctx, ids)
 	if err != nil {
 		return buildCostResult{}, err
+	}
+	priceTiers := map[partSupplierKey][]priceTier{}
+	for _, t := range tierRows {
+		key := partSupplierKey{PartID: t.PartID, SupplierID: t.SupplierID}
+		priceTiers[key] = append(priceTiers[key], priceTier{PriceEA: t.PriceEA, PackSize: t.PackSize})
 	}
 
 	var result buildCostResult
@@ -1353,8 +1238,8 @@ func (h *Handler) buildCost(ctx context.Context, pnid int, qty float64) (buildCo
 			QtyNeeded: totalQty, Source: "missing",
 		}
 
-		if info.DefaultSupplierID.Valid {
-			tiers := priceTiers[partSupplierKey{PartID: childID, SupplierID: int(info.DefaultSupplierID.Int64)}]
+		if info.DefaultSupplierID != nil {
+			tiers := priceTiers[partSupplierKey{PartID: childID, SupplierID: *info.DefaultSupplierID}]
 			if unitPrice, packSize, ok := pickTier(tiers, totalQty); ok {
 				line.UnitPrice = unitPrice
 				line.PackSize = packSize

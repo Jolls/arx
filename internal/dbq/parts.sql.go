@@ -697,6 +697,46 @@ func (q *Queries) ImportPrice(ctx context.Context, arg ImportPriceParams) (int64
 	return result.RowsAffected()
 }
 
+const listActivePriceTiers = `-- name: ListActivePriceTiers :many
+SELECT part_id, supplier_id, price_ea, pack_size
+FROM price WHERE is_active = TRUE AND part_id = ANY(string_to_array($1::text, ',')::int[])
+`
+
+type ListActivePriceTiersRow struct {
+	PartID     int
+	SupplierID int
+	PriceEa    *float64
+	PackSize   *float64
+}
+
+func (q *Queries) ListActivePriceTiers(ctx context.Context, partIds string) ([]ListActivePriceTiersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActivePriceTiers, partIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActivePriceTiersRow
+	for rows.Next() {
+		var i ListActivePriceTiersRow
+		if err := rows.Scan(
+			&i.PartID,
+			&i.SupplierID,
+			&i.PriceEa,
+			&i.PackSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActivePrices = `-- name: ListActivePrices :many
 SELECT supplier_id, price_ea, price_pack, pack_size, effective_date
 FROM price
@@ -858,6 +898,48 @@ func (q *Queries) ListBOMLines(ctx context.Context, parentPartID int) ([]ListBOM
 			&i.HasBom,
 			&i.AttachmentCount,
 			&i.PoLineCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBuildCostParts = `-- name: ListBuildCostParts :many
+SELECT id, part_number, COALESCE(description, '') AS description, default_supplier_id
+FROM part WHERE id = ANY(string_to_array($1::text, ',')::int[])
+`
+
+type ListBuildCostPartsRow struct {
+	ID                int
+	PartNumber        string
+	Description       string
+	DefaultSupplierID *int
+}
+
+// ListBuildCostParts and ListActivePriceTiers take their ids comma-separated: sqlc's
+// database/sql output would pass an int[] param through lib/pq's pq.Array.
+func (q *Queries) ListBuildCostParts(ctx context.Context, ids string) ([]ListBuildCostPartsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBuildCostParts, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBuildCostPartsRow
+	for rows.Next() {
+		var i ListBuildCostPartsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartNumber,
+			&i.Description,
+			&i.DefaultSupplierID,
 		); err != nil {
 			return nil, err
 		}
@@ -1316,6 +1398,20 @@ type SetDefaultSupplierParams struct {
 
 func (q *Queries) SetDefaultSupplier(ctx context.Context, arg SetDefaultSupplierParams) error {
 	_, err := q.db.ExecContext(ctx, setDefaultSupplier, arg.SupplierID, arg.ID)
+	return err
+}
+
+const setPartRollup = `-- name: SetPartRollup :exec
+UPDATE part SET last_rollup_cost = $1::numeric, last_rollup_at = CURRENT_TIMESTAMP WHERE id = $2
+`
+
+type SetPartRollupParams struct {
+	Cost float64
+	ID   int
+}
+
+func (q *Queries) SetPartRollup(ctx context.Context, arg SetPartRollupParams) error {
+	_, err := q.db.ExecContext(ctx, setPartRollup, arg.Cost, arg.ID)
 	return err
 }
 
