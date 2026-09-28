@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"arx/arx_go/models"
+	"arx/internal/purchasing"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -188,7 +189,9 @@ func (h *Handler) buildRFQPlan(ctx context.Context, root int, n float64) (rfqPla
 		if g == nil {
 			g = &rfqSupplierGroup{SupplierID: sid}
 			bySupplier[sid] = g
-			h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = $1`, h.cfg().CompanyTable()), sid).Scan(&g.SupplierName)
+			if s, err := h.purchasing().GetSupplier(ctx, sid); err == nil {
+				g.SupplierName = s.Name
+			}
 		}
 		g.Lines = append(g.Lines, l)
 	}
@@ -313,20 +316,17 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 // itself) for supplier group g, with its lines and status-history row.
 func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup, lines []rfqLine, root models.Part, po models.PurchaseOrder) (string, error) {
 	ctx := r.Context()
-	var base string
-	if err := h.queryRowContext(ctx,
-		"SELECT CAST(nextval('po_number_seq') AS VARCHAR)",
-	).Scan(&base); err != nil {
+	base, err := h.purchasing().NextPONumber(ctx)
+	if err != nil {
 		return "", err
 	}
 	number := base + "R1"
 
-	var defaultContact sql.NullInt64
-	h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id = $1`, h.cfg().CompanyTable()), g.SupplierID).Scan(&defaultContact)
+	supplier, _ := h.purchasing().GetSupplier(ctx, g.SupplierID)
 	var sc ContactSummary
-	if defaultContact.Valid {
+	if supplier.DefaultContact != nil {
 		for _, c := range h.contactsForSupplier(r, g.SupplierID) {
-			if c.ID == int(defaultContact.Int64) {
+			if c.ID == *supplier.DefaultContact {
 				sc = c
 				break
 			}
@@ -334,55 +334,35 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	}
 
 	now := time.Now()
-	var poID int
-	insertPO := fmt.Sprintf(`INSERT INTO %s (number, status, is_active, orderer, account_id,
-		 supplier_id, supplier_name, supplier_contact, supplier_email,
-		 supplier_address, supplier_city, supplier_state, supplier_zipcode,
-		 supplier_country, supplier_phone_number, supplier_fax_number,
-		 receiver_id, receiver_name, receiver_contact, receiver_email,
-		 receiver_address, receiver_city, receiver_state, receiver_zipcode,
-		 receiver_country, receiver_phone, receiver_fax,
-		 tax1, shipping_cost, misc_cost, notes, internal_notes, date_ordered,
-		 date_requested, date_closed, total_cost,
-		 supplier_contact_id, receiver_contact_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-		 $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
-		 $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38) RETURNING id`, h.cfg().POTable())
-	var supplierContactID any
+	zero := 0.0
+	rfq := purchasing.PO{Number: number, Status: "rfq", IsActive: statusIsActive("rfq"), Orderer: po.Orderer,
+		SupplierID: &g.SupplierID, SupplierName: g.SupplierName, SupplierContact: sc.DisplayName, SupplierEmail: sc.Email,
+		SupplierAddress: sc.Address, SupplierCity: sc.City, SupplierState: sc.State, SupplierZipcode: sc.Zipcode,
+		SupplierCountry: sc.Country, SupplierPhoneNumber: sc.Phone, SupplierFaxNumber: sc.Fax,
+		ReceiverID: po.ReceiverID, ReceiverName: po.ReceiverName, ReceiverContact: po.ReceiverContact,
+		ReceiverEmail: po.ReceiverEmail, ReceiverAddress: po.ReceiverAddress, ReceiverCity: po.ReceiverCity,
+		ReceiverState: po.ReceiverState, ReceiverZipcode: po.ReceiverZipcode, ReceiverCountry: po.ReceiverCountry,
+		ReceiverPhone: po.ReceiverPhone, ReceiverFax: po.ReceiverFax,
+		Tax1: &zero, ShippingCost: &zero, MiscCost: &zero, InternalNotes: "Created from BOM of " + root.PartNumber,
+		DateRequested: &now}
 	if sc.ID > 0 {
-		supplierContactID = sc.ID
+		rfq.SupplierContactID = &sc.ID
 	}
-	var receiverID any
-	if po.ReceiverID != nil {
-		receiverID = *po.ReceiverID
-	}
-	if err := tx.QueryRowContext(ctx, insertPO,
-		number, "rfq", statusIsActive("rfq"), po.Orderer, "",
-		g.SupplierID, g.SupplierName, sc.DisplayName, sc.Email,
-		sc.Address, sc.City, sc.State, sc.Zipcode,
-		sc.Country, sc.Phone, sc.Fax,
-		receiverID, po.ReceiverName, po.ReceiverContact, po.ReceiverEmail,
-		po.ReceiverAddress, po.ReceiverCity, po.ReceiverState, po.ReceiverZipcode,
-		po.ReceiverCountry, po.ReceiverPhone, po.ReceiverFax,
-		0.0, 0.0, 0.0, "", "Created from BOM of "+root.PartNumber, nil,
-		now, nil, 0.0,
-		supplierContactID, nil,
-	).Scan(&poID); err != nil {
+	pur := purchasing.New(tx)
+	poID, err := pur.CreatePO(ctx, rfq)
+	if err != nil {
 		return "", err
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET rfq_group_id=$1 WHERE ID=$2`, h.cfg().POTable()), poID, poID); err != nil {
+	if err := pur.SetRFQGroup(ctx, poID, poID); err != nil {
 		return "", err
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by)
-		VALUES ($1, 'status', NULL, 'rfq', $2)
-	`, h.cfg().POHistoryTable()), poID, h.actorName(r)); err != nil {
+	if err := pur.CreatePOStatusEvent(ctx, poID, nil, "rfq", h.actorName(r)); err != nil {
 		return "", err
 	}
 	for i, l := range lines {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-			INSERT INTO %s (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-		`, h.cfg().POLineTable()), poID, i+1, l.Part.PartNumber, l.Part.Revision, l.Part.Description, l.Qty, 0.0, "", l.Part.ID); err != nil {
+		partID := l.Part.ID
+		if err := pur.CreatePOLine(ctx, poID, purchasing.POLine{LineNumber: i + 1, PartNumberSnapshot: l.Part.PartNumber,
+			RevisionSnapshot: l.Part.Revision, Description: l.Part.Description, Qty: l.Qty, PartID: &partID}); err != nil {
 			return "", err
 		}
 	}

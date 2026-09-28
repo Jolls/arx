@@ -333,3 +333,82 @@ WHERE id = sqlc.arg(id);
 
 -- name: ListPOLineQtys :many
 SELECT COALESCE(qty, 0) AS qty, COALESCE(received_qty, 0) AS received_qty FROM po_line WHERE po_id = $1;
+
+-- name: ListRFQLineIDs :many
+-- Every line of every quote in RFQ group group_id.
+SELECT pol.id FROM po_line pol JOIN purchase_order po ON pol.po_id = po.id
+WHERE po.rfq_group_id = sqlc.arg(group_id)::int;
+
+-- name: SetRFQLineQuote :exec
+UPDATE po_line SET unit_cost = sqlc.arg(unit_cost)::float8, lead_time_days = sqlc.narg(lead_time_days)::int
+WHERE id = sqlc.arg(id);
+
+-- name: RecomputeRFQTotals :exec
+-- Each quote's total: its line sum plus its own tax/shipping/misc.
+UPDATE purchase_order
+SET total_cost = COALESCE((SELECT SUM(pol.qty * pol.unit_cost) FROM po_line pol WHERE pol.po_id = purchase_order.id), 0)
+    + COALESCE(tax1, 0) + COALESCE(shipping_cost, 0) + COALESCE(misc_cost, 0),
+    date_modified = CURRENT_TIMESTAMP
+WHERE rfq_group_id = sqlc.arg(group_id)::int;
+
+-- name: GetRFQQuote :one
+SELECT id, COALESCE(status, '') AS status, rfq_group_id, supplier_id FROM purchase_order WHERE number = $1;
+
+-- name: LockRFQGroup :many
+-- #191: locks the group's quotes in id order, so two converts of one group queue instead of deadlocking.
+SELECT id FROM purchase_order WHERE rfq_group_id = sqlc.arg(group_id)::int ORDER BY id FOR UPDATE;
+
+-- name: AwardRFQQuote :execrows
+-- #191: only a still-'rfq' quote can be awarded; closes it out and locks it for the rest of the tx.
+UPDATE purchase_order SET status = 'closed', is_active = FALSE, date_modified = CURRENT_TIMESTAMP
+WHERE id = $1 AND status = 'rfq';
+
+-- name: DeclineRFQQuote :execrows
+-- #191: only a still-'rfq' quote is declined; one changed meanwhile is left alone.
+UPDATE purchase_order SET status = 'cancelled', is_active = FALSE, date_modified = CURRENT_TIMESTAMP
+WHERE id = $1 AND status = 'rfq';
+
+-- name: ListOpenRFQSiblings :many
+-- The other quotes of group group_id still in 'rfq'.
+SELECT id FROM purchase_order
+WHERE rfq_group_id = sqlc.arg(group_id)::int AND status = 'rfq' AND id <> sqlc.arg(id)::int;
+
+-- name: CopyPOForConversion :one
+-- Duplicates PO source_id's header as a draft at number, outside any RFQ group, ordered today.
+INSERT INTO purchase_order (number, status, is_active, approval_status, rfq_group_id,
+  orderer, account_id,
+  supplier_id, supplier_name, supplier_contact, supplier_email,
+  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+  supplier_country, supplier_phone_number, supplier_fax_number,
+  receiver_id, receiver_name, receiver_contact, receiver_email,
+  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+  receiver_country, receiver_phone, receiver_fax,
+  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
+  date_ordered, date_requested, date_closed, date_printed, date_modified,
+  supplier_contact_id, receiver_contact_id)
+SELECT sqlc.arg(number)::text, 'draft', TRUE, 'not_submitted', NULL,
+  orderer, account_id,
+  supplier_id, supplier_name, supplier_contact, supplier_email,
+  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+  supplier_country, supplier_phone_number, supplier_fax_number,
+  receiver_id, receiver_name, receiver_contact, receiver_email,
+  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+  receiver_country, receiver_phone, receiver_fax,
+  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
+  CAST(CURRENT_TIMESTAMP AS DATE), date_requested, NULL, NULL, CURRENT_TIMESTAMP,
+  supplier_contact_id, receiver_contact_id
+FROM purchase_order WHERE id = sqlc.arg(source_id)::int
+RETURNING id;
+
+-- name: CopyPOLines :exec
+-- Copies PO source_id's lines onto PO po_id (received quantities start at their defaults).
+INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot,
+  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days)
+SELECT sqlc.arg(po_id)::int, line_number, part_number_snapshot, revision_snapshot,
+  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days
+FROM po_line WHERE po_id = sqlc.arg(source_id)::int;
+
+-- name: CreatePOStatusEventNote :exec
+-- CreatePOStatusEvent with a note.
+INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, note, changed_by)
+VALUES (sqlc.arg(po_id), 'status', sqlc.narg(from_status)::text, sqlc.arg(to_status)::text, sqlc.arg(note)::text, sqlc.arg(changed_by));

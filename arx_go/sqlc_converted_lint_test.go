@@ -11,7 +11,7 @@ import (
 // handler file whose domain moved to internal/<domain> must not slide back to
 // cfg.*Table() or raw query calls. Append each file as its domain converts.
 func TestSQLCConvertedFilesHaveNoRawSQL(t *testing.T) {
-	convertedFiles := []string{"contacts.go", "categories.go", "mfg_parts.go", "sourcing.go", "attachments.go", "partnumber.go", "parts.go", "suppliers.go"}
+	convertedFiles := []string{"contacts.go", "categories.go", "mfg_parts.go", "sourcing.go", "attachments.go", "partnumber.go", "parts.go", "suppliers.go", "pos.go", "rfq_bom.go"}
 	raw := regexp.MustCompile(`Table\(\)|\bh\.(queryContext|queryRowContext|execContext)\(|\.(QueryContext|QueryRowContext|ExecContext)\(`)
 	for _, f := range convertedFiles {
 		b, err := os.ReadFile(f)

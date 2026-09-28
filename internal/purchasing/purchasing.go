@@ -3,8 +3,9 @@
 // queries in purchasing.sql. So far the supplier pages (list, detail cards,
 // create/update, parts and POs tabs), the supplier typeahead and the PO reads
 // (grid, CSV export, header, lines, receipts, history, link/price suggestions,
-// RFQ comparison grid), PO create/edit writes and the PO lifecycle (status
-// transitions, approval, receiving's PO/line statements) are converted.
+// RFQ comparison grid), PO create/edit writes, the PO lifecycle (status
+// transitions, approval, receiving's PO/line statements) and the RFQ writes
+// (quote save, convert to PO, create from a BOM) are converted.
 package purchasing
 
 import (
@@ -671,4 +672,77 @@ func (s *Service) ListPOLineQtys(ctx context.Context, poID int) ([]POLine, error
 // SumPOLines returns the sum of qty × unit cost over poID's lines.
 func (s *Service) SumPOLines(ctx context.Context, poID int) (float64, error) {
 	return s.q.SumPOLines(ctx, poID)
+}
+
+// RFQQuote is a quote's id, status and links; a NULL status reads as "".
+type RFQQuote struct {
+	ID         int
+	Status     string
+	RFQGroupID *int
+	SupplierID int
+}
+
+// GetRFQQuote returns the PO with number's id, status and links; sql.ErrNoRows when there is none.
+func (s *Service) GetRFQQuote(ctx context.Context, number string) (RFQQuote, error) {
+	r, err := s.q.GetRFQQuote(ctx, number)
+	return RFQQuote{ID: r.ID, Status: r.Status, RFQGroupID: r.RfqGroupID, SupplierID: r.SupplierID}, err
+}
+
+// ListRFQLineIDs returns the ids of every line of every quote in RFQ group groupID.
+func (s *Service) ListRFQLineIDs(ctx context.Context, groupID int) ([]int, error) {
+	return s.q.ListRFQLineIDs(ctx, groupID)
+}
+
+// SetRFQLineQuote sets line id's quoted unit cost and lead time (nil clears it).
+func (s *Service) SetRFQLineQuote(ctx context.Context, id int, unitCost float64, leadDays *int) error {
+	return s.q.SetRFQLineQuote(ctx, dbq.SetRFQLineQuoteParams{UnitCost: unitCost, LeadTimeDays: leadDays, ID: id})
+}
+
+// RecomputeRFQTotals sets every quote's total in group groupID to its line sum plus its own
+// tax/shipping/misc.
+func (s *Service) RecomputeRFQTotals(ctx context.Context, groupID int) error {
+	return s.q.RecomputeRFQTotals(ctx, groupID)
+}
+
+// LockRFQGroup locks group groupID's quotes in id order for the rest of the transaction.
+func (s *Service) LockRFQGroup(ctx context.Context, groupID int) error {
+	_, err := s.q.LockRFQGroup(ctx, groupID)
+	return err
+}
+
+// AwardRFQQuote closes quote id out as the winner; false when it is no longer in 'rfq'.
+func (s *Service) AwardRFQQuote(ctx context.Context, id int) (bool, error) {
+	n, err := s.q.AwardRFQQuote(ctx, id)
+	return n > 0, err
+}
+
+// DeclineRFQQuote cancels quote id; false when it is no longer in 'rfq' (left untouched).
+func (s *Service) DeclineRFQQuote(ctx context.Context, id int) (bool, error) {
+	n, err := s.q.DeclineRFQQuote(ctx, id)
+	return n > 0, err
+}
+
+// ListOpenRFQSiblings returns the ids of group groupID's quotes other than exceptID still in 'rfq'.
+func (s *Service) ListOpenRFQSiblings(ctx context.Context, groupID, exceptID int) ([]int, error) {
+	return s.q.ListOpenRFQSiblings(ctx, dbq.ListOpenRFQSiblingsParams{GroupID: groupID, ID: exceptID})
+}
+
+// CopyPOForConversion duplicates PO sourceID's header as a draft PO at number (no RFQ group,
+// ordered today, approval not submitted) and returns its id.
+func (s *Service) CopyPOForConversion(ctx context.Context, sourceID int, number string) (int, error) {
+	return s.q.CopyPOForConversion(ctx, dbq.CopyPOForConversionParams{Number: number, SourceID: sourceID})
+}
+
+// CopyPOLines copies PO sourceID's lines onto PO poID.
+func (s *Service) CopyPOLines(ctx context.Context, sourceID, poID int) error {
+	return s.q.CopyPOLines(ctx, dbq.CopyPOLinesParams{PoID: poID, SourceID: sourceID})
+}
+
+// CreatePOStatusEventNote is CreatePOStatusEvent with a note.
+func (s *Service) CreatePOStatusEventNote(ctx context.Context, poID int, from *string, to, note, changedBy string) error {
+	var f sql.NullString
+	if from != nil {
+		f = sql.NullString{String: *from, Valid: true}
+	}
+	return s.q.CreatePOStatusEventNote(ctx, dbq.CreatePOStatusEventNoteParams{PoID: poID, FromStatus: f, ToStatus: to, Note: note, ChangedBy: changedBy})
 }

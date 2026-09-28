@@ -11,6 +11,79 @@ import (
 	"time"
 )
 
+const awardRFQQuote = `-- name: AwardRFQQuote :execrows
+UPDATE purchase_order SET status = 'closed', is_active = FALSE, date_modified = CURRENT_TIMESTAMP
+WHERE id = $1 AND status = 'rfq'
+`
+
+// #191: only a still-'rfq' quote can be awarded; closes it out and locks it for the rest of the tx.
+func (q *Queries) AwardRFQQuote(ctx context.Context, id int) (int64, error) {
+	result, err := q.db.ExecContext(ctx, awardRFQQuote, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const copyPOForConversion = `-- name: CopyPOForConversion :one
+INSERT INTO purchase_order (number, status, is_active, approval_status, rfq_group_id,
+  orderer, account_id,
+  supplier_id, supplier_name, supplier_contact, supplier_email,
+  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+  supplier_country, supplier_phone_number, supplier_fax_number,
+  receiver_id, receiver_name, receiver_contact, receiver_email,
+  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+  receiver_country, receiver_phone, receiver_fax,
+  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
+  date_ordered, date_requested, date_closed, date_printed, date_modified,
+  supplier_contact_id, receiver_contact_id)
+SELECT $1::text, 'draft', TRUE, 'not_submitted', NULL,
+  orderer, account_id,
+  supplier_id, supplier_name, supplier_contact, supplier_email,
+  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+  supplier_country, supplier_phone_number, supplier_fax_number,
+  receiver_id, receiver_name, receiver_contact, receiver_email,
+  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+  receiver_country, receiver_phone, receiver_fax,
+  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
+  CAST(CURRENT_TIMESTAMP AS DATE), date_requested, NULL, NULL, CURRENT_TIMESTAMP,
+  supplier_contact_id, receiver_contact_id
+FROM purchase_order WHERE id = $2::int
+RETURNING id
+`
+
+type CopyPOForConversionParams struct {
+	Number   string
+	SourceID int
+}
+
+// Duplicates PO source_id's header as a draft at number, outside any RFQ group, ordered today.
+func (q *Queries) CopyPOForConversion(ctx context.Context, arg CopyPOForConversionParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, copyPOForConversion, arg.Number, arg.SourceID)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
+const copyPOLines = `-- name: CopyPOLines :exec
+INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot,
+  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days)
+SELECT $1::int, line_number, part_number_snapshot, revision_snapshot,
+  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days
+FROM po_line WHERE po_id = $2::int
+`
+
+type CopyPOLinesParams struct {
+	PoID     int
+	SourceID int
+}
+
+// Copies PO source_id's lines onto PO po_id (received quantities start at their defaults).
+func (q *Queries) CopyPOLines(ctx context.Context, arg CopyPOLinesParams) error {
+	_, err := q.db.ExecContext(ctx, copyPOLines, arg.PoID, arg.SourceID)
+	return err
+}
+
 const countRFQQuotes = `-- name: CountRFQQuotes :one
 SELECT COUNT(*)::int FROM purchase_order WHERE rfq_group_id = $1::int
 `
@@ -209,6 +282,31 @@ func (q *Queries) CreatePOStatusEvent(ctx context.Context, arg CreatePOStatusEve
 	return err
 }
 
+const createPOStatusEventNote = `-- name: CreatePOStatusEventNote :exec
+INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, note, changed_by)
+VALUES ($1, 'status', $2::text, $3::text, $4::text, $5)
+`
+
+type CreatePOStatusEventNoteParams struct {
+	PoID       int
+	FromStatus sql.NullString
+	ToStatus   string
+	Note       string
+	ChangedBy  string
+}
+
+// CreatePOStatusEvent with a note.
+func (q *Queries) CreatePOStatusEventNote(ctx context.Context, arg CreatePOStatusEventNoteParams) error {
+	_, err := q.db.ExecContext(ctx, createPOStatusEventNote,
+		arg.PoID,
+		arg.FromStatus,
+		arg.ToStatus,
+		arg.Note,
+		arg.ChangedBy,
+	)
+	return err
+}
+
 const createSupplier = `-- name: CreateSupplier :one
 INSERT INTO company (name, supplier_code, default_contact, is_active, is_supplier, is_manufacturer, notes)
 VALUES ($1, $2::text, $3,
@@ -241,6 +339,20 @@ func (q *Queries) CreateSupplier(ctx context.Context, arg CreateSupplierParams) 
 	var id int
 	err := row.Scan(&id)
 	return id, err
+}
+
+const declineRFQQuote = `-- name: DeclineRFQQuote :execrows
+UPDATE purchase_order SET status = 'cancelled', is_active = FALSE, date_modified = CURRENT_TIMESTAMP
+WHERE id = $1 AND status = 'rfq'
+`
+
+// #191: only a still-'rfq' quote is declined; one changed meanwhile is left alone.
+func (q *Queries) DeclineRFQQuote(ctx context.Context, id int) (int64, error) {
+	result, err := q.db.ExecContext(ctx, declineRFQQuote, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deletePOLine = `-- name: DeletePOLine :exec
@@ -416,6 +528,29 @@ func (q *Queries) GetPOSupplierID(ctx context.Context, number string) (int, erro
 	return supplier_id, err
 }
 
+const getRFQQuote = `-- name: GetRFQQuote :one
+SELECT id, COALESCE(status, '') AS status, rfq_group_id, supplier_id FROM purchase_order WHERE number = $1
+`
+
+type GetRFQQuoteRow struct {
+	ID         int
+	Status     string
+	RfqGroupID *int
+	SupplierID int
+}
+
+func (q *Queries) GetRFQQuote(ctx context.Context, number string) (GetRFQQuoteRow, error) {
+	row := q.db.QueryRowContext(ctx, getRFQQuote, number)
+	var i GetRFQQuoteRow
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.RfqGroupID,
+		&i.SupplierID,
+	)
+	return i, err
+}
+
 const getSupplier = `-- name: GetSupplier :one
 SELECT su.id, su.name, COALESCE(su.supplier_code, '') AS supplier_code, COALESCE(su.notes, '') AS notes,
        su.default_contact, COALESCE(su.is_active, FALSE) AS is_active,
@@ -475,6 +610,40 @@ func (q *Queries) GetSupplier(ctx context.Context, id int) (GetSupplierRow, erro
 		&i.ContactCity,
 	)
 	return i, err
+}
+
+const listOpenRFQSiblings = `-- name: ListOpenRFQSiblings :many
+SELECT id FROM purchase_order
+WHERE rfq_group_id = $1::int AND status = 'rfq' AND id <> $2::int
+`
+
+type ListOpenRFQSiblingsParams struct {
+	GroupID int
+	ID      int
+}
+
+// The other quotes of group group_id still in 'rfq'.
+func (q *Queries) ListOpenRFQSiblings(ctx context.Context, arg ListOpenRFQSiblingsParams) ([]int, error) {
+	rows, err := q.db.QueryContext(ctx, listOpenRFQSiblings, arg.GroupID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPOExportRows = `-- name: ListPOExportRows :many
@@ -853,6 +1022,35 @@ func (q *Queries) ListRFQGroupLines(ctx context.Context, groupID int) ([]ListRFQ
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRFQLineIDs = `-- name: ListRFQLineIDs :many
+SELECT pol.id FROM po_line pol JOIN purchase_order po ON pol.po_id = po.id
+WHERE po.rfq_group_id = $1::int
+`
+
+// Every line of every quote in RFQ group group_id.
+func (q *Queries) ListRFQLineIDs(ctx context.Context, groupID int) ([]int, error) {
+	rows, err := q.db.QueryContext(ctx, listRFQLineIDs, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1242,6 +1440,34 @@ func (q *Queries) LockPOStatus(ctx context.Context, id int) (string, error) {
 	return status, err
 }
 
+const lockRFQGroup = `-- name: LockRFQGroup :many
+SELECT id FROM purchase_order WHERE rfq_group_id = $1::int ORDER BY id FOR UPDATE
+`
+
+// #191: locks the group's quotes in id order, so two converts of one group queue instead of deadlocking.
+func (q *Queries) LockRFQGroup(ctx context.Context, groupID int) ([]int, error) {
+	rows, err := q.db.QueryContext(ctx, lockRFQGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markPOPrinted = `-- name: MarkPOPrinted :exec
 UPDATE purchase_order SET date_printed = $1::text::date WHERE number = $2
 `
@@ -1282,6 +1508,20 @@ type ReceivePOLineParams struct {
 
 func (q *Queries) ReceivePOLine(ctx context.Context, arg ReceivePOLineParams) error {
 	_, err := q.db.ExecContext(ctx, receivePOLine, arg.Qty, arg.DateReceived, arg.ID)
+	return err
+}
+
+const recomputeRFQTotals = `-- name: RecomputeRFQTotals :exec
+UPDATE purchase_order
+SET total_cost = COALESCE((SELECT SUM(pol.qty * pol.unit_cost) FROM po_line pol WHERE pol.po_id = purchase_order.id), 0)
+    + COALESCE(tax1, 0) + COALESCE(shipping_cost, 0) + COALESCE(misc_cost, 0),
+    date_modified = CURRENT_TIMESTAMP
+WHERE rfq_group_id = $1::int
+`
+
+// Each quote's total: its line sum plus its own tax/shipping/misc.
+func (q *Queries) RecomputeRFQTotals(ctx context.Context, groupID int) error {
+	_, err := q.db.ExecContext(ctx, recomputeRFQTotals, groupID)
 	return err
 }
 
@@ -1397,6 +1637,22 @@ type SetRFQGroupParams struct {
 
 func (q *Queries) SetRFQGroup(ctx context.Context, arg SetRFQGroupParams) error {
 	_, err := q.db.ExecContext(ctx, setRFQGroup, arg.GroupID, arg.ID)
+	return err
+}
+
+const setRFQLineQuote = `-- name: SetRFQLineQuote :exec
+UPDATE po_line SET unit_cost = $1::float8, lead_time_days = $2::int
+WHERE id = $3
+`
+
+type SetRFQLineQuoteParams struct {
+	UnitCost     float64
+	LeadTimeDays *int
+	ID           int
+}
+
+func (q *Queries) SetRFQLineQuote(ctx context.Context, arg SetRFQLineQuoteParams) error {
+	_, err := q.db.ExecContext(ctx, setRFQLineQuote, arg.UnitCost, arg.LeadTimeDays, arg.ID)
 	return err
 }
 
