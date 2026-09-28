@@ -152,3 +152,63 @@ SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
        COALESCE((SELECT MIN(a.file_name) FROM part_attachment a
                  WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = sqlc.arg(thumb_category)::text), '')::text AS thumb_file
 FROM part p ORDER BY p.part_number;
+
+-- name: GetPartBasic :one
+-- The part header behind every part sub-tab page; thumb_file as in ListParts.
+SELECT p.id, p.part_number, COALESCE(p.description, '') AS description, COALESCE(p.category, '') AS category,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = p.id) AS has_bom,
+       p.primary_attachment_id, p.stock_on_hand, p.tracking_mode,
+       COALESCE((SELECT MIN(a.file_name) FROM part_attachment a
+                 WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = sqlc.arg(thumb_category)::text), '')::text AS thumb_file
+FROM part p WHERE p.id = sqlc.arg(id);
+
+-- name: GetPart :one
+SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision, COALESCE(p.description, '') AS description,
+       COALESCE(p.detail, '') AS detail, COALESCE(p.category, '') AS category,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = p.id) AS has_bom,
+       p.release_status, COALESCE(p.is_active, FALSE) AS is_active,
+       COALESCE(p.requested_by, '') AS requested_by, COALESCE(p.notes, '') AS notes,
+       p.created_date, p.modified_date, p.primary_attachment_id,
+       COALESCE(p.current_cost, 0) AS current_cost, COALESCE(p.last_rollup_cost, 0) AS last_rollup_cost,
+       p.last_rollup_at, COALESCE(p.attachment_count, 0) AS attachment_count,
+       COALESCE(p.po_line_count, 0) AS po_line_count,
+       p.uom_id, COALESCE(u.abbreviation, '') AS unit_abbr, p.stock_on_hand, p.reorder_min, p.tracking_mode,
+       COALESCE(p.user_field_1, '') AS user_field_1, COALESCE(p.user_field_2, '') AS user_field_2,
+       COALESCE(p.user_field_3, '') AS user_field_3, COALESCE(p.user_field_4, '') AS user_field_4,
+       COALESCE(p.user_field_5, '') AS user_field_5, COALESCE(p.user_field_6, '') AS user_field_6,
+       COALESCE(p.user_field_7, '') AS user_field_7, COALESCE(p.user_field_8, '') AS user_field_8,
+       COALESCE(p.user_field_9, '') AS user_field_9, COALESCE(p.user_field_10, '') AS user_field_10
+FROM part p LEFT JOIN uom u ON u.uom_id = p.uom_id
+WHERE p.id = $1;
+
+-- name: CreatePart :one
+-- A blank category is stored as NULL (uncategorized).
+INSERT INTO part (part_number, revision, description, detail, category,
+                  release_status, is_active, requested_by, notes, created_date, modified_date,
+                  uom_id, current_cost, reorder_min,
+                  user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
+                  user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, tracking_mode)
+VALUES (sqlc.arg(part_number), sqlc.arg(revision)::text, sqlc.arg(description)::text, sqlc.arg(detail)::text,
+        NULLIF(sqlc.arg(category)::text, ''), sqlc.arg(release_status), sqlc.arg(is_active)::boolean,
+        sqlc.arg(requested_by)::text, sqlc.arg(notes)::text, sqlc.arg(now)::date, sqlc.arg(now)::date,
+        sqlc.narg(uom_id), sqlc.arg(current_cost)::numeric, sqlc.narg(reorder_min),
+        sqlc.arg(user_field_1)::text, sqlc.arg(user_field_2)::text, sqlc.arg(user_field_3)::text,
+        sqlc.arg(user_field_4)::text, sqlc.arg(user_field_5)::text, sqlc.arg(user_field_6)::text,
+        sqlc.arg(user_field_7)::text, sqlc.arg(user_field_8)::text, sqlc.arg(user_field_9)::text,
+        sqlc.arg(user_field_10)::text, sqlc.arg(tracking_mode))
+RETURNING id;
+
+-- name: UpdatePart :exec
+UPDATE part SET
+  part_number = sqlc.arg(part_number), revision = sqlc.arg(revision)::text, description = sqlc.arg(description)::text,
+  detail = sqlc.arg(detail)::text, category = NULLIF(sqlc.arg(category)::text, ''),
+  release_status = sqlc.arg(release_status), is_active = sqlc.arg(is_active)::boolean,
+  requested_by = sqlc.arg(requested_by)::text, notes = sqlc.arg(notes)::text, modified_date = sqlc.arg(now)::date,
+  uom_id = sqlc.narg(uom_id), current_cost = sqlc.arg(current_cost)::numeric, reorder_min = sqlc.narg(reorder_min),
+  user_field_1 = sqlc.arg(user_field_1)::text, user_field_2 = sqlc.arg(user_field_2)::text,
+  user_field_3 = sqlc.arg(user_field_3)::text, user_field_4 = sqlc.arg(user_field_4)::text,
+  user_field_5 = sqlc.arg(user_field_5)::text, user_field_6 = sqlc.arg(user_field_6)::text,
+  user_field_7 = sqlc.arg(user_field_7)::text, user_field_8 = sqlc.arg(user_field_8)::text,
+  user_field_9 = sqlc.arg(user_field_9)::text, user_field_10 = sqlc.arg(user_field_10)::text,
+  tracking_mode = sqlc.arg(tracking_mode)
+WHERE id = sqlc.arg(id);

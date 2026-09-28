@@ -106,6 +106,83 @@ func (q *Queries) CreateMfgPart(ctx context.Context, arg CreateMfgPartParams) er
 	return err
 }
 
+const createPart = `-- name: CreatePart :one
+INSERT INTO part (part_number, revision, description, detail, category,
+                  release_status, is_active, requested_by, notes, created_date, modified_date,
+                  uom_id, current_cost, reorder_min,
+                  user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
+                  user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, tracking_mode)
+VALUES ($1, $2::text, $3::text, $4::text,
+        NULLIF($5::text, ''), $6, $7::boolean,
+        $8::text, $9::text, $10::date, $10::date,
+        $11, $12::numeric, $13,
+        $14::text, $15::text, $16::text,
+        $17::text, $18::text, $19::text,
+        $20::text, $21::text, $22::text,
+        $23::text, $24)
+RETURNING id
+`
+
+type CreatePartParams struct {
+	PartNumber    string
+	Revision      string
+	Description   string
+	Detail        string
+	Category      string
+	ReleaseStatus string
+	IsActive      bool
+	RequestedBy   string
+	Notes         string
+	Now           time.Time
+	UomID         *int
+	CurrentCost   float64
+	ReorderMin    *float64
+	UserField1    string
+	UserField2    string
+	UserField3    string
+	UserField4    string
+	UserField5    string
+	UserField6    string
+	UserField7    string
+	UserField8    string
+	UserField9    string
+	UserField10   string
+	TrackingMode  string
+}
+
+// A blank category is stored as NULL (uncategorized).
+func (q *Queries) CreatePart(ctx context.Context, arg CreatePartParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, createPart,
+		arg.PartNumber,
+		arg.Revision,
+		arg.Description,
+		arg.Detail,
+		arg.Category,
+		arg.ReleaseStatus,
+		arg.IsActive,
+		arg.RequestedBy,
+		arg.Notes,
+		arg.Now,
+		arg.UomID,
+		arg.CurrentCost,
+		arg.ReorderMin,
+		arg.UserField1,
+		arg.UserField2,
+		arg.UserField3,
+		arg.UserField4,
+		arg.UserField5,
+		arg.UserField6,
+		arg.UserField7,
+		arg.UserField8,
+		arg.UserField9,
+		arg.UserField10,
+		arg.TrackingMode,
+	)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createSupplierPart = `-- name: CreateSupplierPart :exec
 INSERT INTO supplier_part (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
 VALUES ($1, $2, $3, $4::text,
@@ -202,6 +279,149 @@ func (q *Queries) GetMfgPart(ctx context.Context, arg GetMfgPartParams) (GetMfgP
 		&i.MfgID,
 		&i.MfgPartNumber,
 		&i.Description,
+	)
+	return i, err
+}
+
+const getPart = `-- name: GetPart :one
+SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision, COALESCE(p.description, '') AS description,
+       COALESCE(p.detail, '') AS detail, COALESCE(p.category, '') AS category,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = p.id) AS has_bom,
+       p.release_status, COALESCE(p.is_active, FALSE) AS is_active,
+       COALESCE(p.requested_by, '') AS requested_by, COALESCE(p.notes, '') AS notes,
+       p.created_date, p.modified_date, p.primary_attachment_id,
+       COALESCE(p.current_cost, 0) AS current_cost, COALESCE(p.last_rollup_cost, 0) AS last_rollup_cost,
+       p.last_rollup_at, COALESCE(p.attachment_count, 0) AS attachment_count,
+       COALESCE(p.po_line_count, 0) AS po_line_count,
+       p.uom_id, COALESCE(u.abbreviation, '') AS unit_abbr, p.stock_on_hand, p.reorder_min, p.tracking_mode,
+       COALESCE(p.user_field_1, '') AS user_field_1, COALESCE(p.user_field_2, '') AS user_field_2,
+       COALESCE(p.user_field_3, '') AS user_field_3, COALESCE(p.user_field_4, '') AS user_field_4,
+       COALESCE(p.user_field_5, '') AS user_field_5, COALESCE(p.user_field_6, '') AS user_field_6,
+       COALESCE(p.user_field_7, '') AS user_field_7, COALESCE(p.user_field_8, '') AS user_field_8,
+       COALESCE(p.user_field_9, '') AS user_field_9, COALESCE(p.user_field_10, '') AS user_field_10
+FROM part p LEFT JOIN uom u ON u.uom_id = p.uom_id
+WHERE p.id = $1
+`
+
+type GetPartRow struct {
+	ID                  int
+	PartNumber          string
+	Revision            string
+	Description         string
+	Detail              string
+	Category            string
+	HasBom              bool
+	ReleaseStatus       string
+	IsActive            bool
+	RequestedBy         string
+	Notes               string
+	CreatedDate         *time.Time
+	ModifiedDate        *time.Time
+	PrimaryAttachmentID *int
+	CurrentCost         float64
+	LastRollupCost      float64
+	LastRollupAt        *time.Time
+	AttachmentCount     int
+	PoLineCount         int
+	UomID               *int
+	UnitAbbr            string
+	StockOnHand         float64
+	ReorderMin          *float64
+	TrackingMode        string
+	UserField1          string
+	UserField2          string
+	UserField3          string
+	UserField4          string
+	UserField5          string
+	UserField6          string
+	UserField7          string
+	UserField8          string
+	UserField9          string
+	UserField10         string
+}
+
+func (q *Queries) GetPart(ctx context.Context, id int) (GetPartRow, error) {
+	row := q.db.QueryRowContext(ctx, getPart, id)
+	var i GetPartRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartNumber,
+		&i.Revision,
+		&i.Description,
+		&i.Detail,
+		&i.Category,
+		&i.HasBom,
+		&i.ReleaseStatus,
+		&i.IsActive,
+		&i.RequestedBy,
+		&i.Notes,
+		&i.CreatedDate,
+		&i.ModifiedDate,
+		&i.PrimaryAttachmentID,
+		&i.CurrentCost,
+		&i.LastRollupCost,
+		&i.LastRollupAt,
+		&i.AttachmentCount,
+		&i.PoLineCount,
+		&i.UomID,
+		&i.UnitAbbr,
+		&i.StockOnHand,
+		&i.ReorderMin,
+		&i.TrackingMode,
+		&i.UserField1,
+		&i.UserField2,
+		&i.UserField3,
+		&i.UserField4,
+		&i.UserField5,
+		&i.UserField6,
+		&i.UserField7,
+		&i.UserField8,
+		&i.UserField9,
+		&i.UserField10,
+	)
+	return i, err
+}
+
+const getPartBasic = `-- name: GetPartBasic :one
+SELECT p.id, p.part_number, COALESCE(p.description, '') AS description, COALESCE(p.category, '') AS category,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = p.id) AS has_bom,
+       p.primary_attachment_id, p.stock_on_hand, p.tracking_mode,
+       COALESCE((SELECT MIN(a.file_name) FROM part_attachment a
+                 WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = $1::text), '')::text AS thumb_file
+FROM part p WHERE p.id = $2
+`
+
+type GetPartBasicParams struct {
+	ThumbCategory string
+	ID            int
+}
+
+type GetPartBasicRow struct {
+	ID                  int
+	PartNumber          string
+	Description         string
+	Category            string
+	HasBom              bool
+	PrimaryAttachmentID *int
+	StockOnHand         float64
+	TrackingMode        string
+	ThumbFile           string
+}
+
+// The part header behind every part sub-tab page; thumb_file as in ListParts.
+func (q *Queries) GetPartBasic(ctx context.Context, arg GetPartBasicParams) (GetPartBasicRow, error) {
+	row := q.db.QueryRowContext(ctx, getPartBasic, arg.ThumbCategory, arg.ID)
+	var i GetPartBasicRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartNumber,
+		&i.Description,
+		&i.Category,
+		&i.HasBom,
+		&i.PrimaryAttachmentID,
+		&i.StockOnHand,
+		&i.TrackingMode,
+		&i.ThumbFile,
 	)
 	return i, err
 }
@@ -753,6 +973,81 @@ func (q *Queries) UpdateMfgPart(ctx context.Context, arg UpdateMfgPartParams) er
 		arg.Description,
 		arg.ID,
 		arg.PartID,
+	)
+	return err
+}
+
+const updatePart = `-- name: UpdatePart :exec
+UPDATE part SET
+  part_number = $1, revision = $2::text, description = $3::text,
+  detail = $4::text, category = NULLIF($5::text, ''),
+  release_status = $6, is_active = $7::boolean,
+  requested_by = $8::text, notes = $9::text, modified_date = $10::date,
+  uom_id = $11, current_cost = $12::numeric, reorder_min = $13,
+  user_field_1 = $14::text, user_field_2 = $15::text,
+  user_field_3 = $16::text, user_field_4 = $17::text,
+  user_field_5 = $18::text, user_field_6 = $19::text,
+  user_field_7 = $20::text, user_field_8 = $21::text,
+  user_field_9 = $22::text, user_field_10 = $23::text,
+  tracking_mode = $24
+WHERE id = $25
+`
+
+type UpdatePartParams struct {
+	PartNumber    string
+	Revision      string
+	Description   string
+	Detail        string
+	Category      string
+	ReleaseStatus string
+	IsActive      bool
+	RequestedBy   string
+	Notes         string
+	Now           time.Time
+	UomID         *int
+	CurrentCost   float64
+	ReorderMin    *float64
+	UserField1    string
+	UserField2    string
+	UserField3    string
+	UserField4    string
+	UserField5    string
+	UserField6    string
+	UserField7    string
+	UserField8    string
+	UserField9    string
+	UserField10   string
+	TrackingMode  string
+	ID            int
+}
+
+func (q *Queries) UpdatePart(ctx context.Context, arg UpdatePartParams) error {
+	_, err := q.db.ExecContext(ctx, updatePart,
+		arg.PartNumber,
+		arg.Revision,
+		arg.Description,
+		arg.Detail,
+		arg.Category,
+		arg.ReleaseStatus,
+		arg.IsActive,
+		arg.RequestedBy,
+		arg.Notes,
+		arg.Now,
+		arg.UomID,
+		arg.CurrentCost,
+		arg.ReorderMin,
+		arg.UserField1,
+		arg.UserField2,
+		arg.UserField3,
+		arg.UserField4,
+		arg.UserField5,
+		arg.UserField6,
+		arg.UserField7,
+		arg.UserField8,
+		arg.UserField9,
+		arg.UserField10,
+		arg.TrackingMode,
+		arg.ID,
 	)
 	return err
 }
