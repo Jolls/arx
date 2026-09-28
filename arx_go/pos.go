@@ -65,42 +65,14 @@ type SuggestLink struct {
 }
 
 func (h *Handler) fetchSuggestLinks(r *http.Request, poNum string) []SuggestLink {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pol.part_id, pol.part_number_snapshot, pol.vendor_part_number
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.ID
-		WHERE po.number = $1
-		  AND pol.part_id IS NOT NULL
-		  AND pol.vendor_part_number IS NOT NULL AND pol.vendor_part_number <> ''
-		  AND po.supplier_id IS NOT NULL
-		  AND NOT EXISTS (
-		    SELECT 1 FROM %s sp
-		    WHERE sp.part_id = pol.part_id
-		      AND sp.supplier_id = po.supplier_id
-		      AND sp.supplier_pn = pol.vendor_part_number
-		  )
-	`, h.cfg().POLineTable(), h.cfg().POTable(), h.cfg().SupplierPartTable()), poNum)
+	links, err := h.purchasing().ListSuggestedLinks(r.Context(), poNum)
 	if err != nil {
+		log.Printf("fetchSuggestLinks: %v", err)
 		return nil
 	}
-	defer rows.Close()
-	var out []SuggestLink
-	for rows.Next() {
-		var l SuggestLink
-		var partID sql.NullInt64
-		var partNum, vendorPN sql.NullString
-		if err := rows.Scan(&partID, &partNum, &vendorPN); err != nil {
-			log.Printf("fetchSuggestLinks: scan error: %v", err)
-			break
-		}
-		l.Index = len(out)
-		l.PartID = int(partID.Int64)
-		l.PartNumber = partNum.String
-		l.VendorPN = vendorPN.String
-		out = append(out, l)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("fetchSuggestLinks: rows error: %v", err)
+	out := make([]SuggestLink, len(links))
+	for i, l := range links {
+		out[i] = SuggestLink{Index: i, PartID: l.PartID, PartNumber: l.PartNumber, VendorPN: l.VendorPartNumber}
 	}
 	return out
 }
@@ -118,43 +90,14 @@ type SuggestPrice struct {
 }
 
 func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPrice {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT DISTINCT pol.part_id, pol.part_number_snapshot, pol.unit_cost, pol.qty
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.ID
-		WHERE po.number = $1
-		  AND pol.part_id IS NOT NULL
-		  AND pol.unit_cost > 0
-		  AND po.supplier_id IS NOT NULL
-		  AND NOT EXISTS (
-		    SELECT 1 FROM %s pr
-		    WHERE pr.part_id = pol.part_id
-		      AND pr.supplier_id = po.supplier_id
-		      AND pr.is_active = TRUE
-		      AND pr.price_ea = pol.unit_cost
-		      AND pr.pack_size <= pol.qty
-		  )
-	`, h.cfg().POLineTable(), h.cfg().POTable(), h.cfg().PriceTable()), poNum)
+	prices, err := h.purchasing().ListSuggestedPrices(r.Context(), poNum)
 	if err != nil {
+		log.Printf("fetchSuggestPrices: %v", err)
 		return nil
 	}
-	defer rows.Close()
-	var out []SuggestPrice
-	for rows.Next() {
-		var s SuggestPrice
-		var partID sql.NullInt64
-		var partNum sql.NullString
-		if err := rows.Scan(&partID, &partNum, &s.Cost, &s.PackSize); err != nil {
-			log.Printf("fetchSuggestPrices: scan error: %v", err)
-			break
-		}
-		s.Index = len(out)
-		s.PartID = int(partID.Int64)
-		s.PartNumber = partNum.String
-		out = append(out, s)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("fetchSuggestPrices: rows error: %v", err)
+	out := make([]SuggestPrice, len(prices))
+	for i, p := range prices {
+		out[i] = SuggestPrice{Index: i, PartID: p.PartID, PartNumber: p.PartNumber, Cost: p.UnitCost, PackSize: p.Qty}
 	}
 	return out
 }
@@ -252,6 +195,14 @@ func parseFormDate(s string) *time.Time {
 	return &t
 }
 
+// isoDate formats t as YYYY-MM-DD, "" for nil.
+func isoDate(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}
+
 func parseFormFloat(s string) any {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -285,51 +236,15 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		Orderer  string  `json:"orderer"`
 		Cost     float64 `json:"cost"`
 	}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT number, status, supplier_id, rfq_group_id, supplier_name,
-		       date_ordered, date_closed, orderer, total_cost
-		FROM %s ORDER BY number DESC
-	`, h.cfg().POTable()))
+	pos, err := h.purchasing().ListPORows(r.Context())
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
-	out := make([]row, 0)
-	for rows.Next() {
-		var po row
-		var supplierID, groupID sql.NullInt64
-		var supplierName, orderer, status sql.NullString
-		var dateOrdered, dateClosed sql.NullTime
-		var totalCost sql.NullFloat64
-		if err := rows.Scan(&po.Num, &status, &supplierID, &groupID, &supplierName,
-			&dateOrdered, &dateClosed, &orderer, &totalCost); err != nil {
-			serverError(w, "database error", err)
-			return
-		}
-		po.Status = status.String
-		po.Supplier = supplierName.String
-		po.Orderer = orderer.String
-		po.Cost = totalCost.Float64
-		if supplierID.Valid {
-			v := int(supplierID.Int64)
-			po.SID = &v
-		}
-		if groupID.Valid {
-			v := int(groupID.Int64)
-			po.GID = &v
-		}
-		if dateOrdered.Valid {
-			po.Ordered = dateOrdered.Time.Format("2006-01-02")
-		}
-		if dateClosed.Valid {
-			po.Closed = dateClosed.Time.Format("2006-01-02")
-		}
-		out = append(out, po)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, "database error", err)
-		return
+	out := make([]row, len(pos))
+	for i, p := range pos {
+		out[i] = row{Num: p.Number, Status: p.Status, SID: &p.SupplierID, GID: p.RFQGroupID, Supplier: p.SupplierName,
+			Ordered: isoDate(p.DateOrdered), Closed: isoDate(p.DateClosed), Orderer: p.Orderer, Cost: p.Total}
 	}
 	log.Printf("[rows] pos: %d rows in %v", len(out), time.Since(start))
 	writeJSON(w, out)
@@ -425,12 +340,9 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 		noDefaultReceiver = receiverID <= 0
 	}
 	if rid := receiverID; rid > 0 {
-		var rName sql.NullString
-		var rDefaultContact sql.NullInt64
-		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT name, default_contact FROM %s WHERE id = $1`, h.cfg().CompanyTable(),
-		), rid).Scan(&rName, &rDefaultContact)
-		po.ReceiverName = rName.String
+		// A missing receiver company leaves the name and default contact blank.
+		receiver, _ := h.purchasing().GetSupplier(r.Context(), rid)
+		po.ReceiverName = receiver.Name
 		v := rid
 		po.ReceiverID = &v
 		receiverContacts = h.contactsForSupplier(r, rid)
@@ -438,8 +350,8 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 		// Pick the receiver contact: the resolved PO default contact wins;
 		// otherwise fall back to the receiver company's own default_contact.
 		wantContact := contactID
-		if wantContact <= 0 && rDefaultContact.Valid {
-			wantContact = int(rDefaultContact.Int64)
+		if wantContact <= 0 && receiver.DefaultContact != nil {
+			wantContact = *receiver.DefaultContact
 		}
 		if wantContact > 0 {
 			for _, c := range receiverContacts {
@@ -1032,11 +944,8 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 
 	var supplierCode string
 	if po.SupplierID != nil {
-		var code sql.NullString
-		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT supplier_code FROM %s WHERE id=$1`, h.cfg().CompanyTable(),
-		), *po.SupplierID).Scan(&code)
-		supplierCode = code.String
+		su, _ := h.purchasing().GetSupplier(r.Context(), *po.SupplierID) // missing supplier → no code
+		supplierCode = su.SupplierCode
 	}
 
 	items, err := h.fetchPOItems(r, num)
@@ -1099,21 +1008,15 @@ func (h *Handler) POOpenFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid PO number", http.StatusBadRequest)
 		return
 	}
-	var supplierID sql.NullInt64
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT supplier_id FROM %s WHERE number=$1`, h.cfg().POTable(),
-	), num).Scan(&supplierID); err == sql.ErrNoRows {
+	supplierID, err := h.purchasing().GetPOSupplierID(r.Context(), num)
+	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
 	} else if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	supplierIDStr := ""
-	if supplierID.Valid {
-		supplierIDStr = strconv.FormatInt(supplierID.Int64, 10)
-	}
-	h.createPOFolder(r, num, supplierIDStr)
+	h.createPOFolder(r, num, strconv.Itoa(supplierID))
 	if folder := findPOBaseFolder(root, num); folder != "" {
 		exec.Command("explorer.exe", filepath.Join(root, folder)).Start() //nolint:errcheck
 	}
@@ -1388,35 +1291,14 @@ type POHistoryEvent struct {
 
 // fetchPOHistory returns the combined status + approval timeline for a PO, newest first.
 func (h *Handler) fetchPOHistory(r *http.Request, poID int) []POHistoryEvent {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT event_type, from_status, to_status, action, note, changed_by, changed_at
-		FROM %s WHERE po_id = $1 ORDER BY changed_at DESC, id DESC
-	`, h.cfg().POHistoryTable()), poID)
+	events, err := h.purchasing().ListPOHistory(r.Context(), poID)
 	if err != nil {
+		log.Printf("fetchPOHistory: %v", err)
 		return nil
 	}
-	defer rows.Close()
-	var out []POHistoryEvent
-	for rows.Next() {
-		var e POHistoryEvent
-		var from, to, action, note, by sql.NullString
-		var at sql.NullTime
-		if err := rows.Scan(&e.EventType, &from, &to, &action, &note, &by, &at); err != nil {
-			log.Printf("fetchPOHistory: scan error: %v", err)
-			break
-		}
-		e.FromStatus = from.String
-		e.ToStatus = to.String
-		e.Action = action.String
-		e.Note = note.String
-		e.ChangedBy = by.String
-		if at.Valid {
-			e.ChangedAt = at.Time
-		}
-		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("fetchPOHistory: rows error: %v", err)
+	out := make([]POHistoryEvent, len(events))
+	for i, e := range events {
+		out[i] = POHistoryEvent(e)
 	}
 	return out
 }
@@ -1872,195 +1754,32 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 // ── shared helpers ───────────────────────────────────────────────────────────
 
 func (h *Handler) fetchPO(w http.ResponseWriter, r *http.Request, num string) (models.PurchaseOrder, bool) {
-	var po models.PurchaseOrder
-	var (
-		isActive                                                     sql.NullBool
-		supplierID, receiverID, rfqGroupID                           sql.NullInt64
-		supContactID, recContactID                                   sql.NullInt64
-		number, orderer, accountID, status, approvalStatus           sql.NullString
-		supName, supContact, supEmail                                sql.NullString
-		supAddr, supCity, supState, supZip, supCountry               sql.NullString
-		supPhone, supFax                                             sql.NullString
-		recName, recContact, recEmail                                sql.NullString
-		recAddr, recCity, recState, recZip, recCountry               sql.NullString
-		recPhone, recFax                                             sql.NullString
-		tax1, shipping, misc, totalCost                              sql.NullFloat64
-		notes, internalNotes                                         sql.NullString
-		dateOrdered, dateRequested, dateClosed, datePrinted, dateMod sql.NullTime
-	)
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT ID, number, status, approval_status, is_active, orderer, account_id,
-		       supplier_id, supplier_name, supplier_contact, supplier_email,
-		       supplier_address, supplier_city, supplier_state, supplier_zipcode, supplier_country,
-		       supplier_phone_number, supplier_fax_number,
-		       receiver_id, receiver_name, receiver_contact, receiver_email,
-		       receiver_address, receiver_city, receiver_state, receiver_zipcode, receiver_country,
-		       receiver_phone, receiver_fax,
-		       tax1, shipping_cost, misc_cost, total_cost,
-		       notes, internal_notes, rfq_group_id,
-		       date_ordered, date_requested, date_closed, date_printed, date_modified,
-		       supplier_contact_id, receiver_contact_id
-		FROM %s WHERE number = $1
-	`, h.cfg().POTable()), num).Scan(
-		&po.ID, &number, &status, &approvalStatus, &isActive, &orderer, &accountID,
-		&supplierID, &supName, &supContact, &supEmail,
-		&supAddr, &supCity, &supState, &supZip, &supCountry, &supPhone, &supFax,
-		&receiverID, &recName, &recContact, &recEmail,
-		&recAddr, &recCity, &recState, &recZip, &recCountry, &recPhone, &recFax,
-		&tax1, &shipping, &misc, &totalCost,
-		&notes, &internalNotes, &rfqGroupID,
-		&dateOrdered, &dateRequested, &dateClosed, &datePrinted, &dateMod,
-		&supContactID, &recContactID,
-	)
+	po, err := h.purchasing().GetPO(r.Context(), num)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
-		return po, false
+		return models.PurchaseOrder{}, false
 	}
 	if err != nil {
 		h.renderError(w, r, "Error retrieving purchase order: "+err.Error())
-		return po, false
+		return models.PurchaseOrder{}, false
 	}
-	po.Number = number.String
-	po.Status = status.String
-	po.ApprovalStatus = approvalStatus.String
-	po.IsActive = isActive.Bool
-	po.Orderer = orderer.String
-	po.AccountID = accountID.String
-	po.SupplierName = supName.String
-	po.SupplierContact = supContact.String
-	po.SupplierEmail = supEmail.String
-	po.SupplierAddress = supAddr.String
-	po.SupplierCity = supCity.String
-	po.SupplierState = supState.String
-	po.SupplierZipcode = supZip.String
-	po.SupplierCountry = supCountry.String
-	po.SupplierPhoneNumber = supPhone.String
-	po.SupplierFaxNumber = supFax.String
-	po.ReceiverName = recName.String
-	po.ReceiverContact = recContact.String
-	po.ReceiverEmail = recEmail.String
-	po.ReceiverAddress = recAddr.String
-	po.ReceiverCity = recCity.String
-	po.ReceiverState = recState.String
-	po.ReceiverZipcode = recZip.String
-	po.ReceiverCountry = recCountry.String
-	po.ReceiverPhone = recPhone.String
-	po.ReceiverFax = recFax.String
-	po.Notes = notes.String
-	po.InternalNotes = internalNotes.String
-	if supplierID.Valid {
-		v := int(supplierID.Int64)
-		po.SupplierID = &v
-	}
-	if receiverID.Valid {
-		v := int(receiverID.Int64)
-		po.ReceiverID = &v
-	}
-	if supContactID.Valid {
-		v := int(supContactID.Int64)
-		po.SupplierContactID = &v
-	}
-	if recContactID.Valid {
-		v := int(recContactID.Int64)
-		po.ReceiverContactID = &v
-	}
-	if rfqGroupID.Valid {
-		v := int(rfqGroupID.Int64)
-		po.RFQGroupID = &v
-	}
-	if tax1.Valid {
-		po.Tax1 = &tax1.Float64
-	}
-	if shipping.Valid {
-		po.ShippingCost = &shipping.Float64
-	}
-	if misc.Valid {
-		po.MiscCost = &misc.Float64
-	}
-	if totalCost.Valid {
-		po.TotalCost = &totalCost.Float64
-	}
-	if dateOrdered.Valid {
-		po.DateOrdered = &dateOrdered.Time
-	}
-	if dateRequested.Valid {
-		po.DateRequested = &dateRequested.Time
-	}
-	if dateClosed.Valid {
-		po.DateClosed = &dateClosed.Time
-	}
-	if datePrinted.Valid {
-		po.DatePrinted = &datePrinted.Time
-	}
-	if dateMod.Valid {
-		po.DateModified = &dateMod.Time
-	}
-	return po, true
+	return models.PurchaseOrder(po), true
 }
 
 func (h *Handler) fetchPOItems(r *http.Request, num string) ([]models.PurchaseOrderLine, error) {
-	pol, po, parts, fil := h.cfg().POLineTable(), h.cfg().POTable(), h.cfg().PartsTable(), h.cfg().AttachmentsTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pol.id, pol.line_number, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
-		       pol.qty, pol.unit_cost, pol.vendor_part_number, pol.part_id, pol.lead_time_days,
-		       pol.received_qty, pol.date_received,
-		       p.tracking_mode,
-		       fil.id, fil.file_name, fil.category
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.ID
-		LEFT JOIN %s p ON pol.part_id = p.id
-		LEFT JOIN %s fil ON p.primary_attachment_id = fil.id
-		WHERE po.number = $1
-		ORDER BY pol.line_number
-	`, pol, po, parts, fil), num)
+	lines, err := h.purchasing().ListPOLines(r.Context(), num)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var items []models.PurchaseOrderLine
-	for rows.Next() {
-		var item models.PurchaseOrderLine
-		var partNumber, rev, desc, vendorPN sql.NullString
-		var polpnid, leadTime sql.NullInt64
-		var dateReceived sql.NullTime
-		var trackingMode sql.NullString
-		var filID sql.NullInt64
-		var filFileName, filCategory sql.NullString
-		if err := rows.Scan(&item.ID, &item.LineNumber, &partNumber, &rev, &desc,
-			&item.Qty, &item.UnitCost, &vendorPN, &polpnid, &leadTime,
-			&item.ReceivedQty, &dateReceived,
-			&trackingMode,
-			&filID, &filFileName, &filCategory); err != nil {
-			return nil, err
+	items := make([]models.PurchaseOrderLine, len(lines))
+	for i, l := range lines {
+		items[i] = models.PurchaseOrderLine{ID: l.ID, LineNumber: l.LineNumber, PartNumberSnapshot: l.PartNumberSnapshot,
+			RevisionSnapshot: l.RevisionSnapshot, Description: l.Description, Qty: l.Qty, UnitCost: l.UnitCost,
+			VendorPN: l.VendorPartNumber, PartID: l.PartID, LeadTimeDays: l.LeadTimeDays, ReceivedQty: l.ReceivedQty,
+			DateReceived: l.DateReceived, IsLotTracked: models.TracksLots(l.TrackingMode)}
+		if l.AttID != nil {
+			items[i].PrimaryAtt = &models.Attachment{ID: *l.AttID, FileName: l.AttFileName, Category: l.AttCategory}
 		}
-		item.IsLotTracked = models.TracksLots(trackingMode.String)
-		item.PartNumberSnapshot = partNumber.String
-		item.RevisionSnapshot = rev.String
-		item.Description = desc.String
-		item.VendorPN = vendorPN.String
-		if polpnid.Valid {
-			v := int(polpnid.Int64)
-			item.PartID = &v
-		}
-		if leadTime.Valid {
-			v := int(leadTime.Int64)
-			item.LeadTimeDays = &v
-		}
-		if dateReceived.Valid {
-			t := dateReceived.Time
-			item.DateReceived = &t
-		}
-		if filID.Valid {
-			item.PrimaryAtt = &models.Attachment{
-				ID:       int(filID.Int64),
-				FileName: filFileName.String,
-				Category: filCategory.String,
-			}
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	return items, nil
 }
@@ -2076,40 +1795,15 @@ type POReceiptView struct {
 
 // fetchPOReceipts returns the receipt ledger rows recorded against a PO, newest first.
 func (h *Handler) fetchPOReceipts(r *http.Request, poID int) []POReceiptView {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT it.txn_date, pol.part_id, pol.part_number_snapshot, it.qty, it.username
-		FROM %s it
-		JOIN %s pol ON it.po_line_id = pol.id
-		WHERE pol.po_id = $1 AND it.txn_type = 'receipt'
-		ORDER BY it.txn_date DESC, it.id DESC
-	`, h.cfg().InventoryTxnTable(), h.cfg().POLineTable()), poID)
+	receipts, err := h.purchasing().ListPOReceipts(r.Context(), poID)
 	if err != nil {
+		log.Printf("fetchPOReceipts: %v", err)
 		return nil
 	}
-	defer rows.Close()
-	var out []POReceiptView
-	for rows.Next() {
-		var v POReceiptView
-		var date sql.NullTime
-		var partID sql.NullInt64
-		var pn, user sql.NullString
-		if err := rows.Scan(&date, &partID, &pn, &v.Qty, &user); err != nil {
-			log.Printf("fetchPOReceipts: scan error: %v", err)
-			break
-		}
-		if date.Valid {
-			v.Date = date.Time.Format("2006-01-02")
-		}
-		if partID.Valid {
-			id := int(partID.Int64)
-			v.PartID = &id
-		}
-		v.PartNumber = pn.String
-		v.Username = user.String
-		out = append(out, v)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("fetchPOReceipts: rows error: %v", err)
+	out := make([]POReceiptView, len(receipts))
+	for i, rc := range receipts {
+		out[i] = POReceiptView{Date: rc.TxnDate.Format("2006-01-02"), PartID: rc.PartID, PartNumber: rc.PartNumber,
+			Qty: rc.Qty, Username: rc.Username}
 	}
 	return out
 }
@@ -2124,11 +1818,12 @@ func (h *Handler) resolvePolRev(r *http.Request, formRev, pnidStr string) string
 	if pnidStr == "" {
 		return ""
 	}
-	var rev sql.NullString
-	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT revision FROM %s WHERE id=$1`, h.cfg().PartsTable(),
-	), pnidStr).Scan(&rev)
-	return rev.String
+	id, err := strconv.Atoi(pnidStr)
+	if err != nil {
+		return ""
+	}
+	p, _ := h.parts().GetPart(r.Context(), id) // unknown part → ""
+	return p.Revision
 }
 
 func (h *Handler) createPOFolder(r *http.Request, poNumber, supplierIDStr string) {
@@ -2355,50 +2050,24 @@ func buildRFQGrid(lines []rfqScanLine) (suppliers []rfqSupplier, rows []*rfqRow)
 // RFQCompare — GET /rfq/{group}/compare
 func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
 	group := chi.URLParam(r, "group")
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT po.number, po.supplier_name, po.supplier_id, po.status, po.total_cost,
-		       pol.id, pol.part_number_snapshot, pol.revision_snapshot, pol.description,
-		       pol.qty, pol.unit_cost, pol.lead_time_days
-		FROM %s po
-		LEFT JOIN %s pol ON pol.po_id = po.ID
-		WHERE po.rfq_group_id = $1
-		ORDER BY po.ID, pol.line_number
-	`, h.cfg().POTable(), h.cfg().POLineTable()), group)
-	if err != nil {
-		h.renderError(w, r, "Error loading RFQ group: "+err.Error())
-		return
-	}
-	defer rows.Close()
-
 	var lines []rfqScanLine
-	for rows.Next() {
-		var number, supName, status, partNum, rev, desc sql.NullString
-		var supID, polID, leadDays sql.NullInt64
-		var total, qty, cost sql.NullFloat64
-		if err := rows.Scan(&number, &supName, &supID, &status, &total,
-			&polID, &partNum, &rev, &desc, &qty, &cost, &leadDays); err != nil {
+	if groupID, err := strconv.Atoi(group); err == nil { // non-numeric → no quotes → not found
+		rows, err := h.purchasing().ListRFQGroupLines(r.Context(), groupID)
+		if err != nil {
 			h.renderError(w, r, "Error loading RFQ group: "+err.Error())
 			return
 		}
-		ln := rfqScanLine{
-			Number: number.String, SupplierName: supName.String, Status: status.String,
-			Total: total.Float64, HasLine: polID.Valid, POLID: int(polID.Int64),
-			PartNumber: partNum.String, Rev: rev.String, Description: desc.String,
-			Qty: qty.Float64, Cost: cost.Float64,
+		lines = make([]rfqScanLine, len(rows))
+		for i, l := range rows {
+			lines[i] = rfqScanLine{
+				Number: l.Number, SupplierName: l.SupplierName, SupplierID: &l.SupplierID, Status: l.Status,
+				Total: l.TotalCost, HasLine: l.PolID != nil, PartNumber: l.PartNumber, Rev: l.Revision,
+				Description: l.Description, Qty: l.Qty, Cost: l.UnitCost, LeadDays: l.LeadTimeDays,
+			}
+			if l.PolID != nil {
+				lines[i].POLID = *l.PolID
+			}
 		}
-		if supID.Valid {
-			v := int(supID.Int64)
-			ln.SupplierID = &v
-		}
-		if leadDays.Valid {
-			v := int(leadDays.Int64)
-			ln.LeadDays = &v
-		}
-		lines = append(lines, ln)
-	}
-	if err := rows.Err(); err != nil {
-		h.renderError(w, r, "Error loading RFQ group: "+err.Error())
-		return
 	}
 
 	suppliers, orderedRows := buildRFQGrid(lines)
@@ -2810,52 +2479,26 @@ func (h *Handler) POImportPartFile(w http.ResponseWriter, r *http.Request) {
 // ── POsExportCSV — GET /pos/export.csv ──────────────────────────────────────
 
 func (h *Handler) POsExportCSV(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT p.number, p.status, p.supplier_name, p.date_ordered, p.date_closed,
-		       p.orderer, p.total_cost,
-		       l.line_number, l.part_number, l.description, l.qty, l.unit_cost, l.vendor_pn
-		FROM %s p
-		LEFT JOIN %s l ON l.po_number = p.number
-		ORDER BY p.number DESC, l.line_number
-	`, h.cfg().POTable(), h.cfg().POLineTable()))
+	rows, err := h.purchasing().ListPOExportRows(r.Context())
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="purchase-orders.csv"`)
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"PO Number", "Status", "Supplier", "Date Ordered", "Date Closed", "Orderer", "PO Total", "Line #", "Part Number", "Description", "Qty", "Unit Cost", "Vendor PN"})
-	for rows.Next() {
-		var num, status, supplier, orderer sql.NullString
-		var dateOrdered, dateClosed sql.NullTime
-		var totalCost sql.NullFloat64
-		var lineNum sql.NullInt64
-		var linePN, lineDesc, lineVendorPN sql.NullString
-		var lineQty, lineUnitCost sql.NullFloat64
-		if err := rows.Scan(&num, &status, &supplier, &dateOrdered, &dateClosed,
-			&orderer, &totalCost, &lineNum, &linePN, &lineDesc, &lineQty, &lineUnitCost, &lineVendorPN); err != nil {
-			return
-		}
-		orderedStr := ""
-		if dateOrdered.Valid {
-			orderedStr = dateOrdered.Time.Format("2006-01-02")
-		}
-		closedStr := ""
-		if dateClosed.Valid {
-			closedStr = dateClosed.Time.Format("2006-01-02")
-		}
+	for _, p := range rows {
 		lineNumStr := ""
-		if lineNum.Valid {
-			lineNumStr = fmt.Sprintf("%d", lineNum.Int64)
+		if p.LineNumber != nil {
+			lineNumStr = strconv.Itoa(*p.LineNumber)
 		}
 		_ = cw.Write([]string{
-			num.String, status.String, supplier.String, orderedStr, closedStr,
-			orderer.String, fmt.Sprintf("%.2f", totalCost.Float64),
-			lineNumStr, linePN.String, lineDesc.String,
-			fmt.Sprintf("%.4g", lineQty.Float64), fmt.Sprintf("%.2f", lineUnitCost.Float64),
-			lineVendorPN.String,
+			p.Number, p.Status, p.SupplierName, isoDate(p.DateOrdered), isoDate(p.DateClosed),
+			p.Orderer, fmt.Sprintf("%.2f", p.Total),
+			lineNumStr, p.PartNumber, p.Description,
+			fmt.Sprintf("%.4g", p.Qty), fmt.Sprintf("%.2f", p.UnitCost),
+			p.VendorPN,
 		})
 	}
 	cw.Flush()
