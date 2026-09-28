@@ -2102,68 +2102,23 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pr, su := h.cfg().PriceTable(), h.cfg().CompanyTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
-		FROM %s p
-		LEFT JOIN %s s ON p.supplier_id = s.id
-		WHERE p.part_id = $1
-		ORDER BY s.name, p.effective_date DESC, p.pack_size
-	`, pr, su), id)
+	prices, err := h.parts().ListPartPrices(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving pricing: "+err.Error())
 		return
 	}
-	defer rows.Close()
-	var allRows []models.Price
-	for rows.Next() {
-		var price models.Price
-		var priceEA, pricePack, packSize sql.NullFloat64
-		var supplierID sql.NullInt64
-		var isActive sql.NullBool
-		var effectiveDate sql.NullTime
-		var supplierName sql.NullString
-		if err := rows.Scan(&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID, &supplierName); err != nil {
-			h.renderError(w, r, "Error reading pricing: "+err.Error())
-			return
-		}
-		if priceEA.Valid {
-			price.PriceEA = &priceEA.Float64
-		}
-		if pricePack.Valid {
-			price.PricePack = &pricePack.Float64
-		}
-		if packSize.Valid {
-			price.PackSize = &packSize.Float64
-		}
-		price.IsActive = isActive.Bool
-		if effectiveDate.Valid {
-			price.EffectiveDate = &effectiveDate.Time
-		}
-		if supplierID.Valid {
-			v := int(supplierID.Int64)
-			price.SupplierID = &v
-		}
-		price.SupplierName = supplierName.String
-		allRows = append(allRows, price)
-	}
 	seen := map[int]int{}
 	var groups []SupplierPriceGroup
-	for _, row := range allRows {
-		sid := 0
-		if row.SupplierID != nil {
-			sid = *row.SupplierID
-		}
-		if idx, ok := seen[sid]; ok {
+	for _, pp := range prices {
+		row := modelPrice(pp)
+		if idx, ok := seen[pp.SupplierID]; ok {
 			groups[idx].Rows = append(groups[idx].Rows, row)
 		} else {
-			seen[sid] = len(groups)
-			groups = append(groups, SupplierPriceGroup{SupplierID: sid, SupplierName: row.SupplierName, Rows: []models.Price{row}})
+			seen[pp.SupplierID] = len(groups)
+			groups = append(groups, SupplierPriceGroup{SupplierID: pp.SupplierID, SupplierName: pp.SupplierName, Rows: []models.Price{row}})
 		}
 	}
-	var defSup sql.NullInt64
-	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT default_supplier_id FROM %s WHERE id=$1`, h.cfg().PartsTable()), id).Scan(&defSup)
+	defSup, _ := h.parts().GetDefaultSupplier(r.Context(), p.ID)
 	for i := range groups {
 		allInactive := true
 		for _, r := range groups[i].Rows {
@@ -2173,7 +2128,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		groups[i].AllInactive = allInactive
-		groups[i].IsPreferred = defSup.Valid && groups[i].SupplierID == int(defSup.Int64)
+		groups[i].IsPreferred = defSup != nil && groups[i].SupplierID == *defSup
 	}
 	h.render(w, r, "parts/part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
@@ -2184,6 +2139,20 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Price CRUD ───────────────────────────────────────────────────────────────
+
+// modelPrice maps a price row to the pricing templates' model.
+func modelPrice(pp parts.PartPrice) models.Price {
+	sid := pp.SupplierID
+	return models.Price{ID: pp.ID, SupplierID: &sid, PriceEA: pp.PriceEA, PricePack: pp.PricePack,
+		PackSize: pp.PackSize, IsActive: pp.IsActive, EffectiveDate: pp.EffectiveDate, SupplierName: pp.SupplierName}
+}
+
+// isDuplicatePrice reports whether err is UQ_price_active_combo rejecting a
+// second active price for a supplier and pack size. Postgres folds the index
+// name to lowercase, so match case-insensitively.
+func isDuplicatePrice(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "uq_price")
+}
 
 func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
@@ -2211,7 +2180,8 @@ func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID 
 // used for cost rollup (the multi-supplier review case from migration #484).
 func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+	p, ok := h.requireTab(w, r, partID, "pricing")
+	if !ok {
 		return
 	}
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
@@ -2219,9 +2189,7 @@ func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Invalid supplier")
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET default_supplier_id=$1 WHERE id=$2`, h.cfg().PartsTable(),
-	), supplierID, partID); err != nil {
+	if err := h.parts().SetDefaultSupplier(r.Context(), p.ID, supplierID); err != nil {
 		h.renderError(w, r, "Error setting preferred supplier: "+err.Error())
 		return
 	}
@@ -2230,7 +2198,8 @@ func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+	p, ok := h.requireTab(w, r, partID, "pricing")
+	if !ok {
 		return
 	}
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
@@ -2243,23 +2212,16 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 		effectiveDate = time.Now().Format("2006-01-02")
 	}
 	priceEA, pricePack := resolvePriceFields(r)
-	_, err = h.execContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, TRUE)
-	`, h.cfg().PriceTable()),
-		partID, supplierID,
-		nullableFloat(r.FormValue("pack_size")), priceEA, pricePack,
-		effectiveDate,
-	)
+	err = h.parts().CreatePrice(r.Context(), p.ID, supplierID, nullableFloat(r.FormValue("pack_size")), priceEA, pricePack, effectiveDate)
 	if err != nil {
-		if strings.Contains(err.Error(), "UQ_price") {
+		if isDuplicatePrice(err) {
 			h.renderError(w, r, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
 			return
 		}
 		h.renderError(w, r, "Error saving price: "+err.Error())
 		return
 	}
-	h.ensureDefaultSupplier(r.Context(), partID, supplierID)
+	h.ensureDefaultSupplier(r.Context(), p.ID, supplierID)
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
 }
 
@@ -2270,20 +2232,11 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var price models.Price
-	var priceEA, pricePack, packSize sql.NullFloat64
-	var isActive sql.NullBool
-	var effectiveDate sql.NullTime
-	var supplierID sql.NullInt64
-	var supplierName sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT p.id, p.price_ea, p.price_pack, p.pack_size, p.is_active, p.effective_date, p.supplier_id, s.name
-		FROM %s p
-		LEFT JOIN %s s ON p.supplier_id = s.id
-		WHERE p.id = $1 AND p.part_id = $2
-	`, h.cfg().PriceTable(), h.cfg().CompanyTable()), priceID, partID).Scan(
-		&price.ID, &priceEA, &pricePack, &packSize, &isActive, &effectiveDate, &supplierID, &supplierName,
-	)
+	var pp parts.PartPrice
+	pid, err := strconv.Atoi(priceID)
+	if err == nil {
+		pp, err = h.parts().GetPartPrice(r.Context(), pid, p.ID)
+	}
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Price not found")
 		return
@@ -2292,26 +2245,8 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving price: "+err.Error())
 		return
 	}
-	if priceEA.Valid {
-		price.PriceEA = &priceEA.Float64
-	}
-	if pricePack.Valid {
-		price.PricePack = &pricePack.Float64
-	}
-	if packSize.Valid {
-		price.PackSize = &packSize.Float64
-	}
-	price.IsActive = isActive.Bool
-	if effectiveDate.Valid {
-		price.EffectiveDate = &effectiveDate.Time
-	}
-	if supplierID.Valid {
-		v := int(supplierID.Int64)
-		price.SupplierID = &v
-	}
-	price.SupplierName = supplierName.String
 	h.render(w, r, "parts/part_pricing_form.html", map[string]any{
-		"Part": p, "Price": price, "IsNew": false,
+		"Part": p, "Price": modelPrice(pp), "IsNew": false,
 		"ActiveTab": "parts", "ActiveSubTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
@@ -2320,10 +2255,10 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+	p, ok := h.requireTab(w, r, partID, "pricing")
+	if !ok {
 		return
 	}
-	priceID := chi.URLParam(r, "priceID")
 	supplierID, err := strconv.Atoi(r.FormValue("supplier_id"))
 	if err != nil || supplierID == 0 {
 		h.renderError(w, r, "Invalid supplier")
@@ -2333,32 +2268,26 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	if effectiveDate == "" {
 		effectiveDate = time.Now().Format("2006-01-02")
 	}
-	pr := h.cfg().PriceTable()
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		h.renderError(w, r, "Error starting transaction: "+err.Error())
 		return
 	}
-	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = FALSE WHERE id = $1 AND part_id = $2`, pr,
-	), priceID, partID)
+	svc := parts.New(tx)
+	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	if err == nil {
+		err = svc.SetPriceActive(r.Context(), priceID, p.ID, false)
+	}
 	if err != nil {
 		tx.Rollback()
 		h.renderError(w, r, "Error updating price: "+err.Error())
 		return
 	}
 	priceEA, pricePack := resolvePriceFields(r)
-	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, TRUE)
-	`, pr),
-		partID, supplierID,
-		nullableFloat(r.FormValue("pack_size")), priceEA, pricePack,
-		effectiveDate,
-	)
+	err = svc.CreatePrice(r.Context(), p.ID, supplierID, nullableFloat(r.FormValue("pack_size")), priceEA, pricePack, effectiveDate)
 	if err != nil {
 		tx.Rollback()
-		if strings.Contains(err.Error(), "UQ_price") {
+		if isDuplicatePrice(err) {
 			h.renderError(w, r, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
 			return
 		}
@@ -2369,19 +2298,20 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error committing price update: "+err.Error())
 		return
 	}
-	h.ensureDefaultSupplier(r.Context(), partID, supplierID)
+	h.ensureDefaultSupplier(r.Context(), p.ID, supplierID)
 	http.Redirect(w, r, fmt.Sprintf("/part/%s/pricing", partID), http.StatusSeeOther)
 }
 
 func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+	p, ok := h.requireTab(w, r, partID, "pricing")
+	if !ok {
 		return
 	}
-	priceID := chi.URLParam(r, "priceID")
-	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = FALSE WHERE id = $1 AND part_id = $2`, h.cfg().PriceTable(),
-	), priceID, partID)
+	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	if err == nil {
+		err = h.parts().SetPriceActive(r.Context(), priceID, p.ID, false)
+	}
 	if err != nil {
 		h.renderError(w, r, "Error deactivating price: "+err.Error())
 		return
@@ -2393,13 +2323,14 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 // active pricing must be deactivated first (#57).
 func (h *Handler) PriceDelete(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+	p, ok := h.requireTab(w, r, partID, "pricing")
+	if !ok {
 		return
 	}
-	priceID := chi.URLParam(r, "priceID")
-	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`DELETE FROM %s WHERE id = $1 AND part_id = $2 AND is_active = FALSE`, h.cfg().PriceTable(),
-	), priceID, partID)
+	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	if err == nil {
+		err = h.parts().DeleteInactivePrice(r.Context(), priceID, p.ID)
+	}
 	if err != nil {
 		h.renderError(w, r, "Error deleting price: "+err.Error())
 		return
@@ -2409,15 +2340,16 @@ func (h *Handler) PriceDelete(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 	partID := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, partID, "pricing"); !ok {
+	p, ok := h.requireTab(w, r, partID, "pricing")
+	if !ok {
 		return
 	}
-	priceID := chi.URLParam(r, "priceID")
-	_, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = TRUE WHERE id = $1 AND part_id = $2`, h.cfg().PriceTable(),
-	), priceID, partID)
+	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	if err == nil {
+		err = h.parts().SetPriceActive(r.Context(), priceID, p.ID, true)
+	}
 	if err != nil {
-		if strings.Contains(err.Error(), "UQ_price") {
+		if isDuplicatePrice(err) {
 			h.renderError(w, r, "Cannot activate: another active price exists for this supplier and pack size.")
 			return
 		}

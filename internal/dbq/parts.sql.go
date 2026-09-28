@@ -220,6 +220,33 @@ func (q *Queries) CreatePart(ctx context.Context, arg CreatePartParams) (int, er
 	return id, err
 }
 
+const createPrice = `-- name: CreatePrice :exec
+INSERT INTO price (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+VALUES ($1, $2, $3, $4, $5,
+        $6::text::date, TRUE)
+`
+
+type CreatePriceParams struct {
+	PartID        int
+	SupplierID    int
+	PackSize      *float64
+	PriceEa       *float64
+	PricePack     *float64
+	EffectiveDate string
+}
+
+func (q *Queries) CreatePrice(ctx context.Context, arg CreatePriceParams) error {
+	_, err := q.db.ExecContext(ctx, createPrice,
+		arg.PartID,
+		arg.SupplierID,
+		arg.PackSize,
+		arg.PriceEa,
+		arg.PricePack,
+		arg.EffectiveDate,
+	)
+	return err
+}
+
 const createSupplierPart = `-- name: CreateSupplierPart :exec
 INSERT INTO supplier_part (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
 VALUES ($1, $2, $3, $4::text,
@@ -265,6 +292,20 @@ func (q *Queries) DeleteBOMLine(ctx context.Context, arg DeleteBOMLineParams) er
 	return err
 }
 
+const deleteInactivePrice = `-- name: DeleteInactivePrice :exec
+DELETE FROM price WHERE id = $1 AND part_id = $2 AND is_active = FALSE
+`
+
+type DeleteInactivePriceParams struct {
+	ID     int
+	PartID int
+}
+
+func (q *Queries) DeleteInactivePrice(ctx context.Context, arg DeleteInactivePriceParams) error {
+	_, err := q.db.ExecContext(ctx, deleteInactivePrice, arg.ID, arg.PartID)
+	return err
+}
+
 const deleteMfgPart = `-- name: DeleteMfgPart :exec
 UPDATE mfg_part SET is_active = FALSE WHERE id = $1 AND part_id = $2
 `
@@ -300,6 +341,17 @@ type DeleteSupplierPartParams struct {
 func (q *Queries) DeleteSupplierPart(ctx context.Context, arg DeleteSupplierPartParams) error {
 	_, err := q.db.ExecContext(ctx, deleteSupplierPart, arg.ID, arg.PartID)
 	return err
+}
+
+const getDefaultSupplier = `-- name: GetDefaultSupplier :one
+SELECT default_supplier_id FROM part WHERE id = $1
+`
+
+func (q *Queries) GetDefaultSupplier(ctx context.Context, id int) (*int, error) {
+	row := q.db.QueryRowContext(ctx, getDefaultSupplier, id)
+	var default_supplier_id *int
+	err := row.Scan(&default_supplier_id)
+	return default_supplier_id, err
 }
 
 const getMfgPart = `-- name: GetMfgPart :one
@@ -491,6 +543,46 @@ func (q *Queries) GetPartByNumber(ctx context.Context, partNumber string) (GetPa
 	row := q.db.QueryRowContext(ctx, getPartByNumber, partNumber)
 	var i GetPartByNumberRow
 	err := row.Scan(&i.ID, &i.PartNumber, &i.Description)
+	return i, err
+}
+
+const getPartPrice = `-- name: GetPartPrice :one
+SELECT p.id, p.price_ea, p.price_pack, p.pack_size, COALESCE(p.is_active, FALSE) AS is_active,
+       p.effective_date, p.supplier_id, COALESCE(s.name, '') AS supplier_name
+FROM price p
+LEFT JOIN company s ON p.supplier_id = s.id
+WHERE p.id = $1 AND p.part_id = $2
+`
+
+type GetPartPriceParams struct {
+	ID     int
+	PartID int
+}
+
+type GetPartPriceRow struct {
+	ID            int
+	PriceEa       *float64
+	PricePack     *float64
+	PackSize      *float64
+	IsActive      bool
+	EffectiveDate *time.Time
+	SupplierID    int
+	SupplierName  string
+}
+
+func (q *Queries) GetPartPrice(ctx context.Context, arg GetPartPriceParams) (GetPartPriceRow, error) {
+	row := q.db.QueryRowContext(ctx, getPartPrice, arg.ID, arg.PartID)
+	var i GetPartPriceRow
+	err := row.Scan(
+		&i.ID,
+		&i.PriceEa,
+		&i.PricePack,
+		&i.PackSize,
+		&i.IsActive,
+		&i.EffectiveDate,
+		&i.SupplierID,
+		&i.SupplierName,
+	)
 	return i, err
 }
 
@@ -970,6 +1062,59 @@ func (q *Queries) ListPartNumbers(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const listPartPrices = `-- name: ListPartPrices :many
+SELECT p.id, p.price_ea, p.price_pack, p.pack_size, COALESCE(p.is_active, FALSE) AS is_active,
+       p.effective_date, p.supplier_id, COALESCE(s.name, '') AS supplier_name
+FROM price p
+LEFT JOIN company s ON p.supplier_id = s.id
+WHERE p.part_id = $1
+ORDER BY s.name, p.effective_date DESC, p.pack_size
+`
+
+type ListPartPricesRow struct {
+	ID            int
+	PriceEa       *float64
+	PricePack     *float64
+	PackSize      *float64
+	IsActive      bool
+	EffectiveDate *time.Time
+	SupplierID    int
+	SupplierName  string
+}
+
+// Every price row of a part (active or not), by supplier name, newest first, then pack size.
+func (q *Queries) ListPartPrices(ctx context.Context, partID int) ([]ListPartPricesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPartPrices, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartPricesRow
+	for rows.Next() {
+		var i ListPartPricesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PriceEa,
+			&i.PricePack,
+			&i.PackSize,
+			&i.IsActive,
+			&i.EffectiveDate,
+			&i.SupplierID,
+			&i.SupplierName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParts = `-- name: ListParts :many
 SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
        COALESCE(p.description, '') AS description, COALESCE(p.detail, '') AS detail,
@@ -1158,6 +1303,35 @@ func (q *Queries) ListWhereUsed(ctx context.Context, componentPartID int) ([]Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const setDefaultSupplier = `-- name: SetDefaultSupplier :exec
+UPDATE part SET default_supplier_id = $1 WHERE id = $2
+`
+
+type SetDefaultSupplierParams struct {
+	SupplierID *int
+	ID         int
+}
+
+func (q *Queries) SetDefaultSupplier(ctx context.Context, arg SetDefaultSupplierParams) error {
+	_, err := q.db.ExecContext(ctx, setDefaultSupplier, arg.SupplierID, arg.ID)
+	return err
+}
+
+const setPriceActive = `-- name: SetPriceActive :exec
+UPDATE price SET is_active = $1::boolean WHERE id = $2 AND part_id = $3
+`
+
+type SetPriceActiveParams struct {
+	IsActive bool
+	ID       int
+	PartID   int
+}
+
+func (q *Queries) SetPriceActive(ctx context.Context, arg SetPriceActiveParams) error {
+	_, err := q.db.ExecContext(ctx, setPriceActive, arg.IsActive, arg.ID, arg.PartID)
+	return err
 }
 
 const updateBOMLine = `-- name: UpdateBOMLine :exec
