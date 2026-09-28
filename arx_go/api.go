@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/internal/attachments"
 	"arx/internal/folderpick"
 	"arx/internal/urlutil"
 )
@@ -308,14 +309,8 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var oID any
-	if n, err := strconv.Atoi(body.OrderID); err == nil {
-		oID = n
-	}
-	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, hash) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		h.cfg().AttachmentsTable(),
-	), id, "LOCAL:"+finalName, body.Rev, "Photo", oID, body.Comment, hashBytes(data)); err != nil {
+	if err := h.insertAttachmentRow(r.Context(), id, "LOCAL:"+finalName, body.Rev, "Photo", intPtrOrNil(body.OrderID), body.Comment,
+		nil, nil, hashBytes(data)); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error adding attachment: "+err.Error())
 		return
 	}
@@ -338,10 +333,9 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var oldFileNameNS sql.NullString
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name FROM %s WHERE id=$1 AND part_id=$2`, h.cfg().AttachmentsTable(),
-	), attID, id).Scan(&oldFileNameNS); err != nil {
+	partID, _ := strconv.Atoi(id)
+	old, err := h.attachments().GetPartAttachment(r.Context(), attID, partID)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Attachment not found")
 			return
@@ -349,7 +343,7 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 		writeJSONError(w, http.StatusInternalServerError, "Error loading attachment: "+err.Error())
 		return
 	}
-	oldFileName := oldFileNameNS.String
+	oldFileName := old.FileName
 
 	var body struct {
 		ImageData string `json:"image_data"`
@@ -380,20 +374,15 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var oID any
-	if n, err := strconv.Atoi(body.OrderID); err == nil {
-		oID = n
-	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET part_revision=$1, category=$2, sort_order=$3, comment=$4, file_name=$5, hash=$6 WHERE id=$7`,
-		h.cfg().AttachmentsTable(),
-	), body.Rev, "Photo", oID, body.Comment, "LOCAL:"+finalName, hashBytes(data), attID); err != nil {
+	if err := h.attachments().ReplacePartAttachmentPhoto(r.Context(), attachments.PartAttachment{ID: attID,
+		PartRevision: body.Rev, Category: "Photo", SortOrder: intPtrOrNil(body.OrderID), Comment: body.Comment,
+		FileName: "LOCAL:" + finalName, Hash: hashBytes(data)}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "Error updating attachment: "+err.Error())
 		return
 	}
 
 	if urlutil.IsLocalFile(oldFileName) {
-		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().AttachmentsTable(), "id", "file_name",
+		if err := deleteAttachmentFileIfUnshared(r.Context(), h.attachments().PartFileInUse,
 			attID, oldFileName, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFileName)); err != nil {
 			writeJSON(w, map[string]any{"ok": true, "warning": "Attachment updated, but the old file could not be removed: " + err.Error()})
 			return
@@ -409,8 +398,8 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 // thumbnailCategory (small) drives the /parts part-number hover tooltip and is
 // kept out of the Photos card.
 const (
-	previewCategory   = "PDF Preview"
-	thumbnailCategory = "Thumbnail"
+	previewCategory   = attachments.PreviewCategory
+	thumbnailCategory = attachments.ThumbnailCategory
 )
 
 // isGeneratedCategory reports whether category is reserved for PDF-thumbnail
@@ -463,11 +452,9 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var fileNameNS, revNS sql.NullString
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name, part_revision FROM %s WHERE id=$1 AND part_id=$2 AND is_active=TRUE`,
-		h.cfg().AttachmentsTable(),
-	), attID, id).Scan(&fileNameNS, &revNS); err != nil {
+	partID, _ := strconv.Atoi(id)
+	src, err := h.attachments().GetActivePartAttachment(r.Context(), attID, partID)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Attachment not found")
 			return
@@ -475,8 +462,8 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 		writeJSONError(w, http.StatusInternalServerError, "Error loading attachment: "+err.Error())
 		return
 	}
-	srcFile := fileNameNS.String
-	rev := revNS.String
+	srcFile := src.FileName
+	rev := src.PartRevision
 	if !urlutil.IsLocalFile(srcFile) || urlutil.IsLocalDir(srcFile) || !urlutil.IsPDF(urlutil.FileBaseName(srcFile)) {
 		writeJSONError(w, http.StatusBadRequest, "Thumbnails can only be generated from a local PDF attachment.")
 		return
@@ -533,34 +520,31 @@ func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Reques
 // the find-or-create check below can't race with another request for the same
 // part. partID is the URL string form used elsewhere in this file.
 func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, category, newFile, hash string) error {
-	var existingID int
-	var oldFileNS sql.NullString
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, file_name FROM %s WHERE part_id=$1 AND category=$2 AND is_active=TRUE ORDER BY id`,
-		h.cfg().AttachmentsTable(),
-	), partID, category).Scan(&existingID, &oldFileNS)
-	if err == sql.ErrNoRows {
-		_, err = h.execContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, file_name, part_revision, category, hash) VALUES ($1,$2,$3,$4,$5)`,
-			h.cfg().AttachmentsTable(),
-		), partID, newFile, rev, category, hash)
+	pid, err := strconv.Atoi(partID)
+	if err != nil {
 		return err
+	}
+	svc := h.attachments()
+	existing, err := svc.GetGeneratedAttachment(ctx, pid, category)
+	if err == sql.ErrNoRows {
+		return svc.CreateGeneratedAttachment(ctx, attachments.PartAttachment{PartID: pid, FileName: newFile,
+			PartRevision: rev, Category: category, Hash: hash})
 	}
 	if err != nil {
 		return err
 	}
-	if _, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET file_name=$1, part_revision=$2, hash=$3 WHERE id=$4`, h.cfg().AttachmentsTable(),
-	), newFile, rev, hash, existingID); err != nil {
+	existingID := existing.ID
+	if err := svc.UpdateGeneratedAttachment(ctx, attachments.PartAttachment{ID: existingID, FileName: newFile,
+		PartRevision: rev, Hash: hash}); err != nil {
 		return err
 	}
 	// The DB row is already correctly repointed at newFile at this point, so a
 	// failure removing the now-superseded old file is a cleanup miss, not a
 	// request failure — matches APIPartPasteAttachmentReplace's soft-warning
 	// treatment of the same failure mode instead of hard-failing the request.
-	oldFile := oldFileNS.String
+	oldFile := existing.FileName
 	if urlutil.IsLocalFile(oldFile) && oldFile != newFile {
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name",
+		if err := deleteAttachmentFileIfUnshared(ctx, svc.PartFileInUse,
 			existingID, oldFile, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFile)); err != nil {
 			log.Printf("[thumbnail] part %s: attachment %d updated, but old file %q could not be removed: %v", partID, existingID, oldFile, err)
 		}
@@ -577,16 +561,14 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 func (h *Handler) saveGeneratedAttachment(ctx context.Context, partID, rev, category, partNumber, description string, data []byte) error {
 	name := buildAttachmentFileName(partNumber, rev, description, category, ".png")
 
-	var oldFileNS sql.NullString
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT file_name FROM %s WHERE part_id=$1 AND category=$2 AND is_active=TRUE`,
-		h.cfg().AttachmentsTable(),
-	), partID, category).Scan(&oldFileNS); err != nil && err != sql.ErrNoRows {
+	pid, _ := strconv.Atoi(partID)
+	existing, err := h.attachments().GetGeneratedAttachment(ctx, pid, category)
+	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("Error loading existing attachment: %w", err)
 	}
 
 	finalName := name
-	if urlutil.IsLocalFile(oldFileNS.String) && strings.EqualFold(urlutil.StripLocalPrefix(oldFileNS.String), name) {
+	if urlutil.IsLocalFile(existing.FileName) && strings.EqualFold(urlutil.StripLocalPrefix(existing.FileName), name) {
 		if err := replaceDocControlData(h.cfg().DocControlRoot, name, data); err != nil {
 			return fmt.Errorf("Error saving image: %w", err)
 		}

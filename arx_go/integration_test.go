@@ -5445,7 +5445,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := deleteAttachmentFileIfUnshared(ctx, h.attachments().PartFileInUse, attID, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
@@ -5465,7 +5465,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := deleteAttachmentFileIfUnshared(ctx, h.attachments().PartFileInUse, att1, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); err != nil {
@@ -5488,7 +5488,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", att1, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := deleteAttachmentFileIfUnshared(ctx, h.attachments().PartFileInUse, att1, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
@@ -5503,7 +5503,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		const name = "never-existed.txt"
 		attID, cleanupAtt := seedAttachment(t, partID, "LOCAL:"+name)
 		defer cleanupAtt()
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().AttachmentsTable(), "id", "file_name", attID, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := deleteAttachmentFileIfUnshared(ctx, h.attachments().PartFileInUse, attID, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Errorf("expected nil error for already-gone file, got %v", err)
 		}
 	})
@@ -5532,7 +5532,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := h.deleteAttachmentFileIfUnshared(ctx, h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "file_path", attID, "LOCAL:"+name, docRoot, name); err != nil {
+		if err := deleteAttachmentFileIfUnshared(ctx, h.attachments().CompanyFileInUse, attID, "LOCAL:"+name, docRoot, name); err != nil {
 			t.Fatalf("deleteAttachmentFileIfUnshared: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(docRoot, name)); !os.IsNotExist(err) {
@@ -5541,7 +5541,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 	})
 }
 
-// TestIntegration_SetPrimaryAttachment exercises setPrimaryAttachment's set/clear
+// TestIntegration_SetPrimaryAttachment exercises SetPartPrimary / SetCompanyPrimary set/clear
 // logic for both the part and supplier (company) primary-attachment pointer (#809).
 func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 	h, cleanup := liveHandler(t)
@@ -5554,8 +5554,8 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 		attID, attCleanup := seedThrowawayAttachment(t, h, ctx, partID, "LOCAL:primary-test.txt", "Test")
 		defer attCleanup()
 
-		if err := h.setPrimaryAttachment(ctx, h.cfg().PartsTable(), "id", "primary_attachment_id", partID, attID); err != nil {
-			t.Fatalf("setPrimaryAttachment(set): %v", err)
+		if err := h.attachments().SetPartPrimary(ctx, partID, &attID); err != nil {
+			t.Fatalf("SetPartPrimary(set): %v", err)
 		}
 		var gotPrimary sql.NullInt64
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=$1`, h.cfg().PartsTable()), partID).Scan(&gotPrimary); err != nil {
@@ -5565,8 +5565,8 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 			t.Errorf("primary_attachment_id = %+v, want %d", gotPrimary, attID)
 		}
 
-		if err := h.setPrimaryAttachment(ctx, h.cfg().PartsTable(), "id", "primary_attachment_id", partID, nil); err != nil {
-			t.Fatalf("setPrimaryAttachment(clear): %v", err)
+		if err := h.attachments().SetPartPrimary(ctx, partID, nil); err != nil {
+			t.Fatalf("SetPartPrimary(clear): %v", err)
 		}
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=$1`, h.cfg().PartsTable()), partID).Scan(&gotPrimary); err != nil {
 			t.Fatalf("select primary_attachment_id after clear: %v", err)
@@ -5596,8 +5596,8 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 			t.Fatalf("seed company_attachment: %v", err)
 		}
 
-		if err := h.setPrimaryAttachment(ctx, h.cfg().CompanyTable(), "id", "primary_attachment_id", supplierID, attID); err != nil {
-			t.Fatalf("setPrimaryAttachment: %v", err)
+		if err := h.attachments().SetCompanyPrimary(ctx, supplierID, &attID); err != nil {
+			t.Fatalf("SetCompanyPrimary: %v", err)
 		}
 		var gotPrimary sql.NullInt64
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID).Scan(&gotPrimary); err != nil {
@@ -5609,7 +5609,7 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 	})
 
 	t.Run("noop_on_nonexistent_parent", func(t *testing.T) {
-		if err := h.setPrimaryAttachment(ctx, h.cfg().PartsTable(), "id", "primary_attachment_id", 999999999, nil); err != nil {
+		if err := h.attachments().SetPartPrimary(ctx, 999999999, nil); err != nil {
 			t.Errorf("expected nil error for nonexistent parentID, got %v", err)
 		}
 	})
@@ -5652,7 +5652,8 @@ func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
 
 		insert := func(name, category string) int {
 			t.Helper()
-			if err := h.insertAttachmentRow(ctx, strconv.Itoa(partID), name, "A", category, 1, "", nil, nil, ""); err != nil {
+			sortOrder := 1
+			if err := h.insertAttachmentRow(ctx, strconv.Itoa(partID), name, "A", category, &sortOrder, "", nil, nil, ""); err != nil {
 				t.Fatalf("insertAttachmentRow: %v", err)
 			}
 			var id int

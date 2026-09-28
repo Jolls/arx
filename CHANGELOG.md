@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.11] - 2026-09-27
+### Changed
+- Data-access layer: part and supplier attachment queries (list, add, edit, delete, primary, paste, PDF thumbnails, vendor scope, duplicate check, where-used) moved to sqlc in a new `internal/attachments` package ([#220](https://github.com/Jolls/arx/issues/220))
+### Fixed
+- With a supplier files folder set, replacing a supplier attachment's file now removes the old file from that folder; it used to look in Doc Control, which left the old file behind and could delete a part file with the same name ([#220](https://github.com/Jolls/arx/issues/220))
+
 ## [0.8.10] - 2026-09-27
 ### Changed
 - Data-access layer: sourcing-tab queries (supplier links, their prices, DigiKey import) moved to sqlc (`internal/parts`); the pricing sub-row now shows the pack price ([#220](https://github.com/Jolls/arx/issues/220))

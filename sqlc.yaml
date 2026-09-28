@@ -42,6 +42,7 @@ sql:
     queries:
       - internal/contacts/contacts.sql
       - internal/parts/parts.sql
+      - internal/attachments/attachments.sql
     gen:
       go:
         package: dbq

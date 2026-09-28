@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"arx/arx_go/models"
+	"arx/internal/attachments"
 	"arx/internal/urlutil"
 )
 
@@ -313,7 +313,7 @@ func isBatchTempDir(dir, partID string) bool {
 // collision re-renders the page (a fresh request), and the original
 // multipart upload's bytes do not survive that. Only the extension is staged
 // per name because buildAttachmentFileName never uses the original filename.
-func (h *Handler) startAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID any, ups []*multipart.FileHeader, categories []string) {
+func (h *Handler) startAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID *int, ups []*multipart.FileHeader, categories []string) {
 	dir, err := os.MkdirTemp("", batchDirPrefix)
 	if err != nil {
 		h.renderError(w, r, "Error starting import: "+err.Error())
@@ -361,7 +361,7 @@ func (h *Handler) startAttachmentBatch(w http.ResponseWriter, r *http.Request, i
 // imported stay imported). dir, remaining, and their categories are
 // client-supplied (hidden form fields) and are validated before any
 // filesystem access or DB write.
-func (h *Handler) resumeAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID any, dir string) {
+func (h *Handler) resumeAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID *int, dir string) {
 	if !isBatchTempDir(dir, id) {
 		h.renderError(w, r, "This import batch has expired or is invalid. Please re-select your files.")
 		return
@@ -413,7 +413,7 @@ func (h *Handler) resumeAttachmentBatch(w http.ResponseWriter, r *http.Request, 
 // retrying — r's link_existing=1/link_name values apply to that one file
 // only, so every recursive call after it passes false (r is reused across
 // the whole recursion and never stops carrying those values).
-func (h *Handler) importAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID any, dir string, staged, categories []string, total int, allowLinkExisting bool) {
+func (h *Handler) importAttachmentBatch(w http.ResponseWriter, r *http.Request, id, rev, comment string, oID, supplierPartID, mfgPartID *int, dir string, staged, categories []string, total int, allowLinkExisting bool) {
 	if len(staged) == 0 {
 		os.RemoveAll(dir)
 		http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
@@ -503,18 +503,34 @@ func replaceDocControlData(root, name string, data []byte) error {
 	return nil
 }
 
-// deleteAttachmentFileIfUnshared removes root/<strippedName> unless another
-// active row in table still has fullFileName (e.g. via the "Link to existing
-// file" import flow), in which case the file is left in place for that row.
-// A file that's already gone is treated as success, not an error.
-func (h *Handler) deleteAttachmentFileIfUnshared(ctx context.Context, table, idCol, fileCol string, excludeID any, fullFileName, root, strippedName string) error {
-	var count int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE %s=$1 AND is_active=TRUE AND %s<>$2`, table, fileCol, idCol,
-	), fullFileName, excludeID).Scan(&count); err != nil {
+func (h *Handler) attachments() *attachments.Service { return attachments.New(handlerDB{h}) }
+
+// attachmentTx runs fn against an attachments service bound to one transaction.
+// Attachment INSERTs and soft-deletes go through here with the Ensure*Primary that
+// follows them, so a failure can't leave the write done but the primary stale (#121).
+func (h *Handler) attachmentTx(ctx context.Context, fn func(*attachments.Service) error) error {
+	tx, err := h.beginTx(ctx)
+	if err != nil {
 		return err
 	}
-	if count > 0 {
+	defer tx.Rollback()
+	if err := fn(attachments.New(tx)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// deleteAttachmentFileIfUnshared removes root/<strippedName> unless inUse (the
+// table's PartFileInUse / CompanyFileInUse) reports another active row still has
+// fullFileName (e.g. via the "Link to existing file" import flow), in which case
+// the file is left in place for that row. A file that's already gone is treated
+// as success, not an error.
+func deleteAttachmentFileIfUnshared(ctx context.Context, inUse func(context.Context, string, int) (bool, error), excludeID int, fullFileName, root, strippedName string) error {
+	used, err := inUse(ctx, fullFileName, excludeID)
+	if err != nil {
+		return err
+	}
+	if used {
 		return nil
 	}
 	if err := os.Remove(filepath.Join(root, strippedName)); err != nil && !os.IsNotExist(err) {
@@ -523,72 +539,7 @@ func (h *Handler) deleteAttachmentFileIfUnshared(ctx context.Context, table, idC
 	return nil
 }
 
-// execFunc is the ExecContext shape shared by h.execContext and (*txLogger).ExecContext,
-// so a helper can run against either.
-type execFunc func(ctx context.Context, query string, args ...any) (sql.Result, error)
-
-// primaryAttachmentEnsureSQL builds the statement that points a parent's primary at
-// its first active attachment (lowest sort_order, ties by id), but only when the
-// current primary is NULL or no longer active. A live primary is never changed, so
-// it is safe to run after every insert and soft-delete; when no active attachment
-// remains the subselect yields NULL and the primary is cleared (#121). extraFilter
-// is an optional " AND ..." clause on the attachment alias `a`. Takes $1 = parent id.
-func primaryAttachmentEnsureSQL(parentTable, primaryCol, attTable, attPK, ownerCol, extraFilter string) string {
-	return fmt.Sprintf(
-		`UPDATE %[1]s SET %[2]s = (
-			SELECT a.%[4]s FROM %[3]s a
-			WHERE a.%[5]s = %[1]s.id AND a.is_active = TRUE%[6]s
-			ORDER BY COALESCE(a.sort_order, 0), a.%[4]s LIMIT 1)
-		WHERE id = $1 AND (%[2]s IS NULL OR NOT EXISTS (
-			SELECT 1 FROM %[3]s x WHERE x.%[4]s = %[1]s.%[2]s AND x.is_active = TRUE))`,
-		parentTable, primaryCol, attTable, attPK, ownerCol, extraFilter)
-}
-
-// ensurePartPrimary applies primaryAttachmentEnsureSQL to a part. The generated
-// PDF Preview / Thumbnail rows never become the auto-set primary — they are
-// derived images, not the part's own files.
-func (h *Handler) ensurePartPrimary(ctx context.Context, exec execFunc, partID any) error {
-	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.cfg().PartsTable(), "primary_attachment_id",
-		h.cfg().AttachmentsTable(), "id", "part_id",
-		fmt.Sprintf(" AND COALESCE(a.category, '') NOT IN ('%s', '%s')", previewCategory, thumbnailCategory)), partID)
-	return err
-}
-
-func (h *Handler) ensureSupplierPrimary(ctx context.Context, exec execFunc, supplierID any) error {
-	_, err := exec(ctx, primaryAttachmentEnsureSQL(h.cfg().CompanyTable(), "primary_attachment_id",
-		h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "supplier_id", ""), supplierID)
-	return err
-}
-
-// execThenEnsurePrimary runs an attachment INSERT or soft-delete UPDATE and then
-// ensure, in one transaction, so a failure can't leave the write done but the
-// primary stale (#121).
-func (h *Handler) execThenEnsurePrimary(ctx context.Context, ensure func(context.Context, execFunc, any) error, parentID any, query string, args ...any) error {
-	tx, err := h.beginTx(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-		return err
-	}
-	if err := ensure(ctx, tx.ExecContext, parentID); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// setPrimaryAttachment updates a parent record's primary attachment pointer.
-// Pass nil for attachmentID to clear the primary.
-func (h *Handler) setPrimaryAttachment(ctx context.Context, table, idCol, primaryCol string, parentID int, attachmentID any) error {
-	_, err := h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET %s=$1 WHERE %s=$2`, table, primaryCol, idCol,
-	), attachmentID, parentID)
-	return err
-}
-
-// Vendor-scope columns on part_attachment (#56). Interpolated into SQL, so these are
-// the only permitted values — never user input.
+// Vendor-scope columns on part_attachment (#56); fetchAttachmentsByVendor keys by one.
 const (
 	supplierScopeCol = "supplier_part_id"
 	mfgScopeCol      = "mfg_part_id"
@@ -639,7 +590,7 @@ func vendorScopeLabel(kind, name, pn string) string {
 // mfg_part_id pair to store (#56). An empty token means part-level (both NULL). The
 // referenced link must belong to partID — the picker only offers this part's own vendors,
 // and nothing else may be scoped to an attachment of a different part.
-func (h *Handler) resolveVendorScope(ctx context.Context, partID, token string) (supplierPartID, mfgPartID any, err error) {
+func (h *Handler) resolveVendorScope(ctx context.Context, partID, token string) (supplierPartID, mfgPartID *int, err error) {
 	if token == "" {
 		return nil, nil, nil
 	}
@@ -651,66 +602,50 @@ func (h *Handler) resolveVendorScope(ctx context.Context, partID, token string) 
 	if convErr != nil {
 		return nil, nil, fmt.Errorf("invalid linked vendor selection")
 	}
-	var table string
+	pid, _ := strconv.Atoi(partID)
+	var linked bool
 	switch kind {
 	case "s":
-		table = h.cfg().SupplierPartTable()
+		linked, err = h.attachments().SupplierPartOfPart(ctx, id, pid)
 	case "m":
-		table = h.cfg().MfgPartTable()
+		linked, err = h.attachments().MfgPartOfPart(ctx, id, pid)
 	default:
 		return nil, nil, fmt.Errorf("invalid linked vendor selection")
 	}
-	var count int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE id=$1 AND part_id=$2`, table,
-	), id, partID).Scan(&count); err != nil {
+	if err != nil {
 		return nil, nil, err
 	}
-	if count == 0 {
+	if !linked {
 		return nil, nil, fmt.Errorf("that supplier or manufacturer is not linked to this part")
 	}
 	if kind == "s" {
-		return id, nil, nil
+		return &id, nil, nil
 	}
-	return nil, id, nil
+	return nil, &id, nil
 }
 
 // fetchAttachmentsByVendor returns a part's active attachments that are scoped to a vendor
 // link, keyed by that link's id, for the Suppliers / Mfg Parts tabs (#56). col is one of
 // supplierScopeCol / mfgScopeCol.
 func (h *Handler) fetchAttachmentsByVendor(r *http.Request, partID, col string) map[int][]models.Attachment {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT %s, id, file_name, category, part_revision
-		FROM %s
-		WHERE part_id = $1 AND is_active = TRUE AND %s IS NOT NULL
-		ORDER BY sort_order, id
-	`, col, h.cfg().AttachmentsTable(), col), partID)
+	pid, _ := strconv.Atoi(partID)
+	atts, err := h.attachments().ListPartAttachments(r.Context(), pid)
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
 	out := map[int][]models.Attachment{}
-	for rows.Next() {
-		var vendorID sql.NullInt64
-		var att models.Attachment
-		var fname, category, rev sql.NullString
-		if rows.Scan(&vendorID, &att.ID, &fname, &category, &rev) != nil || !vendorID.Valid {
+	for _, a := range atts {
+		vendorID := a.SupplierPartID
+		if col == mfgScopeCol {
+			vendorID = a.MfgPartID
+		}
+		if vendorID == nil {
 			continue
 		}
-		att.FileName = fname.String
-		att.Category = category.String
-		att.PartRevision = rev.String
-		out[int(vendorID.Int64)] = append(out[int(vendorID.Int64)], att)
+		out[*vendorID] = append(out[*vendorID], models.Attachment{
+			ID: a.ID, FileName: a.FileName, Category: a.Category, PartRevision: a.PartRevision})
 	}
 	return out
-}
-
-// attachmentUsage is one row/owner in the "where used" results for a file link.
-type attachmentUsage struct {
-	Kind    string // "part" or "supplier"
-	OwnerID int
-	Code    string // part number (empty for suppliers)
-	Label   string // part description or supplier name
 }
 
 // AttachmentWhereUsed shows every part and supplier that links the given file
@@ -722,32 +657,10 @@ func (h *Handler) AttachmentWhereUsed(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "No file link specified.")
 		return
 	}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT 'part' AS kind, p.id, p.part_number, p.description
-		FROM %s fa JOIN %s p ON p.id = fa.part_id
-		WHERE fa.is_active = TRUE AND fa.file_name = $1
-		UNION ALL
-		SELECT 'supplier' AS kind, c.id, '', c.name
-		FROM %s ca JOIN %s c ON c.id = ca.supplier_id
-		WHERE ca.is_active = TRUE AND ca.file_path = $1
-		ORDER BY 1, 4
-	`, h.cfg().AttachmentsTable(), h.cfg().PartsTable(), h.cfg().CompanyAttachmentsTable(), h.cfg().CompanyTable()), file)
+	usages, err := h.attachments().WhereUsed(r.Context(), file)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
 		return
-	}
-	defer rows.Close()
-	var usages []attachmentUsage
-	for rows.Next() {
-		var u attachmentUsage
-		var code, label sql.NullString
-		if err := rows.Scan(&u.Kind, &u.OwnerID, &code, &label); err != nil {
-			h.renderError(w, r, "Error reading where-used: "+err.Error())
-			return
-		}
-		u.Code = code.String
-		u.Label = label.String
-		usages = append(usages, u)
 	}
 	h.render(w, r, "parts/attachment_where_used.html", map[string]any{
 		"FileLink": file, "Usages": usages,
@@ -830,44 +743,25 @@ type duplicateAttachment struct {
 	URL   string // "/part/<id>/attachments" or "/supplier/<id>/attachments"
 }
 
-// findDuplicateAttachment returns the oldest active attTable row whose hash
-// matches, excluding excludeID (0 = exclude nothing, i.e. the create path).
-// Returns nil when hash is empty or nothing matches. Soft-deleted rows are
-// never compared. idCol/labelCol/joinCol/joinTable/urlFmt parameterize the
-// query shape shared by findDuplicatePartAttachment and
-// findDuplicateCompanyAttachment — the two tables are otherwise checked
-// completely independently (a match in one never flags against the other).
-func (h *Handler) findDuplicateAttachment(ctx context.Context, hash string, excludeID int, attTable, idCol, joinTable, joinCol, labelCol, urlFmt string) (*duplicateAttachment, error) {
-	if hash == "" {
-		return nil, nil
-	}
-	var dup duplicateAttachment
-	var joinID int
-	var label string
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT a.%s, j.id, j.%s
-		FROM %s a JOIN %s j ON j.id = a.%s
-		WHERE a.is_active = TRUE AND a.hash = $1 AND a.%s <> $2
-		ORDER BY a.%s LIMIT 1`,
-		idCol, labelCol, attTable, joinTable, joinCol, idCol, idCol,
-	), hash, excludeID).Scan(&dup.ID, &joinID, &label)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
+// duplicateAt adds the owner page URL (urlFmt takes the owner id) to a
+// Find*DuplicateAttachment result; nil stays nil.
+func duplicateAt(d *attachments.Duplicate, err error, urlFmt string) (*duplicateAttachment, error) {
+	if d == nil || err != nil {
 		return nil, err
 	}
-	dup.Label = label
-	dup.URL = fmt.Sprintf(urlFmt, joinID)
-	return &dup, nil
+	return &duplicateAttachment{ID: d.ID, Label: d.Label, URL: fmt.Sprintf(urlFmt, d.OwnerID)}, nil
 }
 
+// findDuplicatePartAttachment / findDuplicateCompanyAttachment return the oldest
+// active row of their table whose hash matches, excluding excludeID (0 = exclude
+// nothing, i.e. the create path); nil when hash is empty or nothing matches. The
+// two tables are checked independently (a match in one never flags the other).
 func (h *Handler) findDuplicatePartAttachment(ctx context.Context, hash string, excludeID int) (*duplicateAttachment, error) {
-	return h.findDuplicateAttachment(ctx, hash, excludeID,
-		h.cfg().AttachmentsTable(), "id", h.cfg().PartsTable(), "part_id", "part_number", "/part/%d/attachments")
+	d, err := h.attachments().FindDuplicatePartAttachment(ctx, hash, excludeID)
+	return duplicateAt(d, err, "/part/%d/attachments")
 }
 
 func (h *Handler) findDuplicateCompanyAttachment(ctx context.Context, hash string, excludeID int) (*duplicateAttachment, error) {
-	return h.findDuplicateAttachment(ctx, hash, excludeID,
-		h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", h.cfg().CompanyTable(), "supplier_id", "name", "/supplier/%d/attachments")
+	d, err := h.attachments().FindDuplicateCompanyAttachment(ctx, hash, excludeID)
+	return duplicateAt(d, err, "/supplier/%d/attachments")
 }
