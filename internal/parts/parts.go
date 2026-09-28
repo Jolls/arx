@@ -4,8 +4,9 @@
 // DigiKey import), the RFQ planner's BOM reads, the part-number list, the
 // parts list/CSV export, the single-part read/create/update, the BOM
 // lines (view, where-used, edit, paste preview, copy, export), the
-// pricing tab's price CRUD, the BOM cost rollup/build cost, and the part
-// detail dashboard's cards and orders/price-history tabs are converted.
+// pricing tab's price CRUD, the BOM cost rollup/build cost, the part
+// detail dashboard's cards and orders/price-history tabs, and the part
+// search / supplier-part autofill APIs are converted.
 package parts
 
 import (
@@ -851,4 +852,43 @@ func (s *Service) ListPriceListPoints(ctx context.Context, partID int) ([]PriceL
 		out = append(out, PriceListPoint{SupplierName: r.SupplierName, EffectiveDate: *r.EffectiveDate, PriceEA: *r.PriceEa, PackSize: r.PackSize})
 	}
 	return out, nil
+}
+
+// PartMatch is a part search hit.
+type PartMatch struct {
+	ID          int
+	PartNumber  string
+	Revision    string
+	Description string
+	Detail      string
+}
+
+// SearchParts returns up to n parts whose part_number contains q, or whose
+// description/detail does when byDesc, ordered by part_number. q is not
+// LIKE-escaped.
+func (s *Service) SearchParts(ctx context.Context, q string, byDesc bool, n int) ([]PartMatch, error) {
+	rows, err := s.q.SearchParts(ctx, dbq.SearchPartsParams{ByDesc: byDesc, Pattern: "%" + q + "%", N: n})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PartMatch, len(rows))
+	for i, r := range rows {
+		out[i] = PartMatch(r)
+	}
+	return out, nil
+}
+
+// SupplierPartDefaults autofills a PO line: the supplier's part number and
+// minimum order increment, and its smallest-pack active unit price.
+type SupplierPartDefaults struct {
+	SupplierPN   string
+	MinIncrement *float64
+	PriceEA      *float64
+}
+
+// GetSupplierPartDefaults returns a (part, supplier) pair's PO-line defaults;
+// sql.ErrNoRows when the pair has no supplier_part link.
+func (s *Service) GetSupplierPartDefaults(ctx context.Context, partID, supplierID int) (SupplierPartDefaults, error) {
+	r, err := s.q.GetSupplierPartDefaults(ctx, dbq.GetSupplierPartDefaultsParams{PartID: partID, SupplierID: supplierID})
+	return SupplierPartDefaults{SupplierPN: r.SupplierPn, MinIncrement: r.MinIncrement, PriceEA: r.PriceEa}, err
 }
