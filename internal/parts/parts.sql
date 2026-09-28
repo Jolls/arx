@@ -57,3 +57,68 @@ UPDATE mfg_part SET is_active = FALSE WHERE id = sqlc.arg(id) AND part_id = sqlc
 SELECT id, name FROM company
 WHERE is_manufacturer = TRUE AND is_active = TRUE
 ORDER BY name;
+
+-- name: ListSupplierParts :many
+SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, COALESCE(sp.supplier_pn, '') AS supplier_pn,
+       COALESCE(sp.supplier_desc, '') AS supplier_desc, COALESCE(sp.lead_time, '') AS lead_time,
+       sp.min_increment, sp.uom_id, c.name AS supplier_name,
+       COALESCE(pu.abbreviation, bu.abbreviation, '') AS purchase_unit_abbr,
+       (sp.uom_id IS NOT NULL)::boolean AS purchase_unit_is_explicit
+FROM supplier_part sp
+JOIN company c  ON sp.supplier_id = c.id
+LEFT JOIN uom pu ON sp.uom_id   = pu.uom_id
+LEFT JOIN part p ON sp.part_id  = p.id
+LEFT JOIN uom bu ON p.uom_id    = bu.uom_id
+WHERE sp.part_id = $1
+ORDER BY c.name, sp.supplier_pn;
+
+-- name: GetSupplierPart :one
+SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, COALESCE(sp.supplier_pn, '') AS supplier_pn,
+       COALESCE(sp.supplier_desc, '') AS supplier_desc, COALESCE(sp.lead_time, '') AS lead_time,
+       sp.min_increment, sp.uom_id, c.name AS supplier_name
+FROM supplier_part sp
+JOIN company c ON sp.supplier_id = c.id
+WHERE sp.id = sqlc.arg(id) AND sp.part_id = sqlc.arg(part_id);
+
+-- name: CreateSupplierPart :exec
+INSERT INTO supplier_part (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
+VALUES (sqlc.arg(supplier_id), sqlc.arg(part_id), sqlc.narg(preference), sqlc.arg(supplier_pn)::text,
+        sqlc.arg(supplier_desc)::text, sqlc.arg(lead_time)::text, sqlc.narg(min_increment), sqlc.narg(uom_id));
+
+-- name: UpdateSupplierPart :exec
+UPDATE supplier_part SET supplier_id = sqlc.arg(supplier_id), preference = sqlc.narg(preference),
+  supplier_pn = sqlc.arg(supplier_pn)::text, supplier_desc = sqlc.arg(supplier_desc)::text,
+  lead_time = sqlc.arg(lead_time)::text, min_increment = sqlc.narg(min_increment), uom_id = sqlc.narg(uom_id)
+WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id);
+
+-- name: DeleteSupplierPart :exec
+DELETE FROM supplier_part WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id);
+
+-- name: ListActivePrices :many
+SELECT supplier_id, price_ea, price_pack, pack_size, effective_date
+FROM price
+WHERE part_id = $1 AND is_active = TRUE
+ORDER BY supplier_id, pack_size;
+
+-- ImportPrice skips (0 rows) a pack size that already has an active price.
+-- name: ImportPrice :execrows
+INSERT INTO price (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+VALUES (sqlc.arg(part_id), sqlc.arg(supplier_id), sqlc.arg(pack_size)::numeric, sqlc.arg(price_ea)::numeric,
+        sqlc.arg(price_pack)::numeric, sqlc.arg(effective_date)::text::date, TRUE)
+ON CONFLICT (part_id, supplier_id, pack_size) WHERE is_active DO NOTHING;
+
+-- name: CreateImportedAttachment :exec
+INSERT INTO part_attachment (part_id, file_name, part_revision, category, comment, hash)
+VALUES (sqlc.arg(part_id), sqlc.arg(file_name)::text, '', sqlc.arg(category)::text, sqlc.arg(comment)::text, sqlc.arg(hash)::text);
+
+-- CreateManufacturer returns no row when a company already has the name.
+-- name: CreateManufacturer :one
+INSERT INTO company (name, is_supplier, is_manufacturer) VALUES ($1, FALSE, TRUE)
+ON CONFLICT (name) DO NOTHING
+RETURNING id;
+
+-- ImportMfgPart leaves an existing active (part, manufacturer, MPN) alone.
+-- name: ImportMfgPart :exec
+INSERT INTO mfg_part (part_id, mfg_id, mfg_part_number, is_active)
+VALUES (sqlc.arg(part_id), sqlc.arg(mfg_id), sqlc.arg(mfg_part_number), TRUE)
+ON CONFLICT (part_id, mfg_id, mfg_part_number) WHERE is_active DO NOTHING;
