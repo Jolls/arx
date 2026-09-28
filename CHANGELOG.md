@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.21] - 2026-09-28
+### Changed
+- Data-access layer: the PO reads (PO list, detail header and lines, receipts, history, link/price suggestions, print supplier code, open-folder lookup, new-PO receiver defaults, line revision fallback, RFQ comparison grid) moved to sqlc in `internal/purchasing` ([#221](https://github.com/Jolls/arx/issues/221))
+### Fixed
+- The purchase-order CSV export (`/pos/export.csv`) failed with a database error on every request; it now exports each PO line ([#221](https://github.com/Jolls/arx/issues/221))
+
 ## [0.8.20] - 2026-09-28
 ### Changed
 - Data-access layer: the supplier pages (list, detail dashboard, create/edit, Parts and POs tabs), the supplier typeahead and supplier-contacts APIs, and the PO forms' supplier contact and bulk-order lookups moved to sqlc in a new `internal/purchasing` package; `suppliers.go` is now free of raw SQL ([#221](https://github.com/Jolls/arx/issues/221))

@@ -44,6 +44,136 @@ func (q *Queries) CreateSupplier(ctx context.Context, arg CreateSupplierParams) 
 	return id, err
 }
 
+const getPO = `-- name: GetPO :one
+SELECT id, number, COALESCE(status, '') AS status, COALESCE(approval_status, '') AS approval_status,
+       COALESCE(is_active, FALSE) AS is_active, COALESCE(orderer, '') AS orderer, COALESCE(account_id, '') AS account_id,
+       date_ordered, date_requested, date_closed, date_printed, date_modified,
+       supplier_id, COALESCE(supplier_name, '') AS supplier_name, COALESCE(supplier_contact, '') AS supplier_contact,
+       supplier_contact_id, COALESCE(supplier_email, '') AS supplier_email,
+       COALESCE(supplier_address, '') AS supplier_address, COALESCE(supplier_city, '') AS supplier_city,
+       COALESCE(supplier_state, '') AS supplier_state, COALESCE(supplier_zipcode, '') AS supplier_zipcode,
+       COALESCE(supplier_country, '') AS supplier_country, COALESCE(supplier_phone_number, '') AS supplier_phone_number,
+       COALESCE(supplier_fax_number, '') AS supplier_fax_number,
+       receiver_id, COALESCE(receiver_name, '') AS receiver_name, COALESCE(receiver_contact, '') AS receiver_contact,
+       receiver_contact_id, COALESCE(receiver_email, '') AS receiver_email,
+       COALESCE(receiver_address, '') AS receiver_address, COALESCE(receiver_city, '') AS receiver_city,
+       COALESCE(receiver_state, '') AS receiver_state, COALESCE(receiver_zipcode, '') AS receiver_zipcode,
+       COALESCE(receiver_country, '') AS receiver_country, COALESCE(receiver_phone, '') AS receiver_phone,
+       COALESCE(receiver_fax, '') AS receiver_fax,
+       tax1, shipping_cost, misc_cost, total_cost,
+       COALESCE(notes, '') AS notes, COALESCE(internal_notes, '') AS internal_notes, rfq_group_id
+FROM purchase_order
+WHERE number = $1
+`
+
+type GetPORow struct {
+	ID                  int
+	Number              string
+	Status              string
+	ApprovalStatus      string
+	IsActive            bool
+	Orderer             string
+	AccountID           string
+	DateOrdered         *time.Time
+	DateRequested       *time.Time
+	DateClosed          *time.Time
+	DatePrinted         *time.Time
+	DateModified        *time.Time
+	SupplierID          int
+	SupplierName        string
+	SupplierContact     string
+	SupplierContactID   *int
+	SupplierEmail       string
+	SupplierAddress     string
+	SupplierCity        string
+	SupplierState       string
+	SupplierZipcode     string
+	SupplierCountry     string
+	SupplierPhoneNumber string
+	SupplierFaxNumber   string
+	ReceiverID          *int
+	ReceiverName        string
+	ReceiverContact     string
+	ReceiverContactID   *int
+	ReceiverEmail       string
+	ReceiverAddress     string
+	ReceiverCity        string
+	ReceiverState       string
+	ReceiverZipcode     string
+	ReceiverCountry     string
+	ReceiverPhone       string
+	ReceiverFax         string
+	Tax1                *float64
+	ShippingCost        *float64
+	MiscCost            *float64
+	TotalCost           *float64
+	Notes               string
+	InternalNotes       string
+	RfqGroupID          *int
+}
+
+func (q *Queries) GetPO(ctx context.Context, number string) (GetPORow, error) {
+	row := q.db.QueryRowContext(ctx, getPO, number)
+	var i GetPORow
+	err := row.Scan(
+		&i.ID,
+		&i.Number,
+		&i.Status,
+		&i.ApprovalStatus,
+		&i.IsActive,
+		&i.Orderer,
+		&i.AccountID,
+		&i.DateOrdered,
+		&i.DateRequested,
+		&i.DateClosed,
+		&i.DatePrinted,
+		&i.DateModified,
+		&i.SupplierID,
+		&i.SupplierName,
+		&i.SupplierContact,
+		&i.SupplierContactID,
+		&i.SupplierEmail,
+		&i.SupplierAddress,
+		&i.SupplierCity,
+		&i.SupplierState,
+		&i.SupplierZipcode,
+		&i.SupplierCountry,
+		&i.SupplierPhoneNumber,
+		&i.SupplierFaxNumber,
+		&i.ReceiverID,
+		&i.ReceiverName,
+		&i.ReceiverContact,
+		&i.ReceiverContactID,
+		&i.ReceiverEmail,
+		&i.ReceiverAddress,
+		&i.ReceiverCity,
+		&i.ReceiverState,
+		&i.ReceiverZipcode,
+		&i.ReceiverCountry,
+		&i.ReceiverPhone,
+		&i.ReceiverFax,
+		&i.Tax1,
+		&i.ShippingCost,
+		&i.MiscCost,
+		&i.TotalCost,
+		&i.Notes,
+		&i.InternalNotes,
+		&i.RfqGroupID,
+	)
+	return i, err
+}
+
+const getPOSupplierID = `-- name: GetPOSupplierID :one
+SELECT supplier_id FROM purchase_order WHERE number = $1
+`
+
+func (q *Queries) GetPOSupplierID(ctx context.Context, number string) (int, error) {
+	row := q.db.QueryRowContext(ctx, getPOSupplierID, number)
+	var supplier_id int
+	err := row.Scan(&supplier_id)
+	return supplier_id, err
+}
+
 const getSupplier = `-- name: GetSupplier :one
 SELECT su.id, su.name, COALESCE(su.supplier_code, '') AS supplier_code, COALESCE(su.notes, '') AS notes,
        su.default_contact, COALESCE(su.is_active, FALSE) AS is_active,
@@ -103,6 +233,461 @@ func (q *Queries) GetSupplier(ctx context.Context, id int) (GetSupplierRow, erro
 		&i.ContactCity,
 	)
 	return i, err
+}
+
+const listPOExportRows = `-- name: ListPOExportRows :many
+SELECT p.number, COALESCE(p.status, '') AS status, COALESCE(p.supplier_name, '') AS supplier_name,
+       p.date_ordered, p.date_closed, COALESCE(p.orderer, '') AS orderer, COALESCE(p.total_cost, 0) AS total_cost,
+       l.line_number, COALESCE(l.part_number_snapshot, '') AS part_number, COALESCE(l.description, '') AS description,
+       COALESCE(l.qty, 0) AS qty, COALESCE(l.unit_cost, 0) AS unit_cost,
+       COALESCE(l.vendor_part_number, '') AS vendor_part_number
+FROM purchase_order p
+LEFT JOIN po_line l ON l.po_id = p.id
+ORDER BY p.number DESC, l.line_number
+`
+
+type ListPOExportRowsRow struct {
+	Number           string
+	Status           string
+	SupplierName     string
+	DateOrdered      *time.Time
+	DateClosed       *time.Time
+	Orderer          string
+	TotalCost        float64
+	LineNumber       *int
+	PartNumber       string
+	Description      string
+	Qty              float64
+	UnitCost         float64
+	VendorPartNumber string
+}
+
+// One row per PO line (a PO without lines once, line columns NULL), for the CSV export.
+func (q *Queries) ListPOExportRows(ctx context.Context) ([]ListPOExportRowsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPOExportRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPOExportRowsRow
+	for rows.Next() {
+		var i ListPOExportRowsRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.Status,
+			&i.SupplierName,
+			&i.DateOrdered,
+			&i.DateClosed,
+			&i.Orderer,
+			&i.TotalCost,
+			&i.LineNumber,
+			&i.PartNumber,
+			&i.Description,
+			&i.Qty,
+			&i.UnitCost,
+			&i.VendorPartNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPOHistory = `-- name: ListPOHistory :many
+SELECT event_type, COALESCE(from_status, '') AS from_status, COALESCE(to_status, '') AS to_status,
+       COALESCE(action, '') AS action, COALESCE(note, '') AS note, changed_by, changed_at
+FROM purchase_order_history
+WHERE po_id = $1
+ORDER BY changed_at DESC, id DESC
+`
+
+type ListPOHistoryRow struct {
+	EventType  string
+	FromStatus string
+	ToStatus   string
+	Action     string
+	Note       string
+	ChangedBy  string
+	ChangedAt  time.Time
+}
+
+// A PO's status + approval timeline, newest first.
+func (q *Queries) ListPOHistory(ctx context.Context, poID int) ([]ListPOHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPOHistory, poID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPOHistoryRow
+	for rows.Next() {
+		var i ListPOHistoryRow
+		if err := rows.Scan(
+			&i.EventType,
+			&i.FromStatus,
+			&i.ToStatus,
+			&i.Action,
+			&i.Note,
+			&i.ChangedBy,
+			&i.ChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPOLines = `-- name: ListPOLines :many
+SELECT pol.id, pol.line_number, COALESCE(pol.part_number_snapshot, '') AS part_number_snapshot,
+       COALESCE(pol.revision_snapshot, '') AS revision_snapshot, COALESCE(pol.description, '') AS description,
+       pol.qty, pol.unit_cost, COALESCE(pol.vendor_part_number, '') AS vendor_part_number, pol.part_id,
+       pol.lead_time_days, pol.received_qty, pol.date_received,
+       COALESCE(p.tracking_mode, '') AS tracking_mode,
+       fil.id AS att_id, COALESCE(fil.file_name, '') AS att_file_name, COALESCE(fil.category, '') AS att_category
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+LEFT JOIN part p ON pol.part_id = p.id
+LEFT JOIN part_attachment fil ON p.primary_attachment_id = fil.id
+WHERE po.number = $1
+ORDER BY pol.line_number
+`
+
+type ListPOLinesRow struct {
+	ID                 int
+	LineNumber         int
+	PartNumberSnapshot string
+	RevisionSnapshot   string
+	Description        string
+	Qty                float64
+	UnitCost           float64
+	VendorPartNumber   string
+	PartID             *int
+	LeadTimeDays       *int
+	ReceivedQty        float64
+	DateReceived       *time.Time
+	TrackingMode       string
+	AttID              *int
+	AttFileName        string
+	AttCategory        string
+}
+
+// A PO's lines by line number, with the part's tracking mode and primary attachment.
+func (q *Queries) ListPOLines(ctx context.Context, number string) ([]ListPOLinesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPOLines, number)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPOLinesRow
+	for rows.Next() {
+		var i ListPOLinesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LineNumber,
+			&i.PartNumberSnapshot,
+			&i.RevisionSnapshot,
+			&i.Description,
+			&i.Qty,
+			&i.UnitCost,
+			&i.VendorPartNumber,
+			&i.PartID,
+			&i.LeadTimeDays,
+			&i.ReceivedQty,
+			&i.DateReceived,
+			&i.TrackingMode,
+			&i.AttID,
+			&i.AttFileName,
+			&i.AttCategory,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPOReceipts = `-- name: ListPOReceipts :many
+SELECT it.txn_date, pol.part_id, COALESCE(pol.part_number_snapshot, '') AS part_number, it.qty, it.username
+FROM inventory_transaction it
+JOIN po_line pol ON it.po_line_id = pol.id
+WHERE pol.po_id = $1 AND it.txn_type = 'receipt'
+ORDER BY it.txn_date DESC, it.id DESC
+`
+
+type ListPOReceiptsRow struct {
+	TxnDate    time.Time
+	PartID     *int
+	PartNumber string
+	Qty        float64
+	Username   string
+}
+
+// The receipt ledger rows recorded against a PO's lines, newest first.
+func (q *Queries) ListPOReceipts(ctx context.Context, poID int) ([]ListPOReceiptsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPOReceipts, poID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPOReceiptsRow
+	for rows.Next() {
+		var i ListPOReceiptsRow
+		if err := rows.Scan(
+			&i.TxnDate,
+			&i.PartID,
+			&i.PartNumber,
+			&i.Qty,
+			&i.Username,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPORows = `-- name: ListPORows :many
+SELECT number, COALESCE(status, '') AS status, supplier_id, rfq_group_id, COALESCE(supplier_name, '') AS supplier_name,
+       date_ordered, date_closed, COALESCE(orderer, '') AS orderer, COALESCE(total_cost, 0) AS total_cost
+FROM purchase_order
+ORDER BY number DESC
+`
+
+type ListPORowsRow struct {
+	Number       string
+	Status       string
+	SupplierID   int
+	RfqGroupID   *int
+	SupplierName string
+	DateOrdered  *time.Time
+	DateClosed   *time.Time
+	Orderer      string
+	TotalCost    float64
+}
+
+// The /pos grid, number descending.
+func (q *Queries) ListPORows(ctx context.Context) ([]ListPORowsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPORows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPORowsRow
+	for rows.Next() {
+		var i ListPORowsRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.Status,
+			&i.SupplierID,
+			&i.RfqGroupID,
+			&i.SupplierName,
+			&i.DateOrdered,
+			&i.DateClosed,
+			&i.Orderer,
+			&i.TotalCost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRFQGroupLines = `-- name: ListRFQGroupLines :many
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.supplier_id, COALESCE(po.status, '') AS status,
+       COALESCE(po.total_cost, 0) AS total_cost,
+       pol.id AS pol_id, COALESCE(pol.part_number_snapshot, '') AS part_number,
+       COALESCE(pol.revision_snapshot, '') AS revision, COALESCE(pol.description, '') AS description,
+       COALESCE(pol.qty, 0) AS qty, COALESCE(pol.unit_cost, 0) AS unit_cost, pol.lead_time_days
+FROM purchase_order po
+LEFT JOIN po_line pol ON pol.po_id = po.id
+WHERE po.rfq_group_id = $1::int
+ORDER BY po.id, pol.line_number
+`
+
+type ListRFQGroupLinesRow struct {
+	Number       string
+	SupplierName string
+	SupplierID   int
+	Status       string
+	TotalCost    float64
+	PolID        *int
+	PartNumber   string
+	Revision     string
+	Description  string
+	Qty          float64
+	UnitCost     float64
+	LeadTimeDays *int
+}
+
+// One row per (quote, line) in an RFQ group, quotes in id order; a quote without lines once,
+// with a NULL po_line id.
+func (q *Queries) ListRFQGroupLines(ctx context.Context, groupID int) ([]ListRFQGroupLinesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRFQGroupLines, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRFQGroupLinesRow
+	for rows.Next() {
+		var i ListRFQGroupLinesRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.SupplierName,
+			&i.SupplierID,
+			&i.Status,
+			&i.TotalCost,
+			&i.PolID,
+			&i.PartNumber,
+			&i.Revision,
+			&i.Description,
+			&i.Qty,
+			&i.UnitCost,
+			&i.LeadTimeDays,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSuggestedLinks = `-- name: ListSuggestedLinks :many
+SELECT pol.part_id::int AS part_id, COALESCE(pol.part_number_snapshot, '') AS part_number, pol.vendor_part_number::text AS vendor_part_number
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE po.number = $1
+  AND pol.part_id IS NOT NULL
+  AND pol.vendor_part_number IS NOT NULL AND pol.vendor_part_number <> ''
+  AND po.supplier_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM supplier_part sp
+    WHERE sp.part_id = pol.part_id
+      AND sp.supplier_id = po.supplier_id
+      AND sp.supplier_pn = pol.vendor_part_number
+  )
+`
+
+type ListSuggestedLinksRow struct {
+	PartID           int
+	PartNumber       string
+	VendorPartNumber string
+}
+
+// Catalog lines on a PO whose vendor part number has no supplier_part row for the PO's supplier.
+func (q *Queries) ListSuggestedLinks(ctx context.Context, number string) ([]ListSuggestedLinksRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSuggestedLinks, number)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSuggestedLinksRow
+	for rows.Next() {
+		var i ListSuggestedLinksRow
+		if err := rows.Scan(&i.PartID, &i.PartNumber, &i.VendorPartNumber); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSuggestedPrices = `-- name: ListSuggestedPrices :many
+SELECT DISTINCT pol.part_id::int AS part_id, COALESCE(pol.part_number_snapshot, '') AS part_number, pol.unit_cost, pol.qty
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE po.number = $1
+  AND pol.part_id IS NOT NULL
+  AND pol.unit_cost > 0
+  AND po.supplier_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM price pr
+    WHERE pr.part_id = pol.part_id
+      AND pr.supplier_id = po.supplier_id
+      AND pr.is_active = TRUE
+      AND pr.price_ea = pol.unit_cost
+      AND pr.pack_size <= pol.qty
+  )
+`
+
+type ListSuggestedPricesRow struct {
+	PartID     int
+	PartNumber string
+	UnitCost   float64
+	Qty        float64
+}
+
+// Distinct priced catalog lines on a PO whose cost no active price of the PO's supplier covers at
+// the same unit cost and a pack size at or below the line qty.
+func (q *Queries) ListSuggestedPrices(ctx context.Context, number string) ([]ListSuggestedPricesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSuggestedPrices, number)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSuggestedPricesRow
+	for rows.Next() {
+		var i ListSuggestedPricesRow
+		if err := rows.Scan(
+			&i.PartID,
+			&i.PartNumber,
+			&i.UnitCost,
+			&i.Qty,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSupplierLinkedParts = `-- name: ListSupplierLinkedParts :many

@@ -1,7 +1,9 @@
 // Package purchasing is the purchasing domain (#190, #221): typed access to
 // the company, purchase_order and po_line tables via the sqlc-generated
 // queries in purchasing.sql. So far the supplier pages (list, detail cards,
-// create/update, parts and POs tabs) and the supplier typeahead are converted.
+// create/update, parts and POs tabs), the supplier typeahead and the PO reads
+// (grid, CSV export, header, lines, receipts, history, link/price suggestions,
+// RFQ comparison grid) are converted.
 package purchasing
 
 import (
@@ -213,6 +215,295 @@ func (s *Service) SupplierPOLinks(ctx context.Context, supplierID int) (map[int]
 		if r.PartID != nil {
 			out[*r.PartID] = append(out[*r.PartID], r.Number)
 		}
+	}
+	return out, nil
+}
+
+// PORow is one row in the /pos grid.
+type PORow struct {
+	Number       string
+	Status       string
+	SupplierID   int
+	RFQGroupID   *int
+	SupplierName string
+	DateOrdered  *time.Time
+	DateClosed   *time.Time
+	Orderer      string
+	Total        float64
+}
+
+// POExportRow is one PO line (or a line-less PO, LineNumber nil) for the CSV export.
+type POExportRow struct {
+	Number       string
+	Status       string
+	SupplierName string
+	DateOrdered  *time.Time
+	DateClosed   *time.Time
+	Orderer      string
+	Total        float64
+	LineNumber   *int
+	PartNumber   string
+	Description  string
+	Qty          float64
+	UnitCost     float64
+	VendorPN     string
+}
+
+// PO is a purchase_order row; NULL text reads as "". Its fields match
+// models.PurchaseOrder, so arx_go converts it directly.
+type PO struct {
+	ID                  int
+	Number              string
+	Status              string
+	ApprovalStatus      string
+	IsActive            bool
+	Orderer             string
+	AccountID           string
+	DateOrdered         *time.Time
+	DateRequested       *time.Time
+	DateClosed          *time.Time
+	DatePrinted         *time.Time
+	DateModified        *time.Time
+	SupplierID          *int
+	SupplierName        string
+	SupplierContact     string
+	SupplierContactID   *int
+	SupplierEmail       string
+	SupplierAddress     string
+	SupplierCity        string
+	SupplierState       string
+	SupplierZipcode     string
+	SupplierCountry     string
+	SupplierPhoneNumber string
+	SupplierFaxNumber   string
+	ReceiverID          *int
+	ReceiverName        string
+	ReceiverContact     string
+	ReceiverContactID   *int
+	ReceiverEmail       string
+	ReceiverAddress     string
+	ReceiverCity        string
+	ReceiverState       string
+	ReceiverZipcode     string
+	ReceiverCountry     string
+	ReceiverPhone       string
+	ReceiverFax         string
+	Tax1                *float64
+	ShippingCost        *float64
+	MiscCost            *float64
+	TotalCost           *float64
+	Notes               string
+	InternalNotes       string
+	RFQGroupID          *int
+}
+
+// POLine is a po_line row plus its part's tracking mode and primary
+// attachment (AttID nil when there is none).
+type POLine struct {
+	ID                 int
+	LineNumber         int
+	PartNumberSnapshot string
+	RevisionSnapshot   string
+	Description        string
+	Qty                float64
+	UnitCost           float64
+	VendorPartNumber   string
+	PartID             *int
+	LeadTimeDays       *int
+	ReceivedQty        float64
+	DateReceived       *time.Time
+	TrackingMode       string
+	AttID              *int
+	AttFileName        string
+	AttCategory        string
+}
+
+// POReceipt is one 'receipt' ledger row recorded against a PO line.
+type POReceipt struct {
+	TxnDate    time.Time
+	PartID     *int
+	PartNumber string
+	Qty        float64
+	Username   string
+}
+
+// POEvent is one purchase_order_history row.
+type POEvent struct {
+	EventType  string
+	FromStatus string
+	ToStatus   string
+	Action     string
+	Note       string
+	ChangedBy  string
+	ChangedAt  time.Time
+}
+
+// SuggestedLink is a PO line whose vendor part number isn't a supplier_part yet.
+type SuggestedLink struct {
+	PartID           int
+	PartNumber       string
+	VendorPartNumber string
+}
+
+// SuggestedPrice is a PO line price point no active price covers yet.
+type SuggestedPrice struct {
+	PartID     int
+	PartNumber string
+	UnitCost   float64
+	Qty        float64
+}
+
+// RFQGroupLine is one (quote, line) row of an RFQ group; PolID is nil for a
+// quote without lines.
+type RFQGroupLine struct {
+	Number       string
+	SupplierName string
+	SupplierID   int
+	Status       string
+	TotalCost    float64
+	PolID        *int
+	PartNumber   string
+	Revision     string
+	Description  string
+	Qty          float64
+	UnitCost     float64
+	LeadTimeDays *int
+}
+
+// ListPORows returns every PO, number descending.
+func (s *Service) ListPORows(ctx context.Context) ([]PORow, error) {
+	rows, err := s.q.ListPORows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PORow, len(rows))
+	for i, r := range rows {
+		out[i] = PORow{Number: r.Number, Status: r.Status, SupplierID: r.SupplierID, RFQGroupID: r.RfqGroupID,
+			SupplierName: r.SupplierName, DateOrdered: r.DateOrdered, DateClosed: r.DateClosed,
+			Orderer: r.Orderer, Total: r.TotalCost}
+	}
+	return out, nil
+}
+
+// ListPOExportRows returns every PO line (number descending, then line
+// number), with a line-less PO as one row.
+func (s *Service) ListPOExportRows(ctx context.Context) ([]POExportRow, error) {
+	rows, err := s.q.ListPOExportRows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]POExportRow, len(rows))
+	for i, r := range rows {
+		out[i] = POExportRow{Number: r.Number, Status: r.Status, SupplierName: r.SupplierName,
+			DateOrdered: r.DateOrdered, DateClosed: r.DateClosed, Orderer: r.Orderer, Total: r.TotalCost,
+			LineNumber: r.LineNumber, PartNumber: r.PartNumber, Description: r.Description, Qty: r.Qty,
+			UnitCost: r.UnitCost, VendorPN: r.VendorPartNumber}
+	}
+	return out, nil
+}
+
+// GetPO returns the PO with number; sql.ErrNoRows when there is none.
+func (s *Service) GetPO(ctx context.Context, number string) (PO, error) {
+	r, err := s.q.GetPO(ctx, number)
+	if err != nil {
+		return PO{}, err
+	}
+	return PO{ID: r.ID, Number: r.Number, Status: r.Status, ApprovalStatus: r.ApprovalStatus, IsActive: r.IsActive,
+		Orderer: r.Orderer, AccountID: r.AccountID, DateOrdered: r.DateOrdered, DateRequested: r.DateRequested,
+		DateClosed: r.DateClosed, DatePrinted: r.DatePrinted, DateModified: r.DateModified,
+		SupplierID: &r.SupplierID, SupplierName: r.SupplierName, SupplierContact: r.SupplierContact,
+		SupplierContactID: r.SupplierContactID, SupplierEmail: r.SupplierEmail, SupplierAddress: r.SupplierAddress,
+		SupplierCity: r.SupplierCity, SupplierState: r.SupplierState, SupplierZipcode: r.SupplierZipcode,
+		SupplierCountry: r.SupplierCountry, SupplierPhoneNumber: r.SupplierPhoneNumber,
+		SupplierFaxNumber: r.SupplierFaxNumber, ReceiverID: r.ReceiverID, ReceiverName: r.ReceiverName,
+		ReceiverContact: r.ReceiverContact, ReceiverContactID: r.ReceiverContactID, ReceiverEmail: r.ReceiverEmail,
+		ReceiverAddress: r.ReceiverAddress, ReceiverCity: r.ReceiverCity, ReceiverState: r.ReceiverState,
+		ReceiverZipcode: r.ReceiverZipcode, ReceiverCountry: r.ReceiverCountry, ReceiverPhone: r.ReceiverPhone,
+		ReceiverFax: r.ReceiverFax, Tax1: r.Tax1, ShippingCost: r.ShippingCost, MiscCost: r.MiscCost,
+		TotalCost: r.TotalCost, Notes: r.Notes, InternalNotes: r.InternalNotes, RFQGroupID: r.RfqGroupID}, nil
+}
+
+// GetPOSupplierID returns the supplier of the PO with number; sql.ErrNoRows when there is none.
+func (s *Service) GetPOSupplierID(ctx context.Context, number string) (int, error) {
+	return s.q.GetPOSupplierID(ctx, number)
+}
+
+// ListPOLines returns the lines of the PO with number, by line number.
+func (s *Service) ListPOLines(ctx context.Context, number string) ([]POLine, error) {
+	rows, err := s.q.ListPOLines(ctx, number)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]POLine, len(rows))
+	for i, r := range rows {
+		out[i] = POLine(r)
+	}
+	return out, nil
+}
+
+// ListPOReceipts returns the receipts recorded against poID's lines, newest first.
+func (s *Service) ListPOReceipts(ctx context.Context, poID int) ([]POReceipt, error) {
+	rows, err := s.q.ListPOReceipts(ctx, poID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]POReceipt, len(rows))
+	for i, r := range rows {
+		out[i] = POReceipt(r)
+	}
+	return out, nil
+}
+
+// ListPOHistory returns poID's status + approval events, newest first.
+func (s *Service) ListPOHistory(ctx context.Context, poID int) ([]POEvent, error) {
+	rows, err := s.q.ListPOHistory(ctx, poID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]POEvent, len(rows))
+	for i, r := range rows {
+		out[i] = POEvent(r)
+	}
+	return out, nil
+}
+
+// ListSuggestedLinks returns the catalog lines on PO number whose vendor part
+// number has no supplier_part row for the PO's supplier.
+func (s *Service) ListSuggestedLinks(ctx context.Context, number string) ([]SuggestedLink, error) {
+	rows, err := s.q.ListSuggestedLinks(ctx, number)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SuggestedLink, len(rows))
+	for i, r := range rows {
+		out[i] = SuggestedLink(r)
+	}
+	return out, nil
+}
+
+// ListSuggestedPrices returns the distinct catalog-line price points on PO
+// number that no active price of the PO's supplier covers at or below the line qty.
+func (s *Service) ListSuggestedPrices(ctx context.Context, number string) ([]SuggestedPrice, error) {
+	rows, err := s.q.ListSuggestedPrices(ctx, number)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SuggestedPrice, len(rows))
+	for i, r := range rows {
+		out[i] = SuggestedPrice(r)
+	}
+	return out, nil
+}
+
+// ListRFQGroupLines returns RFQ group groupID's (quote, line) rows, quotes in id order.
+func (s *Service) ListRFQGroupLines(ctx context.Context, groupID int) ([]RFQGroupLine, error) {
+	rows, err := s.q.ListRFQGroupLines(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RFQGroupLine, len(rows))
+	for i, r := range rows {
+		out[i] = RFQGroupLine(r)
 	}
 	return out, nil
 }
