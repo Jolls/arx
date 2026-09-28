@@ -7,8 +7,185 @@ package dbq
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
+
+const countRFQQuotes = `-- name: CountRFQQuotes :one
+SELECT COUNT(*)::int FROM purchase_order WHERE rfq_group_id = $1::int
+`
+
+func (q *Queries) CountRFQQuotes(ctx context.Context, groupID int) (int, error) {
+	row := q.db.QueryRowContext(ctx, countRFQQuotes, groupID)
+	var column_1 int
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const createPO = `-- name: CreatePO :one
+INSERT INTO purchase_order (number, status, is_active, orderer, account_id,
+  supplier_id, supplier_name, supplier_contact, supplier_email,
+  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+  supplier_country, supplier_phone_number, supplier_fax_number,
+  receiver_id, receiver_name, receiver_contact, receiver_email,
+  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+  receiver_country, receiver_phone, receiver_fax,
+  tax1, shipping_cost, misc_cost, notes, internal_notes,
+  date_ordered, date_requested, date_closed, total_cost,
+  supplier_contact_id, receiver_contact_id)
+VALUES ($1, $2::text, $3::boolean,
+  $4::text, $5::text,
+  $6::int, $7::text, $8::text, $9::text,
+  $10::text, $11::text, $12::text, $13::text,
+  $14::text, $15::text, $16::text,
+  $17::int, $18::text, $19::text, $20::text,
+  $21::text, $22::text, $23::text, $24::text,
+  $25::text, $26::text, $27::text,
+  $28, $29, $30, $31::text, $32::text,
+  $33, $34, $35, 0,
+  $36::int, $37::int)
+RETURNING id
+`
+
+type CreatePOParams struct {
+	Number              string
+	Status              string
+	IsActive            bool
+	Orderer             string
+	AccountID           string
+	SupplierID          *int
+	SupplierName        string
+	SupplierContact     string
+	SupplierEmail       string
+	SupplierAddress     string
+	SupplierCity        string
+	SupplierState       string
+	SupplierZipcode     string
+	SupplierCountry     string
+	SupplierPhoneNumber string
+	SupplierFaxNumber   string
+	ReceiverID          *int
+	ReceiverName        string
+	ReceiverContact     string
+	ReceiverEmail       string
+	ReceiverAddress     string
+	ReceiverCity        string
+	ReceiverState       string
+	ReceiverZipcode     string
+	ReceiverCountry     string
+	ReceiverPhone       string
+	ReceiverFax         string
+	Tax1                *float64
+	ShippingCost        *float64
+	MiscCost            *float64
+	Notes               string
+	InternalNotes       string
+	DateOrdered         *time.Time
+	DateRequested       *time.Time
+	DateClosed          *time.Time
+	SupplierContactID   *int
+	ReceiverContactID   *int
+}
+
+func (q *Queries) CreatePO(ctx context.Context, arg CreatePOParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, createPO,
+		arg.Number,
+		arg.Status,
+		arg.IsActive,
+		arg.Orderer,
+		arg.AccountID,
+		arg.SupplierID,
+		arg.SupplierName,
+		arg.SupplierContact,
+		arg.SupplierEmail,
+		arg.SupplierAddress,
+		arg.SupplierCity,
+		arg.SupplierState,
+		arg.SupplierZipcode,
+		arg.SupplierCountry,
+		arg.SupplierPhoneNumber,
+		arg.SupplierFaxNumber,
+		arg.ReceiverID,
+		arg.ReceiverName,
+		arg.ReceiverContact,
+		arg.ReceiverEmail,
+		arg.ReceiverAddress,
+		arg.ReceiverCity,
+		arg.ReceiverState,
+		arg.ReceiverZipcode,
+		arg.ReceiverCountry,
+		arg.ReceiverPhone,
+		arg.ReceiverFax,
+		arg.Tax1,
+		arg.ShippingCost,
+		arg.MiscCost,
+		arg.Notes,
+		arg.InternalNotes,
+		arg.DateOrdered,
+		arg.DateRequested,
+		arg.DateClosed,
+		arg.SupplierContactID,
+		arg.ReceiverContactID,
+	)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createPOLine = `-- name: CreatePOLine :exec
+INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
+VALUES ($1, $2, $3::text, $4::text, $5::text,
+        $6::float8, $7::float8, $8::text, $9::int)
+`
+
+type CreatePOLineParams struct {
+	PoID             int
+	LineNumber       int
+	PartNumber       string
+	Revision         string
+	Description      string
+	Qty              float64
+	UnitCost         float64
+	VendorPartNumber string
+	PartID           *int
+}
+
+func (q *Queries) CreatePOLine(ctx context.Context, arg CreatePOLineParams) error {
+	_, err := q.db.ExecContext(ctx, createPOLine,
+		arg.PoID,
+		arg.LineNumber,
+		arg.PartNumber,
+		arg.Revision,
+		arg.Description,
+		arg.Qty,
+		arg.UnitCost,
+		arg.VendorPartNumber,
+		arg.PartID,
+	)
+	return err
+}
+
+const createPOStatusEvent = `-- name: CreatePOStatusEvent :exec
+INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, changed_by)
+VALUES ($1, 'status', $2::text, $3::text, $4)
+`
+
+type CreatePOStatusEventParams struct {
+	PoID       int
+	FromStatus sql.NullString
+	ToStatus   string
+	ChangedBy  string
+}
+
+func (q *Queries) CreatePOStatusEvent(ctx context.Context, arg CreatePOStatusEventParams) error {
+	_, err := q.db.ExecContext(ctx, createPOStatusEvent,
+		arg.PoID,
+		arg.FromStatus,
+		arg.ToStatus,
+		arg.ChangedBy,
+	)
+	return err
+}
 
 const createSupplier = `-- name: CreateSupplier :one
 INSERT INTO company (name, supplier_code, default_contact, is_active, is_supplier, is_manufacturer, notes)
@@ -42,6 +219,20 @@ func (q *Queries) CreateSupplier(ctx context.Context, arg CreateSupplierParams) 
 	var id int
 	err := row.Scan(&id)
 	return id, err
+}
+
+const deletePOLine = `-- name: DeletePOLine :exec
+DELETE FROM po_line WHERE id = $1 AND po_id = $2
+`
+
+type DeletePOLineParams struct {
+	ID   int
+	PoID int
+}
+
+func (q *Queries) DeletePOLine(ctx context.Context, arg DeletePOLineParams) error {
+	_, err := q.db.ExecContext(ctx, deletePOLine, arg.ID, arg.PoID)
+	return err
 }
 
 const getPO = `-- name: GetPO :one
@@ -160,6 +351,35 @@ func (q *Queries) GetPO(ctx context.Context, number string) (GetPORow, error) {
 		&i.InternalNotes,
 		&i.RfqGroupID,
 	)
+	return i, err
+}
+
+const getPONumber = `-- name: GetPONumber :one
+SELECT number FROM purchase_order WHERE id = $1
+`
+
+func (q *Queries) GetPONumber(ctx context.Context, id int) (string, error) {
+	row := q.db.QueryRowContext(ctx, getPONumber, id)
+	var number string
+	err := row.Scan(&number)
+	return number, err
+}
+
+const getPOState = `-- name: GetPOState :one
+SELECT id, COALESCE(status, '') AS status, COALESCE(approval_status, '') AS approval_status
+FROM purchase_order WHERE number = $1
+`
+
+type GetPOStateRow struct {
+	ID             int
+	Status         string
+	ApprovalStatus string
+}
+
+func (q *Queries) GetPOState(ctx context.Context, number string) (GetPOStateRow, error) {
+	row := q.db.QueryRowContext(ctx, getPOState, number)
+	var i GetPOStateRow
+	err := row.Scan(&i.ID, &i.Status, &i.ApprovalStatus)
 	return i, err
 }
 
@@ -956,6 +1176,33 @@ func (q *Queries) ListTopSupplierParts(ctx context.Context, arg ListTopSupplierP
 	return items, nil
 }
 
+const markPOPrinted = `-- name: MarkPOPrinted :exec
+UPDATE purchase_order SET date_printed = $1::text::date WHERE number = $2
+`
+
+type MarkPOPrintedParams struct {
+	PrintedOn string
+	Number    string
+}
+
+// printed_on is a YYYY-MM-DD date string.
+func (q *Queries) MarkPOPrinted(ctx context.Context, arg MarkPOPrintedParams) error {
+	_, err := q.db.ExecContext(ctx, markPOPrinted, arg.PrintedOn, arg.Number)
+	return err
+}
+
+const nextPONumber = `-- name: NextPONumber :one
+SELECT nextval('po_number_seq')::text
+`
+
+// Outside any transaction: sequences never roll back, so a failed PO never reuses its number.
+func (q *Queries) NextPONumber(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, nextPONumber)
+	var column_1 string
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const searchSuppliers = `-- name: SearchSuppliers :many
 SELECT su.id, su.name, COALESCE(cn.city, '') AS city
 FROM company su
@@ -1000,6 +1247,190 @@ func (q *Queries) SearchSuppliers(ctx context.Context, arg SearchSuppliersParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPOTotal = `-- name: SetPOTotal :exec
+UPDATE purchase_order SET total_cost = $1::float8 WHERE id = $2
+`
+
+type SetPOTotalParams struct {
+	TotalCost float64
+	ID        int
+}
+
+func (q *Queries) SetPOTotal(ctx context.Context, arg SetPOTotalParams) error {
+	_, err := q.db.ExecContext(ctx, setPOTotal, arg.TotalCost, arg.ID)
+	return err
+}
+
+const setRFQGroup = `-- name: SetRFQGroup :exec
+UPDATE purchase_order SET rfq_group_id = $1::int WHERE id = $2
+`
+
+type SetRFQGroupParams struct {
+	GroupID int
+	ID      int
+}
+
+func (q *Queries) SetRFQGroup(ctx context.Context, arg SetRFQGroupParams) error {
+	_, err := q.db.ExecContext(ctx, setRFQGroup, arg.GroupID, arg.ID)
+	return err
+}
+
+const sumPOLines = `-- name: SumPOLines :one
+SELECT COALESCE(SUM(qty * unit_cost), 0)::float8 FROM po_line WHERE po_id = $1
+`
+
+func (q *Queries) SumPOLines(ctx context.Context, poID int) (float64, error) {
+	row := q.db.QueryRowContext(ctx, sumPOLines, poID)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const updatePOHeader = `-- name: UpdatePOHeader :exec
+UPDATE purchase_order SET
+  orderer = $1::text, account_id = $2::text,
+  supplier_id = $3::int, supplier_name = $4::text,
+  supplier_contact = $5::text, supplier_email = $6::text,
+  supplier_address = $7::text, supplier_city = $8::text,
+  supplier_state = $9::text, supplier_zipcode = $10::text,
+  supplier_country = $11::text, supplier_phone_number = $12::text,
+  supplier_fax_number = $13::text,
+  receiver_id = $14::int, receiver_name = $15::text,
+  receiver_contact = $16::text, receiver_email = $17::text,
+  receiver_address = $18::text, receiver_city = $19::text,
+  receiver_state = $20::text, receiver_zipcode = $21::text,
+  receiver_country = $22::text, receiver_phone = $23::text,
+  receiver_fax = $24::text,
+  tax1 = $25, shipping_cost = $26, misc_cost = $27,
+  notes = $28::text, internal_notes = $29::text,
+  date_ordered = $30, date_requested = $31,
+  date_closed = $32, date_printed = $33,
+  date_modified = CURRENT_TIMESTAMP, total_cost = $34::float8,
+  supplier_contact_id = $35::int, receiver_contact_id = $36::int
+WHERE number = $37
+`
+
+type UpdatePOHeaderParams struct {
+	Orderer             string
+	AccountID           string
+	SupplierID          *int
+	SupplierName        string
+	SupplierContact     string
+	SupplierEmail       string
+	SupplierAddress     string
+	SupplierCity        string
+	SupplierState       string
+	SupplierZipcode     string
+	SupplierCountry     string
+	SupplierPhoneNumber string
+	SupplierFaxNumber   string
+	ReceiverID          *int
+	ReceiverName        string
+	ReceiverContact     string
+	ReceiverEmail       string
+	ReceiverAddress     string
+	ReceiverCity        string
+	ReceiverState       string
+	ReceiverZipcode     string
+	ReceiverCountry     string
+	ReceiverPhone       string
+	ReceiverFax         string
+	Tax1                *float64
+	ShippingCost        *float64
+	MiscCost            *float64
+	Notes               string
+	InternalNotes       string
+	DateOrdered         *time.Time
+	DateRequested       *time.Time
+	DateClosed          *time.Time
+	DatePrinted         *time.Time
+	TotalCost           float64
+	SupplierContactID   *int
+	ReceiverContactID   *int
+	Number              string
+}
+
+// status/is_active change only through status transitions; approval is reset separately.
+func (q *Queries) UpdatePOHeader(ctx context.Context, arg UpdatePOHeaderParams) error {
+	_, err := q.db.ExecContext(ctx, updatePOHeader,
+		arg.Orderer,
+		arg.AccountID,
+		arg.SupplierID,
+		arg.SupplierName,
+		arg.SupplierContact,
+		arg.SupplierEmail,
+		arg.SupplierAddress,
+		arg.SupplierCity,
+		arg.SupplierState,
+		arg.SupplierZipcode,
+		arg.SupplierCountry,
+		arg.SupplierPhoneNumber,
+		arg.SupplierFaxNumber,
+		arg.ReceiverID,
+		arg.ReceiverName,
+		arg.ReceiverContact,
+		arg.ReceiverEmail,
+		arg.ReceiverAddress,
+		arg.ReceiverCity,
+		arg.ReceiverState,
+		arg.ReceiverZipcode,
+		arg.ReceiverCountry,
+		arg.ReceiverPhone,
+		arg.ReceiverFax,
+		arg.Tax1,
+		arg.ShippingCost,
+		arg.MiscCost,
+		arg.Notes,
+		arg.InternalNotes,
+		arg.DateOrdered,
+		arg.DateRequested,
+		arg.DateClosed,
+		arg.DatePrinted,
+		arg.TotalCost,
+		arg.SupplierContactID,
+		arg.ReceiverContactID,
+		arg.Number,
+	)
+	return err
+}
+
+const updatePOLine = `-- name: UpdatePOLine :exec
+UPDATE po_line SET line_number = $1, part_number_snapshot = $2::text,
+  revision_snapshot = $3::text, description = $4::text,
+  qty = $5::float8, unit_cost = $6::float8,
+  vendor_part_number = $7::text, part_id = $8::int
+WHERE id = $9 AND po_id = $10
+`
+
+type UpdatePOLineParams struct {
+	LineNumber       int
+	PartNumber       string
+	Revision         string
+	Description      string
+	Qty              float64
+	UnitCost         float64
+	VendorPartNumber string
+	PartID           *int
+	ID               int
+	PoID             int
+}
+
+func (q *Queries) UpdatePOLine(ctx context.Context, arg UpdatePOLineParams) error {
+	_, err := q.db.ExecContext(ctx, updatePOLine,
+		arg.LineNumber,
+		arg.PartNumber,
+		arg.Revision,
+		arg.Description,
+		arg.Qty,
+		arg.UnitCost,
+		arg.VendorPartNumber,
+		arg.PartID,
+		arg.ID,
+		arg.PoID,
+	)
+	return err
 }
 
 const updateSupplier = `-- name: UpdateSupplier :exec

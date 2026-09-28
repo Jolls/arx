@@ -278,6 +278,22 @@ func (q *Queries) CreateSupplierPart(ctx context.Context, arg CreateSupplierPart
 	return err
 }
 
+const deactivatePrices = `-- name: DeactivatePrices :exec
+UPDATE price SET is_active = FALSE
+WHERE part_id = $1 AND supplier_id = $2 AND pack_size = $3::numeric AND is_active = TRUE
+`
+
+type DeactivatePricesParams struct {
+	PartID     int
+	SupplierID int
+	PackSize   float64
+}
+
+func (q *Queries) DeactivatePrices(ctx context.Context, arg DeactivatePricesParams) error {
+	_, err := q.db.ExecContext(ctx, deactivatePrices, arg.PartID, arg.SupplierID, arg.PackSize)
+	return err
+}
+
 const deleteBOMLine = `-- name: DeleteBOMLine :exec
 DELETE FROM bom WHERE id = $1 AND parent_part_id = $2
 `
@@ -773,6 +789,27 @@ func (q *Queries) ImportPrice(ctx context.Context, arg ImportPriceParams) (int64
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const linkSupplierPN = `-- name: LinkSupplierPN :exec
+INSERT INTO supplier_part (part_id, supplier_id, supplier_pn)
+SELECT $1::int, $2::int, $3::text
+WHERE NOT EXISTS (
+  SELECT 1 FROM supplier_part
+  WHERE part_id = $1::int AND supplier_id = $2::int AND supplier_pn = $3::text
+)
+`
+
+type LinkSupplierPNParams struct {
+	PartID     int
+	SupplierID int
+	SupplierPn string
+}
+
+// Links a supplier part number unless that exact link already exists.
+func (q *Queries) LinkSupplierPN(ctx context.Context, arg LinkSupplierPNParams) error {
+	_, err := q.db.ExecContext(ctx, linkSupplierPN, arg.PartID, arg.SupplierID, arg.SupplierPn)
+	return err
 }
 
 const listActivePriceTiers = `-- name: ListActivePriceTiers :many

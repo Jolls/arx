@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.22] - 2026-09-28
+### Changed
+- Data-access layer: PO create/edit writes (new PO/RFQ quote, PO edit with line changes, the detail page's supplier-link/price suggestions, mark printed, PO folder naming, import part file) moved to sqlc in `internal/purchasing` and `internal/parts` ([#221](https://github.com/Jolls/arx/issues/221))
+### Fixed
+- Adding a suggested supplier part link from the PO detail page failed with a database error; the link is now saved ([#221](https://github.com/Jolls/arx/issues/221))
+
 ## [0.8.21] - 2026-09-28
 ### Changed
 - Data-access layer: the PO reads (PO list, detail header and lines, receipts, history, link/price suggestions, print supplier code, open-folder lookup, new-PO receiver defaults, line revision fallback, RFQ comparison grid) moved to sqlc in `internal/purchasing` ([#221](https://github.com/Jolls/arx/issues/221))
