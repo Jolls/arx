@@ -118,39 +118,21 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []any{})
 		return
 	}
-	where := "part_number LIKE $1"
-	if r.URL.Query().Get("by") == "desc" {
-		where = "description LIKE $1 OR detail LIKE $1"
-	}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail FROM %s
-		WHERE %s
-		ORDER BY part_number
-		LIMIT 25
-	`, h.cfg().PartsTable(), where), "%"+q+"%")
+	matches, err := h.parts().SearchParts(r.Context(), q, r.URL.Query().Get("by") == "desc", 25)
 	if err != nil {
 		writeJSON(w, []any{})
 		return
 	}
-	defer rows.Close()
 	type result struct {
-		PNID        int    `json:"pnid"`
+		ID          int    `json:"pnid"`
 		PartNumber  string `json:"part_number"`
 		Revision    string `json:"revision"`
 		Description string `json:"description"`
 		Detail      string `json:"detail"`
 	}
-	var out []result
-	for rows.Next() {
-		var p result
-		var partNumber, revision, description, detail sql.NullString
-		if rows.Scan(&p.PNID, &partNumber, &revision, &description, &detail) == nil {
-			p.PartNumber = partNumber.String
-			p.Revision = revision.String
-			p.Description = description.String
-			p.Detail = detail.String
-			out = append(out, p)
-		}
+	out := make([]result, len(matches))
+	for i, m := range matches {
+		out[i] = result(m)
 	}
 	writeJSON(w, out)
 }
@@ -160,40 +142,24 @@ func (h *Handler) APIPartSearch(w http.ResponseWriter, r *http.Request) {
 // (#76).
 // GET /api/supplier-part?part_id=X&supplier_id=Y
 func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
-	partID := r.URL.Query().Get("part_id")
-	supplierID := r.URL.Query().Get("supplier_id")
-	if partID == "" || supplierID == "" {
+	partID, err1 := strconv.Atoi(r.URL.Query().Get("part_id"))
+	supplierID, err2 := strconv.Atoi(r.URL.Query().Get("supplier_id"))
+	if err1 != nil || err2 != nil {
 		writeJSON(w, map[string]string{"supplier_pn": ""})
 		return
 	}
-	var pn sql.NullString
-	var minIncrement sql.NullFloat64
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT supplier_pn, min_increment
-		FROM %s
-		WHERE part_id = $1 AND supplier_id = $2
-		ORDER BY preference ASC
-		LIMIT 1
-	`, h.cfg().SupplierPartTable()), partID, supplierID).Scan(&pn, &minIncrement)
+	d, err := h.parts().GetSupplierPartDefaults(r.Context(), partID, supplierID)
 	if err != nil {
 		writeJSON(w, map[string]string{"supplier_pn": ""})
 		return
 	}
-	var priceEa sql.NullFloat64
-	h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT price_ea
-		FROM %s
-		WHERE part_id = $1 AND supplier_id = $2 AND is_active = TRUE
-		ORDER BY pack_size ASC
-		LIMIT 1
-	`, h.cfg().PriceTable()), partID, supplierID).Scan(&priceEa)
 
-	resp := map[string]any{"supplier_pn": pn.String}
-	if minIncrement.Valid && minIncrement.Float64 > 0 {
-		resp["min_increment"] = minIncrement.Float64
+	resp := map[string]any{"supplier_pn": d.SupplierPN}
+	if d.MinIncrement != nil && *d.MinIncrement > 0 {
+		resp["min_increment"] = *d.MinIncrement
 	}
-	if priceEa.Valid {
-		resp["price_ea"] = priceEa.Float64
+	if d.PriceEA != nil {
+		resp["price_ea"] = *d.PriceEA
 	}
 	writeJSON(w, resp)
 }

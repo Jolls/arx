@@ -694,6 +694,37 @@ func (q *Queries) GetSupplierPart(ctx context.Context, arg GetSupplierPartParams
 	return i, err
 }
 
+const getSupplierPartDefaults = `-- name: GetSupplierPartDefaults :one
+SELECT COALESCE(sp.supplier_pn, '') AS supplier_pn, sp.min_increment,
+       (SELECT pr.price_ea FROM price pr
+        WHERE pr.part_id = sp.part_id AND pr.supplier_id = sp.supplier_id AND pr.is_active = TRUE
+        ORDER BY pr.pack_size LIMIT 1) AS price_ea
+FROM supplier_part sp
+WHERE sp.part_id = $1 AND sp.supplier_id = $2
+ORDER BY sp.preference
+LIMIT 1
+`
+
+type GetSupplierPartDefaultsParams struct {
+	PartID     int
+	SupplierID int
+}
+
+type GetSupplierPartDefaultsRow struct {
+	SupplierPn   string
+	MinIncrement *float64
+	PriceEa      *float64
+}
+
+// The pair's most-preferred supplier_part row plus its smallest-pack active price_ea; no row when
+// there is no link.
+func (q *Queries) GetSupplierPartDefaults(ctx context.Context, arg GetSupplierPartDefaultsParams) (GetSupplierPartDefaultsRow, error) {
+	row := q.db.QueryRowContext(ctx, getSupplierPartDefaults, arg.PartID, arg.SupplierID)
+	var i GetSupplierPartDefaultsRow
+	err := row.Scan(&i.SupplierPn, &i.MinIncrement, &i.PriceEa)
+	return i, err
+}
+
 const importMfgPart = `-- name: ImportMfgPart :exec
 INSERT INTO mfg_part (part_id, mfg_id, mfg_part_number, is_active)
 VALUES ($1, $2, $3, TRUE)
@@ -1682,6 +1713,61 @@ func (q *Queries) PreferredSupplierMinPrice(ctx context.Context, partID int) (*f
 	var price_ea *float64
 	err := row.Scan(&price_ea)
 	return price_ea, err
+}
+
+const searchParts = `-- name: SearchParts :many
+SELECT id, part_number, COALESCE(revision, '') AS revision,
+       COALESCE(description, '') AS description, COALESCE(detail, '') AS detail
+FROM part
+WHERE CASE WHEN $1::bool
+           THEN description LIKE $2::text OR detail LIKE $2::text
+           ELSE part_number LIKE $2::text END
+ORDER BY part_number
+LIMIT $3::int
+`
+
+type SearchPartsParams struct {
+	ByDesc  bool
+	Pattern string
+	N       int
+}
+
+type SearchPartsRow struct {
+	ID          int
+	PartNumber  string
+	Revision    string
+	Description string
+	Detail      string
+}
+
+// Autocomplete: part_number LIKE pattern, or description/detail LIKE pattern when by_desc.
+func (q *Queries) SearchParts(ctx context.Context, arg SearchPartsParams) ([]SearchPartsRow, error) {
+	rows, err := q.db.QueryContext(ctx, searchParts, arg.ByDesc, arg.Pattern, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPartsRow
+	for rows.Next() {
+		var i SearchPartsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartNumber,
+			&i.Revision,
+			&i.Description,
+			&i.Detail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setDefaultSupplier = `-- name: SetDefaultSupplier :exec

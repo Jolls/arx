@@ -361,3 +361,26 @@ ORDER BY price_ea LIMIT 1;
 
 -- name: EnsureDefaultSupplier :exec
 UPDATE part SET default_supplier_id = sqlc.arg(supplier_id)::int WHERE id = sqlc.arg(id) AND default_supplier_id IS NULL;
+
+-- name: SearchParts :many
+-- Autocomplete: part_number LIKE pattern, or description/detail LIKE pattern when by_desc.
+SELECT id, part_number, COALESCE(revision, '') AS revision,
+       COALESCE(description, '') AS description, COALESCE(detail, '') AS detail
+FROM part
+WHERE CASE WHEN sqlc.arg(by_desc)::bool
+           THEN description LIKE sqlc.arg(pattern)::text OR detail LIKE sqlc.arg(pattern)::text
+           ELSE part_number LIKE sqlc.arg(pattern)::text END
+ORDER BY part_number
+LIMIT sqlc.arg(n)::int;
+
+-- name: GetSupplierPartDefaults :one
+-- The pair's most-preferred supplier_part row plus its smallest-pack active price_ea; no row when
+-- there is no link.
+SELECT COALESCE(sp.supplier_pn, '') AS supplier_pn, sp.min_increment,
+       (SELECT pr.price_ea FROM price pr
+        WHERE pr.part_id = sp.part_id AND pr.supplier_id = sp.supplier_id AND pr.is_active = TRUE
+        ORDER BY pr.pack_size LIMIT 1) AS price_ea
+FROM supplier_part sp
+WHERE sp.part_id = sqlc.arg(part_id) AND sp.supplier_id = sqlc.arg(supplier_id)
+ORDER BY sp.preference
+LIMIT 1;
