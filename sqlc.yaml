@@ -61,3 +61,8 @@ sql:
           - db_type: date
             nullable: true
             go_type: { import: time, type: Time, pointer: true }
+          - db_type: pg_catalog.numeric
+            go_type: float64
+          - db_type: pg_catalog.numeric
+            nullable: true
+            go_type: { type: float64, pointer: true }

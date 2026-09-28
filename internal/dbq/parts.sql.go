@@ -7,6 +7,7 @@ package dbq
 
 import (
 	"context"
+	"time"
 )
 
 const countPartsByCategory = `-- name: CountPartsByCategory :many
@@ -44,6 +45,44 @@ func (q *Queries) CountPartsByCategory(ctx context.Context) ([]CountPartsByCateg
 	return items, nil
 }
 
+const createImportedAttachment = `-- name: CreateImportedAttachment :exec
+INSERT INTO part_attachment (part_id, file_name, part_revision, category, comment, hash)
+VALUES ($1, $2::text, '', $3::text, $4::text, $5::text)
+`
+
+type CreateImportedAttachmentParams struct {
+	PartID   int
+	FileName string
+	Category string
+	Comment  string
+	Hash     string
+}
+
+func (q *Queries) CreateImportedAttachment(ctx context.Context, arg CreateImportedAttachmentParams) error {
+	_, err := q.db.ExecContext(ctx, createImportedAttachment,
+		arg.PartID,
+		arg.FileName,
+		arg.Category,
+		arg.Comment,
+		arg.Hash,
+	)
+	return err
+}
+
+const createManufacturer = `-- name: CreateManufacturer :one
+INSERT INTO company (name, is_supplier, is_manufacturer) VALUES ($1, FALSE, TRUE)
+ON CONFLICT (name) DO NOTHING
+RETURNING id
+`
+
+// CreateManufacturer returns no row when a company already has the name.
+func (q *Queries) CreateManufacturer(ctx context.Context, name string) (int, error) {
+	row := q.db.QueryRowContext(ctx, createManufacturer, name)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createMfgPart = `-- name: CreateMfgPart :exec
 INSERT INTO mfg_part (part_id, mfg_id, mfg_part_number, description, is_active)
 VALUES ($1, $2, $3, $4::text, TRUE)
@@ -62,6 +101,37 @@ func (q *Queries) CreateMfgPart(ctx context.Context, arg CreateMfgPartParams) er
 		arg.MfgID,
 		arg.MfgPartNumber,
 		arg.Description,
+	)
+	return err
+}
+
+const createSupplierPart = `-- name: CreateSupplierPart :exec
+INSERT INTO supplier_part (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
+VALUES ($1, $2, $3, $4::text,
+        $5::text, $6::text, $7, $8)
+`
+
+type CreateSupplierPartParams struct {
+	SupplierID   int
+	PartID       int
+	Preference   *int
+	SupplierPn   string
+	SupplierDesc string
+	LeadTime     string
+	MinIncrement *float64
+	UomID        *int
+}
+
+func (q *Queries) CreateSupplierPart(ctx context.Context, arg CreateSupplierPartParams) error {
+	_, err := q.db.ExecContext(ctx, createSupplierPart,
+		arg.SupplierID,
+		arg.PartID,
+		arg.Preference,
+		arg.SupplierPn,
+		arg.SupplierDesc,
+		arg.LeadTime,
+		arg.MinIncrement,
+		arg.UomID,
 	)
 	return err
 }
@@ -86,6 +156,20 @@ DELETE FROM part_category WHERE code = $1
 
 func (q *Queries) DeletePartCategory(ctx context.Context, code string) error {
 	_, err := q.db.ExecContext(ctx, deletePartCategory, code)
+	return err
+}
+
+const deleteSupplierPart = `-- name: DeleteSupplierPart :exec
+DELETE FROM supplier_part WHERE id = $1 AND part_id = $2
+`
+
+type DeleteSupplierPartParams struct {
+	ID     int
+	PartID int
+}
+
+func (q *Queries) DeleteSupplierPart(ctx context.Context, arg DeleteSupplierPartParams) error {
+	_, err := q.db.ExecContext(ctx, deleteSupplierPart, arg.ID, arg.PartID)
 	return err
 }
 
@@ -119,6 +203,145 @@ func (q *Queries) GetMfgPart(ctx context.Context, arg GetMfgPartParams) (GetMfgP
 		&i.Description,
 	)
 	return i, err
+}
+
+const getSupplierPart = `-- name: GetSupplierPart :one
+SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, COALESCE(sp.supplier_pn, '') AS supplier_pn,
+       COALESCE(sp.supplier_desc, '') AS supplier_desc, COALESCE(sp.lead_time, '') AS lead_time,
+       sp.min_increment, sp.uom_id, c.name AS supplier_name
+FROM supplier_part sp
+JOIN company c ON sp.supplier_id = c.id
+WHERE sp.id = $1 AND sp.part_id = $2
+`
+
+type GetSupplierPartParams struct {
+	ID     int
+	PartID int
+}
+
+type GetSupplierPartRow struct {
+	ID           int
+	SupplierID   int
+	PartID       int
+	Preference   *int
+	SupplierPn   string
+	SupplierDesc string
+	LeadTime     string
+	MinIncrement *float64
+	UomID        *int
+	SupplierName string
+}
+
+func (q *Queries) GetSupplierPart(ctx context.Context, arg GetSupplierPartParams) (GetSupplierPartRow, error) {
+	row := q.db.QueryRowContext(ctx, getSupplierPart, arg.ID, arg.PartID)
+	var i GetSupplierPartRow
+	err := row.Scan(
+		&i.ID,
+		&i.SupplierID,
+		&i.PartID,
+		&i.Preference,
+		&i.SupplierPn,
+		&i.SupplierDesc,
+		&i.LeadTime,
+		&i.MinIncrement,
+		&i.UomID,
+		&i.SupplierName,
+	)
+	return i, err
+}
+
+const importMfgPart = `-- name: ImportMfgPart :exec
+INSERT INTO mfg_part (part_id, mfg_id, mfg_part_number, is_active)
+VALUES ($1, $2, $3, TRUE)
+ON CONFLICT (part_id, mfg_id, mfg_part_number) WHERE is_active DO NOTHING
+`
+
+type ImportMfgPartParams struct {
+	PartID        int
+	MfgID         int
+	MfgPartNumber string
+}
+
+// ImportMfgPart leaves an existing active (part, manufacturer, MPN) alone.
+func (q *Queries) ImportMfgPart(ctx context.Context, arg ImportMfgPartParams) error {
+	_, err := q.db.ExecContext(ctx, importMfgPart, arg.PartID, arg.MfgID, arg.MfgPartNumber)
+	return err
+}
+
+const importPrice = `-- name: ImportPrice :execrows
+INSERT INTO price (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+VALUES ($1, $2, $3::numeric, $4::numeric,
+        $5::numeric, $6::text::date, TRUE)
+ON CONFLICT (part_id, supplier_id, pack_size) WHERE is_active DO NOTHING
+`
+
+type ImportPriceParams struct {
+	PartID        int
+	SupplierID    int
+	PackSize      float64
+	PriceEa       float64
+	PricePack     float64
+	EffectiveDate string
+}
+
+// ImportPrice skips (0 rows) a pack size that already has an active price.
+func (q *Queries) ImportPrice(ctx context.Context, arg ImportPriceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, importPrice,
+		arg.PartID,
+		arg.SupplierID,
+		arg.PackSize,
+		arg.PriceEa,
+		arg.PricePack,
+		arg.EffectiveDate,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const listActivePrices = `-- name: ListActivePrices :many
+SELECT supplier_id, price_ea, price_pack, pack_size, effective_date
+FROM price
+WHERE part_id = $1 AND is_active = TRUE
+ORDER BY supplier_id, pack_size
+`
+
+type ListActivePricesRow struct {
+	SupplierID    int
+	PriceEa       *float64
+	PricePack     *float64
+	PackSize      *float64
+	EffectiveDate *time.Time
+}
+
+func (q *Queries) ListActivePrices(ctx context.Context, partID int) ([]ListActivePricesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActivePrices, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActivePricesRow
+	for rows.Next() {
+		var i ListActivePricesRow
+		if err := rows.Scan(
+			&i.SupplierID,
+			&i.PriceEa,
+			&i.PricePack,
+			&i.PackSize,
+			&i.EffectiveDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listManufacturers = `-- name: ListManufacturers :many
@@ -284,6 +507,72 @@ func (q *Queries) ListPartCategoryCodes(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const listSupplierParts = `-- name: ListSupplierParts :many
+SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, COALESCE(sp.supplier_pn, '') AS supplier_pn,
+       COALESCE(sp.supplier_desc, '') AS supplier_desc, COALESCE(sp.lead_time, '') AS lead_time,
+       sp.min_increment, sp.uom_id, c.name AS supplier_name,
+       COALESCE(pu.abbreviation, bu.abbreviation, '') AS purchase_unit_abbr,
+       (sp.uom_id IS NOT NULL)::boolean AS purchase_unit_is_explicit
+FROM supplier_part sp
+JOIN company c  ON sp.supplier_id = c.id
+LEFT JOIN uom pu ON sp.uom_id   = pu.uom_id
+LEFT JOIN part p ON sp.part_id  = p.id
+LEFT JOIN uom bu ON p.uom_id    = bu.uom_id
+WHERE sp.part_id = $1
+ORDER BY c.name, sp.supplier_pn
+`
+
+type ListSupplierPartsRow struct {
+	ID                     int
+	SupplierID             int
+	PartID                 int
+	Preference             *int
+	SupplierPn             string
+	SupplierDesc           string
+	LeadTime               string
+	MinIncrement           *float64
+	UomID                  *int
+	SupplierName           string
+	PurchaseUnitAbbr       string
+	PurchaseUnitIsExplicit bool
+}
+
+func (q *Queries) ListSupplierParts(ctx context.Context, partID int) ([]ListSupplierPartsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSupplierParts, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSupplierPartsRow
+	for rows.Next() {
+		var i ListSupplierPartsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SupplierID,
+			&i.PartID,
+			&i.Preference,
+			&i.SupplierPn,
+			&i.SupplierDesc,
+			&i.LeadTime,
+			&i.MinIncrement,
+			&i.UomID,
+			&i.SupplierName,
+			&i.PurchaseUnitAbbr,
+			&i.PurchaseUnitIsExplicit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateMfgPart = `-- name: UpdateMfgPart :exec
 UPDATE mfg_part SET mfg_id = $1, mfg_part_number = $2,
   description = $3::text
@@ -303,6 +592,40 @@ func (q *Queries) UpdateMfgPart(ctx context.Context, arg UpdateMfgPartParams) er
 		arg.MfgID,
 		arg.MfgPartNumber,
 		arg.Description,
+		arg.ID,
+		arg.PartID,
+	)
+	return err
+}
+
+const updateSupplierPart = `-- name: UpdateSupplierPart :exec
+UPDATE supplier_part SET supplier_id = $1, preference = $2,
+  supplier_pn = $3::text, supplier_desc = $4::text,
+  lead_time = $5::text, min_increment = $6, uom_id = $7
+WHERE id = $8 AND part_id = $9
+`
+
+type UpdateSupplierPartParams struct {
+	SupplierID   int
+	Preference   *int
+	SupplierPn   string
+	SupplierDesc string
+	LeadTime     string
+	MinIncrement *float64
+	UomID        *int
+	ID           int
+	PartID       int
+}
+
+func (q *Queries) UpdateSupplierPart(ctx context.Context, arg UpdateSupplierPartParams) error {
+	_, err := q.db.ExecContext(ctx, updateSupplierPart,
+		arg.SupplierID,
+		arg.Preference,
+		arg.SupplierPn,
+		arg.SupplierDesc,
+		arg.LeadTime,
+		arg.MinIncrement,
+		arg.UomID,
 		arg.ID,
 		arg.PartID,
 	)

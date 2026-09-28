@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.10] - 2026-09-27
+### Changed
+- Data-access layer: sourcing-tab queries (supplier links, their prices, DigiKey import) moved to sqlc (`internal/parts`); the pricing sub-row now shows the pack price ([#220](https://github.com/Jolls/arx/issues/220))
+### Fixed
+- DigiKey import no longer fails the whole supplier-link save when a price break's pack size already has an active price or the MPN is already on the part (both are skipped), and naming a new manufacturer after an existing company shows the "pick it from the list" message instead of a database error ([#220](https://github.com/Jolls/arx/issues/220))
+
 ## [0.8.9] - 2026-09-27
 ### Changed
 - Data-access layer: manufacturer-part queries moved to sqlc (`internal/parts`); a non-numeric manufacturer-part id in the URL shows "Manufacturer part not found" ([#220](https://github.com/Jolls/arx/issues/220))

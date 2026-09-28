@@ -62,12 +62,18 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 // midway never leaves a supplier link with half-imported data.
 func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "suppliers"); !ok {
+	p, ok := h.requireTab(w, r, id, "suppliers")
+	if !ok {
 		return
 	}
-	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
-	if supplierID == "" {
+	supplierIDStr := strings.TrimSpace(r.FormValue("supplier_id"))
+	if supplierIDStr == "" {
 		h.renderSourcingWithError(w, r, id, "Supplier is required", nil, supplierPartFromForm(r))
+		return
+	}
+	supplierID, err := strconv.Atoi(supplierIDStr)
+	if err != nil {
+		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
 		return
 	}
 
@@ -88,24 +94,14 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (supplier_id, part_id, preference, supplier_pn, supplier_desc, lead_time, min_increment, uom_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, h.cfg().SupplierPartTable()),
-		supplierID, id,
-		nullableInt(r.FormValue("preference")),
-		strings.TrimSpace(r.FormValue("supplier_pn")),
-		strings.TrimSpace(r.FormValue("supplier_desc")),
-		strings.TrimSpace(r.FormValue("lead_time")),
-		nullableFloat(r.FormValue("min_increment")),
-		nullableInt(r.FormValue("unit_id")),
-	)
-	if err != nil {
-		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
+	sp := supplierPartFromForm(r)
+	sp.PartID = p.ID
+	if err := parts.New(tx).CreateSupplierPart(r.Context(), *sp); err != nil {
+		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, sp)
 		return
 	}
 
-	pricesInserted, photoForThumbnail, err := h.applyDigiKeyImportExtras(r, tx, id, supplierID, preparedFiles)
+	pricesInserted, photoForThumbnail, err := h.applyDigiKeyImportExtras(r, tx, p.ID, supplierID, preparedFiles)
 	if err != nil {
 		h.renderSourcingWithError(w, r, id, err.Error(), nil, supplierPartFromForm(r))
 		return
@@ -133,8 +129,8 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 
 // supplierPartFromForm rebuilds a SupplierPart from submitted form values so a
 // failed create/update can redisplay what the user typed instead of losing it.
-func supplierPartFromForm(r *http.Request) *models.SupplierPart {
-	sp := &models.SupplierPart{
+func supplierPartFromForm(r *http.Request) *parts.SupplierPart {
+	sp := &parts.SupplierPart{
 		SupplierPN:   strings.TrimSpace(r.FormValue("supplier_pn")),
 		SupplierDesc: strings.TrimSpace(r.FormValue("supplier_desc")),
 		LeadTime:     strings.TrimSpace(r.FormValue("lead_time")),
@@ -237,8 +233,9 @@ func (h *Handler) prepareDigiKeyFiles(ctx context.Context, r *http.Request, part
 // photoForThumbnail is the raw bytes of a "dk_import_photo" download, returned
 // only when the user also checked "dk_generate_thumbnail" — the caller uses it
 // to build the /parts hover-tooltip Thumbnail after the transaction commits.
-func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID, supplierID string, preparedFiles []digikeyPreparedFile) (pricesInserted bool, photoForThumbnail []byte, err error) {
+func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID, supplierID int, preparedFiles []digikeyPreparedFile) (pricesInserted bool, photoForThumbnail []byte, err error) {
 	ctx := r.Context()
+	svc := parts.New(tx)
 
 	if r.FormValue("dk_import_prices") == "1" {
 		var breaks []digikeyPriceBreak
@@ -249,26 +246,17 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 		}
 		effectiveDate := time.Now().Format("2006-01-02")
 		for _, b := range breaks {
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-				INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-				VALUES ($1, $2, $3, $4, $5, $6, TRUE)
-			`, h.cfg().PriceTable()),
-				partID, supplierID, b.BreakQuantity, b.UnitPrice, b.TotalPrice, effectiveDate,
-			); err != nil {
-				if strings.Contains(err.Error(), "UQ_price") {
-					continue // an active price already exists at this pack size; leave it alone
-				}
+			// An active price already at this pack size is left alone (inserted=false).
+			inserted, err := svc.ImportPrice(ctx, partID, supplierID, b.BreakQuantity, b.UnitPrice, b.TotalPrice, effectiveDate)
+			if err != nil {
 				return false, nil, fmt.Errorf("could not save imported price: %w", err)
 			}
-			pricesInserted = true
+			pricesInserted = pricesInserted || inserted
 		}
 	}
 
 	for _, pf := range preparedFiles {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, file_name, part_revision, category, comment, hash) VALUES ($1,$2,$3,$4,$5,$6)`,
-			h.cfg().AttachmentsTable(),
-		), partID, pf.fileName, "", pf.category, "Imported from DigiKey", pf.hash); err != nil {
+		if err := svc.CreateImportedAttachment(ctx, partID, pf.fileName, pf.category, "Imported from DigiKey", pf.hash); err != nil {
 			return false, nil, fmt.Errorf("could not save imported %s: %w", strings.ToLower(pf.category), err)
 		}
 		if pf.category == "Photo" && r.FormValue("dk_generate_thumbnail") == "1" {
@@ -279,26 +267,25 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 	mfgChoice := strings.TrimSpace(r.FormValue("dk_mfg_choice"))
 	mfgPartNumber := strings.TrimSpace(r.FormValue("dk_mfg_part_number"))
 	if mfgChoice != "" && mfgChoice != "skip" && mfgPartNumber != "" {
-		mfgID := mfgChoice
+		var mfgID int
 		if mfgChoice == "create" {
 			mfgName := strings.TrimSpace(r.FormValue("dk_mfg_name"))
 			if mfgName == "" {
 				return pricesInserted, nil, fmt.Errorf("manufacturer name is required to create a new manufacturer")
 			}
-			insertMfg := fmt.Sprintf(`INSERT INTO %s (name, is_supplier, is_manufacturer) VALUES ($1,$2,$3) RETURNING id`, h.cfg().CompanyTable())
-			var newID int
-			if err := tx.QueryRowContext(ctx, insertMfg, mfgName, false, true).Scan(&newID); err != nil {
-				if strings.Contains(err.Error(), "UQ_company_name") {
-					return pricesInserted, nil, fmt.Errorf("a company named %q already exists — pick it from the manufacturer list instead", mfgName)
-				}
+			newID, err := svc.CreateManufacturer(ctx, mfgName)
+			if err == parts.ErrCompanyNameTaken {
+				return pricesInserted, nil, fmt.Errorf("a company named %q already exists — pick it from the manufacturer list instead", mfgName)
+			}
+			if err != nil {
 				return pricesInserted, nil, fmt.Errorf("could not create manufacturer: %w", err)
 			}
-			mfgID = strconv.Itoa(newID)
+			mfgID = newID
+		} else if mfgID, err = strconv.Atoi(mfgChoice); err != nil {
+			return pricesInserted, nil, fmt.Errorf("could not save manufacturer part: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, mfg_id, mfg_part_number, is_active) VALUES ($1,$2,$3,TRUE)`,
-			h.cfg().MfgPartTable(),
-		), partID, mfgID, mfgPartNumber); err != nil && !strings.Contains(err.Error(), "UQ_mfg_part") {
+		// An MPN the part already has from this manufacturer is left alone.
+		if err := svc.ImportMfgPart(ctx, partID, mfgID, mfgPartNumber); err != nil {
 			return pricesInserted, nil, fmt.Errorf("could not save manufacturer part: %w", err)
 		}
 	}
@@ -315,20 +302,12 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var sp models.SupplierPart
-	var pref sql.NullInt64
-	var supplierPN, supplierDesc, leadTime, supplierName sql.NullString
-	var minIncr sql.NullFloat64
-	var unitID sql.NullInt64
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
-		       sp.lead_time, sp.min_increment, sp.uom_id, c.name
-		FROM %s sp
-		JOIN %s c ON sp.supplier_id = c.id
-		WHERE sp.id = $1 AND sp.part_id = $2
-	`, h.cfg().SupplierPartTable(), h.cfg().CompanyTable()), spID, id).Scan(
-		&sp.ID, &sp.SupplierID, &sp.PartID, &pref, &supplierPN, &supplierDesc, &leadTime, &minIncr, &unitID, &supplierName,
-	)
+	spIDInt, err := strconv.Atoi(spID)
+	if err != nil {
+		h.renderError(w, r, "Supplier link not found")
+		return
+	}
+	sp, err := h.parts().GetSupplierPart(r.Context(), spIDInt, p.ID)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Supplier link not found")
 		return
@@ -336,21 +315,6 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.renderError(w, r, "Error retrieving supplier link: "+err.Error())
 		return
-	}
-	if pref.Valid {
-		v := int(pref.Int64)
-		sp.Preference = &v
-	}
-	sp.SupplierPN = supplierPN.String
-	sp.SupplierDesc = supplierDesc.String
-	sp.LeadTime = leadTime.String
-	sp.SupplierName = supplierName.String
-	if minIncr.Valid {
-		sp.MinIncrement = &minIncr.Float64
-	}
-	if unitID.Valid {
-		v := int(unitID.Int64)
-		sp.UnitID = &v
 	}
 
 	links, err := h.fetchSupplierLinks(r, id)
@@ -383,19 +347,28 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "suppliers"); !ok {
+	p, ok := h.requireTab(w, r, id, "suppliers")
+	if !ok {
 		return
 	}
-	spID := chi.URLParam(r, "spID")
-	spIDInt, _ := strconv.Atoi(spID)
+	spIDInt, spIDErr := strconv.Atoi(chi.URLParam(r, "spID"))
 	fail := func(msg string) {
 		draft := supplierPartFromForm(r)
 		draft.ID = spIDInt
 		h.renderSourcingWithError(w, r, id, msg, draft, nil)
 	}
-	supplierID := strings.TrimSpace(r.FormValue("supplier_id"))
-	if supplierID == "" {
+	supplierIDStr := strings.TrimSpace(r.FormValue("supplier_id"))
+	if supplierIDStr == "" {
 		fail("Supplier is required")
+		return
+	}
+	if spIDErr != nil {
+		fail("Error updating supplier link: " + spIDErr.Error())
+		return
+	}
+	supplierID, err := strconv.Atoi(supplierIDStr)
+	if err != nil {
+		fail("Error updating supplier link: " + err.Error())
 		return
 	}
 	// Mirrors SupplierPartCreate: downloaded and written to DOC_CONTROL_ROOT
@@ -414,26 +387,14 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.ExecContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET supplier_id=$1, preference=$2, supplier_pn=$3, supplier_desc=$4,
-		              lead_time=$5, min_increment=$6, uom_id=$7
-		WHERE id=$8 AND part_id=$9
-	`, h.cfg().SupplierPartTable()),
-		supplierID,
-		nullableInt(r.FormValue("preference")),
-		strings.TrimSpace(r.FormValue("supplier_pn")),
-		strings.TrimSpace(r.FormValue("supplier_desc")),
-		strings.TrimSpace(r.FormValue("lead_time")),
-		nullableFloat(r.FormValue("min_increment")),
-		nullableInt(r.FormValue("unit_id")),
-		spID, id,
-	)
-	if err != nil {
+	sp := supplierPartFromForm(r)
+	sp.ID, sp.PartID = spIDInt, p.ID
+	if err := parts.New(tx).UpdateSupplierPart(r.Context(), *sp); err != nil {
 		fail("Error updating supplier link: " + err.Error())
 		return
 	}
 
-	pricesInserted, photoForThumbnail, err := h.applyDigiKeyImportExtras(r, tx, id, supplierID, preparedFiles)
+	pricesInserted, photoForThumbnail, err := h.applyDigiKeyImportExtras(r, tx, p.ID, supplierID, preparedFiles)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -456,13 +417,14 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "suppliers"); !ok {
+	p, ok := h.requireTab(w, r, id, "suppliers")
+	if !ok {
 		return
 	}
-	spID := chi.URLParam(r, "spID")
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		DELETE FROM %s WHERE id=$1 AND part_id=$2
-	`, h.cfg().SupplierPartTable()), spID, id)
+	spID, err := strconv.Atoi(chi.URLParam(r, "spID"))
+	if err == nil {
+		err = h.parts().DeleteSupplierPart(r.Context(), spID, p.ID)
+	}
 	if err != nil {
 		h.renderError(w, r, "Error deleting supplier link: "+err.Error())
 		return
@@ -472,96 +434,22 @@ func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]models.SupplierPart, error) {
-	sp, co, ut, pn := h.cfg().SupplierPartTable(), h.cfg().CompanyTable(), h.cfg().UomTable(), h.cfg().PartsTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, sp.supplier_pn, sp.supplier_desc,
-		       sp.lead_time, sp.min_increment, sp.uom_id,
-		       c.name AS supplier_name,
-		       COALESCE(pu.abbreviation, bu.abbreviation) AS effective_unit,
-		       (sp.uom_id IS NOT NULL) AS unit_is_explicit
-		FROM %s sp
-		JOIN %s c  ON sp.supplier_id = c.id
-		LEFT JOIN %s pu ON sp.uom_id   = pu.uom_id
-		LEFT JOIN %s p  ON sp.part_id  = p.id
-		LEFT JOIN %s bu ON p.uom_id    = bu.uom_id
-		WHERE sp.part_id = $1
-		ORDER BY c.name, sp.supplier_pn
-	`, sp, co, ut, pn, ut), partID)
+func (h *Handler) fetchSupplierLinks(r *http.Request, partID string) ([]parts.SupplierPart, error) {
+	id, err := strconv.Atoi(partID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var list []models.SupplierPart
-	for rows.Next() {
-		var lk models.SupplierPart
-		var pref sql.NullInt64
-		var supplierPN, supplierDesc, leadTime, supplierName, unitAbbr sql.NullString
-		var minIncr sql.NullFloat64
-		var unitID sql.NullInt64
-		var unitIsExplicit bool
-		if err := rows.Scan(
-			&lk.ID, &lk.SupplierID, &lk.PartID, &pref, &supplierPN, &supplierDesc,
-			&leadTime, &minIncr, &unitID,
-			&supplierName, &unitAbbr, &unitIsExplicit,
-		); err != nil {
-			return nil, err
-		}
-		if pref.Valid {
-			v := int(pref.Int64)
-			lk.Preference = &v
-		}
-		lk.SupplierPN = supplierPN.String
-		lk.SupplierDesc = supplierDesc.String
-		lk.LeadTime = leadTime.String
-		lk.SupplierName = supplierName.String
-		lk.PurchaseUnitAbbr = unitAbbr.String
-		lk.PurchaseUnitIsExplicit = unitIsExplicit
-		if minIncr.Valid {
-			lk.MinIncrement = &minIncr.Float64
-		}
-		if unitID.Valid {
-			v := int(unitID.Int64)
-			lk.UnitID = &v
-		}
-		list = append(list, lk)
-	}
-	return list, rows.Err()
+	return h.parts().ListSupplierParts(r.Context(), id)
 }
 
-// fetchActivePricesBySupplier returns active prices for a part keyed by supplier_id.
-func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) map[int][]models.Price {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT supplier_id, price_ea, pack_size, effective_date
-		FROM %s
-		WHERE part_id = $1 AND is_active = TRUE
-		ORDER BY supplier_id, pack_size
-	`, h.cfg().PriceTable()), partID)
+// fetchActivePricesBySupplier returns active prices for a part keyed by
+// supplier_id, or nil on error.
+func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) map[int][]parts.Price {
+	id, err := strconv.Atoi(partID)
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
-	out := map[int][]models.Price{}
-	for rows.Next() {
-		var suppID sql.NullInt64
-		var priceEA, packSize sql.NullFloat64
-		var effDate sql.NullTime
-		if rows.Scan(&suppID, &priceEA, &packSize, &effDate) != nil || !suppID.Valid {
-			continue
-		}
-		p := models.Price{}
-		if priceEA.Valid {
-			p.PriceEA = &priceEA.Float64
-		}
-		if packSize.Valid {
-			p.PackSize = &packSize.Float64
-		}
-		if effDate.Valid {
-			p.EffectiveDate = &effDate.Time
-		}
-		out[int(suppID.Int64)] = append(out[int(suppID.Int64)], p)
-	}
+	out, _ := h.parts().ActivePricesBySupplier(r.Context(), id)
 	return out
 }
 
@@ -569,7 +457,7 @@ func (h *Handler) fetchActivePricesBySupplier(r *http.Request, partID string) ma
 // create/update, so the user's input isn't lost. editing repopulates the Edit
 // Supplier form (an in-progress edit of an existing link); draft repopulates
 // the Add Supplier form. At most one of the two is non-nil.
-func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request, partID, errMsg string, editing, draft *models.SupplierPart) {
+func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request, partID, errMsg string, editing, draft *parts.SupplierPart) {
 	p, backURL, backLabel, ok := h.partPageBase(w, r, partID, "suppliers")
 	if !ok {
 		return

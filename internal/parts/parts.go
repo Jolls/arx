@@ -1,10 +1,14 @@
 // Package parts is the parts domain (#190, #220): typed access to the part
-// tables via the sqlc-generated queries in parts.sql. So far part categories
-// and manufacturer parts are converted.
+// tables via the sqlc-generated queries in parts.sql. So far part categories,
+// manufacturer parts and sourcing (supplier links, their prices and the
+// DigiKey import) are converted.
 package parts
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"time"
 
 	"arx/internal/dbq"
 )
@@ -39,6 +43,33 @@ type MfgPart struct {
 type Manufacturer struct {
 	ID   int
 	Name string
+}
+
+// SupplierPart is a supplier_part row (a supplier link) plus its supplier's name.
+type SupplierPart struct {
+	ID           int
+	SupplierID   int
+	PartID       int
+	Preference   *int
+	SupplierPN   string
+	SupplierDesc string
+	LeadTime     string
+	MinIncrement *float64
+	UnitID       *int
+	// joined
+	SupplierName string
+	// ListSupplierParts only: the link's own unit, else the part's base unit.
+	PurchaseUnitAbbr       string
+	PurchaseUnitIsExplicit bool
+}
+
+// Price is an active price row of a part.
+type Price struct {
+	SupplierID    int
+	PriceEA       *float64
+	PricePack     *float64
+	PackSize      *float64
+	EffectiveDate *time.Time
 }
 
 type Service struct{ q *dbq.Queries }
@@ -160,4 +191,108 @@ func (s *Service) ListManufacturers(ctx context.Context) ([]Manufacturer, error)
 		out = append(out, Manufacturer(r))
 	}
 	return out, nil
+}
+
+// ListSupplierParts returns a part's supplier links by supplier name then supplier PN.
+func (s *Service) ListSupplierParts(ctx context.Context, partID int) ([]SupplierPart, error) {
+	rows, err := s.q.ListSupplierParts(ctx, partID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SupplierPart, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, SupplierPart{
+			ID: r.ID, SupplierID: r.SupplierID, PartID: r.PartID, Preference: r.Preference,
+			SupplierPN: r.SupplierPn, SupplierDesc: r.SupplierDesc, LeadTime: r.LeadTime,
+			MinIncrement: r.MinIncrement, UnitID: r.UomID, SupplierName: r.SupplierName,
+			PurchaseUnitAbbr: r.PurchaseUnitAbbr, PurchaseUnitIsExplicit: r.PurchaseUnitIsExplicit,
+		})
+	}
+	return out, nil
+}
+
+// GetSupplierPart returns supplier link id of partID; sql.ErrNoRows when it
+// doesn't exist or belongs to another part.
+func (s *Service) GetSupplierPart(ctx context.Context, id, partID int) (SupplierPart, error) {
+	r, err := s.q.GetSupplierPart(ctx, dbq.GetSupplierPartParams{ID: id, PartID: partID})
+	return SupplierPart{
+		ID: r.ID, SupplierID: r.SupplierID, PartID: r.PartID, Preference: r.Preference,
+		SupplierPN: r.SupplierPn, SupplierDesc: r.SupplierDesc, LeadTime: r.LeadTime,
+		MinIncrement: r.MinIncrement, UnitID: r.UomID, SupplierName: r.SupplierName,
+	}, err
+}
+
+// CreateSupplierPart inserts sp's link (the joined fields are ignored).
+func (s *Service) CreateSupplierPart(ctx context.Context, sp SupplierPart) error {
+	return s.q.CreateSupplierPart(ctx, dbq.CreateSupplierPartParams{
+		SupplierID: sp.SupplierID, PartID: sp.PartID, Preference: sp.Preference,
+		SupplierPn: sp.SupplierPN, SupplierDesc: sp.SupplierDesc, LeadTime: sp.LeadTime,
+		MinIncrement: sp.MinIncrement, UomID: sp.UnitID,
+	})
+}
+
+// UpdateSupplierPart rewrites link sp.ID of sp.PartID; a link of another part
+// is left alone without error.
+func (s *Service) UpdateSupplierPart(ctx context.Context, sp SupplierPart) error {
+	return s.q.UpdateSupplierPart(ctx, dbq.UpdateSupplierPartParams{
+		SupplierID: sp.SupplierID, Preference: sp.Preference,
+		SupplierPn: sp.SupplierPN, SupplierDesc: sp.SupplierDesc, LeadTime: sp.LeadTime,
+		MinIncrement: sp.MinIncrement, UomID: sp.UnitID, ID: sp.ID, PartID: sp.PartID,
+	})
+}
+
+// DeleteSupplierPart hard-deletes supplier link id of partID.
+func (s *Service) DeleteSupplierPart(ctx context.Context, id, partID int) error {
+	return s.q.DeleteSupplierPart(ctx, dbq.DeleteSupplierPartParams{ID: id, PartID: partID})
+}
+
+// ActivePricesBySupplier returns a part's active prices keyed by supplier, by pack size.
+func (s *Service) ActivePricesBySupplier(ctx context.Context, partID int) (map[int][]Price, error) {
+	rows, err := s.q.ListActivePrices(ctx, partID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int][]Price{}
+	for _, r := range rows {
+		out[r.SupplierID] = append(out[r.SupplierID], Price{
+			SupplierID: r.SupplierID, PriceEA: r.PriceEa, PricePack: r.PricePack,
+			PackSize: r.PackSize, EffectiveDate: r.EffectiveDate,
+		})
+	}
+	return out, nil
+}
+
+// ImportPrice inserts an active price break dated effectiveDate (YYYY-MM-DD).
+// It reports false, without error, when the pack size already has an active price.
+func (s *Service) ImportPrice(ctx context.Context, partID, supplierID int, packSize, priceEA, pricePack float64, effectiveDate string) (bool, error) {
+	n, err := s.q.ImportPrice(ctx, dbq.ImportPriceParams{
+		PartID: partID, SupplierID: supplierID, PackSize: packSize,
+		PriceEa: priceEA, PricePack: pricePack, EffectiveDate: effectiveDate,
+	})
+	return n > 0, err
+}
+
+// CreateImportedAttachment inserts an active, revision-less part_attachment.
+func (s *Service) CreateImportedAttachment(ctx context.Context, partID int, fileName, category, comment, hash string) error {
+	return s.q.CreateImportedAttachment(ctx, dbq.CreateImportedAttachmentParams{
+		PartID: partID, FileName: fileName, Category: category, Comment: comment, Hash: hash,
+	})
+}
+
+// ErrCompanyNameTaken is CreateManufacturer's error when a company already has the name.
+var ErrCompanyNameTaken = errors.New("company name already exists")
+
+// CreateManufacturer inserts a manufacturer-only company and returns its id.
+func (s *Service) CreateManufacturer(ctx context.Context, name string) (int, error) {
+	id, err := s.q.CreateManufacturer(ctx, name)
+	if err == sql.ErrNoRows {
+		return 0, ErrCompanyNameTaken
+	}
+	return id, err
+}
+
+// ImportMfgPart inserts an active mfg_part with no description, unless the
+// part already has that manufacturer and MPN.
+func (s *Service) ImportMfgPart(ctx context.Context, partID, mfgID int, mfgPartNumber string) error {
+	return s.q.ImportMfgPart(ctx, dbq.ImportMfgPartParams{PartID: partID, MfgID: mfgID, MfgPartNumber: mfgPartNumber})
 }
