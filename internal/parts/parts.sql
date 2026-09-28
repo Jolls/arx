@@ -305,3 +305,59 @@ FROM part WHERE id = ANY(string_to_array(sqlc.arg(ids)::text, ',')::int[]);
 -- name: ListActivePriceTiers :many
 SELECT part_id, supplier_id, price_ea, pack_size
 FROM price WHERE is_active = TRUE AND part_id = ANY(string_to_array(sqlc.arg(part_ids)::text, ',')::int[]);
+
+-- name: ListPartOrders :many
+-- Every PO line of a part with its PO header, newest order first.
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_ordered, po.date_closed,
+       COALESCE(po.status, '') AS status, pol.line_number, pol.qty, pol.unit_cost,
+       COALESCE(pol.description, '') AS description, COALESCE(pol.vendor_part_number, '') AS vendor_part_number
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = sqlc.arg(part_id)::int
+ORDER BY po.date_ordered DESC;
+
+-- name: ListRecentPartPOs :many
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, COALESCE(po.status, '') AS status,
+       po.date_ordered, pol.qty, pol.unit_cost
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = sqlc.arg(part_id)::int
+ORDER BY po.date_ordered DESC, po.id DESC LIMIT sqlc.arg(n)::int;
+
+-- name: ListRecentPartTxns :many
+SELECT txn_type, qty, txn_date
+FROM inventory_transaction WHERE part_id = sqlc.arg(part_id) ORDER BY txn_date DESC, id DESC LIMIT sqlc.arg(n)::int;
+
+-- name: GetPreferredSupplier :one
+-- The part's preferred supplier and its most-preferred supplier_part row, if any. No row when
+-- default_supplier_id is NULL.
+SELECT c.id, COALESCE(c.name, '') AS name, sp.id AS supplier_part_id,
+       COALESCE(sp.supplier_pn, '') AS supplier_pn, COALESCE(sp.supplier_desc, '') AS supplier_desc
+FROM part p
+JOIN company c ON c.id = p.default_supplier_id
+LEFT JOIN supplier_part sp ON sp.part_id = p.id AND sp.supplier_id = c.id
+WHERE p.id = $1
+ORDER BY sp.preference, sp.id LIMIT 1;
+
+-- name: ListPOPricePoints :many
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_ordered, pol.unit_cost
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = sqlc.arg(part_id)::int AND po.date_ordered IS NOT NULL
+ORDER BY po.date_ordered;
+
+-- name: ListPriceListPoints :many
+SELECT COALESCE(c.name, '') AS supplier_name, p.effective_date, p.price_ea, p.pack_size
+FROM price p
+LEFT JOIN company c ON p.supplier_id = c.id
+WHERE p.part_id = $1 AND p.is_active = TRUE AND p.effective_date IS NOT NULL
+ORDER BY p.effective_date;
+
+-- name: PreferredSupplierMinPrice :one
+-- The preferred supplier's cheapest active price (NULL prices sort last); no row when there is none.
+SELECT price_ea FROM price WHERE part_id = sqlc.arg(part_id) AND is_active = TRUE
+AND supplier_id = (SELECT default_supplier_id FROM part WHERE id = sqlc.arg(part_id))
+ORDER BY price_ea LIMIT 1;
+
+-- name: EnsureDefaultSupplier :exec
+UPDATE part SET default_supplier_id = sqlc.arg(supplier_id)::int WHERE id = sqlc.arg(id) AND default_supplier_id IS NULL;

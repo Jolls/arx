@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.18] - 2026-09-28
+### Changed
+- Data-access layer: the part detail dashboard (attachments, photos, preferred supplier, recent POs, inventory, price trend), the Orders and Price History tabs, and the first-price preferred-supplier default moved to sqlc (`internal/parts`); `parts.go` is now free of raw SQL ([#220](https://github.com/Jolls/arx/issues/220))
+
 ## [0.8.17] - 2026-09-28
 ### Changed
 - Data-access layer: the BOM cost rollup and the cost-to-build-N calculation moved to sqlc (`internal/parts`) ([#220](https://github.com/Jolls/arx/issues/220))

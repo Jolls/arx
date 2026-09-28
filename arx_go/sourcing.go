@@ -114,7 +114,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 	// Matches the trigger PriceCreate/PriceEdit use: fire only when a price
 	// row actually landed, not merely when the user checked "import prices".
 	if pricesInserted {
-		h.ensureDefaultSupplier(r.Context(), id, supplierID)
+		h.ensureDefaultSupplier(r.Context(), p.ID, supplierID)
 	}
 	// Best-effort, like ensureDefaultSupplier above: runs after the supplier
 	// link is already committed, so a thumbnail failure must not undo it.
@@ -405,7 +405,7 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if pricesInserted {
-		h.ensureDefaultSupplier(r.Context(), id, supplierID)
+		h.ensureDefaultSupplier(r.Context(), p.ID, supplierID)
 	}
 	if photoForThumbnail != nil {
 		h.generateThumbnailFromPhoto(r.Context(), id, *importedPart, photoForThumbnail)

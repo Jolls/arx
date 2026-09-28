@@ -205,62 +205,37 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	attSvc := h.attachments()
 	var primaryAtt *models.Attachment
 	if p.PrimaryAttachmentID != nil {
-		var att models.Attachment
-		var fname, fnotes, frev sql.NullString
-		if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT id, file_name, category, part_revision FROM %s WHERE id = $1`,
-			h.cfg().AttachmentsTable(),
-		), *p.PrimaryAttachmentID).Scan(&att.ID, &fname, &fnotes, &frev); err == nil {
-			att.FileName = fname.String
-			att.Category = fnotes.String
-			att.PartRevision = frev.String
-			primaryAtt = &att
+		if a, err := attSvc.GetPartAttachment(r.Context(), *p.PrimaryAttachmentID, p.ID); err == nil {
+			primaryAtt = &models.Attachment{ID: a.ID, FileName: a.FileName, Category: a.Category, PartRevision: a.PartRevision}
 		}
 	}
 
 	var topAtts, photoAtts []models.Attachment
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT id, file_name, category, part_revision, sort_order FROM %s
-		 WHERE part_id = $1 AND is_active = TRUE
-		 ORDER BY sort_order, id`,
-		h.cfg().AttachmentsTable()), p.ID)
-	if err == nil {
-		for rows.Next() {
-			var att models.Attachment
-			var fname, fnotes, frev sql.NullString
-			var sortOrder sql.NullInt64
-			if err := rows.Scan(&att.ID, &fname, &fnotes, &frev, &sortOrder); err == nil {
-				att.FileName = fname.String
-				att.Category = fnotes.String
-				att.PartRevision = frev.String
-				if sortOrder.Valid {
-					v := int(sortOrder.Int64)
-					att.OrderID = &v
-				}
-				if (p.PrimaryAttachmentID == nil || att.ID != *p.PrimaryAttachmentID) && len(topAtts) < 5 {
-					topAtts = append(topAtts, att)
-				}
-				// The generated "Thumbnail" (#696) is purpose-built for the /parts
-				// hover tooltip; its larger "PDF Preview" sibling represents the PDF
-				// in the Photos card, so keep the tiny thumbnail out of it.
-				if urlutil.IsLocalFile(att.FileName) && !urlutil.IsLocalDir(att.FileName) &&
-					urlutil.IsImage(urlutil.FileBaseName(att.FileName)) && att.Category != thumbnailCategory {
-					photoAtts = append(photoAtts, att)
-				}
-				// PartDetail runs its own attachment query rather than fetchPartBasic
-				// (#56), so the breadcrumb hover thumbnail is resolved here off this
-				// same loop instead of a second round-trip.
-				if att.Category == thumbnailCategory && urlutil.IsLocalFile(att.FileName) {
-					p.ThumbnailURL = urlutil.LocalFileURL(att.FileName, "/local/")
-				}
-			}
+	partAtts, err := attSvc.ListPartAttachments(r.Context(), p.ID)
+	if err != nil {
+		log.Printf("[part] attachments for part %d: %v", p.ID, err)
+	}
+	for _, a := range partAtts {
+		att := models.Attachment{ID: a.ID, FileName: a.FileName, Category: a.Category, PartRevision: a.PartRevision, OrderID: a.SortOrder}
+		if (p.PrimaryAttachmentID == nil || att.ID != *p.PrimaryAttachmentID) && len(topAtts) < 5 {
+			topAtts = append(topAtts, att)
 		}
-		if err := rows.Err(); err != nil {
-			log.Printf("[part] attachments for part %d: %v", p.ID, err)
+		// The generated "Thumbnail" (#696) is purpose-built for the /parts
+		// hover tooltip; its larger "PDF Preview" sibling represents the PDF
+		// in the Photos card, so keep the tiny thumbnail out of it.
+		if urlutil.IsLocalFile(att.FileName) && !urlutil.IsLocalDir(att.FileName) &&
+			urlutil.IsImage(urlutil.FileBaseName(att.FileName)) && att.Category != thumbnailCategory {
+			photoAtts = append(photoAtts, att)
 		}
-		rows.Close()
+		// PartDetail runs its own attachment query rather than fetchPartBasic
+		// (#56), so the breadcrumb hover thumbnail is resolved here off this
+		// same loop instead of a second round-trip.
+		if att.Category == thumbnailCategory && urlutil.IsLocalFile(att.FileName) {
+			p.ThumbnailURL = urlutil.LocalFileURL(att.FileName, "/local/")
+		}
 	}
 
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.ID), p.PartNumber)
@@ -272,13 +247,9 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	// price — the cheapest active price from its preferred supplier, falling back
 	// to current_cost when no preferred-supplier price exists.
 	purchasePrice := p.CurrentCost
-	var prefPrice sql.NullFloat64
-	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT MIN(price_ea) FROM %s WHERE part_id=$1 AND is_active=TRUE
-		 AND supplier_id=(SELECT default_supplier_id FROM %s WHERE id=$1)`,
-		h.cfg().PriceTable(), h.cfg().PartsTable()), p.ID).Scan(&prefPrice)
-	if prefPrice.Valid && prefPrice.Float64 > 0 {
-		purchasePrice = prefPrice.Float64
+	prefPrice, _ := h.parts().PreferredSupplierPrice(r.Context(), p.ID)
+	if prefPrice != nil && *prefPrice > 0 {
+		purchasePrice = *prefPrice
 	}
 
 	var rollupDelta, rollupDeltaPct float64
@@ -289,13 +260,13 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		rollupSignificant = math.Abs(rollupDeltaPct) >= 5.0
 	}
 
-	var recentPOs []partPOSummary
+	var recentPOs []parts.RecentPO
 	var recentTxns []partTxnSummary
 	if p.ShowOrders() {
-		recentPOs = h.recentPartPOs(r.Context(), id, 5)
+		recentPOs, _ = h.parts().ListRecentPOs(r.Context(), p.ID, 5)
 	}
 	if p.ShowInventory() {
-		recentTxns = h.recentPartTxns(r.Context(), id, 5)
+		recentTxns = h.recentPartTxns(r.Context(), p.ID, 5)
 	}
 
 	var recentLots []LotRow
@@ -313,16 +284,16 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 
 	var prefSupplier *preferredSupplierSummary
 	if p.ShowSuppliers() {
-		prefSupplier = h.preferredSupplier(r.Context(), id)
-		if prefSupplier != nil && prefPrice.Valid {
-			prefSupplier.Price = &prefPrice.Float64
+		prefSupplier = h.preferredSupplier(r.Context(), p.ID)
+		if prefSupplier != nil {
+			prefSupplier.Price = prefPrice
 		}
 	}
 
 	var priceJSON template.JS
 	var hasPriceData bool
 	if p.ShowPricing() {
-		pts := h.partPricePoints(r.Context(), id)
+		pts := h.partPricePoints(r.Context(), p.ID)
 		if len(pts) > 0 {
 			data, _ := json.Marshal(pts)
 			priceJSON = template.JS(data)
@@ -1683,44 +1654,16 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pol, po := h.cfg().POLineTable(), h.cfg().POTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT po.number, po.supplier_name, po.date_ordered, po.date_closed, po.status,
-		       pol.line_number, pol.qty, pol.unit_cost, pol.description, pol.vendor_part_number
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.ID
-		WHERE pol.part_id = $1
-		ORDER BY po.date_ordered DESC
-	`, pol, po), id)
+	orders, err := h.parts().ListPartOrders(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving orders: "+err.Error())
 		return
 	}
-	defer rows.Close()
 	var items []models.PurchaseOrderLine
-	for rows.Next() {
-		var item models.PurchaseOrderLine
-		var poNum, supplierName, desc, vendorPN, status sql.NullString
-		var dateOrdered, dateClosed sql.NullTime
-		if err := rows.Scan(
-			&poNum, &supplierName, &dateOrdered, &dateClosed, &status,
-			&item.LineNumber, &item.Qty, &item.UnitCost, &desc, &vendorPN,
-		); err != nil {
-			h.renderError(w, r, "Error reading orders: "+err.Error())
-			return
-		}
-		item.PONumber = poNum.String
-		item.SupplierName = supplierName.String
-		item.Status = status.String
-		item.Description = desc.String
-		item.VendorPN = vendorPN.String
-		if dateOrdered.Valid {
-			item.DateOrdered = &dateOrdered.Time
-		}
-		if dateClosed.Valid {
-			item.DateClosed = &dateClosed.Time
-		}
-		items = append(items, item)
+	for _, o := range orders {
+		items = append(items, models.PurchaseOrderLine{PONumber: o.PONumber, SupplierName: o.SupplierName,
+			DateOrdered: o.DateOrdered, DateClosed: o.DateClosed, Status: o.Status, LineNumber: o.LineNumber,
+			Qty: o.Qty, UnitCost: o.UnitCost, Description: o.Description, VendorPN: o.VendorPN})
 	}
 	h.render(w, r, "parts/part_orders.html", map[string]any{
 		"Part": p, "OrderItems": items,
@@ -1765,51 +1708,6 @@ func (h *Handler) PartRecordsRows(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// partPOSummary is one row in the Part dashboard "Recent POs" card (#521).
-type partPOSummary struct {
-	Number       string
-	SupplierName string
-	Status       string
-	DateOrdered  *time.Time
-	Qty          float64
-	UnitCost     float64
-}
-
-// recentPartPOs returns the most recent PO lines for a part, newest first,
-// capped at limit. Returns nil on error so the caller can omit the card.
-func (h *Handler) recentPartPOs(ctx context.Context, partID string, limit int) []partPOSummary {
-	pol, po := h.cfg().POLineTable(), h.cfg().POTable()
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT po.number, po.supplier_name, po.status, po.date_ordered,
-		       pol.qty, pol.unit_cost
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.ID
-		WHERE pol.part_id = $1
-		ORDER BY po.date_ordered DESC, po.ID DESC LIMIT $2
-	`, pol, po), partID, limit)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []partPOSummary
-	for rows.Next() {
-		var s partPOSummary
-		var num, sup, status sql.NullString
-		var d sql.NullTime
-		var qty, cost sql.NullFloat64
-		if rows.Scan(&num, &sup, &status, &d, &qty, &cost) != nil {
-			continue
-		}
-		s.Number, s.SupplierName, s.Status = num.String, sup.String, status.String
-		s.Qty, s.UnitCost = qty.Float64, cost.Float64
-		if d.Valid {
-			s.DateOrdered = &d.Time
-		}
-		out = append(out, s)
-	}
-	return out
-}
-
 // partTxnSummary is one row in the Part dashboard "Inventory" card (#521).
 type partTxnSummary struct {
 	Type string
@@ -1819,28 +1717,14 @@ type partTxnSummary struct {
 
 // recentPartTxns returns the most recent inventory transactions for a part,
 // newest first, capped at limit. Returns nil on error.
-func (h *Handler) recentPartTxns(ctx context.Context, partID string, limit int) []partTxnSummary {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT txn_type, qty, txn_date
-		FROM %s WHERE part_id = $1 ORDER BY txn_date DESC, id DESC LIMIT $2
-	`, h.cfg().InventoryTxnTable()), partID, limit)
+func (h *Handler) recentPartTxns(ctx context.Context, partID int, limit int) []partTxnSummary {
+	rows, err := h.parts().ListRecentTxns(ctx, partID, limit)
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
 	var out []partTxnSummary
-	for rows.Next() {
-		var s partTxnSummary
-		var d sql.NullTime
-		var qty sql.NullFloat64
-		if rows.Scan(&s.Type, &qty, &d) != nil {
-			continue
-		}
-		s.Qty = qty.Float64
-		if d.Valid {
-			s.Date = d.Time.Format("2006-01-02")
-		}
-		out = append(out, s)
+	for _, t := range rows {
+		out = append(out, partTxnSummary{Type: t.Type, Qty: t.Qty, Date: t.Date.Format("2006-01-02")})
 	}
 	return out
 }
@@ -1862,27 +1746,13 @@ type preferredSupplierSummary struct {
 // reference row for the Preferred Supplier card (#55). Returns nil when no
 // preferred supplier is pinned (the JOIN drops the row on a NULL
 // default_supplier_id). Price is filled in by the caller.
-func (h *Handler) preferredSupplier(ctx context.Context, partID string) *preferredSupplierSummary {
-	pt, co, sp := h.cfg().PartsTable(), h.cfg().CompanyTable(), h.cfg().SupplierPartTable()
-	var s preferredSupplierSummary
-	var name, pn, desc sql.NullString
-	var spID sql.NullInt64
-	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT c.id, c.name, sp.id, sp.supplier_pn, sp.supplier_desc
-		FROM %s p
-		JOIN %s c ON c.id = p.default_supplier_id
-		LEFT JOIN %s sp ON sp.part_id = p.id AND sp.supplier_id = c.id
-		WHERE p.id = $1
-		ORDER BY sp.preference, sp.id LIMIT 1
-	`, pt, co, sp), partID).Scan(&s.SupplierID, &name, &spID, &pn, &desc)
+func (h *Handler) preferredSupplier(ctx context.Context, partID int) *preferredSupplierSummary {
+	s, err := h.parts().GetPreferredSupplier(ctx, partID)
 	if err != nil {
 		return nil
 	}
-	s.SupplierName = name.String
-	s.SupplierPN = pn.String
-	s.SupplierDesc = desc.String
-	s.HasLink = spID.Valid
-	return &s
+	return &preferredSupplierSummary{SupplierID: s.SupplierID, SupplierName: s.SupplierName,
+		SupplierPN: s.SupplierPN, SupplierDesc: s.SupplierDesc, HasLink: s.HasLink}
 }
 
 // pricePoint is one unit-cost-over-time sample for the price-history chart (#284),
@@ -1899,55 +1769,26 @@ type pricePoint struct {
 // partPricePoints assembles the unit-cost-over-time samples for a part from its
 // PO lines and active price-list entries, chronological within each source.
 // Shared by PartPriceHistory and PartDetail (#521).
-func (h *Handler) partPricePoints(ctx context.Context, partID string) []pricePoint {
+func (h *Handler) partPricePoints(ctx context.Context, partID int) []pricePoint {
 	var points []pricePoint
+	svc := h.parts()
 
-	pol, po := h.cfg().POLineTable(), h.cfg().POTable()
-	if rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT po.number, po.supplier_name, po.date_ordered, pol.unit_cost
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.ID
-		WHERE pol.part_id = $1 AND po.date_ordered IS NOT NULL
-		ORDER BY po.date_ordered
-	`, pol, po), partID); err == nil {
-		for rows.Next() {
-			var num, sup sql.NullString
-			var d sql.NullTime
-			var cost float64
-			if rows.Scan(&num, &sup, &d, &cost) == nil && d.Valid {
-				points = append(points, pricePoint{
-					Date: d.Time.Format("2006-01-02"), Cost: cost,
-					PO: num.String, Supplier: sup.String, Source: "po",
-				})
-			}
+	if rows, err := svc.ListPOPricePoints(ctx, partID); err == nil {
+		for _, r := range rows {
+			points = append(points, pricePoint{
+				Date: r.DateOrdered.Format("2006-01-02"), Cost: r.UnitCost,
+				PO: r.PONumber, Supplier: r.SupplierName, Source: "po",
+			})
 		}
-		rows.Close()
 	}
 
-	pr, comp := h.cfg().PriceTable(), h.cfg().CompanyTable()
-	if prRows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT c.name, p.effective_date, p.price_ea, p.pack_size
-		FROM %s p
-		LEFT JOIN %s c ON p.supplier_id = c.id
-		WHERE p.part_id = $1 AND p.is_active = TRUE AND p.effective_date IS NOT NULL
-		ORDER BY p.effective_date
-	`, pr, comp), partID); err == nil {
-		for prRows.Next() {
-			var sup sql.NullString
-			var d sql.NullTime
-			var ea, packSize sql.NullFloat64
-			if prRows.Scan(&sup, &d, &ea, &packSize) == nil && d.Valid && ea.Valid {
-				pt := pricePoint{
-					Date: d.Time.Format("2006-01-02"), Cost: ea.Float64,
-					PO: "", Supplier: sup.String, Source: "price",
-				}
-				if packSize.Valid {
-					pt.PackSize = &packSize.Float64
-				}
-				points = append(points, pt)
-			}
+	if rows, err := svc.ListPriceListPoints(ctx, partID); err == nil {
+		for _, r := range rows {
+			points = append(points, pricePoint{
+				Date: r.EffectiveDate.Format("2006-01-02"), Cost: r.PriceEA,
+				Supplier: r.SupplierName, Source: "price", PackSize: r.PackSize,
+			})
 		}
-		prRows.Close()
 	}
 	return points
 }
@@ -1963,7 +1804,7 @@ func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	points := h.partPricePoints(r.Context(), id)
+	points := h.partPricePoints(r.Context(), p.ID)
 
 	data, _ := json.Marshal(points)
 	h.render(w, r, "parts/part_price_history.html", map[string]any{
@@ -2055,10 +1896,8 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 
 // ensureDefaultSupplier pins supplierID as the part's preferred supplier for cost
 // rollup the first time a price is added (#465). No-op once one is already set.
-func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID any) {
-	_, _ = h.execContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET default_supplier_id=$1 WHERE id=$2 AND default_supplier_id IS NULL`,
-		h.cfg().PartsTable()), supplierID, partID)
+func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID int) {
+	_ = h.parts().EnsureDefaultSupplier(ctx, partID, supplierID)
 }
 
 // PricePreferred — POST /part/{id}/pricing/preferred. Sets the preferred supplier
