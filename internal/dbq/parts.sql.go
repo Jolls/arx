@@ -11,6 +11,21 @@ import (
 	"time"
 )
 
+const copyBOM = `-- name: CopyBOM :exec
+INSERT INTO bom (parent_part_id, component_part_id, line_number, qty)
+SELECT $1::int, s.component_part_id, s.line_number, s.qty FROM bom s WHERE s.parent_part_id = $2
+`
+
+type CopyBOMParams struct {
+	DstID int
+	SrcID int
+}
+
+func (q *Queries) CopyBOM(ctx context.Context, arg CopyBOMParams) error {
+	_, err := q.db.ExecContext(ctx, copyBOM, arg.DstID, arg.SrcID)
+	return err
+}
+
 const countPartsByCategory = `-- name: CountPartsByCategory :many
 SELECT COALESCE(category, '') AS category, COUNT(*) AS part_count
 FROM part
@@ -44,6 +59,28 @@ func (q *Queries) CountPartsByCategory(ctx context.Context) ([]CountPartsByCateg
 		return nil, err
 	}
 	return items, nil
+}
+
+const createBOMLine = `-- name: CreateBOMLine :exec
+INSERT INTO bom (parent_part_id, component_part_id, line_number, qty)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateBOMLineParams struct {
+	ParentPartID    int
+	ComponentPartID int
+	LineNumber      int
+	Qty             float64
+}
+
+func (q *Queries) CreateBOMLine(ctx context.Context, arg CreateBOMLineParams) error {
+	_, err := q.db.ExecContext(ctx, createBOMLine,
+		arg.ParentPartID,
+		arg.ComponentPartID,
+		arg.LineNumber,
+		arg.Qty,
+	)
+	return err
 }
 
 const createImportedAttachment = `-- name: CreateImportedAttachment :exec
@@ -211,6 +248,20 @@ func (q *Queries) CreateSupplierPart(ctx context.Context, arg CreateSupplierPart
 		arg.MinIncrement,
 		arg.UomID,
 	)
+	return err
+}
+
+const deleteBOMLine = `-- name: DeleteBOMLine :exec
+DELETE FROM bom WHERE id = $1 AND parent_part_id = $2
+`
+
+type DeleteBOMLineParams struct {
+	ID           int
+	ParentPartID int
+}
+
+func (q *Queries) DeleteBOMLine(ctx context.Context, arg DeleteBOMLineParams) error {
+	_, err := q.db.ExecContext(ctx, deleteBOMLine, arg.ID, arg.ParentPartID)
 	return err
 }
 
@@ -426,6 +477,39 @@ func (q *Queries) GetPartBasic(ctx context.Context, arg GetPartBasicParams) (Get
 	return i, err
 }
 
+const getPartByNumber = `-- name: GetPartByNumber :one
+SELECT id, part_number, COALESCE(description, '') AS description FROM part WHERE part_number = $1
+`
+
+type GetPartByNumberRow struct {
+	ID          int
+	PartNumber  string
+	Description string
+}
+
+func (q *Queries) GetPartByNumber(ctx context.Context, partNumber string) (GetPartByNumberRow, error) {
+	row := q.db.QueryRowContext(ctx, getPartByNumber, partNumber)
+	var i GetPartByNumberRow
+	err := row.Scan(&i.ID, &i.PartNumber, &i.Description)
+	return i, err
+}
+
+const getPartRollup = `-- name: GetPartRollup :one
+SELECT COALESCE(last_rollup_cost, 0) AS last_rollup_cost, last_rollup_at FROM part WHERE id = $1
+`
+
+type GetPartRollupRow struct {
+	LastRollupCost float64
+	LastRollupAt   *time.Time
+}
+
+func (q *Queries) GetPartRollup(ctx context.Context, id int) (GetPartRollupRow, error) {
+	row := q.db.QueryRowContext(ctx, getPartRollup, id)
+	var i GetPartRollupRow
+	err := row.Scan(&i.LastRollupCost, &i.LastRollupAt)
+	return i, err
+}
+
 const getSupplierPart = `-- name: GetSupplierPart :one
 SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, COALESCE(sp.supplier_pn, '') AS supplier_pn,
        COALESCE(sp.supplier_desc, '') AS supplier_desc, COALESCE(sp.lead_time, '') AS lead_time,
@@ -610,6 +694,78 @@ func (q *Queries) ListBOMComponents(ctx context.Context, parentPartID int) ([]Li
 			&i.ReorderMin,
 			&i.DefaultSupplierID,
 			&i.HasBom,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBOMLines = `-- name: ListBOMLines :many
+SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
+       pn.part_number, COALESCE(pn.description, '') AS description,
+       COALESCE(pn.revision, '') AS revision, COALESCE(pn.category, '') AS category,
+       COALESCE(pn.current_cost, 0) AS current_cost, COALESCE(pn.last_rollup_cost, 0) AS last_rollup_cost,
+       COALESCE((SELECT MIN(p.price_ea) FROM price p
+        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id), 0)::numeric AS preferred_price,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = pn.id) AS has_bom,
+       COALESCE(pn.attachment_count, 0) AS attachment_count, COALESCE(pn.po_line_count, 0) AS po_line_count
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id = $1
+ORDER BY pl.line_number
+`
+
+type ListBOMLinesRow struct {
+	ID              int
+	LineNumber      int
+	Qty             float64
+	ComponentPartID int
+	PartNumber      string
+	Description     string
+	Revision        string
+	Category        string
+	CurrentCost     float64
+	LastRollupCost  float64
+	PreferredPrice  float64
+	HasBom          bool
+	AttachmentCount int
+	PoLineCount     int
+}
+
+// A parent's BOM lines in line order, with each component's part data and
+// cost inputs; preferred_price is its lowest active price from its default supplier.
+func (q *Queries) ListBOMLines(ctx context.Context, parentPartID int) ([]ListBOMLinesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBOMLines, parentPartID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBOMLinesRow
+	for rows.Next() {
+		var i ListBOMLinesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LineNumber,
+			&i.Qty,
+			&i.ComponentPartID,
+			&i.PartNumber,
+			&i.Description,
+			&i.Revision,
+			&i.Category,
+			&i.CurrentCost,
+			&i.LastRollupCost,
+			&i.PreferredPrice,
+			&i.HasBom,
+			&i.AttachmentCount,
+			&i.PoLineCount,
 		); err != nil {
 			return nil, err
 		}
@@ -950,6 +1106,82 @@ func (q *Queries) ListSupplierParts(ctx context.Context, partID int) ([]ListSupp
 		return nil, err
 	}
 	return items, nil
+}
+
+const listWhereUsed = `-- name: ListWhereUsed :many
+SELECT pl.line_number, pl.qty, pl.parent_part_id,
+       pn.part_number, COALESCE(pn.description, '') AS description,
+       COALESCE(pn.revision, '') AS revision, COALESCE(pn.category, '') AS category
+FROM bom pl
+JOIN part pn ON pl.parent_part_id = pn.id
+WHERE pl.component_part_id = $1
+ORDER BY pn.part_number
+`
+
+type ListWhereUsedRow struct {
+	LineNumber   int
+	Qty          float64
+	ParentPartID int
+	PartNumber   string
+	Description  string
+	Revision     string
+	Category     string
+}
+
+// The BOM lines that use a part, with each parent's part data, by parent part number.
+func (q *Queries) ListWhereUsed(ctx context.Context, componentPartID int) ([]ListWhereUsedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWhereUsed, componentPartID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWhereUsedRow
+	for rows.Next() {
+		var i ListWhereUsedRow
+		if err := rows.Scan(
+			&i.LineNumber,
+			&i.Qty,
+			&i.ParentPartID,
+			&i.PartNumber,
+			&i.Description,
+			&i.Revision,
+			&i.Category,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateBOMLine = `-- name: UpdateBOMLine :exec
+UPDATE bom SET line_number = $1, qty = $2, component_part_id = $3
+WHERE id = $4 AND parent_part_id = $5
+`
+
+type UpdateBOMLineParams struct {
+	LineNumber      int
+	Qty             float64
+	ComponentPartID int
+	ID              int
+	ParentPartID    int
+}
+
+func (q *Queries) UpdateBOMLine(ctx context.Context, arg UpdateBOMLineParams) error {
+	_, err := q.db.ExecContext(ctx, updateBOMLine,
+		arg.LineNumber,
+		arg.Qty,
+		arg.ComponentPartID,
+		arg.ID,
+		arg.ParentPartID,
+	)
+	return err
 }
 
 const updateMfgPart = `-- name: UpdateMfgPart :exec

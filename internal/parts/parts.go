@@ -2,7 +2,8 @@
 // tables via the sqlc-generated queries in parts.sql. So far part categories,
 // manufacturer parts, sourcing (supplier links, their prices and the
 // DigiKey import), the RFQ planner's BOM reads, the part-number list, the
-// parts list/CSV export and the single-part read/create/update are converted.
+// parts list/CSV export, the single-part read/create/update and the BOM
+// lines (view, where-used, edit, paste preview, copy, export) are converted.
 package parts
 
 import (
@@ -157,6 +158,45 @@ type Part struct {
 	UserField8          string
 	UserField9          string
 	UserField10         string
+}
+
+// BOMLine is a bom line plus its component's part data; NULL text reads as "",
+// NULL costs and counts as 0. PreferredPrice is the component's lowest active
+// price from its default supplier, 0 when it has none. It is also the
+// update/create input, which writes LineNumber, Qty and ComponentPartID.
+type BOMLine struct {
+	ID              int
+	LineNumber      int
+	Qty             float64
+	ComponentPartID int
+	PartNumber      string
+	Description     string
+	Revision        string
+	Category        string
+	CurrentCost     float64
+	LastRollupCost  float64
+	PreferredPrice  float64
+	HasBOM          bool
+	AttachmentCount int
+	POLineCount     int
+}
+
+// WhereUsed is a bom line that uses a part, plus its parent's part data.
+type WhereUsed struct {
+	LineNumber   int
+	Qty          float64
+	ParentPartID int
+	PartNumber   string
+	Description  string
+	Revision     string
+	Category     string
+}
+
+// PartRef is a part's id, number and description.
+type PartRef struct {
+	ID          int
+	PartNumber  string
+	Description string
 }
 
 type Service struct{ q *dbq.Queries }
@@ -470,4 +510,67 @@ func (s *Service) UpdatePart(ctx context.Context, p Part, now time.Time) error {
 		UserField1: p.UserField1, UserField2: p.UserField2, UserField3: p.UserField3, UserField4: p.UserField4,
 		UserField5: p.UserField5, UserField6: p.UserField6, UserField7: p.UserField7, UserField8: p.UserField8,
 		UserField9: p.UserField9, UserField10: p.UserField10, TrackingMode: p.TrackingMode, ID: p.ID})
+}
+
+// ListBOMLines returns parentID's BOM lines by line number.
+func (s *Service) ListBOMLines(ctx context.Context, parentID int) ([]BOMLine, error) {
+	rows, err := s.q.ListBOMLines(ctx, parentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BOMLine, len(rows))
+	for i, r := range rows {
+		out[i] = BOMLine{ID: r.ID, LineNumber: r.LineNumber, Qty: r.Qty, ComponentPartID: r.ComponentPartID,
+			PartNumber: r.PartNumber, Description: r.Description, Revision: r.Revision, Category: r.Category,
+			CurrentCost: r.CurrentCost, LastRollupCost: r.LastRollupCost, PreferredPrice: r.PreferredPrice,
+			HasBOM: r.HasBom, AttachmentCount: r.AttachmentCount, POLineCount: r.PoLineCount}
+	}
+	return out, nil
+}
+
+// ListWhereUsed returns the BOM lines that use partID, by parent part number.
+func (s *Service) ListWhereUsed(ctx context.Context, partID int) ([]WhereUsed, error) {
+	rows, err := s.q.ListWhereUsed(ctx, partID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]WhereUsed, len(rows))
+	for i, r := range rows {
+		out[i] = WhereUsed(r)
+	}
+	return out, nil
+}
+
+// GetPartRollup returns a part's last rollup cost (0 when never run) and time.
+func (s *Service) GetPartRollup(ctx context.Context, id int) (float64, *time.Time, error) {
+	r, err := s.q.GetPartRollup(ctx, id)
+	return r.LastRollupCost, r.LastRollupAt, err
+}
+
+// GetPartByNumber returns sql.ErrNoRows when no part has the number.
+func (s *Service) GetPartByNumber(ctx context.Context, partNumber string) (PartRef, error) {
+	r, err := s.q.GetPartByNumber(ctx, partNumber)
+	return PartRef(r), err
+}
+
+// DeleteBOMLine deletes line id of parentID; a line of another parent is left alone.
+func (s *Service) DeleteBOMLine(ctx context.Context, id, parentID int) error {
+	return s.q.DeleteBOMLine(ctx, dbq.DeleteBOMLineParams{ID: id, ParentPartID: parentID})
+}
+
+// UpdateBOMLine rewrites line l.ID of parentID; a line of another parent is left alone.
+func (s *Service) UpdateBOMLine(ctx context.Context, parentID int, l BOMLine) error {
+	return s.q.UpdateBOMLine(ctx, dbq.UpdateBOMLineParams{LineNumber: l.LineNumber, Qty: l.Qty,
+		ComponentPartID: l.ComponentPartID, ID: l.ID, ParentPartID: parentID})
+}
+
+// CreateBOMLine adds l to parentID's BOM.
+func (s *Service) CreateBOMLine(ctx context.Context, parentID int, l BOMLine) error {
+	return s.q.CreateBOMLine(ctx, dbq.CreateBOMLineParams{ParentPartID: parentID,
+		ComponentPartID: l.ComponentPartID, LineNumber: l.LineNumber, Qty: l.Qty})
+}
+
+// CopyBOM adds every BOM line of srcID to dstID.
+func (s *Service) CopyBOM(ctx context.Context, srcID, dstID int) error {
+	return s.q.CopyBOM(ctx, dbq.CopyBOMParams{DstID: dstID, SrcID: srcID})
 }

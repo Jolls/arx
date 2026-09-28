@@ -385,15 +385,10 @@ func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
 	sourcePN := src.PartNumber
 	src.PartNumber = ""     // force the user to enter a new, unique number
 	src.ReleaseStatus = "U" // a fresh clone starts Under Review
-	// has_bom is not reliably maintained, so check for actual BOM lines to decide
-	// whether to promise a BOM copy in the UI.
-	var bomLines int
-	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE parent_part_id=$1`, h.cfg().BOMTable()), src.ID).Scan(&bomLines)
 	units, _ := h.fetchUnits(r.Context())
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": src, "IsNew": true, "IsDuplicate": true,
-		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.ID, "SourceHasBOM": bomLines > 0,
+		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.ID, "SourceHasBOM": src.HasBOM,
 		"Units": units, "Categories": h.st().partCategories,
 		"ActiveTab": "parts", "ActiveSubTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
@@ -427,21 +422,12 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Duplicate flow: copy the source part's BOM onto the new part (#548).
 	if srcID, e := strconv.Atoi(fv(r, "duplicate_bom_from")); e == nil && srcID > 0 {
-		if err := h.copyBOM(r.Context(), srcID, newID); err != nil {
+		if err := h.parts().CopyBOM(r.Context(), srcID, newID); err != nil {
 			h.renderError(w, r, "Part created but copying BOM failed: "+err.Error())
 			return
 		}
 	}
 	http.Redirect(w, r, fmt.Sprintf("/part/%d", newID), http.StatusFound)
-}
-
-// copyBOM clones every BOM line from srcID onto dstID. Used by the duplicate-part flow (#548).
-func (h *Handler) copyBOM(ctx context.Context, srcID, dstID int) error {
-	_, err := h.execContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (parent_part_id, component_part_id, line_number, qty)
-		SELECT $1, component_part_id, line_number, qty FROM %s WHERE parent_part_id = $2
-	`, h.cfg().BOMTable(), h.cfg().BOMTable()), dstID, srcID)
-	return err
 }
 
 // dupContext re-adds the duplicate banner/hidden-field context to a render map
@@ -634,17 +620,17 @@ func partInput(p models.Part) parts.Part {
 // bomLeafCost picks the per-line unit cost and CostSource label for a BOM row,
 // shared by the read-only BOM view (PartBOM) and CSV export (BOMExportCSV).
 // Assembly rows use the stored rollup; leaf rows prefer the preferred-supplier
-// price, else current_cost — labelled "labor" for OPS lines whose current_cost
+// price (0 = none), else current_cost — labelled "labor" for OPS lines whose current_cost
 // is an hourly rate. Mirrors the leaf-cost rule in rollupCost.
-func bomLeafCost(childHasBOM bool, lastRollupCost float64, preferredPrice sql.NullFloat64, currentCost float64, category string) (float64, string) {
+func bomLeafCost(childHasBOM bool, lastRollupCost float64, preferredPrice float64, currentCost float64, category string) (float64, string) {
 	if childHasBOM {
 		if lastRollupCost > 0 {
 			return lastRollupCost, "rollup"
 		}
 		return 0, "missing"
 	}
-	if preferredPrice.Valid && preferredPrice.Float64 > 0 {
-		return preferredPrice.Float64, "price"
+	if preferredPrice > 0 {
+		return preferredPrice, "price"
 	}
 	if currentCost > 0 {
 		if category == "OPS" {
@@ -655,53 +641,26 @@ func bomLeafCost(childHasBOM bool, lastRollupCost float64, preferredPrice sql.Nu
 	return 0, "missing"
 }
 
-// fetchBOMItems runs the direct-children BOM query for partID, shared by the
-// read-only BOM view (PartBOM) and its lazy-loaded children endpoint
-// (APIPartBOMChildren).
+// fetchBOMItems returns partID's BOM rows, with line costs, and their total, shared by the
+// read-only BOM view (PartBOM), its lazy-loaded children endpoint
+// (APIPartBOMChildren), the BOM editor and the CSV export.
 func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BOMItem, float64, error) {
-	pl, pn, prc := h.cfg().BOMTable(), h.cfg().PartsTable(), h.cfg().PriceTable()
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pl.line_number, pl.qty, pl.component_part_id,
-		       pn.part_number, pn.description, pn.revision, pn.category,
-		       pn.current_cost, pn.last_rollup_cost,
-		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
-		       %s,
-		       pn.attachment_count, pn.po_line_count
-		FROM %s pl
-		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = $1
-		ORDER BY pl.line_number
-	`, prc, hasOwnBOMExpr(pl, "pn.id"), pl, pn), partID)
+	pid, err := strconv.Atoi(partID)
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	lines, err := h.parts().ListBOMLines(ctx, pid)
+	if err != nil {
+		return nil, 0, err
+	}
 	var items []models.BOMItem
 	var bomTotal float64
-	for rows.Next() {
-		var item models.BOMItem
-		var partNumber, description, revision, category sql.NullString
-		var currentCost, lastRollupCost, preferredPrice sql.NullFloat64
-		var childHasBOM sql.NullBool
-		var attachCount, poLineCount sql.NullInt64
-		if err := rows.Scan(&item.LineNumber, &item.Qty, &item.ComponentPartID,
-			&partNumber, &description, &revision, &category,
-			&currentCost, &lastRollupCost, &preferredPrice, &childHasBOM,
-			&attachCount, &poLineCount); err != nil {
-			return nil, 0, err
-		}
-		item.PartNumber = partNumber.String
-		item.Description = description.String
-		item.Revision = revision.String
-		item.Category = category.String
-		item.CurrentCost = currentCost.Float64
-		item.LastRollupCost = lastRollupCost.Float64
-		item.ChildHasBOM = childHasBOM.Bool
-		item.AttachCount = int(attachCount.Int64)
-		item.POLineCount = int(poLineCount.Int64)
-
-		item.LineUnitCost, item.CostSource = bomLeafCost(item.ChildHasBOM, item.LastRollupCost, preferredPrice, item.CurrentCost, item.Category)
+	for _, l := range lines {
+		item := models.BOMItem{ID: l.ID, LineNumber: l.LineNumber, Qty: l.Qty, ComponentPartID: l.ComponentPartID,
+			PartNumber: l.PartNumber, Description: l.Description, Revision: l.Revision, Category: l.Category,
+			CurrentCost: l.CurrentCost, AttachCount: l.AttachmentCount, POLineCount: l.POLineCount,
+			LastRollupCost: l.LastRollupCost, ChildHasBOM: l.HasBOM}
+		item.LineUnitCost, item.CostSource = bomLeafCost(l.HasBOM, l.LastRollupCost, l.PreferredPrice, l.CurrentCost, l.Category)
 		item.LineExtCost = item.LineUnitCost * item.Qty
 		bomTotal += item.LineExtCost
 		items = append(items, item)
@@ -733,34 +692,15 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.line_number, pl.qty, pl.parent_part_id,
-		       pn.part_number, pn.description, pn.revision, pn.category
-		FROM %s pl
-		JOIN %s pn ON pl.parent_part_id = pn.id
-		WHERE pl.component_part_id = $1
-		ORDER BY pn.part_number
-	`, pl, pn), id)
+	used, err := h.parts().ListWhereUsed(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
 		return
 	}
-	defer rows.Close()
 	var items []models.BOMItem
-	for rows.Next() {
-		var item models.BOMItem
-		var partNumber, description, revision, category sql.NullString
-		if err := rows.Scan(&item.LineNumber, &item.Qty, &item.ParentPartID,
-			&partNumber, &description, &revision, &category); err != nil {
-			h.renderError(w, r, "Error reading where-used: "+err.Error())
-			return
-		}
-		item.PartNumber = partNumber.String
-		item.Description = description.String
-		item.Revision = revision.String
-		item.Category = category.String
-		items = append(items, item)
+	for _, u := range used {
+		items = append(items, models.BOMItem{LineNumber: u.LineNumber, Qty: u.Qty, ParentPartID: u.ParentPartID,
+			PartNumber: u.PartNumber, Description: u.Description, Revision: u.Revision, Category: u.Category})
 	}
 	h.render(w, r, "parts/part_where_used.html", map[string]any{
 		"Part": p, "WhereUsedItems": items,
@@ -819,42 +759,12 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
-		       pn.part_number, pn.description
-		FROM %s pl
-		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = $1
-		ORDER BY pl.line_number
-	`, pl, pn), id)
+	items, _, err := h.fetchBOMItems(r.Context(), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
-	defer rows.Close()
-	var items []models.BOMItem
-	for rows.Next() {
-		var item models.BOMItem
-		var partNumber, description sql.NullString
-		if err := rows.Scan(&item.ID, &item.LineNumber, &item.Qty, &item.ComponentPartID,
-			&partNumber, &description); err != nil {
-			h.renderError(w, r, "Error reading BOM: "+err.Error())
-			return
-		}
-		item.PartNumber = partNumber.String
-		item.Description = description.String
-		items = append(items, item)
-	}
-	var lastRollupCost sql.NullFloat64
-	var lastRollupAt sql.NullTime
-	h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id = $1`, pn,
-	), id).Scan(&lastRollupCost, &lastRollupAt)
-	p.LastRollupCost = lastRollupCost.Float64
-	if lastRollupAt.Valid {
-		p.LastRollupAt = &lastRollupAt.Time
-	}
+	p.LastRollupCost, p.LastRollupAt, _ = h.parts().GetPartRollup(r.Context(), p.ID)
 	h.render(w, r, "parts/part_bom_edit.html", map[string]any{
 		"Part": p, "BOMItems": items,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
@@ -867,7 +777,8 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "bom"); !ok {
+	p, ok := h.requireTab(w, r, id, "bom")
+	if !ok {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -887,14 +798,31 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
+	svc := parts.New(tx)
+	// line resolves a form row to a BOM line; ComponentPartID 0 means the
+	// component didn't resolve (no id and no matching part number).
+	line := func(row bomRow) parts.BOMLine {
+		item, _ := strconv.Atoi(row.Item)
+		qty, _ := strconv.ParseFloat(row.Qty, 64)
+		var pnid int
+		if row.PNID != "" {
+			pnid, _ = strconv.Atoi(row.PNID)
+		}
+		if pnid == 0 && row.PartPN != "" {
+			ref, _ := h.parts().GetPartByNumber(r.Context(), row.PartPN)
+			pnid = ref.ID
+		}
+		return parts.BOMLine{LineNumber: item, Qty: qty, ComponentPartID: pnid}
+	}
 
 	deleteSet := map[string]bool{}
 	for _, plidStr := range r.Form["delete_pl[]"] {
 		deleteSet[plidStr] = true
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`DELETE FROM %s WHERE id=$1 AND parent_part_id=$2`, pl,
-		), plidStr, id); err != nil {
+		plid, err := strconv.Atoi(plidStr)
+		if err == nil {
+			err = svc.DeleteBOMLine(r.Context(), plid, p.ID)
+		}
+		if err != nil {
 			h.renderError(w, r, "Error deleting BOM row: "+err.Error())
 			return
 		}
@@ -904,50 +832,29 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 		if deleteSet[plidStr] {
 			continue
 		}
-		item, _ := strconv.Atoi(row.Item)
-		qty, _ := strconv.ParseFloat(row.Qty, 64)
-		var pnid int
-		if row.PNID != "" {
-			pnid, _ = strconv.Atoi(row.PNID)
-		}
-		if pnid == 0 && row.PartPN != "" {
-			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT id FROM %s WHERE part_number = $1`, pn,
-			), row.PartPN).Scan(&pnid)
-		}
-		if pnid == 0 {
+		l := line(row)
+		if l.ComponentPartID == 0 {
 			continue
 		}
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET line_number=$1, qty=$2, component_part_id=$3 WHERE id=$4 AND parent_part_id=$5
-		`, pl), item, qty, pnid, plidStr, id); err != nil {
+		var err error
+		if l.ID, err = strconv.Atoi(plidStr); err == nil {
+			err = svc.UpdateBOMLine(r.Context(), p.ID, l)
+		}
+		if err != nil {
 			h.renderError(w, r, "Error updating BOM row: "+err.Error())
 			return
 		}
 	}
 
-	parentID, _ := strconv.Atoi(id)
 	for _, row := range extractBOMRows(r.Form, "new_pl") {
 		if row.PartPN == "" && row.PNID == "" {
 			continue
 		}
-		item, _ := strconv.Atoi(row.Item)
-		qty, _ := strconv.ParseFloat(row.Qty, 64)
-		var pnid int
-		if row.PNID != "" {
-			pnid, _ = strconv.Atoi(row.PNID)
-		}
-		if pnid == 0 && row.PartPN != "" {
-			h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT id FROM %s WHERE part_number = $1`, pn,
-			), row.PartPN).Scan(&pnid)
-		}
-		if pnid == 0 {
+		l := line(row)
+		if l.ComponentPartID == 0 {
 			continue
 		}
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES ($1,$2,$3,$4)
-		`, pl), parentID, pnid, item, qty); err != nil {
+		if err := svc.CreateBOMLine(r.Context(), p.ID, l); err != nil {
 			h.renderError(w, r, "Error inserting BOM row: "+err.Error())
 			return
 		}
@@ -1051,47 +958,29 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
-
-	type existingLine struct {
-		ID  int
-		Qty float64
-	}
-	existing := map[int]existingLine{}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT id, component_part_id, qty FROM %s WHERE parent_part_id = $1`, pl,
-	), id)
+	lines, err := h.parts().ListBOMLines(r.Context(), p.ID)
 	if err != nil {
 		serverError(w, "Error retrieving BOM", err)
 		return
 	}
-	for rows.Next() {
-		var plid, cpid int
-		var qty float64
-		if err := rows.Scan(&plid, &cpid, &qty); err != nil {
-			rows.Close()
-			serverError(w, "Error reading BOM", err)
-			return
-		}
-		existing[cpid] = existingLine{ID: plid, Qty: qty}
+	existing := map[int]parts.BOMLine{}
+	for _, l := range lines {
+		existing[l.ComponentPartID] = l
 	}
-	rows.Close()
 
 	var preview []bomPastePreviewRow
 	hasError := false
 	for _, line := range parseBOMPasteText(r.FormValue("paste_text")) {
 		row := bomPastePreviewRow{PartNumber: line.PartNumber, RawText: line.RawText}
 
-		var pnid int
-		var partNumber, description sql.NullString
+		var ref parts.PartRef
 		if line.PartNumber != "" {
-			if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-				`SELECT id, part_number, description FROM %s WHERE part_number = $1`, pn,
-			), line.PartNumber).Scan(&pnid, &partNumber, &description); err != nil && err != sql.ErrNoRows {
+			if ref, err = h.parts().GetPartByNumber(r.Context(), line.PartNumber); err != nil && err != sql.ErrNoRows {
 				serverError(w, "Error looking up part number", err)
 				return
 			}
 		}
+		pnid := ref.ID
 
 		switch {
 		case pnid == 0:
@@ -1101,8 +990,8 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 			row.Status, row.RowClass, row.StatusLabel = "error", "table-danger", "Error"
 			hasError = true
 		default:
-			row.PartNumber = partNumber.String
-			row.Description = description.String
+			row.PartNumber = ref.PartNumber
+			row.Description = ref.Description
 			row.Qty = line.Qty
 			row.PNID = pnid
 			if ex, ok := existing[pnid]; ok {
@@ -1189,7 +1078,7 @@ func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool
 			}
 			unitCost = res.cost
 		} else {
-			unitCost, _ = bomLeafCost(false, 0, preferredPrice, currentCost.Float64, "")
+			unitCost, _ = bomLeafCost(false, 0, preferredPrice.Float64, currentCost.Float64, "")
 		}
 		total += unitCost * qty
 	}
@@ -2561,56 +2450,31 @@ func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, ok := h.requireTab(w, r, id, "bom"); !ok {
+	p, ok := h.requireTab(w, r, id, "bom")
+	if !ok {
 		return
 	}
-	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
-	var parentPN string
-	_ = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT part_number FROM %s WHERE id = $1`, h.cfg().PartsTable()), id).Scan(&parentPN)
+	parentPN := p.PartNumber
 	if parentPN == "" {
 		parentPN = id
 	}
-	prc := h.cfg().PriceTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT pl.line_number, pl.qty, pn.part_number, pn.description, pn.revision, pn.category,
-		       pn.current_cost, pn.last_rollup_cost,
-		       (SELECT MIN(p.price_ea) FROM %s p
-		        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id) AS preferred_price,
-		       %s
-		FROM %s pl
-		JOIN %s pn ON pl.component_part_id = pn.id
-		WHERE pl.parent_part_id = $1
-		ORDER BY pl.line_number
-	`, prc, hasOwnBOMExpr(pl, "pn.id"), pl, pn), id)
+	items, _, err := h.fetchBOMItems(r.Context(), id)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+parentPN+`-bom.csv"`)
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"Line #", "Qty", "Part Number", "Description", "Revision", "Category", "Unit Cost", "Ext Cost", "Cost Source"})
-	for rows.Next() {
-		var lineNum sql.NullInt64
-		var qty sql.NullFloat64
-		var partNum, description, rev, cat sql.NullString
-		var currentCost, rollupCost, preferredPrice sql.NullFloat64
-		var childHasBOM sql.NullBool
-		if err := rows.Scan(&lineNum, &qty, &partNum, &description, &rev, &cat,
-			&currentCost, &rollupCost, &preferredPrice, &childHasBOM); err != nil {
-			return
-		}
-		unitCost, costSrc := bomLeafCost(childHasBOM.Bool, rollupCost.Float64, preferredPrice, currentCost.Float64, cat.String)
-		extCost := unitCost * qty.Float64
+	for _, item := range items {
 		_ = cw.Write([]string{
-			fmt.Sprintf("%d", lineNum.Int64),
-			fmt.Sprintf("%.4g", qty.Float64),
-			partNum.String, description.String, rev.String, cat.String,
-			fmt.Sprintf("%.2f", unitCost),
-			fmt.Sprintf("%.2f", extCost),
-			costSrc,
+			fmt.Sprintf("%d", item.LineNumber),
+			fmt.Sprintf("%.4g", item.Qty),
+			item.PartNumber, item.Description, item.Revision, item.Category,
+			fmt.Sprintf("%.2f", item.LineUnitCost),
+			fmt.Sprintf("%.2f", item.LineExtCost),
+			item.CostSource,
 		})
 	}
 	cw.Flush()
