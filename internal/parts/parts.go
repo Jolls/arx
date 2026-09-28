@@ -1,8 +1,8 @@
 // Package parts is the parts domain (#190, #220): typed access to the part
 // tables via the sqlc-generated queries in parts.sql. So far part categories,
 // manufacturer parts, sourcing (supplier links, their prices and the
-// DigiKey import), the RFQ planner's BOM reads, the part-number list and the
-// parts list/CSV export are converted.
+// DigiKey import), the RFQ planner's BOM reads, the part-number list, the
+// parts list/CSV export and the single-part read/create/update are converted.
 package parts
 
 import (
@@ -104,6 +104,59 @@ type ListedPart struct {
 	POLineCount     int
 	BelowMin        bool
 	ThumbFile       string
+}
+
+// PartBasic is the part header behind every part sub-tab page.
+type PartBasic struct {
+	ID                  int
+	PartNumber          string
+	Description         string
+	Category            string
+	HasBOM              bool
+	PrimaryAttachmentID *int
+	StockOnHand         float64
+	TrackingMode        string
+	ThumbFile           string
+}
+
+// Part is a whole part row plus its unit abbreviation; NULL text reads as "",
+// NULL is_active as inactive, NULL costs and counts as 0. It is also the
+// create/update input, which writes the editable fields (a blank Category as NULL).
+type Part struct {
+	ID                  int
+	PartNumber          string
+	Revision            string
+	Description         string
+	Detail              string
+	Category            string
+	HasBOM              bool
+	ReleaseStatus       string
+	IsActive            bool
+	RequestedBy         string
+	Notes               string
+	CreatedDate         *time.Time
+	ModifiedDate        *time.Time
+	PrimaryAttachmentID *int
+	CurrentCost         float64
+	LastRollupCost      float64
+	LastRollupAt        *time.Time
+	AttachmentCount     int
+	POLineCount         int
+	UnitID              *int
+	UnitAbbr            string
+	StockOnHand         float64
+	ReorderMin          *float64
+	TrackingMode        string
+	UserField1          string
+	UserField2          string
+	UserField3          string
+	UserField4          string
+	UserField5          string
+	UserField6          string
+	UserField7          string
+	UserField8          string
+	UserField9          string
+	UserField10         string
 }
 
 type Service struct{ q *dbq.Queries }
@@ -366,4 +419,55 @@ func (s *Service) ListParts(ctx context.Context, thumbCategory string) ([]Listed
 			POLineCount: r.PoLineCount, BelowMin: r.BelowMin.Bool, ThumbFile: r.ThumbFile}
 	}
 	return out, nil
+}
+
+// GetPartBasic returns sql.ErrNoRows when no part has the id.
+func (s *Service) GetPartBasic(ctx context.Context, id int, thumbCategory string) (PartBasic, error) {
+	r, err := s.q.GetPartBasic(ctx, dbq.GetPartBasicParams{ID: id, ThumbCategory: thumbCategory})
+	if err != nil {
+		return PartBasic{}, err
+	}
+	return PartBasic{ID: r.ID, PartNumber: r.PartNumber, Description: r.Description, Category: r.Category,
+		HasBOM: r.HasBom, PrimaryAttachmentID: r.PrimaryAttachmentID, StockOnHand: r.StockOnHand,
+		TrackingMode: r.TrackingMode, ThumbFile: r.ThumbFile}, nil
+}
+
+// GetPart returns sql.ErrNoRows when no part has the id.
+func (s *Service) GetPart(ctx context.Context, id int) (Part, error) {
+	r, err := s.q.GetPart(ctx, id)
+	if err != nil {
+		return Part{}, err
+	}
+	return Part{ID: r.ID, PartNumber: r.PartNumber, Revision: r.Revision, Description: r.Description,
+		Detail: r.Detail, Category: r.Category, HasBOM: r.HasBom, ReleaseStatus: r.ReleaseStatus,
+		IsActive: r.IsActive, RequestedBy: r.RequestedBy, Notes: r.Notes, CreatedDate: r.CreatedDate,
+		ModifiedDate: r.ModifiedDate, PrimaryAttachmentID: r.PrimaryAttachmentID, CurrentCost: r.CurrentCost,
+		LastRollupCost: r.LastRollupCost, LastRollupAt: r.LastRollupAt, AttachmentCount: r.AttachmentCount,
+		POLineCount: r.PoLineCount, UnitID: r.UomID, UnitAbbr: r.UnitAbbr, StockOnHand: r.StockOnHand,
+		ReorderMin: r.ReorderMin, TrackingMode: r.TrackingMode,
+		UserField1: r.UserField1, UserField2: r.UserField2, UserField3: r.UserField3, UserField4: r.UserField4,
+		UserField5: r.UserField5, UserField6: r.UserField6, UserField7: r.UserField7, UserField8: r.UserField8,
+		UserField9: r.UserField9, UserField10: r.UserField10}, nil
+}
+
+// CreatePart inserts p, dated now, and returns its id.
+func (s *Service) CreatePart(ctx context.Context, p Part, now time.Time) (int, error) {
+	return s.q.CreatePart(ctx, dbq.CreatePartParams{PartNumber: p.PartNumber, Revision: p.Revision,
+		Description: p.Description, Detail: p.Detail, Category: p.Category, ReleaseStatus: p.ReleaseStatus,
+		IsActive: p.IsActive, RequestedBy: p.RequestedBy, Notes: p.Notes, Now: now, UomID: p.UnitID,
+		CurrentCost: p.CurrentCost, ReorderMin: p.ReorderMin,
+		UserField1: p.UserField1, UserField2: p.UserField2, UserField3: p.UserField3, UserField4: p.UserField4,
+		UserField5: p.UserField5, UserField6: p.UserField6, UserField7: p.UserField7, UserField8: p.UserField8,
+		UserField9: p.UserField9, UserField10: p.UserField10, TrackingMode: p.TrackingMode})
+}
+
+// UpdatePart overwrites part p.ID's editable fields and sets its modified date to now.
+func (s *Service) UpdatePart(ctx context.Context, p Part, now time.Time) error {
+	return s.q.UpdatePart(ctx, dbq.UpdatePartParams{PartNumber: p.PartNumber, Revision: p.Revision,
+		Description: p.Description, Detail: p.Detail, Category: p.Category, ReleaseStatus: p.ReleaseStatus,
+		IsActive: p.IsActive, RequestedBy: p.RequestedBy, Notes: p.Notes, Now: now, UomID: p.UnitID,
+		CurrentCost: p.CurrentCost, ReorderMin: p.ReorderMin,
+		UserField1: p.UserField1, UserField2: p.UserField2, UserField3: p.UserField3, UserField4: p.UserField4,
+		UserField5: p.UserField5, UserField6: p.UserField6, UserField7: p.UserField7, UserField8: p.UserField8,
+		UserField9: p.UserField9, UserField10: p.UserField10, TrackingMode: p.TrackingMode, ID: p.ID})
 }

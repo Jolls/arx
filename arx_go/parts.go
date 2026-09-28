@@ -21,42 +21,30 @@ import (
 
 	"arx/arx_go/models"
 	"arx/internal/attachments"
+	"arx/internal/parts"
 	"arx/internal/urlutil"
 )
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
 func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, error) {
-	var p models.Part
-	var partNumber, description, category, trackingMode sql.NullString
-	var hasBOM sql.NullBool
-	var filIDPrimary sql.NullInt64
-	var stockOnHand sql.NullFloat64
-	var thumbFile sql.NullString
+	pid, err := strconv.Atoi(id)
+	if err != nil {
+		return models.Part{}, err
+	}
 	// the thumbnail subquery rides this one query (rather than a separate
-	// round-trip) since fetchPartBasic backs every part sub-tab page — see the
-	// Thumb subquery in PartsRows for the same pattern (#56).
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, description, category, `+hasOwnBOMExpr(h.cfg().BOMTable(), "p.id")+`, primary_attachment_id, stock_on_hand, tracking_mode,
-		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = $2)
-		FROM %s p WHERE id = $1`,
-		h.cfg().AttachmentsTable(), h.cfg().PartsTable(),
-	), id, thumbnailCategory).Scan(&p.ID, &partNumber, &description, &category, &hasBOM, &filIDPrimary, &stockOnHand, &trackingMode, &thumbFile)
-	p.PartNumber = partNumber.String
-	p.Description = description.String
-	p.Category = category.String
-	p.HasBOM = hasBOM.Bool
-	if filIDPrimary.Valid {
-		v := int(filIDPrimary.Int64)
-		p.PrimaryAttachmentID = &v
+	// round-trip) since fetchPartBasic backs every part sub-tab page (#56).
+	b, err := h.parts().GetPartBasic(ctx, pid, thumbnailCategory)
+	if err != nil {
+		return models.Part{}, err
 	}
-	p.StockOnHand = stockOnHand.Float64
-	p.TrackingMode = trackingMode.String
-	p.IsLotTracked = models.TracksLots(trackingMode.String)
-	if urlutil.IsLocalFile(thumbFile.String) {
-		p.ThumbnailURL = urlutil.LocalFileURL(thumbFile.String, "/local/")
+	p := models.Part{ID: b.ID, PartNumber: b.PartNumber, Description: b.Description, Category: b.Category,
+		HasBOM: b.HasBOM, PrimaryAttachmentID: b.PrimaryAttachmentID, StockOnHand: b.StockOnHand,
+		TrackingMode: b.TrackingMode, IsLotTracked: models.TracksLots(b.TrackingMode)}
+	if urlutil.IsLocalFile(b.ThumbFile) {
+		p.ThumbnailURL = urlutil.LocalFileURL(b.ThumbFile, "/local/")
 	}
-	return p, err
+	return p, nil
 }
 
 func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTab string) (models.Part, string, string, bool) {
@@ -202,38 +190,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var p models.Part
-	var (
-		partNumber, revision, description, detail, category sql.NullString
-		status, reqBy, notes                                sql.NullString
-		user1, user2, user3, user4, user5                   sql.NullString
-		user6, user7, user8, user9, user10                  sql.NullString
-		trackingMode                                        sql.NullString
-		pnDate, pnDateModified, lastRollupAt                sql.NullTime
-		active, hasBOM                                      sql.NullBool
-		filIDPrimary, filLinks, poLinks                     sql.NullInt64
-		currentCost, lastRollupCost                         sql.NullFloat64
-		stockOnHand, reorderMin                             sql.NullFloat64
-		unitID                                              sql.NullInt64
-	)
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.cfg().BOMTable(), "p.id")+`,
-		       release_status, is_active, requested_by, notes,
-		       created_date, modified_date, primary_attachment_id,
-		       current_cost, last_rollup_cost, last_rollup_at, attachment_count, po_line_count,
-		       uom_id, stock_on_hand, reorder_min, tracking_mode,
-		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
-		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s p WHERE id = $1
-	`, h.cfg().PartsTable()), id).Scan(
-		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
-		&status, &active, &reqBy, &notes,
-		&pnDate, &pnDateModified, &filIDPrimary,
-		&currentCost, &lastRollupCost, &lastRollupAt, &filLinks, &poLinks,
-		&unitID, &stockOnHand, &reorderMin, &trackingMode,
-		&user1, &user2, &user3, &user4, &user5,
-		&user6, &user7, &user8, &user9, &user10,
-	)
+	p, err := h.fetchPartFull(r.Context(), id)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Part not found")
 		return
@@ -241,52 +198,6 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.renderError(w, r, "Error retrieving part: "+err.Error())
 		return
-	}
-
-	p.PartNumber = partNumber.String
-	p.Revision = revision.String
-	p.Description = description.String
-	p.Detail = detail.String
-	p.Category = category.String
-	p.HasBOM = hasBOM.Bool
-	p.ReleaseStatus = releaseStatusOrUnderReview(status.String)
-	p.IsActive = active.Bool
-	p.RequestedBy = reqBy.String
-	p.Notes = notes.String
-	if filIDPrimary.Valid {
-		v := int(filIDPrimary.Int64)
-		p.PrimaryAttachmentID = &v
-	}
-	p.StockOnHand = stockOnHand.Float64
-	if reorderMin.Valid {
-		v := reorderMin.Float64
-		p.ReorderMin = &v
-	}
-	p.CurrentCost = currentCost.Float64
-	p.TrackingMode = trackingMode.String
-	p.IsLotTracked = models.TracksLots(trackingMode.String)
-	p.LastRollupCost = lastRollupCost.Float64
-	if lastRollupAt.Valid {
-		p.LastRollupAt = &lastRollupAt.Time
-	}
-	p.AttachmentCount = int(filLinks.Int64)
-	p.POLineCount = int(poLinks.Int64)
-	p.UserField1, p.UserField2, p.UserField3, p.UserField4, p.UserField5 = user1.String, user2.String, user3.String, user4.String, user5.String
-	p.UserField6, p.UserField7, p.UserField8, p.UserField9, p.UserField10 = user6.String, user7.String, user8.String, user9.String, user10.String
-	if pnDate.Valid {
-		p.CreatedDate = &pnDate.Time
-	}
-	if pnDateModified.Valid {
-		p.ModifiedDate = &pnDateModified.Time
-	}
-	if unitID.Valid {
-		v := int(unitID.Int64)
-		p.UnitID = &v
-		var abbr sql.NullString
-		h.queryRowContext(r.Context(), fmt.Sprintf(
-			`SELECT abbreviation FROM %s WHERE uom_id = $1`, h.cfg().UomTable(),
-		), v).Scan(&abbr)
-		p.UnitAbbr = abbr.String
 	}
 
 	if p.HasBOM && r.URL.Path == fmt.Sprintf("/part/%s", id) {
@@ -503,25 +414,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		}))
 		return
 	}
-	now := time.Now()
-	mode := trackingModeFromForm(r)
-	var newID int
-	insertPart := fmt.Sprintf(`INSERT INTO %s (part_number, revision, description, detail, category,
-		 release_status, is_active, requested_by, notes, created_date, modified_date,
-		 uom_id, current_cost, reorder_min,
-		 user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
-		 user_field_6, user_field_7, user_field_8, user_field_9, user_field_10, tracking_mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-		 $12,$13,$14,
-		 $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING id`, h.cfg().PartsTable())
-	err := h.queryRowContext(r.Context(), insertPart,
-		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), nullableText(fv(r, "category")),
-		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
-		now, now,
-		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
-		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
-		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
-		mode,
-	).Scan(&newID)
+	newID, err := h.parts().CreatePart(r.Context(), partInput(partFromForm(r)), time.Now())
 	if err != nil {
 		units, _ := h.fetchUnits(r.Context())
 		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
@@ -614,26 +507,11 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	mode := trackingModeFromForm(r)
-	_, err := h.execContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s SET
-		  part_number=$1, revision=$2, description=$3, detail=$4, category=$5,
-		  release_status=$6, is_active=$7, requested_by=$8, notes=$9, modified_date=$10,
-		  uom_id=$11, current_cost=$12, reorder_min=$13,
-		  user_field_1=$14, user_field_2=$15, user_field_3=$16, user_field_4=$17, user_field_5=$18,
-		  user_field_6=$19, user_field_7=$20, user_field_8=$21, user_field_9=$22, user_field_10=$23,
-		  tracking_mode=$24
-		WHERE id=$25
-	`, h.cfg().PartsTable()),
-		partNumber, fv(r, "revision"), fv(r, "description"), fv(r, "detail"), nullableText(fv(r, "category")),
-		releaseStatusOrUnderReview(fv(r, "release_status")), activeFromStatus(r), fv(r, "PNReqBy"), fv(r, "PNNotes"),
-		time.Now(),
-		nullableInt(fv(r, "PNUNID")), floatOrZero(fv(r, "current_cost")), nullableFloat(fv(r, "reorder_min")),
-		fv(r, "user_field_1"), fv(r, "user_field_2"), fv(r, "user_field_3"), fv(r, "user_field_4"), fv(r, "user_field_5"),
-		fv(r, "user_field_6"), fv(r, "user_field_7"), fv(r, "user_field_8"), fv(r, "user_field_9"), fv(r, "user_field_10"),
-		mode,
-		id,
-	)
+	in := partInput(partFromForm(r))
+	var err error
+	if in.ID, err = strconv.Atoi(id); err == nil {
+		err = h.parts().UpdatePart(r.Context(), in, time.Now())
+	}
 	if err != nil {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
 		units, _ := h.fetchUnits(r.Context())
@@ -717,60 +595,38 @@ func partFromForm(r *http.Request) models.Part {
 	return p
 }
 
-// fetchPartFull fetches all editable fields for the edit form.
+// fetchPartFull fetches the whole part row: the detail page and the edit form.
 func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, error) {
-	var p models.Part
-	var (
-		partNumber, revision, description, detail, category sql.NullString
-		status, reqBy, notes                                sql.NullString
-		user1, user2, user3, user4, user5                   sql.NullString
-		user6, user7, user8, user9, user10                  sql.NullString
-		trackingMode                                        sql.NullString
-		active, hasBOM                                      sql.NullBool
-		unitID                                              sql.NullInt64
-		currentCost, reorderMin                             sql.NullFloat64
-	)
-	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail, category, `+hasOwnBOMExpr(h.cfg().BOMTable(), "p.id")+`,
-		       release_status, is_active, requested_by, notes,
-		       uom_id, current_cost, reorder_min, tracking_mode,
-		       user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
-		       user_field_6, user_field_7, user_field_8, user_field_9, user_field_10
-		FROM %s p WHERE id = $1
-	`, h.cfg().PartsTable()), id).Scan(
-		&p.ID, &partNumber, &revision, &description, &detail, &category, &hasBOM,
-		&status, &active, &reqBy, &notes,
-		&unitID, &currentCost, &reorderMin, &trackingMode,
-		&user1, &user2, &user3, &user4, &user5,
-		&user6, &user7, &user8, &user9, &user10,
-	)
+	pid, err := strconv.Atoi(id)
 	if err != nil {
-		return p, err
+		return models.Part{}, err
 	}
-	p.CurrentCost = currentCost.Float64
-	if reorderMin.Valid {
-		v := reorderMin.Float64
-		p.ReorderMin = &v
+	p, err := h.parts().GetPart(ctx, pid)
+	if err != nil {
+		return models.Part{}, err
 	}
-	p.TrackingMode = trackingMode.String
-	p.IsLotTracked = models.TracksLots(trackingMode.String)
-	p.PartNumber = partNumber.String
-	p.Revision = revision.String
-	p.Description = description.String
-	p.Detail = detail.String
-	p.Category = category.String
-	p.HasBOM = hasBOM.Bool
-	p.ReleaseStatus = releaseStatusOrUnderReview(status.String)
-	p.IsActive = active.Bool
-	p.RequestedBy = reqBy.String
-	p.Notes = notes.String
-	if unitID.Valid {
-		v := int(unitID.Int64)
-		p.UnitID = &v
-	}
-	p.UserField1, p.UserField2, p.UserField3, p.UserField4, p.UserField5 = user1.String, user2.String, user3.String, user4.String, user5.String
-	p.UserField6, p.UserField7, p.UserField8, p.UserField9, p.UserField10 = user6.String, user7.String, user8.String, user9.String, user10.String
-	return p, nil
+	return models.Part{ID: p.ID, PartNumber: p.PartNumber, Revision: p.Revision, Description: p.Description,
+		Detail: p.Detail, Category: p.Category, HasBOM: p.HasBOM,
+		ReleaseStatus: releaseStatusOrUnderReview(p.ReleaseStatus), IsActive: p.IsActive,
+		RequestedBy: p.RequestedBy, Notes: p.Notes, CreatedDate: p.CreatedDate, ModifiedDate: p.ModifiedDate,
+		PrimaryAttachmentID: p.PrimaryAttachmentID, CurrentCost: p.CurrentCost, LastRollupCost: p.LastRollupCost,
+		LastRollupAt: p.LastRollupAt, AttachmentCount: p.AttachmentCount, POLineCount: p.POLineCount,
+		UnitID: p.UnitID, UnitAbbr: p.UnitAbbr, StockOnHand: p.StockOnHand, ReorderMin: p.ReorderMin,
+		TrackingMode: p.TrackingMode, IsLotTracked: models.TracksLots(p.TrackingMode),
+		UserField1: p.UserField1, UserField2: p.UserField2, UserField3: p.UserField3, UserField4: p.UserField4,
+		UserField5: p.UserField5, UserField6: p.UserField6, UserField7: p.UserField7, UserField8: p.UserField8,
+		UserField9: p.UserField9, UserField10: p.UserField10}, nil
+}
+
+// partInput is the create/update input for the editable fields of p (from partFromForm).
+func partInput(p models.Part) parts.Part {
+	return parts.Part{PartNumber: p.PartNumber, Revision: p.Revision, Description: p.Description,
+		Detail: p.Detail, Category: p.Category, ReleaseStatus: p.ReleaseStatus, IsActive: p.IsActive,
+		RequestedBy: p.RequestedBy, Notes: p.Notes, UnitID: p.UnitID, CurrentCost: p.CurrentCost,
+		ReorderMin: p.ReorderMin, TrackingMode: p.TrackingMode,
+		UserField1: p.UserField1, UserField2: p.UserField2, UserField3: p.UserField3, UserField4: p.UserField4,
+		UserField5: p.UserField5, UserField6: p.UserField6, UserField7: p.UserField7, UserField8: p.UserField8,
+		UserField9: p.UserField9, UserField10: p.UserField10}
 }
 
 // ── Sub-tab handlers ────────────────────────────────────────────────────────
