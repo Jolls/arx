@@ -7,6 +7,7 @@ package dbq
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
@@ -583,6 +584,78 @@ func (q *Queries) ListPartNumbers(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, part_number)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParts = `-- name: ListParts :many
+SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
+       COALESCE(p.description, '') AS description, COALESCE(p.detail, '') AS detail,
+       COALESCE(p.requested_by, '') AS requested_by, p.created_date,
+       COALESCE(p.category, '') AS category, p.modified_date,
+       COALESCE(p.is_active, TRUE) AS is_active,
+       COALESCE(p.attachment_count, 0) AS attachment_count,
+       COALESCE(p.po_line_count, 0) AS po_line_count,
+       (p.reorder_min IS NOT NULL AND p.stock_on_hand < p.reorder_min) AS below_min,
+       COALESCE((SELECT MIN(a.file_name) FROM part_attachment a
+                 WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = $1::text), '')::text AS thumb_file
+FROM part p ORDER BY p.part_number
+`
+
+type ListPartsRow struct {
+	ID              int
+	PartNumber      string
+	Revision        string
+	Description     string
+	Detail          string
+	RequestedBy     string
+	CreatedDate     *time.Time
+	Category        string
+	ModifiedDate    *time.Time
+	IsActive        bool
+	AttachmentCount int
+	PoLineCount     int
+	BelowMin        sql.NullBool
+	ThumbFile       string
+}
+
+// The /parts grid and CSV export. thumb_file is the part's generated PDF
+// thumbnail (#696); MIN() is an arbitrary tie-break since the app enforces
+// one active Thumbnail row per part.
+func (q *Queries) ListParts(ctx context.Context, thumbCategory string) ([]ListPartsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listParts, thumbCategory)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartsRow
+	for rows.Next() {
+		var i ListPartsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartNumber,
+			&i.Revision,
+			&i.Description,
+			&i.Detail,
+			&i.RequestedBy,
+			&i.CreatedDate,
+			&i.Category,
+			&i.ModifiedDate,
+			&i.IsActive,
+			&i.AttachmentCount,
+			&i.PoLineCount,
+			&i.BelowMin,
+			&i.ThumbFile,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

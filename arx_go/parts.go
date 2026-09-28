@@ -177,56 +177,21 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Thumb is the /parts hover-tooltip image from a part's generated PDF thumbnail
-	// (#696), pulled via a correlated subquery on the parts SELECT rather than a
-	// separate round-trip; MIN() is an arbitrary tie-break since the app enforces
-	// one active Thumbnail row per part.
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, part_number, revision, description, detail,
-		       requested_by, created_date, category, modified_date, is_active,
-		       attachment_count, po_line_count,
-		       (reorder_min IS NOT NULL AND stock_on_hand < reorder_min),
-		       (SELECT MIN(file_name) FROM %s a WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = $1)
-		FROM %s p ORDER BY part_number
-	`, h.cfg().AttachmentsTable(), h.cfg().PartsTable()), thumbnailCategory)
+	// (#696), pulled with the parts rather than a separate round-trip.
+	parts, err := h.parts().ListParts(r.Context(), thumbnailCategory)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
-	out := make([]row, 0)
-	for rows.Next() {
-		var p row
-		var pn, rev, description, detail, reqBy, cat, thumbFile sql.NullString
-		var date, modified sql.NullTime
-		var active sql.NullBool
-		var attach, poLines sql.NullInt64
-		if err := rows.Scan(&p.ID, &pn, &rev, &description, &detail, &reqBy, &date, &cat, &modified, &active, &attach, &poLines, &p.BelowMin, &thumbFile); err != nil {
-			serverError(w, "database error", err)
-			return
+	out := make([]row, len(parts))
+	for i, lp := range parts {
+		p := row{ID: lp.ID, PN: lp.PartNumber, Rev: lp.Revision, Description: lp.Description, Detail: lp.Detail,
+			ReqBy: lp.RequestedBy, Date: recordsFormatDate(lp.CreatedDate), Cat: lp.Category, Modified: recordsFormatDate(lp.ModifiedDate),
+			Active: lp.IsActive, Attach: lp.AttachmentCount, POLines: lp.POLineCount, BelowMin: lp.BelowMin}
+		if urlutil.IsLocalFile(lp.ThumbFile) {
+			p.Thumb = urlutil.LocalFileURL(lp.ThumbFile, "/local/")
 		}
-		if urlutil.IsLocalFile(thumbFile.String) {
-			p.Thumb = urlutil.LocalFileURL(thumbFile.String, "/local/")
-		}
-		p.PN = pn.String
-		p.Active = !active.Valid || active.Bool
-		p.Rev = rev.String
-		p.Description = description.String
-		p.Detail = detail.String
-		p.ReqBy = reqBy.String
-		p.Cat = cat.String
-		p.Attach = int(attach.Int64)
-		p.POLines = int(poLines.Int64)
-		if date.Valid {
-			p.Date = date.Time.Format("2006-01-02")
-		}
-		if modified.Valid {
-			p.Modified = modified.Time.Format("2006-01-02")
-		}
-		out = append(out, p)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, "database error", err)
-		return
+		out[i] = p
 	}
 	log.Printf("[rows] parts: %d rows in %v", len(out), time.Since(start))
 	writeJSON(w, out)
@@ -2720,40 +2685,18 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 // ── PartsExportCSV — GET /parts/export.csv ──────────────────────────────────
 
 func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT part_number, revision, description, detail,
-		       requested_by, created_date, category, modified_date, is_active
-		FROM %s ORDER BY part_number
-	`, h.cfg().PartsTable()))
+	parts, err := h.parts().ListParts(r.Context(), thumbnailCategory)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="parts.csv"`)
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"Part Number", "Revision", "Description", "Detail", "Requested By", "Created Date", "Category", "Modified Date", "Active"})
-	for rows.Next() {
-		var pn, rev, description, detail, reqBy, cat sql.NullString
-		var created, modified sql.NullTime
-		var active sql.NullBool
-		if err := rows.Scan(&pn, &rev, &description, &detail, &reqBy, &created, &cat, &modified, &active); err != nil {
-			return
-		}
-		activeStr := "true"
-		if active.Valid && !active.Bool {
-			activeStr = "false"
-		}
-		createdStr := ""
-		if created.Valid {
-			createdStr = created.Time.Format("2006-01-02")
-		}
-		modifiedStr := ""
-		if modified.Valid {
-			modifiedStr = modified.Time.Format("2006-01-02")
-		}
-		_ = cw.Write([]string{pn.String, rev.String, description.String, detail.String, reqBy.String, createdStr, cat.String, modifiedStr, activeStr})
+	for _, p := range parts {
+		_ = cw.Write([]string{p.PartNumber, p.Revision, p.Description, p.Detail, p.RequestedBy,
+			recordsFormatDate(p.CreatedDate), p.Category, recordsFormatDate(p.ModifiedDate), strconv.FormatBool(p.IsActive)})
 	}
 	cw.Flush()
 }
