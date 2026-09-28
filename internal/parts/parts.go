@@ -1,8 +1,8 @@
 // Package parts is the parts domain (#190, #220): typed access to the part
 // tables via the sqlc-generated queries in parts.sql. So far part categories,
 // manufacturer parts, sourcing (supplier links, their prices and the
-// DigiKey import), the RFQ planner's BOM reads and the part-number list are
-// converted.
+// DigiKey import), the RFQ planner's BOM reads, the part-number list and the
+// parts list/CSV export are converted.
 package parts
 
 import (
@@ -85,6 +85,25 @@ type BOMComponent struct {
 	ReorderMin  *float64
 	SupplierID  *int
 	HasBOM      bool
+}
+
+// ListedPart is one part row of the /parts grid and CSV export; NULL text
+// reads as "", NULL counts as 0, NULL is_active as active.
+type ListedPart struct {
+	ID              int
+	PartNumber      string
+	Revision        string
+	Description     string
+	Detail          string
+	RequestedBy     string
+	Category        string
+	CreatedDate     *time.Time
+	ModifiedDate    *time.Time
+	IsActive        bool
+	AttachmentCount int
+	POLineCount     int
+	BelowMin        bool
+	ThumbFile       string
 }
 
 type Service struct{ q *dbq.Queries }
@@ -330,4 +349,21 @@ func (s *Service) ListBOMComponents(ctx context.Context, parentID int) ([]BOMCom
 // ListPartNumbers returns every part's part_number.
 func (s *Service) ListPartNumbers(ctx context.Context) ([]string, error) {
 	return s.q.ListPartNumbers(ctx)
+}
+
+// ListParts returns every part for the /parts grid and CSV export, by
+// part_number; ThumbFile is its lowest active attachment in thumbCategory.
+func (s *Service) ListParts(ctx context.Context, thumbCategory string) ([]ListedPart, error) {
+	rows, err := s.q.ListParts(ctx, thumbCategory)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ListedPart, len(rows))
+	for i, r := range rows {
+		out[i] = ListedPart{ID: r.ID, PartNumber: r.PartNumber, Revision: r.Revision, Description: r.Description,
+			Detail: r.Detail, RequestedBy: r.RequestedBy, Category: r.Category, CreatedDate: r.CreatedDate,
+			ModifiedDate: r.ModifiedDate, IsActive: r.IsActive, AttachmentCount: r.AttachmentCount,
+			POLineCount: r.PoLineCount, BelowMin: r.BelowMin.Bool, ThumbFile: r.ThumbFile}
+	}
+	return out, nil
 }

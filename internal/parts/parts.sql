@@ -136,3 +136,19 @@ WHERE pl.parent_part_id = $1;
 
 -- name: ListPartNumbers :many
 SELECT part_number FROM part;
+
+-- name: ListParts :many
+-- The /parts grid and CSV export. thumb_file is the part's generated PDF
+-- thumbnail (#696); MIN() is an arbitrary tie-break since the app enforces
+-- one active Thumbnail row per part.
+SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
+       COALESCE(p.description, '') AS description, COALESCE(p.detail, '') AS detail,
+       COALESCE(p.requested_by, '') AS requested_by, p.created_date,
+       COALESCE(p.category, '') AS category, p.modified_date,
+       COALESCE(p.is_active, TRUE) AS is_active,
+       COALESCE(p.attachment_count, 0) AS attachment_count,
+       COALESCE(p.po_line_count, 0) AS po_line_count,
+       (p.reorder_min IS NOT NULL AND p.stock_on_hand < p.reorder_min) AS below_min,
+       COALESCE((SELECT MIN(a.file_name) FROM part_attachment a
+                 WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = sqlc.arg(thumb_category)::text), '')::text AS thumb_file
+FROM part p ORDER BY p.part_number;
