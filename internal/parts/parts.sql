@@ -259,3 +259,36 @@ VALUES (sqlc.arg(parent_part_id), sqlc.arg(component_part_id), sqlc.arg(line_num
 -- name: CopyBOM :exec
 INSERT INTO bom (parent_part_id, component_part_id, line_number, qty)
 SELECT sqlc.arg(dst_id)::int, s.component_part_id, s.line_number, s.qty FROM bom s WHERE s.parent_part_id = sqlc.arg(src_id);
+
+-- name: ListPartPrices :many
+-- Every price row of a part (active or not), by supplier name, newest first, then pack size.
+SELECT p.id, p.price_ea, p.price_pack, p.pack_size, COALESCE(p.is_active, FALSE) AS is_active,
+       p.effective_date, p.supplier_id, COALESCE(s.name, '') AS supplier_name
+FROM price p
+LEFT JOIN company s ON p.supplier_id = s.id
+WHERE p.part_id = $1
+ORDER BY s.name, p.effective_date DESC, p.pack_size;
+
+-- name: GetPartPrice :one
+SELECT p.id, p.price_ea, p.price_pack, p.pack_size, COALESCE(p.is_active, FALSE) AS is_active,
+       p.effective_date, p.supplier_id, COALESCE(s.name, '') AS supplier_name
+FROM price p
+LEFT JOIN company s ON p.supplier_id = s.id
+WHERE p.id = sqlc.arg(id) AND p.part_id = sqlc.arg(part_id);
+
+-- name: GetDefaultSupplier :one
+SELECT default_supplier_id FROM part WHERE id = $1;
+
+-- name: SetDefaultSupplier :exec
+UPDATE part SET default_supplier_id = sqlc.arg(supplier_id) WHERE id = sqlc.arg(id);
+
+-- name: CreatePrice :exec
+INSERT INTO price (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+VALUES (sqlc.arg(part_id), sqlc.arg(supplier_id), sqlc.narg(pack_size), sqlc.narg(price_ea), sqlc.narg(price_pack),
+        sqlc.arg(effective_date)::text::date, TRUE);
+
+-- name: SetPriceActive :exec
+UPDATE price SET is_active = sqlc.arg(is_active)::boolean WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id);
+
+-- name: DeleteInactivePrice :exec
+DELETE FROM price WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id) AND is_active = FALSE;

@@ -2,8 +2,9 @@
 // tables via the sqlc-generated queries in parts.sql. So far part categories,
 // manufacturer parts, sourcing (supplier links, their prices and the
 // DigiKey import), the RFQ planner's BOM reads, the part-number list, the
-// parts list/CSV export, the single-part read/create/update and the BOM
-// lines (view, where-used, edit, paste preview, copy, export) are converted.
+// parts list/CSV export, the single-part read/create/update, the BOM
+// lines (view, where-used, edit, paste preview, copy, export) and the
+// pricing tab's price CRUD are converted.
 package parts
 
 import (
@@ -72,6 +73,19 @@ type Price struct {
 	PricePack     *float64
 	PackSize      *float64
 	EffectiveDate *time.Time
+}
+
+// PartPrice is any price row of a part plus its supplier's name; NULL is_active reads as inactive.
+type PartPrice struct {
+	ID            int
+	SupplierID    int
+	PriceEA       *float64
+	PricePack     *float64
+	PackSize      *float64
+	IsActive      bool
+	EffectiveDate *time.Time
+	// joined
+	SupplierName string
 }
 
 // BOMComponent is one bom line below a parent, with the component's part data.
@@ -573,4 +587,53 @@ func (s *Service) CreateBOMLine(ctx context.Context, parentID int, l BOMLine) er
 // CopyBOM adds every BOM line of srcID to dstID.
 func (s *Service) CopyBOM(ctx context.Context, srcID, dstID int) error {
 	return s.q.CopyBOM(ctx, dbq.CopyBOMParams{DstID: dstID, SrcID: srcID})
+}
+
+// ListPartPrices returns every price row of partID, by supplier name, newest
+// effective date first, then pack size.
+func (s *Service) ListPartPrices(ctx context.Context, partID int) ([]PartPrice, error) {
+	rows, err := s.q.ListPartPrices(ctx, partID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PartPrice, len(rows))
+	for i, r := range rows {
+		out[i] = PartPrice{ID: r.ID, SupplierID: r.SupplierID, PriceEA: r.PriceEa, PricePack: r.PricePack,
+			PackSize: r.PackSize, IsActive: r.IsActive, EffectiveDate: r.EffectiveDate, SupplierName: r.SupplierName}
+	}
+	return out, nil
+}
+
+// GetPartPrice returns price id of partID; sql.ErrNoRows when it doesn't exist
+// or belongs to another part.
+func (s *Service) GetPartPrice(ctx context.Context, id, partID int) (PartPrice, error) {
+	r, err := s.q.GetPartPrice(ctx, dbq.GetPartPriceParams{ID: id, PartID: partID})
+	return PartPrice{ID: r.ID, SupplierID: r.SupplierID, PriceEA: r.PriceEa, PricePack: r.PricePack,
+		PackSize: r.PackSize, IsActive: r.IsActive, EffectiveDate: r.EffectiveDate, SupplierName: r.SupplierName}, err
+}
+
+// GetDefaultSupplier returns a part's preferred supplier for cost rollup, nil when unset.
+func (s *Service) GetDefaultSupplier(ctx context.Context, partID int) (*int, error) {
+	return s.q.GetDefaultSupplier(ctx, partID)
+}
+
+// SetDefaultSupplier sets a part's preferred supplier for cost rollup.
+func (s *Service) SetDefaultSupplier(ctx context.Context, partID, supplierID int) error {
+	return s.q.SetDefaultSupplier(ctx, dbq.SetDefaultSupplierParams{SupplierID: &supplierID, ID: partID})
+}
+
+// CreatePrice inserts an active price dated effectiveDate (YYYY-MM-DD).
+func (s *Service) CreatePrice(ctx context.Context, partID, supplierID int, packSize, priceEA, pricePack *float64, effectiveDate string) error {
+	return s.q.CreatePrice(ctx, dbq.CreatePriceParams{PartID: partID, SupplierID: supplierID,
+		PackSize: packSize, PriceEa: priceEA, PricePack: pricePack, EffectiveDate: effectiveDate})
+}
+
+// SetPriceActive (de)activates price id of partID; a price of another part is left alone.
+func (s *Service) SetPriceActive(ctx context.Context, id, partID int, active bool) error {
+	return s.q.SetPriceActive(ctx, dbq.SetPriceActiveParams{IsActive: active, ID: id, PartID: partID})
+}
+
+// DeleteInactivePrice hard-deletes price id of partID; an active price is left alone.
+func (s *Service) DeleteInactivePrice(ctx context.Context, id, partID int) error {
+	return s.q.DeleteInactivePrice(ctx, dbq.DeleteInactivePriceParams{ID: id, PartID: partID})
 }
