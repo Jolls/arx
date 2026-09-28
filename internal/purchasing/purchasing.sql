@@ -306,3 +306,30 @@ DELETE FROM po_line WHERE id = sqlc.arg(id) AND po_id = sqlc.arg(po_id);
 
 -- name: SumPOLines :one
 SELECT COALESCE(SUM(qty * unit_cost), 0)::float8 FROM po_line WHERE po_id = $1;
+
+-- name: SetPOStatus :exec
+-- Also mirrors date_closed: set when closing (if unset), cleared when reopening from closed.
+UPDATE purchase_order SET status = sqlc.arg(to_status)::text, is_active = sqlc.arg(is_active)::boolean,
+  date_modified = CURRENT_TIMESTAMP,
+  date_closed = CASE WHEN sqlc.arg(to_status)::text = 'closed' THEN COALESCE(date_closed, CAST(CURRENT_TIMESTAMP AS DATE))
+                     WHEN sqlc.arg(from_status)::text = 'closed' THEN NULL
+                     ELSE date_closed END
+WHERE id = sqlc.arg(id);
+
+-- name: SetPOApproval :exec
+UPDATE purchase_order SET approval_status = sqlc.arg(approval_status)::text WHERE id = sqlc.arg(id);
+
+-- name: CreatePOApprovalEvent :exec
+INSERT INTO purchase_order_history (po_id, event_type, action, note, changed_by)
+VALUES (sqlc.arg(po_id), 'approval', sqlc.arg(action)::text, sqlc.narg(note)::text, sqlc.arg(changed_by));
+
+-- name: LockPOStatus :one
+-- #191: locks the PO row for the rest of the transaction.
+SELECT COALESCE(status, '') FROM purchase_order WHERE id = $1 FOR UPDATE;
+
+-- name: ReceivePOLine :exec
+UPDATE po_line SET received_qty = received_qty + sqlc.arg(qty)::float8, date_received = sqlc.arg(date_received)
+WHERE id = sqlc.arg(id);
+
+-- name: ListPOLineQtys :many
+SELECT COALESCE(qty, 0) AS qty, COALESCE(received_qty, 0) AS received_qty FROM po_line WHERE po_id = $1;

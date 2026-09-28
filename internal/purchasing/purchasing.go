@@ -3,7 +3,8 @@
 // queries in purchasing.sql. So far the supplier pages (list, detail cards,
 // create/update, parts and POs tabs), the supplier typeahead and the PO reads
 // (grid, CSV export, header, lines, receipts, history, link/price suggestions,
-// RFQ comparison grid) and PO create/edit writes are converted.
+// RFQ comparison grid), PO create/edit writes and the PO lifecycle (status
+// transitions, approval, receiving's PO/line statements) are converted.
 package purchasing
 
 import (
@@ -622,6 +623,49 @@ func (s *Service) UpdatePOLine(ctx context.Context, poID int, l POLine) error {
 // DeletePOLine deletes line id if it belongs to poID.
 func (s *Service) DeletePOLine(ctx context.Context, poID, id int) error {
 	return s.q.DeletePOLine(ctx, dbq.DeletePOLineParams{ID: id, PoID: poID})
+}
+
+// SetPOStatus moves PO id from from to to (with isActive) and bumps
+// date_modified; closing sets date_closed if unset, reopening from closed clears it.
+func (s *Service) SetPOStatus(ctx context.Context, id int, from, to string, isActive bool) error {
+	return s.q.SetPOStatus(ctx, dbq.SetPOStatusParams{ToStatus: to, IsActive: isActive, FromStatus: from, ID: id})
+}
+
+// SetPOApproval sets PO id's approval_status.
+func (s *Service) SetPOApproval(ctx context.Context, id int, approval string) error {
+	return s.q.SetPOApproval(ctx, dbq.SetPOApprovalParams{ApprovalStatus: approval, ID: id})
+}
+
+// CreatePOApprovalEvent records an approval action on poID; a nil note is stored as NULL.
+func (s *Service) CreatePOApprovalEvent(ctx context.Context, poID int, action string, note *string, changedBy string) error {
+	var n sql.NullString
+	if note != nil {
+		n = sql.NullString{String: *note, Valid: true}
+	}
+	return s.q.CreatePOApprovalEvent(ctx, dbq.CreatePOApprovalEventParams{PoID: poID, Action: action, Note: n, ChangedBy: changedBy})
+}
+
+// LockPOStatus locks PO id's row for the rest of the transaction and returns its status.
+func (s *Service) LockPOStatus(ctx context.Context, id int) (string, error) {
+	return s.q.LockPOStatus(ctx, id)
+}
+
+// ReceivePOLine adds qty to line id's received_qty and sets date_received to on.
+func (s *Service) ReceivePOLine(ctx context.Context, id int, qty float64, on time.Time) error {
+	return s.q.ReceivePOLine(ctx, dbq.ReceivePOLineParams{Qty: qty, DateReceived: &on, ID: id})
+}
+
+// ListPOLineQtys returns poID's lines with only Qty and ReceivedQty set.
+func (s *Service) ListPOLineQtys(ctx context.Context, poID int) ([]POLine, error) {
+	rows, err := s.q.ListPOLineQtys(ctx, poID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]POLine, len(rows))
+	for i, r := range rows {
+		out[i] = POLine{Qty: r.Qty, ReceivedQty: r.ReceivedQty}
+	}
+	return out, nil
 }
 
 // SumPOLines returns the sum of qty × unit cost over poID's lines.

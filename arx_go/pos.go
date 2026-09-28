@@ -1277,11 +1277,7 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var poID int
-	var current, approval sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT ID, status, approval_status FROM %s WHERE number = $1`, h.cfg().POTable()),
-		num).Scan(&poID, &current, &approval)
+	st, err := h.purchasing().GetPOState(r.Context(), num)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
 		return
@@ -1290,12 +1286,13 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading PO: "+err.Error())
 		return
 	}
-	if !poCanTransition(current.String, target) {
-		h.renderError(w, r, fmt.Sprintf("Cannot change status from %q to %q.", current.String, target))
+	poID, current, approval := st.ID, st.Status, st.ApprovalStatus
+	if !poCanTransition(current, target) {
+		h.renderError(w, r, fmt.Sprintf("Cannot change status from %q to %q.", current, target))
 		return
 	}
 	// Approval gate (#267): a PO cannot be sent until it has been approved.
-	if target == "sent" && approval.String != "approved" {
+	if target == "sent" && approval != "approved" {
 		h.renderError(w, r, "This PO must be approved before it can be marked Sent.")
 		return
 	}
@@ -1312,14 +1309,14 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if err := h.recordPOStatusChange(r, tx, poID, current.String, target); err != nil {
+	if err := h.recordPOStatusChange(r, tx, poID, current, target); err != nil {
 		h.renderError(w, r, "Error updating PO status: "+err.Error())
 		return
 	}
 
 	// Cancelling a PO clears any approval (#267): a cancelled PO is not approved,
 	// and a later reopen must go through approval again.
-	if target == "cancelled" && approval.String != "not_submitted" {
+	if target == "cancelled" && approval != "not_submitted" {
 		if err := h.resetApproval(r, tx, poID, "PO cancelled"); err != nil {
 			h.renderError(w, r, "Error clearing approval: "+err.Error())
 			return
@@ -1339,25 +1336,13 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 // transition handler (#271) and PO receiving (#269) so both audit identically.
 // The caller is responsible for validating the transition (poCanTransition) first.
 func (h *Handler) recordPOStatusChange(r *http.Request, tx *txLogger, poID int, from, to string) error {
-	ctx := r.Context()
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, changed_by)
-		VALUES ($1, 'status', $2, $3, $4)
-	`, h.cfg().POHistoryTable()), poID, from, to, h.actorName(r)); err != nil {
+	pur := purchasing.New(tx)
+	if err := pur.CreatePOStatusEvent(r.Context(), poID, &from, to, h.actorName(r)); err != nil {
 		return err
 	}
 	// date_closed mirrors the closed state: set it when closing (if unset),
 	// clear it when reopening from closed.
-	query := fmt.Sprintf(`UPDATE %s SET status=$1, is_active=$2, date_modified=CURRENT_TIMESTAMP`, h.cfg().POTable())
-	switch {
-	case to == "closed":
-		query += `, date_closed=COALESCE(date_closed, CAST(CURRENT_TIMESTAMP AS DATE))`
-	case from == "closed":
-		query += `, date_closed=NULL`
-	}
-	query += ` WHERE ID=$3`
-	_, err := tx.ExecContext(ctx, query, to, statusIsActive(to), poID)
-	return err
+	return pur.SetPOStatus(r.Context(), poID, from, to, statusIsActive(to))
 }
 
 // ── PO receiving / goods receipt (issue #269) ────────────────────────────────
@@ -1424,11 +1409,7 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var poID int
-	var status sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT ID, status FROM %s WHERE number = $1`, h.cfg().POTable()),
-		num).Scan(&poID, &status)
+	st, err := h.purchasing().GetPOState(r.Context(), num)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
 		return
@@ -1437,7 +1418,8 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading PO: "+err.Error())
 		return
 	}
-	if status.String != "sent" && status.String != "partially_received" {
+	poID, status := st.ID, st.Status
+	if status != "sent" && status != "partially_received" {
 		h.renderError(w, r, "Only a sent or partially-received PO can receive goods.")
 		return
 	}
@@ -1476,12 +1458,12 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// #191: lock the PO row and re-check its status inside the tx.
-	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT status FROM %s WHERE ID = $1 FOR UPDATE`, h.cfg().POTable()), poID).Scan(&status); err != nil {
+	pur := purchasing.New(tx)
+	if status, err = pur.LockPOStatus(r.Context(), poID); err != nil {
 		h.renderError(w, r, "Error loading PO: "+err.Error())
 		return
 	}
-	if status.String != "sent" && status.String != "partially_received" {
+	if status != "sent" && status != "partially_received" {
 		h.renderError(w, r, "Only a sent or partially-received PO can receive goods.")
 		return
 	}
@@ -1514,9 +1496,7 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET received_qty = received_qty + $1, date_received = $2 WHERE id = $3`,
-			h.cfg().POLineTable()), d, *txnDate, items[i].ID); err != nil {
+		if err := pur.ReceivePOLine(r.Context(), items[i].ID, d, *txnDate); err != nil {
 			h.renderError(w, r, "Error updating line item: "+err.Error())
 			return
 		}
@@ -1524,30 +1504,18 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 
 	// Re-derive the PO status from the committed-plus-this-tx line receipts (#191:
 	// not the pre-tx copy, which can miss a concurrent receipt).
-	lineRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
-		`SELECT COALESCE(qty,0), COALESCE(received_qty,0) FROM %s WHERE po_id = $1`, h.cfg().POLineTable()), poID)
+	lines, err := pur.ListPOLineQtys(r.Context(), poID)
 	if err != nil {
 		h.renderError(w, r, "Error reloading PO lines: "+err.Error())
 		return
 	}
-	var current []models.PurchaseOrderLine
-	for lineRows.Next() {
-		var l models.PurchaseOrderLine
-		if err := lineRows.Scan(&l.Qty, &l.ReceivedQty); err != nil {
-			lineRows.Close()
-			h.renderError(w, r, "Error reloading PO lines: "+err.Error())
-			return
-		}
-		current = append(current, l)
+	current := make([]models.PurchaseOrderLine, len(lines))
+	for i, l := range lines {
+		current[i] = models.PurchaseOrderLine{Qty: l.Qty, ReceivedQty: l.ReceivedQty}
 	}
-	lineRows.Close()
-	if err := lineRows.Err(); err != nil {
-		h.renderError(w, r, "Error reloading PO lines: "+err.Error())
-		return
-	}
-	if target := derivePOReceiptStatus(current); target != "" && target != status.String &&
-		poCanTransition(status.String, target) {
-		if err := h.recordPOStatusChange(r, tx, poID, status.String, target); err != nil {
+	if target := derivePOReceiptStatus(current); target != "" && target != status &&
+		poCanTransition(status, target) {
+		if err := h.recordPOStatusChange(r, tx, poID, status, target); err != nil {
 			h.renderError(w, r, "Error updating PO status: "+err.Error())
 			return
 		}
@@ -1598,16 +1566,11 @@ func poApprovalAllowsSend(approval string) bool { return approval == "approved" 
 // approval event with the given note. Used when an edit or a cancellation
 // invalidates a prior approval decision (#267). Runs inside the caller's tx.
 func (h *Handler) resetApproval(r *http.Request, tx *txLogger, poID int, note string) error {
-	ctx := r.Context()
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET approval_status='not_submitted' WHERE ID=$1`, h.cfg().POTable()), poID); err != nil {
+	pur := purchasing.New(tx)
+	if err := pur.SetPOApproval(r.Context(), poID, "not_submitted"); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, action, note, changed_by)
-		VALUES ($1, 'approval', 'reset', $2, $3)
-	`, h.cfg().POHistoryTable()), poID, note, h.actorName(r))
-	return err
+	return pur.CreatePOApprovalEvent(r.Context(), poID, "reset", &note, h.actorName(r))
 }
 
 // ApprovalAction is an approval button rendered on the PO detail page.
@@ -1653,11 +1616,7 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var poID int
-	var current sql.NullString
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT ID, approval_status FROM %s WHERE number = $1`, h.cfg().POTable()),
-		num).Scan(&poID, &current)
+	st, err := h.purchasing().GetPOState(r.Context(), num)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
 		return
@@ -1666,10 +1625,11 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading PO: "+err.Error())
 		return
 	}
+	poID := st.ID
 
-	next, ok := poApprovalNext(action, current.String)
+	next, ok := poApprovalNext(action, st.ApprovalStatus)
 	if !ok {
-		h.renderError(w, r, fmt.Sprintf("Cannot %s a PO whose approval status is %q.", action, current.String))
+		h.renderError(w, r, fmt.Sprintf("Cannot %s a PO whose approval status is %q.", action, st.ApprovalStatus))
 		return
 	}
 
@@ -1689,16 +1649,16 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, action, note, changed_by)
-		VALUES ($1, 'approval', $2, $3, $4)
-	`, h.cfg().POHistoryTable()), poID, logged, nullableText(note), h.actorName(r)); err != nil {
+	var notePtr *string // blank note → NULL
+	if note != "" {
+		notePtr = &note
+	}
+	pur := purchasing.New(tx)
+	if err := pur.CreatePOApprovalEvent(r.Context(), poID, logged, notePtr, h.actorName(r)); err != nil {
 		h.renderError(w, r, "Error recording approval: "+err.Error())
 		return
 	}
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET approval_status=$1 WHERE ID=$2`, h.cfg().POTable()),
-		next, poID); err != nil {
+	if err := pur.SetPOApproval(r.Context(), poID, next); err != nil {
 		h.renderError(w, r, "Error updating approval status: "+err.Error())
 		return
 	}

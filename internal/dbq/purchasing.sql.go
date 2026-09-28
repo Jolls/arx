@@ -132,6 +132,28 @@ func (q *Queries) CreatePO(ctx context.Context, arg CreatePOParams) (int, error)
 	return id, err
 }
 
+const createPOApprovalEvent = `-- name: CreatePOApprovalEvent :exec
+INSERT INTO purchase_order_history (po_id, event_type, action, note, changed_by)
+VALUES ($1, 'approval', $2::text, $3::text, $4)
+`
+
+type CreatePOApprovalEventParams struct {
+	PoID      int
+	Action    string
+	Note      sql.NullString
+	ChangedBy string
+}
+
+func (q *Queries) CreatePOApprovalEvent(ctx context.Context, arg CreatePOApprovalEventParams) error {
+	_, err := q.db.ExecContext(ctx, createPOApprovalEvent,
+		arg.PoID,
+		arg.Action,
+		arg.Note,
+		arg.ChangedBy,
+	)
+	return err
+}
+
 const createPOLine = `-- name: CreatePOLine :exec
 INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
 VALUES ($1, $2, $3::text, $4::text, $5::text,
@@ -557,6 +579,38 @@ func (q *Queries) ListPOHistory(ctx context.Context, poID int) ([]ListPOHistoryR
 			&i.ChangedBy,
 			&i.ChangedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPOLineQtys = `-- name: ListPOLineQtys :many
+SELECT COALESCE(qty, 0) AS qty, COALESCE(received_qty, 0) AS received_qty FROM po_line WHERE po_id = $1
+`
+
+type ListPOLineQtysRow struct {
+	Qty         float64
+	ReceivedQty float64
+}
+
+func (q *Queries) ListPOLineQtys(ctx context.Context, poID int) ([]ListPOLineQtysRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPOLineQtys, poID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPOLineQtysRow
+	for rows.Next() {
+		var i ListPOLineQtysRow
+		if err := rows.Scan(&i.Qty, &i.ReceivedQty); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1176,6 +1230,18 @@ func (q *Queries) ListTopSupplierParts(ctx context.Context, arg ListTopSupplierP
 	return items, nil
 }
 
+const lockPOStatus = `-- name: LockPOStatus :one
+SELECT COALESCE(status, '') FROM purchase_order WHERE id = $1 FOR UPDATE
+`
+
+// #191: locks the PO row for the rest of the transaction.
+func (q *Queries) LockPOStatus(ctx context.Context, id int) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockPOStatus, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const markPOPrinted = `-- name: MarkPOPrinted :exec
 UPDATE purchase_order SET date_printed = $1::text::date WHERE number = $2
 `
@@ -1201,6 +1267,22 @@ func (q *Queries) NextPONumber(ctx context.Context) (string, error) {
 	var column_1 string
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const receivePOLine = `-- name: ReceivePOLine :exec
+UPDATE po_line SET received_qty = received_qty + $1::float8, date_received = $2
+WHERE id = $3
+`
+
+type ReceivePOLineParams struct {
+	Qty          float64
+	DateReceived *time.Time
+	ID           int
+}
+
+func (q *Queries) ReceivePOLine(ctx context.Context, arg ReceivePOLineParams) error {
+	_, err := q.db.ExecContext(ctx, receivePOLine, arg.Qty, arg.DateReceived, arg.ID)
+	return err
 }
 
 const searchSuppliers = `-- name: SearchSuppliers :many
@@ -1247,6 +1329,47 @@ func (q *Queries) SearchSuppliers(ctx context.Context, arg SearchSuppliersParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPOApproval = `-- name: SetPOApproval :exec
+UPDATE purchase_order SET approval_status = $1::text WHERE id = $2
+`
+
+type SetPOApprovalParams struct {
+	ApprovalStatus string
+	ID             int
+}
+
+func (q *Queries) SetPOApproval(ctx context.Context, arg SetPOApprovalParams) error {
+	_, err := q.db.ExecContext(ctx, setPOApproval, arg.ApprovalStatus, arg.ID)
+	return err
+}
+
+const setPOStatus = `-- name: SetPOStatus :exec
+UPDATE purchase_order SET status = $1::text, is_active = $2::boolean,
+  date_modified = CURRENT_TIMESTAMP,
+  date_closed = CASE WHEN $1::text = 'closed' THEN COALESCE(date_closed, CAST(CURRENT_TIMESTAMP AS DATE))
+                     WHEN $3::text = 'closed' THEN NULL
+                     ELSE date_closed END
+WHERE id = $4
+`
+
+type SetPOStatusParams struct {
+	ToStatus   string
+	IsActive   bool
+	FromStatus string
+	ID         int
+}
+
+// Also mirrors date_closed: set when closing (if unset), cleared when reopening from closed.
+func (q *Queries) SetPOStatus(ctx context.Context, arg SetPOStatusParams) error {
+	_, err := q.db.ExecContext(ctx, setPOStatus,
+		arg.ToStatus,
+		arg.IsActive,
+		arg.FromStatus,
+		arg.ID,
+	)
+	return err
 }
 
 const setPOTotal = `-- name: SetPOTotal :exec
