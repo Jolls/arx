@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.12] - 2026-09-27
+### Changed
+- Data-access layer: the Create RFQs BOM walk and the next-part-number scan moved to sqlc (`internal/parts`) ([#220](https://github.com/Jolls/arx/issues/220))
+
 ## [0.8.11] - 2026-09-27
 ### Changed
 - Data-access layer: part and supplier attachment queries (list, add, edit, delete, primary, paste, PDF thumbnails, vendor scope, duplicate check, where-used) moved to sqlc in a new `internal/attachments` package ([#220](https://github.com/Jolls/arx/issues/220))
