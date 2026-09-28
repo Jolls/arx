@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/internal/attachments"
 	"arx/internal/urlutil"
 )
 
@@ -1707,50 +1708,24 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT a.id, a.file_name, a.category, a.part_revision, a.sort_order, a.comment,
-		       a.supplier_part_id, a.mfg_part_id, COALESCE(sc.name, mc.name) AS vendor_name
-		FROM %s a
-		LEFT JOIN %s sp ON sp.id = a.supplier_part_id
-		LEFT JOIN %s sc ON sc.id = sp.supplier_id
-		LEFT JOIN %s mp ON mp.id = a.mfg_part_id
-		LEFT JOIN %s mc ON mc.id = mp.mfg_id
-		WHERE a.part_id = $1 AND a.is_active = TRUE ORDER BY a.sort_order, a.id
-	`, h.cfg().AttachmentsTable(), h.cfg().SupplierPartTable(), h.cfg().CompanyTable(),
-		h.cfg().MfgPartTable(), h.cfg().CompanyTable()), id)
+	rows, err := h.attachments().ListPartAttachments(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
 	}
-	defer rows.Close()
 	var atts []models.Attachment
 	nextOrderID := 1
-	for rows.Next() {
-		var att models.Attachment
-		var fname, fnotes, frev, fcomment, vendorName sql.NullString
-		var orderID, supplierPartID, mfgPartID sql.NullInt64
-		if err := rows.Scan(&att.ID, &fname, &fnotes, &frev, &orderID, &fcomment,
-			&supplierPartID, &mfgPartID, &vendorName); err != nil {
-			h.renderError(w, r, "Error reading attachments: "+err.Error())
-			return
-		}
-		att.FileName = fname.String
-		att.Category = fnotes.String
-		att.PartRevision = frev.String
-		att.Comment = fcomment.String
-		att.VendorName = vendorName.String
+	for _, a := range rows {
+		att := models.Attachment{ID: a.ID, FileName: a.FileName, Category: a.Category,
+			PartRevision: a.PartRevision, OrderID: a.SortOrder, Comment: a.Comment, VendorName: a.VendorName}
 		switch {
-		case supplierPartID.Valid:
-			att.VendorScope = fmt.Sprintf("s:%d", supplierPartID.Int64)
-		case mfgPartID.Valid:
-			att.VendorScope = fmt.Sprintf("m:%d", mfgPartID.Int64)
+		case a.SupplierPartID != nil:
+			att.VendorScope = fmt.Sprintf("s:%d", *a.SupplierPartID)
+		case a.MfgPartID != nil:
+			att.VendorScope = fmt.Sprintf("m:%d", *a.MfgPartID)
 		}
-		if orderID.Valid {
-			v := int(orderID.Int64)
-			att.OrderID = &v
-			if v+1 > nextOrderID {
-				nextOrderID = v + 1
-			}
+		if a.SortOrder != nil && *a.SortOrder+1 > nextOrderID {
+			nextOrderID = *a.SortOrder + 1
 		}
 		atts = append(atts, att)
 	}
@@ -1806,11 +1781,19 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 
 // insertAttachmentRow inserts a single part_attachment row. Shared by
 // PartAttachmentCreate's single-file path and importAttachmentBatch (#70).
-func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID any, comment string, supplierPartID, mfgPartID any, hash string) error {
-	return h.execThenEnsurePrimary(ctx, h.ensurePartPrimary, partID, fmt.Sprintf(
-		`INSERT INTO %s (part_id, file_name, part_revision, category, sort_order, comment, supplier_part_id, mfg_part_id, hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		h.cfg().AttachmentsTable(),
-	), partID, fileName, rev, category, oID, comment, supplierPartID, mfgPartID, hash)
+func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev, category string, oID *int, comment string, supplierPartID, mfgPartID *int, hash string) error {
+	pid, err := strconv.Atoi(partID)
+	if err != nil {
+		return err
+	}
+	return h.attachmentTx(ctx, func(s *attachments.Service) error {
+		if err := s.CreatePartAttachment(ctx, attachments.PartAttachment{PartID: pid, FileName: fileName,
+			PartRevision: rev, Category: category, SortOrder: oID, Comment: comment,
+			SupplierPartID: supplierPartID, MfgPartID: mfgPartID, Hash: hash}); err != nil {
+			return err
+		}
+		return s.EnsurePartPrimary(ctx, pid)
+	})
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
@@ -1821,19 +1804,14 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	// unless some other active row already links the same name.
 	if link := fv(r, "discard_import"); link != "" {
 		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
-			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().AttachmentsTable(), "id", "file_name",
+			_ = deleteAttachmentFileIfUnshared(r.Context(), h.attachments().PartFileInUse,
 				0, link, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(link))
 		}
 		http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
 		return
 	}
 
-	var oID any
-	if v := fv(r, "order_id"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			oID = n
-		}
-	}
+	oID := intPtrOrNil(fv(r, "order_id"))
 	rev := fv(r, "FILPNRev")
 	comment := fv(r, "comment")
 
@@ -1954,12 +1932,7 @@ func (h *Handler) partAttachmentDuplicateWarning(w http.ResponseWriter, r *http.
 func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	id, attID := chi.URLParam(r, "id"), chi.URLParam(r, "attID")
 	attIDInt, _ := strconv.Atoi(attID)
-	var oID any
-	if v := fv(r, "order_id"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			oID = n
-		}
-	}
+	oID := intPtrOrNil(fv(r, "order_id"))
 	rev, category := fv(r, "FILPNRev"), fv(r, "category")
 	comment := fv(r, "comment")
 
@@ -1969,22 +1942,25 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var oldFileNameNS, oldCategoryNS sql.NullString
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_name, category FROM %s WHERE id=$1 AND part_id=$2`, h.cfg().AttachmentsTable(),
-	), attIDInt, id).Scan(&oldFileNameNS, &oldCategoryNS); err != nil {
+	partID, err := strconv.Atoi(id)
+	if err != nil {
+		h.renderError(w, r, "Error loading attachment: "+err.Error())
+		return
+	}
+	old, err := h.attachments().GetPartAttachment(r.Context(), attIDInt, partID)
+	if err != nil {
 		h.renderError(w, r, "Error loading attachment: "+err.Error())
 		return
 	}
 	// Only reject when the category is actually changing into a reserved value —
 	// re-saving a row that's already the generated one (e.g. editing its comment)
 	// must keep working, since that's not a new collision.
-	if isGeneratedCategory(category) && category != oldCategoryNS.String {
+	if isGeneratedCategory(category) && category != old.Category {
 		h.renderPartAttachments(w, r, id, map[string]any{"Error": fmt.Sprintf(
 			"Category %q is reserved for generated PDF thumbnails; please choose a different category.", category)})
 		return
 	}
-	oldFileName := oldFileNameNS.String
+	oldFileName := old.FileName
 	var replaceName string
 	if urlutil.IsLocalFile(oldFileName) {
 		replaceName = urlutil.StripLocalPrefix(oldFileName)
@@ -2019,17 +1995,12 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	var err error
+	att := attachments.PartAttachment{ID: attIDInt, PartRevision: rev, Category: category, SortOrder: oID,
+		Comment: comment, SupplierPartID: supplierPartID, MfgPartID: mfgPartID, FileName: in.FileName, Hash: hash}
 	if contentChanged {
-		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET part_revision=$1, category=$2, sort_order=$3, comment=$4, supplier_part_id=$5, mfg_part_id=$6, file_name=$7, hash=$8 WHERE id=$9`,
-			h.cfg().AttachmentsTable(),
-		), rev, category, oID, comment, supplierPartID, mfgPartID, in.FileName, hash, attIDInt)
+		err = h.attachments().UpdatePartAttachmentFile(r.Context(), att)
 	} else {
-		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET part_revision=$1, category=$2, sort_order=$3, comment=$4, supplier_part_id=$5, mfg_part_id=$6 WHERE id=$7`,
-			h.cfg().AttachmentsTable(),
-		), rev, category, oID, comment, supplierPartID, mfgPartID, attIDInt)
+		err = h.attachments().UpdatePartAttachment(r.Context(), att)
 	}
 	if err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
@@ -2037,7 +2008,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if fileChanged && replaceName != "" {
-		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().AttachmentsTable(), "id", "file_name",
+		if err := deleteAttachmentFileIfUnshared(r.Context(), h.attachments().PartFileInUse,
 			attIDInt, oldFileName, h.cfg().DocControlRoot, replaceName); err != nil {
 			h.renderPartAttachments(w, r, id, map[string]any{
 				"Error": "Attachment updated, but the old file could not be removed: " + err.Error()})
@@ -2050,9 +2021,16 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
-	if err := h.execThenEnsurePrimary(r.Context(), h.ensurePartPrimary, id, fmt.Sprintf(
-		`UPDATE %s SET is_active=FALSE WHERE id=$1 AND part_id=$2`, h.cfg().AttachmentsTable(),
-	), attIDInt, id); err != nil {
+	partID, err := strconv.Atoi(id)
+	if err == nil {
+		err = h.attachmentTx(r.Context(), func(s *attachments.Service) error {
+			if err := s.DeletePartAttachment(r.Context(), attIDInt, partID); err != nil {
+				return err
+			}
+			return s.EnsurePartPrimary(r.Context(), partID)
+		})
+	}
+	if err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
 	}
@@ -2063,11 +2041,11 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 	id := chi.URLParam(r, "id")
 	idInt, _ := strconv.Atoi(id)
 	filID := r.FormValue("filid")
-	var val any
+	var val *int
 	if n, err2 := strconv.Atoi(filID); err2 == nil && n != 0 {
-		val = n
+		val = &n
 	}
-	if err := h.setPrimaryAttachment(r.Context(), h.cfg().PartsTable(), "id", "primary_attachment_id", idInt, val); err != nil {
+	if err := h.attachments().SetPartPrimary(r.Context(), idInt, val); err != nil {
 		h.renderError(w, r, "Error setting primary attachment: "+err.Error())
 		return
 	}
@@ -2077,27 +2055,20 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 // APIPartLocalAttachments — GET /api/part/{id}/local-attachments (#156)
 // Returns LOCAL: file (not directory) attachments for a part, for the PO import picker.
 func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		`SELECT id, file_name FROM %s WHERE part_id = $1 AND is_active = TRUE ORDER BY sort_order, id`,
-		h.cfg().AttachmentsTable()), id)
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	rows, err := h.attachments().ListPartAttachments(r.Context(), id)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
 	type att struct {
 		ID       int    `json:"id"`
 		BaseName string `json:"base_name"`
 	}
 	out := []att{}
-	for rows.Next() {
-		var a att
-		var fname sql.NullString
-		if rows.Scan(&a.ID, &fname) != nil {
-			continue
-		}
-		fn := fname.String
+	for _, row := range rows {
+		a := att{ID: row.ID}
+		fn := row.FileName
 		if !strings.HasPrefix(strings.ToUpper(fn), "LOCAL:") {
 			continue
 		}

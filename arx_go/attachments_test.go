@@ -236,22 +236,3 @@ func TestComputeAttachmentHash(t *testing.T) {
 		t.Errorf("file content hash should not equal the directory-link string hash by coincidence in this test")
 	}
 }
-
-// The ensure statement must only repoint a NULL or inactive primary, order by
-// COALESCE(sort_order, 0) then id, and take one row with LIMIT 1 (#121).
-func TestPrimaryAttachmentEnsureSQL(t *testing.T) {
-	got := primaryAttachmentEnsureSQL("part", "primary_attachment_id", "part_attachment", "id", "part_id", " AND a.x = 1")
-	for _, want := range []string{
-		"LIMIT 1",
-		"a.is_active = TRUE",
-		"UPDATE part SET primary_attachment_id",
-		"a.part_id = part.id",
-		" AND a.x = 1",
-		"ORDER BY COALESCE(a.sort_order, 0), a.id",
-		"WHERE id = $1 AND (primary_attachment_id IS NULL OR NOT EXISTS",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("SQL missing %q:\n%s", want, got)
-		}
-	}
-}

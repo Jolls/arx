@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/internal/attachments"
 	"arx/internal/urlutil"
 )
 
@@ -494,37 +495,20 @@ func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tbl := h.cfg().CompanyAttachmentsTable()
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT supplier_attachment_id, supplier_id, file_path, notes, sort_order
-		FROM %s WHERE supplier_id = $1 AND is_active = TRUE
-		ORDER BY sort_order, supplier_attachment_id
-	`, tbl), s.ID)
+	rows, err := h.attachments().ListCompanyAttachments(r.Context(), s.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
 	}
-	defer rows.Close()
 
-	var attachments []models.SupplierAttachment
+	var atts []models.SupplierAttachment
 	nextOrderID := 1
-	for rows.Next() {
-		var a models.SupplierAttachment
-		var notes sql.NullString
-		var sortOrder sql.NullInt64
-		if err := rows.Scan(&a.SupplierAttachmentID, &a.SupplierID, &a.FilePath, &notes, &sortOrder); err != nil {
-			h.renderError(w, r, "Error reading attachments: "+err.Error())
-			return
+	for _, row := range rows {
+		atts = append(atts, models.SupplierAttachment{SupplierAttachmentID: row.ID,
+			SupplierID: row.SupplierID, FilePath: row.FilePath, Notes: row.Notes, SortOrder: row.SortOrder})
+		if row.SortOrder != nil && *row.SortOrder+1 > nextOrderID {
+			nextOrderID = *row.SortOrder + 1
 		}
-		a.Notes = notes.String
-		if sortOrder.Valid {
-			v := int(sortOrder.Int64)
-			a.SortOrder = &v
-			if v+1 > nextOrderID {
-				nextOrderID = v + 1
-			}
-		}
-		attachments = append(attachments, a)
 	}
 
 	editID := r.URL.Query().Get("edit")
@@ -533,9 +517,9 @@ func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Reque
 	}
 	var editingAtt *models.SupplierAttachment
 	if editID != "" {
-		for i := range attachments {
-			if strconv.Itoa(attachments[i].SupplierAttachmentID) == editID {
-				editingAtt = &attachments[i]
+		for i := range atts {
+			if strconv.Itoa(atts[i].SupplierAttachmentID) == editID {
+				editingAtt = &atts[i]
 				break
 			}
 		}
@@ -546,7 +530,7 @@ func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Reque
 	backURL, backLabel := navBack(sess)
 	data := map[string]any{
 		"Supplier":    s,
-		"Attachments": attachments,
+		"Attachments": atts,
 		"EditingAtt":  editingAtt,
 		"ActiveTab":   "suppliers", "ActiveSubTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
@@ -592,7 +576,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 	// it unless some other active row already links the same name.
 	if link := fv(r, "discard_import"); link != "" {
 		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
-			_ = h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
+			_ = deleteAttachmentFileIfUnshared(r.Context(), h.attachments().CompanyFileInUse,
 				0, link, h.companyAttachmentRoot(), urlutil.StripLocalPrefix(link))
 		}
 		http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
@@ -620,22 +604,23 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
 
-	var sortOrderVal any
-	if sortOrderStr != "" {
-		if v, err := strconv.Atoi(sortOrderStr); err == nil {
-			sortOrderVal = v
-		}
-	}
+	sortOrderVal := intPtrOrNil(sortOrderStr)
 
 	hash := computeAttachmentHash(h.companyAttachmentRoot(), filePath)
 	if h.companyAttachmentDuplicateWarning(w, r, id, "", hash, 0, imported, filePath, notes, sortOrderStr) {
 		return
 	}
 
-	err := h.execThenEnsurePrimary(r.Context(), h.ensureSupplierPrimary, id, fmt.Sprintf(`
-		INSERT INTO %s (supplier_id, file_path, notes, sort_order, hash)
-		VALUES ($1, $2, $3, $4, $5)
-	`, h.cfg().CompanyAttachmentsTable()), id, filePath, notes, sortOrderVal, hash)
+	supplierID, err := strconv.Atoi(id)
+	if err == nil {
+		err = h.attachmentTx(r.Context(), func(s *attachments.Service) error {
+			if err := s.CreateCompanyAttachment(r.Context(), attachments.CompanyAttachment{SupplierID: supplierID,
+				FilePath: filePath, Notes: notes, SortOrder: sortOrderVal, Hash: hash}); err != nil {
+				return err
+			}
+			return s.EnsureCompanyPrimary(r.Context(), supplierID)
+		})
+	}
 	if err != nil {
 		h.renderError(w, r, "Error adding attachment: "+err.Error())
 		return
@@ -677,11 +662,19 @@ func (h *Handler) companyAttachmentDuplicateWarning(w http.ResponseWriter, r *ht
 
 func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	attID := chi.URLParam(r, "attID")
-	err := h.execThenEnsurePrimary(r.Context(), h.ensureSupplierPrimary, id, fmt.Sprintf(`
-		UPDATE %s SET is_active = FALSE
-		WHERE supplier_attachment_id = $1 AND supplier_id = $2
-	`, h.cfg().CompanyAttachmentsTable()), attID, id)
+	supplierID, err := strconv.Atoi(id)
+	var attID int
+	if err == nil {
+		attID, err = strconv.Atoi(chi.URLParam(r, "attID"))
+	}
+	if err == nil {
+		err = h.attachmentTx(r.Context(), func(s *attachments.Service) error {
+			if err := s.DeleteCompanyAttachment(r.Context(), attID, supplierID); err != nil {
+				return err
+			}
+			return s.EnsureCompanyPrimary(r.Context(), supplierID)
+		})
+	}
 	if err != nil {
 		h.renderError(w, r, "Error deleting attachment: "+err.Error())
 		return
@@ -709,17 +702,14 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 		newFilePath = urlutil.NormalizeLink(strings.TrimSpace(r.FormValue("file_path")))
 	}
 
-	var sortOrderVal any
-	if sortOrderStr != "" {
-		if v, err := strconv.Atoi(sortOrderStr); err == nil {
-			sortOrderVal = v
-		}
-	}
+	sortOrderVal := intPtrOrNil(sortOrderStr)
 
+	supplierID, err := strconv.Atoi(id)
 	var oldFilePath string
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT file_path FROM %s WHERE supplier_attachment_id=$1 AND supplier_id=$2`, h.cfg().CompanyAttachmentsTable(),
-	), attID, id).Scan(&oldFilePath); err != nil {
+	if err == nil {
+		oldFilePath, err = h.attachments().CompanyAttachmentPath(r.Context(), attIDInt, supplierID)
+	}
+	if err != nil {
 		h.renderError(w, r, "Error loading attachment: "+err.Error())
 		return
 	}
@@ -732,17 +722,12 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	var err error
+	att := attachments.CompanyAttachment{ID: attIDInt, SupplierID: supplierID, FilePath: newFilePath,
+		Notes: notes, SortOrder: sortOrderVal, Hash: hash}
 	if fileChanged {
-		_, err = h.execContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET notes=$1, sort_order=$2, file_path=$3, hash=$4
-			WHERE supplier_attachment_id=$5 AND supplier_id=$6
-		`, h.cfg().CompanyAttachmentsTable()), notes, sortOrderVal, newFilePath, hash, attID, id)
+		err = h.attachments().UpdateCompanyAttachmentFile(r.Context(), att)
 	} else {
-		_, err = h.execContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET notes=$1, sort_order=$2
-			WHERE supplier_attachment_id=$3 AND supplier_id=$4
-		`, h.cfg().CompanyAttachmentsTable()), notes, sortOrderVal, attID, id)
+		err = h.attachments().UpdateCompanyAttachment(r.Context(), att)
 	}
 	if err != nil {
 		h.renderError(w, r, "Error updating attachment: "+err.Error())
@@ -750,8 +735,8 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	}
 
 	if fileChanged && urlutil.IsLocalFile(oldFilePath) {
-		if err := h.deleteAttachmentFileIfUnshared(r.Context(), h.cfg().CompanyAttachmentsTable(), "supplier_attachment_id", "file_path",
-			attID, oldFilePath, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFilePath)); err != nil {
+		if err := deleteAttachmentFileIfUnshared(r.Context(), h.attachments().CompanyFileInUse,
+			attIDInt, oldFilePath, h.companyAttachmentRoot(), urlutil.StripLocalPrefix(oldFilePath)); err != nil {
 			h.renderError(w, r, "Attachment updated, but the old file could not be removed: "+err.Error())
 			return
 		}
@@ -829,11 +814,11 @@ func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Re
 	id := chi.URLParam(r, "id")
 	idInt, _ := strconv.Atoi(id)
 	attIDStr := r.FormValue("attachment_id")
-	var val any
+	var val *int
 	if n, err2 := strconv.Atoi(attIDStr); err2 == nil && n != 0 {
-		val = n
+		val = &n
 	}
-	if err := h.setPrimaryAttachment(r.Context(), h.cfg().CompanyTable(), "id", "primary_attachment_id", idInt, val); err != nil {
+	if err := h.attachments().SetCompanyPrimary(r.Context(), idInt, val); err != nil {
 		h.renderError(w, r, "Error setting primary attachment: "+err.Error())
 		return
 	}
@@ -1051,6 +1036,14 @@ func nullableInt(s string) any {
 	}
 	if n, err := strconv.Atoi(s); err == nil {
 		return n
+	}
+	return nil
+}
+
+// intPtrOrNil parses s as an int for a nullable sqlc param: nil for empty or invalid input.
+func intPtrOrNil(s string) *int {
+	if n, err := strconv.Atoi(s); err == nil {
+		return &n
 	}
 	return nil
 }
