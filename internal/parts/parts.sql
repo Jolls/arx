@@ -212,3 +212,50 @@ UPDATE part SET
   user_field_9 = sqlc.arg(user_field_9)::text, user_field_10 = sqlc.arg(user_field_10)::text,
   tracking_mode = sqlc.arg(tracking_mode)
 WHERE id = sqlc.arg(id);
+
+-- name: ListBOMLines :many
+-- A parent's BOM lines in line order, with each component's part data and
+-- cost inputs; preferred_price is its lowest active price from its default supplier.
+SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
+       pn.part_number, COALESCE(pn.description, '') AS description,
+       COALESCE(pn.revision, '') AS revision, COALESCE(pn.category, '') AS category,
+       COALESCE(pn.current_cost, 0) AS current_cost, COALESCE(pn.last_rollup_cost, 0) AS last_rollup_cost,
+       COALESCE((SELECT MIN(p.price_ea) FROM price p
+        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id), 0)::numeric AS preferred_price,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = pn.id) AS has_bom,
+       COALESCE(pn.attachment_count, 0) AS attachment_count, COALESCE(pn.po_line_count, 0) AS po_line_count
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id = $1
+ORDER BY pl.line_number;
+
+-- name: ListWhereUsed :many
+-- The BOM lines that use a part, with each parent's part data, by parent part number.
+SELECT pl.line_number, pl.qty, pl.parent_part_id,
+       pn.part_number, COALESCE(pn.description, '') AS description,
+       COALESCE(pn.revision, '') AS revision, COALESCE(pn.category, '') AS category
+FROM bom pl
+JOIN part pn ON pl.parent_part_id = pn.id
+WHERE pl.component_part_id = $1
+ORDER BY pn.part_number;
+
+-- name: GetPartRollup :one
+SELECT COALESCE(last_rollup_cost, 0) AS last_rollup_cost, last_rollup_at FROM part WHERE id = $1;
+
+-- name: GetPartByNumber :one
+SELECT id, part_number, COALESCE(description, '') AS description FROM part WHERE part_number = $1;
+
+-- name: DeleteBOMLine :exec
+DELETE FROM bom WHERE id = sqlc.arg(id) AND parent_part_id = sqlc.arg(parent_part_id);
+
+-- name: UpdateBOMLine :exec
+UPDATE bom SET line_number = sqlc.arg(line_number), qty = sqlc.arg(qty), component_part_id = sqlc.arg(component_part_id)
+WHERE id = sqlc.arg(id) AND parent_part_id = sqlc.arg(parent_part_id);
+
+-- name: CreateBOMLine :exec
+INSERT INTO bom (parent_part_id, component_part_id, line_number, qty)
+VALUES (sqlc.arg(parent_part_id), sqlc.arg(component_part_id), sqlc.arg(line_number), sqlc.arg(qty));
+
+-- name: CopyBOM :exec
+INSERT INTO bom (parent_part_id, component_part_id, line_number, qty)
+SELECT sqlc.arg(dst_id)::int, s.component_part_id, s.line_number, s.qty FROM bom s WHERE s.parent_part_id = sqlc.arg(src_id);
