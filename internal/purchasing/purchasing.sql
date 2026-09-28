@@ -212,3 +212,97 @@ FROM purchase_order po
 LEFT JOIN po_line pol ON pol.po_id = po.id
 WHERE po.rfq_group_id = sqlc.arg(group_id)::int
 ORDER BY po.id, pol.line_number;
+
+-- name: GetPOState :one
+SELECT id, COALESCE(status, '') AS status, COALESCE(approval_status, '') AS approval_status
+FROM purchase_order WHERE number = $1;
+
+-- name: GetPONumber :one
+SELECT number FROM purchase_order WHERE id = $1;
+
+-- name: CountRFQQuotes :one
+SELECT COUNT(*)::int FROM purchase_order WHERE rfq_group_id = sqlc.arg(group_id)::int;
+
+-- name: NextPONumber :one
+-- Outside any transaction: sequences never roll back, so a failed PO never reuses its number.
+SELECT nextval('po_number_seq')::text;
+
+-- name: CreatePO :one
+INSERT INTO purchase_order (number, status, is_active, orderer, account_id,
+  supplier_id, supplier_name, supplier_contact, supplier_email,
+  supplier_address, supplier_city, supplier_state, supplier_zipcode,
+  supplier_country, supplier_phone_number, supplier_fax_number,
+  receiver_id, receiver_name, receiver_contact, receiver_email,
+  receiver_address, receiver_city, receiver_state, receiver_zipcode,
+  receiver_country, receiver_phone, receiver_fax,
+  tax1, shipping_cost, misc_cost, notes, internal_notes,
+  date_ordered, date_requested, date_closed, total_cost,
+  supplier_contact_id, receiver_contact_id)
+VALUES (sqlc.arg(number), sqlc.arg(status)::text, sqlc.arg(is_active)::boolean,
+  sqlc.arg(orderer)::text, sqlc.arg(account_id)::text,
+  sqlc.narg(supplier_id)::int, sqlc.arg(supplier_name)::text, sqlc.arg(supplier_contact)::text, sqlc.arg(supplier_email)::text,
+  sqlc.arg(supplier_address)::text, sqlc.arg(supplier_city)::text, sqlc.arg(supplier_state)::text, sqlc.arg(supplier_zipcode)::text,
+  sqlc.arg(supplier_country)::text, sqlc.arg(supplier_phone_number)::text, sqlc.arg(supplier_fax_number)::text,
+  sqlc.narg(receiver_id)::int, sqlc.arg(receiver_name)::text, sqlc.arg(receiver_contact)::text, sqlc.arg(receiver_email)::text,
+  sqlc.arg(receiver_address)::text, sqlc.arg(receiver_city)::text, sqlc.arg(receiver_state)::text, sqlc.arg(receiver_zipcode)::text,
+  sqlc.arg(receiver_country)::text, sqlc.arg(receiver_phone)::text, sqlc.arg(receiver_fax)::text,
+  sqlc.narg(tax1), sqlc.narg(shipping_cost), sqlc.narg(misc_cost), sqlc.arg(notes)::text, sqlc.arg(internal_notes)::text,
+  sqlc.narg(date_ordered), sqlc.narg(date_requested), sqlc.narg(date_closed), 0,
+  sqlc.narg(supplier_contact_id)::int, sqlc.narg(receiver_contact_id)::int)
+RETURNING id;
+
+-- name: UpdatePOHeader :exec
+-- status/is_active change only through status transitions; approval is reset separately.
+UPDATE purchase_order SET
+  orderer = sqlc.arg(orderer)::text, account_id = sqlc.arg(account_id)::text,
+  supplier_id = sqlc.narg(supplier_id)::int, supplier_name = sqlc.arg(supplier_name)::text,
+  supplier_contact = sqlc.arg(supplier_contact)::text, supplier_email = sqlc.arg(supplier_email)::text,
+  supplier_address = sqlc.arg(supplier_address)::text, supplier_city = sqlc.arg(supplier_city)::text,
+  supplier_state = sqlc.arg(supplier_state)::text, supplier_zipcode = sqlc.arg(supplier_zipcode)::text,
+  supplier_country = sqlc.arg(supplier_country)::text, supplier_phone_number = sqlc.arg(supplier_phone_number)::text,
+  supplier_fax_number = sqlc.arg(supplier_fax_number)::text,
+  receiver_id = sqlc.narg(receiver_id)::int, receiver_name = sqlc.arg(receiver_name)::text,
+  receiver_contact = sqlc.arg(receiver_contact)::text, receiver_email = sqlc.arg(receiver_email)::text,
+  receiver_address = sqlc.arg(receiver_address)::text, receiver_city = sqlc.arg(receiver_city)::text,
+  receiver_state = sqlc.arg(receiver_state)::text, receiver_zipcode = sqlc.arg(receiver_zipcode)::text,
+  receiver_country = sqlc.arg(receiver_country)::text, receiver_phone = sqlc.arg(receiver_phone)::text,
+  receiver_fax = sqlc.arg(receiver_fax)::text,
+  tax1 = sqlc.narg(tax1), shipping_cost = sqlc.narg(shipping_cost), misc_cost = sqlc.narg(misc_cost),
+  notes = sqlc.arg(notes)::text, internal_notes = sqlc.arg(internal_notes)::text,
+  date_ordered = sqlc.narg(date_ordered), date_requested = sqlc.narg(date_requested),
+  date_closed = sqlc.narg(date_closed), date_printed = sqlc.narg(date_printed),
+  date_modified = CURRENT_TIMESTAMP, total_cost = sqlc.arg(total_cost)::float8,
+  supplier_contact_id = sqlc.narg(supplier_contact_id)::int, receiver_contact_id = sqlc.narg(receiver_contact_id)::int
+WHERE number = sqlc.arg(number);
+
+-- name: SetPOTotal :exec
+UPDATE purchase_order SET total_cost = sqlc.arg(total_cost)::float8 WHERE id = sqlc.arg(id);
+
+-- name: SetRFQGroup :exec
+UPDATE purchase_order SET rfq_group_id = sqlc.arg(group_id)::int WHERE id = sqlc.arg(id);
+
+-- name: MarkPOPrinted :exec
+-- printed_on is a YYYY-MM-DD date string.
+UPDATE purchase_order SET date_printed = sqlc.arg(printed_on)::text::date WHERE number = sqlc.arg(number);
+
+-- name: CreatePOStatusEvent :exec
+INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, changed_by)
+VALUES (sqlc.arg(po_id), 'status', sqlc.narg(from_status)::text, sqlc.arg(to_status)::text, sqlc.arg(changed_by));
+
+-- name: CreatePOLine :exec
+INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
+VALUES (sqlc.arg(po_id), sqlc.arg(line_number), sqlc.arg(part_number)::text, sqlc.arg(revision)::text, sqlc.arg(description)::text,
+        sqlc.arg(qty)::float8, sqlc.arg(unit_cost)::float8, sqlc.arg(vendor_part_number)::text, sqlc.narg(part_id)::int);
+
+-- name: UpdatePOLine :exec
+UPDATE po_line SET line_number = sqlc.arg(line_number), part_number_snapshot = sqlc.arg(part_number)::text,
+  revision_snapshot = sqlc.arg(revision)::text, description = sqlc.arg(description)::text,
+  qty = sqlc.arg(qty)::float8, unit_cost = sqlc.arg(unit_cost)::float8,
+  vendor_part_number = sqlc.arg(vendor_part_number)::text, part_id = sqlc.narg(part_id)::int
+WHERE id = sqlc.arg(id) AND po_id = sqlc.arg(po_id);
+
+-- name: DeletePOLine :exec
+DELETE FROM po_line WHERE id = sqlc.arg(id) AND po_id = sqlc.arg(po_id);
+
+-- name: SumPOLines :one
+SELECT COALESCE(SUM(qty * unit_cost), 0)::float8 FROM po_line WHERE po_id = $1;

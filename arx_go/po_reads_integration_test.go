@@ -97,8 +97,8 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 		h.cfg().AttachmentsTable()), f.P1)
 	exec(fmt.Sprintf(`UPDATE %s SET primary_attachment_id=$2 WHERE id=$1`, pn), f.P1, f.Att)
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn) VALUES ($1,$2,'SPN-1')`, h.cfg().SupplierPartTable()), f.P1, f.Co)
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, price_pack, pack_size, is_active) VALUES
-		($1,$3,2.5,25,10,TRUE), ($2,$3,4,4,1,FALSE)`, h.cfg().PriceTable()), f.P1, f.P2, f.Co)
+	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, price_pack, pack_size, is_active, effective_date) VALUES
+		($1,$3,2.5,25,10,TRUE,'2026-01-01'), ($2,$3,4,4,1,FALSE,'2026-01-01')`, h.cfg().PriceTable()), f.P1, f.P2, f.Co)
 
 	scan(&f.FullID, fmt.Sprintf(`INSERT INTO %s (number, status, approval_status, is_active, orderer, account_id,
 		supplier_id, supplier_name, supplier_contact, supplier_email, supplier_address, supplier_city, supplier_state,

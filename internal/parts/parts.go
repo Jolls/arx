@@ -5,8 +5,9 @@
 // parts list/CSV export, the single-part read/create/update, the BOM
 // lines (view, where-used, edit, paste preview, copy, export), the
 // pricing tab's price CRUD, the BOM cost rollup/build cost, the part
-// detail dashboard's cards and orders/price-history tabs, and the part
-// search / supplier-part autofill APIs are converted.
+// detail dashboard's cards and orders/price-history tabs, the part
+// search / supplier-part autofill APIs, and the supplier-link/price writes
+// behind the PO page's suggestions are converted.
 package parts
 
 import (
@@ -806,6 +807,16 @@ func (s *Service) PreferredSupplierPrice(ctx context.Context, partID int) (*floa
 // one is already set.
 func (s *Service) EnsureDefaultSupplier(ctx context.Context, partID, supplierID int) error {
 	return s.q.EnsureDefaultSupplier(ctx, dbq.EnsureDefaultSupplierParams{SupplierID: supplierID, ID: partID})
+}
+
+// LinkSupplierPN links partID to supplierID's part number pn unless that exact link exists.
+func (s *Service) LinkSupplierPN(ctx context.Context, partID, supplierID int, pn string) error {
+	return s.q.LinkSupplierPN(ctx, dbq.LinkSupplierPNParams{PartID: partID, SupplierID: supplierID, SupplierPn: pn})
+}
+
+// DeactivatePrices deactivates partID's active supplierID prices at packSize.
+func (s *Service) DeactivatePrices(ctx context.Context, partID, supplierID int, packSize float64) error {
+	return s.q.DeactivatePrices(ctx, dbq.DeactivatePricesParams{PartID: partID, SupplierID: supplierID, PackSize: packSize})
 }
 
 // POPricePoint is a dated PO line's unit cost.

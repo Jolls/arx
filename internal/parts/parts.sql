@@ -384,3 +384,16 @@ FROM supplier_part sp
 WHERE sp.part_id = sqlc.arg(part_id) AND sp.supplier_id = sqlc.arg(supplier_id)
 ORDER BY sp.preference
 LIMIT 1;
+
+-- name: LinkSupplierPN :exec
+-- Links a supplier part number unless that exact link already exists.
+INSERT INTO supplier_part (part_id, supplier_id, supplier_pn)
+SELECT sqlc.arg(part_id)::int, sqlc.arg(supplier_id)::int, sqlc.arg(supplier_pn)::text
+WHERE NOT EXISTS (
+  SELECT 1 FROM supplier_part
+  WHERE part_id = sqlc.arg(part_id)::int AND supplier_id = sqlc.arg(supplier_id)::int AND supplier_pn = sqlc.arg(supplier_pn)::text
+);
+
+-- name: DeactivatePrices :exec
+UPDATE price SET is_active = FALSE
+WHERE part_id = sqlc.arg(part_id) AND supplier_id = sqlc.arg(supplier_id) AND pack_size = sqlc.arg(pack_size)::numeric AND is_active = TRUE;

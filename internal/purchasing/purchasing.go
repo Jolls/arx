@@ -3,11 +3,12 @@
 // queries in purchasing.sql. So far the supplier pages (list, detail cards,
 // create/update, parts and POs tabs), the supplier typeahead and the PO reads
 // (grid, CSV export, header, lines, receipts, history, link/price suggestions,
-// RFQ comparison grid) are converted.
+// RFQ comparison grid) and PO create/edit writes are converted.
 package purchasing
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"arx/internal/dbq"
@@ -506,4 +507,124 @@ func (s *Service) ListRFQGroupLines(ctx context.Context, groupID int) ([]RFQGrou
 		out[i] = RFQGroupLine(r)
 	}
 	return out, nil
+}
+
+// POState is a PO's id and workflow state; NULLs read as "".
+type POState struct {
+	ID             int
+	Status         string
+	ApprovalStatus string
+}
+
+// GetPOState returns the PO with number's state; sql.ErrNoRows when there is none.
+func (s *Service) GetPOState(ctx context.Context, number string) (POState, error) {
+	r, err := s.q.GetPOState(ctx, number)
+	return POState(r), err
+}
+
+// GetPONumber returns PO id's number; sql.ErrNoRows when there is none.
+func (s *Service) GetPONumber(ctx context.Context, id int) (string, error) {
+	return s.q.GetPONumber(ctx, id)
+}
+
+// CountRFQQuotes returns how many quotes RFQ group groupID has.
+func (s *Service) CountRFQQuotes(ctx context.Context, groupID int) (int, error) {
+	return s.q.CountRFQQuotes(ctx, groupID)
+}
+
+// NextPONumber takes the next po_number_seq value. Call it outside the PO's
+// transaction: the sequence never rolls back, so a failed PO never reuses it.
+func (s *Service) NextPONumber(ctx context.Context) (string, error) {
+	return s.q.NextPONumber(ctx)
+}
+
+// CreatePO inserts po (number, status, is_active and the editable header
+// fields; DatePrinted is ignored) with a zero total and returns its id.
+func (s *Service) CreatePO(ctx context.Context, po PO) (int, error) {
+	return s.q.CreatePO(ctx, dbq.CreatePOParams{
+		Number: po.Number, Status: po.Status, IsActive: po.IsActive, Orderer: po.Orderer, AccountID: po.AccountID,
+		SupplierID: po.SupplierID, SupplierName: po.SupplierName, SupplierContact: po.SupplierContact,
+		SupplierEmail: po.SupplierEmail, SupplierAddress: po.SupplierAddress, SupplierCity: po.SupplierCity,
+		SupplierState: po.SupplierState, SupplierZipcode: po.SupplierZipcode, SupplierCountry: po.SupplierCountry,
+		SupplierPhoneNumber: po.SupplierPhoneNumber, SupplierFaxNumber: po.SupplierFaxNumber,
+		ReceiverID: po.ReceiverID, ReceiverName: po.ReceiverName, ReceiverContact: po.ReceiverContact,
+		ReceiverEmail: po.ReceiverEmail, ReceiverAddress: po.ReceiverAddress, ReceiverCity: po.ReceiverCity,
+		ReceiverState: po.ReceiverState, ReceiverZipcode: po.ReceiverZipcode, ReceiverCountry: po.ReceiverCountry,
+		ReceiverPhone: po.ReceiverPhone, ReceiverFax: po.ReceiverFax,
+		Tax1: po.Tax1, ShippingCost: po.ShippingCost, MiscCost: po.MiscCost, Notes: po.Notes, InternalNotes: po.InternalNotes,
+		DateOrdered: po.DateOrdered, DateRequested: po.DateRequested, DateClosed: po.DateClosed,
+		SupplierContactID: po.SupplierContactID, ReceiverContactID: po.ReceiverContactID,
+	})
+}
+
+// UpdatePOHeader overwrites the editable header fields of PO number with po's
+// (including DatePrinted), sets total_cost and bumps date_modified. Status,
+// is_active and approval are left alone.
+func (s *Service) UpdatePOHeader(ctx context.Context, number string, total float64, po PO) error {
+	return s.q.UpdatePOHeader(ctx, dbq.UpdatePOHeaderParams{
+		Orderer: po.Orderer, AccountID: po.AccountID,
+		SupplierID: po.SupplierID, SupplierName: po.SupplierName, SupplierContact: po.SupplierContact,
+		SupplierEmail: po.SupplierEmail, SupplierAddress: po.SupplierAddress, SupplierCity: po.SupplierCity,
+		SupplierState: po.SupplierState, SupplierZipcode: po.SupplierZipcode, SupplierCountry: po.SupplierCountry,
+		SupplierPhoneNumber: po.SupplierPhoneNumber, SupplierFaxNumber: po.SupplierFaxNumber,
+		ReceiverID: po.ReceiverID, ReceiverName: po.ReceiverName, ReceiverContact: po.ReceiverContact,
+		ReceiverEmail: po.ReceiverEmail, ReceiverAddress: po.ReceiverAddress, ReceiverCity: po.ReceiverCity,
+		ReceiverState: po.ReceiverState, ReceiverZipcode: po.ReceiverZipcode, ReceiverCountry: po.ReceiverCountry,
+		ReceiverPhone: po.ReceiverPhone, ReceiverFax: po.ReceiverFax,
+		Tax1: po.Tax1, ShippingCost: po.ShippingCost, MiscCost: po.MiscCost, Notes: po.Notes, InternalNotes: po.InternalNotes,
+		DateOrdered: po.DateOrdered, DateRequested: po.DateRequested, DateClosed: po.DateClosed, DatePrinted: po.DatePrinted,
+		TotalCost: total, SupplierContactID: po.SupplierContactID, ReceiverContactID: po.ReceiverContactID,
+		Number: number,
+	})
+}
+
+// SetPOTotal sets PO id's total_cost.
+func (s *Service) SetPOTotal(ctx context.Context, id int, total float64) error {
+	return s.q.SetPOTotal(ctx, dbq.SetPOTotalParams{TotalCost: total, ID: id})
+}
+
+// SetRFQGroup puts PO id in RFQ group groupID.
+func (s *Service) SetRFQGroup(ctx context.Context, id, groupID int) error {
+	return s.q.SetRFQGroup(ctx, dbq.SetRFQGroupParams{GroupID: groupID, ID: id})
+}
+
+// MarkPOPrinted sets PO number's date_printed to on (YYYY-MM-DD).
+func (s *Service) MarkPOPrinted(ctx context.Context, number, on string) error {
+	return s.q.MarkPOPrinted(ctx, dbq.MarkPOPrintedParams{PrintedOn: on, Number: number})
+}
+
+// CreatePOStatusEvent records a status change on poID; from is nil on creation.
+func (s *Service) CreatePOStatusEvent(ctx context.Context, poID int, from *string, to, changedBy string) error {
+	var f sql.NullString
+	if from != nil {
+		f = sql.NullString{String: *from, Valid: true}
+	}
+	return s.q.CreatePOStatusEvent(ctx, dbq.CreatePOStatusEventParams{PoID: poID, FromStatus: f, ToStatus: to, ChangedBy: changedBy})
+}
+
+// CreatePOLine adds l to poID. Only the line number, snapshots, description,
+// qty, unit cost, vendor PN and part id are written.
+func (s *Service) CreatePOLine(ctx context.Context, poID int, l POLine) error {
+	return s.q.CreatePOLine(ctx, dbq.CreatePOLineParams{PoID: poID, LineNumber: l.LineNumber,
+		PartNumber: l.PartNumberSnapshot, Revision: l.RevisionSnapshot, Description: l.Description,
+		Qty: l.Qty, UnitCost: l.UnitCost, VendorPartNumber: l.VendorPartNumber, PartID: l.PartID})
+}
+
+// UpdatePOLine overwrites line l.ID of poID with the fields CreatePOLine writes;
+// a line on another PO is left alone.
+func (s *Service) UpdatePOLine(ctx context.Context, poID int, l POLine) error {
+	return s.q.UpdatePOLine(ctx, dbq.UpdatePOLineParams{LineNumber: l.LineNumber,
+		PartNumber: l.PartNumberSnapshot, Revision: l.RevisionSnapshot, Description: l.Description,
+		Qty: l.Qty, UnitCost: l.UnitCost, VendorPartNumber: l.VendorPartNumber, PartID: l.PartID,
+		ID: l.ID, PoID: poID})
+}
+
+// DeletePOLine deletes line id if it belongs to poID.
+func (s *Service) DeletePOLine(ctx context.Context, poID, id int) error {
+	return s.q.DeletePOLine(ctx, dbq.DeletePOLineParams{ID: id, PoID: poID})
+}
+
+// SumPOLines returns the sum of qty × unit cost over poID's lines.
+func (s *Service) SumPOLines(ctx context.Context, poID int) (float64, error) {
+	return s.q.SumPOLines(ctx, poID)
 }
