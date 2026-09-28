@@ -343,6 +343,20 @@ func (q *Queries) DeleteSupplierPart(ctx context.Context, arg DeleteSupplierPart
 	return err
 }
 
+const ensureDefaultSupplier = `-- name: EnsureDefaultSupplier :exec
+UPDATE part SET default_supplier_id = $1::int WHERE id = $2 AND default_supplier_id IS NULL
+`
+
+type EnsureDefaultSupplierParams struct {
+	SupplierID int
+	ID         int
+}
+
+func (q *Queries) EnsureDefaultSupplier(ctx context.Context, arg EnsureDefaultSupplierParams) error {
+	_, err := q.db.ExecContext(ctx, ensureDefaultSupplier, arg.SupplierID, arg.ID)
+	return err
+}
+
 const getDefaultSupplier = `-- name: GetDefaultSupplier :one
 SELECT default_supplier_id FROM part WHERE id = $1
 `
@@ -599,6 +613,39 @@ func (q *Queries) GetPartRollup(ctx context.Context, id int) (GetPartRollupRow, 
 	row := q.db.QueryRowContext(ctx, getPartRollup, id)
 	var i GetPartRollupRow
 	err := row.Scan(&i.LastRollupCost, &i.LastRollupAt)
+	return i, err
+}
+
+const getPreferredSupplier = `-- name: GetPreferredSupplier :one
+SELECT c.id, COALESCE(c.name, '') AS name, sp.id AS supplier_part_id,
+       COALESCE(sp.supplier_pn, '') AS supplier_pn, COALESCE(sp.supplier_desc, '') AS supplier_desc
+FROM part p
+JOIN company c ON c.id = p.default_supplier_id
+LEFT JOIN supplier_part sp ON sp.part_id = p.id AND sp.supplier_id = c.id
+WHERE p.id = $1
+ORDER BY sp.preference, sp.id LIMIT 1
+`
+
+type GetPreferredSupplierRow struct {
+	ID             int
+	Name           string
+	SupplierPartID *int
+	SupplierPn     string
+	SupplierDesc   string
+}
+
+// The part's preferred supplier and its most-preferred supplier_part row, if any. No row when
+// default_supplier_id is NULL.
+func (q *Queries) GetPreferredSupplier(ctx context.Context, id int) (GetPreferredSupplierRow, error) {
+	row := q.db.QueryRowContext(ctx, getPreferredSupplier, id)
+	var i GetPreferredSupplierRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.SupplierPartID,
+		&i.SupplierPn,
+		&i.SupplierDesc,
+	)
 	return i, err
 }
 
@@ -1038,6 +1085,49 @@ func (q *Queries) ListMfgParts(ctx context.Context, partID int) ([]ListMfgPartsR
 	return items, nil
 }
 
+const listPOPricePoints = `-- name: ListPOPricePoints :many
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_ordered, pol.unit_cost
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = $1::int AND po.date_ordered IS NOT NULL
+ORDER BY po.date_ordered
+`
+
+type ListPOPricePointsRow struct {
+	Number       string
+	SupplierName string
+	DateOrdered  *time.Time
+	UnitCost     float64
+}
+
+func (q *Queries) ListPOPricePoints(ctx context.Context, partID int) ([]ListPOPricePointsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPOPricePoints, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPOPricePointsRow
+	for rows.Next() {
+		var i ListPOPricePointsRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.SupplierName,
+			&i.DateOrdered,
+			&i.UnitCost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPartCategories = `-- name: ListPartCategories :many
 SELECT code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
        is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible
@@ -1134,6 +1224,64 @@ func (q *Queries) ListPartNumbers(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, part_number)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPartOrders = `-- name: ListPartOrders :many
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_ordered, po.date_closed,
+       COALESCE(po.status, '') AS status, pol.line_number, pol.qty, pol.unit_cost,
+       COALESCE(pol.description, '') AS description, COALESCE(pol.vendor_part_number, '') AS vendor_part_number
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = $1::int
+ORDER BY po.date_ordered DESC
+`
+
+type ListPartOrdersRow struct {
+	Number           string
+	SupplierName     string
+	DateOrdered      *time.Time
+	DateClosed       *time.Time
+	Status           string
+	LineNumber       int
+	Qty              float64
+	UnitCost         float64
+	Description      string
+	VendorPartNumber string
+}
+
+// Every PO line of a part with its PO header, newest order first.
+func (q *Queries) ListPartOrders(ctx context.Context, partID int) ([]ListPartOrdersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPartOrders, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartOrdersRow
+	for rows.Next() {
+		var i ListPartOrdersRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.SupplierName,
+			&i.DateOrdered,
+			&i.DateClosed,
+			&i.Status,
+			&i.LineNumber,
+			&i.Qty,
+			&i.UnitCost,
+			&i.Description,
+			&i.VendorPartNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1269,6 +1417,141 @@ func (q *Queries) ListParts(ctx context.Context, thumbCategory string) ([]ListPa
 	return items, nil
 }
 
+const listPriceListPoints = `-- name: ListPriceListPoints :many
+SELECT COALESCE(c.name, '') AS supplier_name, p.effective_date, p.price_ea, p.pack_size
+FROM price p
+LEFT JOIN company c ON p.supplier_id = c.id
+WHERE p.part_id = $1 AND p.is_active = TRUE AND p.effective_date IS NOT NULL
+ORDER BY p.effective_date
+`
+
+type ListPriceListPointsRow struct {
+	SupplierName  string
+	EffectiveDate *time.Time
+	PriceEa       *float64
+	PackSize      *float64
+}
+
+func (q *Queries) ListPriceListPoints(ctx context.Context, partID int) ([]ListPriceListPointsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPriceListPoints, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPriceListPointsRow
+	for rows.Next() {
+		var i ListPriceListPointsRow
+		if err := rows.Scan(
+			&i.SupplierName,
+			&i.EffectiveDate,
+			&i.PriceEa,
+			&i.PackSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentPartPOs = `-- name: ListRecentPartPOs :many
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, COALESCE(po.status, '') AS status,
+       po.date_ordered, pol.qty, pol.unit_cost
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = $1::int
+ORDER BY po.date_ordered DESC, po.id DESC LIMIT $2::int
+`
+
+type ListRecentPartPOsParams struct {
+	PartID int
+	N      int
+}
+
+type ListRecentPartPOsRow struct {
+	Number       string
+	SupplierName string
+	Status       string
+	DateOrdered  *time.Time
+	Qty          float64
+	UnitCost     float64
+}
+
+func (q *Queries) ListRecentPartPOs(ctx context.Context, arg ListRecentPartPOsParams) ([]ListRecentPartPOsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentPartPOs, arg.PartID, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentPartPOsRow
+	for rows.Next() {
+		var i ListRecentPartPOsRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.SupplierName,
+			&i.Status,
+			&i.DateOrdered,
+			&i.Qty,
+			&i.UnitCost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentPartTxns = `-- name: ListRecentPartTxns :many
+SELECT txn_type, qty, txn_date
+FROM inventory_transaction WHERE part_id = $1 ORDER BY txn_date DESC, id DESC LIMIT $2::int
+`
+
+type ListRecentPartTxnsParams struct {
+	PartID int
+	N      int
+}
+
+type ListRecentPartTxnsRow struct {
+	TxnType string
+	Qty     float64
+	TxnDate time.Time
+}
+
+func (q *Queries) ListRecentPartTxns(ctx context.Context, arg ListRecentPartTxnsParams) ([]ListRecentPartTxnsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentPartTxns, arg.PartID, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentPartTxnsRow
+	for rows.Next() {
+		var i ListRecentPartTxnsRow
+		if err := rows.Scan(&i.TxnType, &i.Qty, &i.TxnDate); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSupplierParts = `-- name: ListSupplierParts :many
 SELECT sp.id, sp.supplier_id, sp.part_id, sp.preference, COALESCE(sp.supplier_pn, '') AS supplier_pn,
        COALESCE(sp.supplier_desc, '') AS supplier_desc, COALESCE(sp.lead_time, '') AS lead_time,
@@ -1385,6 +1668,20 @@ func (q *Queries) ListWhereUsed(ctx context.Context, componentPartID int) ([]Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const preferredSupplierMinPrice = `-- name: PreferredSupplierMinPrice :one
+SELECT price_ea FROM price WHERE part_id = $1 AND is_active = TRUE
+AND supplier_id = (SELECT default_supplier_id FROM part WHERE id = $1)
+ORDER BY price_ea LIMIT 1
+`
+
+// The preferred supplier's cheapest active price (NULL prices sort last); no row when there is none.
+func (q *Queries) PreferredSupplierMinPrice(ctx context.Context, partID int) (*float64, error) {
+	row := q.db.QueryRowContext(ctx, preferredSupplierMinPrice, partID)
+	var price_ea *float64
+	err := row.Scan(&price_ea)
+	return price_ea, err
 }
 
 const setDefaultSupplier = `-- name: SetDefaultSupplier :exec

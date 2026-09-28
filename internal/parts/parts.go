@@ -4,7 +4,8 @@
 // DigiKey import), the RFQ planner's BOM reads, the part-number list, the
 // parts list/CSV export, the single-part read/create/update, the BOM
 // lines (view, where-used, edit, paste preview, copy, export), the
-// pricing tab's price CRUD and the BOM cost rollup/build cost are converted.
+// pricing tab's price CRUD, the BOM cost rollup/build cost, and the part
+// detail dashboard's cards and orders/price-history tabs are converted.
 package parts
 
 import (
@@ -696,6 +697,158 @@ func (s *Service) ActivePriceTiers(ctx context.Context, partIDs []int) ([]PriceT
 			continue
 		}
 		out = append(out, PriceTier{PartID: r.PartID, SupplierID: r.SupplierID, PriceEA: *r.PriceEa, PackSize: *r.PackSize})
+	}
+	return out, nil
+}
+
+// PartOrder is a PO line of a part plus its PO header.
+type PartOrder struct {
+	PONumber     string
+	SupplierName string
+	DateOrdered  *time.Time
+	DateClosed   *time.Time
+	Status       string
+	LineNumber   int
+	Qty          float64
+	UnitCost     float64
+	Description  string
+	VendorPN     string
+}
+
+// ListPartOrders returns every PO line of a part, newest order first (undated first).
+func (s *Service) ListPartOrders(ctx context.Context, partID int) ([]PartOrder, error) {
+	rows, err := s.q.ListPartOrders(ctx, partID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PartOrder, len(rows))
+	for i, r := range rows {
+		out[i] = PartOrder{PONumber: r.Number, SupplierName: r.SupplierName, DateOrdered: r.DateOrdered, DateClosed: r.DateClosed,
+			Status: r.Status, LineNumber: r.LineNumber, Qty: r.Qty, UnitCost: r.UnitCost, Description: r.Description, VendorPN: r.VendorPartNumber}
+	}
+	return out, nil
+}
+
+// RecentPO is a PO line of a part for the part dashboard.
+type RecentPO struct {
+	Number       string
+	SupplierName string
+	Status       string
+	DateOrdered  *time.Time
+	Qty          float64
+	UnitCost     float64
+}
+
+// ListRecentPOs returns a part's n newest PO lines (undated first).
+func (s *Service) ListRecentPOs(ctx context.Context, partID, n int) ([]RecentPO, error) {
+	rows, err := s.q.ListRecentPartPOs(ctx, dbq.ListRecentPartPOsParams{PartID: partID, N: n})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RecentPO, len(rows))
+	for i, r := range rows {
+		out[i] = RecentPO{Number: r.Number, SupplierName: r.SupplierName, Status: r.Status,
+			DateOrdered: r.DateOrdered, Qty: r.Qty, UnitCost: r.UnitCost}
+	}
+	return out, nil
+}
+
+// InventoryTxn is an inventory movement of a part.
+type InventoryTxn struct {
+	Type string
+	Qty  float64
+	Date time.Time
+}
+
+// ListRecentTxns returns a part's n newest inventory movements.
+func (s *Service) ListRecentTxns(ctx context.Context, partID, n int) ([]InventoryTxn, error) {
+	rows, err := s.q.ListRecentPartTxns(ctx, dbq.ListRecentPartTxnsParams{PartID: partID, N: n})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]InventoryTxn, len(rows))
+	for i, r := range rows {
+		out[i] = InventoryTxn{Type: r.TxnType, Qty: r.Qty, Date: r.TxnDate}
+	}
+	return out, nil
+}
+
+// PreferredSupplier is a part's preferred supplier plus its most-preferred
+// supplier_part reference fields; HasLink is false when there is no such row.
+type PreferredSupplier struct {
+	SupplierID   int
+	SupplierName string
+	SupplierPN   string
+	SupplierDesc string
+	HasLink      bool
+}
+
+// GetPreferredSupplier returns a part's preferred supplier; sql.ErrNoRows when
+// none is pinned.
+func (s *Service) GetPreferredSupplier(ctx context.Context, partID int) (PreferredSupplier, error) {
+	r, err := s.q.GetPreferredSupplier(ctx, partID)
+	return PreferredSupplier{SupplierID: r.ID, SupplierName: r.Name, SupplierPN: r.SupplierPn,
+		SupplierDesc: r.SupplierDesc, HasLink: r.SupplierPartID != nil}, err
+}
+
+// PreferredSupplierPrice returns the cheapest active price_ea from a part's
+// preferred supplier, nil when there is none.
+func (s *Service) PreferredSupplierPrice(ctx context.Context, partID int) (*float64, error) {
+	p, err := s.q.PreferredSupplierMinPrice(ctx, partID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return p, err
+}
+
+// EnsureDefaultSupplier pins supplierID as a part's preferred supplier unless
+// one is already set.
+func (s *Service) EnsureDefaultSupplier(ctx context.Context, partID, supplierID int) error {
+	return s.q.EnsureDefaultSupplier(ctx, dbq.EnsureDefaultSupplierParams{SupplierID: supplierID, ID: partID})
+}
+
+// POPricePoint is a dated PO line's unit cost.
+type POPricePoint struct {
+	PONumber     string
+	SupplierName string
+	DateOrdered  time.Time
+	UnitCost     float64
+}
+
+// ListPOPricePoints returns a part's dated PO lines, oldest first.
+func (s *Service) ListPOPricePoints(ctx context.Context, partID int) ([]POPricePoint, error) {
+	rows, err := s.q.ListPOPricePoints(ctx, partID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]POPricePoint, len(rows))
+	for i, r := range rows {
+		out[i] = POPricePoint{PONumber: r.Number, SupplierName: r.SupplierName, DateOrdered: *r.DateOrdered, UnitCost: r.UnitCost}
+	}
+	return out, nil
+}
+
+// PriceListPoint is a dated active price's per-unit price and pack size.
+type PriceListPoint struct {
+	SupplierName  string
+	EffectiveDate time.Time
+	PriceEA       float64
+	PackSize      *float64
+}
+
+// ListPriceListPoints returns a part's dated active prices, oldest first,
+// skipping any without a per-unit price.
+func (s *Service) ListPriceListPoints(ctx context.Context, partID int) ([]PriceListPoint, error) {
+	rows, err := s.q.ListPriceListPoints(ctx, partID)
+	if err != nil {
+		return nil, err
+	}
+	var out []PriceListPoint
+	for _, r := range rows {
+		if r.PriceEa == nil {
+			continue
+		}
+		out = append(out, PriceListPoint{SupplierName: r.SupplierName, EffectiveDate: *r.EffectiveDate, PriceEA: *r.PriceEa, PackSize: r.PackSize})
 	}
 	return out, nil
 }

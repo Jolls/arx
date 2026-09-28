@@ -925,7 +925,10 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error inserting price: "+err.Error())
 			return
 		}
-		h.ensureDefaultSupplier(r.Context(), partID, supplierID)
+		// Both ids already went into the INSERT above, so a bad one never gets here.
+		pid, _ := strconv.Atoi(partID)
+		sid, _ := strconv.Atoi(supplierID)
+		h.ensureDefaultSupplier(r.Context(), pid, sid)
 	}
 
 	http.Redirect(w, r, "/po/"+num, http.StatusFound)
