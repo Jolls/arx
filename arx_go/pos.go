@@ -2009,6 +2009,11 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
+	groupID, err := strconv.Atoi(group)
+	if err != nil {
+		h.renderError(w, r, "Error loading RFQ lines: invalid RFQ group")
+		return
+	}
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
@@ -2022,31 +2027,14 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	pur := purchasing.New(tx)
+
 	// All line ids in the group, so we only accept input for lines that belong to it.
-	idRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(`
-		SELECT pol.id FROM %s pol JOIN %s po ON pol.po_id = po.ID
-		WHERE po.rfq_group_id = $1
-	`, h.cfg().POLineTable(), h.cfg().POTable()), group)
+	polIDs, err := pur.ListRFQLineIDs(r.Context(), groupID)
 	if err != nil {
 		h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
 		return
 	}
-	var polIDs []int
-	for idRows.Next() {
-		var id int
-		if err := idRows.Scan(&id); err != nil {
-			idRows.Close()
-			h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
-			return
-		}
-		polIDs = append(polIDs, id)
-	}
-	if err := idRows.Err(); err != nil {
-		idRows.Close()
-		h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
-		return
-	}
-	idRows.Close()
 
 	for _, id := range polIDs {
 		idStr := strconv.Itoa(id)
@@ -2054,23 +2042,14 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 		if v, ok := parseFormFloat(fv(r, "cost_"+idStr)).(float64); ok {
 			cost = v
 		}
-		lead := nullableInt(fv(r, "lead_"+idStr))
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET unit_cost=$1, lead_time_days=$2 WHERE id=$3`, h.cfg().POLineTable()),
-			cost, lead, id); err != nil {
+		if err := pur.SetRFQLineQuote(r.Context(), id, cost, intPtrOrNil(fv(r, "lead_"+idStr))); err != nil {
 			h.renderError(w, r, "Error saving quote: "+err.Error())
 			return
 		}
 	}
 
 	// Recompute each quote's total (line sum + its own tax/shipping/misc).
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		UPDATE %s
-		SET total_cost = COALESCE((SELECT SUM(pol.qty * pol.unit_cost) FROM %s pol WHERE pol.po_id = %s.ID), 0)
-		    + COALESCE(tax1, 0) + COALESCE(shipping_cost, 0) + COALESCE(misc_cost, 0),
-		    date_modified = CURRENT_TIMESTAMP
-		WHERE rfq_group_id = $1
-	`, h.cfg().POTable(), h.cfg().POLineTable(), h.cfg().POTable()), group); err != nil {
+	if err := pur.RecomputeRFQTotals(r.Context(), groupID); err != nil {
 		h.renderError(w, r, "Error recomputing totals: "+err.Error())
 		return
 	}
@@ -2094,12 +2073,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var poID int
-	var status sql.NullString
-	var groupID, supplierID sql.NullInt64
-	err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT ID, status, rfq_group_id, supplier_id FROM %s WHERE number = $1`, h.cfg().POTable()),
-		num).Scan(&poID, &status, &groupID, &supplierID)
+	quote, err := h.purchasing().GetRFQQuote(r.Context(), num)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
 		return
@@ -2108,7 +2082,8 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading RFQ: "+err.Error())
 		return
 	}
-	if status.String != "rfq" {
+	poID := quote.ID
+	if quote.Status != "rfq" {
 		h.renderError(w, r, "Only an RFQ can be converted to a PO.")
 		return
 	}
@@ -2116,14 +2091,11 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 	// The new PO takes the bare base number (1050R2 -> 1050). Guard against the
 	// base already being in use before inserting it.
 	base := rfqBaseNumber(num)
-	var taken int
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE number=$1`, h.cfg().POTable()), base).Scan(&taken); err != nil {
-		h.renderError(w, r, "Error checking PO number: "+err.Error())
-		return
-	}
-	if taken > 0 {
+	if _, err := h.purchasing().GetPOState(r.Context(), base); err == nil {
 		h.renderError(w, r, "Cannot convert: PO number "+base+" is already in use.")
+		return
+	} else if err != sql.ErrNoRows {
+		h.renderError(w, r, "Error checking PO number: "+err.Error())
 		return
 	}
 
@@ -2140,20 +2112,13 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	actor := h.actorName(r)
+	pur := purchasing.New(tx)
+	rfq := "rfq"
 
 	// #191: lock the whole RFQ group in ID order first, so two quotes of one group
 	// converted at once queue up instead of deadlocking on each other's rows.
-	if groupID.Valid {
-		lockRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
-			`SELECT ID FROM %s WHERE rfq_group_id=$1 ORDER BY ID FOR UPDATE`, h.cfg().POTable()), groupID.Int64)
-		if err != nil {
-			h.renderError(w, r, "Error locking RFQ group: "+err.Error())
-			return
-		}
-		for lockRows.Next() {
-		}
-		lockRows.Close()
-		if err := lockRows.Err(); err != nil {
+	if quote.RFQGroupID != nil {
+		if err := pur.LockRFQGroup(r.Context(), *quote.RFQGroupID); err != nil {
 			h.renderError(w, r, "Error locking RFQ group: "+err.Error())
 			return
 		}
@@ -2161,122 +2126,61 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 
 	// #191: claim the quote — only a still-'rfq' quote can be awarded. Closes out the
 	// awarded quote (retained for the record) and locks it for the rest of the tx.
-	res, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET status='closed', is_active=FALSE, date_modified=CURRENT_TIMESTAMP WHERE ID=$1 AND status='rfq'`,
-		h.cfg().POTable()), poID)
+	awarded, err := pur.AwardRFQQuote(r.Context(), poID)
 	if err != nil {
 		h.renderError(w, r, "Error closing awarded quote: "+err.Error())
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	if !awarded {
 		h.renderError(w, r, "Only an RFQ can be converted to a PO.")
 		return
 	}
 
 	// Duplicate the winning quote's header into a new real PO: bare base number,
 	// draft, no rfq_group_id (so it always shows on the PO list).
-	var newID int
-	insertPO := fmt.Sprintf(`INSERT INTO %s (number, status, is_active, approval_status, rfq_group_id,
-		  orderer, account_id,
-		  supplier_id, supplier_name, supplier_contact, supplier_email,
-		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
-		  supplier_country, supplier_phone_number, supplier_fax_number,
-		  receiver_id, receiver_name, receiver_contact, receiver_email,
-		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
-		  receiver_country, receiver_phone, receiver_fax,
-		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
-		  date_ordered, date_requested, date_closed, date_printed, date_modified,
-		  supplier_contact_id, receiver_contact_id)
-%s
-RETURNING id`, h.cfg().POTable(), fmt.Sprintf(`SELECT $1, 'draft', TRUE, 'not_submitted', NULL,
-		  orderer, account_id,
-		  supplier_id, supplier_name, supplier_contact, supplier_email,
-		  supplier_address, supplier_city, supplier_state, supplier_zipcode,
-		  supplier_country, supplier_phone_number, supplier_fax_number,
-		  receiver_id, receiver_name, receiver_contact, receiver_email,
-		  receiver_address, receiver_city, receiver_state, receiver_zipcode,
-		  receiver_country, receiver_phone, receiver_fax,
-		  tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
-		  CAST(CURRENT_TIMESTAMP AS DATE), date_requested, NULL, NULL, CURRENT_TIMESTAMP,
-		  supplier_contact_id, receiver_contact_id
-		FROM %s WHERE id=$2`, h.cfg().POTable()))
-	if err := tx.QueryRowContext(r.Context(), insertPO, base, poID).Scan(&newID); err != nil {
+	newID, err := pur.CopyPOForConversion(r.Context(), poID, base)
+	if err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
 		return
 	}
 
 	// Copy the line items onto the new PO.
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, line_number, part_number_snapshot, revision_snapshot,
-		  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days)
-		SELECT $1, line_number, part_number_snapshot, revision_snapshot,
-		  description, qty, unit_cost, vendor_part_number, part_id, lead_time_days
-		FROM %s WHERE po_id=$2
-	`, h.cfg().POLineTable(), h.cfg().POLineTable()), newID, poID); err != nil {
+	if err := pur.CopyPOLines(r.Context(), poID, newID); err != nil {
 		h.renderError(w, r, "Error copying line items: "+err.Error())
 		return
 	}
 
 	// Record the new PO's creation, noting the RFQ it came from.
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by)
-		VALUES ($1, 'status', NULL, 'draft', $2, $3)
-	`, h.cfg().POHistoryTable()), newID, "Converted from RFQ "+num, actor); err != nil {
+	if err := pur.CreatePOStatusEventNote(r.Context(), newID, nil, "draft", "Converted from RFQ "+num, actor); err != nil {
 		h.renderError(w, r, "Error recording PO creation: "+err.Error())
 		return
 	}
 
 	// Close out the awarded quote (retained for the record).
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-		INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by)
-		VALUES ($1, 'status', 'rfq', 'closed', $2, $3)
-	`, h.cfg().POHistoryTable()), poID, "Awarded — converted to PO #"+base, actor); err != nil {
+	if err := pur.CreatePOStatusEventNote(r.Context(), poID, &rfq, "closed", "Awarded — converted to PO #"+base, actor); err != nil {
 		h.renderError(w, r, "Error recording award: "+err.Error())
 		return
 	}
 
 	// Decline the other quotes in the group (retained, not deleted).
-	if groupID.Valid {
-		sibRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
-			`SELECT ID FROM %s WHERE rfq_group_id=$1 AND status='rfq' AND ID<>$2`, h.cfg().POTable()),
-			groupID.Int64, poID)
+	if quote.RFQGroupID != nil {
+		sibIDs, err := pur.ListOpenRFQSiblings(r.Context(), *quote.RFQGroupID, poID)
 		if err != nil {
 			h.renderError(w, r, "Error finding sibling quotes: "+err.Error())
 			return
 		}
-		var sibIDs []int
-		for sibRows.Next() {
-			var id int
-			if err := sibRows.Scan(&id); err != nil {
-				sibRows.Close()
-				h.renderError(w, r, "Error finding sibling quotes: "+err.Error())
-				return
-			}
-			sibIDs = append(sibIDs, id)
-		}
-		if err := sibRows.Err(); err != nil {
-			sibRows.Close()
-			h.renderError(w, r, "Error finding sibling quotes: "+err.Error())
-			return
-		}
-		sibRows.Close()
 		note := "Not awarded — PO #" + base + " issued"
 		for _, id := range sibIDs {
 			// #191: only decline a quote still in 'rfq' — one changed meanwhile is left alone.
-			res, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-				`UPDATE %s SET status='cancelled', is_active=FALSE, date_modified=CURRENT_TIMESTAMP WHERE ID=$1 AND status='rfq'`, h.cfg().POTable()),
-				id)
+			declined, err := pur.DeclineRFQQuote(r.Context(), id)
 			if err != nil {
 				h.renderError(w, r, "Error declining quote: "+err.Error())
 				return
 			}
-			if n, _ := res.RowsAffected(); n == 0 {
+			if !declined {
 				continue
 			}
-			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-				INSERT INTO %s (po_id, event_type, from_status, to_status, note, changed_by)
-				VALUES ($1, 'status', 'rfq', 'cancelled', $2, $3)
-			`, h.cfg().POHistoryTable()), id, note, actor); err != nil {
+			if err := pur.CreatePOStatusEventNote(r.Context(), id, &rfq, "cancelled", note, actor); err != nil {
 				h.renderError(w, r, "Error recording decline: "+err.Error())
 				return
 			}
@@ -2290,11 +2194,7 @@ RETURNING id`, h.cfg().POTable(), fmt.Sprintf(`SELECT $1, 'draft', TRUE, 'not_su
 	committed = true
 
 	// Give the new PO a folder under the bare base number.
-	supplierIDStr := ""
-	if supplierID.Valid {
-		supplierIDStr = strconv.FormatInt(supplierID.Int64, 10)
-	}
-	h.createPOFolder(r, base, supplierIDStr)
+	h.createPOFolder(r, base, strconv.Itoa(quote.SupplierID))
 	http.Redirect(w, r, "/po/"+base, http.StatusFound)
 }
 
