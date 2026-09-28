@@ -230,6 +230,13 @@ func (s *Service) ListCompanyAttachments(ctx context.Context, supplierID int) ([
 	return out, nil
 }
 
+// GetCompanyAttachment returns attachment id, active or not; sql.ErrNoRows when there's none.
+func (s *Service) GetCompanyAttachment(ctx context.Context, id int) (CompanyAttachment, error) {
+	r, err := s.q.GetCompanyAttachment(ctx, id)
+	return CompanyAttachment{ID: r.SupplierAttachmentID, SupplierID: r.SupplierID, FilePath: r.FilePath,
+		Notes: r.Notes, SortOrder: r.SortOrder}, err
+}
+
 // CompanyAttachmentPath returns one of supplierID's attachment links; sql.ErrNoRows
 // when there's none.
 func (s *Service) CompanyAttachmentPath(ctx context.Context, id, supplierID int) (string, error) {

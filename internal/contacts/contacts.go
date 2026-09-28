@@ -128,3 +128,18 @@ func (s *Service) POs(ctx context.Context, contactID int) ([]PO, error) {
 	}
 	return out, nil
 }
+
+// ListActiveForCompany returns companyID's active contacts by name, with the
+// address/phone/fax/email fields a PO snapshots.
+func (s *Service) ListActiveForCompany(ctx context.Context, companyID int) ([]Contact, error) {
+	rows, err := s.q.ListActiveCompanyContacts(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Contact, len(rows))
+	for i, r := range rows {
+		out[i] = Contact{ID: r.ID, DisplayName: r.DisplayName, Address: r.Address, City: r.City,
+			State: r.State, Zipcode: r.Zipcode, Country: r.Country, Phone1: r.Phone1, Fax: r.Fax, Email: r.Email}
+	}
+	return out, nil
+}
