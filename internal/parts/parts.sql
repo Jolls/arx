@@ -122,3 +122,17 @@ RETURNING id;
 INSERT INTO mfg_part (part_id, mfg_id, mfg_part_number, is_active)
 VALUES (sqlc.arg(part_id), sqlc.arg(mfg_id), sqlc.arg(mfg_part_number), TRUE)
 ON CONFLICT (part_id, mfg_id, mfg_part_number) WHERE is_active DO NOTHING;
+
+-- ListBOMComponents is one BOM level below a parent: each component's part data and whether it
+-- has its own BOM (the RFQ planner, #99).
+-- name: ListBOMComponents :many
+SELECT pn.id, pl.qty, pn.part_number, COALESCE(pn.description, '') AS description,
+       COALESCE(pn.revision, '') AS revision, COALESCE(pn.category, '') AS category,
+       pn.stock_on_hand, pn.reorder_min, pn.default_supplier_id,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = pn.id) AS has_bom
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id = $1;
+
+-- name: ListPartNumbers :many
+SELECT part_number FROM part;

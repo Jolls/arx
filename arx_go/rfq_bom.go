@@ -133,48 +133,33 @@ func (h *Handler) isPurchasedCategory(code string) bool {
 // loadRFQGraph loads the BOM edges below root and the part data of every
 // component. Purchased parts are leaves: their own BOMs are never loaded.
 func (h *Handler) loadRFQGraph(ctx context.Context, root int) (map[int][]bomEdge, map[int]rfqPart, error) {
-	pl, pn := h.cfg().BOMTable(), h.cfg().PartsTable()
-	hasBOM := hasOwnBOMExpr(pl, "pn.id")
 	edges := map[int][]bomEdge{}
 	parts := map[int]rfqPart{}
 	queue := []int{root}
 	loaded := map[int]bool{root: true}
+	svc := h.parts()
 	for len(queue) > 0 {
 		id := queue[0]
 		queue = queue[1:]
-		rows, err := h.queryContext(ctx, fmt.Sprintf(`
-			SELECT pn.id, pl.qty, pn.part_number, pn.description, pn.revision, pn.category,
-			       pn.stock_on_hand, pn.reorder_min, pn.default_supplier_id, %s
-			FROM %s pl
-			JOIN %s pn ON pl.component_part_id = pn.id
-			WHERE pl.parent_part_id = $1
-		`, hasBOM, pl, pn), id)
+		comps, err := svc.ListBOMComponents(ctx, id)
 		if err != nil {
 			return nil, nil, err
 		}
-		for rows.Next() {
-			var p rfqPart
-			var qty float64
-			var desc, rev, cat sql.NullString
-			var stock sql.NullFloat64
-			var hb sql.NullBool
-			if err := rows.Scan(&p.ID, &qty, &p.PartNumber, &desc, &rev, &cat, &stock, &p.ReorderMin, &p.SupplierID, &hb); err != nil {
-				rows.Close()
-				return nil, nil, err
+		for _, c := range comps {
+			p := rfqPart{ID: c.ID, PartNumber: c.PartNumber, Description: c.Description, Revision: c.Revision,
+				Category: c.Category, Stock: c.Stock, HasBOM: c.HasBOM}
+			if c.ReorderMin != nil {
+				p.ReorderMin = sql.NullFloat64{Float64: *c.ReorderMin, Valid: true}
 			}
-			p.Description, p.Revision, p.Category = desc.String, rev.String, cat.String
-			p.Stock, p.HasBOM = stock.Float64, hb.Bool
+			if c.SupplierID != nil {
+				p.SupplierID = sql.NullInt64{Int64: int64(*c.SupplierID), Valid: true}
+			}
 			parts[p.ID] = p
-			edges[id] = append(edges[id], bomEdge{child: p.ID, qty: qty})
+			edges[id] = append(edges[id], bomEdge{child: p.ID, qty: c.Qty})
 			if p.HasBOM && !h.isPurchasedCategory(p.Category) && !loaded[p.ID] {
 				loaded[p.ID] = true
 				queue = append(queue, p.ID)
 			}
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, nil, err
 		}
 	}
 	return edges, parts, nil

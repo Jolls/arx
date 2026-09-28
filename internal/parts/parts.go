@@ -1,7 +1,8 @@
 // Package parts is the parts domain (#190, #220): typed access to the part
 // tables via the sqlc-generated queries in parts.sql. So far part categories,
-// manufacturer parts and sourcing (supplier links, their prices and the
-// DigiKey import) are converted.
+// manufacturer parts, sourcing (supplier links, their prices and the
+// DigiKey import), the RFQ planner's BOM reads and the part-number list are
+// converted.
 package parts
 
 import (
@@ -70,6 +71,20 @@ type Price struct {
 	PricePack     *float64
 	PackSize      *float64
 	EffectiveDate *time.Time
+}
+
+// BOMComponent is one bom line below a parent, with the component's part data.
+type BOMComponent struct {
+	ID          int
+	Qty         float64
+	PartNumber  string
+	Description string
+	Revision    string
+	Category    string
+	Stock       float64
+	ReorderMin  *float64
+	SupplierID  *int
+	HasBOM      bool
 }
 
 type Service struct{ q *dbq.Queries }
@@ -295,4 +310,24 @@ func (s *Service) CreateManufacturer(ctx context.Context, name string) (int, err
 // part already has that manufacturer and MPN.
 func (s *Service) ImportMfgPart(ctx context.Context, partID, mfgID int, mfgPartNumber string) error {
 	return s.q.ImportMfgPart(ctx, dbq.ImportMfgPartParams{PartID: partID, MfgID: mfgID, MfgPartNumber: mfgPartNumber})
+}
+
+// ListBOMComponents returns the components one BOM level below parentID.
+func (s *Service) ListBOMComponents(ctx context.Context, parentID int) ([]BOMComponent, error) {
+	rows, err := s.q.ListBOMComponents(ctx, parentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BOMComponent, len(rows))
+	for i, r := range rows {
+		out[i] = BOMComponent{ID: r.ID, Qty: r.Qty, PartNumber: r.PartNumber, Description: r.Description,
+			Revision: r.Revision, Category: r.Category, Stock: r.StockOnHand, ReorderMin: r.ReorderMin,
+			SupplierID: r.DefaultSupplierID, HasBOM: r.HasBom}
+	}
+	return out, nil
+}
+
+// ListPartNumbers returns every part's part_number.
+func (s *Service) ListPartNumbers(ctx context.Context) ([]string, error) {
+	return s.q.ListPartNumbers(ctx)
 }

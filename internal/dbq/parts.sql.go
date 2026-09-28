@@ -344,6 +344,65 @@ func (q *Queries) ListActivePrices(ctx context.Context, partID int) ([]ListActiv
 	return items, nil
 }
 
+const listBOMComponents = `-- name: ListBOMComponents :many
+SELECT pn.id, pl.qty, pn.part_number, COALESCE(pn.description, '') AS description,
+       COALESCE(pn.revision, '') AS revision, COALESCE(pn.category, '') AS category,
+       pn.stock_on_hand, pn.reorder_min, pn.default_supplier_id,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = pn.id) AS has_bom
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id = $1
+`
+
+type ListBOMComponentsRow struct {
+	ID                int
+	Qty               float64
+	PartNumber        string
+	Description       string
+	Revision          string
+	Category          string
+	StockOnHand       float64
+	ReorderMin        *float64
+	DefaultSupplierID *int
+	HasBom            bool
+}
+
+// ListBOMComponents is one BOM level below a parent: each component's part data and whether it
+// has its own BOM (the RFQ planner, #99).
+func (q *Queries) ListBOMComponents(ctx context.Context, parentPartID int) ([]ListBOMComponentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBOMComponents, parentPartID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBOMComponentsRow
+	for rows.Next() {
+		var i ListBOMComponentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Qty,
+			&i.PartNumber,
+			&i.Description,
+			&i.Revision,
+			&i.Category,
+			&i.StockOnHand,
+			&i.ReorderMin,
+			&i.DefaultSupplierID,
+			&i.HasBom,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listManufacturers = `-- name: ListManufacturers :many
 SELECT id, name FROM company
 WHERE is_manufacturer = TRUE AND is_active = TRUE
@@ -497,6 +556,33 @@ func (q *Queries) ListPartCategoryCodes(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, code)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPartNumbers = `-- name: ListPartNumbers :many
+SELECT part_number FROM part
+`
+
+func (q *Queries) ListPartNumbers(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listPartNumbers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var part_number string
+		if err := rows.Scan(&part_number); err != nil {
+			return nil, err
+		}
+		items = append(items, part_number)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

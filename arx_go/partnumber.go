@@ -36,21 +36,8 @@ func (h *Handler) loadBaseNumberConfig(ctx context.Context) models.BaseNumberCon
 func (h *Handler) nextBaseNumber(ctx context.Context) (string, error) {
 	cfg := h.loadBaseNumberConfig(ctx)
 
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT part_number FROM %s`, h.cfg().PartsTable()))
+	partNumbers, err := h.parts().ListPartNumbers(ctx)
 	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-
-	var partNumbers []string
-	for rows.Next() {
-		var pn string
-		if err := rows.Scan(&pn); err != nil {
-			return "", err
-		}
-		partNumbers = append(partNumbers, pn)
-	}
-	if err := rows.Err(); err != nil {
 		return "", err
 	}
 
