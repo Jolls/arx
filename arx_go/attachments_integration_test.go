@@ -78,7 +78,7 @@ func TestIntegration_PartAttachmentVendorScope(t *testing.T) {
 	defer deletePartAttachments(ctx, h, partID)
 
 	var supplierName string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID).Scan(&supplierName); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, "company"), supplierID).Scan(&supplierName); err != nil {
 		t.Fatalf("select supplier name: %v", err)
 	}
 
@@ -198,7 +198,7 @@ func TestIntegration_AttachmentWhereUsed(t *testing.T) {
 	}
 	defer deleteCompanyAttachmentRow(ctx, h, companyAtt)
 	var supplierName string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID).Scan(&supplierName); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, "company"), supplierID).Scan(&supplierName); err != nil {
 		t.Fatalf("select supplier name: %v", err)
 	}
 
@@ -301,7 +301,7 @@ func TestIntegration_SupplierAttachments_ListUpdateDelete(t *testing.T) {
 	supplierID, cleanupSupplier := seedSupplier(t, h, ctx)
 	defer cleanupSupplier()
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, h.cfg().CompanyTable()), supplierID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, "company"), supplierID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, h.cfg().CompanyAttachmentsTable()), supplierID)
 	}()
 
@@ -338,7 +338,7 @@ func TestIntegration_SupplierAttachments_ListUpdateDelete(t *testing.T) {
 		t.Helper()
 		var id sql.NullInt64
 		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`SELECT primary_attachment_id FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID).Scan(&id); err != nil {
+			`SELECT primary_attachment_id FROM %s WHERE id=$1`, "company"), supplierID).Scan(&id); err != nil {
 			t.Fatalf("select supplier primary: %v", err)
 		}
 		return int(id.Int64)
@@ -397,7 +397,7 @@ func TestIntegration_SupplierAttachmentUpdate_RemovesOldFileFromSupplierRoot(t *
 	supplierID, cleanupSupplier := seedSupplier(t, h, ctx)
 	defer cleanupSupplier()
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, h.cfg().CompanyTable()), supplierID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, "company"), supplierID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, h.cfg().CompanyAttachmentsTable()), supplierID)
 	}()
 	attID := createCompanyAttachment(t, h, ctx, supplierID, url.Values{"file_path": {"LOCAL:" + name}})

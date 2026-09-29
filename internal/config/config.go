@@ -199,24 +199,7 @@ func randomSecret() string {
 func (c *Config) PartsTable() string              { return "part" }
 func (c *Config) AttachmentsTable() string        { return "part_attachment" }
 func (c *Config) BOMTable() string                { return "bom" }
-func (c *Config) PriceTable() string              { return "price" }
-func (c *Config) POTable() string                 { return "purchase_order" }
-func (c *Config) POLineTable() string             { return "po_line" }
-func (c *Config) POHistoryTable() string          { return "purchase_order_history" }
-func (c *Config) CompanyTable() string            { return "company" }
-func (c *Config) SupplierPartTable() string       { return "supplier_part" }
-func (c *Config) MfgPartTable() string            { return "mfg_part" }
 func (c *Config) CompanyAttachmentsTable() string { return "company_attachment" }
-func (c *Config) ContactTable() string            { return "contact" }
-func (c *Config) UomTable() string                { return "uom" }
-func (c *Config) InventoryTxnTable() string       { return "inventory_transaction" }
-func (c *Config) BuildTable() string              { return "build" }
-func (c *Config) LotTable() string                { return "lot" }
-func (c *Config) GenealogyTable() string          { return "genealogy" }
-func (c *Config) AppConfigTable() string          { return "app_config" }
-func (c *Config) PartCategoryTable() string       { return "part_category" }
-func (c *Config) AttachmentCategoryTable() string { return "attachment_category" }
-func (c *Config) UsersTable() string              { return "users" }
 func (c *Config) LinksTable() string              { return "supplier_part" }
 
 // Test Records tables

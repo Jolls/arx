@@ -247,31 +247,31 @@ func seedBuildReturnRecord(t *testing.T, h *Handler, ctx context.Context, locked
 		t.Fatalf("seed record: %v", err)
 	}
 	var before int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(MAX(id),0) FROM %s`, h.cfg().BuildTable())).Scan(&before); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(MAX(id),0) FROM %s`, "build")).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	return recordID, func() {
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().RecordsTable()), recordID)
 		var buildID, lotID int
 		_ = h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(MAX(id),0) FROM %s WHERE part_id=$1 AND id>$2`,
-			h.cfg().BuildTable()), brOutputPart, before).Scan(&buildID)
+			"build"), brOutputPart, before).Scan(&buildID)
 		if buildID == 0 {
 			return
 		}
-		_ = h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(output_lot_id,0) FROM %s WHERE id=$1`, h.cfg().BuildTable()), buildID).Scan(&lotID)
+		_ = h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(output_lot_id,0) FROM %s WHERE id=$1`, "build"), buildID).Scan(&lotID)
 		if lotID != 0 {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE child_lot_id=$1`, h.cfg().GenealogyTable()), lotID)
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE child_lot_id=$1`, "genealogy"), lotID)
 		}
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE build_id=$1`, h.cfg().InventoryTxnTable()), buildID)
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET output_lot_id=NULL WHERE id=$1`, h.cfg().BuildTable()), buildID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE build_id=$1`, "inventory_transaction"), buildID)
+		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET output_lot_id=NULL WHERE id=$1`, "build"), buildID)
 		if lotID != 0 {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().LotTable()), lotID)
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "lot"), lotID)
 		}
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().BuildTable()), buildID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "build"), buildID)
 		for _, id := range []int{3001, brTrackedComp, 3002, brOutputPart} {
 			smokeExec(ctx, h, fmt.Sprintf(
 				`UPDATE %s SET stock_on_hand = (SELECT COALESCE(SUM(qty),0) FROM %s WHERE part_id = $1) WHERE id = $1`,
-				h.cfg().PartsTable(), h.cfg().InventoryTxnTable()), id)
+				h.cfg().PartsTable(), "inventory_transaction"), id)
 		}
 	}
 }
@@ -338,7 +338,7 @@ func TestIntegration_BuildReturnRecord_LockRaceNotLinked(t *testing.T) {
 func poStatus(t *testing.T, h *Handler, ctx context.Context, poID int) string {
 	t.Helper()
 	var s string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT status FROM %s WHERE ID=$1`, h.cfg().POTable()), poID).Scan(&s); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT status FROM %s WHERE ID=$1`, "purchase_order"), poID).Scan(&s); err != nil {
 		t.Fatal(err)
 	}
 	return s
@@ -361,12 +361,12 @@ func TestIntegration_POReceive_StatusRaceRejected(t *testing.T) {
 	setPOStatus(t, h, ctx, poID, "sent", "approved")
 	defer smokeExec(ctx, h, fmt.Sprintf(
 		`UPDATE %s SET stock_on_hand = (SELECT COALESCE(SUM(qty),0) FROM %s WHERE part_id = $1) WHERE id = $1`,
-		h.cfg().PartsTable(), h.cfg().InventoryTxnTable()), 3001)
-	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id=$1`, h.cfg().InventoryTxnTable()), lineID)
+		h.cfg().PartsTable(), "inventory_transaction"), 3001)
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id=$1`, "inventory_transaction"), lineID)
 
 	var rec *httptest.ResponseRecorder
 	raceHandler(t, h, ctx,
-		[]string{fmt.Sprintf(`UPDATE %s SET status='cancelled' WHERE ID=$1`, h.cfg().POTable())},
+		[]string{fmt.Sprintf(`UPDATE %s SET status='cancelled' WHERE ID=$1`, "purchase_order")},
 		[][]any{{poID}},
 		func() { rec = poReceive(h, number, url.Values{fmt.Sprintf("recv[%d]", lineID): {"4"}}) })
 
@@ -378,10 +378,10 @@ func TestIntegration_POReceive_StatusRaceRejected(t *testing.T) {
 	}
 	var received float64
 	var txns int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT received_qty FROM %s WHERE id=$1`, h.cfg().POLineTable()), lineID).Scan(&received); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT received_qty FROM %s WHERE id=$1`, "po_line"), lineID).Scan(&received); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE po_line_id=$1`, h.cfg().InventoryTxnTable()), lineID).Scan(&txns); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE po_line_id=$1`, "inventory_transaction"), lineID).Scan(&txns); err != nil {
 		t.Fatal(err)
 	}
 	if received != 0 || txns != 0 {
@@ -402,13 +402,13 @@ func TestIntegration_POReceive_StatusDerivedFromCommittedLines(t *testing.T) {
 	setPOStatus(t, h, ctx, poID, "sent", "approved")
 	defer smokeExec(ctx, h, fmt.Sprintf(
 		`UPDATE %s SET stock_on_hand = (SELECT COALESCE(SUM(qty),0) FROM %s WHERE part_id = $1) WHERE id = $1`,
-		h.cfg().PartsTable(), h.cfg().InventoryTxnTable()), 3001)
-	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN ($1, $2)`, h.cfg().InventoryTxnTable()), line1, line2)
+		h.cfg().PartsTable(), "inventory_transaction"), 3001)
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN ($1, $2)`, "inventory_transaction"), line1, line2)
 
 	raceHandler(t, h, ctx,
 		[]string{
-			fmt.Sprintf(`SELECT ID FROM %s WHERE ID=$1 FOR UPDATE`, h.cfg().POTable()),
-			fmt.Sprintf(`UPDATE %s SET received_qty=10 WHERE id=$1`, h.cfg().POLineTable()),
+			fmt.Sprintf(`SELECT ID FROM %s WHERE ID=$1 FOR UPDATE`, "purchase_order"),
+			fmt.Sprintf(`UPDATE %s SET received_qty=10 WHERE id=$1`, "po_line"),
 		},
 		[][]any{{poID}, {line2}},
 		func() { poReceive(h, number, url.Values{fmt.Sprintf("recv[%d]", line1): {"10"}}) })
@@ -429,7 +429,7 @@ func rfqConvert(h *Handler, number string) *httptest.ResponseRecorder {
 func poIDByNumber(t *testing.T, h *Handler, ctx context.Context, number string) int {
 	t.Helper()
 	var id int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(MAX(ID),0) FROM %s WHERE number=$1`, h.cfg().POTable()), number).Scan(&id); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(MAX(ID),0) FROM %s WHERE number=$1`, "purchase_order"), number).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	return id
@@ -451,7 +451,7 @@ func TestIntegration_RFQConvert_StatusRaceRejected(t *testing.T) {
 
 	var rec *httptest.ResponseRecorder
 	raceHandler(t, h, ctx,
-		[]string{fmt.Sprintf(`UPDATE %s SET status='cancelled' WHERE ID=$1`, h.cfg().POTable())},
+		[]string{fmt.Sprintf(`UPDATE %s SET status='cancelled' WHERE ID=$1`, "purchase_order")},
 		[][]any{{quoteID}},
 		func() { rec = rfqConvert(h, quoteNumber) })
 
@@ -483,7 +483,7 @@ func TestIntegration_RFQConvert_SiblingChangedConcurrentlyNotCancelled(t *testin
 	}()
 
 	raceHandler(t, h, ctx,
-		[]string{fmt.Sprintf(`UPDATE %s SET status='draft' WHERE ID=$1`, h.cfg().POTable())},
+		[]string{fmt.Sprintf(`UPDATE %s SET status='draft' WHERE ID=$1`, "purchase_order")},
 		[][]any{{acmeID}},
 		func() { rfqConvert(h, pmcNumber) })
 
@@ -492,7 +492,7 @@ func TestIntegration_RFQConvert_SiblingChangedConcurrentlyNotCancelled(t *testin
 	}
 	var n int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE po_id=$1 AND to_status='cancelled'`,
-		h.cfg().POHistoryTable()), acmeID).Scan(&n); err != nil {
+		"purchase_order_history"), acmeID).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {

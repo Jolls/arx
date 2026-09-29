@@ -32,7 +32,7 @@ type pricingFixture struct {
 func seedPricing(t *testing.T, h *Handler) (f pricingFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, prc := h.cfg().PartsTable(), h.cfg().PriceTable()
+	pn, prc := h.cfg().PartsTable(), "price"
 	base := smokeUniq("ITEST-PRC")
 	cleanup = func() {
 		for _, id := range []int{f.Part, f.Other} {
@@ -68,7 +68,7 @@ func priceRow(t *testing.T, h *Handler, id int) map[string]any {
 	t.Helper()
 	var raw string
 	err := h.queryRowContext(context.Background(), fmt.Sprintf(
-		`SELECT COALESCE((SELECT row_to_json(p)::text FROM %s p WHERE id=$1), 'null')`, h.cfg().PriceTable()), id).Scan(&raw)
+		`SELECT COALESCE((SELECT row_to_json(p)::text FROM %s p WHERE id=$1), 'null')`, "price"), id).Scan(&raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestIntegration_PriceCreate_Columns(t *testing.T) {
 	newest := func() map[string]any {
 		t.Helper()
 		var id int
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=$1`, h.cfg().PriceTable()), f.Part).Scan(&id); err != nil {
+		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=$1`, "price"), f.Part).Scan(&id); err != nil {
 			t.Fatal(err)
 		}
 		m := priceRow(t, h, id)
@@ -273,7 +273,7 @@ func TestIntegration_PriceUpdate(t *testing.T) {
 		t.Error("PriceUpdate: old row still active")
 	}
 	var newID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=$1`, h.cfg().PriceTable()), f.Part).Scan(&newID); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=$1`, "price"), f.Part).Scan(&newID); err != nil {
 		t.Fatal(err)
 	}
 	got := priceRow(t, h, newID)
@@ -345,7 +345,7 @@ func TestIntegration_PriceActivateDeactivateDelete(t *testing.T) {
 	if priceRow(t, h, f.InC) != nil {
 		t.Error("PriceDelete: inactive price still there")
 	}
-	smokeExec(context.Background(), h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, h.cfg().PriceTable()), f.OtherPrice)
+	smokeExec(context.Background(), h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, "price"), f.OtherPrice)
 	act(h.PriceDelete, f.OtherPrice)
 	if priceRow(t, h, f.OtherPrice) == nil {
 		t.Error("PriceDelete: deleted another part's price")

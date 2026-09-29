@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	"arx/internal/auth"
 )
 
 // contextKey is an unexported type for context keys in this package.
@@ -22,47 +22,12 @@ const ctxUserKey contextKey = 1
 const ctxSQLStatsKey contextKey = 2
 
 // User holds the identity of the logged-in user.
-type User struct {
-	ID                int
-	Username          string
-	DisplayName       string
-	CanApprovePO      bool
-	CanApproveRecords bool
-	// IsAdmin gates the user-management endpoints (issue #750).
-	IsAdmin bool
-	// Per-user PO defaults (issue #463); 0 = unset, falls back to global config.
-	DefaultPOContactID  int
-	DefaultPOReceiverID int
-	// Per-user UI accent theme (issue #537); "" = unset, falls back to "blue".
-	AccentColor string
-	// Per-user post-login landing page (issue #282); a same-origin relative path
-	// (e.g. "/", "/pos", "/?f0=as"). "" = unset, falls back to "/".
-	DefaultRoute string
-	// Per-user IANA timezone (issue #847), e.g. "America/Los_Angeles"; used to
-	// bucket UTC audit timestamps into the user's local calendar day. NOT NULL in
-	// the DB with a default, but "" (or an unknown zone) falls back to
-	// defaultTimezone.
-	Timezone string
-}
+type User = auth.User
 
 // --- DB helpers ---
 
 func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
-	var u User
-	var defContact, defReceiver sql.NullInt64
-	var accentColor, defaultRoute sql.NullString
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, can_approve_po, can_approve_records, is_admin, default_po_contact_id, default_po_receiver_id, accent_color, default_route, timezone FROM %s WHERE id = $1 AND is_active = TRUE`,
-		h.cfg().UsersTable()), id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.CanApprovePO, &u.CanApproveRecords, &u.IsAdmin, &defContact, &defReceiver, &accentColor, &defaultRoute, &u.Timezone)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	u.DefaultPOContactID = int(defContact.Int64)
-	u.DefaultPOReceiverID = int(defReceiver.Int64)
-	u.AccentColor = accentColor.String
-	u.DefaultRoute = defaultRoute.String
-	return &u, err
+	return auth.New(handlerDB{h}).ByID(ctx, id)
 }
 
 // userCacheEntry holds a cached session user with a TTL-based expiry.
@@ -104,26 +69,11 @@ func (h *Handler) invalidateUserCache(id int) {
 }
 
 func (h *Handler) userByUsername(ctx context.Context, username string) (*User, string, error) {
-	var u User
-	var hash string
-	var defaultRoute sql.NullString
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, password_hash, default_route FROM %s WHERE username = $1 AND is_active = TRUE`,
-		h.cfg().UsersTable()), username,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &hash, &defaultRoute)
-	if err == sql.ErrNoRows {
-		return nil, "", nil
-	}
-	u.DefaultRoute = defaultRoute.String
-	return &u, hash, err
+	return auth.New(handlerDB{h}).ByUsername(ctx, username)
 }
 
 func (h *Handler) userCount(ctx context.Context) (int, error) {
-	var n int
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE is_active = TRUE`, h.cfg().UsersTable()),
-	).Scan(&n)
-	return n, err
+	return auth.New(handlerDB{h}).CountActive(ctx)
 }
 
 // serverError logs the full error and sends the client only msg — driver errors
@@ -365,39 +315,27 @@ func (h *Handler) createUser(ctx context.Context, username, displayName, passwor
 	if err != nil {
 		return err
 	}
-	_, err = h.execContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (username, display_name, password_hash, is_admin) VALUES ($1, $2, $3, $4)`,
-		h.cfg().UsersTable()), username, displayName, string(hash), admin)
-	return err
+	return auth.New(handlerDB{h}).Create(ctx, username, displayName, string(hash), admin)
 }
 
 func (h *Handler) listUsers(ctx context.Context) ([]map[string]any, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, username, display_name, is_active, can_approve_po, can_approve_records, is_admin FROM %s ORDER BY username`,
-		h.cfg().UsersTable()))
+	users, err := auth.New(handlerDB{h}).List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var out []map[string]any
-	for rows.Next() {
-		var id int
-		var username, displayName string
-		var isActive, canApprovePO, canApproveRecords, isAdmin bool
-		if err := rows.Scan(&id, &username, &displayName, &isActive, &canApprovePO, &canApproveRecords, &isAdmin); err != nil {
-			return nil, err
-		}
+	for _, u := range users {
 		out = append(out, map[string]any{
-			"ID":                id,
-			"Username":          username,
-			"DisplayName":       displayName,
-			"IsActive":          isActive,
-			"CanApprovePO":      canApprovePO,
-			"CanApproveRecords": canApproveRecords,
-			"IsAdmin":           isAdmin,
+			"ID":                u.ID,
+			"Username":          u.Username,
+			"DisplayName":       u.DisplayName,
+			"IsActive":          u.IsActive,
+			"CanApprovePO":      u.CanApprovePO,
+			"CanApproveRecords": u.CanApproveRecords,
+			"IsAdmin":           u.IsAdmin,
 		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // isAdmin reports whether the session user is an admin. The RequireAdmin and
@@ -448,9 +386,7 @@ func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "hashing error", http.StatusInternalServerError)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET password_hash=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`,
-		h.cfg().UsersTable()), string(hash), id); err != nil {
+	if err := auth.New(handlerDB{h}).SetPassword(r.Context(), id, string(hash)); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+reset+password", http.StatusSeeOther)
 		return
 	}
@@ -468,9 +404,7 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 		http.Redirect(w, r, "/settings?tab=users&error=cannot+deactivate+your+own+account", http.StatusSeeOther)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_active = NOT is_active, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		h.cfg().UsersTable()), id); err != nil {
+	if err := auth.New(handlerDB{h}).ToggleActive(r.Context(), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -485,9 +419,7 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET can_approve_po = NOT can_approve_po, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		h.cfg().UsersTable()), id); err != nil {
+	if err := auth.New(handlerDB{h}).ToggleApprovePO(r.Context(), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -502,9 +434,7 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET can_approve_records = NOT can_approve_records, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		h.cfg().UsersTable()), id); err != nil {
+	if err := auth.New(handlerDB{h}).ToggleApproveRecords(r.Context(), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}
@@ -525,9 +455,7 @@ func (h *Handler) SettingsUsersToggleAdmin(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, "/settings?tab=users&error=cannot+remove+your+own+admin+rights", http.StatusSeeOther)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET is_admin = NOT is_admin, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		h.cfg().UsersTable()), id); err != nil {
+	if err := auth.New(handlerDB{h}).ToggleAdmin(r.Context(), id); err != nil {
 		http.Redirect(w, r, "/settings?tab=users&error=could+not+update+user", http.StatusSeeOther)
 		return
 	}

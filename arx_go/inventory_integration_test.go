@@ -82,7 +82,7 @@ func TestIntegration_InventoryCreateLot(t *testing.T) {
 		var s lotState
 		if err := tx.QueryRowContext(ctx, fmt.Sprintf(
 			`SELECT part_id, lot_number, lot_description, vendor_lot_number, po_line_id, source, is_active, notes, created_at FROM %s WHERE id=$1`,
-			h.cfg().LotTable()), id).Scan(&s.Part, &s.Number, &s.Desc, &s.Vendor, &s.POLine, &s.Source, &s.Active, &s.Notes, &s.created); err != nil {
+			"lot"), id).Scan(&s.Part, &s.Number, &s.Desc, &s.Vendor, &s.POLine, &s.Source, &s.Active, &s.Notes, &s.created); err != nil {
 			t.Fatal(err)
 		}
 		return s
@@ -132,7 +132,7 @@ func TestIntegration_InventoryRecordTxn(t *testing.T) {
 	last := func() (r row) {
 		if err := tx.QueryRowContext(ctx, fmt.Sprintf(
 			`SELECT txn_type, username, qty::float8, txn_date::text, reference, note, po_line_id, lot_id, build_id
-			 FROM %s WHERE part_id=3002 ORDER BY id DESC LIMIT 1`, h.cfg().InventoryTxnTable())).
+			 FROM %s WHERE part_id=3002 ORDER BY id DESC LIMIT 1`, "inventory_transaction")).
 			Scan(&r.Type, &r.User, &r.Qty, &r.Date, &r.Ref, &r.Note, &r.PO, &r.Lot, &r.Build); err != nil {
 			t.Fatal(err)
 		}
@@ -176,7 +176,7 @@ func TestIntegration_InventoryAppendLotNote(t *testing.T) {
 	}
 	notes := func() sql.NullString {
 		var n sql.NullString
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT notes FROM %s WHERE id=$1`, h.cfg().LotTable()), id).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT notes FROM %s WHERE id=$1`, "lot"), id).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
@@ -410,7 +410,7 @@ func TestIntegration_InventoryLotUpdateWrongPart(t *testing.T) {
 		t.Errorf("LotUpdate wrong part: %s", rec.Body.String())
 	}
 	var desc string
-	if err := h.queryRowContext(context.Background(), fmt.Sprintf(`SELECT lot_description FROM %s WHERE id=8301`, h.cfg().LotTable())).Scan(&desc); err != nil || desc != "PO 5003" {
+	if err := h.queryRowContext(context.Background(), fmt.Sprintf(`SELECT lot_description FROM %s WHERE id=8301`, "lot")).Scan(&desc); err != nil || desc != "PO 5003" {
 		t.Errorf("lot 8301 description = %q, %v; want unchanged", desc, err)
 	}
 }
@@ -422,10 +422,10 @@ func TestIntegration_InventoryRecordLinkage(t *testing.T) {
 
 	var retired int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) VALUES (3007, 'ITEST-RETIRED', 'itest-222', FALSE) RETURNING id`, h.cfg().LotTable())).Scan(&retired); err != nil {
+		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) VALUES (3007, 'ITEST-RETIRED', 'itest-222', FALSE) RETURNING id`, "lot")).Scan(&retired); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().LotTable()), retired) })
+	t.Cleanup(func() { smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "lot"), retired) })
 
 	args := func(part int, vals url.Values) (any, any, error) {
 		r := postForm("/x", vals)

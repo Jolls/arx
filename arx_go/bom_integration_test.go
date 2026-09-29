@@ -30,7 +30,7 @@ type bomFixture struct {
 func seedBOM(t *testing.T, h *Handler) (f bomFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, bom, prc := h.cfg().PartsTable(), h.cfg().BOMTable(), h.cfg().PriceTable()
+	pn, bom, prc := h.cfg().PartsTable(), h.cfg().BOMTable(), "price"
 	base := smokeUniq("ITEST-BOM")
 	f.PN = map[int]string{}
 	var ids []int

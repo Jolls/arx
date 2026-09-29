@@ -26,7 +26,7 @@ type partOrdersFixture struct {
 func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, po, pol := h.cfg().PartsTable(), h.cfg().POTable(), h.cfg().POLineTable()
+	pn, po, pol := h.cfg().PartsTable(), "purchase_order", "po_line"
 	base := smokeUniq("IPO") // purchase_order.number is VARCHAR(32)
 	f.PO = map[string]string{"A": base + "-A", "B": base + "-B", "C": base + "-C"}
 	f.Sup = map[int]string{}
@@ -38,7 +38,7 @@ func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func
 		}
 		for _, id := range []int{f.P, f.Q, f.R} {
 			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, pn), id)
-			for _, tbl := range []string{h.cfg().AttachmentsTable(), h.cfg().InventoryTxnTable(), h.cfg().PriceTable(), h.cfg().SupplierPartTable()} {
+			for _, tbl := range []string{h.cfg().AttachmentsTable(), "inventory_transaction", "price", "supplier_part"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
@@ -60,7 +60,7 @@ func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func
 	}
 	for _, id := range []int{1002, 1003, 1004} {
 		var name string
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, h.cfg().CompanyTable()), id).Scan(&name); err != nil {
+		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, "company"), id).Scan(&name); err != nil {
 			t.Fatalf("company %d: %v", id, err)
 		}
 		f.Sup[id] = name
@@ -90,17 +90,17 @@ func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func
 			VALUES ($1,$2,1,$3,$4,$5,$6)`, pol), id, f.P, c.qty, c.cost, c.desc, c.vpn)
 	}
 
-	txn := h.cfg().InventoryTxnTable()
+	txn := "inventory_transaction"
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, txn_type, qty, txn_date) VALUES
 		($1,'receipt',5,'2026-01-15'), ($1,'issue',-2,'2026-01-20'), ($1,'adjustment',1.5,'2026-01-20')`, txn), f.P)
 
-	sp := h.cfg().SupplierPartTable()
+	sp := "supplier_part"
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn, supplier_desc, preference) VALUES
 		($1,1002,'PN-B',NULL,2), ($1,1002,'PN-A','Desc A',1), ($1,1003,'PN-X','other',0)`, sp), f.P)
 
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, pack_size, is_active, effective_date) VALUES
 		($1,1002,2,1,TRUE,'2026-01-05'), ($1,1002,1.5,10,TRUE,'2026-01-06'), ($1,1002,0.5,100,FALSE,'2026-01-07'),
-		($1,1003,1,1,TRUE,NULL), ($1,1004,NULL,NULL,TRUE,'2026-01-08')`, h.cfg().PriceTable()), f.P)
+		($1,1003,1,1,TRUE,NULL), ($1,1004,NULL,NULL,TRUE,'2026-01-08')`, "price"), f.P)
 
 	att := h.cfg().AttachmentsTable()
 	scan(&f.PrimaryAtt, fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, part_revision, sort_order)

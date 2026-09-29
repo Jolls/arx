@@ -828,8 +828,8 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 		idCol string
 		ids   []int
 	}{
-		{h.cfg().ContactTable(), "id", []int{2001, 2002, 2003, 2004, 2005}},
-		{h.cfg().UsersTable(), "id", []int{8001, 8002}},
+		{"contact", "id", []int{2001, 2002, 2003, 2004, 2005}},
+		{"users", "id", []int{8001, 8002}},
 		{h.cfg().StepsTable(), "id", []int{6101, 6102, 6103, 6104, 6105, 6106, 6107, 6108}},
 		{h.cfg().RecordsTable(), "id", []int{7001, 7002, 7003, 7004, 7005}},
 		{h.cfg().ResultsTable(), "id", []int{
@@ -858,7 +858,7 @@ func TestIntegration_UpdatedAtSentinel(t *testing.T) {
 	// app_config and named_queries key off setting_key/name, not id.
 	var appConfigUpdated sql.NullTime
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf(`SELECT updated_at FROM %s WHERE setting_key=$1`, h.cfg().AppConfigTable()), "schema_version",
+		fmt.Sprintf(`SELECT updated_at FROM %s WHERE setting_key=$1`, "app_config"), "schema_version",
 	).Scan(&appConfigUpdated); err != nil {
 		t.Fatalf("SELECT updated_at FROM app_config: %v", err)
 	}
@@ -1512,15 +1512,15 @@ func seedThrowawayPO(t *testing.T, h *Handler, ctx context.Context) (id int, num
 	}
 
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", h.cfg().POTable()), number,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", "purchase_order"), number,
 	).Scan(&id); err != nil {
 		t.Fatalf("look up created PO id: %v", err)
 	}
 
 	cleanup = func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POLineTable()), id)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POHistoryTable()), id)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", h.cfg().POTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "po_line"), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "purchase_order_history"), id)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", "purchase_order"), id)
 	}
 	return id, number, cleanup
 }
@@ -1537,7 +1537,7 @@ func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
 	poID, poNumber, poCleanup := seedThrowawayPO(t, h, ctx)
 	defer poCleanup()
 
-	before := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POLineTable(), poID))
+	before := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", "po_line", poID))
 
 	numID, err := strconv.Atoi(poNumber)
 	if err != nil {
@@ -1554,7 +1554,7 @@ func TestIntegration_POUpdate_BlankNewLineNotSaved(t *testing.T) {
 	}), numID))
 	assert302(t, "POUpdate blank line", rec)
 
-	after := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POLineTable(), poID))
+	after := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", "po_line", poID))
 	if after != before {
 		t.Errorf("po_line count for PO %d changed from %d to %d; whitespace-only new line should not be saved", poID, before, after)
 	}
@@ -1785,8 +1785,8 @@ func TestIntegration_BuildConsumesOnlyStockedComponents(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	inv := h.cfg().InventoryTxnTable()
-	bt := h.cfg().BuildTable()
+	inv := "inventory_transaction"
+	bt := "build"
 	pn := h.cfg().PartsTable()
 
 	const outputPart = 3005
@@ -1908,10 +1908,10 @@ func TestIntegration_BuildLotGenealogy(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	inv := h.cfg().InventoryTxnTable()
-	bt := h.cfg().BuildTable()
-	lt := h.cfg().LotTable()
-	lg := h.cfg().GenealogyTable()
+	inv := "inventory_transaction"
+	bt := "build"
+	lt := "lot"
+	lg := "genealogy"
 	pn := h.cfg().PartsTable()
 
 	const outputPart = 3012  // ASM-1002 sub-assembly, lot-tracked in seed
@@ -2052,10 +2052,10 @@ func TestIntegration_BuildReturnsToRecord(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	rt := h.cfg().RecordsTable()
-	bt := h.cfg().BuildTable()
-	lt := h.cfg().LotTable()
-	lg := h.cfg().GenealogyTable()
-	inv := h.cfg().InventoryTxnTable()
+	bt := "build"
+	lt := "lot"
+	lg := "genealogy"
+	inv := "inventory_transaction"
 	pn := h.cfg().PartsTable()
 
 	const outputPart = 3012  // ASM-1002, lot-tracked + has a BOM in seed
@@ -2429,10 +2429,10 @@ func TestIntegration_BuildAtTestTime(t *testing.T) {
 	ctx := context.Background()
 	rt := h.cfg().RecordsTable()
 	ut := "unit"
-	bt := h.cfg().BuildTable()
-	lt := h.cfg().LotTable()
-	lg := h.cfg().GenealogyTable()
-	inv := h.cfg().InventoryTxnTable()
+	bt := "build"
+	lt := "lot"
+	lg := "genealogy"
+	inv := "inventory_transaction"
 	pn := h.cfg().PartsTable()
 
 	const testedPart = 3013
@@ -2692,7 +2692,7 @@ func TestIntegration_LoginPost_ValidCredentials(t *testing.T) {
 		t.Fatalf("createUser: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=$1`, h.cfg().UsersTable()), username)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=$1`, "users"), username)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2719,7 +2719,7 @@ func TestIntegration_LoginPost_InvalidPassword(t *testing.T) {
 		t.Fatalf("createUser: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=$1`, h.cfg().UsersTable()), username)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=$1`, "users"), username)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2787,14 +2787,14 @@ func TestIntegration_SettingsUsersCreate_Success(t *testing.T) {
 
 	var isAdmin bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT is_admin FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&isAdmin); err != nil {
 		t.Fatalf("SELECT after create: %v", err)
 	}
 	if isAdmin {
 		t.Error("user created via SettingsUsersCreate has is_admin=1, want 0 (only bootstrap creates an admin)")
 	}
-	_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=$1`, h.cfg().UsersTable()), username)
+	_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE username=$1`, "users"), username)
 }
 
 func TestIntegration_SettingsUsersCreate_MissingFields(t *testing.T) {
@@ -2814,7 +2814,7 @@ func TestIntegration_SettingsUsersCreate_MissingFields(t *testing.T) {
 
 	var n int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT COUNT(*) FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&n); err != nil {
 		t.Fatalf("count after rejected create: %v", err)
 	}
@@ -2836,12 +2836,12 @@ func TestIntegration_SettingsUsersResetPassword_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT id FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "users"), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2852,7 +2852,7 @@ func TestIntegration_SettingsUsersResetPassword_Success(t *testing.T) {
 
 	var hash string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT password_hash FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID,
+		`SELECT password_hash FROM %s WHERE id=$1`, "users"), userID,
 	).Scan(&hash); err != nil {
 		t.Fatalf("SELECT password_hash: %v", err)
 	}
@@ -2873,12 +2873,12 @@ func TestIntegration_SettingsUsersResetPassword_EmptyPassword(t *testing.T) {
 	var userID int
 	var beforeHash string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id, password_hash FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT id, password_hash FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&userID, &beforeHash); err != nil {
 		t.Fatalf("look up created user: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "users"), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -2892,7 +2892,7 @@ func TestIntegration_SettingsUsersResetPassword_EmptyPassword(t *testing.T) {
 
 	var afterHash string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT password_hash FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID,
+		`SELECT password_hash FROM %s WHERE id=$1`, "users"), userID,
 	).Scan(&afterHash); err != nil {
 		t.Fatalf("SELECT password_hash after rejected reset: %v", err)
 	}
@@ -2914,18 +2914,18 @@ func TestIntegration_SettingsUsersToggleActive_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT id FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "users"), userID)
 	}()
 
 	readActive := func() bool {
 		var active bool
 		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`SELECT is_active FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID,
+			`SELECT is_active FROM %s WHERE id=$1`, "users"), userID,
 		).Scan(&active); err != nil {
 			t.Fatalf("read is_active: %v", err)
 		}
@@ -2963,7 +2963,7 @@ func TestIntegration_SettingsUsersToggleActive_CannotDeactivateSelf(t *testing.T
 
 	var before bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_active FROM %s WHERE id=8001`, h.cfg().UsersTable()),
+		`SELECT is_active FROM %s WHERE id=8001`, "users"),
 	).Scan(&before); err != nil {
 		t.Fatalf("read admin is_active: %v", err)
 	}
@@ -2979,7 +2979,7 @@ func TestIntegration_SettingsUsersToggleActive_CannotDeactivateSelf(t *testing.T
 
 	var after bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_active FROM %s WHERE id=8001`, h.cfg().UsersTable()),
+		`SELECT is_active FROM %s WHERE id=8001`, "users"),
 	).Scan(&after); err != nil {
 		t.Fatalf("re-read admin is_active: %v", err)
 	}
@@ -3003,12 +3003,12 @@ func TestIntegration_SettingsUsersToggleApprove_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT id FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "users"), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -3019,7 +3019,7 @@ func TestIntegration_SettingsUsersToggleApprove_Success(t *testing.T) {
 
 	var canApprove bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT can_approve_po FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID,
+		`SELECT can_approve_po FROM %s WHERE id=$1`, "users"), userID,
 	).Scan(&canApprove); err != nil {
 		t.Fatalf("read can_approve_po: %v", err)
 	}
@@ -3039,12 +3039,12 @@ func TestIntegration_SettingsUsersToggleApproveRecords_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT id FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "users"), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -3055,7 +3055,7 @@ func TestIntegration_SettingsUsersToggleApproveRecords_Success(t *testing.T) {
 
 	var canApprove bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT can_approve_records FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID,
+		`SELECT can_approve_records FROM %s WHERE id=$1`, "users"), userID,
 	).Scan(&canApprove); err != nil {
 		t.Fatalf("read can_approve_records: %v", err)
 	}
@@ -3075,12 +3075,12 @@ func TestIntegration_SettingsUsersToggleAdmin_Success(t *testing.T) {
 	}
 	var userID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE username=$1`, h.cfg().UsersTable()), username,
+		`SELECT id FROM %s WHERE username=$1`, "users"), username,
 	).Scan(&userID); err != nil {
 		t.Fatalf("look up created user id: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "users"), userID)
 	}()
 
 	rec := httptest.NewRecorder()
@@ -3091,7 +3091,7 @@ func TestIntegration_SettingsUsersToggleAdmin_Success(t *testing.T) {
 
 	var isAdmin bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE id=$1`, h.cfg().UsersTable()), userID,
+		`SELECT is_admin FROM %s WHERE id=$1`, "users"), userID,
 	).Scan(&isAdmin); err != nil {
 		t.Fatalf("read is_admin: %v", err)
 	}
@@ -3107,7 +3107,7 @@ func TestIntegration_SettingsUsersToggleAdmin_CannotRemoveOwnAdmin(t *testing.T)
 
 	var before bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg().UsersTable()),
+		`SELECT is_admin FROM %s WHERE id=8001`, "users"),
 	).Scan(&before); err != nil {
 		t.Fatalf("read admin is_admin: %v", err)
 	}
@@ -3123,7 +3123,7 @@ func TestIntegration_SettingsUsersToggleAdmin_CannotRemoveOwnAdmin(t *testing.T)
 
 	var after bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_admin FROM %s WHERE id=8001`, h.cfg().UsersTable()),
+		`SELECT is_admin FROM %s WHERE id=8001`, "users"),
 	).Scan(&after); err != nil {
 		t.Fatalf("re-read admin is_admin: %v", err)
 	}
@@ -3287,7 +3287,7 @@ func TestIntegration_APINamedQuery_EndToEnd(t *testing.T) {
 func seedPOLine(t *testing.T, h *Handler, ctx context.Context, poID, partID int, partNumber string, qty, unitCost float64) int {
 	t.Helper()
 	var id int
-	insert := fmt.Sprintf(`INSERT INTO %s (po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, received_qty) VALUES ($1, $2, 'A', $3, 1, 'test line', $4, $5, 0) RETURNING id`, h.cfg().POLineTable())
+	insert := fmt.Sprintf(`INSERT INTO %s (po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, received_qty) VALUES ($1, $2, 'A', $3, 1, 'test line', $4, $5, 0) RETURNING id`, "po_line")
 	if err := h.queryRowContext(ctx, insert, poID, partNumber, partID, qty, unitCost).Scan(&id); err != nil {
 		t.Fatalf("seedPOLine: %v", err)
 	}
@@ -3299,7 +3299,7 @@ func seedPOLine(t *testing.T, h *Handler, ctx context.Context, poID, partID int,
 func setPOStatus(t *testing.T, h *Handler, ctx context.Context, poID int, status, approval string) {
 	t.Helper()
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET status=$1, approval_status=$2 WHERE ID=$3", h.cfg().POTable()),
+		"UPDATE %s SET status=$1, approval_status=$2 WHERE ID=$3", "purchase_order"),
 		status, approval, poID); err != nil {
 		t.Fatalf("setPOStatus: %v", err)
 	}
@@ -3325,7 +3325,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 
 	// Rejected transition: draft -> sent must go through open first, and must
 	// not write a history row or change status.
-	histBefore := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POHistoryTable(), poID))
+	histBefore := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", "purchase_order_history", poID))
 	rec := httptest.NewRecorder()
 	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"sent"}}), numID))
 	assertStatus(t, "draft->sent rejected", rec, http.StatusOK)
@@ -3333,14 +3333,14 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 		t.Errorf("draft->sent: expected rejection message in body, got: %s", rec.Body.String())
 	}
 	var statusAfterReject string
-	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).
+	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", "purchase_order"), poID).
 		Scan(&statusAfterReject); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
 	if statusAfterReject != "draft" {
 		t.Errorf("draft->sent rejected: status = %q, want unchanged draft", statusAfterReject)
 	}
-	histAfterReject := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POHistoryTable(), poID))
+	histAfterReject := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", "purchase_order_history", poID))
 	if histAfterReject != histBefore {
 		t.Errorf("draft->sent rejected: history rows = %d, want unchanged %d", histAfterReject, histBefore)
 	}
@@ -3353,7 +3353,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	var status string
 	var isActive bool
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT status, is_active FROM %s WHERE ID=$1", h.cfg().POTable()), poID,
+		fmt.Sprintf("SELECT status, is_active FROM %s WHERE ID=$1", "purchase_order"), poID,
 	).Scan(&status, &isActive); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
@@ -3364,7 +3364,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	var fromStatus, toStatus, changedBy string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT from_status, to_status, changed_by FROM %s WHERE po_id=$1 AND event_type='status' ORDER BY id DESC LIMIT 1`,
-		h.cfg().POHistoryTable()), poID,
+		"purchase_order_history"), poID,
 	).Scan(&fromStatus, &toStatus, &changedBy); err != nil {
 		t.Fatalf("read history: %v", err)
 	}
@@ -3379,7 +3379,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	assert302(t, "sent->closed", rec)
 	var dateClosed sql.NullTime
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=$1", h.cfg().POTable()), poID,
+		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=$1", "purchase_order"), poID,
 	).Scan(&status, &dateClosed); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
@@ -3391,7 +3391,7 @@ func TestIntegration_POStatusTransition_AllowedAndRejected(t *testing.T) {
 	h.POStatusTransition(rec, withID(postForm("/po/{id}/status", url.Values{"target": {"open"}}), numID))
 	assert302(t, "closed->open reopen", rec)
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=$1", h.cfg().POTable()), poID,
+		fmt.Sprintf("SELECT status, date_closed FROM %s WHERE ID=$1", "purchase_order"), poID,
 	).Scan(&status, &dateClosed); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
@@ -3418,7 +3418,7 @@ func TestIntegration_POStatusTransition_ApprovalGateForSent(t *testing.T) {
 		t.Errorf("open->sent without approval: expected approval-gate message, got: %s", rec.Body.String())
 	}
 	var status string
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).Scan(&status)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", "purchase_order"), poID).Scan(&status)
 	if status != "open" {
 		t.Errorf("open->sent without approval: status = %q, want unchanged open", status)
 	}
@@ -3445,7 +3445,7 @@ func TestIntegration_POStatusTransition_CancelClearsApproval(t *testing.T) {
 
 	var status, approval string
 	h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT status, approval_status FROM %s WHERE ID=$1", h.cfg().POTable()), poID,
+		fmt.Sprintf("SELECT status, approval_status FROM %s WHERE ID=$1", "purchase_order"), poID,
 	).Scan(&status, &approval)
 	if status != "cancelled" || approval != "not_submitted" {
 		t.Errorf("cancel: got status=%q approval=%q, want cancelled/not_submitted", status, approval)
@@ -3454,7 +3454,7 @@ func TestIntegration_POStatusTransition_CancelClearsApproval(t *testing.T) {
 	var resetAction string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT action FROM %s WHERE po_id=$1 AND event_type='approval' ORDER BY id DESC LIMIT 1`,
-		h.cfg().POHistoryTable()), poID,
+		"purchase_order_history"), poID,
 	).Scan(&resetAction); err != nil {
 		t.Fatalf("read reset history: %v", err)
 	}
@@ -3473,7 +3473,7 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 	numID, _ := strconv.Atoi(poNumber)
 
 	lineID := seedPOLine(t, h, ctx, poID, 3001, "RAW-1001", 10, 2.50) // not lot-tracked
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=$1", h.cfg().InventoryTxnTable()), lineID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=$1", "inventory_transaction"), lineID)
 	// stock_on_hand is app-maintained, not reversed by deleting the ledger row above —
 	// restore it explicitly so this test doesn't leak +10 onto part 3001.
 	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 10 WHERE id = 3001", h.cfg().PartsTable()))
@@ -3488,15 +3488,15 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 
 	var status string
 	var receivedQty float64
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).Scan(&status)
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=$1", h.cfg().POLineTable()), lineID).Scan(&receivedQty)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", "purchase_order"), poID).Scan(&status)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=$1", "po_line"), lineID).Scan(&receivedQty)
 	if status != "partially_received" {
 		t.Errorf("after partial receive: PO status = %q, want partially_received", status)
 	}
 	if receivedQty != 4 {
 		t.Errorf("after partial receive: line received_qty = %v, want 4", receivedQty)
 	}
-	invAfterPartial := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg().InventoryTxnTable(), lineID))
+	invAfterPartial := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", "inventory_transaction", lineID))
 	if invAfterPartial != 1 {
 		t.Fatalf("after partial receive: inventory_transaction rows for line = %d, want 1", invAfterPartial)
 	}
@@ -3504,7 +3504,7 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 	var txnQty float64
 	h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT txn_type, qty, reference FROM %s WHERE po_line_id=$1 ORDER BY id DESC LIMIT 1`,
-		h.cfg().InventoryTxnTable()), lineID,
+		"inventory_transaction"), lineID,
 	).Scan(&txnType, &txnQty, &reference)
 	if txnType != "receipt" || txnQty != 4 || reference != poNumber {
 		t.Errorf("inventory_transaction row = {type:%q qty:%v ref:%q}, want {receipt 4 %q}", txnType, txnQty, reference, poNumber)
@@ -3516,25 +3516,25 @@ func TestIntegration_POReceive_PartialThenFull(t *testing.T) {
 		fmt.Sprintf("recv[%d]", lineID): {"6"},
 	}), numID))
 	assert302(t, "final receive", rec)
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).Scan(&status)
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=$1", h.cfg().POLineTable()), lineID).Scan(&receivedQty)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT status FROM %s WHERE ID=$1", "purchase_order"), poID).Scan(&status)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT received_qty FROM %s WHERE id=$1", "po_line"), lineID).Scan(&receivedQty)
 	if status != "closed" {
 		t.Errorf("after full receive: PO status = %q, want closed", status)
 	}
 	if receivedQty != 10 {
 		t.Errorf("after full receive: line received_qty = %v, want 10", receivedQty)
 	}
-	invAfterFull := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", h.cfg().InventoryTxnTable(), lineID))
+	invAfterFull := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_line_id=%d", "inventory_transaction", lineID))
 	if invAfterFull != 2 {
 		t.Errorf("after full receive: inventory_transaction rows for line = %d, want 2", invAfterFull)
 	}
 
 	partialEvent := countRows(t, h, ctx, fmt.Sprintf(
 		"%s WHERE po_id=%d AND event_type='status' AND from_status='sent' AND to_status='partially_received'",
-		h.cfg().POHistoryTable(), poID))
+		"purchase_order_history", poID))
 	closedEvent := countRows(t, h, ctx, fmt.Sprintf(
 		"%s WHERE po_id=%d AND event_type='status' AND from_status='partially_received' AND to_status='closed'",
-		h.cfg().POHistoryTable(), poID))
+		"purchase_order_history", poID))
 	if partialEvent != 1 || closedEvent != 1 {
 		t.Errorf("PO_history status events: sent->partially_received=%d, partially_received->closed=%d, want 1 each", partialEvent, closedEvent)
 	}
@@ -3553,8 +3553,8 @@ func TestIntegration_POReceive_CreatesLotForLotTrackedPart(t *testing.T) {
 	// stock_on_hand is app-maintained, not reversed by deleting the ledger row below —
 	// restore it explicitly so this test doesn't leak +5 onto part 3007.
 	defer smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET stock_on_hand = stock_on_hand - 5 WHERE id = 3007", h.cfg().PartsTable()))
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=$1", h.cfg().LotTable()), lineID)
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=$1", h.cfg().InventoryTxnTable()), lineID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=$1", "lot"), lineID)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_line_id=$1", "inventory_transaction"), lineID)
 	setPOStatus(t, h, ctx, poID, "sent", "approved")
 
 	rec := httptest.NewRecorder()
@@ -3569,7 +3569,7 @@ func TestIntegration_POReceive_CreatesLotForLotTrackedPart(t *testing.T) {
 	var lotPOLineID sql.NullInt64
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, lot_description, vendor_lot_number, po_line_id FROM %s WHERE po_line_id=$1 ORDER BY id DESC LIMIT 1`,
-		h.cfg().LotTable()), lineID,
+		"lot"), lineID,
 	).Scan(&lotID, &lotDesc, &vendorLot, &lotPOLineID); err != nil {
 		t.Fatalf("read created lot: %v", err)
 	}
@@ -3581,7 +3581,7 @@ func TestIntegration_POReceive_CreatesLotForLotTrackedPart(t *testing.T) {
 
 	var invLotID sql.NullInt64
 	h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT lot_id FROM %s WHERE po_line_id=$1 ORDER BY id DESC LIMIT 1`, h.cfg().InventoryTxnTable()), lineID,
+		`SELECT lot_id FROM %s WHERE po_line_id=$1 ORDER BY id DESC LIMIT 1`, "inventory_transaction"), lineID,
 	).Scan(&invLotID)
 	if !invLotID.Valid || int(invLotID.Int64) != lotID {
 		t.Errorf("inventory_transaction.lot_id = %v, want %d", invLotID, lotID)
@@ -3618,7 +3618,7 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	h.POApprovalAction(rec, withID(postForm("/po/{id}/approval", url.Values{"action": {"submit"}}), numID))
 	assert302(t, "submit", rec)
 	var approval string
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).Scan(&approval)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", "purchase_order"), poID).Scan(&approval)
 	if approval != "pending" {
 		t.Errorf("after submit: approval_status = %q, want pending", approval)
 	}
@@ -3630,7 +3630,7 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "not authorized") {
 		t.Errorf("reject without approver: expected authorization error, got: %s", rec.Body.String())
 	}
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).Scan(&approval)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", "purchase_order"), poID).Scan(&approval)
 	if approval != "pending" {
 		t.Errorf("after unauthorized reject: approval_status = %q, want unchanged pending", approval)
 	}
@@ -3640,14 +3640,14 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	h.POApprovalAction(rec, approverCtx(withID(postForm("/po/{id}/approval",
 		url.Values{"action": {"reject"}, "note": {"needs rework"}}), numID)))
 	assert302(t, "reject as approver", rec)
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).Scan(&approval)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", "purchase_order"), poID).Scan(&approval)
 	if approval != "rejected" {
 		t.Errorf("after reject: approval_status = %q, want rejected", approval)
 	}
 	var lastAction, lastNote string
 	h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT action, note FROM %s WHERE po_id=$1 AND event_type='approval' ORDER BY id DESC LIMIT 1`,
-		h.cfg().POHistoryTable()), poID,
+		"purchase_order_history"), poID,
 	).Scan(&lastAction, &lastNote)
 	if lastAction != "rejected" || lastNote != "needs rework" {
 		t.Errorf("history row = {action:%q note:%q}, want {rejected \"needs rework\"}", lastAction, lastNote)
@@ -3661,7 +3661,7 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.POApprovalAction(rec, approverCtx(withID(postForm("/po/{id}/approval", url.Values{"action": {"approve"}}), numID)))
 	assert302(t, "approve as approver", rec)
-	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", h.cfg().POTable()), poID).Scan(&approval)
+	h.queryRowContext(ctx, fmt.Sprintf("SELECT approval_status FROM %s WHERE ID=$1", "purchase_order"), poID).Scan(&approval)
 	if approval != "approved" {
 		t.Errorf("after approve: approval_status = %q, want approved", approval)
 	}
@@ -3713,7 +3713,7 @@ func seedRFQQuote(t *testing.T, h *Handler, ctx context.Context, supplierID, gro
 		t.Fatalf("could not parse RFQ quote number from Location %q", loc)
 	}
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", h.cfg().POTable()), number,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", "purchase_order"), number,
 	).Scan(&id); err != nil {
 		t.Fatalf("look up created RFQ quote id: %v", err)
 	}
@@ -3724,9 +3724,9 @@ func seedRFQQuote(t *testing.T, h *Handler, ctx context.Context, supplierID, gro
 // the given PO id — the same cleanup seedThrowawayPO uses, exposed here for
 // tests that manage several PO ids directly (RFQ groups, converted POs).
 func cleanupPO(ctx context.Context, h *Handler, id int) {
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POLineTable()), id)
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", h.cfg().POHistoryTable()), id)
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", h.cfg().POTable()), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "po_line"), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "purchase_order_history"), id)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", "purchase_order"), id)
 }
 
 func TestIntegration_RFQNew_RendersRFQForm(t *testing.T) {
@@ -3802,7 +3802,7 @@ func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T)
 
 	var lineID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		"SELECT id FROM %s WHERE po_id=$1", h.cfg().POLineTable()), quoteID,
+		"SELECT id FROM %s WHERE po_id=$1", "po_line"), quoteID,
 	).Scan(&lineID); err != nil {
 		t.Fatalf("look up seeded line id: %v", err)
 	}
@@ -3820,7 +3820,7 @@ func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T)
 	var unitCost float64
 	var leadDays sql.NullInt64
 	h.queryRowContext(ctx, fmt.Sprintf(
-		"SELECT unit_cost, lead_time_days FROM %s WHERE id=$1", h.cfg().POLineTable()), lineID,
+		"SELECT unit_cost, lead_time_days FROM %s WHERE id=$1", "po_line"), lineID,
 	).Scan(&unitCost, &leadDays)
 	if unitCost != 3.25 {
 		t.Errorf("unit_cost = %v, want 3.25", unitCost)
@@ -3831,7 +3831,7 @@ func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T)
 
 	var totalCost float64
 	h.queryRowContext(ctx, fmt.Sprintf(
-		"SELECT total_cost FROM %s WHERE ID=$1", h.cfg().POTable()), quoteID,
+		"SELECT total_cost FROM %s WHERE ID=$1", "purchase_order"), quoteID,
 	).Scan(&totalCost)
 	if totalCost != 32.50 { // 10 qty * 3.25
 		t.Errorf("total_cost = %v, want 32.50", totalCost)
@@ -3869,7 +3869,7 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 
 	var newID int
 	if err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", h.cfg().POTable()), base,
+		fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", "purchase_order"), base,
 	).Scan(&newID); err != nil {
 		t.Fatalf("look up converted PO: %v", err)
 	}
@@ -3881,7 +3881,7 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 	var newSupplierID sql.NullInt64
 	var newGroupID sql.NullInt64
 	h.queryRowContext(ctx, fmt.Sprintf(
-		"SELECT status, supplier_id, rfq_group_id FROM %s WHERE ID=$1", h.cfg().POTable()), newID,
+		"SELECT status, supplier_id, rfq_group_id FROM %s WHERE ID=$1", "purchase_order"), newID,
 	).Scan(&newStatus, &newSupplierID, &newGroupID)
 	if newStatus != "draft" {
 		t.Errorf("new PO status = %q, want draft", newStatus)
@@ -3892,14 +3892,14 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 	if newGroupID.Valid {
 		t.Errorf("new PO rfq_group_id = %v, want NULL", newGroupID)
 	}
-	newLines := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POLineTable(), newID))
+	newLines := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", "po_line", newID))
 	if newLines != 1 {
 		t.Errorf("new PO line count = %d, want 1", newLines)
 	}
 
 	var pmcStatus, pmcActive string
 	h.queryRowContext(ctx, fmt.Sprintf(
-		"SELECT status, CAST(is_active AS VARCHAR) FROM %s WHERE ID=$1", h.cfg().POTable()), pmcID,
+		"SELECT status, CAST(is_active AS VARCHAR) FROM %s WHERE ID=$1", "purchase_order"), pmcID,
 	).Scan(&pmcStatus, &pmcActive)
 	if pmcStatus != "closed" {
 		t.Errorf("awarded quote status = %q, want closed", pmcStatus)
@@ -3907,21 +3907,21 @@ func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
 
 	var acmeStatus string
 	h.queryRowContext(ctx, fmt.Sprintf(
-		"SELECT status FROM %s WHERE ID=$1", h.cfg().POTable()), acmeID,
+		"SELECT status FROM %s WHERE ID=$1", "purchase_order"), acmeID,
 	).Scan(&acmeStatus)
 	if acmeStatus != "cancelled" {
 		t.Errorf("sibling quote status = %q, want cancelled", acmeStatus)
 	}
 
-	newPOHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", h.cfg().POHistoryTable(), newID))
+	newPOHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d", "purchase_order_history", newID))
 	if newPOHistory != 1 {
 		t.Errorf("new PO history rows = %d, want 1 (draft creation)", newPOHistory)
 	}
-	pmcHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='closed'", h.cfg().POHistoryTable(), pmcID))
+	pmcHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='closed'", "purchase_order_history", pmcID))
 	if pmcHistory != 1 {
 		t.Errorf("awarded quote history 'closed' rows = %d, want 1", pmcHistory)
 	}
-	acmeHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='cancelled'", h.cfg().POHistoryTable(), acmeID))
+	acmeHistory := countRows(t, h, ctx, fmt.Sprintf("%s WHERE po_id=%d AND to_status='cancelled'", "purchase_order_history", acmeID))
 	if acmeHistory != 1 {
 		t.Errorf("sibling quote history 'cancelled' rows = %d, want 1", acmeHistory)
 	}
@@ -3957,7 +3957,7 @@ func TestIntegration_RFQConvert_RejectsWhenBaseNumberTaken(t *testing.T) {
 	collisionID, _, collisionCleanup := seedThrowawayPO(t, h, ctx)
 	defer collisionCleanup()
 	if _, err := h.execContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET number=$1 WHERE ID=$2", h.cfg().POTable()), base, collisionID); err != nil {
+		"UPDATE %s SET number=$1 WHERE ID=$2", "purchase_order"), base, collisionID); err != nil {
 		t.Fatalf("force collision PO number: %v", err)
 	}
 
@@ -4638,11 +4638,11 @@ func TestIntegration_LotBelongsToPart(t *testing.T) {
 	var inactiveLotID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) VALUES ($1, 'ITEST-INACTIVE', 'itest inactive lot', FALSE) RETURNING id`,
-		h.cfg().LotTable()), 3007,
+		"lot"), 3007,
 	).Scan(&inactiveLotID); err != nil {
 		t.Fatalf("seed inactive lot: %v", err)
 	}
-	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().LotTable()), inactiveLotID)
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "lot"), inactiveLotID)
 
 	tx, err := h.beginTx(ctx)
 	if err != nil {
@@ -4740,11 +4740,11 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 	var throwawayLotID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) VALUES ($1, 'ITEST-LOTUPD', 'orig desc', TRUE) RETURNING id`,
-		h.cfg().LotTable()), 3007,
+		"lot"), 3007,
 	).Scan(&throwawayLotID); err != nil {
 		t.Fatalf("seed throwaway lot: %v", err)
 	}
-	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().LotTable()), throwawayLotID)
+	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "lot"), throwawayLotID)
 
 	updateRec := httptest.NewRecorder()
 	h.LotUpdate(updateRec, withIDAndLotID(postForm(fmt.Sprintf("/part/3007/lots/%d", throwawayLotID), url.Values{
@@ -4754,7 +4754,7 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 
 	var gotDesc, gotVendor string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT lot_description, vendor_lot_number FROM %s WHERE id=$1`, h.cfg().LotTable()), throwawayLotID,
+		`SELECT lot_description, vendor_lot_number FROM %s WHERE id=$1`, "lot"), throwawayLotID,
 	).Scan(&gotDesc, &gotVendor); err != nil {
 		t.Fatalf("select updated lot: %v", err)
 	}
@@ -4772,7 +4772,7 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 	}
 	var afterDesc string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT lot_description FROM %s WHERE id=$1`, h.cfg().LotTable()), throwawayLotID,
+		`SELECT lot_description FROM %s WHERE id=$1`, "lot"), throwawayLotID,
 	).Scan(&afterDesc); err != nil {
 		t.Fatalf("select lot after wrong-part update: %v", err)
 	}
@@ -4855,12 +4855,12 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	var lotIDNull sql.NullInt64
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, qty, note, lot_id FROM %s WHERE part_id=$1 AND txn_type='adjustment' ORDER BY id DESC LIMIT 1`,
-		h.cfg().InventoryTxnTable()), nonLotTrackedPart,
+		"inventory_transaction"), nonLotTrackedPart,
 	).Scan(&txnID, &qty, &note, &lotIDNull); err != nil {
 		t.Fatalf("select new ledger row: %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().InventoryTxnTable()), txnID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "inventory_transaction"), txnID)
 		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=$1 WHERE id=$2`, h.cfg().PartsTable()), stockBefore, nonLotTrackedPart)
 	}()
 	if qty != 5 || note != "itest count correction" || lotIDNull.Valid {
@@ -4912,12 +4912,12 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	}
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, lot_id FROM %s WHERE part_id=$1 AND txn_type='adjustment' ORDER BY id DESC LIMIT 1`,
-		h.cfg().InventoryTxnTable()), lotTrackedPart,
+		"inventory_transaction"), lotTrackedPart,
 	).Scan(&pickTxnID, &pickLotID); err != nil {
 		t.Fatalf("select new ledger row (lot-tracked): %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().InventoryTxnTable()), pickTxnID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "inventory_transaction"), pickTxnID)
 		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=$1 WHERE id=$2`, h.cfg().PartsTable()), lotStockBefore, lotTrackedPart)
 	}()
 	if pickLotID != 8301 {
@@ -4970,13 +4970,13 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 
 	var newLotID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE part_id=$1 AND lot_number=$2`, h.cfg().LotTable()), lotTrackedPart, newLotNumber,
+		`SELECT id FROM %s WHERE part_id=$1 AND lot_number=$2`, "lot"), lotTrackedPart, newLotNumber,
 	).Scan(&newLotID); err != nil {
 		t.Fatalf("select new lot: %v", err)
 	}
 	var newLotDesc string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT lot_description FROM %s WHERE id=$1`, h.cfg().LotTable()), newLotID,
+		`SELECT lot_description FROM %s WHERE id=$1`, "lot"), newLotID,
 	).Scan(&newLotDesc); err != nil {
 		t.Fatalf("select new lot description: %v", err)
 	}
@@ -4987,13 +4987,13 @@ func TestIntegration_PartStockAdjust(t *testing.T) {
 	var newLotTxnLotID int64
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT id, lot_id FROM %s WHERE part_id=$1 AND txn_type='adjustment' ORDER BY id DESC LIMIT 1`,
-		h.cfg().InventoryTxnTable()), lotTrackedPart,
+		"inventory_transaction"), lotTrackedPart,
 	).Scan(&newLotTxnID, &newLotTxnLotID); err != nil {
 		t.Fatalf("select new-lot ledger row: %v", err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().InventoryTxnTable()), newLotTxnID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().LotTable()), newLotID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "inventory_transaction"), newLotTxnID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "lot"), newLotID)
 		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET stock_on_hand=stock_on_hand-2 WHERE id=$1`, h.cfg().PartsTable()), lotTrackedPart)
 	}()
 	if int(newLotTxnLotID) != newLotID {
@@ -5063,7 +5063,7 @@ func deleteAttachmentRow(ctx context.Context, h *Handler, attID int) {
 }
 
 func deleteCompanyAttachmentRow(ctx context.Context, h *Handler, attID int) {
-	_, _ = h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=$1`, h.cfg().CompanyTable()), attID)
+	_, _ = h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE primary_attachment_id=$1`, "company"), attID)
 	_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=$1`, h.cfg().CompanyAttachmentsTable()), attID)
 }
 
@@ -5268,12 +5268,12 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	companyName := "ITEST-71-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	var companyID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, h.cfg().CompanyTable()), companyName,
+		`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, "company"), companyName,
 	).Scan(&companyID); err != nil {
 		t.Fatalf("seed company: %v", err)
 	}
 	defer func() {
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().CompanyTable()), companyID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "company"), companyID)
 	}()
 
 	rec = httptest.NewRecorder()
@@ -5513,7 +5513,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		supplierName := "ITEST-809-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 		var supplierID int
 		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, h.cfg().CompanyTable()), supplierName,
+			`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, "company"), supplierName,
 		).Scan(&supplierID); err != nil {
 			t.Fatalf("seed company: %v", err)
 		}
@@ -5527,7 +5527,7 @@ func TestIntegration_DeleteAttachmentFileIfUnshared(t *testing.T) {
 		}
 		defer func() {
 			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=$1`, h.cfg().CompanyAttachmentsTable()), attID)
-			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID)
+			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "company"), supplierID)
 		}()
 		if err := os.WriteFile(filepath.Join(docRoot, name), []byte("x"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -5580,14 +5580,14 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 		supplierName := "ITEST-809-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 		var supplierID int
 		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, h.cfg().CompanyTable()), supplierName,
+			`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, "company"), supplierName,
 		).Scan(&supplierID); err != nil {
 			t.Fatalf("seed company: %v", err)
 		}
 		var attID int
 		defer func() {
 			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_attachment_id=$1`, h.cfg().CompanyAttachmentsTable()), attID)
-			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID)
+			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "company"), supplierID)
 		}()
 		if err := h.queryRowContext(ctx, fmt.Sprintf(
 			`INSERT INTO %s (supplier_id, file_path) VALUES ($1,$2) RETURNING supplier_attachment_id`,
@@ -5600,7 +5600,7 @@ func TestIntegration_SetPrimaryAttachment(t *testing.T) {
 			t.Fatalf("SetCompanyPrimary: %v", err)
 		}
 		var gotPrimary sql.NullInt64
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID).Scan(&gotPrimary); err != nil {
+		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT primary_attachment_id FROM %s WHERE id=$1`, "company"), supplierID).Scan(&gotPrimary); err != nil {
 			t.Fatalf("select primary_attachment_id: %v", err)
 		}
 		if !gotPrimary.Valid || int(gotPrimary.Int64) != attID {
@@ -5689,15 +5689,15 @@ func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
 	t.Run("supplier", func(t *testing.T) {
 		var supplierID int
 		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, h.cfg().CompanyTable()),
+			`INSERT INTO %s (name, is_active) VALUES ($1,TRUE) RETURNING id`, "company"),
 			"ITEST-121-"+strconv.FormatInt(time.Now().UnixNano(), 10),
 		).Scan(&supplierID); err != nil {
 			t.Fatalf("seed company: %v", err)
 		}
 		defer func() {
-			_, _ = h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, h.cfg().CompanyTable()), supplierID)
+			_, _ = h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, "company"), supplierID)
 			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, h.cfg().CompanyAttachmentsTable()), supplierID)
-			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().CompanyTable()), supplierID)
+			_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "company"), supplierID)
 		}()
 
 		insert := func(link string) int {
@@ -5722,16 +5722,16 @@ func TestIntegration_AutoPrimaryAttachment(t *testing.T) {
 		}
 
 		first := insert("LOCAL:auto-primary-supplier-1.txt")
-		wantPrimary(t, "after first insert", h.cfg().CompanyTable(), supplierID, first)
+		wantPrimary(t, "after first insert", "company", supplierID, first)
 
 		second := insert("LOCAL:auto-primary-supplier-2.txt")
-		wantPrimary(t, "after second insert", h.cfg().CompanyTable(), supplierID, first)
+		wantPrimary(t, "after second insert", "company", supplierID, first)
 
 		remove(first)
-		wantPrimary(t, "after deleting primary", h.cfg().CompanyTable(), supplierID, second)
+		wantPrimary(t, "after deleting primary", "company", supplierID, second)
 
 		remove(second)
-		wantPrimary(t, "no active attachments left", h.cfg().CompanyTable(), supplierID, 0)
+		wantPrimary(t, "no active attachments left", "company", supplierID, 0)
 	})
 }
 
@@ -6275,7 +6275,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyImport(t *testing.T) {
 	defer cleanupPart()
 	defer func() {
 		deletePartAttachments(ctx, h, partID)
-		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, h.cfg().SupplierPartTable()), partID)
+		_, _ = h.execContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, "supplier_part"), partID)
 	}()
 
 	form := url.Values{

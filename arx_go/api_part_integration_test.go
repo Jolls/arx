@@ -21,7 +21,7 @@ func seedAPIParts(t *testing.T, h *Handler, parts [][3]any) (ids []int, cleanup 
 	pn := h.cfg().PartsTable()
 	cleanup = func() {
 		for _, id := range ids {
-			for _, tbl := range []string{h.cfg().PriceTable(), h.cfg().SupplierPartTable()} {
+			for _, tbl := range []string{"price", "supplier_part"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
@@ -138,8 +138,8 @@ func TestIntegration_APISupplierPN_Cases(t *testing.T) {
 			t.Fatalf("seed: %v", err)
 		}
 	}
-	sp := fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn, min_increment, preference) VALUES ($1,$2,$3,$4,$5)`, h.cfg().SupplierPartTable())
-	pr := fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, pack_size, is_active) VALUES ($1,$2,$3,$4,$5)`, h.cfg().PriceTable())
+	sp := fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn, min_increment, preference) VALUES ($1,$2,$3,$4,$5)`, "supplier_part")
+	pr := fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, pack_size, is_active) VALUES ($1,$2,$3,$4,$5)`, "price")
 	exec(sp, p1, 1003, "SP-2", 5, 2)
 	exec(sp, p1, 1003, "SP-1", nil, 1)
 	exec(pr, p1, 1003, 9, 1, false)

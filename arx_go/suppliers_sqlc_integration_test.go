@@ -30,7 +30,7 @@ type supFixture struct {
 func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co, cn, pn, po, pol := h.cfg().CompanyTable(), h.cfg().ContactTable(), h.cfg().PartsTable(), h.cfg().POTable(), h.cfg().POLineTable()
+	co, cn, pn, po, pol := "company", "contact", h.cfg().PartsTable(), "purchase_order", "po_line"
 	base := smokeUniq("SQ") // purchase_order.number is VARCHAR(32)
 	f.Name = base + "-co"
 	f.PO = map[string]string{}
@@ -41,13 +41,13 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 		}
 		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=NULL, primary_attachment_id=NULL WHERE id=$1`, co), f.ID)
 		for _, id := range poIDs {
-			for _, tbl := range []string{pol, h.cfg().POHistoryTable()} {
+			for _, tbl := range []string{pol, "purchase_order_history"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, po), id)
 		}
 		for _, id := range f.Parts {
-			for _, tbl := range []string{h.cfg().AttachmentsTable(), h.cfg().SupplierPartTable()} {
+			for _, tbl := range []string{h.cfg().AttachmentsTable(), "supplier_part"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
@@ -91,8 +91,8 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 	// Parts 1-6 (inserted out of order): P1 has an explicit purchase unit, a thumbnail and a min
 	// increment; P2 inherits the part's base unit; P3 has no unit at all.
 	var ea, kg int
-	scan(&ea, fmt.Sprintf(`SELECT uom_id FROM %s WHERE abbreviation='EA'`, h.cfg().UomTable()))
-	scan(&kg, fmt.Sprintf(`SELECT uom_id FROM %s WHERE abbreviation='kg'`, h.cfg().UomTable()))
+	scan(&ea, fmt.Sprintf(`SELECT uom_id FROM %s WHERE abbreviation='EA'`, "uom"))
+	scan(&kg, fmt.Sprintf(`SELECT uom_id FROM %s WHERE abbreviation='kg'`, "uom"))
 	for _, i := range []int{3, 0, 5, 1, 4, 2} {
 		f.PN[i] = fmt.Sprintf("%s-P%d", base, i+1)
 		var uom any
@@ -106,7 +106,7 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 			spUom, minIncr = ea, 2.5
 		}
 		exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn, supplier_desc, lead_time, preference, uom_id, min_increment)
-			VALUES ($1,$2,$3,'sd','3 wk',1,$4,$5)`, h.cfg().SupplierPartTable()),
+			VALUES ($1,$2,$3,'sd','3 wk',1,$4,$5)`, "supplier_part"),
 			f.Parts[i], f.ID, fmt.Sprintf("SPN-%d", i+1), spUom, minIncr)
 	}
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\sq-thumb.png',$2,TRUE)`,
@@ -296,7 +296,7 @@ func TestIntegration_SupplierSQLC_Create(t *testing.T) {
 	f, cleanup := seedSupFixture(t, h)
 	defer cleanup()
 	var conD int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id=$1`, h.cfg().CompanyTable()), f.ID).Scan(&conD); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id=$1`, "company"), f.ID).Scan(&conD); err != nil {
 		t.Fatal(err)
 	}
 
@@ -307,13 +307,13 @@ func TestIntegration_SupplierSQLC_Create(t *testing.T) {
 		"is_active": {"1"}, "is_manufacturer": {"1"}, "notes": {"created"},
 	}))
 	id := locID(t, rec, "/supplier/")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().CompanyTable()), id)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", "company"), id)
 
 	var gotName, code, notes, delim, pnSrc string
 	var active, supplier, mfg bool
 	var dc *int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name, supplier_code, notes, is_active, is_supplier, is_manufacturer,
-		default_contact, bulk_order_delimiter, bulk_order_pn_source FROM %s WHERE id=$1`, h.cfg().CompanyTable()), id,
+		default_contact, bulk_order_delimiter, bulk_order_pn_source FROM %s WHERE id=$1`, "company"), id,
 	).Scan(&gotName, &code, &notes, &active, &supplier, &mfg, &dc, &delim, &pnSrc); err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +349,7 @@ func TestIntegration_SupplierSQLC_UpdateBulkOrder(t *testing.T) {
 		assert302(t, "SupplierUpdate", rec)
 		var delim, src string
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT bulk_order_delimiter, bulk_order_pn_source FROM %s WHERE id=$1`,
-			h.cfg().CompanyTable()), id).Scan(&delim, &src); err != nil {
+			"company"), id).Scan(&delim, &src); err != nil {
 			t.Fatal(err)
 		}
 		if delim != c.wantDelim || src != c.wantSrc {
@@ -407,11 +407,11 @@ func supplierSearch(t *testing.T, h *Handler, query string) (raw string, hits []
 func seedCompanies(t *testing.T, h *Handler, rows [][3]any) (ids []int, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co := h.cfg().CompanyTable()
+	co := "company"
 	cleanup = func() {
 		for _, id := range ids {
 			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=NULL WHERE id=$1`, co), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE company_id=$1`, h.cfg().ContactTable()), id)
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE company_id=$1`, "contact"), id)
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, co), id)
 		}
 	}
@@ -440,10 +440,10 @@ func TestIntegration_SupplierSQLC_Search(t *testing.T) {
 	defer cleanup()
 	var con int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (display_name, company_id, city) VALUES ('SRC contact',$1,'Townb') RETURNING id`,
-		h.cfg().ContactTable()), ids[0]).Scan(&con); err != nil {
+		"contact"), ids[0]).Scan(&con); err != nil {
 		t.Fatal(err)
 	}
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=$2 WHERE id=$1`, h.cfg().CompanyTable()), ids[0], con)
+	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=$2 WHERE id=$1`, "company"), ids[0], con)
 
 	if raw, _ := supplierSearch(t, h, "q=S"); raw != "[]" {
 		t.Errorf("short q body = %s, want []", raw)

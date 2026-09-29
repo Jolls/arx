@@ -35,18 +35,18 @@ func seedLifecyclePO(t *testing.T, h *Handler, f poFixture, suffix, status, appr
 	ctx := context.Background()
 	num = strings.TrimSuffix(f.Full, "-f") + "-" + suffix
 	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (number, supplier_id, status, approval_status, is_active, date_closed, date_modified)
-		VALUES ($1,$2,$3,$4,TRUE,NULLIF($5,'')::date,'2026-01-01') RETURNING id`, h.cfg().POTable()),
+		VALUES ($1,$2,$3,$4,TRUE,NULLIF($5,'')::date,'2026-01-01') RETURNING id`, "purchase_order"),
 		num, f.Co, status, approval, dateClosed).Scan(&id); err != nil {
 		t.Fatalf("seed PO: %v", err)
 	}
 	t.Cleanup(func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN (SELECT id FROM %s WHERE po_id=$1)`, h.cfg().InventoryTxnTable(), h.cfg().POLineTable()), id)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN (SELECT id FROM %s WHERE po_id=$1)`, "inventory_transaction", "po_line"), id)
 		cleanupPO(ctx, h, id)
 	})
 	for i, l := range lines {
 		var lid int
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (po_id, part_id, line_number, description, qty, unit_cost)
-			VALUES ($1,$2,$3,'lc',$4,1) RETURNING id`, h.cfg().POLineTable()), id, l.part, i+1, l.qty).Scan(&lid); err != nil {
+			VALUES ($1,$2,$3,'lc',$4,1) RETURNING id`, "po_line"), id, l.part, i+1, l.qty).Scan(&lid); err != nil {
 			t.Fatalf("seed line: %v", err)
 		}
 		lineIDs = append(lineIDs, lid)
@@ -64,7 +64,7 @@ func readPOState(t *testing.T, h *Handler, id int) poRowState {
 	t.Helper()
 	var s poRowState
 	if err := h.queryRowContext(context.Background(), fmt.Sprintf(`SELECT COALESCE(status,''), COALESCE(approval_status,''), is_active,
-		COALESCE(date_closed::text,''), COALESCE(date_modified::date::text,'') FROM %s WHERE id=$1`, h.cfg().POTable()), id).
+		COALESCE(date_closed::text,''), COALESCE(date_modified::date::text,'') FROM %s WHERE id=$1`, "purchase_order"), id).
 		Scan(&s.Status, &s.Approval, &s.Active, &s.Closed, &s.Modified); err != nil {
 		t.Fatalf("read PO %d: %v", id, err)
 	}
@@ -77,7 +77,7 @@ func lastEvent(t *testing.T, h *Handler, id int, eventType string) string {
 	var s string
 	err := h.queryRowContext(context.Background(), fmt.Sprintf(`SELECT COALESCE(from_status,'∅') || '>' || COALESCE(to_status,'∅') || '|' ||
 		COALESCE(action,'∅') || '|' || COALESCE(note,'∅') || '|' || changed_by FROM %s WHERE po_id=$1 AND event_type=$2 ORDER BY id DESC LIMIT 1`,
-		h.cfg().POHistoryTable()), id, eventType).Scan(&s)
+		"purchase_order_history"), id, eventType).Scan(&s)
 	if err != nil {
 		return ""
 	}
@@ -211,7 +211,7 @@ func TestIntegration_POLifecycle_Receive(t *testing.T) {
 		t.Helper()
 		var s string
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT string_agg(received_qty::float8 || '@' || COALESCE(date_received::text,'∅'), ',' ORDER BY line_number)
-			FROM %s WHERE po_id=$1`, h.cfg().POLineTable()), id).Scan(&s); err != nil {
+			FROM %s WHERE po_id=$1`, "po_line"), id).Scan(&s); err != nil {
 			t.Fatal(err)
 		}
 		return s
@@ -220,7 +220,7 @@ func TestIntegration_POLifecycle_Receive(t *testing.T) {
 		t.Helper()
 		var s string
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(string_agg(po_line_id || ':' || qty::float8 || '@' || txn_date, ',' ORDER BY id), '')
-			FROM %s WHERE po_line_id IN (SELECT id FROM %s WHERE po_id=$1)`, h.cfg().InventoryTxnTable(), h.cfg().POLineTable()), id).Scan(&s); err != nil {
+			FROM %s WHERE po_line_id IN (SELECT id FROM %s WHERE po_id=$1)`, "inventory_transaction", "po_line"), id).Scan(&s); err != nil {
 			t.Fatal(err)
 		}
 		return s
