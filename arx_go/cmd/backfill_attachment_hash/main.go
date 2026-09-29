@@ -159,9 +159,9 @@ func main() {
 		supplierRoot = cfg.DocControlRoot
 	}
 
-	pu, pf := backfillTable(ctx, db, cfg.AttachmentsTable(), "id", "file_name", cfg.DocControlRoot, *apply)
-	fmt.Printf("%s: %d updated, %d failed\n", cfg.AttachmentsTable(), pu, pf)
+	pu, pf := backfillTable(ctx, db, "part_attachment", "id", "file_name", cfg.DocControlRoot, *apply)
+	fmt.Printf("%s: %d updated, %d failed\n", "part_attachment", pu, pf)
 
-	cu, cf := backfillTable(ctx, db, cfg.CompanyAttachmentsTable(), "supplier_attachment_id", "file_path", supplierRoot, *apply)
-	fmt.Printf("%s: %d updated, %d failed\n", cfg.CompanyAttachmentsTable(), cu, cf)
+	cu, cf := backfillTable(ctx, db, "company_attachment", "supplier_attachment_id", "file_path", supplierRoot, *apply)
+	fmt.Printf("%s: %d updated, %d failed\n", "company_attachment", cu, cf)
 }

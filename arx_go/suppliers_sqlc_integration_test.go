@@ -30,7 +30,7 @@ type supFixture struct {
 func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co, cn, pn, po, pol := "company", "contact", h.cfg().PartsTable(), "purchase_order", "po_line"
+	co, cn, pn, po, pol := "company", "contact", "part", "purchase_order", "po_line"
 	base := smokeUniq("SQ") // purchase_order.number is VARCHAR(32)
 	f.Name = base + "-co"
 	f.PO = map[string]string{}
@@ -47,12 +47,12 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, po), id)
 		}
 		for _, id := range f.Parts {
-			for _, tbl := range []string{h.cfg().AttachmentsTable(), "supplier_part"} {
+			for _, tbl := range []string{"part_attachment", "supplier_part"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
 		}
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, h.cfg().CompanyAttachmentsTable()), f.ID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, "company_attachment"), f.ID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE company_id=$1`, cn), f.ID)
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, co), f.ID)
 	}
@@ -85,7 +85,7 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 		($3,$4,'gone','gone','gone','gone','gone','gone','gone','gone',FALSE)`, cn), f.ConA, f.ConZ, f.ConX, f.ID)
 	var att int
 	scan(&att, fmt.Sprintf(`INSERT INTO %s (supplier_id, file_path, notes) VALUES ($1,'https://example.com/sq.pdf','Quote sheet')
-		RETURNING supplier_attachment_id`, h.cfg().CompanyAttachmentsTable()), f.ID)
+		RETURNING supplier_attachment_id`, "company_attachment"), f.ID)
 	exec(fmt.Sprintf(`UPDATE %s SET default_contact=$2, primary_attachment_id=$3 WHERE id=$1`, co), f.ID, conD, att)
 
 	// Parts 1-6 (inserted out of order): P1 has an explicit purchase unit, a thumbnail and a min
@@ -110,7 +110,7 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 			f.Parts[i], f.ID, fmt.Sprintf("SPN-%d", i+1), spUom, minIncr)
 	}
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\sq-thumb.png',$2,TRUE)`,
-		h.cfg().AttachmentsTable()), f.Parts[0], thumbnailCategory)
+		"part_attachment"), f.Parts[0], thumbnailCategory)
 
 	// POs d1..d6 dated, nd undated, rq an RFQ quote dated last. Lines: P1 on d1, d2 and rq; P2 on nd.
 	for _, c := range []struct {

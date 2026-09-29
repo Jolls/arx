@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	arxdb "arx/internal/db"
+	"arx/internal/records"
 )
 
 // Sentinel errors runNamedQuery/execQuery return for caller-fixable problems
@@ -48,32 +49,11 @@ func isSafeQuery(q string) bool {
 }
 
 // NamedQueryInfo is display metadata for one named query (no SQL body — view-only reference).
-type NamedQueryInfo struct {
-	Name        string
-	Description string
-	Params      string
-	ResultType  string
-}
+type NamedQueryInfo = records.NamedQueryInfo
 
 // listNamedQueries returns active named queries ordered by name, for the def-editor reference.
 func (h *Handler) listNamedQueries(ctx context.Context) ([]NamedQueryInfo, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT name, COALESCE(description,''), COALESCE(params,''), result_type
-		 FROM %s WHERE is_active = TRUE ORDER BY name`, h.cfg().NamedQueriesTable()))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []NamedQueryInfo
-	for rows.Next() {
-		var q NamedQueryInfo
-		if err := rows.Scan(&q.Name, &q.Description, &q.Params, &q.ResultType); err != nil {
-			continue
-		}
-		out = append(out, q)
-	}
-	return out, rows.Err()
+	return h.records().ListActiveNamedQueries(ctx)
 }
 
 // parseQuerySpec parses "query:name(@param1=value1,@param2=value2)".
@@ -134,11 +114,7 @@ func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResul
 		return QueryResult{}, fmt.Errorf("%w: spec_nom %q", errNamedQueryEmptySpec, specNom)
 	}
 
-	var storedSQL, resultType string
-	err := h.queryRowContext(ctx,
-		fmt.Sprintf("SELECT sql, result_type FROM %s WHERE name = $1 AND is_active = TRUE", h.cfg().NamedQueriesTable()),
-		name,
-	).Scan(&storedSQL, &resultType)
+	storedSQL, resultType, err := h.records().GetActiveNamedQuery(ctx, name)
 	if err == sql.ErrNoRows {
 		return QueryResult{}, fmt.Errorf("%w: %q", errNamedQueryNotFound, name)
 	}

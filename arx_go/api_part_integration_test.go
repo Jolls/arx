@@ -18,7 +18,7 @@ import (
 func seedAPIParts(t *testing.T, h *Handler, parts [][3]any) (ids []int, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn := h.cfg().PartsTable()
+	pn := "part"
 	cleanup = func() {
 		for _, id := range ids {
 			for _, tbl := range []string{"price", "supplier_part"} {

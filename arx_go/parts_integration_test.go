@@ -30,7 +30,7 @@ func TestIntegration_PartTrackingModeRoundTrip(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.PartsCreate(rec, postForm("/parts", vals))
 	id := locID(t, rec, "/part/")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().PartsTable()), id)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", "part"), id)
 
 	check := func(step, wantMode string, wantLot bool) {
 		t.Helper()

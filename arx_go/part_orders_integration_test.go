@@ -26,7 +26,7 @@ type partOrdersFixture struct {
 func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, po, pol := h.cfg().PartsTable(), "purchase_order", "po_line"
+	pn, po, pol := "part", "purchase_order", "po_line"
 	base := smokeUniq("IPO") // purchase_order.number is VARCHAR(32)
 	f.PO = map[string]string{"A": base + "-A", "B": base + "-B", "C": base + "-C"}
 	f.Sup = map[int]string{}
@@ -38,7 +38,7 @@ func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func
 		}
 		for _, id := range []int{f.P, f.Q, f.R} {
 			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, pn), id)
-			for _, tbl := range []string{h.cfg().AttachmentsTable(), "inventory_transaction", "price", "supplier_part"} {
+			for _, tbl := range []string{"part_attachment", "inventory_transaction", "price", "supplier_part"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
@@ -102,7 +102,7 @@ func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func
 		($1,1002,2,1,TRUE,'2026-01-05'), ($1,1002,1.5,10,TRUE,'2026-01-06'), ($1,1002,0.5,100,FALSE,'2026-01-07'),
 		($1,1003,1,1,TRUE,NULL), ($1,1004,NULL,NULL,TRUE,'2026-01-08')`, "price"), f.P)
 
-	att := h.cfg().AttachmentsTable()
+	att := "part_attachment"
 	scan(&f.PrimaryAtt, fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, part_revision, sort_order)
 		VALUES ($1,'https://example.com/p.pdf','Drawing','B',1) RETURNING id`, att), f.P)
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, sort_order, is_active) VALUES

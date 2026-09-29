@@ -336,7 +336,7 @@ func TestIntegration_POWrites_AddSuggestions(t *testing.T) {
 		t.Helper()
 		var s string
 		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT string_agg(COALESCE(default_supplier_id::text, '-'), ',' ORDER BY id) FROM %s WHERE id IN ($1,$2)`,
-			h.cfg().PartsTable()), f.P1, f.P2).Scan(&s); err != nil {
+			"part"), f.P1, f.P2).Scan(&s); err != nil {
 			t.Fatalf("defaults: %v", err)
 		}
 		return s
@@ -485,7 +485,7 @@ func TestIntegration_POWrites_ImportPartFile(t *testing.T) {
 			t.Errorf("POImportPartFile(%s, %s, %s): body missing %q", c.num, c.att, c.part, c.want)
 		}
 	}
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, h.cfg().AttachmentsTable()), f.Att)
+	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, "part_attachment"), f.Att)
 	if body := post(f.Full, att, p1).Body.String(); !strings.Contains(body, "Attachment not found.") {
 		t.Errorf("inactive attachment: body missing not-found message")
 	}

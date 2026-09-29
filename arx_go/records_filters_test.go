@@ -3,7 +3,6 @@ package main
 import (
 	"net/url"
 	"testing"
-	"time"
 )
 
 func TestParseRecordFilters_DefaultsToWIP(t *testing.T) {
@@ -43,56 +42,6 @@ func TestParseRecordFilters_ParsesGoodDates(t *testing.T) {
 	}
 	if f.To.IsZero() || f.ToStr != "2026-03-04" {
 		t.Errorf("to not parsed: %v / %q", f.To, f.ToStr)
-	}
-}
-
-func TestWhereClauses_WIPNoExtras(t *testing.T) {
-	f := parseRecordFilters(url.Values{}) // status=wip, nothing else
-	sql, args := f.whereClauses(2)
-	if sql != " AND is_locked = FALSE" {
-		t.Errorf("sql = %q", sql)
-	}
-	if len(args) != 0 {
-		t.Errorf("args = %v, want none", args)
-	}
-}
-
-func TestWhereClauses_StatusVariants(t *testing.T) {
-	cases := map[string]string{
-		"complete": " AND is_locked = TRUE AND is_approved = FALSE",
-		"approved": " AND is_approved = TRUE",
-		"all":      "",
-	}
-	for status, want := range cases {
-		f := parseRecordFilters(url.Values{"status": {status}})
-		sql, _ := f.whereClauses(2)
-		if sql != want {
-			t.Errorf("status %q: sql = %q, want %q", status, sql, want)
-		}
-	}
-}
-
-func TestWhereClauses_AllFiltersNumberedFromStart(t *testing.T) {
-	q := url.Values{
-		"status": {"all"},
-		"type":   {"Re-Test"},
-		"from":   {"2026-01-02"},
-		"to":     {"2026-03-04"},
-	}
-	f := parseRecordFilters(q)
-	sql, args := f.whereClauses(2)
-	want := " AND record_type = $2 AND record_date >= $3 AND record_date < (CAST($4 AS DATE) + 1)"
-	if sql != want {
-		t.Errorf("sql = %q, want %q", sql, want)
-	}
-	if len(args) != 3 {
-		t.Fatalf("args len = %d, want 3", len(args))
-	}
-	if args[0] != "Re-Test" {
-		t.Errorf("args[0] = %v, want Re-Test", args[0])
-	}
-	if _, ok := args[1].(time.Time); !ok {
-		t.Errorf("args[1] = %T, want time.Time", args[1])
 	}
 }
 

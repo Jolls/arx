@@ -11,6 +11,100 @@ import (
 	"time"
 )
 
+const approveRecord = `-- name: ApproveRecord :execrows
+UPDATE form_record SET is_approved = TRUE, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND is_locked = TRUE AND is_approved = FALSE
+`
+
+func (q *Queries) ApproveRecord(ctx context.Context, id int) (int64, error) {
+	result, err := q.db.ExecContext(ctx, approveRecord, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const claimRecord = `-- name: ClaimRecord :execrows
+UPDATE form_record SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND is_locked = FALSE
+`
+
+// Takes a WIP record's row lock for the rest of the tx (#191); 0 rows = locked or missing.
+func (q *Queries) ClaimRecord(ctx context.Context, id int) (int64, error) {
+	result, err := q.db.ExecContext(ctx, claimRecord, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const completeRecord = `-- name: CompleteRecord :execrows
+UPDATE form_record SET is_locked = TRUE, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND is_locked = FALSE
+  AND ($2::int IS NULL OR form_id = $2::int)
+`
+
+type CompleteRecordParams struct {
+	ID     int
+	FormID *int
+}
+
+// WIP → Complete; takes the record's row lock. A non-NULL form_id scopes a bulk complete to that form.
+func (q *Queries) CompleteRecord(ctx context.Context, arg CompleteRecordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, completeRecord, arg.ID, arg.FormID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const copyRecordResults = `-- name: CopyRecordResults :exec
+INSERT INTO result (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+                    spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
+SELECT $1, s.form_row_id, s.type, s.parameter, s.specification, s.spec_min, s.spec_nom,
+       s.spec_max, s.spec_units, s.pf_type, s.format, s.hide_formula, s.default_result, s.result, s.comment,
+       s.pass_fail, CURRENT_TIMESTAMP
+FROM result s
+WHERE s.form_record_id = $2
+`
+
+type CopyRecordResultsParams struct {
+	ToRecordID   int
+	FromRecordID int
+}
+
+// Copies every result row (snapshot and recorded value) of one record onto another.
+func (q *Queries) CopyRecordResults(ctx context.Context, arg CopyRecordResultsParams) error {
+	_, err := q.db.ExecContext(ctx, copyRecordResults, arg.ToRecordID, arg.FromRecordID)
+	return err
+}
+
+const copyStep = `-- name: CopyStep :one
+INSERT INTO form_row (form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units, pf_type,
+                      default_result, hide_formula, category, sheet_name, instrument_types, format, comment,
+                      archive_id, revision)
+SELECT $1, COALESCE(s.type, 0), COALESCE(s.parameter, ''), COALESCE(s.specification, ''),
+       s.spec_nom, s.spec_min, s.spec_max, s.spec_units, s.pf_type, s.default_result, s.hide_formula, s.category,
+       s.sheet_name, s.instrument_types, s.format, s.comment, s.archive_id, s.revision
+FROM form_row s
+WHERE s.id = $2 AND s.form_id = $3
+RETURNING id
+`
+
+type CopyStepParams struct {
+	ToFormID   int
+	StepID     int
+	FromFormID int
+}
+
+// Copies one step of from_form_id into another form (no row when the step isn't one of from_form_id's). archived
+// is not copied (a copy starts active); a NULL type / parameter / specification becomes 0 / ”.
+func (q *Queries) CopyStep(ctx context.Context, arg CopyStepParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, copyStep, arg.ToFormID, arg.StepID, arg.FromFormID)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
 const countFormSteps = `-- name: CountFormSteps :one
 SELECT COUNT(*)::int FROM form_row WHERE form_id = $1
 `
@@ -20,6 +114,44 @@ func (q *Queries) CountFormSteps(ctx context.Context, formID int) (int, error) {
 	var column_1 int
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const duplicateRecord = `-- name: DuplicateRecord :one
+INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
+                         record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
+                         is_approved, form_revision, unit_id)
+SELECT s.form_id, s.part_id, s.serial_number, s.subject_part_number, s.subject_pn_description,
+       s.record_type, COALESCE(s.instrument_type, ''), s.test_order, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, FALSE,
+       FALSE, f.revision, s.unit_id
+FROM form_record s
+JOIN form f ON f.id = s.form_id
+WHERE s.id = $1
+RETURNING id
+`
+
+// A fresh WIP re-test of a record: same form, part, serial, subject, type, instrument and step order, dated now,
+// stamped with the form's current revision (#260), unit carried over (#745). No row = no such record.
+func (q *Queries) DuplicateRecord(ctx context.Context, id int) (int, error) {
+	row := q.db.QueryRowContext(ctx, duplicateRecord, id)
+	var id_2 int
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const getActiveNamedQuery = `-- name: GetActiveNamedQuery :one
+SELECT sql, result_type FROM named_queries WHERE name = $1 AND is_active = TRUE
+`
+
+type GetActiveNamedQueryRow struct {
+	Sql        string
+	ResultType string
+}
+
+func (q *Queries) GetActiveNamedQuery(ctx context.Context, name string) (GetActiveNamedQueryRow, error) {
+	row := q.db.QueryRowContext(ctx, getActiveNamedQuery, name)
+	var i GetActiveNamedQueryRow
+	err := row.Scan(&i.Sql, &i.ResultType)
+	return i, err
 }
 
 const getFormHeader = `-- name: GetFormHeader :one
@@ -109,6 +241,25 @@ func (q *Queries) GetFormStepFormat(ctx context.Context, arg GetFormStepFormatPa
 	var format string
 	err := row.Scan(&format)
 	return format, err
+}
+
+const getPartLabel = `-- name: GetPartLabel :one
+SELECT part_number, COALESCE(description, '') AS description
+FROM part
+WHERE id = $1
+`
+
+type GetPartLabelRow struct {
+	PartNumber  string
+	Description string
+}
+
+// The part number / description denormalized onto a new record as its subject.
+func (q *Queries) GetPartLabel(ctx context.Context, id int) (GetPartLabelRow, error) {
+	row := q.db.QueryRowContext(ctx, getPartLabel, id)
+	var i GetPartLabelRow
+	err := row.Scan(&i.PartNumber, &i.Description)
+	return i, err
 }
 
 const getPartTracking = `-- name: GetPartTracking :one
@@ -245,6 +396,297 @@ func (q *Queries) GetRecordNeighbors(ctx context.Context, arg GetRecordNeighbors
 	return i, err
 }
 
+const insertEventResult = `-- name: InsertEventResult :exec
+INSERT INTO record_event_results (event_id, form_row_id, parameter, specification, spec_units, result, pass_fail, comment)
+VALUES ($1, $2, $3::text, $4::text,
+        $5::text, $6::text, $7::bool, $8::text)
+`
+
+type InsertEventResultParams struct {
+	EventID       int
+	FormRowID     int
+	Parameter     string
+	Specification string
+	SpecUnits     string
+	Result        string
+	PassFail      sql.NullBool
+	Comment       string
+}
+
+func (q *Queries) InsertEventResult(ctx context.Context, arg InsertEventResultParams) error {
+	_, err := q.db.ExecContext(ctx, insertEventResult,
+		arg.EventID,
+		arg.FormRowID,
+		arg.Parameter,
+		arg.Specification,
+		arg.SpecUnits,
+		arg.Result,
+		arg.PassFail,
+		arg.Comment,
+	)
+	return err
+}
+
+const insertForm = `-- name: InsertForm :one
+INSERT INTO form (part_number_id, is_active, is_locked, test_order, record_types, instrument_types)
+VALUES ($1, TRUE, FALSE, '',
+        (SELECT s.record_types FROM form s WHERE s.id = $2),
+        (SELECT s.instrument_types FROM form s WHERE s.id = $2))
+RETURNING id
+`
+
+type InsertFormParams struct {
+	PartNumberID int
+	SourceID     int
+}
+
+// A new active, unlocked form with an empty step order. Record / instrument types come from the source form
+// (NULL when there is none).
+func (q *Queries) InsertForm(ctx context.Context, arg InsertFormParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, insertForm, arg.PartNumberID, arg.SourceID)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertFormEvent = `-- name: InsertFormEvent :exec
+INSERT INTO form_events (form_id, event_type, username, event_date, comments)
+VALUES ($1, $2, $3::text, CURRENT_TIMESTAMP, $4::text)
+`
+
+type InsertFormEventParams struct {
+	FormID    int
+	EventType string
+	Username  string
+	Comments  sql.NullString
+}
+
+func (q *Queries) InsertFormEvent(ctx context.Context, arg InsertFormEventParams) error {
+	_, err := q.db.ExecContext(ctx, insertFormEvent,
+		arg.FormID,
+		arg.EventType,
+		arg.Username,
+		arg.Comments,
+	)
+	return err
+}
+
+const insertNamedQuery = `-- name: InsertNamedQuery :one
+INSERT INTO named_queries (name, description, sql, params, result_type, is_active)
+VALUES ($1, $2::text, $3, $4::text, $5,
+        $6)
+RETURNING id
+`
+
+type InsertNamedQueryParams struct {
+	Name        string
+	Description string
+	Sql         string
+	Params      string
+	ResultType  string
+	IsActive    bool
+}
+
+func (q *Queries) InsertNamedQuery(ctx context.Context, arg InsertNamedQueryParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, insertNamedQuery,
+		arg.Name,
+		arg.Description,
+		arg.Sql,
+		arg.Params,
+		arg.ResultType,
+		arg.IsActive,
+	)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertRecord = `-- name: InsertRecord :one
+INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
+                         record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
+                         form_revision)
+VALUES ($1, $2, $3::text, $4::text,
+        $5::text, $6::text, $7::text,
+        $8::text, $9::timestamp, CURRENT_TIMESTAMP, TRUE, FALSE,
+        $10::int)
+RETURNING id
+`
+
+type InsertRecordParams struct {
+	FormID               int
+	PartID               *int
+	SerialNumber         string
+	SubjectPartNumber    string
+	SubjectPnDescription string
+	RecordType           string
+	InstrumentType       string
+	TestOrder            string
+	RecordDate           time.Time
+	FormRevision         int
+}
+
+func (q *Queries) InsertRecord(ctx context.Context, arg InsertRecordParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, insertRecord,
+		arg.FormID,
+		arg.PartID,
+		arg.SerialNumber,
+		arg.SubjectPartNumber,
+		arg.SubjectPnDescription,
+		arg.RecordType,
+		arg.InstrumentType,
+		arg.TestOrder,
+		arg.RecordDate,
+		arg.FormRevision,
+	)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertRecordEvent = `-- name: InsertRecordEvent :one
+INSERT INTO record_events (form_record_id, event_type, username, event_date, comments)
+VALUES ($1, $2, $3::text, CURRENT_TIMESTAMP, $4::text)
+RETURNING id
+`
+
+type InsertRecordEventParams struct {
+	RecordID  int
+	EventType string
+	Username  string
+	Comments  sql.NullString
+}
+
+func (q *Queries) InsertRecordEvent(ctx context.Context, arg InsertRecordEventParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, insertRecordEvent,
+		arg.RecordID,
+		arg.EventType,
+		arg.Username,
+		arg.Comments,
+	)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertResult = `-- name: InsertResult :exec
+INSERT INTO result (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+                    spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
+VALUES ($1, $2, $3::int, $4::text,
+        $5::text, $6::text, $7::text, $8::text,
+        $9::text, $10::text, $11::text, $12::text,
+        $13::text, $14::text, $15::text, $16::bool,
+        CURRENT_TIMESTAMP)
+`
+
+type InsertResultParams struct {
+	RecordID      int
+	StepID        int
+	Type          int
+	Parameter     string
+	Specification string
+	SpecMin       string
+	SpecNom       string
+	SpecMax       string
+	SpecUnits     string
+	PfType        string
+	Format        string
+	HideFormula   string
+	DefaultResult string
+	Result        sql.NullString
+	Comment       sql.NullString
+	PassFail      sql.NullBool
+}
+
+// One result row materialized from a (baked) step definition; result / comment / pass_fail NULL for a fresh row.
+func (q *Queries) InsertResult(ctx context.Context, arg InsertResultParams) error {
+	_, err := q.db.ExecContext(ctx, insertResult,
+		arg.RecordID,
+		arg.StepID,
+		arg.Type,
+		arg.Parameter,
+		arg.Specification,
+		arg.SpecMin,
+		arg.SpecNom,
+		arg.SpecMax,
+		arg.SpecUnits,
+		arg.PfType,
+		arg.Format,
+		arg.HideFormula,
+		arg.DefaultResult,
+		arg.Result,
+		arg.Comment,
+		arg.PassFail,
+	)
+	return err
+}
+
+const insertStep = `-- name: InsertStep :one
+INSERT INTO form_row (form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units, pf_type,
+                      default_result, hide_formula, category, sheet_name, instrument_types, format, comment,
+                      created_at, updated_at)
+VALUES ($1, $2::int, $3::text, $4::text,
+        $5::text, $6::text, $7::text, $8::text,
+        $9::text, $10::text, $11::text,
+        $12::text, $13::text, $14::text,
+        $15::text, $16::text, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+RETURNING id
+`
+
+type InsertStepParams struct {
+	FormID          int
+	Type            int
+	Parameter       string
+	Specification   sql.NullString
+	SpecNom         sql.NullString
+	SpecMin         sql.NullString
+	SpecMax         sql.NullString
+	SpecUnits       sql.NullString
+	PfType          sql.NullString
+	DefaultResult   sql.NullString
+	HideFormula     sql.NullString
+	Category        sql.NullString
+	SheetName       sql.NullString
+	InstrumentTypes sql.NullString
+	Format          sql.NullString
+	Comment         sql.NullString
+}
+
+func (q *Queries) InsertStep(ctx context.Context, arg InsertStepParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, insertStep,
+		arg.FormID,
+		arg.Type,
+		arg.Parameter,
+		arg.Specification,
+		arg.SpecNom,
+		arg.SpecMin,
+		arg.SpecMax,
+		arg.SpecUnits,
+		arg.PfType,
+		arg.DefaultResult,
+		arg.HideFormula,
+		arg.Category,
+		arg.SheetName,
+		arg.InstrumentTypes,
+		arg.Format,
+		arg.Comment,
+	)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
+const isFormPart = `-- name: IsFormPart :one
+SELECT EXISTS (SELECT 1 FROM part WHERE id = $1 AND category = 'FORM' AND is_active = TRUE)::bool
+`
+
+// Whether a part may own a new form: an active FORM-category part.
+func (q *Queries) IsFormPart(ctx context.Context, id int) (bool, error) {
+	row := q.db.QueryRowContext(ctx, isFormPart, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listActiveForms = `-- name: ListActiveForms :many
 
 SELECT f.id, f.part_number_id, f.is_locked, f.revision, pn.part_number,
@@ -282,6 +724,51 @@ func (q *Queries) ListActiveForms(ctx context.Context) ([]ListActiveFormsRow, er
 			&i.Revision,
 			&i.PartNumber,
 			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveNamedQueries = `-- name: ListActiveNamedQueries :many
+
+SELECT name, COALESCE(description, '') AS description, COALESCE(params, '') AS params, result_type
+FROM named_queries
+WHERE is_active = TRUE
+ORDER BY name
+`
+
+type ListActiveNamedQueriesRow struct {
+	Name        string
+	Description string
+	Params      string
+	ResultType  string
+}
+
+// ── Named queries (#250) ─────────────────────────────────────────────────────
+// The admin-authored SQL itself runs raw in arx_go's execQuery; only the named_queries table is here.
+func (q *Queries) ListActiveNamedQueries(ctx context.Context) ([]ListActiveNamedQueriesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveNamedQueries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveNamedQueriesRow
+	for rows.Next() {
+		var i ListActiveNamedQueriesRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Description,
+			&i.Params,
+			&i.ResultType,
 		); err != nil {
 			return nil, err
 		}
@@ -670,6 +1157,56 @@ func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams
 			&i.DefaultResult,
 			&i.HideFormula,
 			&i.Changed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNamedQueries = `-- name: ListNamedQueries :many
+SELECT id, name, COALESCE(description, '') AS description, sql, COALESCE(params, '') AS params, result_type,
+       is_active, updated_at
+FROM named_queries
+ORDER BY name
+`
+
+type ListNamedQueriesRow struct {
+	ID          int
+	Name        string
+	Description string
+	Sql         string
+	Params      string
+	ResultType  string
+	IsActive    bool
+	UpdatedAt   *time.Time
+}
+
+func (q *Queries) ListNamedQueries(ctx context.Context) ([]ListNamedQueriesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listNamedQueries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListNamedQueriesRow
+	for rows.Next() {
+		var i ListNamedQueriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Sql,
+			&i.Params,
+			&i.ResultType,
+			&i.IsActive,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1137,6 +1674,36 @@ func (q *Queries) ListYieldRecords(ctx context.Context, arg ListYieldRecordsPara
 	return items, nil
 }
 
+const lockForm = `-- name: LockForm :execrows
+UPDATE form SET is_locked = TRUE, revision = revision + 1 WHERE id = $1 AND is_locked = FALSE
+`
+
+// Release: lock and bump the revision (#260).
+func (q *Queries) LockForm(ctx context.Context, id int) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockForm, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const lockSerialAllocation = `-- name: LockSerialAllocation :exec
+
+SELECT pg_advisory_xact_lock($1::int, $2::int)
+`
+
+type LockSerialAllocationParams struct {
+	Namespace int
+	FormID    int
+}
+
+// ── Record writes ────────────────────────────────────────────────────────────
+// Serializes auto serial allocation for one form until the tx ends (#369, #33).
+func (q *Queries) LockSerialAllocation(ctx context.Context, arg LockSerialAllocationParams) error {
+	_, err := q.db.ExecContext(ctx, lockSerialAllocation, arg.Namespace, arg.FormID)
+	return err
+}
+
 const nextFormSerial = `-- name: NextFormSerial :one
 SELECT COALESCE(MAX(CASE WHEN serial_number ~ '^[0-9]+$' THEN CAST(serial_number AS INTEGER) END) + 1, 1)::int AS next_serial
 FROM form_record
@@ -1149,4 +1716,305 @@ func (q *Queries) NextFormSerial(ctx context.Context, formID int) (int, error) {
 	var next_serial int
 	err := row.Scan(&next_serial)
 	return next_serial, err
+}
+
+const refreshResult = `-- name: RefreshResult :exec
+UPDATE result
+SET type = $1::int, parameter = $2::text, specification = $3::text,
+    spec_min = $4::text, spec_nom = $5::text, spec_max = $6::text,
+    spec_units = $7::text, pf_type = $8::text, format = $9::text,
+    hide_formula = $10::text, default_result = $11::text,
+    pass_fail = $12::bool, updated_at = CURRENT_TIMESTAMP
+WHERE id = $13
+`
+
+type RefreshResultParams struct {
+	Type          int
+	Parameter     string
+	Specification string
+	SpecMin       string
+	SpecNom       string
+	SpecMax       string
+	SpecUnits     string
+	PfType        string
+	Format        string
+	HideFormula   string
+	DefaultResult string
+	PassFail      sql.NullBool
+	ID            int
+}
+
+// Re-pulls a step's live definition into an existing snapshot row (resync) with a recomputed pass_fail.
+func (q *Queries) RefreshResult(ctx context.Context, arg RefreshResultParams) error {
+	_, err := q.db.ExecContext(ctx, refreshResult,
+		arg.Type,
+		arg.Parameter,
+		arg.Specification,
+		arg.SpecMin,
+		arg.SpecNom,
+		arg.SpecMax,
+		arg.SpecUnits,
+		arg.PfType,
+		arg.Format,
+		arg.HideFormula,
+		arg.DefaultResult,
+		arg.PassFail,
+		arg.ID,
+	)
+	return err
+}
+
+const resyncRecordHeader = `-- name: ResyncRecordHeader :exec
+UPDATE form_record
+SET test_order = $1::text, form_revision = $2::int, updated_at = CURRENT_TIMESTAMP
+WHERE id = $3
+`
+
+type ResyncRecordHeaderParams struct {
+	TestOrder    string
+	FormRevision int
+	ID           int
+}
+
+func (q *Queries) ResyncRecordHeader(ctx context.Context, arg ResyncRecordHeaderParams) error {
+	_, err := q.db.ExecContext(ctx, resyncRecordHeader, arg.TestOrder, arg.FormRevision, arg.ID)
+	return err
+}
+
+const setAuditUser = `-- name: SetAuditUser :exec
+
+SELECT set_config('arx.username', $1::text, true)
+`
+
+// ── Form writes ──────────────────────────────────────────────────────────────
+// Transaction-local acting username that trg_form_row_history reads via current_setting('arx.username').
+func (q *Queries) SetAuditUser(ctx context.Context, username string) error {
+	_, err := q.db.ExecContext(ctx, setAuditUser, username)
+	return err
+}
+
+const setFormTestOrder = `-- name: SetFormTestOrder :exec
+UPDATE form SET test_order = $1::text WHERE id = $2
+`
+
+type SetFormTestOrderParams struct {
+	TestOrder string
+	ID        int
+}
+
+func (q *Queries) SetFormTestOrder(ctx context.Context, arg SetFormTestOrderParams) error {
+	_, err := q.db.ExecContext(ctx, setFormTestOrder, arg.TestOrder, arg.ID)
+	return err
+}
+
+const setFormTypes = `-- name: SetFormTypes :exec
+UPDATE form SET record_types = $1::text, instrument_types = $2::text
+WHERE id = $3
+`
+
+type SetFormTypesParams struct {
+	RecordTypes     sql.NullString
+	InstrumentTypes sql.NullString
+	ID              int
+}
+
+func (q *Queries) SetFormTypes(ctx context.Context, arg SetFormTypesParams) error {
+	_, err := q.db.ExecContext(ctx, setFormTypes, arg.RecordTypes, arg.InstrumentTypes, arg.ID)
+	return err
+}
+
+const setStepArchived = `-- name: SetStepArchived :exec
+UPDATE form_row SET archived = $1, updated_at = CURRENT_TIMESTAMP
+WHERE id = $2 AND form_id = $3
+`
+
+type SetStepArchivedParams struct {
+	Archived bool
+	ID       int
+	FormID   int
+}
+
+func (q *Queries) SetStepArchived(ctx context.Context, arg SetStepArchivedParams) error {
+	_, err := q.db.ExecContext(ctx, setStepArchived, arg.Archived, arg.ID, arg.FormID)
+	return err
+}
+
+const unlockForm = `-- name: UnlockForm :execrows
+UPDATE form SET is_locked = FALSE WHERE id = $1 AND is_locked = TRUE
+`
+
+func (q *Queries) UnlockForm(ctx context.Context, id int) (int64, error) {
+	result, err := q.db.ExecContext(ctx, unlockForm, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const unlockRecord = `-- name: UnlockRecord :execrows
+UPDATE form_record SET is_locked = FALSE, is_approved = FALSE, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND is_locked = TRUE AND (is_approved = FALSE OR $2::bool)
+`
+
+type UnlockRecordParams struct {
+	ID                int
+	MayUnlockApproved bool
+}
+
+// Locked → WIP, clearing approval. An approved record unlocks only for a reviewer (#249); the check sits in
+// the WHERE so an approval that lands while the unlock waits on the row lock still wins.
+func (q *Queries) UnlockRecord(ctx context.Context, arg UnlockRecordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, unlockRecord, arg.ID, arg.MayUnlockApproved)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateNamedQuery = `-- name: UpdateNamedQuery :execrows
+UPDATE named_queries
+SET name = $1, description = $2::text, sql = $3,
+    params = $4::text, result_type = $5, is_active = $6,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $7
+`
+
+type UpdateNamedQueryParams struct {
+	Name        string
+	Description string
+	Sql         string
+	Params      string
+	ResultType  string
+	IsActive    bool
+	ID          int
+}
+
+func (q *Queries) UpdateNamedQuery(ctx context.Context, arg UpdateNamedQueryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateNamedQuery,
+		arg.Name,
+		arg.Description,
+		arg.Sql,
+		arg.Params,
+		arg.ResultType,
+		arg.IsActive,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateRecordAfterSave = `-- name: UpdateRecordAfterSave :exec
+UPDATE form_record
+SET record_date = COALESCE($1::timestamp, record_date), record_type = $2::text,
+    notes = $3::text, instrument_type = $4::text,
+    lot_id = $5::int, build_id = $6::int, unit_id = $7::int,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $8
+`
+
+type UpdateRecordAfterSaveParams struct {
+	RecordDate     sql.NullTime
+	RecordType     string
+	Notes          sql.NullString
+	InstrumentType string
+	LotID          *int
+	BuildID        *int
+	UnitID         *int
+	ID             int
+}
+
+// The record-level fields of a results save; a NULL record_date keeps the stored one.
+func (q *Queries) UpdateRecordAfterSave(ctx context.Context, arg UpdateRecordAfterSaveParams) error {
+	_, err := q.db.ExecContext(ctx, updateRecordAfterSave,
+		arg.RecordDate,
+		arg.RecordType,
+		arg.Notes,
+		arg.InstrumentType,
+		arg.LotID,
+		arg.BuildID,
+		arg.UnitID,
+		arg.ID,
+	)
+	return err
+}
+
+const updateResultValue = `-- name: UpdateResultValue :exec
+UPDATE result
+SET result = $1::text, comment = $2::text, pass_fail = $3::bool,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $4
+`
+
+type UpdateResultValueParams struct {
+	Result   string
+	Comment  string
+	PassFail sql.NullBool
+	ID       int
+}
+
+func (q *Queries) UpdateResultValue(ctx context.Context, arg UpdateResultValueParams) error {
+	_, err := q.db.ExecContext(ctx, updateResultValue,
+		arg.Result,
+		arg.Comment,
+		arg.PassFail,
+		arg.ID,
+	)
+	return err
+}
+
+const updateStep = `-- name: UpdateStep :exec
+UPDATE form_row
+SET type = $1::int, parameter = $2::text, specification = $3::text,
+    spec_nom = $4::text, spec_min = $5::text, spec_max = $6::text,
+    spec_units = $7::text, pf_type = $8::text,
+    default_result = $9::text, hide_formula = $10::text,
+    category = $11::text, sheet_name = $12::text,
+    instrument_types = $13::text, format = $14::text,
+    comment = $15::text, updated_at = CURRENT_TIMESTAMP
+WHERE id = $16 AND form_id = $17
+`
+
+type UpdateStepParams struct {
+	Type            int
+	Parameter       string
+	Specification   string
+	SpecNom         sql.NullString
+	SpecMin         sql.NullString
+	SpecMax         sql.NullString
+	SpecUnits       sql.NullString
+	PfType          sql.NullString
+	DefaultResult   sql.NullString
+	HideFormula     sql.NullString
+	Category        sql.NullString
+	SheetName       sql.NullString
+	InstrumentTypes sql.NullString
+	Format          sql.NullString
+	Comment         sql.NullString
+	ID              int
+	FormID          int
+}
+
+func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) error {
+	_, err := q.db.ExecContext(ctx, updateStep,
+		arg.Type,
+		arg.Parameter,
+		arg.Specification,
+		arg.SpecNom,
+		arg.SpecMin,
+		arg.SpecMax,
+		arg.SpecUnits,
+		arg.PfType,
+		arg.DefaultResult,
+		arg.HideFormula,
+		arg.Category,
+		arg.SheetName,
+		arg.InstrumentTypes,
+		arg.Format,
+		arg.Comment,
+		arg.ID,
+		arg.FormID,
+	)
+	return err
 }

@@ -23,6 +23,20 @@ import (
 
 func (h *Handler) records() *records.Service { return records.New(handlerDB{h}) }
 
+// recordsTx runs fn against a records service bound to one transaction, so a state change and the
+// audit event that records it commit or roll back together.
+func (h *Handler) recordsTx(ctx context.Context, fn func(*records.Service) error) error {
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(records.New(tx)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // testForm copies a form header into the model the templates render.
 func testForm(f records.FormHeader) models.TestForm {
 	return models.TestForm{
@@ -424,7 +438,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 	}
 	form := testForm(hdr)
 
-	stepsMap, err := h.loadSteps(r.Context(), formID)
+	stepsMap, err := h.loadSteps(r.Context(), h.records(), formID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
@@ -602,7 +616,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	form := testForm(hdr)
 
 	// Load raw step values â€" no substituteRefs, we want to edit the actual stored values.
-	stepsMap, err := h.loadSteps(r.Context(), formID)
+	stepsMap, err := h.loadSteps(r.Context(), h.records(), formID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
@@ -636,23 +650,6 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// serialIntExpr is serial_number's integer value for ordering and next-serial
-// math, or NULL when it isn't all digits (a bare CAST would raise). col is
-// evaluated twice, so pass a bare column, not an expression.
-func serialIntExpr(col string) string {
-	return "CASE WHEN " + col + " ~ '^[0-9]+$' THEN CAST(" + col + " AS INTEGER) END"
-}
-
-// setAuditUser records the acting username for the current transaction so the
-// trg_form_row_history trigger attributes the snapshot to them, via a
-// transaction-local session GUC the trigger reads with
-// current_setting('arx.username'). Best-effort: a failure here only leaves the
-// history row unattributed, matching the prior inline behavior, which also
-// ignored the error.
-func (h *Handler) setAuditUser(ctx context.Context, tx *txLogger, username string) {
-	tx.ExecContext(ctx, "SELECT set_config('arx.username', $1, true)", username)
-}
-
 // SaveFormDef â€" POST /forms/{id}/def/edit
 func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -675,12 +672,6 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	orig := func(id int, field string) string {
 		return r.FormValue(fmt.Sprintf("original_%s_%d", field, id))
 	}
-	nullOrVal := func(s string) any {
-		if s == "" {
-			return nil
-		}
-		return s
-	}
 
 	// Collect step IDs from submitted original_ fields.
 	stepIDs := map[int]bool{}
@@ -700,9 +691,10 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	svc := records.New(tx)
 
 	if u := h.currentUser(r); u != nil {
-		h.setAuditUser(r.Context(), tx, u.Username)
+		svc.SetAuditUser(r.Context(), u.Username) // best-effort, as before: a failure only leaves history unattributed
 	}
 
 	for id := range stepIDs {
@@ -735,28 +727,13 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			UPDATE %s SET
-			  type=$1, parameter=$2, specification=$3,
-			  spec_nom=$4, spec_min=$5, spec_max=$6, spec_units=$7,
-			  pf_type=$8, default_result=$9, hide_formula=$10,
-			  category=$11, sheet_name=$12, instrument_types=$13,
-			  format=$14, comment=$15, updated_at=CURRENT_TIMESTAMP
-			WHERE id=$16 AND form_id=$17`, h.cfg().StepsTable()),
-			stepType,
-			sid(id, "parameter"), sid(id, "specification"),
-			nullOrVal(sid(id, "spec_nom")),
-			nullOrVal(sid(id, "spec_min")), nullOrVal(sid(id, "spec_max")),
-			nullOrVal(sid(id, "spec_units")),
-			nullOrVal(sid(id, "pf_type")),
-			nullOrVal(sid(id, "default_result")),
-			nullOrVal(hideFormula),
-			nullOrVal(sid(id, "category")), nullOrVal(sid(id, "sheet_name")),
-			nullOrVal(sid(id, "instrument_types")),
-			nullOrVal(sid(id, "format")),
-			nullOrVal(sid(id, "comment")),
-			id, formID,
-		); err != nil {
+		if err := svc.UpdateStep(r.Context(), formID, id, records.StepDef{
+			Type: stepType, Parameter: sid(id, "parameter"), Specification: sid(id, "specification"),
+			SpecNom: sid(id, "spec_nom"), SpecMin: sid(id, "spec_min"), SpecMax: sid(id, "spec_max"),
+			SpecUnits: sid(id, "spec_units"), PFType: sid(id, "pf_type"), DefaultResult: sid(id, "default_result"),
+			HideFormula: hideFormula, Category: sid(id, "category"), SheetName: sid(id, "sheet_name"),
+			InstrumentTypes: sid(id, "instrument_types"), Format: sid(id, "format"), Comment: sid(id, "comment"),
+		}); err != nil {
 			serverError(w, "could not save step", err)
 			return
 		}
@@ -843,30 +820,21 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		if stepType == 0 && row.Parameter == "" {
 			continue
 		}
-		hideFormula := row.Hide
-		var newID int
-		insertStep := fmt.Sprintf(`INSERT INTO %s (form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
-			 pf_type, default_result, hide_formula, category, sheet_name, instrument_types,
-			 format, comment, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) RETURNING id`, h.cfg().StepsTable())
-		if err2 := tx.QueryRowContext(r.Context(), insertStep,
-			formID, stepType, row.Parameter, nullOrVal(row.Specification),
-			nullOrVal(row.SpecNom), nullOrVal(row.SpecMin), nullOrVal(row.SpecMax),
-			nullOrVal(row.SpecUnits), nullOrVal(row.PFType), nullOrVal(row.DefaultResult),
-			nullOrVal(hideFormula), nullOrVal(row.Category), nullOrVal(row.SheetName),
-			nullOrVal(row.InstrumentTypes), nullOrVal(row.Format), nullOrVal(row.Comment),
-		).Scan(&newID); err2 != nil {
+		newID, err2 := svc.InsertStep(r.Context(), formID, records.StepDef{
+			Type: stepType, Parameter: row.Parameter, Specification: row.Specification,
+			SpecNom: row.SpecNom, SpecMin: row.SpecMin, SpecMax: row.SpecMax, SpecUnits: row.SpecUnits,
+			PFType: row.PFType, DefaultResult: row.DefaultResult, HideFormula: row.Hide, Category: row.Category,
+			SheetName: row.SheetName, InstrumentTypes: row.InstrumentTypes, Format: row.Format, Comment: row.Comment,
+		})
+		if err2 != nil {
 			http.Error(w, "could not insert new step: "+err2.Error(), http.StatusInternalServerError)
 			return
 		}
 		newIDMap[idx] = newID
 	}
 
-	if err := tx.Commit(); err != nil {
-		serverError(w, "could not save steps", err)
-		return
-	}
-
-	// Update Forms.test_order if the order changed or new rows were added.
+	// Update Forms.test_order if the order changed or new rows were added (same tx: new steps
+	// and the order that shows them commit together).
 	normalizeOrder := func(s string) string {
 		parts := strings.Split(s, ",")
 		out := make([]string, 0, len(parts))
@@ -913,14 +881,13 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		var currentOrder string
-		h.queryRowContext(r.Context(), fmt.Sprintf(
-			"SELECT COALESCE(test_order,'') FROM %s WHERE id=$1", h.cfg().FormsTable()),
-			formID).Scan(&currentOrder)
-		if normalizeOrder(stepOrder) != normalizeOrder(currentOrder) {
-			if _, err := h.execContext(r.Context(), fmt.Sprintf(
-				"UPDATE %s SET test_order=$1 WHERE id=$2", h.cfg().FormsTable()),
-				normalizeOrder(stepOrder), formID); err != nil {
+		current, err := svc.GetFormHeader(r.Context(), formID)
+		if err != nil && err != sql.ErrNoRows { // a missing form reads as an empty order
+			serverError(w, "could not read step order", err)
+			return
+		}
+		if normalizeOrder(stepOrder) != normalizeOrder(current.TestOrder) {
+			if err := svc.SetFormTestOrder(r.Context(), formID, normalizeOrder(stepOrder)); err != nil {
 				serverError(w, "could not save step order", err)
 				return
 			}
@@ -932,13 +899,15 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 	newInstrTypes := strings.TrimSpace(r.FormValue("instrument_types"))
 	if newRecordTypes != r.FormValue("original_record_types") ||
 		newInstrTypes != r.FormValue("original_instrument_types") {
-		if _, err := h.execContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET record_types=$1, instrument_types=$2 WHERE id=$3",
-			h.cfg().FormsTable()),
-			nullOrVal(newRecordTypes), nullOrVal(newInstrTypes), formID); err != nil {
+		if err := svc.SetFormTypes(r.Context(), formID, newRecordTypes, newInstrTypes); err != nil {
 			serverError(w, "could not save record types", err)
 			return
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		serverError(w, "could not save steps", err)
+		return
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
@@ -946,8 +915,9 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 
 // loadSteps loads all form_row rows for a form keyed by id, with every field used for
 // rendering and token resolution. Used as the live-definition fallback for un-materialized rows.
-func (h *Handler) loadSteps(ctx context.Context, formID int) (map[int]*models.TestStep, error) {
-	rows, err := h.records().ListFormSteps(ctx, formID)
+// svc is h.records(), or a Service over the caller's tx when the read belongs to a write.
+func (h *Handler) loadSteps(ctx context.Context, svc *records.Service, formID int) (map[int]*models.TestStep, error) {
+	rows, err := svc.ListFormSteps(ctx, formID)
 	if err != nil {
 		return nil, err
 	}
@@ -1009,7 +979,7 @@ func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	liveSteps, err := h.loadSteps(ctx, form.ID)
+	liveSteps, err := h.loadSteps(ctx, h.records(), form.ID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1291,12 +1261,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.description
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1305,6 +1270,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
 	serialNumber := strings.TrimSpace(r.FormValue("serial_number"))
 	suggestedSN := strings.TrimSpace(r.FormValue("suggested_serial_number"))
@@ -1316,13 +1282,15 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	var partNumberID *int
 	if pnidStr := r.FormValue("bom_pnid"); pnidStr != "" {
 		if pnid, convErr := strconv.Atoi(pnidStr); convErr == nil {
-			var pn, description sql.NullString
-			if scanErr := h.queryRowContext(r.Context(), fmt.Sprintf(`
-				SELECT part_number, description FROM %s WHERE id = $1`,
-				h.cfg().PartsTable()), pnid).Scan(&pn, &description); scanErr == nil {
-				snPN = pn.String
-				snDesc = description.String
+			pn, description, lookupErr := h.records().GetPartLabel(r.Context(), pnid)
+			switch {
+			case lookupErr == nil:
+				snPN = pn
+				snDesc = description
 				partNumberID = &pnid
+			case lookupErr != sql.ErrNoRows: // an unknown part id just leaves the subject blank
+				serverError(w, "query error", lookupErr)
+				return
 			}
 		}
 	}
@@ -1342,6 +1310,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	svc := records.New(tx)
 
 	// SN allocation is atomic when the user accepted the suggested default (#369).
 	// Re-derive the next per-form SN inside the transaction under a lock so two
@@ -1351,16 +1320,11 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		// Serialize concurrent auto-allocations for this form: the xact-scoped
 		// advisory lock is held until tx commit/rollback, so the MAX()+1 read and
 		// the INSERT below are atomic w.r.t. other creates on the same form.
-		if _, err = tx.ExecContext(r.Context(),
-			`SELECT pg_advisory_xact_lock($1, $2)`, serialAllocLockNS, formID); err != nil {
+		if err = svc.LockSerialAllocation(r.Context(), serialAllocLockNS, formID); err != nil {
 			serverError(w, "serial lock error", err)
 			return
 		}
-		var nextSN int
-		err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-			SELECT COALESCE(MAX(`+serialIntExpr("serial_number")+`), 0) + 1
-			FROM %s WHERE form_id = $1`,
-			h.cfg().RecordsTable()), formID).Scan(&nextSN)
+		nextSN, err := svc.NextSerial(r.Context(), formID)
 		if err != nil {
 			serverError(w, "serial number error", err)
 			return
@@ -1368,11 +1332,11 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		serialNumber = strconv.Itoa(nextSN)
 	}
 
-	var newID int
-	insertRecord := fmt.Sprintf(`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
-		 record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked, form_revision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP,TRUE,FALSE,$10) RETURNING id`, h.cfg().RecordsTable())
-	err = tx.QueryRowContext(r.Context(), insertRecord,
-		formID, partNumberID, serialNumber, snPN, snDesc, recordType, instrumentType, form.TestOrder, recordDate, form.Revision).Scan(&newID)
+	newID, err := svc.InsertRecord(r.Context(), records.NewRecord{
+		FormID: formID, PartID: partNumberID, SerialNumber: serialNumber, SubjectPartNumber: snPN,
+		SubjectPnDescription: snDesc, RecordType: recordType, InstrumentType: instrumentType,
+		TestOrder: form.TestOrder, RecordDate: recordDate, FormRevision: form.Revision,
+	})
 	if err != nil {
 		serverError(w, "insert error", err)
 		return
@@ -1384,7 +1348,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		SerialNumberPN: snPN, SerialNumberDesc: snDesc, RecordType: recordType,
 		InstrumentType: instrumentType, RecordDate: &recordDate, TestOrder: form.TestOrder,
 	}
-	if err := h.materializeRecordSteps(r.Context(), tx, &rec, &form); err != nil {
+	if err := h.materializeRecordSteps(r.Context(), svc, &rec, &form); err != nil {
 		serverError(w, "materialize error", err)
 		return
 	}
@@ -1400,9 +1364,10 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 // materializeRecordSteps creates a frozen result snapshot row for every applicable step in the
 // form's order at record creation (#487): headings included (type > 0); archived and non-applicable
 // instrument-type data steps skipped. Self/record/form tokens are baked; {id} cross-step tokens are
-// left for render-time resolution. result/comment/pass_fail start empty.
-func (h *Handler) materializeRecordSteps(ctx context.Context, tx *txLogger, record *models.TestRecord, form *models.TestForm) error {
-	steps, err := h.loadSteps(ctx, form.ID)
+// left for render-time resolution. result/comment/pass_fail start empty. svc runs on the caller's tx,
+// the step read included.
+func (h *Handler) materializeRecordSteps(ctx context.Context, svc *records.Service, record *models.TestRecord, form *models.TestForm) error {
+	steps, err := h.loadSteps(ctx, svc, form.ID)
 	if err != nil {
 		return err
 	}
@@ -1422,19 +1387,18 @@ func (h *Handler) materializeRecordSteps(ctx context.Context, tx *txLogger, reco
 			continue
 		}
 		bakeStepTokens(step, record, form)
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-			INSERT INTO %s
-			  (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
-			   spec_units, pf_type, format, hide_formula, default_result, updated_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CURRENT_TIMESTAMP)`,
-			h.cfg().ResultsTable()),
-			record.ID, tid, step.Type, step.Parameter, step.Specification,
-			step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
-			step.HideFormula, step.DefaultResult); err != nil {
+		if err := svc.InsertResult(ctx, record.ID, tid, resultDef(step), nil, nil, nil); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// resultDef is the (baked) step definition a result row freezes.
+func resultDef(s *models.TestStep) records.ResultDef {
+	return records.ResultDef{Type: s.Type, Parameter: s.Parameter, Specification: s.Specification, SpecMin: s.SpecMin,
+		SpecNom: s.SpecNom, SpecMax: s.SpecMax, SpecUnits: s.SpecUnits, PFType: s.PFType, Format: s.Format,
+		HideFormula: s.HideFormula, DefaultResult: s.DefaultResult}
 }
 
 // RecordTrace is the lot/build linkage panel for a test record (#677): the currently
@@ -1734,21 +1698,16 @@ func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_approved=TRUE, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND is_locked=TRUE AND is_approved=FALSE",
-		h.cfg().RecordsTable()), recordID)
-	if err != nil {
+	if err := h.recordsTx(r.Context(), func(svc *records.Service) error {
+		approved, err := svc.ApproveRecord(r.Context(), recordID)
+		if err != nil || !approved {
+			return err
+		}
+		_, err = svc.InsertRecordEvent(r.Context(), recordID, "approved", u.Username, "")
+		return err
+	}); err != nil {
 		serverError(w, "approve error", err)
 		return
-	}
-
-	if n, _ := res.RowsAffected(); n > 0 {
-		if _, err := h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (form_record_id, event_type, username, event_date) VALUES ($1, 'approved', $2, CURRENT_TIMESTAMP)",
-			h.cfg().RecordEventsTable()), recordID, u.Username); err != nil {
-			serverError(w, "approve error", err)
-			return
-		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
@@ -1774,16 +1733,16 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Approved records may only be unlocked by a TR reviewer.
-	var isApproved bool
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT is_approved FROM %s WHERE id=$1", h.cfg().RecordsTable()), recordID).
-		Scan(&isApproved); err != nil {
+	// Approved records may only be unlocked by a TR reviewer. This read gives the 403; the UPDATE
+	// re-checks under the row lock, so an approval that lands in between still wins.
+	rec, err := h.records().GetRecord(r.Context(), recordID)
+	if err != nil {
 		serverError(w, "unlock error", err)
 		return
 	}
 	u := h.currentUser(r)
-	if isApproved && (u == nil || !u.CanApproveRecords) {
+	reviewer := u != nil && u.CanApproveRecords
+	if rec.IsApproved && !reviewer {
 		http.Error(w, "only a TR reviewer can unlock an approved record", http.StatusForbidden)
 		return
 	}
@@ -1793,21 +1752,16 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 		username = u.Username
 	}
 
-	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=FALSE, is_approved=FALSE, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND is_locked=TRUE",
-		h.cfg().RecordsTable()), recordID)
-	if err != nil {
+	if err := h.recordsTx(r.Context(), func(svc *records.Service) error {
+		unlocked, err := svc.UnlockRecord(r.Context(), recordID, reviewer)
+		if err != nil || !unlocked {
+			return err
+		}
+		_, err = svc.InsertRecordEvent(r.Context(), recordID, "unlocked", username, comment)
+		return err
+	}); err != nil {
 		serverError(w, "unlock error", err)
 		return
-	}
-
-	if n, _ := res.RowsAffected(); n > 0 {
-		if _, err := h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (form_record_id, event_type, username, event_date, comments) VALUES ($1, 'unlocked', $2, CURRENT_TIMESTAMP, $3)",
-			h.cfg().RecordEventsTable()), recordID, username, comment); err != nil {
-			serverError(w, "unlock error", err)
-			return
-		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
@@ -1856,112 +1810,28 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load source record — same SELECT as RecordDetail.
-	var src models.TestRecord
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, record_type, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order, unit_id
-		FROM %s WHERE id = $1`, h.cfg().RecordsTable()), recordID).
-		Scan(&src.ID, &src.FormID, &src.PartNumberID, &src.SerialNumber, &src.SerialNumberPN,
-			&src.SerialNumberDesc, &src.RecordDate, &src.RecordType,
-			&src.InstrumentType, &src.IsLocked, &src.IsApproved, &src.IsActive, &src.TestOrder, &src.UnitID)
-	if err == sql.ErrNoRows {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		serverError(w, "query error", err)
-		return
-	}
-
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		serverError(w, "could not start transaction", err)
 		return
 	}
 	defer tx.Rollback()
+	svc := records.New(tx)
 
-	// INSERT new form_record; part_id is NULL when PartNumberID == 0 (mirrors CreateRecord).
-	var partNumberID *int
-	if src.PartNumberID != 0 {
-		partNumberID = &src.PartNumberID
-	}
-
-	// A duplicate is a fresh re-test, so it captures the CURRENT form revision, not the
-	// source record's frozen form_revision (#260).
-	var formRevision int
-	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT revision FROM %s WHERE id=$1", h.cfg().FormsTable()), src.FormID).Scan(&formRevision); err != nil {
-		serverError(w, "query error", err)
+	// A duplicate is a fresh re-test: dated now and capturing the CURRENT form revision, not the
+	// source's frozen one (#260). unit_id is carried over unchanged: a retest points at the SAME
+	// serialized unit as the source record (#745, design §2/§5), never a new unit row.
+	newID, err := svc.DuplicateRecord(r.Context(), recordID)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
 		return
 	}
-
-	var newID int
-	// record_date is set to now — a duplicate is a fresh re-test, dated the day it's made.
-	// unit_id is carried over unchanged: a retest points at the SAME serialized unit as
-	// the source record (#745, design §2/§5), never a new unit row.
-	insertDupRecord := fmt.Sprintf(`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
-		 record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked, is_approved, form_revision, unit_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,TRUE,FALSE,FALSE,$9,$10) RETURNING id`, h.cfg().RecordsTable())
-	err = tx.QueryRowContext(r.Context(), insertDupRecord,
-		src.FormID, partNumberID, src.SerialNumber, src.SerialNumberPN, src.SerialNumberDesc,
-		src.RecordType, src.InstrumentType, src.TestOrder, formRevision, src.UnitID).Scan(&newID)
 	if err != nil {
 		serverError(w, "insert error", err)
 		return
 	}
-
-	// Copy all result rows from the source record into the new record.
-	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
-		       spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail
-		FROM %s WHERE form_record_id = $1`, h.cfg().ResultsTable()), recordID)
-	if err != nil {
-		serverError(w, "query error", err)
-		return
-	}
-	defer resRows.Close()
-
-	for resRows.Next() {
-		var (
-			testID                                     int
-			rowType                                    int
-			parameter, specification                   sql.NullString
-			specMin, specNom, specMax, specUnits       sql.NullString
-			pfType, format, hideFormula, defaultResult sql.NullString
-			result, comment                            sql.NullString
-			passFail                                   sql.NullBool
-		)
-		if err := resRows.Scan(
-			&testID, &rowType, &parameter, &specification,
-			&specMin, &specNom, &specMax, &specUnits,
-			&pfType, &format, &hideFormula, &defaultResult,
-			&result, &comment, &passFail,
-		); err != nil {
-			serverError(w, "scan error", err)
-			return
-		}
-		var pf *bool
-		if passFail.Valid {
-			v := passFail.Bool
-			pf = &v
-		}
-		if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-			INSERT INTO %s
-			  (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
-			   spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,CURRENT_TIMESTAMP)`,
-			h.cfg().ResultsTable()),
-			newID, testID, rowType, parameter, specification,
-			specMin, specNom, specMax, specUnits,
-			pfType, format, hideFormula, defaultResult,
-			result, comment, pf,
-		); err != nil {
-			serverError(w, "insert error", err)
-			return
-		}
-	}
-	if err := resRows.Err(); err != nil {
-		serverError(w, "rows error", err)
+	if err := svc.CopyResults(r.Context(), recordID, newID); err != nil {
+		serverError(w, "insert error", err)
 		return
 	}
 
@@ -1987,21 +1857,15 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 		username = u.Username
 	}
 
-	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=TRUE, revision = revision + 1 WHERE id=$1 AND is_locked=FALSE",
-		h.cfg().FormsTable()), formID)
-	if err != nil {
+	if err := h.recordsTx(r.Context(), func(svc *records.Service) error {
+		locked, err := svc.LockForm(r.Context(), formID)
+		if err != nil || !locked {
+			return err
+		}
+		return svc.InsertFormEvent(r.Context(), formID, "locked", username, "")
+	}); err != nil {
 		serverError(w, "lock error", err)
 		return
-	}
-
-	if n, _ := res.RowsAffected(); n > 0 {
-		if _, err := h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (form_id, event_type, username, event_date) VALUES ($1, 'locked', $2, CURRENT_TIMESTAMP)",
-			h.cfg().FormEventsTable()), formID, username); err != nil {
-			serverError(w, "lock error", err)
-			return
-		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
@@ -2031,21 +1895,15 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 		username = u.Username
 	}
 
-	res, err := h.execContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET is_locked=FALSE WHERE id=$1 AND is_locked=TRUE",
-		h.cfg().FormsTable()), formID)
-	if err != nil {
+	if err := h.recordsTx(r.Context(), func(svc *records.Service) error {
+		unlocked, err := svc.UnlockForm(r.Context(), formID)
+		if err != nil || !unlocked {
+			return err
+		}
+		return svc.InsertFormEvent(r.Context(), formID, "unlocked", username, comment)
+	}); err != nil {
 		serverError(w, "unlock error", err)
 		return
-	}
-
-	if n, _ := res.RowsAffected(); n > 0 {
-		if _, err := h.execContext(r.Context(), fmt.Sprintf(
-			"INSERT INTO %s (form_id, event_type, username, event_date, comments) VALUES ($1, 'unlocked', $2, CURRENT_TIMESTAMP, $3)",
-			h.cfg().FormEventsTable()), formID, username, comment); err != nil {
-			serverError(w, "unlock error", err)
-			return
-		}
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/forms/%d/def", formID), http.StatusSeeOther)
@@ -2053,7 +1911,7 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 
 // ArchiveStep — POST /forms/{id}/tests/{testID}/archive
 // Toggles form_row.archived for a single step. Form field "archived"=1 archives,
-// anything else unarchives. No hard delete. Wrapped in a transaction so setAuditUser
+// anything else unarchives. No hard delete. Wrapped in a transaction so SetAuditUser
 // attributes the history-trigger row to the current user (same pattern as SaveFormDef).
 func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
 	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -2078,14 +1936,13 @@ func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	svc := records.New(tx)
 
 	if u := h.currentUser(r); u != nil {
-		h.setAuditUser(r.Context(), tx, u.Username)
+		svc.SetAuditUser(r.Context(), u.Username) // best-effort, as in SaveFormDef
 	}
 
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET archived=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2 AND form_id=$3",
-		h.cfg().StepsTable()), archived, testID, formID); err != nil {
+	if err := svc.SetStepArchived(r.Context(), formID, testID, archived); err != nil {
 		serverError(w, "archive error", err)
 		return
 	}
@@ -2117,28 +1974,17 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	svc := records.New(tx)
 
 	// #191: claim the WIP record inside the tx. The row lock serializes against
-	// Lock/Complete; 0 rows = locked (or missing — told apart by the SELECT below).
-	guard, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND is_locked=FALSE",
-		h.cfg().RecordsTable()), recordID)
+	// Lock/Complete; false = locked (or missing — told apart by the read below).
+	claimed, err := svc.ClaimRecord(r.Context(), recordID)
 	if err != nil {
 		serverError(w, "could not save record", err)
 		return
 	}
-	claimed, _ := guard.RowsAffected()
 
-	var record models.TestRecord
-	err = tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, record_type, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
-		       unit_id, build_id
-		FROM %s WHERE id = $1`, h.cfg().RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType,
-			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
-			&record.UnitID, &record.BuildID)
+	got, err := svc.GetRecord(r.Context(), recordID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -2147,94 +1993,38 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
-	if claimed == 0 {
+	record := testRecord(got)
+	if !claimed {
 		http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
 		return
 	}
 
 	// Form context for resolving {form.X} tokens when snapshotting (#487).
-	var form models.TestForm
-	if err := tx.QueryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, pn.part_number
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.PartNumber); err != nil && err != sql.ErrNoRows {
+	hdr, err := svc.GetFormHeader(r.Context(), record.FormID)
+	if err != nil && err != sql.ErrNoRows {
 		serverError(w, "query error", err) // a failed statement aborts the Postgres tx
 		return
 	}
+	form := testForm(hdr)
 
 	// Load steps for pass_fail computation and INSERT snapshots.
-	stepRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type, spec_units, spec_nom, archived
-		FROM %s WHERE form_id = $1`, h.cfg().StepsTable()), record.FormID)
+	steps, err := h.loadSteps(r.Context(), svc, record.FormID)
 	if err != nil {
 		serverError(w, "query error", err)
-		return
-	}
-	defer stepRows.Close()
-
-	steps := map[int]*models.TestStep{}
-	for stepRows.Next() {
-		var s models.TestStep
-		var param, spec, defaultResult, hideFormula sql.NullString
-		var specMin, specMax, pfType, specUnits, specNom sql.NullString
-		if err := stepRows.Scan(
-			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType, &specUnits, &specNom, &s.Archived,
-		); err != nil {
-			serverError(w, "scan error", err)
-			return
-		}
-		s.Parameter = param.String
-		s.Specification = spec.String
-		s.DefaultResult = defaultResult.String
-		s.HideFormula = hideFormula.String
-		s.SpecMin = specMin.String
-		s.SpecMax = specMax.String
-		s.PFType = pfType.String
-		s.SpecUnits = specUnits.String
-		s.SpecNom = specNom.String
-		steps[s.ID] = &s
-	}
-	if err := stepRows.Err(); err != nil {
-		serverError(w, "rows error", err)
 		return
 	}
 
 	// Load existing results keyed by form_row_id â€" used for change detection and UPDATE vs INSERT.
 	// SpecMin/SpecMax/PFType carry the frozen snapshot so edits re-evaluate P/F against the spec
 	// the record was taken under, not the live definition (#487).
-	type savedResult struct {
-		ID      int
-		Result  string
-		Comment string
-		SpecMin string
-		SpecMax string
-		PFType  string
-	}
-	existing := map[int]savedResult{}
-	exRows, err := tx.QueryContext(r.Context(), fmt.Sprintf(
-		"SELECT id, form_row_id, result, comment, COALESCE(spec_min,''), COALESCE(spec_max,''), COALESCE(pf_type,'') FROM %s WHERE form_record_id = $1", h.cfg().ResultsTable()), recordID)
+	existing := map[int]records.ResultRow{}
+	saved, err := svc.ListResults(r.Context(), recordID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	defer exRows.Close()
-	for exRows.Next() {
-		var rid, tid int
-		var result, comment sql.NullString
-		var specMin, specMax, pfType string
-		if err := exRows.Scan(&rid, &tid, &result, &comment, &specMin, &specMax, &pfType); err != nil {
-			serverError(w, "scan error", err)
-			return
-		}
-		existing[tid] = savedResult{ID: rid, Result: result.String, Comment: comment.String,
-			SpecMin: specMin, SpecMax: specMax, PFType: pfType}
-	}
-	if err := exRows.Err(); err != nil {
-		serverError(w, "rows error", err)
-		return
+	for _, x := range saved {
+		existing[x.FormRowID] = x
 	}
 
 	for key, vals := range r.Form {
@@ -2258,18 +2048,15 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 				// Re-evaluate against the frozen snapshot, falling back to the live def for
 				// pre-#487 rows whose snapshot columns are empty.
 				pfStep := step
-				if prev.SpecMin != "" || prev.SpecMax != "" || prev.PFType != "" {
-					pfStep = &models.TestStep{SpecMin: prev.SpecMin, SpecMax: prev.SpecMax, PFType: prev.PFType}
+				if prev.SpecMin != "" || prev.SpecMax != "" || prev.PfType != "" {
+					pfStep = &models.TestStep{SpecMin: prev.SpecMin, SpecMax: prev.SpecMax, PFType: prev.PfType}
 				}
 				var passFail *bool
 				if result != "" {
 					passFail = models.ComputePassFail(result, pfStep)
 				}
 				// #251: insert into TestResultHistory here when per-result change history is added
-				if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-					UPDATE %s SET result=$1, comment=$2, pass_fail=$3, updated_at=CURRENT_TIMESTAMP
-					WHERE id=$4`, h.cfg().ResultsTable()),
-					result, comment, passFail, prev.ID); err != nil {
+				if err := svc.UpdateResultValue(r.Context(), prev.ID, result, comment, passFail); err != nil {
 					serverError(w, "could not save result", err)
 					return
 				}
@@ -2283,18 +2070,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			if result != "" {
 				passFail = models.ComputePassFail(result, step)
 			}
-			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-				INSERT INTO %s
-				  (form_record_id, form_row_id, result, comment, pass_fail, type,
-				   parameter, specification, spec_min, spec_nom, spec_max, spec_units, pf_type, format,
-				   hide_formula, default_result, updated_at)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,CURRENT_TIMESTAMP)`,
-				h.cfg().ResultsTable()),
-				recordID, testID,
-				result, comment, passFail, step.Type,
-				step.Parameter, step.Specification,
-				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
-				step.HideFormula, step.DefaultResult); err != nil {
+			if err := svc.InsertResult(r.Context(), recordID, testID, resultDef(step), &result, &comment, passFail); err != nil {
 				serverError(w, "could not save result", err)
 				return
 			}
@@ -2317,12 +2093,12 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	// unit this record refers to when saved with provenance (a picked build or lot).
 	// The record then points at the unit via unit_id and leaves lot_id/build_id NULL —
 	// lot/build are read through the unit (Q8 FK-consistency invariant).
-	var trackingMode string
-	if e := tx.QueryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT tracking_mode FROM %s WHERE id = $1`, h.cfg().PartsTable()), record.PartNumberID).Scan(&trackingMode); e != nil && e != sql.ErrNoRows {
+	pt, e := svc.GetPartTracking(r.Context(), record.PartNumberID)
+	if e != nil && e != sql.ErrNoRows {
 		http.Error(w, "could not read part tracking mode: "+e.Error(), http.StatusInternalServerError)
 		return
 	}
+	trackingMode := pt.TrackingMode
 
 	var rd *time.Time
 	if rdStr := r.FormValue("record_date"); rdStr != "" {
@@ -2434,16 +2210,10 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	if unitArg != nil {
 		lotArg, buildArg = nil, nil // Q8: provenance lives on the unit, not the record
 	}
-	if rd != nil {
-		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET record_date=$1, record_type=$2, notes=$3, instrument_type=$4, lot_id=$5, build_id=$6, unit_id=$7, updated_at=CURRENT_TIMESTAMP WHERE id=$8",
-			h.cfg().RecordsTable()), *rd, recordType, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
-	} else {
-		_, err = tx.ExecContext(r.Context(), fmt.Sprintf(
-			"UPDATE %s SET record_type=$1, notes=$2, instrument_type=$3, lot_id=$4, build_id=$5, unit_id=$6, updated_at=CURRENT_TIMESTAMP WHERE id=$7",
-			h.cfg().RecordsTable()), recordType, nullableText(notes), instrumentType, lotArg, buildArg, unitArg, recordID)
-	}
-	if err != nil {
+	if err := svc.UpdateRecordAfterSave(r.Context(), recordID, records.RecordSave{
+		RecordDate: rd, RecordType: recordType, Notes: notes, InstrumentType: instrumentType,
+		LotID: anyIntPtr(lotArg), BuildID: anyIntPtr(buildArg), UnitID: anyIntPtr(unitArg),
+	}); err != nil {
 		serverError(w, "could not save record", err)
 		return
 	}
@@ -2468,14 +2238,22 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var record models.TestRecord
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, record_type, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
-		FROM %s WHERE id = $1`, h.cfg().RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType,
-			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder)
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		serverError(w, "could not start transaction", err)
+		return
+	}
+	defer tx.Rollback()
+	svc := records.New(tx)
+
+	// Claim the WIP record first, like SaveResults (#191): the row lock serializes against
+	// Lock/Complete and a concurrent save, so the reads below can't go stale before the writes.
+	claimed, err := svc.ClaimRecord(r.Context(), recordID)
+	if err != nil {
+		serverError(w, "resync error", err)
+		return
+	}
+	got, err := svc.GetRecord(r.Context(), recordID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -2484,59 +2262,36 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
-	if record.IsLocked {
+	if !claimed {
 		http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
 		return
 	}
+	record := testRecord(got)
 
-	var form models.TestForm
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, COALESCE(f.test_order,''), f.revision, pn.part_number
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.TestOrder, &form.Revision, &form.PartNumber); err != nil {
+	hdr, err := svc.GetFormHeader(r.Context(), record.FormID)
+	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
 	// Live definition (full) and the record's existing snapshot rows.
-	steps, err := h.loadSteps(r.Context(), record.FormID)
+	steps, err := h.loadSteps(r.Context(), svc, record.FormID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
 	existing := map[int]int{}                  // form_row_id -> result row id
 	curResults := map[int]*models.TestResult{} // form_row_id -> recorded value (for {id} P/F resolution)
-	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(
-		"SELECT id, form_row_id, COALESCE(result,'') FROM %s WHERE form_record_id = $1", h.cfg().ResultsTable()), recordID)
+	saved, err := svc.ListResults(r.Context(), recordID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	for resRows.Next() {
-		var id, tid int
-		var result string
-		if err := resRows.Scan(&id, &tid, &result); err != nil {
-			resRows.Close()
-			serverError(w, "query error", err)
-			return
-		}
-		existing[tid] = id
-		curResults[tid] = &models.TestResult{ID: id, TestID: tid, Result: result}
+	for _, x := range saved {
+		existing[x.FormRowID] = x.ID
+		curResults[x.FormRowID] = &models.TestResult{ID: x.ID, TestID: x.FormRowID, Result: x.Result}
 	}
-	if err := resRows.Err(); err != nil {
-		resRows.Close()
-		serverError(w, "query error", err)
-		return
-	}
-	resRows.Close()
-
-	tx, err := h.beginTx(r.Context())
-	if err != nil {
-		serverError(w, "could not start transaction", err)
-		return
-	}
-	defer tx.Rollback()
 
 	// Walk the form's CURRENT order so newly added steps are materialized too.
 	for _, tid := range form.OrderedTestIDs() {
@@ -2562,28 +2317,13 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if rowID, ok := existing[tid]; ok {
-			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-				UPDATE %s SET type=$1, parameter=$2, specification=$3, spec_min=$4, spec_nom=$5, spec_max=$6,
-				              spec_units=$7, pf_type=$8, format=$9, hide_formula=$10, default_result=$11,
-				              pass_fail=$12, updated_at=CURRENT_TIMESTAMP
-				WHERE id=$13`, h.cfg().ResultsTable()),
-				step.Type, step.Parameter, step.Specification, step.SpecMin, step.SpecNom, step.SpecMax,
-				step.SpecUnits, step.PFType, step.Format, step.HideFormula, step.DefaultResult,
-				passFail, rowID); err != nil {
+			if err := svc.RefreshResult(r.Context(), rowID, resultDef(step), passFail); err != nil {
 				serverError(w, "resync error", err)
 				return
 			}
 		} else {
 			// Step added to the form since this record was created — materialize an empty row.
-			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`
-				INSERT INTO %s
-				  (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
-				   spec_units, pf_type, format, hide_formula, default_result, updated_at)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CURRENT_TIMESTAMP)`,
-				h.cfg().ResultsTable()),
-				recordID, tid, step.Type, step.Parameter, step.Specification,
-				step.SpecMin, step.SpecNom, step.SpecMax, step.SpecUnits, step.PFType, step.Format,
-				step.HideFormula, step.DefaultResult); err != nil {
+			if err := svc.InsertResult(r.Context(), recordID, tid, resultDef(step), nil, nil, nil); err != nil {
 				serverError(w, "resync error", err)
 				return
 			}
@@ -2593,9 +2333,7 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	// Refresh the record's step-order snapshot so newly added steps appear on edit/view.
 	// Re-pulling the live definition also re-captures the form's current revision (#260):
 	// the snapshot now represents that revision.
-	if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(
-		"UPDATE %s SET test_order=$1, form_revision=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3", h.cfg().RecordsTable()),
-		form.TestOrder, form.Revision, recordID); err != nil {
+	if err := svc.ResyncRecordHeader(r.Context(), recordID, form.TestOrder, form.Revision); err != nil {
 		serverError(w, "resync error", err)
 		return
 	}
@@ -2629,101 +2367,29 @@ func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
 	return list, nil
 }
 
-// copyFormSteps copies all test steps from sourceID into newFormID (within tx)
-// and sets test_order on the new form. Returns an error on any failure.
-func (h *Handler) copyFormSteps(ctx context.Context, tx *txLogger, sourceID, newFormID int) error {
-	var sourceOrder string
-	if err := tx.QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT COALESCE(test_order,'') FROM %s WHERE id=$1", h.cfg().FormsTable()), sourceID).
-		Scan(&sourceOrder); err != nil {
-		return err
-	}
-
-	stepRows, err := tx.QueryContext(ctx, fmt.Sprintf(`
-		SELECT id, COALESCE(type,0), parameter, specification, spec_nom, spec_min, spec_max,
-		       spec_units, pf_type, default_result, hide_formula,
-		       category, sheet_name, instrument_types, format, comment,
-		       archive_id, revision
-		FROM %s WHERE form_id=$1`, h.cfg().StepsTable()), sourceID)
+// copyFormSteps copies all test steps from sourceID into newFormID (svc runs on the caller's tx)
+// and sets test_order on the new form. Returns an error on any failure (a missing source included).
+func (h *Handler) copyFormSteps(ctx context.Context, svc *records.Service, sourceID, newFormID int) error {
+	src, err := svc.GetFormHeader(ctx, sourceID)
 	if err != nil {
 		return err
 	}
-	defer stepRows.Close()
 
-	type stepRow struct {
-		ID            int
-		Type          int
-		Parameter     sql.NullString
-		Specification sql.NullString
-		SpecNom       sql.NullString
-		SpecMin       sql.NullString
-		SpecMax       sql.NullString
-		SpecUnits     sql.NullString
-		PFType        sql.NullString
-		DefaultResult sql.NullString
-		HideFormula   sql.NullString
-		Category      sql.NullString
-		SheetName     sql.NullString
-		InstrTypes    sql.NullString
-		Format        sql.NullString
-		Comment       sql.NullString
-		ArchiveID     sql.NullInt64
-		Revision      sql.NullInt64
-	}
-	stepsMap := map[int]stepRow{}
-	for stepRows.Next() {
-		var s stepRow
-		if err := stepRows.Scan(
-			&s.ID, &s.Type, &s.Parameter, &s.Specification,
-			&s.SpecNom, &s.SpecMin, &s.SpecMax, &s.SpecUnits,
-			&s.PFType, &s.DefaultResult, &s.HideFormula,
-			&s.Category, &s.SheetName, &s.InstrTypes, &s.Format, &s.Comment,
-			&s.ArchiveID, &s.Revision,
-		); err != nil {
-			return err
-		}
-		stepsMap[s.ID] = s
-	}
-	if err := stepRows.Err(); err != nil {
-		return err
-	}
-
-	// Walk steps in source test_order sequence.
-	var src models.TestForm
-	src.TestOrder = sourceOrder
-	orderedIDs := src.OrderedTestIDs()
-
-	newIDs := make([]int, 0, len(orderedIDs))
+	// Walk steps in source test_order sequence; ids that aren't the source's steps are skipped.
+	form := testForm(src)
+	orderedIDs := form.OrderedTestIDs()
+	idParts := make([]string, 0, len(orderedIDs))
 	for _, oldID := range orderedIDs {
-		s, ok := stepsMap[oldID]
-		if !ok {
+		newStepID, err := svc.CopyStep(ctx, sourceID, oldID, newFormID)
+		if err == sql.ErrNoRows {
 			continue
 		}
-		var newStepID int
-		insertCopiedStep := fmt.Sprintf(`INSERT INTO %s (form_id, type, parameter, specification, spec_nom, spec_min, spec_max,
-			 spec_units, pf_type, default_result, hide_formula,
-			 category, sheet_name, instrument_types, format, comment,
-			 archive_id, revision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`, h.cfg().StepsTable())
-		if err := tx.QueryRowContext(ctx, insertCopiedStep,
-			newFormID, s.Type, s.Parameter.String, s.Specification.String,
-			s.SpecNom, s.SpecMin, s.SpecMax, s.SpecUnits,
-			s.PFType, s.DefaultResult, s.HideFormula,
-			s.Category, s.SheetName, s.InstrTypes, s.Format, s.Comment,
-			s.ArchiveID, s.Revision,
-		).Scan(&newStepID); err != nil {
+		if err != nil {
 			return err
 		}
-		newIDs = append(newIDs, newStepID)
+		idParts = append(idParts, strconv.Itoa(newStepID))
 	}
-
-	idParts := make([]string, len(newIDs))
-	for i, id := range newIDs {
-		idParts[i] = strconv.Itoa(id)
-	}
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET test_order=$1 WHERE id=$2", h.cfg().FormsTable()),
-		strings.Join(idParts, ","), newFormID)
-	return err
+	return svc.SetFormTestOrder(ctx, newFormID, strings.Join(idParts, ","))
 }
 
 // NewForm — GET /forms/new
@@ -2770,41 +2436,30 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify the PNID is a valid active FORM-category part number.
-	var exists int
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT COUNT(1) FROM %s WHERE id=$1 AND category='FORM' AND is_active=TRUE",
-		h.cfg().PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
+	if ok, err := h.records().IsFormPart(r.Context(), pnid); err != nil || !ok {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
 	}
 
 	sourceID, _ := strconv.Atoi(r.FormValue("source_id")) // 0 = blank form
 
-	// If copying from a source, carry over form-level settings.
-	var srcRecordTypes, srcInstrTypes sql.NullString
-	if sourceID > 0 {
-		h.queryRowContext(r.Context(), fmt.Sprintf(
-			"SELECT record_types, instrument_types FROM %s WHERE id=$1",
-			h.cfg().FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
-	}
-
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		serverError(w, "tx error", err)
 		return
 	}
+	svc := records.New(tx)
 
-	var newID int
-	insertForm := fmt.Sprintf(`INSERT INTO %s (part_number_id, is_active, is_locked, test_order, record_types, instrument_types) VALUES ($1, TRUE, FALSE, '', $2, $3) RETURNING id`, h.cfg().FormsTable())
-	if err := tx.QueryRowContext(r.Context(), insertForm,
-		pnid, srcRecordTypes, srcInstrTypes).Scan(&newID); err != nil {
+	// If copying from a source, carry over form-level settings.
+	newID, err := svc.InsertForm(r.Context(), pnid, sourceID)
+	if err != nil {
 		tx.Rollback()
 		serverError(w, "create error", err)
 		return
 	}
 
 	if sourceID > 0 {
-		if err := h.copyFormSteps(r.Context(), tx, sourceID, newID); err != nil {
+		if err := h.copyFormSteps(r.Context(), svc, sourceID, newID); err != nil {
 			tx.Rollback()
 			serverError(w, "copy error", err)
 			return
@@ -2876,36 +2531,27 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify the PNID is a valid active FORM-category part number.
-	var exists int
-	if err := h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT COUNT(1) FROM %s WHERE id=$1 AND category='FORM' AND is_active=TRUE",
-		h.cfg().PartsTable()), pnid).Scan(&exists); err != nil || exists == 0 {
+	if ok, err := h.records().IsFormPart(r.Context(), pnid); err != nil || !ok {
 		http.Error(w, "invalid part number", http.StatusBadRequest)
 		return
 	}
-
-	// Carry over form-level settings from the source form.
-	var srcRecordTypes, srcInstrTypes sql.NullString
-	h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT record_types, instrument_types FROM %s WHERE id=$1",
-		h.cfg().FormsTable()), sourceID).Scan(&srcRecordTypes, &srcInstrTypes)
 
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		serverError(w, "tx error", err)
 		return
 	}
+	svc := records.New(tx)
 
-	var newFormID int
-	insertDupForm := fmt.Sprintf(`INSERT INTO %s (part_number_id, is_active, is_locked, test_order, record_types, instrument_types) VALUES ($1, TRUE, FALSE, '', $2, $3) RETURNING id`, h.cfg().FormsTable())
-	if err := tx.QueryRowContext(r.Context(), insertDupForm,
-		pnid, srcRecordTypes, srcInstrTypes).Scan(&newFormID); err != nil {
+	// Carry over form-level settings from the source form.
+	newFormID, err := svc.InsertForm(r.Context(), pnid, sourceID)
+	if err != nil {
 		tx.Rollback()
 		serverError(w, "insert error", err)
 		return
 	}
 
-	if err := h.copyFormSteps(r.Context(), tx, sourceID, newFormID); err != nil {
+	if err := h.copyFormSteps(r.Context(), svc, sourceID, newFormID); err != nil {
 		tx.Rollback()
 		serverError(w, "copy error", err)
 		return

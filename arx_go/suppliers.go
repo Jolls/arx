@@ -805,11 +805,3 @@ func intPtrOrNil(s string) *int {
 	}
 	return nil
 }
-
-// nullableText returns nil for an empty string so the column is stored as NULL.
-func nullableText(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}

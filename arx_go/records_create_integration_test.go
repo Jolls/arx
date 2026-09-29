@@ -37,7 +37,7 @@ func createdSerial(t *testing.T, h *Handler, ctx context.Context, rec *httptest.
 	}
 	var sn string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT serial_number FROM %s WHERE id=$1`,
-		h.cfg().RecordsTable()), id).Scan(&sn); err != nil {
+		"form_record"), id).Scan(&sn); err != nil {
 		t.Fatalf("select serial: %v", err)
 	}
 	return sn
@@ -93,7 +93,7 @@ func TestIntegration_CreateRecord_ConcurrentDistinctSerials(t *testing.T) {
 	}
 
 	rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT serial_number FROM %s WHERE form_id=$1`,
-		h.cfg().RecordsTable()), formID)
+		"form_record"), formID)
 	if err != nil {
 		t.Fatalf("select serials: %v", err)
 	}

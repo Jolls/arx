@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.29] - 2026-09-28
+### Changed
+- Data-access layer: the records write paths (create, results save, resync, duplicate, complete/approve/unlock with the completion snapshot, form create/duplicate/lock/unlock, step edit/archive) moved to sqlc in `internal/records`. Each transaction keeps its statement order and row locks, with the service built over the handler's transaction; `SaveResults` now loads steps with the same query as every other page. `records.go` and `records_history.go` are free of raw SQL ([#249](https://github.com/Jolls/arx/issues/249))
+- Named queries: the `named_queries` table's list/lookup/save moved to sqlc; only the admin-authored query itself still runs as raw SQL, the one exception to the sqlc rule (documented in `docs/conventions.md`) ([#250](https://github.com/Jolls/arx/issues/250))
+- Removed the last `cfg.*Table()` helpers; the integration tests and the attachment-hash backfill tool use literal table names ([#249](https://github.com/Jolls/arx/issues/249))
+- The raw-SQL lint now checks every handler file by default instead of a list of converted ones ([#190](https://github.com/Jolls/arx/issues/190))
+
+### Fixed
+- Creating, saving, re-syncing or duplicating a test record no longer fails with a server error when the record (or its form) has an empty serial number, part number, description, type or step order; a duplicate copies such empty fields as empty ([#249](https://github.com/Jolls/arx/issues/249))
+- Recording a first value on a step of an older record now keeps that step's display format ([#249](https://github.com/Jolls/arx/issues/249))
+- Re-syncing a record now takes the record's lock first, so a record completed (or saved) at the same moment is no longer rewritten or given duplicate result rows ([#249](https://github.com/Jolls/arx/issues/249))
+- An approval that lands while a non-reviewer is unlocking the record now wins; the approved record stays locked ([#249](https://github.com/Jolls/arx/issues/249))
+- Approving, unlocking, and locking/unlocking a form now write the change and its audit-trail entry together, so a failed audit entry no longer leaves an unrecorded state change ([#249](https://github.com/Jolls/arx/issues/249))
+- A test-definition save that fails part-way (e.g. on the record-types update) no longer keeps its step edits and new steps ([#249](https://github.com/Jolls/arx/issues/249))
+- Creating a record no longer silently drops the subject part when its lookup fails with a database error ([#249](https://github.com/Jolls/arx/issues/249))
+
 ## [0.8.28] - 2026-09-28
 ### Changed
 - Data-access layer: the records read paths (forms list, records tables incl. the Part/Lot/Unit ones, form definition and edit pages, record view/print/edit/new pages, audit trail and snapshots, test-step report, yield and failure-mode reports, new/duplicate-form pickers) moved to sqlc in `internal/records`; one step-loading and one form-header query replace the copies that were spread over the handlers. `records_yield.go` and `records_failure_modes.go` are now free of raw SQL; the save/lock/approve/event write paths follow ([#249](https://github.com/Jolls/arx/issues/249))

@@ -194,25 +194,6 @@ func randomSecret() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// Table name helpers — TEST_MODE swaps the whole DB via the DSN (see Base.ActiveDBName).
-// Parts Master tables
-func (c *Config) PartsTable() string              { return "part" }
-func (c *Config) AttachmentsTable() string        { return "part_attachment" }
-func (c *Config) BOMTable() string                { return "bom" }
-func (c *Config) CompanyAttachmentsTable() string { return "company_attachment" }
-func (c *Config) LinksTable() string              { return "supplier_part" }
-
-// Test Records tables
-func (c *Config) FormsTable() string              { return "form" }
-func (c *Config) RecordsTable() string            { return "form_record" }
-func (c *Config) StepsTable() string              { return "form_row" }
-func (c *Config) ResultsTable() string            { return "result" }
-func (c *Config) NamedQueriesTable() string       { return "named_queries" }
-func (c *Config) FormRowHistoryTable() string     { return "form_row_history" }
-func (c *Config) FormEventsTable() string          { return "form_events" }
-func (c *Config) RecordEventsTable() string        { return "record_events" }
-func (c *Config) RecordEventResultsTable() string  { return "record_event_results" }
-
 // CheckSchemaVersion queries app_config for schema_version. connErr is
 // non-empty when the query itself failed (DB unreachable/misconfigured —
 // distinct from a working DB on an old schema). mismatch is non-empty when

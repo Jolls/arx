@@ -116,7 +116,7 @@ func TestIntegration_InventoryRecordTxn(t *testing.T) {
 
 	stock := func() float64 {
 		var v float64
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT stock_on_hand FROM %s WHERE id=3002`, h.cfg().PartsTable())).Scan(&v); err != nil {
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT stock_on_hand FROM %s WHERE id=3002`, "part")).Scan(&v); err != nil {
 			t.Fatal(err)
 		}
 		return v
@@ -390,10 +390,10 @@ func TestIntegration_InventoryUnitCreateUpdate(t *testing.T) {
 	var recID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active, unit_id) VALUES (6001, 3005, $1, 'x', 'x', '', '', TRUE, TRUE, $2) RETURNING id`,
-		h.cfg().RecordsTable()), serial, unitID).Scan(&recID); err != nil {
+		"form_record"), serial, unitID).Scan(&recID); err != nil {
 		t.Fatalf("seed locked record (ArxDev may need reseed): %v", err)
 	}
-	t.Cleanup(func() { smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().RecordsTable()), recID) })
+	t.Cleanup(func() { smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "form_record"), recID) })
 	assertStatus(t, "UnitUpdate(locked)", update(3005, url.Values{"serial_number": {"changed"}, "is_active": {"1"}}), http.StatusSeeOther)
 	if s, a := state(); s != serial+"-r" || !a {
 		t.Errorf("after locked update: serial %q active %v; want serial unchanged, active", s, a)

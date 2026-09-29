@@ -94,7 +94,7 @@ func TestIntegration_PartRollupCost_Fixture(t *testing.T) {
 		var cost sql.NullFloat64
 		var at sql.NullTime
 		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id=$1`, h.cfg().PartsTable()), id).Scan(&cost, &at); err != nil {
+			`SELECT last_rollup_cost, last_rollup_at FROM %s WHERE id=$1`, "part"), id).Scan(&cost, &at); err != nil {
 			t.Fatalf("read rollup of part %d: %v", id, err)
 		}
 		return cost, at

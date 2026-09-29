@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -56,60 +54,3 @@ func parseRecordFilters(q url.Values) recordFilters {
 // StatusWIP reports whether the WIP status filter is active. The records list
 // only shows the row-select column and bulk-lock toolbar in this mode.
 func (f recordFilters) StatusWIP() bool { return f.Status == "wip" }
-
-// whereClauses builds the SQL WHERE fragments and positional args implied by the
-// filters. Each fragment begins with " AND " so the caller can concatenate it
-// onto an existing WHERE. Placeholders are numbered starting at startArg; the
-// caller is responsible for $1..$(startArg-1) (formID is $1, so pass 2).
-func (f recordFilters) whereClauses(startArg int) (string, []any) {
-	var sb strings.Builder
-	var args []any
-	n := startArg
-
-	switch f.Status {
-	case "wip":
-		sb.WriteString(" AND is_locked = FALSE")
-	case "complete":
-		sb.WriteString(" AND is_locked = TRUE AND is_approved = FALSE")
-	case "approved":
-		sb.WriteString(" AND is_approved = TRUE")
-	case "all":
-		// no clause
-	}
-
-	if f.Type != "" {
-		fmt.Fprintf(&sb, " AND record_type = $%d", n)
-		args = append(args, f.Type)
-		n++
-	}
-
-	dateClause, dateArgs := f.dateRangeClauses(n)
-	sb.WriteString(dateClause)
-	args = append(args, dateArgs...)
-
-	return sb.String(), args
-}
-
-// dateRangeClauses builds just the From/To record_date WHERE fragments (no
-// status/type clauses), for callers that only want the date-range portion of
-// recordFilters — e.g. a report scoped by a different set of base predicates.
-// Placeholders are numbered starting at startArg; see whereClauses for the
-// same startArg convention.
-func (f recordFilters) dateRangeClauses(startArg int) (string, []any) {
-	var sb strings.Builder
-	var args []any
-	n := startArg
-
-	if !f.From.IsZero() {
-		fmt.Fprintf(&sb, " AND record_date >= $%d", n)
-		args = append(args, f.From)
-		n++
-	}
-	if !f.To.IsZero() {
-		fmt.Fprintf(&sb, " AND record_date < (CAST($%d AS DATE) + 1)", n)
-		args = append(args, f.To)
-		n++
-	}
-
-	return sb.String(), args
-}

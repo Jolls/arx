@@ -32,7 +32,7 @@ type pricingFixture struct {
 func seedPricing(t *testing.T, h *Handler) (f pricingFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, prc := h.cfg().PartsTable(), "price"
+	pn, prc := "part", "price"
 	base := smokeUniq("ITEST-PRC")
 	cleanup = func() {
 		for _, id := range []int{f.Part, f.Other} {
@@ -84,7 +84,7 @@ func defaultSupplier(t *testing.T, h *Handler, part int) int {
 	t.Helper()
 	var v *int
 	if err := h.queryRowContext(context.Background(), fmt.Sprintf(
-		`SELECT default_supplier_id FROM %s WHERE id=$1`, h.cfg().PartsTable()), part).Scan(&v); err != nil {
+		`SELECT default_supplier_id FROM %s WHERE id=$1`, "part"), part).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
 	if v == nil {
@@ -204,7 +204,7 @@ func TestIntegration_PriceCreate_Columns(t *testing.T) {
 	f, cleanup := seedPricing(t, h)
 	defer cleanup()
 	ctx := context.Background()
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_supplier_id=NULL WHERE id=$1`, h.cfg().PartsTable()), f.Part)
+	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_supplier_id=NULL WHERE id=$1`, "part"), f.Part)
 
 	newest := func() map[string]any {
 		t.Helper()

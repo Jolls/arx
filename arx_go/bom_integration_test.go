@@ -30,7 +30,7 @@ type bomFixture struct {
 func seedBOM(t *testing.T, h *Handler) (f bomFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, bom, prc := h.cfg().PartsTable(), h.cfg().BOMTable(), "price"
+	pn, bom, prc := "part", "bom", "price"
 	base := smokeUniq("ITEST-BOM")
 	f.PN = map[int]string{}
 	var ids []int
@@ -96,7 +96,7 @@ func bomLines(t *testing.T, h *Handler, parent int) []string {
 	t.Helper()
 	rows, err := h.queryContext(context.Background(), fmt.Sprintf(
 		`SELECT component_part_id, line_number, qty FROM %s WHERE parent_part_id=$1 ORDER BY line_number, component_part_id`,
-		h.cfg().BOMTable()), parent)
+		"bom"), parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,8 +332,8 @@ func TestIntegration_PartDuplicate_CopiesBOM(t *testing.T) {
 		"duplicate_bom_from": {strconv.Itoa(f.P)},
 	}))
 	id := locID(t, rec, "/part/")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().PartsTable()), id)
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE parent_part_id=$1", h.cfg().BOMTable()), id)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", "part"), id)
+	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE parent_part_id=$1", "bom"), id)
 	if got, want := bomLines(t, h, id), bomLines(t, h, f.P); !reflect.DeepEqual(got, want) || len(got) != 4 {
 		t.Errorf("duplicated BOM = %v, want %v", got, want)
 	}

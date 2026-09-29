@@ -85,7 +85,7 @@ func TestIntegration_RecordDateStaysWallClock(t *testing.T) {
 	defer cleanup()
 	var got time.Time
 	if err := h.queryRowContext(context.Background(),
-		fmt.Sprintf(`SELECT record_date FROM %s WHERE id=$1`, h.cfg().RecordsTable()), 7001).Scan(&got); err != nil {
+		fmt.Sprintf(`SELECT record_date FROM %s WHERE id=$1`, "form_record"), 7001).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if s := got.Format("2006-01-02 15:04"); s != "2026-06-01 00:00" {
