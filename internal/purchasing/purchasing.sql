@@ -39,11 +39,11 @@ UPDATE company SET name = sqlc.arg(name), supplier_code = sqlc.arg(supplier_code
 WHERE id = sqlc.arg(id);
 
 -- name: SearchSuppliers :many
--- Typeahead: active companies whose name is LIKE pattern, with the default contact's city.
+-- Typeahead: active companies whose name is ILIKE pattern, with the default contact's city.
 SELECT su.id, su.name, COALESCE(cn.city, '') AS city
 FROM company su
 LEFT JOIN contact cn ON su.default_contact = cn.id
-WHERE su.name LIKE sqlc.arg(pattern)::text AND su.is_active = TRUE
+WHERE su.name ILIKE sqlc.arg(pattern)::text AND su.is_active = TRUE
   AND (NOT sqlc.arg(supplier_only)::boolean OR su.is_supplier = TRUE)
 ORDER BY su.name
 LIMIT sqlc.arg(n)::int;

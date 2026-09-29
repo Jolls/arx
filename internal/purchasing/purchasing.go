@@ -145,7 +145,7 @@ func (s *Service) UpdateSupplier(ctx context.Context, id int, sup Supplier) erro
 }
 
 // SearchSuppliers returns up to n active companies whose name contains q
-// (case-sensitive, not LIKE-escaped), by name; supplierOnly drops non-suppliers.
+// (case-insensitive, not LIKE-escaped), by name; supplierOnly drops non-suppliers.
 func (s *Service) SearchSuppliers(ctx context.Context, q string, supplierOnly bool, n int) ([]SupplierMatch, error) {
 	rows, err := s.q.SearchSuppliers(ctx, dbq.SearchSuppliersParams{Pattern: "%" + q + "%", SupplierOnly: supplierOnly, N: n})
 	if err != nil {

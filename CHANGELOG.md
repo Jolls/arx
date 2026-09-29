@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.33] - 2026-09-29
+### Fixed
+- Supplier and part typeahead searches now match regardless of case ([#272](https://github.com/Jolls/arx/issues/272))
+
 ## [0.8.32] - 2026-09-29
 ### Changed
 - Roadmap: dropped the shipped header icon item and moved backup/restore to v0.9.0 ([#206](https://github.com/Jolls/arx/issues/206))
