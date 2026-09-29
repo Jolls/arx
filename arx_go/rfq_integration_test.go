@@ -279,7 +279,7 @@ func TestIntegration_RFQ_BOMConfirmCreatesQuotes(t *testing.T) {
 	h, f := lifecycleSetup(t)
 	ctx := context.Background()
 	today := dbToday(t, h)
-	pn, bom := h.cfg().PartsTable(), h.cfg().BOMTable()
+	pn, bom := "part", "bom"
 
 	root := smokeUniq("ITEST-RFQ-ROOT")
 	var rootID, p3 int

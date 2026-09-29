@@ -27,7 +27,7 @@ const partDetailThumb = `LOCAL:itest\t.png`
 func seedPartDetail(t *testing.T, h *Handler) (full, bare, primaryAtt int, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, att, bom := h.cfg().PartsTable(), h.cfg().AttachmentsTable(), h.cfg().BOMTable()
+	pn, att, bom := "part", "part_attachment", "bom"
 	base := smokeUniq("ITEST-PD")
 	cleanup = func() {
 		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id=$1`, bom), full)
@@ -177,7 +177,7 @@ func TestIntegration_PartCreateUpdate_Columns(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()
 	ctx := context.Background()
-	pn := h.cfg().PartsTable()
+	pn := "part"
 	today := time.Now().Format("2006-01-02")
 
 	cols := func(id int) map[string]any {

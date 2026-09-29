@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"arx/internal/records"
 )
 
 // nqDateFormat is the display format for named-query updated dates.
@@ -39,28 +40,22 @@ func validResultType(rt string) bool {
 // SQL bodies and ids, for the Settings → Named Queries editor. Distinct from
 // listNamedQueries, which is the view-only active-only reference used elsewhere.
 func (h *Handler) loadNamedQueriesFull(ctx context.Context) ([]NamedQueryRow, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, name, COALESCE(description,''), sql, COALESCE(params,''), result_type, is_active, updated_at
-		 FROM %s ORDER BY name`, h.cfg().NamedQueriesTable()))
+	rows, err := h.records().ListNamedQueries(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	loc := h.userLocationCtx(ctx)
 	var out []NamedQueryRow
-	for rows.Next() {
-		var q NamedQueryRow
-		var updated sql.NullTime
-		if err := rows.Scan(&q.ID, &q.Name, &q.Description, &q.SQL, &q.Params, &q.ResultType, &q.Active, &updated); err != nil {
-			continue
-		}
-		if updated.Valid {
-			q.Updated = updated.Time.In(loc).Format(nqDateFormat)
+	for _, r := range rows {
+		q := NamedQueryRow{ID: r.ID, Name: r.Name, Description: r.Description, SQL: r.Sql, Params: r.Params,
+			ResultType: r.ResultType, Active: r.IsActive}
+		if r.UpdatedAt != nil {
+			q.Updated = r.UpdatedAt.In(loc).Format(nqDateFormat)
 		}
 		out = append(out, q)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // SettingsNamedQueryRowSave inserts or updates a single named query and returns
@@ -102,26 +97,23 @@ func (h *Handler) SettingsNamedQueryRowSave(w http.ResponseWriter, r *http.Reque
 	active := r.FormValue("active") == "1"
 
 	ctx := r.Context()
-	tbl := h.cfg().NamedQueriesTable()
 	id, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("id")))
+	in := records.NamedQueryInput{Name: name, Description: description, Sql: sqlText, Params: params,
+		ResultType: resultType, IsActive: active}
 
 	if id > 0 {
-		res, err := h.execContext(ctx, fmt.Sprintf(
-			`UPDATE %s SET name=$1, description=$2, sql=$3, params=$4,
-			 result_type=$5, is_active=$6, updated_at=CURRENT_TIMESTAMP WHERE id=$7`, tbl),
-			name, description, sqlText, params, resultType, active, id)
+		found, err := h.records().UpdateNamedQuery(ctx, id, in)
 		if err != nil {
 			writeErr(http.StatusBadRequest, namedQuerySaveError(name, err))
 			return
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
+		if !found {
 			writeErr(http.StatusNotFound, "That named query no longer exists — reload the page.")
 			return
 		}
 	} else {
-		insertQuery := fmt.Sprintf(`INSERT INTO %s (name, description, sql, params, result_type, is_active) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, tbl)
-		err := h.queryRowContext(ctx, insertQuery,
-			name, description, sqlText, params, resultType, active).Scan(&id)
+		var err error
+		id, err = h.records().InsertNamedQuery(ctx, in)
 		if err != nil {
 			writeErr(http.StatusBadRequest, namedQuerySaveError(name, err))
 			return

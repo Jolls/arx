@@ -40,7 +40,7 @@ type poFixture struct {
 func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co, cn, pn, po, pol := "company", "contact", h.cfg().PartsTable(), "purchase_order", "po_line"
+	co, cn, pn, po, pol := "company", "contact", "part", "purchase_order", "po_line"
 	base := smokeUniq("PR") // purchase_order.number is VARCHAR(32)
 	f.CoName, f.ConDName, f.ConOName = base+"-co", base+"-cD", base+"-cO"
 	f.PN1, f.PN2 = base+"-P1", base+"-P2"
@@ -56,7 +56,7 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 		}
 		for _, id := range partIDs {
 			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, pn), id)
-			for _, tbl := range []string{h.cfg().AttachmentsTable(), "supplier_part", "price"} {
+			for _, tbl := range []string{"part_attachment", "supplier_part", "price"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
@@ -94,7 +94,7 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 	scan(&f.P2, fmt.Sprintf(`INSERT INTO %s (part_number, description, revision, category) VALUES ($1,'p2',NULL,'BUY') RETURNING id`, pn), f.PN2)
 	partIDs = append(partIDs, f.P2)
 	scan(&f.Att, fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\pr-dwg.pdf','Drawing',TRUE) RETURNING id`,
-		h.cfg().AttachmentsTable()), f.P1)
+		"part_attachment"), f.P1)
 	exec(fmt.Sprintf(`UPDATE %s SET primary_attachment_id=$2 WHERE id=$1`, pn), f.P1, f.Att)
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn) VALUES ($1,$2,'SPN-1')`, "supplier_part"), f.P1, f.Co)
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, price_pack, pack_size, is_active, effective_date) VALUES

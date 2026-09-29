@@ -18,7 +18,7 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	pn, pl := h.cfg().PartsTable(), h.cfg().BOMTable()
+	pn, pl := "part", "bom"
 	var ids []int
 	defer func() {
 		for _, id := range ids {
@@ -120,7 +120,7 @@ func TestIntegration_NextBaseNumber_ScansAllParts(t *testing.T) {
 	_, _, cleanupPart := seedThrowawayPart(t, h, ctx, "NEXTNUM")
 	defer cleanupPart()
 
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT part_number FROM %s`, h.cfg().PartsTable()))
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT part_number FROM %s`, "part"))
 	if err != nil {
 		t.Fatalf("scan part numbers: %v", err)
 	}

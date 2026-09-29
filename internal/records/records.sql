@@ -234,6 +234,229 @@ JOIN form_record trec ON res.form_record_id = trec.id
 WHERE res.form_row_id = sqlc.arg(step_id) AND trec.form_id = sqlc.arg(form_id) AND trec.is_active = TRUE
 ORDER BY (CASE WHEN trec.serial_number ~ '^[0-9]+$' THEN CAST(trec.serial_number AS INTEGER) END) DESC, trec.record_date DESC;
 
+-- ── Record writes ────────────────────────────────────────────────────────────
+
+-- name: LockSerialAllocation :exec
+-- Serializes auto serial allocation for one form until the tx ends (#369, #33).
+SELECT pg_advisory_xact_lock(sqlc.arg(namespace)::int, sqlc.arg(form_id)::int);
+
+-- name: GetPartLabel :one
+-- The part number / description denormalized onto a new record as its subject.
+SELECT part_number, COALESCE(description, '') AS description
+FROM part
+WHERE id = sqlc.arg(id);
+
+-- name: InsertRecord :one
+INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
+                         record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
+                         form_revision)
+VALUES (sqlc.arg(form_id), sqlc.narg(part_id), sqlc.arg(serial_number)::text, sqlc.arg(subject_part_number)::text,
+        sqlc.arg(subject_pn_description)::text, sqlc.arg(record_type)::text, sqlc.arg(instrument_type)::text,
+        sqlc.arg(test_order)::text, sqlc.arg(record_date)::timestamp, CURRENT_TIMESTAMP, TRUE, FALSE,
+        sqlc.arg(form_revision)::int)
+RETURNING id;
+
+-- name: DuplicateRecord :one
+-- A fresh WIP re-test of a record: same form, part, serial, subject, type, instrument and step order, dated now,
+-- stamped with the form's current revision (#260), unit carried over (#745). No row = no such record.
+INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
+                         record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
+                         is_approved, form_revision, unit_id)
+SELECT s.form_id, s.part_id, s.serial_number, s.subject_part_number, s.subject_pn_description,
+       s.record_type, COALESCE(s.instrument_type, ''), s.test_order, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, FALSE,
+       FALSE, f.revision, s.unit_id
+FROM form_record s
+JOIN form f ON f.id = s.form_id
+WHERE s.id = sqlc.arg(id)
+RETURNING id;
+
+-- name: CopyRecordResults :exec
+-- Copies every result row (snapshot and recorded value) of one record onto another.
+INSERT INTO result (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+                    spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
+SELECT sqlc.arg(to_record_id), s.form_row_id, s.type, s.parameter, s.specification, s.spec_min, s.spec_nom,
+       s.spec_max, s.spec_units, s.pf_type, s.format, s.hide_formula, s.default_result, s.result, s.comment,
+       s.pass_fail, CURRENT_TIMESTAMP
+FROM result s
+WHERE s.form_record_id = sqlc.arg(from_record_id);
+
+-- name: InsertResult :exec
+-- One result row materialized from a (baked) step definition; result / comment / pass_fail NULL for a fresh row.
+INSERT INTO result (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
+                    spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
+VALUES (sqlc.arg(record_id), sqlc.arg(step_id), sqlc.arg(type)::int, sqlc.arg(parameter)::text,
+        sqlc.arg(specification)::text, sqlc.arg(spec_min)::text, sqlc.arg(spec_nom)::text, sqlc.arg(spec_max)::text,
+        sqlc.arg(spec_units)::text, sqlc.arg(pf_type)::text, sqlc.arg(format)::text, sqlc.arg(hide_formula)::text,
+        sqlc.arg(default_result)::text, sqlc.narg(result)::text, sqlc.narg(comment)::text, sqlc.narg(pass_fail)::bool,
+        CURRENT_TIMESTAMP);
+
+-- name: RefreshResult :exec
+-- Re-pulls a step's live definition into an existing snapshot row (resync) with a recomputed pass_fail.
+UPDATE result
+SET type = sqlc.arg(type)::int, parameter = sqlc.arg(parameter)::text, specification = sqlc.arg(specification)::text,
+    spec_min = sqlc.arg(spec_min)::text, spec_nom = sqlc.arg(spec_nom)::text, spec_max = sqlc.arg(spec_max)::text,
+    spec_units = sqlc.arg(spec_units)::text, pf_type = sqlc.arg(pf_type)::text, format = sqlc.arg(format)::text,
+    hide_formula = sqlc.arg(hide_formula)::text, default_result = sqlc.arg(default_result)::text,
+    pass_fail = sqlc.narg(pass_fail)::bool, updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id);
+
+-- name: UpdateResultValue :exec
+UPDATE result
+SET result = sqlc.arg(result)::text, comment = sqlc.arg(comment)::text, pass_fail = sqlc.narg(pass_fail)::bool,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id);
+
+-- name: ClaimRecord :execrows
+-- Takes a WIP record's row lock for the rest of the tx (#191); 0 rows = locked or missing.
+UPDATE form_record SET updated_at = CURRENT_TIMESTAMP WHERE id = sqlc.arg(id) AND is_locked = FALSE;
+
+-- name: UpdateRecordAfterSave :exec
+-- The record-level fields of a results save; a NULL record_date keeps the stored one.
+UPDATE form_record
+SET record_date = COALESCE(sqlc.narg(record_date)::timestamp, record_date), record_type = sqlc.arg(record_type)::text,
+    notes = sqlc.narg(notes)::text, instrument_type = sqlc.arg(instrument_type)::text,
+    lot_id = sqlc.narg(lot_id)::int, build_id = sqlc.narg(build_id)::int, unit_id = sqlc.narg(unit_id)::int,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id);
+
+-- name: ResyncRecordHeader :exec
+UPDATE form_record
+SET test_order = sqlc.arg(test_order)::text, form_revision = sqlc.arg(form_revision)::int, updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id);
+
+-- name: CompleteRecord :execrows
+-- WIP → Complete; takes the record's row lock. A non-NULL form_id scopes a bulk complete to that form.
+UPDATE form_record SET is_locked = TRUE, updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id) AND is_locked = FALSE
+  AND (sqlc.narg(form_id)::int IS NULL OR form_id = sqlc.narg(form_id)::int);
+
+-- name: ApproveRecord :execrows
+UPDATE form_record SET is_approved = TRUE, updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id) AND is_locked = TRUE AND is_approved = FALSE;
+
+-- name: UnlockRecord :execrows
+-- Locked → WIP, clearing approval. An approved record unlocks only for a reviewer (#249); the check sits in
+-- the WHERE so an approval that lands while the unlock waits on the row lock still wins.
+UPDATE form_record SET is_locked = FALSE, is_approved = FALSE, updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id) AND is_locked = TRUE AND (is_approved = FALSE OR sqlc.arg(may_unlock_approved)::bool);
+
+-- name: InsertRecordEvent :one
+INSERT INTO record_events (form_record_id, event_type, username, event_date, comments)
+VALUES (sqlc.arg(record_id), sqlc.arg(event_type), sqlc.arg(username)::text, CURRENT_TIMESTAMP, sqlc.narg(comments)::text)
+RETURNING id;
+
+-- name: InsertEventResult :exec
+INSERT INTO record_event_results (event_id, form_row_id, parameter, specification, spec_units, result, pass_fail, comment)
+VALUES (sqlc.arg(event_id), sqlc.arg(form_row_id), sqlc.arg(parameter)::text, sqlc.arg(specification)::text,
+        sqlc.arg(spec_units)::text, sqlc.arg(result)::text, sqlc.narg(pass_fail)::bool, sqlc.arg(comment)::text);
+
+-- ── Form writes ──────────────────────────────────────────────────────────────
+
+-- name: SetAuditUser :exec
+-- Transaction-local acting username that trg_form_row_history reads via current_setting('arx.username').
+SELECT set_config('arx.username', sqlc.arg(username)::text, true);
+
+-- name: LockForm :execrows
+-- Release: lock and bump the revision (#260).
+UPDATE form SET is_locked = TRUE, revision = revision + 1 WHERE id = sqlc.arg(id) AND is_locked = FALSE;
+
+-- name: UnlockForm :execrows
+UPDATE form SET is_locked = FALSE WHERE id = sqlc.arg(id) AND is_locked = TRUE;
+
+-- name: InsertFormEvent :exec
+INSERT INTO form_events (form_id, event_type, username, event_date, comments)
+VALUES (sqlc.arg(form_id), sqlc.arg(event_type), sqlc.arg(username)::text, CURRENT_TIMESTAMP, sqlc.narg(comments)::text);
+
+-- name: UpdateStep :exec
+UPDATE form_row
+SET type = sqlc.arg(type)::int, parameter = sqlc.arg(parameter)::text, specification = sqlc.arg(specification)::text,
+    spec_nom = sqlc.narg(spec_nom)::text, spec_min = sqlc.narg(spec_min)::text, spec_max = sqlc.narg(spec_max)::text,
+    spec_units = sqlc.narg(spec_units)::text, pf_type = sqlc.narg(pf_type)::text,
+    default_result = sqlc.narg(default_result)::text, hide_formula = sqlc.narg(hide_formula)::text,
+    category = sqlc.narg(category)::text, sheet_name = sqlc.narg(sheet_name)::text,
+    instrument_types = sqlc.narg(instrument_types)::text, format = sqlc.narg(format)::text,
+    comment = sqlc.narg(comment)::text, updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id) AND form_id = sqlc.arg(form_id);
+
+-- name: InsertStep :one
+INSERT INTO form_row (form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units, pf_type,
+                      default_result, hide_formula, category, sheet_name, instrument_types, format, comment,
+                      created_at, updated_at)
+VALUES (sqlc.arg(form_id), sqlc.arg(type)::int, sqlc.arg(parameter)::text, sqlc.narg(specification)::text,
+        sqlc.narg(spec_nom)::text, sqlc.narg(spec_min)::text, sqlc.narg(spec_max)::text, sqlc.narg(spec_units)::text,
+        sqlc.narg(pf_type)::text, sqlc.narg(default_result)::text, sqlc.narg(hide_formula)::text,
+        sqlc.narg(category)::text, sqlc.narg(sheet_name)::text, sqlc.narg(instrument_types)::text,
+        sqlc.narg(format)::text, sqlc.narg(comment)::text, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+RETURNING id;
+
+-- name: CopyStep :one
+-- Copies one step of from_form_id into another form (no row when the step isn't one of from_form_id's). archived
+-- is not copied (a copy starts active); a NULL type / parameter / specification becomes 0 / ''.
+INSERT INTO form_row (form_id, type, parameter, specification, spec_nom, spec_min, spec_max, spec_units, pf_type,
+                      default_result, hide_formula, category, sheet_name, instrument_types, format, comment,
+                      archive_id, revision)
+SELECT sqlc.arg(to_form_id), COALESCE(s.type, 0), COALESCE(s.parameter, ''), COALESCE(s.specification, ''),
+       s.spec_nom, s.spec_min, s.spec_max, s.spec_units, s.pf_type, s.default_result, s.hide_formula, s.category,
+       s.sheet_name, s.instrument_types, s.format, s.comment, s.archive_id, s.revision
+FROM form_row s
+WHERE s.id = sqlc.arg(step_id) AND s.form_id = sqlc.arg(from_form_id)
+RETURNING id;
+
+-- name: SetStepArchived :exec
+UPDATE form_row SET archived = sqlc.arg(archived), updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id) AND form_id = sqlc.arg(form_id);
+
+-- name: SetFormTestOrder :exec
+UPDATE form SET test_order = sqlc.arg(test_order)::text WHERE id = sqlc.arg(id);
+
+-- name: SetFormTypes :exec
+UPDATE form SET record_types = sqlc.narg(record_types)::text, instrument_types = sqlc.narg(instrument_types)::text
+WHERE id = sqlc.arg(id);
+
+-- name: IsFormPart :one
+-- Whether a part may own a new form: an active FORM-category part.
+SELECT EXISTS (SELECT 1 FROM part WHERE id = sqlc.arg(id) AND category = 'FORM' AND is_active = TRUE)::bool;
+
+-- name: InsertForm :one
+-- A new active, unlocked form with an empty step order. Record / instrument types come from the source form
+-- (NULL when there is none).
+INSERT INTO form (part_number_id, is_active, is_locked, test_order, record_types, instrument_types)
+VALUES (sqlc.arg(part_number_id), TRUE, FALSE, '',
+        (SELECT s.record_types FROM form s WHERE s.id = sqlc.arg(source_id)),
+        (SELECT s.instrument_types FROM form s WHERE s.id = sqlc.arg(source_id)))
+RETURNING id;
+
+-- ── Named queries (#250) ─────────────────────────────────────────────────────
+-- The admin-authored SQL itself runs raw in arx_go's execQuery; only the named_queries table is here.
+
+-- name: ListActiveNamedQueries :many
+SELECT name, COALESCE(description, '') AS description, COALESCE(params, '') AS params, result_type
+FROM named_queries
+WHERE is_active = TRUE
+ORDER BY name;
+
+-- name: ListNamedQueries :many
+SELECT id, name, COALESCE(description, '') AS description, sql, COALESCE(params, '') AS params, result_type,
+       is_active, updated_at
+FROM named_queries
+ORDER BY name;
+
+-- name: GetActiveNamedQuery :one
+SELECT sql, result_type FROM named_queries WHERE name = sqlc.arg(name) AND is_active = TRUE;
+
+-- name: InsertNamedQuery :one
+INSERT INTO named_queries (name, description, sql, params, result_type, is_active)
+VALUES (sqlc.arg(name), sqlc.arg(description)::text, sqlc.arg(sql), sqlc.arg(params)::text, sqlc.arg(result_type),
+        sqlc.arg(is_active))
+RETURNING id;
+
+-- name: UpdateNamedQuery :execrows
+UPDATE named_queries
+SET name = sqlc.arg(name), description = sqlc.arg(description)::text, sql = sqlc.arg(sql),
+    params = sqlc.arg(params)::text, result_type = sqlc.arg(result_type), is_active = sqlc.arg(is_active),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id);
+
 -- ── Reports ──────────────────────────────────────────────────────────────────
 
 -- name: ListYieldRecords :many

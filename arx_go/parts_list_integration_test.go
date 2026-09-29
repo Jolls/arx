@@ -20,7 +20,7 @@ import (
 func seedPartsList(t *testing.T, h *Handler) (full, bare, off string, ids [3]int, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, att := h.cfg().PartsTable(), h.cfg().AttachmentsTable()
+	pn, att := "part", "part_attachment"
 	base := smokeUniq("ITEST-PL")
 	full, bare, off = base+"-A", base+"-B", base+"-C"
 	cleanup = func() {

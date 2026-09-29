@@ -270,7 +270,7 @@ func createSupplierPart(h *Handler, partID int, form url.Values) *httptest.Respo
 // included, attachments aside) writes for partID. Defer it after the part and
 // company cleanups so it runs first (FK order).
 func deleteSourcingRows(ctx context.Context, h *Handler, partID int) {
-	smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET default_supplier_id=NULL WHERE id=$1", h.cfg().PartsTable()), partID)
+	smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET default_supplier_id=NULL WHERE id=$1", "part"), partID)
 	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", "price"), partID)
 	deleteMfgParts(ctx, h, partID)
 	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", "supplier_part"), partID)
@@ -372,7 +372,7 @@ func TestIntegration_SupplierPartCreate_Fields(t *testing.T) {
 	var baseUnit string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
 		`SELECT COALESCE(u.abbreviation, '') FROM %s p LEFT JOIN %s u ON p.uom_id = u.uom_id WHERE p.id=$1`,
-		h.cfg().PartsTable(), "uom"), partID).Scan(&baseUnit); err != nil {
+		"part", "uom"), partID).Scan(&baseUnit); err != nil {
 		t.Fatalf("select part unit: %v", err)
 	}
 	if links, err = h.fetchSupplierLinks(getReq, strconv.Itoa(partID)); err != nil || len(links) != 1 {
@@ -413,7 +413,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyPrices(t *testing.T) {
 		}
 	}
 	var defaultSupplier int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(default_supplier_id, 0) FROM %s WHERE id=$1`, h.cfg().PartsTable()), partID).Scan(&defaultSupplier); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(default_supplier_id, 0) FROM %s WHERE id=$1`, "part"), partID).Scan(&defaultSupplier); err != nil {
 		t.Fatalf("select default supplier: %v", err)
 	}
 	if defaultSupplier != supplierID {

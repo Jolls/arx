@@ -70,34 +70,34 @@ func raceHandler(t *testing.T, h *Handler, ctx context.Context, lockSQL []string
 func seedSRRecord(t *testing.T, h *Handler, ctx context.Context) (recordID, testID int, cleanup func()) {
 	t.Helper()
 	var partID, formID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (part_number, revision, description, release_status, is_active) VALUES ($1, 'A', 'tx boundary test', 'U', TRUE) RETURNING id`, h.cfg().PartsTable()), smokeUniq("ITEST-TX")).Scan(&partID); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (part_number, revision, description, release_status, is_active) VALUES ($1, 'A', 'tx boundary test', 'U', TRUE) RETURNING id`, "part"), smokeUniq("ITEST-TX")).Scan(&partID); err != nil {
 		t.Fatalf("seed part: %v", err)
 	}
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (part_number_id, test_order, is_locked, is_active) VALUES ($1, '', FALSE, TRUE) RETURNING id`, h.cfg().FormsTable()), partID).Scan(&formID); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (part_number_id, test_order, is_locked, is_active) VALUES ($1, '', FALSE, TRUE) RETURNING id`, "form"), partID).Scan(&formID); err != nil {
 		t.Fatalf("seed form: %v", err)
 	}
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (form_id, type, parameter) VALUES ($1, 0, 'Output Voltage') RETURNING id`, h.cfg().StepsTable()), formID).Scan(&testID); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (form_id, type, parameter) VALUES ($1, 0, 'Output Voltage') RETURNING id`, "form_row"), formID).Scan(&testID); err != nil {
 		t.Fatalf("seed form_row: %v", err)
 	}
-	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET test_order=$1 WHERE id=$2`, h.cfg().FormsTable()),
+	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET test_order=$1 WHERE id=$2`, "form"),
 		strconv.Itoa(testID), formID); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (form_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, record_type, is_locked, is_approved, is_active) VALUES ($1, '2026-07-01', $2, '', '', $3, 'New Release', FALSE, FALSE, TRUE) RETURNING id`, h.cfg().RecordsTable()),
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (form_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, record_type, is_locked, is_approved, is_active) VALUES ($1, '2026-07-01', $2, '', '', $3, 'New Release', FALSE, FALSE, TRUE) RETURNING id`, "form_record"),
 		formID, smokeUniq("TX"), strconv.Itoa(testID)).Scan(&recordID); err != nil {
 		t.Fatalf("seed record: %v", err)
 	}
 	if _, err := h.execContext(ctx, fmt.Sprintf(
 		`INSERT INTO %s (form_record_id, form_row_id, result, parameter) VALUES ($1, $2, '5.00', 'Output Voltage')`,
-		h.cfg().ResultsTable()), recordID, testID); err != nil {
+		"result"), recordID, testID); err != nil {
 		t.Fatalf("seed result: %v", err)
 	}
 	return recordID, testID, func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_record_id=$1`, h.cfg().ResultsTable()), recordID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().RecordsTable()), recordID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().StepsTable()), testID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().FormsTable()), formID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().PartsTable()), partID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE form_record_id=$1`, "result"), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "form_record"), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "form_row"), testID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "form"), formID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "part"), partID)
 	}
 }
 
@@ -105,7 +105,7 @@ func resultOf(t *testing.T, h *Handler, ctx context.Context, recordID, testID in
 	t.Helper()
 	var v string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COALESCE(result,'') FROM %s WHERE form_record_id=$1 AND form_row_id=$2`, h.cfg().ResultsTable()),
+		`SELECT COALESCE(result,'') FROM %s WHERE form_record_id=$1 AND form_row_id=$2`, "result"),
 		recordID, testID).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func resultOf(t *testing.T, h *Handler, ctx context.Context, recordID, testID in
 func setRecordLocked(t *testing.T, h *Handler, ctx context.Context, recordID int) {
 	t.Helper()
 	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET is_locked=TRUE WHERE id=$1`,
-		h.cfg().RecordsTable()), recordID); err != nil {
+		"form_record"), recordID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -141,7 +141,7 @@ func TestIntegration_SaveResults_HappyPathUpdatesResultAndRecord(t *testing.T) {
 		t.Errorf("result = %q, want 9.99", got)
 	}
 	var rt string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT record_type FROM %s WHERE id=$1`, h.cfg().RecordsTable()), recordID).Scan(&rt); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT record_type FROM %s WHERE id=$1`, "form_record"), recordID).Scan(&rt); err != nil {
 		t.Fatal(err)
 	}
 	if rt != "Changed" {
@@ -166,7 +166,7 @@ func TestIntegration_SaveResults_LockedRecordWritesNothing(t *testing.T) {
 		t.Errorf("result = %q, want unchanged 5.00", got)
 	}
 	var rt string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT record_type FROM %s WHERE id=$1`, h.cfg().RecordsTable()), recordID).Scan(&rt); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT record_type FROM %s WHERE id=$1`, "form_record"), recordID).Scan(&rt); err != nil {
 		t.Fatal(err)
 	}
 	if rt != "New Release" {
@@ -216,7 +216,7 @@ func TestIntegration_SaveResults_LockRaceWritesNothing(t *testing.T) {
 
 	var rec *httptest.ResponseRecorder
 	raceHandler(t, h, ctx,
-		[]string{fmt.Sprintf(`UPDATE %s SET is_locked=TRUE WHERE id=$1`, h.cfg().RecordsTable())},
+		[]string{fmt.Sprintf(`UPDATE %s SET is_locked=TRUE WHERE id=$1`, "form_record")},
 		[][]any{{recordID}},
 		func() { rec = saveResults(h, recordID, url.Values{fmt.Sprintf("result_%d", testID): {"9.99"}}) })
 
@@ -242,7 +242,7 @@ const (
 func seedBuildReturnRecord(t *testing.T, h *Handler, ctx context.Context, locked bool) (int, func()) {
 	t.Helper()
 	var recordID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (form_id, part_id, serial_number, is_locked, is_active) VALUES (6001, $1, $2, $3, TRUE) RETURNING id`, h.cfg().RecordsTable()),
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (form_id, part_id, serial_number, is_locked, is_active) VALUES (6001, $1, $2, $3, TRUE) RETURNING id`, "form_record"),
 		brOutputPart, smokeUniq("BRR"), locked).Scan(&recordID); err != nil {
 		t.Fatalf("seed record: %v", err)
 	}
@@ -251,7 +251,7 @@ func seedBuildReturnRecord(t *testing.T, h *Handler, ctx context.Context, locked
 		t.Fatal(err)
 	}
 	return recordID, func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, h.cfg().RecordsTable()), recordID)
+		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "form_record"), recordID)
 		var buildID, lotID int
 		_ = h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(MAX(id),0) FROM %s WHERE part_id=$1 AND id>$2`,
 			"build"), brOutputPart, before).Scan(&buildID)
@@ -271,7 +271,7 @@ func seedBuildReturnRecord(t *testing.T, h *Handler, ctx context.Context, locked
 		for _, id := range []int{3001, brTrackedComp, 3002, brOutputPart} {
 			smokeExec(ctx, h, fmt.Sprintf(
 				`UPDATE %s SET stock_on_hand = (SELECT COALESCE(SUM(qty),0) FROM %s WHERE part_id = $1) WHERE id = $1`,
-				h.cfg().PartsTable(), "inventory_transaction"), id)
+				"part", "inventory_transaction"), id)
 		}
 	}
 }
@@ -289,7 +289,7 @@ func buildWithReturn(h *Handler, recordID int) *httptest.ResponseRecorder {
 func recordBuildLinked(t *testing.T, h *Handler, ctx context.Context, recordID int) bool {
 	t.Helper()
 	var linked bool
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT build_id IS NOT NULL FROM %s WHERE id=$1`, h.cfg().RecordsTable()), recordID).Scan(&linked); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT build_id IS NOT NULL FROM %s WHERE id=$1`, "form_record"), recordID).Scan(&linked); err != nil {
 		t.Fatal(err)
 	}
 	return linked
@@ -321,7 +321,7 @@ func TestIntegration_BuildReturnRecord_LockRaceNotLinked(t *testing.T) {
 
 	var rec *httptest.ResponseRecorder
 	raceHandler(t, h, ctx,
-		[]string{fmt.Sprintf(`UPDATE %s SET is_locked=TRUE WHERE id=$1`, h.cfg().RecordsTable())},
+		[]string{fmt.Sprintf(`UPDATE %s SET is_locked=TRUE WHERE id=$1`, "form_record")},
 		[][]any{{recordID}},
 		func() { rec = buildWithReturn(h, recordID) })
 
@@ -361,7 +361,7 @@ func TestIntegration_POReceive_StatusRaceRejected(t *testing.T) {
 	setPOStatus(t, h, ctx, poID, "sent", "approved")
 	defer smokeExec(ctx, h, fmt.Sprintf(
 		`UPDATE %s SET stock_on_hand = (SELECT COALESCE(SUM(qty),0) FROM %s WHERE part_id = $1) WHERE id = $1`,
-		h.cfg().PartsTable(), "inventory_transaction"), 3001)
+		"part", "inventory_transaction"), 3001)
 	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id=$1`, "inventory_transaction"), lineID)
 
 	var rec *httptest.ResponseRecorder
@@ -402,7 +402,7 @@ func TestIntegration_POReceive_StatusDerivedFromCommittedLines(t *testing.T) {
 	setPOStatus(t, h, ctx, poID, "sent", "approved")
 	defer smokeExec(ctx, h, fmt.Sprintf(
 		`UPDATE %s SET stock_on_hand = (SELECT COALESCE(SUM(qty),0) FROM %s WHERE part_id = $1) WHERE id = $1`,
-		h.cfg().PartsTable(), "inventory_transaction"), 3001)
+		"part", "inventory_transaction"), 3001)
 	defer smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN ($1, $2)`, "inventory_transaction"), line1, line2)
 
 	raceHandler(t, h, ctx,

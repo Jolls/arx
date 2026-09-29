@@ -124,3 +124,11 @@ When a new PO is created, the app auto-creates a folder in `PO_FOLDER_ROOT` name
 ```
 
 Folder lookup matches any directory whose name **starts with** the PO number (the company code suffix may vary). In test mode, `-testmode` is appended to the folder name.
+
+## Named queries and sqlc (#250)
+
+All app SQL is static sqlc queries (#190), with one exception. The `named_queries` table itself (list,
+lookup by name, insert, update) goes through `internal/records` like any other table. The **stored SQL** an
+admin writes can't be a static query, so `execQuery` (`arx_go/named_query.go`) runs it raw: the one line
+`TestSQLCConvertedFilesHaveNoRawSQL` allows outside the DB plumbing in `handlers.go`. Its `isSafeQuery` guard and the least-privilege login
+(`SQL/SCHEMA.md#database-privileges`, #146) are unchanged.

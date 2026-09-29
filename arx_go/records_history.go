@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 
 	"arx/arx_go/models"
+	"arx/internal/records"
 )
 
 // errRecordNeedsLot is returned by completeRecordTx when a lot-tracked part's record has
@@ -16,43 +16,33 @@ var errRecordNeedsLot = errors.New("a lot must be selected before this record ca
 // snapshotRecordResults copies the record's current data-row results (result) into
 // record_event_results, linked to the given Complete event. Rows are inserted in the
 // record's frozen display order (test_order, falling back to form_row_id order) so the snapshot
-// renders by id. Headings (type > 0) are not captured. Runs inside the caller's tx.
-func (h *Handler) snapshotRecordResults(ctx context.Context, tx *txLogger, eventID, recordID int) error {
-	var testOrder string
-	if err := tx.QueryRowContext(ctx, fmt.Sprintf(
-		"SELECT COALESCE(test_order,'') FROM %s WHERE id=$1", h.cfg().RecordsTable()), recordID).
-		Scan(&testOrder); err != nil {
+// renders by id. Headings (type > 0) are not captured. svc runs on the caller's tx.
+func (h *Handler) snapshotRecordResults(ctx context.Context, svc *records.Service, eventID, recordID int) error {
+	rec, err := svc.GetRecord(ctx, recordID)
+	if err != nil {
 		return err
 	}
-
-	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
-		SELECT form_row_id, COALESCE(parameter,''), COALESCE(specification,''), COALESCE(spec_units,''),
-		       COALESCE(result,''), pass_fail, COALESCE(comment,'')
-		FROM %s WHERE form_record_id=$1 AND COALESCE(type,0)=0`, h.cfg().ResultsTable()), recordID)
+	rows, err := svc.ListResults(ctx, recordID)
 	if err != nil {
 		return err
 	}
 	byTest := map[int]models.RecordResultSnapshot{}
-	for rows.Next() {
-		var s models.RecordResultSnapshot
-		if err := rows.Scan(&s.TestID, &s.Parameter, &s.Specification, &s.SpecUnits,
-			&s.Result, &s.PassFail, &s.Comment); err != nil {
-			rows.Close()
-			return err
+	for _, r := range rows {
+		if r.Type != 0 {
+			continue
+		}
+		s := models.RecordResultSnapshot{TestID: r.FormRowID, Parameter: r.Parameter, Specification: r.Specification,
+			SpecUnits: r.SpecUnits, Result: r.Result, Comment: r.Comment}
+		if r.PassFail.Valid {
+			s.PassFail = &r.PassFail.Bool
 		}
 		byTest[s.TestID] = s
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
 
-	ins := fmt.Sprintf(`INSERT INTO %s (event_id, form_row_id, parameter, specification, spec_units, result, pass_fail, comment)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, h.cfg().RecordEventResultsTable())
-	for _, tid := range orderedResultIDs(testOrder, byTest) {
+	for _, tid := range orderedResultIDs(rec.TestOrder, byTest) {
 		s := byTest[tid]
-		if _, err := tx.ExecContext(ctx, ins, eventID, tid, s.Parameter, s.Specification, s.SpecUnits,
-			s.Result, s.PassFail, s.Comment); err != nil {
+		if err := svc.InsertEventResult(ctx, records.EventResult{EventID: eventID, FormRowID: tid, Parameter: s.Parameter,
+			Specification: s.Specification, SpecUnits: s.SpecUnits, Result: s.Result, PassFail: s.PassFail, Comment: s.Comment}); err != nil {
 			return err
 		}
 	}
@@ -114,13 +104,6 @@ func (h *Handler) loadEventSnapshots(ctx context.Context, recordID int) (map[int
 // captures the result snapshot (#251) — all in a single tx. When formID > 0 the UPDATE is
 // scoped to that form (bulk complete). Returns true if the record was newly completed.
 func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, username string) (bool, error) {
-	guard := ""
-	args := []any{recordID}
-	if formID > 0 {
-		guard = " AND form_id=$2"
-		args = append(args, formID)
-	}
-
 	tx, err := h.beginTx(ctx)
 	if err != nil {
 		return false, err
@@ -137,15 +120,13 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 	// user to satisfy this check. Re-enable alongside the picker. See
 	// docs/plans/677-hide-testrecord-lot-linkage.md
 
-	res, err := tx.ExecContext(ctx, fmt.Sprintf(
-		"UPDATE %s SET is_locked=TRUE, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND is_locked=FALSE"+guard,
-		h.cfg().RecordsTable()), args...)
+	svc := records.New(tx)
+	completed, err := svc.CompleteRecord(ctx, recordID, formID)
 	if err != nil {
 		return false, err
 	}
-	n, _ := res.RowsAffected()
-	if n > 0 {
-		if err := h.logCompletionSnapshot(ctx, tx, recordID, username); err != nil {
+	if completed {
+		if err := h.logCompletionSnapshot(ctx, svc, recordID, username); err != nil {
 			return false, err
 		}
 	}
@@ -153,19 +134,17 @@ func (h *Handler) completeRecordTx(ctx context.Context, recordID, formID int, us
 		return false, err
 	}
 	committed = true
-	return n > 0, nil
+	return completed, nil
 }
 
 // logCompletionSnapshot writes the 'completed' record_events row for a just-locked record and
-// captures its result snapshot, within the caller's tx. Shared by single + bulk lock.
-func (h *Handler) logCompletionSnapshot(ctx context.Context, tx *txLogger, recordID int, username string) error {
-	var eventID int
-	insertEvent := fmt.Sprintf(`INSERT INTO %s (form_record_id, event_type, username, event_date) VALUES ($1, 'completed', $2, CURRENT_TIMESTAMP) RETURNING id`, h.cfg().RecordEventsTable())
-	if err := tx.QueryRowContext(ctx, insertEvent,
-		recordID, username).Scan(&eventID); err != nil {
+// captures its result snapshot, within the caller's tx (svc). Shared by single + bulk lock.
+func (h *Handler) logCompletionSnapshot(ctx context.Context, svc *records.Service, recordID int, username string) error {
+	eventID, err := svc.InsertRecordEvent(ctx, recordID, "completed", username, "")
+	if err != nil {
 		return err
 	}
-	return h.snapshotRecordResults(ctx, tx, eventID, recordID)
+	return h.snapshotRecordResults(ctx, svc, eventID, recordID)
 }
 
 // diffSnapshot annotates each row of a Complete-event result snapshot with how it changed
