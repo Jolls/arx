@@ -53,7 +53,7 @@
 
     <!-- ── Database Connection ───────────────────────────────────────── -->
     <div class="detail-section">
-        <h3 class="d-flex align-items-center gap-2">
+        <h3 class="d-flex flex-wrap align-items-center gap-2">
             Database Connection
             {{if .Connected}}
             <span class="badge rounded-pill text-bg-success fw-normal">&#10003; Connected</span>
@@ -177,7 +177,7 @@
                 <input type="text" name="doc_control_root" id="doc_control_root"
                        value="{{.DocControlRoot}}"
                        placeholder="e.g. C:\DocControl"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('doc_control_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
@@ -189,7 +189,7 @@
                 <input type="text" name="po_folder_root" id="po_folder_root"
                        value="{{.POFolderRoot}}"
                        placeholder="e.g. C:\PurchaseOrders"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('po_folder_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
@@ -201,7 +201,7 @@
                 <input type="text" name="supplier_files_root" id="supplier_files_root"
                        value="{{.SupplierFilesRoot}}"
                        placeholder="e.g. C:\SupplierDocs (blank = use DOC_CONTROL_ROOT)"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('supplier_files_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
@@ -213,7 +213,7 @@
                 <input type="text" name="image_root" id="image_root"
                        value="{{.ImageRoot}}"
                        placeholder="e.g. C:\Images (used by Test Records)"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('image_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
