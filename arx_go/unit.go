@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"arx/arx_go/models"
+	"arx/internal/inventory"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -20,139 +19,38 @@ import (
 
 // UnitRow is one serialized unit for the Units subtab list and the header of a unit's
 // genealogy trace. LotNumber is joined for display and is "" when LotID is nil.
-type UnitRow struct {
-	ID              int
-	SerialNumber    string
-	PartID          int
-	PartNumber      string
-	PartDescription string
-	LotID           *int
-	LotNumber       string
-	BuildID         *int
-	IsActive        bool
-	CreatedAt       time.Time
-	Source          string // "test" | "manual" (#799)
-}
+type UnitRow = inventory.UnitRow
 
-// IsManual reports whether this unit was manually back-filled (#799), for the
-// Units list's Source badge.
-func (u UnitRow) IsManual() bool { return u.Source == "manual" }
-
-// LotIDVal / BuildIDVal return the dereferenced id (0 when nil) for template links;
-// templates gate on {{if .LotID}} first, so 0 is never rendered as a live link.
-func (u UnitRow) LotIDVal() int {
-	if u.LotID != nil {
-		return *u.LotID
+// anyIntPtr converts a lot/build argument as recordLinkageArgs returns it (nil or an int) to
+// the *int the inventory service takes.
+func anyIntPtr(v any) *int {
+	if id, ok := v.(int); ok {
+		return &id
 	}
-	return 0
-}
-func (u UnitRow) BuildIDVal() int {
-	if u.BuildID != nil {
-		return *u.BuildID
-	}
-	return 0
-}
-
-// unitRowSelect is the shared SELECT for a unit joined to its part and (nullable) lot.
-// A `WHERE …` clause and ordering are appended by callers.
-func (h *Handler) unitRowSelect() string {
-	return fmt.Sprintf(`
-		SELECT u.id, u.serial_number, u.part_id, p.part_number, p.description,
-		       u.lot_id, l.lot_number, u.build_id, u.is_active, u.created_at, u.source
-		FROM %s u
-		JOIN %s p ON p.id = u.part_id
-		LEFT JOIN %s l ON l.id = u.lot_id
-	`, h.cfg().UnitTable(), h.cfg().PartsTable(), h.cfg().LotTable())
-}
-
-// scanUnitRow reads one UnitRow from a cursor over unitRowSelect's columns.
-func scanUnitRow(sc interface{ Scan(...any) error }) (UnitRow, error) {
-	var ur UnitRow
-	var partNumber, partDescription, lotNumber sql.NullString
-	var lotID, buildID sql.NullInt64
-	if err := sc.Scan(&ur.ID, &ur.SerialNumber, &ur.PartID, &partNumber, &partDescription,
-		&lotID, &lotNumber, &buildID, &ur.IsActive, &ur.CreatedAt, &ur.Source); err != nil {
-		return UnitRow{}, err
-	}
-	ur.PartNumber = partNumber.String
-	ur.PartDescription = partDescription.String
-	ur.LotNumber = lotNumber.String
-	if lotID.Valid {
-		v := int(lotID.Int64)
-		ur.LotID = &v
-	}
-	if buildID.Valid {
-		v := int(buildID.Int64)
-		ur.BuildID = &v
-	}
-	return ur, nil
+	return nil
 }
 
 // unitsForPart returns every unit of a part, newest first, for the Units subtab list.
 func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, error) {
-	rows, err := h.queryContext(ctx, h.unitRowSelect()+
-		`WHERE u.part_id = $1 ORDER BY u.created_at DESC, u.id DESC`, partID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []UnitRow
-	for rows.Next() {
-		ur, err := scanUnitRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, ur)
-	}
-	return out, rows.Err()
+	return h.inventory().ListPartUnits(ctx, partID)
 }
 
 // recentPartUnits returns the most recent units for a part, newest first, capped
 // at limit, for the Part dashboard "Units" card (#798).
 func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([]UnitRow, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT u.id, u.serial_number, u.part_id, p.part_number, p.description,
-		       u.lot_id, l.lot_number, u.build_id, u.is_active, u.created_at, u.source
-		FROM %s u
-		JOIN %s p ON p.id = u.part_id
-		LEFT JOIN %s l ON l.id = u.lot_id
-		WHERE u.part_id = $1 ORDER BY u.created_at DESC, u.id DESC LIMIT $2
-	`, h.cfg().UnitTable(), h.cfg().PartsTable(), h.cfg().LotTable()), partID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []UnitRow
-	for rows.Next() {
-		ur, err := scanUnitRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, ur)
-	}
-	return out, rows.Err()
+	return h.inventory().ListRecentPartUnits(ctx, partID, limit)
 }
 
 // unitCountForPart returns the total number of units for a part, for the Part
 // dashboard "Units" card (#798).
 func (h *Handler) unitCountForPart(ctx context.Context, partID int) (int, error) {
-	var count int
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id = $1`, h.cfg().UnitTable()), partID).Scan(&count)
-	return count, err
+	return h.inventory().CountPartUnits(ctx, partID)
 }
 
 // fetchUnitRow loads a single unit for the trace header. ok=false (nil error) when
 // the unit does not exist.
 func (h *Handler) fetchUnitRow(ctx context.Context, unitID int) (UnitRow, bool, error) {
-	ur, err := scanUnitRow(h.queryRowContext(ctx, h.unitRowSelect()+`WHERE u.id = $1`, unitID))
-	if err == sql.ErrNoRows {
-		return UnitRow{}, false, nil
-	}
-	if err != nil {
-		return UnitRow{}, false, err
-	}
-	return ur, true, nil
+	return h.inventory().GetUnit(ctx, unitID)
 }
 
 // PartUnits — GET /part/{id}/units. Lists a serial/lot_serial-tracked part's units,
@@ -257,11 +155,7 @@ func (h *Handler) UnitRecordsRows(w http.ResponseWriter, r *http.Request) {
 // form_record points at it (#736 §6 Q5: "editable until the unit's first locked
 // form_record"). Scrap (is_active) stays editable regardless.
 func (h *Handler) unitSerialLocked(ctx context.Context, unitID int) (bool, error) {
-	var n int
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE unit_id = $1 AND is_locked = TRUE`,
-		h.cfg().RecordsTable()), unitID).Scan(&n)
-	return n > 0, err
+	return h.inventory().UnitSerialLocked(ctx, unitID)
 }
 
 // UnitNew — GET /part/{id}/units/new. Form to add a serial for a serial/lot_serial
@@ -316,9 +210,8 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)
 		return
 	}
-	insertUnit := fmt.Sprintf(`INSERT INTO %s (part_id, serial_number, lot_id, build_id, source) VALUES ($1, $2, $3, $4, 'manual') RETURNING id`, h.cfg().UnitTable())
-	var unitID int
-	if err := h.queryRowContext(r.Context(), insertUnit, p.ID, serial, lotArg, buildArg).Scan(&unitID); err != nil {
+	unitID, err := h.inventory().CreateManualUnit(r.Context(), p.ID, serial, anyIntPtr(lotArg), anyIntPtr(buildArg))
+	if err != nil {
 		h.renderUnitSaveErr(w, r, err)
 		return
 	}
@@ -403,18 +296,14 @@ func (h *Handler) UnitUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if locked {
-		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET is_active = $1 WHERE id = $2 AND part_id = $3`,
-			h.cfg().UnitTable()), isActive, unitID, p.ID)
+		err = h.inventory().SetUnitActive(r.Context(), unitID, p.ID, isActive)
 	} else {
 		serial := fv(r, "serial_number")
 		if serial == "" {
 			h.renderError(w, r, "Serial # is required.")
 			return
 		}
-		_, err = h.execContext(r.Context(), fmt.Sprintf(
-			`UPDATE %s SET is_active = $1, serial_number = $2 WHERE id = $3 AND part_id = $4`,
-			h.cfg().UnitTable()), isActive, serial, unitID, p.ID)
+		err = h.inventory().UpdateUnit(r.Context(), unitID, p.ID, serial, isActive)
 	}
 	if err != nil {
 		h.renderUnitSaveErr(w, r, err)

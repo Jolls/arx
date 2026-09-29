@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
-	"time"
 
+	"arx/internal/inventory"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -21,89 +19,37 @@ import (
 
 // LotOption is one active lot of a part, offered in the build form's per-component
 // lot picker. Label is a human-readable identifier (lot number + vendor/PO hint).
-type LotOption struct {
-	ID    int
-	Label string
-}
+type LotOption = inventory.LotOption
 
 // lotCreateArgs groups createLot's free-text fields so a positional call can't
 // silently swap VendorLot and Description (both are plain strings).
-type lotCreateArgs struct {
-	LotNumber   string // "" for auto-issued lots — defaults to the lot's own id (#687)
-	VendorLot   string // supplier's own lot/batch ID (purchased lots); "" when unknown
-	Description string // human-readable provenance stored in lot_description
-}
+type lotCreateArgs = inventory.LotCreate
 
 // createLot inserts one lot row inside the caller's tx and returns its new id.
 // poLineID is nil for manufactured (build) lots. args.LotNumber == "" (auto-issued
 // lots) defers to the lot's own id, guaranteed unique by construction (#687) — a
 // second UPDATE sets it once the id is known post-insert.
 func (h *Handler) createLot(ctx context.Context, tx *txLogger, partID int, args lotCreateArgs, poLineID *int) (int, error) {
-	var poArg any
-	if poLineID != nil {
-		poArg = *poLineID
-	}
-	insert := fmt.Sprintf(`INSERT INTO %s (part_id, lot_number, lot_description, vendor_lot_number, po_line_id, is_active) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, h.cfg().LotTable())
-	var lotID int
-	err := tx.QueryRowContext(ctx, insert,
-		partID, args.LotNumber, args.Description, nullableText(args.VendorLot), poArg, true,
-	).Scan(&lotID)
-	if err != nil || args.LotNumber != "" {
-		return lotID, err
-	}
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET lot_number = $1 WHERE id = $2`, h.cfg().LotTable()),
-		strconv.Itoa(lotID), lotID)
-	return lotID, err
+	return inventory.New(tx).CreateLot(ctx, partID, args, poLineID)
 }
 
 // activeLotsForPart returns a part's active lots, newest first, for the build
 // form's component lot picker. Empty (not an error) when the part has no active lot.
 func (h *Handler) activeLotsForPart(ctx context.Context, partID int) ([]LotOption, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, lot_number, vendor_lot_number
-		FROM %s WHERE part_id = $1 AND is_active = TRUE
-		ORDER BY created_at DESC, id DESC
-	`, h.cfg().LotTable()), partID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var lots []LotOption
-	for rows.Next() {
-		var o LotOption
-		var lotNumber, vendorLot sql.NullString
-		if err := rows.Scan(&o.ID, &lotNumber, &vendorLot); err != nil {
-			return nil, err
-		}
-		o.Label = lotNumber.String
-		if vendorLot.String != "" {
-			o.Label += " (vendor " + vendorLot.String + ")"
-		}
-		lots = append(lots, o)
-	}
-	return lots, rows.Err()
+	return h.inventory().ListActiveLots(ctx, partID)
 }
 
 // lotBelongsToPart reports whether lotID is an active lot of partID — guards the
 // build's genealogy writes against a forged or stale lot selection in the POST.
 func (h *Handler) lotBelongsToPart(ctx context.Context, tx *txLogger, lotID, partID int) (bool, error) {
-	var n int
-	err := tx.QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE id = $1 AND part_id = $2 AND is_active = TRUE`,
-		h.cfg().LotTable()), lotID, partID).Scan(&n)
-	return n == 1, err
+	return inventory.New(tx).LotBelongsToPart(ctx, lotID, partID)
 }
 
 // recordGenealogy inserts one genealogy edge linking a consumed parent (component)
 // lot to the child (output) lot it fed, inside the caller's tx. Lot→lot only; unit
 // endpoints (parent_unit_id/child_unit_id) are written from slice 8 (#736).
 func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID, childLotID int, qtyConsumed float64) error {
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (parent_lot_id, child_lot_id, qty_consumed)
-		VALUES ($1, $2, $3)
-	`, h.cfg().GenealogyTable()), parentLotID, childLotID, qtyConsumed)
-	return err
+	return inventory.New(tx).RecordGenealogy(ctx, parentLotID, childLotID, qtyConsumed)
 }
 
 // ── Lots view (#676) ─────────────────────────────────────────────────────────
@@ -112,183 +58,34 @@ func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID
 // LotDescription is the human-readable provenance stored at creation (#687): "PO
 // <number>" for a purchased lot, "Build #<id>" for a manufactured one, "Manual
 // entry" for one created directly on the inventory adjustment tab.
-type LotRow struct {
-	ID              int
-	LotNumber       string
-	VendorLot       string
-	PartID          int
-	PartNumber      string
-	PartDescription string
-	LotDescription  string
-	Notes           string // free-text batch notes (#872)
-	CreatedAt       time.Time
-	IsActive        bool
-}
-
-// lotRowSelect is the shared SELECT for a lot joined to its part. A `WHERE …`
-// clause and ordering are appended by callers.
-func (h *Handler) lotRowSelect() string {
-	return fmt.Sprintf(`
-		SELECT l.id, l.lot_number, l.vendor_lot_number, l.part_id,
-		       p.part_number, p.description, l.lot_description, l.notes, l.created_at, l.is_active
-		FROM %s l
-		JOIN %s p ON p.id = l.part_id
-	`, h.cfg().LotTable(), h.cfg().PartsTable())
-}
-
-// scanLotRow reads one LotRow from a row cursor over lotRowSelect's columns.
-func scanLotRow(sc interface{ Scan(...any) error }) (LotRow, error) {
-	var lr LotRow
-	var vendorLot, partNumber, partDescription, notes sql.NullString
-	if err := sc.Scan(&lr.ID, &lr.LotNumber, &vendorLot, &lr.PartID,
-		&partNumber, &partDescription, &lr.LotDescription, &notes, &lr.CreatedAt, &lr.IsActive); err != nil {
-		return LotRow{}, err
-	}
-	lr.VendorLot = vendorLot.String
-	lr.Notes = notes.String
-	lr.PartNumber = partNumber.String
-	lr.PartDescription = partDescription.String
-	return lr, nil
-}
+type LotRow = inventory.LotRow
 
 // lotsForPart returns every lot of a part, newest first, for the Lots subtab list.
 func (h *Handler) lotsForPart(ctx context.Context, partID int) ([]LotRow, error) {
-	rows, err := h.queryContext(ctx, h.lotRowSelect()+
-		`WHERE l.part_id = $1 ORDER BY l.created_at DESC, l.id DESC`, partID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []LotRow
-	for rows.Next() {
-		lr, err := scanLotRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, lr)
-	}
-	return out, rows.Err()
+	return h.inventory().ListPartLots(ctx, partID)
 }
 
 // recentPartLots returns the most recent lots for a part, newest first, capped
 // at limit, for the Part dashboard "Lots" card (#798).
 func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]LotRow, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT l.id, l.lot_number, l.vendor_lot_number, l.part_id,
-		       p.part_number, p.description, l.lot_description, l.notes, l.created_at, l.is_active
-		FROM %s l
-		JOIN %s p ON p.id = l.part_id
-		WHERE l.part_id = $1 ORDER BY l.created_at DESC, l.id DESC LIMIT $2
-	`, h.cfg().LotTable(), h.cfg().PartsTable()), partID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []LotRow
-	for rows.Next() {
-		lr, err := scanLotRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, lr)
-	}
-	return out, rows.Err()
+	return h.inventory().ListRecentPartLots(ctx, partID, limit)
 }
 
 // lotCountForPart returns the total number of lots for a part, for the Part
 // dashboard "Lots" card (#798).
 func (h *Handler) lotCountForPart(ctx context.Context, partID int) (int, error) {
-	var count int
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id = $1`, h.cfg().LotTable()), partID).Scan(&count)
-	return count, err
+	return h.inventory().CountPartLots(ctx, partID)
 }
 
 // fetchLotRow loads a single lot for the genealogy trace header. ok=false (nil
 // error) when the lot does not exist.
 func (h *Handler) fetchLotRow(ctx context.Context, lotID int) (LotRow, bool, error) {
-	lr, err := scanLotRow(h.queryRowContext(ctx, h.lotRowSelect()+`WHERE l.id = $1`, lotID))
-	if err == sql.ErrNoRows {
-		return LotRow{}, false, nil
-	}
-	if err != nil {
-		return LotRow{}, false, err
-	}
-	return lr, true, nil
+	return h.inventory().GetLot(ctx, lotID)
 }
 
 // TraceNode is one lot OR unit in a genealogy trace (#746), flattened with Depth for
-// indented rendering. NodeType ("lot"|"unit") says which; Number holds the lot_number
-// or the unit's serial_number accordingly. Qty is qty_consumed on the edge connecting
-// this node to its predecessor (how much of a parent fed the child that led here).
-type TraceNode struct {
-	NodeType        string // "lot" | "unit"
-	ID              int
-	Number          string // lot.lot_number or unit.serial_number, per NodeType
-	VendorLot       string // lot nodes only; "" for unit nodes
-	Notes           string // lot nodes only (#872); "" for unit nodes
-	PartID          int
-	PartNumber      string
-	PartDescription string
-	IsVendorLot     bool // lot nodes only: po_line_id set → a purchased raw/vendor lot (a genealogy leaf)
-	Qty             float64
-	Depth           int
-}
-
-// IsUnit reports whether this node is a serialized unit (vs a lot) — for templates.
-func (n TraceNode) IsUnit() bool { return n.NodeType == "unit" }
-
-// traceNeighbors returns the immediate parent (ancestors) or child (descendants)
-// nodes — lot OR unit — of one node in the genealogy (#746). The exactly-one-parent /
-// exactly-one-child CHECK (Q11) guarantees each edge has precisely one parent FK and
-// one child FK set, so the far endpoint is found by joining against lot and unit
-// separately and unioning. It fully drains its cursor before returning so the caller
-// can recurse without exhausting the connection pool.
-func (h *Handler) traceNeighbors(ctx context.Context, id int, nodeType string, ancestors bool) ([]TraceNode, error) {
-	// filterCol selects edges where THIS node is the near endpoint; joinPrefix names
-	// the FAR endpoint's columns. Ancestors walk child→parent; descendants parent→child.
-	filterCol, joinPrefix := "child_"+nodeType+"_id", "parent"
-	if !ancestors {
-		filterCol, joinPrefix = "parent_"+nodeType+"_id", "child"
-	}
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT 'lot' AS node_type, l.id, l.lot_number, l.vendor_lot_number, l.notes, l.po_line_id,
-		       p.id, p.part_number, p.description, g.qty_consumed
-		FROM %[1]s g
-		JOIN %[2]s l ON l.id = g.%[3]s_lot_id
-		JOIN %[4]s p ON p.id = l.part_id
-		WHERE g.%[5]s = $1
-		UNION ALL
-		SELECT 'unit' AS node_type, u.id, u.serial_number, NULL, NULL, NULL,
-		       p.id, p.part_number, p.description, g.qty_consumed
-		FROM %[1]s g
-		JOIN %[6]s u ON u.id = g.%[3]s_unit_id
-		JOIN %[4]s p ON p.id = u.part_id
-		WHERE g.%[5]s = $1
-		ORDER BY 1, 2
-	`, h.cfg().GenealogyTable(), h.cfg().LotTable(), joinPrefix, h.cfg().PartsTable(), filterCol, h.cfg().UnitTable()), id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []TraceNode
-	for rows.Next() {
-		var n TraceNode
-		var vendorLot, notes, partNumber, partDescription sql.NullString
-		var poLineID sql.NullInt64
-		if err := rows.Scan(&n.NodeType, &n.ID, &n.Number, &vendorLot, &notes, &poLineID,
-			&n.PartID, &partNumber, &partDescription, &n.Qty); err != nil {
-			return nil, err
-		}
-		n.VendorLot = vendorLot.String
-		n.Notes = notes.String
-		n.PartNumber = partNumber.String
-		n.PartDescription = partDescription.String
-		n.IsVendorLot = poLineID.Valid
-		out = append(out, n)
-	}
-	return out, rows.Err()
-}
+// indented rendering — see inventory.TraceNode.
+type TraceNode = inventory.TraceNode
 
 // traceRoot is one starting node (a lot or a unit) for a genealogy walk.
 type traceRoot struct {
@@ -310,40 +107,11 @@ func (h *Handler) genealogyTrace(ctx context.Context, rootID int, rootType strin
 // be traced together with its lot (#746): a lot_serial unit's as-built components are
 // its lot's, so its birth certificate seeds from both the unit and the lot it belongs to.
 func (h *Handler) genealogyTraceRoots(ctx context.Context, roots []traceRoot, ancestors bool) ([]TraceNode, error) {
-	type key struct {
-		nodeType string
-		id       int
+	rs := make([]inventory.TraceRoot, len(roots))
+	for i, rt := range roots {
+		rs[i] = inventory.TraceRoot{ID: rt.id, NodeType: rt.nodeType}
 	}
-	var out []TraceNode
-	visited := map[key]bool{}
-	for _, rt := range roots {
-		visited[key{rt.nodeType, rt.id}] = true
-	}
-	var walk func(id int, nodeType string, depth int) error
-	walk = func(id int, nodeType string, depth int) error {
-		neighbors, err := h.traceNeighbors(ctx, id, nodeType, ancestors)
-		if err != nil {
-			return err
-		}
-		for _, n := range neighbors {
-			n.Depth = depth
-			out = append(out, n)
-			k := key{n.NodeType, n.ID}
-			if !visited[k] {
-				visited[k] = true
-				if err := walk(n.ID, n.NodeType, depth+1); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	for _, rt := range roots {
-		if err := walk(rt.id, rt.nodeType, 0); err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
+	return h.inventory().Trace(ctx, rs, ancestors)
 }
 
 // PartLots — GET /part/{id}/lots. Lists a lot-controlled part's lots, each linking
@@ -483,9 +251,7 @@ func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
 	description := fv(r, "lot_description")
 	vendorLot := fv(r, "vendor_lot")
 	notes := fv(r, "notes")
-	_, err = h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET lot_description = $1, vendor_lot_number = $2, notes = $3 WHERE id = $4 AND part_id = $5`,
-		h.cfg().LotTable()), description, nullableText(vendorLot), nullableText(notes), lotID, p.ID)
+	err = h.inventory().UpdateLot(r.Context(), lotID, p.ID, description, vendorLot, notes)
 	if err != nil {
 		h.renderError(w, r, "Error saving lot: "+err.Error())
 		return
@@ -501,12 +267,7 @@ func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
 // is unreadable without attribution. Takes the caller's tx so an append made while saving
 // a record rolls back with the record if that save fails.
 func (h *Handler) appendLotNote(ctx context.Context, tx *txLogger, lotID int, text, username string) error {
-	entry := fmt.Sprintf("[%s %s] %s", username, time.Now().Format("2006-01-02"), strings.TrimSpace(text))
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		UPDATE %s SET notes = CASE WHEN COALESCE(notes, '') = '' THEN $1 ELSE CONCAT(notes, $2) END
-		WHERE id = $3
-	`, h.cfg().LotTable()), entry, "\n\n"+entry, lotID)
-	return err
+	return inventory.New(tx).AppendLotNote(ctx, lotID, text, username)
 }
 
 // ── All lots (#701) ──────────────────────────────────────────────────────────
@@ -514,23 +275,8 @@ func (h *Handler) appendLotNote(ctx context.Context, tx *txLogger, lotID int, te
 // AllLots — GET /lots. Cross-part list of every lot, newest first, for
 // browsing without drilling into a specific part first.
 func (h *Handler) AllLots(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queryContext(r.Context(), h.lotRowSelect()+
-		`ORDER BY l.created_at DESC, l.id DESC`)
+	lots, err := h.inventory().ListAllLots(r.Context())
 	if err != nil {
-		h.renderError(w, r, "Error retrieving lots: "+err.Error())
-		return
-	}
-	defer rows.Close()
-	var lots []LotRow
-	for rows.Next() {
-		lr, err := scanLotRow(rows)
-		if err != nil {
-			h.renderError(w, r, "Error retrieving lots: "+err.Error())
-			return
-		}
-		lots = append(lots, lr)
-	}
-	if err := rows.Err(); err != nil {
 		h.renderError(w, r, "Error retrieving lots: "+err.Error())
 		return
 	}
