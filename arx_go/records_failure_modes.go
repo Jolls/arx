@@ -2,11 +2,8 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 	"strconv"
-
-	"arx/arx_go/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -39,14 +36,7 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -55,36 +45,19 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
 	filters := parseRecordFilters(r.URL.Query())
-	dateClause, dateArgs := filters.dateRangeClauses(2)
-	args := append([]any{formID}, dateArgs...)
 
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT (SELECT r2.parameter FROM %s r2
-			WHERE r2.form_row_id = res.form_row_id
-			ORDER BY r2.id DESC LIMIT 1) AS parameter,
-			SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) AS failure_count,
-			COUNT(res.pass_fail) AS total_tested
-		FROM %s res
-		JOIN %s trec ON res.form_record_id = trec.id
-		WHERE trec.form_id = $1 AND trec.is_active = TRUE AND res.pass_fail IS NOT NULL%s
-		GROUP BY res.form_row_id
-		ORDER BY failure_count DESC, parameter ASC`,
-		h.cfg().ResultsTable(), h.cfg().ResultsTable(), h.cfg().RecordsTable(), dateClause), args...)
+	rows, err := h.records().ListFailureModes(r.Context(), formID, filters.From, filters.To)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	defer rows.Close()
 
 	var steps []failureModeRow
-	for rows.Next() {
-		var row failureModeRow
-		if err := rows.Scan(&row.Parameter, &row.FailureCount, &row.TotalTested); err != nil {
-			continue
-		}
-		steps = append(steps, row)
+	for _, row := range rows {
+		steps = append(steps, failureModeRow{Parameter: row.Parameter, FailureCount: row.FailureCount, TotalTested: row.TotalTested})
 	}
 
 	h.renderRecords(w, r, "failure_modes.html", map[string]any{

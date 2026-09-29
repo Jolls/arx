@@ -2,13 +2,10 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"time"
-
-	"arx/arx_go/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -95,14 +92,7 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -111,35 +101,20 @@ func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
 	filters := parseRecordFilters(r.URL.Query())
 	grouped := r.URL.Query().Get("group") == "month"
 
-	dateClause, dateArgs := filters.dateRangeClauses(2)
-	args := append([]any{formID}, dateArgs...)
-
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT record_date, MAX(CASE WHEN pass_fail = FALSE THEN 1 ELSE 0 END)
-		FROM %s trec
-		LEFT JOIN %s res ON res.form_record_id = trec.id
-		WHERE form_id = $1 AND is_active = TRUE%s
-		GROUP BY trec.id, record_date`,
-		h.cfg().RecordsTable(), h.cfg().ResultsTable(), dateClause), args...)
+	rows, err := h.records().ListYieldRecords(r.Context(), formID, filters.From, filters.To)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	defer rows.Close()
 
 	var records []yieldRecord
-	for rows.Next() {
-		var rec yieldRecord
-		var anyFail int
-		if err := rows.Scan(&rec.RecordDate, &anyFail); err != nil {
-			continue
-		}
-		rec.AnyFail = anyFail == 1
-		records = append(records, rec)
+	for _, rec := range rows {
+		records = append(records, yieldRecord{RecordDate: rec.RecordDate, AnyFail: rec.AnyFail})
 	}
 
 	total, monthly := computeYieldBuckets(records, grouped)

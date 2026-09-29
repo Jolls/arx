@@ -7,7 +7,186 @@ package dbq
 
 import (
 	"context"
+	"database/sql"
+	"time"
 )
+
+const countFormSteps = `-- name: CountFormSteps :one
+SELECT COUNT(*)::int FROM form_row WHERE form_id = $1
+`
+
+func (q *Queries) CountFormSteps(ctx context.Context, formID int) (int, error) {
+	row := q.db.QueryRowContext(ctx, countFormSteps, formID)
+	var column_1 int
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const getFormHeader = `-- name: GetFormHeader :one
+SELECT f.id, f.part_number_id, f.is_locked, COALESCE(f.test_order, '') AS test_order, f.revision,
+       pn.part_number, COALESCE(pn.description, '') AS description,
+       COALESCE(f.record_types, '') AS record_types, COALESCE(f.instrument_types, '') AS instrument_types
+FROM form f
+JOIN part pn ON f.part_number_id = pn.id
+WHERE f.id = $1
+`
+
+type GetFormHeaderRow struct {
+	ID              int
+	PartNumberID    int
+	IsLocked        bool
+	TestOrder       string
+	Revision        int
+	PartNumber      string
+	Description     string
+	RecordTypes     string
+	InstrumentTypes string
+}
+
+// A form with its part's number/description; every page that shows a form header reads this.
+func (q *Queries) GetFormHeader(ctx context.Context, id int) (GetFormHeaderRow, error) {
+	row := q.db.QueryRowContext(ctx, getFormHeader, id)
+	var i GetFormHeaderRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartNumberID,
+		&i.IsLocked,
+		&i.TestOrder,
+		&i.Revision,
+		&i.PartNumber,
+		&i.Description,
+		&i.RecordTypes,
+		&i.InstrumentTypes,
+	)
+	return i, err
+}
+
+const getFormStep = `-- name: GetFormStep :one
+SELECT id, form_id, COALESCE(parameter, '') AS parameter, COALESCE(specification, '') AS specification,
+       COALESCE(spec_units, '') AS spec_units, COALESCE(format, '') AS format
+FROM form_row
+WHERE id = $1
+`
+
+type GetFormStepRow struct {
+	ID            int
+	FormID        int
+	Parameter     string
+	Specification string
+	SpecUnits     string
+	Format        string
+}
+
+// One step's report header fields; the caller checks form_id belongs to the form in the URL.
+func (q *Queries) GetFormStep(ctx context.Context, id int) (GetFormStepRow, error) {
+	row := q.db.QueryRowContext(ctx, getFormStep, id)
+	var i GetFormStepRow
+	err := row.Scan(
+		&i.ID,
+		&i.FormID,
+		&i.Parameter,
+		&i.Specification,
+		&i.SpecUnits,
+		&i.Format,
+	)
+	return i, err
+}
+
+const getFormStepFormat = `-- name: GetFormStepFormat :one
+SELECT COALESCE(format, '')::text AS format
+FROM form_row
+WHERE id = $1 AND form_id = $2
+`
+
+type GetFormStepFormatParams struct {
+	ID     int
+	FormID int
+}
+
+// A step's display format, scoped to its form (a step of another form is no row).
+func (q *Queries) GetFormStepFormat(ctx context.Context, arg GetFormStepFormatParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getFormStepFormat, arg.ID, arg.FormID)
+	var format string
+	err := row.Scan(&format)
+	return format, err
+}
+
+const getPartTracking = `-- name: GetPartTracking :one
+SELECT p.tracking_mode, (SELECT COUNT(*) FROM bom b WHERE b.parent_part_id = p.id)::int AS bom_count
+FROM part p
+WHERE p.id = $1
+`
+
+type GetPartTrackingRow struct {
+	TrackingMode string
+	BomCount     int
+}
+
+// The tested part's tracking mode and how many BOM lines it has as a parent (buildable if > 0).
+func (q *Queries) GetPartTracking(ctx context.Context, id int) (GetPartTrackingRow, error) {
+	row := q.db.QueryRowContext(ctx, getPartTracking, id)
+	var i GetPartTrackingRow
+	err := row.Scan(&i.TrackingMode, &i.BomCount)
+	return i, err
+}
+
+const getRecord = `-- name: GetRecord :one
+
+SELECT id, form_id, COALESCE(part_id, 0)::int AS part_id, COALESCE(serial_number, '') AS serial_number,
+       COALESCE(subject_part_number, '') AS subject_part_number,
+       COALESCE(subject_pn_description, '') AS subject_pn_description,
+       record_date, COALESCE(record_type, '') AS record_type, COALESCE(notes, '') AS notes,
+       COALESCE(instrument_type, '') AS instrument_type, is_locked, is_approved, is_active,
+       COALESCE(test_order, '') AS test_order, lot_id, build_id, unit_id
+FROM form_record
+WHERE id = $1
+`
+
+type GetRecordRow struct {
+	ID                   int
+	FormID               int
+	PartID               int
+	SerialNumber         string
+	SubjectPartNumber    string
+	SubjectPnDescription string
+	RecordDate           sql.NullTime
+	RecordType           string
+	Notes                string
+	InstrumentType       string
+	IsLocked             bool
+	IsApproved           bool
+	IsActive             bool
+	TestOrder            string
+	LotID                *int
+	BuildID              *int
+	UnitID               *int
+}
+
+// ── Records ──────────────────────────────────────────────────────────────────
+func (q *Queries) GetRecord(ctx context.Context, id int) (GetRecordRow, error) {
+	row := q.db.QueryRowContext(ctx, getRecord, id)
+	var i GetRecordRow
+	err := row.Scan(
+		&i.ID,
+		&i.FormID,
+		&i.PartID,
+		&i.SerialNumber,
+		&i.SubjectPartNumber,
+		&i.SubjectPnDescription,
+		&i.RecordDate,
+		&i.RecordType,
+		&i.Notes,
+		&i.InstrumentType,
+		&i.IsLocked,
+		&i.IsApproved,
+		&i.IsActive,
+		&i.TestOrder,
+		&i.LotID,
+		&i.BuildID,
+		&i.UnitID,
+	)
+	return i, err
+}
 
 const getRecordHeader = `-- name: GetRecordHeader :one
 
@@ -24,7 +203,7 @@ type GetRecordHeaderRow struct {
 	PartNumber   string
 }
 
-// Test-record domain (#190, #248; grows with #223). sqlc generates internal/dbq/records.sql.go
+// Test-record domain (#190, #248, #249; grows with #223). sqlc generates internal/dbq/records.sql.go
 // from this file; the service is records.go.
 // A record's serial, lock state and its form's part number (the paste-image guard reads this).
 func (q *Queries) GetRecordHeader(ctx context.Context, id int) (GetRecordHeaderRow, error) {
@@ -32,4 +211,942 @@ func (q *Queries) GetRecordHeader(ctx context.Context, id int) (GetRecordHeaderR
 	var i GetRecordHeaderRow
 	err := row.Scan(&i.SerialNumber, &i.IsLocked, &i.PartNumber)
 	return i, err
+}
+
+const getRecordNeighbors = `-- name: GetRecordNeighbors :one
+WITH ordered AS (
+    SELECT id,
+           LAG(id)  OVER (ORDER BY (CASE WHEN serial_number ~ '^[0-9]+$' THEN CAST(serial_number AS INTEGER) END) DESC, record_date DESC) AS prev_id,
+           LEAD(id) OVER (ORDER BY (CASE WHEN serial_number ~ '^[0-9]+$' THEN CAST(serial_number AS INTEGER) END) DESC, record_date DESC) AS next_id
+    FROM form_record
+    WHERE form_id = $2 AND is_active = TRUE
+)
+SELECT COALESCE(prev_id, 0)::int AS prev_id, COALESCE(next_id, 0)::int AS next_id
+FROM ordered
+WHERE id = $1
+`
+
+type GetRecordNeighborsParams struct {
+	RecordID int
+	FormID   int
+}
+
+type GetRecordNeighborsRow struct {
+	PrevID int
+	NextID int
+}
+
+// Previous / next active record id (0 = none) in the records-table order; no row when the record
+// is not an active record of the form.
+func (q *Queries) GetRecordNeighbors(ctx context.Context, arg GetRecordNeighborsParams) (GetRecordNeighborsRow, error) {
+	row := q.db.QueryRowContext(ctx, getRecordNeighbors, arg.RecordID, arg.FormID)
+	var i GetRecordNeighborsRow
+	err := row.Scan(&i.PrevID, &i.NextID)
+	return i, err
+}
+
+const listActiveForms = `-- name: ListActiveForms :many
+
+SELECT f.id, f.part_number_id, f.is_locked, f.revision, pn.part_number,
+       COALESCE(pn.description, '') AS description
+FROM form f
+JOIN part pn ON f.part_number_id = pn.id
+WHERE pn.category = 'FORM' AND pn.is_active = TRUE AND f.is_active = TRUE
+ORDER BY pn.part_number ASC
+`
+
+type ListActiveFormsRow struct {
+	ID           int
+	PartNumberID int
+	IsLocked     bool
+	Revision     int
+	PartNumber   string
+	Description  string
+}
+
+// ── Forms ────────────────────────────────────────────────────────────────────
+// The records index: every active form whose part is an active FORM-category part.
+func (q *Queries) ListActiveForms(ctx context.Context) ([]ListActiveFormsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveForms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveFormsRow
+	for rows.Next() {
+		var i ListActiveFormsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartNumberID,
+			&i.IsLocked,
+			&i.Revision,
+			&i.PartNumber,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBOMParts = `-- name: ListBOMParts :many
+SELECT pn.id, pn.part_number, COALESCE(pn.description, '') AS description
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id = $1
+ORDER BY pn.description
+`
+
+type ListBOMPartsRow struct {
+	ID          int
+	PartNumber  string
+	Description string
+}
+
+// Components under a part in the BOM (the new-record subject picker).
+func (q *Queries) ListBOMParts(ctx context.Context, parentPartID int) ([]ListBOMPartsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBOMParts, parentPartID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBOMPartsRow
+	for rows.Next() {
+		var i ListBOMPartsRow
+		if err := rows.Scan(&i.ID, &i.PartNumber, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFailureModes = `-- name: ListFailureModes :many
+SELECT COALESCE((SELECT r2.parameter FROM result r2
+                 WHERE r2.form_row_id = res.form_row_id
+                 ORDER BY r2.id DESC LIMIT 1), '')::text AS parameter,
+       COALESCE(SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END), 0)::int AS failure_count,
+       COUNT(res.pass_fail)::int AS total_tested
+FROM result res
+JOIN form_record trec ON res.form_record_id = trec.id
+WHERE trec.form_id = $1 AND trec.is_active = TRUE AND res.pass_fail IS NOT NULL
+  AND ($2::timestamp IS NULL OR trec.record_date >= $2::timestamp)
+  AND ($3::date IS NULL OR trec.record_date < ($3::date + 1))
+GROUP BY res.form_row_id
+ORDER BY failure_count DESC, parameter ASC
+`
+
+type ListFailureModesParams struct {
+	FormID   int
+	FromDate sql.NullTime
+	ToDate   *time.Time
+}
+
+type ListFailureModesRow struct {
+	Parameter    string
+	FailureCount int
+	TotalTested  int
+}
+
+// Each step's failure count and tested count over the form's active records in the date range,
+// most failures first. The label is the step's most recently written result-row parameter.
+func (q *Queries) ListFailureModes(ctx context.Context, arg ListFailureModesParams) ([]ListFailureModesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFailureModes, arg.FormID, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFailureModesRow
+	for rows.Next() {
+		var i ListFailureModesRow
+		if err := rows.Scan(&i.Parameter, &i.FailureCount, &i.TotalTested); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFormHistoryStamps = `-- name: ListFormHistoryStamps :many
+SELECT changed_at, form_row_id
+FROM form_row_history
+WHERE form_row_id IN (SELECT id FROM form_row WHERE form_id = $1)
+ORDER BY changed_at ASC
+`
+
+type ListFormHistoryStampsRow struct {
+	ChangedAt time.Time
+	FormRowID int
+}
+
+// Change timestamps of a form's steps, oldest first (the definition page's timeline dots).
+func (q *Queries) ListFormHistoryStamps(ctx context.Context, formID int) ([]ListFormHistoryStampsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFormHistoryStamps, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFormHistoryStampsRow
+	for rows.Next() {
+		var i ListFormHistoryStampsRow
+		if err := rows.Scan(&i.ChangedAt, &i.FormRowID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFormPartOptions = `-- name: ListFormPartOptions :many
+SELECT id, part_number, COALESCE(description, '') AS description
+FROM part
+WHERE category = 'FORM' AND is_active = TRUE
+  AND NOT EXISTS (SELECT 1 FROM form WHERE part_number_id = part.id AND is_active = TRUE)
+ORDER BY part_number
+`
+
+type ListFormPartOptionsRow struct {
+	ID          int
+	PartNumber  string
+	Description string
+}
+
+// FORM-category parts that don't already have an active form (new / duplicate form PN picker).
+func (q *Queries) ListFormPartOptions(ctx context.Context) ([]ListFormPartOptionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFormPartOptions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFormPartOptionsRow
+	for rows.Next() {
+		var i ListFormPartOptionsRow
+		if err := rows.Scan(&i.ID, &i.PartNumber, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFormRecords = `-- name: ListFormRecords :many
+SELECT id, COALESCE(part_id, 0)::int AS part_id, COALESCE(serial_number, '') AS serial_number,
+       COALESCE(subject_part_number, '') AS subject_part_number,
+       COALESCE(subject_pn_description, '') AS subject_pn_description,
+       record_date, COALESCE(record_type, '') AS record_type, is_locked, is_approved, form_revision
+FROM form_record
+WHERE form_id = $1 AND is_active = TRUE
+ORDER BY (CASE WHEN serial_number ~ '^[0-9]+$' THEN CAST(serial_number AS INTEGER) END) DESC, record_date DESC
+`
+
+type ListFormRecordsRow struct {
+	ID                   int
+	PartID               int
+	SerialNumber         string
+	SubjectPartNumber    string
+	SubjectPnDescription string
+	RecordDate           sql.NullTime
+	RecordType           string
+	IsLocked             bool
+	IsApproved           bool
+	FormRevision         *int
+}
+
+// Active records of a form for the records table: numeric serials descending (a non-numeric
+// serial sorts first), newest date first within a serial.
+func (q *Queries) ListFormRecords(ctx context.Context, formID int) ([]ListFormRecordsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFormRecords, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFormRecordsRow
+	for rows.Next() {
+		var i ListFormRecordsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartID,
+			&i.SerialNumber,
+			&i.SubjectPartNumber,
+			&i.SubjectPnDescription,
+			&i.RecordDate,
+			&i.RecordType,
+			&i.IsLocked,
+			&i.IsApproved,
+			&i.FormRevision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFormSteps = `-- name: ListFormSteps :many
+SELECT id, form_id, COALESCE(parameter, '') AS parameter, COALESCE(specification, '') AS specification,
+       COALESCE(default_result, '') AS default_result, COALESCE(hide_formula, '') AS hide_formula,
+       COALESCE(type, 0)::int AS type, COALESCE(spec_min, '') AS spec_min, COALESCE(spec_max, '') AS spec_max,
+       COALESCE(pf_type, '') AS pf_type, archived, archive_id, revision,
+       COALESCE(category, '') AS category, COALESCE(sheet_name, '') AS sheet_name,
+       COALESCE(spec_units, '') AS spec_units, COALESCE(spec_nom, '') AS spec_nom,
+       COALESCE(instrument_types, '') AS instrument_types, COALESCE(format, '') AS format,
+       COALESCE(comment, '') AS comment, created_at, updated_at
+FROM form_row
+WHERE form_id = $1
+`
+
+type ListFormStepsRow struct {
+	ID              int
+	FormID          int
+	Parameter       string
+	Specification   string
+	DefaultResult   string
+	HideFormula     string
+	Type            int
+	SpecMin         string
+	SpecMax         string
+	PfType          string
+	Archived        bool
+	ArchiveID       *int
+	Revision        *int
+	Category        string
+	SheetName       string
+	SpecUnits       string
+	SpecNom         string
+	InstrumentTypes string
+	Format          string
+	Comment         string
+	CreatedAt       *time.Time
+	UpdatedAt       *time.Time
+}
+
+// Every form_row of a form with all rendering fields (definition view, edit page, live fallback
+// for un-materialized record rows). Order comes from form.test_order, not from this query.
+func (q *Queries) ListFormSteps(ctx context.Context, formID int) ([]ListFormStepsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFormSteps, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFormStepsRow
+	for rows.Next() {
+		var i ListFormStepsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FormID,
+			&i.Parameter,
+			&i.Specification,
+			&i.DefaultResult,
+			&i.HideFormula,
+			&i.Type,
+			&i.SpecMin,
+			&i.SpecMax,
+			&i.PfType,
+			&i.Archived,
+			&i.ArchiveID,
+			&i.Revision,
+			&i.Category,
+			&i.SheetName,
+			&i.SpecUnits,
+			&i.SpecNom,
+			&i.InstrumentTypes,
+			&i.Format,
+			&i.Comment,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFormStepsAt = `-- name: ListFormStepsAt :many
+SELECT t.id,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.type, 0)            ELSE COALESCE(t.type, 0)            END)::int  AS type,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.parameter, '')      ELSE COALESCE(t.parameter, '')      END)::text AS parameter,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_nom, '')       ELSE COALESCE(t.spec_nom, '')       END)::text AS spec_nom,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_min, '')       ELSE COALESCE(t.spec_min, '')       END)::text AS spec_min,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_max, '')       ELSE COALESCE(t.spec_max, '')       END)::text AS spec_max,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_units, '')     ELSE COALESCE(t.spec_units, '')     END)::text AS spec_units,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.pf_type, '')        ELSE COALESCE(t.pf_type, '')        END)::text AS pf_type,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.default_result, '') ELSE COALESCE(t.default_result, '') END)::text AS default_result,
+       (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.hide_formula, '')   ELSE COALESCE(t.hide_formula, '')   END)::text AS hide_formula,
+       (h.form_row_id IS NOT NULL)::bool AS changed
+FROM form_row t
+LEFT JOIN (
+    SELECT form_row_id, type, parameter, spec_nom, spec_min, spec_max,
+           spec_units, pf_type, default_result, hide_formula
+    FROM form_row_history
+    WHERE changed_at >= $1::timestamptz AND changed_at < $2::timestamptz
+) h ON h.form_row_id = t.id
+WHERE t.form_id = $3
+`
+
+type ListFormStepsAtParams struct {
+	DayStart time.Time
+	DayEnd   time.Time
+	FormID   int
+}
+
+type ListFormStepsAtRow struct {
+	ID            int
+	Type          int
+	Parameter     string
+	SpecNom       string
+	SpecMin       string
+	SpecMax       string
+	SpecUnits     string
+	PfType        string
+	DefaultResult string
+	HideFormula   string
+	Changed       bool
+}
+
+// A form's steps as they stood on one day: a step with history in [day_start, day_end) shows its
+// pre-change values (changed = true), any other its current ones.
+func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams) ([]ListFormStepsAtRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFormStepsAt, arg.DayStart, arg.DayEnd, arg.FormID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFormStepsAtRow
+	for rows.Next() {
+		var i ListFormStepsAtRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Parameter,
+			&i.SpecNom,
+			&i.SpecMin,
+			&i.SpecMax,
+			&i.SpecUnits,
+			&i.PfType,
+			&i.DefaultResult,
+			&i.HideFormula,
+			&i.Changed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecordEventResults = `-- name: ListRecordEventResults :many
+SELECT rer.event_id, rer.form_row_id, COALESCE(rer.parameter, '') AS parameter,
+       COALESCE(rer.specification, '') AS specification, COALESCE(rer.spec_units, '') AS spec_units,
+       COALESCE(rer.result, '') AS result, rer.pass_fail, COALESCE(rer.comment, '') AS comment
+FROM record_event_results rer
+JOIN record_events re ON re.id = rer.event_id
+WHERE re.form_record_id = $1
+ORDER BY re.event_date ASC, re.id ASC, rer.id ASC
+`
+
+type ListRecordEventResultsRow struct {
+	EventID       int
+	FormRowID     int
+	Parameter     string
+	Specification string
+	SpecUnits     string
+	Result        string
+	PassFail      sql.NullBool
+	Comment       string
+}
+
+// The per-completion result snapshots of a record, in event order (the handler diffs them).
+func (q *Queries) ListRecordEventResults(ctx context.Context, recordID int) ([]ListRecordEventResultsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecordEventResults, recordID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecordEventResultsRow
+	for rows.Next() {
+		var i ListRecordEventResultsRow
+		if err := rows.Scan(
+			&i.EventID,
+			&i.FormRowID,
+			&i.Parameter,
+			&i.Specification,
+			&i.SpecUnits,
+			&i.Result,
+			&i.PassFail,
+			&i.Comment,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecordEvents = `-- name: ListRecordEvents :many
+SELECT id, form_record_id, event_type, COALESCE(username, '') AS username, event_date,
+       COALESCE(comments, '') AS comments
+FROM record_events
+WHERE form_record_id = $1
+ORDER BY event_date ASC, id ASC
+`
+
+type ListRecordEventsRow struct {
+	ID           int
+	FormRecordID int
+	EventType    string
+	Username     string
+	EventDate    time.Time
+	Comments     string
+}
+
+// Lifecycle audit trail (complete / approve / unlock), oldest first.
+func (q *Queries) ListRecordEvents(ctx context.Context, recordID int) ([]ListRecordEventsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecordEvents, recordID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecordEventsRow
+	for rows.Next() {
+		var i ListRecordEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FormRecordID,
+			&i.EventType,
+			&i.Username,
+			&i.EventDate,
+			&i.Comments,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecordResults = `-- name: ListRecordResults :many
+SELECT id, form_record_id, form_row_id,
+       COALESCE(parameter, '') AS parameter, COALESCE(specification, '') AS specification,
+       COALESCE(result, '') AS result, pass_fail, COALESCE(comment, '') AS comment,
+       COALESCE(spec_min, '') AS spec_min, COALESCE(spec_nom, '') AS spec_nom, COALESCE(spec_max, '') AS spec_max,
+       COALESCE(spec_units, '') AS spec_units, COALESCE(pf_type, '') AS pf_type, COALESCE(format, '') AS format,
+       COALESCE(type, 0)::int AS type, COALESCE(hide_formula, '') AS hide_formula,
+       COALESCE(default_result, '') AS default_result, updated_at
+FROM result
+WHERE form_record_id = $1
+`
+
+type ListRecordResultsRow struct {
+	ID            int
+	FormRecordID  int
+	FormRowID     int
+	Parameter     string
+	Specification string
+	Result        string
+	PassFail      sql.NullBool
+	Comment       string
+	SpecMin       string
+	SpecNom       string
+	SpecMax       string
+	SpecUnits     string
+	PfType        string
+	Format        string
+	Type          int
+	HideFormula   string
+	DefaultResult string
+	UpdatedAt     *time.Time
+}
+
+// A record's materialized result rows (the frozen snapshot of each step).
+func (q *Queries) ListRecordResults(ctx context.Context, recordID int) ([]ListRecordResultsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecordResults, recordID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecordResultsRow
+	for rows.Next() {
+		var i ListRecordResultsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FormRecordID,
+			&i.FormRowID,
+			&i.Parameter,
+			&i.Specification,
+			&i.Result,
+			&i.PassFail,
+			&i.Comment,
+			&i.SpecMin,
+			&i.SpecNom,
+			&i.SpecMax,
+			&i.SpecUnits,
+			&i.PfType,
+			&i.Format,
+			&i.Type,
+			&i.HideFormula,
+			&i.DefaultResult,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecordTypes = `-- name: ListRecordTypes :many
+SELECT DISTINCT COALESCE(record_type, '')::text AS record_type
+FROM form_record
+WHERE is_active = TRUE AND record_type <> ''
+  AND ($1::int IS NULL OR form_id = $1::int)
+  AND ($2::int IS NULL OR part_id = $2::int)
+  AND ($3::int IS NULL OR lot_id = $3::int)
+  AND ($4::int IS NULL OR unit_id = $4::int)
+ORDER BY 1
+`
+
+type ListRecordTypesParams struct {
+	FormID *int
+	PartID *int
+	LotID  *int
+	UnitID *int
+}
+
+// Distinct non-empty record types of the active records in one scope (filter datalists); exactly
+// one of the four ids is non-NULL.
+func (q *Queries) ListRecordTypes(ctx context.Context, arg ListRecordTypesParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listRecordTypes,
+		arg.FormID,
+		arg.PartID,
+		arg.LotID,
+		arg.UnitID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var record_type string
+		if err := rows.Scan(&record_type); err != nil {
+			return nil, err
+		}
+		items = append(items, record_type)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listScopedRecords = `-- name: ListScopedRecords :many
+SELECT r.id, COALESCE(r.part_id, 0)::int AS part_id, COALESCE(r.serial_number, '') AS serial_number,
+       COALESCE(r.subject_part_number, '') AS subject_part_number,
+       COALESCE(r.subject_pn_description, '') AS subject_pn_description,
+       r.record_date, COALESCE(r.record_type, '') AS record_type, r.is_locked, r.is_approved,
+       r.form_revision, r.form_id, fp.part_number AS form_part_number,
+       COALESCE(fp.description, '') AS form_description
+FROM form_record r
+JOIN form f ON f.id = r.form_id
+JOIN part fp ON fp.id = f.part_number_id
+WHERE r.is_active = TRUE
+  AND ($1::int IS NULL OR r.part_id = $1::int)
+  AND ($2::int IS NULL OR r.lot_id = $2::int)
+  AND ($3::int IS NULL OR r.unit_id = $3::int)
+ORDER BY r.record_date DESC
+`
+
+type ListScopedRecordsParams struct {
+	PartID *int
+	LotID  *int
+	UnitID *int
+}
+
+type ListScopedRecordsRow struct {
+	ID                   int
+	PartID               int
+	SerialNumber         string
+	SubjectPartNumber    string
+	SubjectPnDescription string
+	RecordDate           sql.NullTime
+	RecordType           string
+	IsLocked             bool
+	IsApproved           bool
+	FormRevision         *int
+	FormID               int
+	FormPartNumber       string
+	FormDescription      string
+}
+
+// Active records across forms for the Part/Lot/Unit records tables: exactly one of the three ids is
+// non-NULL (the service picks it from a fixed scope), the others don't filter.
+func (q *Queries) ListScopedRecords(ctx context.Context, arg ListScopedRecordsParams) ([]ListScopedRecordsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listScopedRecords, arg.PartID, arg.LotID, arg.UnitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListScopedRecordsRow
+	for rows.Next() {
+		var i ListScopedRecordsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartID,
+			&i.SerialNumber,
+			&i.SubjectPartNumber,
+			&i.SubjectPnDescription,
+			&i.RecordDate,
+			&i.RecordType,
+			&i.IsLocked,
+			&i.IsApproved,
+			&i.FormRevision,
+			&i.FormID,
+			&i.FormPartNumber,
+			&i.FormDescription,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceForms = `-- name: ListSourceForms :many
+SELECT f.id, pn.part_number, COALESCE(pn.description, '') AS description
+FROM form f
+JOIN part pn ON f.part_number_id = pn.id
+WHERE f.is_active = TRUE
+ORDER BY pn.part_number
+`
+
+type ListSourceFormsRow struct {
+	ID          int
+	PartNumber  string
+	Description string
+}
+
+// Active forms to copy steps from (new-form page).
+func (q *Queries) ListSourceForms(ctx context.Context) ([]ListSourceFormsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceForms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceFormsRow
+	for rows.Next() {
+		var i ListSourceFormsRow
+		if err := rows.Scan(&i.ID, &i.PartNumber, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStepReportRows = `-- name: ListStepReportRows :many
+SELECT trec.id, COALESCE(trec.serial_number, '') AS serial_number,
+       COALESCE(trec.subject_part_number, '') AS subject_part_number,
+       COALESCE(trec.part_id, 0)::int AS part_id, trec.record_date,
+       COALESCE(res.result, '') AS result, res.pass_fail, COALESCE(res.comment, '') AS comment,
+       res.updated_at
+FROM result res
+JOIN form_record trec ON res.form_record_id = trec.id
+WHERE res.form_row_id = $1 AND trec.form_id = $2 AND trec.is_active = TRUE
+ORDER BY (CASE WHEN trec.serial_number ~ '^[0-9]+$' THEN CAST(trec.serial_number AS INTEGER) END) DESC, trec.record_date DESC
+`
+
+type ListStepReportRowsParams struct {
+	StepID int
+	FormID int
+}
+
+type ListStepReportRowsRow struct {
+	ID                int
+	SerialNumber      string
+	SubjectPartNumber string
+	PartID            int
+	RecordDate        sql.NullTime
+	Result            string
+	PassFail          sql.NullBool
+	Comment           string
+	UpdatedAt         *time.Time
+}
+
+// Every active record's recorded result for one step, in the records-table order.
+func (q *Queries) ListStepReportRows(ctx context.Context, arg ListStepReportRowsParams) ([]ListStepReportRowsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStepReportRows, arg.StepID, arg.FormID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStepReportRowsRow
+	for rows.Next() {
+		var i ListStepReportRowsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SerialNumber,
+			&i.SubjectPartNumber,
+			&i.PartID,
+			&i.RecordDate,
+			&i.Result,
+			&i.PassFail,
+			&i.Comment,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listYieldRecords = `-- name: ListYieldRecords :many
+
+SELECT trec.record_date, COALESCE(BOOL_OR(res.pass_fail = FALSE), FALSE)::bool AS any_fail
+FROM form_record trec
+LEFT JOIN result res ON res.form_record_id = trec.id
+WHERE trec.form_id = $1 AND trec.is_active = TRUE
+  AND ($2::timestamp IS NULL OR trec.record_date >= $2::timestamp)
+  AND ($3::date IS NULL OR trec.record_date < ($3::date + 1))
+GROUP BY trec.id, trec.record_date
+`
+
+type ListYieldRecordsParams struct {
+	FormID   int
+	FromDate sql.NullTime
+	ToDate   *time.Time
+}
+
+type ListYieldRecordsRow struct {
+	RecordDate sql.NullTime
+	AnyFail    bool
+}
+
+// ── Reports ──────────────────────────────────────────────────────────────────
+// One row per active record of the form in the date range: its date and whether any result failed.
+// from_date / to_date are optional; to_date is inclusive of the whole day.
+func (q *Queries) ListYieldRecords(ctx context.Context, arg ListYieldRecordsParams) ([]ListYieldRecordsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listYieldRecords, arg.FormID, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListYieldRecordsRow
+	for rows.Next() {
+		var i ListYieldRecordsRow
+		if err := rows.Scan(&i.RecordDate, &i.AnyFail); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const nextFormSerial = `-- name: NextFormSerial :one
+SELECT COALESCE(MAX(CASE WHEN serial_number ~ '^[0-9]+$' THEN CAST(serial_number AS INTEGER) END) + 1, 1)::int AS next_serial
+FROM form_record
+WHERE form_id = $1
+`
+
+// Suggested next serial: the largest all-digit serial of the form (any state) + 1, or 1.
+func (q *Queries) NextFormSerial(ctx context.Context, formID int) (int, error) {
+	row := q.db.QueryRowContext(ctx, nextFormSerial, formID)
+	var next_serial int
+	err := row.Scan(&next_serial)
+	return next_serial, err
 }
