@@ -25,6 +25,7 @@
     <div class="card-header">Top Failing Steps</div>
     <div class="card-body">
         {{if .Steps}}
+        <div class="table-responsive-sm">
         <table class="table table-sm table-hover mb-0">
             <thead><tr><th>Step</th><th class="text-end">Failures</th><th class="text-end">Total Tested</th><th class="text-end">Failure Rate</th></tr></thead>
             <tbody>
@@ -38,6 +39,7 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
         {{else}}
         <p class="text-muted mb-0">No tested results in this date range.</p>
         {{end}}

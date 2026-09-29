@@ -82,6 +82,7 @@
   <summary class="user-select-none" style="cursor:pointer">Available named queries</summary>
   <div class="mt-2 ps-2">
     {{if .NamedQueries}}
+    <div class="table-responsive-sm">
     <table class="table table-sm align-middle mb-0">
       <thead><tr><th>Name</th><th>Params</th><th>Type</th><th>Description</th></tr></thead>
       <tbody>
@@ -95,6 +96,7 @@
         {{end}}
       </tbody>
     </table>
+    </div>
     {{else}}
     <div class="text-muted fst-italic">No named queries defined.</div>
     {{end}}

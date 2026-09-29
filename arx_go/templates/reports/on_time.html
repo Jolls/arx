@@ -11,6 +11,7 @@
         </div>
         <div class="card-body">
             {{if .Rows}}
+            <div class="table-responsive-sm">
             <table class="table table-sm table-hover mb-0">
                 <thead><tr><th>Supplier</th><th class="text-end">Total Lines</th><th class="text-end">On-Time Lines</th><th class="text-end">On-Time %</th><th class="text-end">Avg Days Late</th></tr></thead>
                 <tbody>
@@ -25,6 +26,7 @@
                     {{end}}
                 </tbody>
             </table>
+            </div>
             {{else}}
             <p class="text-muted mb-0">No quoted-and-received PO lines in this date range.</p>
             {{end}}
