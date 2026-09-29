@@ -40,7 +40,7 @@ func seedRFQPO(t *testing.T, h *Handler, f poFixture, num, status string, group 
 	t.Helper()
 	var id int
 	if err := h.queryRowContext(context.Background(), fmt.Sprintf(`INSERT INTO %s (number, supplier_id, status, is_active, date_modified)
-		VALUES ($1,$2,$3,TRUE,'2026-01-01') RETURNING id`, h.cfg().POTable()), num, f.Co, status).Scan(&id); err != nil {
+		VALUES ($1,$2,$3,TRUE,'2026-01-01') RETURNING id`, "purchase_order"), num, f.Co, status).Scan(&id); err != nil {
 		t.Fatalf("seed quote: %v", err)
 	}
 	t.Cleanup(func() { cleanupPO(context.Background(), h, id) })
@@ -48,7 +48,7 @@ func seedRFQPO(t *testing.T, h *Handler, f poFixture, num, status string, group 
 		group = id
 	}
 	if group > 0 {
-		if _, err := h.execContext(context.Background(), fmt.Sprintf(`UPDATE %s SET rfq_group_id=$2 WHERE id=$1`, h.cfg().POTable()), id, group); err != nil {
+		if _, err := h.execContext(context.Background(), fmt.Sprintf(`UPDATE %s SET rfq_group_id=$2 WHERE id=$1`, "purchase_order"), id, group); err != nil {
 			t.Fatalf("seed quote group: %v", err)
 		}
 	}
@@ -60,7 +60,7 @@ func seedRFQLine(t *testing.T, h *Handler, poID, n int, part any, qty, cost floa
 	var id int
 	if err := h.queryRowContext(context.Background(), fmt.Sprintf(`INSERT INTO %s (po_id, line_number, part_id, part_number_snapshot,
 		revision_snapshot, description, vendor_part_number, qty, unit_cost, lead_time_days, received_qty)
-		VALUES ($1,$2,$3,$4,'B',$5,$9,$6,$7,$8,3) RETURNING id`, h.cfg().POLineTable()),
+		VALUES ($1,$2,$3,$4,'B',$5,$9,$6,$7,$8,3) RETURNING id`, "po_line"),
 		poID, n, part, "SNAP-"+strconv.Itoa(n), "line "+strconv.Itoa(n), qty, cost, lead, "VPN-"+strconv.Itoa(n)).Scan(&id); err != nil {
 		t.Fatalf("seed line: %v", err)
 	}
@@ -79,10 +79,10 @@ func TestIntegration_RFQ_CompareSave(t *testing.T) {
 	base := strings.TrimSuffix(f.Full, "-f")
 	qa := seedRFQPO(t, h, f, base+"-aR1", "rfq", 0)
 	qb := seedRFQPO(t, h, f, base+"-bR1", "rfq", 0)
-	if _, err := h.execContext(context.Background(), fmt.Sprintf(`UPDATE %s SET tax1=1.5, shipping_cost=2, misc_cost=0.5 WHERE id=$1`, h.cfg().POTable()), qa); err != nil {
+	if _, err := h.execContext(context.Background(), fmt.Sprintf(`UPDATE %s SET tax1=1.5, shipping_cost=2, misc_cost=0.5 WHERE id=$1`, "purchase_order"), qa); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.execContext(context.Background(), fmt.Sprintf(`UPDATE %s SET total_cost=45 WHERE id=$1`, h.cfg().POTable()), qb); err != nil {
+	if _, err := h.execContext(context.Background(), fmt.Sprintf(`UPDATE %s SET total_cost=45 WHERE id=$1`, "purchase_order"), qb); err != nil {
 		t.Fatal(err)
 	}
 	l1 := seedRFQLine(t, h, qa, 1, f.P1, 10, 9, 3)
@@ -90,7 +90,7 @@ func TestIntegration_RFQ_CompareSave(t *testing.T) {
 	lb := seedRFQLine(t, h, qb, 1, f.P1, 5, 9, 2)
 
 	quote := func(id int) string {
-		return rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, rfqCols("unit_cost::float8", "lead_time_days"), h.cfg().POLineTable()), id)
+		return rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, rfqCols("unit_cost::float8", "lead_time_days"), "po_line"), id)
 	}
 	post := func(group string, vals url.Values) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
@@ -113,10 +113,10 @@ func TestIntegration_RFQ_CompareSave(t *testing.T) {
 	if got := quote(lb); got != "9|2" {
 		t.Errorf("foreign-group line = %q, want 9|2 (untouched)", got)
 	}
-	if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, rfqCols("total_cost::float8", "date_modified::date"), h.cfg().POTable()), qa); got != "29|"+today {
+	if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, rfqCols("total_cost::float8", "date_modified::date"), "purchase_order"), qa); got != "29|"+today {
 		t.Errorf("group quote total|modified = %q, want 29|%s (25 lines + 1.5 tax + 2 shipping + 0.5 misc)", got, today)
 	}
-	if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, rfqCols("total_cost::float8", "date_modified::date"), h.cfg().POTable()), qb); got != "45|2026-01-01" {
+	if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, rfqCols("total_cost::float8", "date_modified::date"), "purchase_order"), qb); got != "45|2026-01-01" {
 		t.Errorf("foreign-group quote total|modified = %q, want 45|2026-01-01 (untouched)", got)
 	}
 
@@ -157,12 +157,12 @@ func TestIntegration_RFQ_ConvertCopiesQuote(t *testing.T) {
 		$2,$3,'Sam Sup','s@example.com','3 Sup St','Supton','SS','33333','Freedonia','555-0501','555-0502',
 		$2,'Recv Co','Rae Recv','r@example.com','4 Recv Rd','Recvton','RS','44444','Ruritania','555-0601','555-0602',
 		1.25,2.5,3.75,100.5,'quote notes','quote internal',
-		'2026-01-15','2026-01-20','2026-03-01','2026-01-16','2026-01-01',$4,$5) RETURNING id`, h.cfg().POTable()),
+		'2026-01-15','2026-01-20','2026-03-01','2026-01-16','2026-01-01',$4,$5) RETURNING id`, "purchase_order"),
 		num, f.Co, f.CoName, f.ConO, f.ConD).Scan(&win); err != nil {
 		t.Fatalf("seed winner: %v", err)
 	}
 	t.Cleanup(func() { cleanupPO(ctx, h, win) })
-	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET rfq_group_id=id WHERE id=$1`, h.cfg().POTable()), win); err != nil {
+	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET rfq_group_id=id WHERE id=$1`, "purchase_order"), win); err != nil {
 		t.Fatal(err)
 	}
 	seedRFQLine(t, h, win, 1, f.P1, 10, 2.5, 7)
@@ -172,7 +172,7 @@ func TestIntegration_RFQ_ConvertCopiesQuote(t *testing.T) {
 	sib3 := seedRFQPO(t, h, f, base+"R4", "rfq", win)
 	other := seedRFQPO(t, h, f, base+"-oR1", "rfq", 0) // another group: untouched
 	t.Cleanup(func() {
-		id, err := strconv.Atoi(rfqStr(t, h, fmt.Sprintf(`SELECT COALESCE((SELECT id FROM %s WHERE number=$1),0)`, h.cfg().POTable()), base))
+		id, err := strconv.Atoi(rfqStr(t, h, fmt.Sprintf(`SELECT COALESCE((SELECT id FROM %s WHERE number=$1),0)`, "purchase_order"), base))
 		if err == nil && id != 0 {
 			cleanupPO(ctx, h, id)
 		}
@@ -187,7 +187,7 @@ func TestIntegration_RFQ_ConvertCopiesQuote(t *testing.T) {
 		t.Fatalf("Location = %q, want /po/%s", loc, base)
 	}
 
-	poT := h.cfg().POTable()
+	poT := "purchase_order"
 	copied := rfqCols("orderer", "account_id", "supplier_id", "supplier_name", "supplier_contact", "supplier_email",
 		"supplier_address", "supplier_city", "supplier_state", "supplier_zipcode", "supplier_country",
 		"supplier_phone_number", "supplier_fax_number", "receiver_id", "receiver_name", "receiver_contact",
@@ -210,11 +210,11 @@ func TestIntegration_RFQ_ConvertCopiesQuote(t *testing.T) {
 
 	lines := fmt.Sprintf(`SELECT COALESCE(string_agg(%s, ';' ORDER BY line_number),'') FROM %s WHERE po_id=$1`,
 		rfqCols("line_number", "part_number_snapshot", "revision_snapshot", "description", "qty::float8", "unit_cost::float8",
-			"vendor_part_number", "part_id", "lead_time_days"), h.cfg().POLineTable())
+			"vendor_part_number", "part_id", "lead_time_days"), "po_line")
 	if got, w := rfqStr(t, h, lines, newID), rfqStr(t, h, lines, win); got != w || !strings.Contains(w, ";") {
 		t.Errorf("copied lines = %q, want %q (two lines)", got, w)
 	}
-	if got := rfqStr(t, h, fmt.Sprintf(`SELECT COALESCE(SUM(received_qty),0)::float8::text FROM %s WHERE po_id=$1`, h.cfg().POLineTable()), newID); got != "0" {
+	if got := rfqStr(t, h, fmt.Sprintf(`SELECT COALESCE(SUM(received_qty),0)::float8::text FROM %s WHERE po_id=$1`, "po_line"), newID); got != "0" {
 		t.Errorf("new lines received_qty sum = %s, want 0 (not copied)", got)
 	}
 
@@ -260,7 +260,7 @@ func TestIntegration_RFQ_ConvertEdges(t *testing.T) {
 	id := seedRFQPO(t, h, f, base+"R1", "rfq", -1)
 	seedRFQLine(t, h, id, 1, f.P1, 2, 1, nil)
 	t.Cleanup(func() {
-		if n, err := strconv.Atoi(rfqStr(t, h, fmt.Sprintf(`SELECT COALESCE((SELECT id FROM %s WHERE number=$1),0)`, h.cfg().POTable()), base)); err == nil && n != 0 {
+		if n, err := strconv.Atoi(rfqStr(t, h, fmt.Sprintf(`SELECT COALESCE((SELECT id FROM %s WHERE number=$1),0)`, "purchase_order"), base)); err == nil && n != 0 {
 			cleanupPO(ctx, h, n)
 		}
 	})
@@ -270,7 +270,7 @@ func TestIntegration_RFQ_ConvertEdges(t *testing.T) {
 	if s := readPOState(t, h, id); s.Status != "closed" || s.Active {
 		t.Errorf("ungrouped quote = %+v, want closed/inactive", s)
 	}
-	if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE number=$1`, rfqCols("status", "supplier_id"), h.cfg().POTable()), base); got != fmt.Sprintf("draft|%d", f.Co) {
+	if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM %s WHERE number=$1`, rfqCols("status", "supplier_id"), "purchase_order"), base); got != fmt.Sprintf("draft|%d", f.Co) {
 		t.Errorf("new PO = %q", got)
 	}
 }
@@ -295,7 +295,7 @@ func TestIntegration_RFQ_BOMConfirmCreatesQuotes(t *testing.T) {
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
 		}
 		var ids []int
-		rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT id FROM %s WHERE internal_notes=$1`, h.cfg().POTable()), "Created from BOM of "+root)
+		rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT id FROM %s WHERE internal_notes=$1`, "purchase_order"), "Created from BOM of "+root)
 		if err != nil {
 			return
 		}
@@ -327,7 +327,7 @@ func TestIntegration_RFQ_BOMConfirmCreatesQuotes(t *testing.T) {
 	h.PartCreateRFQsConfirm(rec, req)
 	assertStatus(t, "PartCreateRFQsConfirm", rec, 200)
 
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT id, number FROM %s WHERE internal_notes=$1 ORDER BY id`, h.cfg().POTable()), "Created from BOM of "+root)
+	rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT id, number FROM %s WHERE internal_notes=$1 ORDER BY id`, "purchase_order"), "Created from BOM of "+root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,12 +358,12 @@ func TestIntegration_RFQ_BOMConfirmCreatesQuotes(t *testing.T) {
 			"receiver_id", "receiver_name", "receiver_contact", "receiver_email", "receiver_address", "receiver_city", "receiver_state",
 			"receiver_zipcode", "receiver_country", "receiver_phone", "receiver_fax",
 			"tax1::float8", "shipping_cost::float8", "misc_cost::float8", "total_cost::float8", "notes", "internal_notes",
-			"date_ordered", "date_requested", "date_closed", "rfq_group_id = id", "supplier_contact_id", "receiver_contact_id"), h.cfg().POTable()), id)
+			"date_ordered", "date_requested", "date_closed", "rfq_group_id = id", "supplier_contact_id", "receiver_contact_id"), "purchase_order"), id)
 	}
 	lineStr := func(id int) string {
 		return rfqStr(t, h, fmt.Sprintf(`SELECT COALESCE(string_agg(%s, ';' ORDER BY line_number),'') FROM %s WHERE po_id=$1`,
 			rfqCols("line_number", "part_number_snapshot", "revision_snapshot", "description", "qty::float8", "unit_cost::float8",
-				"vendor_part_number", "part_id", "lead_time_days"), h.cfg().POLineTable()), id)
+				"vendor_part_number", "part_id", "lead_time_days"), "po_line"), id)
 	}
 	notes := "Created from BOM of " + root
 	wantCo := strings.Join([]string{"rfq", "true", "not_submitted", "", "", strconv.Itoa(f.Co), f.CoName, f.ConDName, "d@example.com",

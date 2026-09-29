@@ -66,7 +66,7 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 	link(p, d, 1)
 
 	var acmeName string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = 1001`, h.cfg().CompanyTable())).Scan(&acmeName); err != nil {
+	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = 1001`, "company")).Scan(&acmeName); err != nil {
 		t.Fatalf("load supplier 1001 name: %v", err)
 	}
 

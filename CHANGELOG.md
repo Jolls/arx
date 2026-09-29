@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.27] - 2026-09-28
+### Changed
+- Data-access layer: the users table (login lookup, user count, create, list, password reset, the four admin toggles and the per-user accent/timezone/landing-page/PO-default preferences) moved to sqlc in the new `internal/auth`; `auth.go` is now free of raw SQL, and password hashing, sessions and CSRF are unchanged ([#251](https://github.com/Jolls/arx/issues/251))
+- Data-access layer: the Settings page's contact/supplier dropdowns, attachment-category list and backup export moved to the new `internal/settings`; the backup reads only tables on a fixed allowlist, and `settings.go` is now free of raw SQL ([#247](https://github.com/Jolls/arx/issues/247))
+- Removed the `cfg.*Table()` helpers for tables no longer queried by non-test code (users, app_config, company, contact, purchase order and line/history, price, supplier/mfg part, uom, inventory, lot, build, genealogy, part/attachment category); tests use literal table names ([#224](https://github.com/Jolls/arx/issues/224))
+
 ## [0.8.26] - 2026-09-28
 ### Changed
 - Data-access layer: the Reports dashboard and reports (spend, on-time delivery, PO cycle time, data-quality gaps, form pickers) and the Settings → Utilities data-integrity checks moved to sqlc in the new `internal/reports`; the date-range filter is now nullable query parameters instead of string-built SQL, and `reports.go` and `utilities.go` are free of raw SQL ([#246](https://github.com/Jolls/arx/issues/246))

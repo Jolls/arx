@@ -126,7 +126,7 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 			t.Fatalf("createLot: %v", err)
 		}
 		var at time.Time
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT created_at FROM %s WHERE id=$1`, h.cfg().LotTable()), id).Scan(&at); err != nil {
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT created_at FROM %s WHERE id=$1`, "lot"), id).Scan(&at); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{at}
@@ -138,7 +138,7 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 		}
 		var at time.Time
 		if err := tx.QueryRowContext(ctx,
-			fmt.Sprintf(`SELECT created_at FROM %s WHERE part_id=$1 ORDER BY id DESC LIMIT 1`, h.cfg().InventoryTxnTable()), 3007).Scan(&at); err != nil {
+			fmt.Sprintf(`SELECT created_at FROM %s WHERE part_id=$1 ORDER BY id DESC LIMIT 1`, "inventory_transaction"), 3007).Scan(&at); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{at}
@@ -150,10 +150,10 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 		}
 		var changed, modified time.Time
 		if err := tx.QueryRowContext(ctx,
-			fmt.Sprintf(`SELECT changed_at FROM %s WHERE po_id=$1 ORDER BY id DESC LIMIT 1`, h.cfg().POHistoryTable()), 5002).Scan(&changed); err != nil {
+			fmt.Sprintf(`SELECT changed_at FROM %s WHERE po_id=$1 ORDER BY id DESC LIMIT 1`, "purchase_order_history"), 5002).Scan(&changed); err != nil {
 			t.Fatal(err)
 		}
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT date_modified FROM %s WHERE ID=$1`, h.cfg().POTable()), 5002).Scan(&modified); err != nil {
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT date_modified FROM %s WHERE ID=$1`, "purchase_order"), 5002).Scan(&modified); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{changed, modified}

@@ -106,7 +106,7 @@ func readPersistedCategories(t *testing.T, h *Handler) []models.Category {
 	rows, err := h.queryContext(context.Background(), fmt.Sprintf(
 		`SELECT code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
 		        is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible
-		 FROM %s ORDER BY sort_order, code`, h.cfg().PartCategoryTable()))
+		 FROM %s ORDER BY sort_order, code`, "part_category"))
 	if err != nil {
 		t.Fatalf("SELECT part_category: %v", err)
 	}

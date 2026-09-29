@@ -40,7 +40,7 @@ type poFixture struct {
 func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co, cn, pn, po, pol := h.cfg().CompanyTable(), h.cfg().ContactTable(), h.cfg().PartsTable(), h.cfg().POTable(), h.cfg().POLineTable()
+	co, cn, pn, po, pol := "company", "contact", h.cfg().PartsTable(), "purchase_order", "po_line"
 	base := smokeUniq("PR") // purchase_order.number is VARCHAR(32)
 	f.CoName, f.ConDName, f.ConOName = base+"-co", base+"-cD", base+"-cO"
 	f.PN1, f.PN2 = base+"-P1", base+"-P2"
@@ -48,15 +48,15 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 	var poIDs, partIDs []int
 	cleanup = func() {
 		for _, id := range poIDs {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN (SELECT id FROM %s WHERE po_id=$1)`, h.cfg().InventoryTxnTable(), pol), id)
-			for _, tbl := range []string{pol, h.cfg().POHistoryTable()} {
+			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN (SELECT id FROM %s WHERE po_id=$1)`, "inventory_transaction", pol), id)
+			for _, tbl := range []string{pol, "purchase_order_history"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, po), id)
 		}
 		for _, id := range partIDs {
 			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, pn), id)
-			for _, tbl := range []string{h.cfg().AttachmentsTable(), h.cfg().SupplierPartTable(), h.cfg().PriceTable()} {
+			for _, tbl := range []string{h.cfg().AttachmentsTable(), "supplier_part", "price"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
 			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
@@ -96,9 +96,9 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 	scan(&f.Att, fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\pr-dwg.pdf','Drawing',TRUE) RETURNING id`,
 		h.cfg().AttachmentsTable()), f.P1)
 	exec(fmt.Sprintf(`UPDATE %s SET primary_attachment_id=$2 WHERE id=$1`, pn), f.P1, f.Att)
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn) VALUES ($1,$2,'SPN-1')`, h.cfg().SupplierPartTable()), f.P1, f.Co)
+	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn) VALUES ($1,$2,'SPN-1')`, "supplier_part"), f.P1, f.Co)
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, price_pack, pack_size, is_active, effective_date) VALUES
-		($1,$3,2.5,25,10,TRUE,'2026-01-01'), ($2,$3,4,4,1,FALSE,'2026-01-01')`, h.cfg().PriceTable()), f.P1, f.P2, f.Co)
+		($1,$3,2.5,25,10,TRUE,'2026-01-01'), ($2,$3,4,4,1,FALSE,'2026-01-01')`, "price"), f.P1, f.P2, f.Co)
 
 	scan(&f.FullID, fmt.Sprintf(`INSERT INTO %s (number, status, approval_status, is_active, orderer, account_id,
 		supplier_id, supplier_name, supplier_contact, supplier_email, supplier_address, supplier_city, supplier_state,
@@ -144,11 +144,11 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 
 	// History: h3 ties h2's changed_at, so the higher id sorts first.
 	exec(fmt.Sprintf(`INSERT INTO %s (po_id, event_type, from_status, to_status, action, note, changed_by, changed_at) VALUES
-		($1,'status',NULL,'draft',NULL,NULL,'alice','2026-01-01 10:00+00')`, h.cfg().POHistoryTable()), f.FullID)
+		($1,'status',NULL,'draft',NULL,NULL,'alice','2026-01-01 10:00+00')`, "purchase_order_history"), f.FullID)
 	exec(fmt.Sprintf(`INSERT INTO %s (po_id, event_type, from_status, to_status, action, note, changed_by, changed_at) VALUES
-		($1,'approval',NULL,NULL,'approved','ok','bob','2026-01-02 10:00+00')`, h.cfg().POHistoryTable()), f.FullID)
+		($1,'approval',NULL,NULL,'approved','ok','bob','2026-01-02 10:00+00')`, "purchase_order_history"), f.FullID)
 	exec(fmt.Sprintf(`INSERT INTO %s (po_id, event_type, from_status, to_status, changed_at) VALUES
-		($1,'status','draft','open','2026-01-02 10:00+00')`, h.cfg().POHistoryTable()), f.FullID)
+		($1,'status','draft','open','2026-01-02 10:00+00')`, "purchase_order_history"), f.FullID)
 
 	// Receipts on line 1: r[1] and r[2] share a date (higher id first); the adjustment is excluded.
 	for i, r := range []struct {
@@ -156,10 +156,10 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 		date, user string
 	}{{3, "2026-02-05", "alice"}, {1, "2026-02-10", ""}, {2, "2026-02-10", "bob"}} {
 		scan(&f.Rcpt[i], fmt.Sprintf(`INSERT INTO %s (part_id, txn_type, qty, txn_date, username, po_line_id)
-			VALUES ($1,'receipt',$2,$3::date,$4,$5) RETURNING id`, h.cfg().InventoryTxnTable()), f.P1, r.qty, r.date, r.user, f.Lines[0])
+			VALUES ($1,'receipt',$2,$3::date,$4,$5) RETURNING id`, "inventory_transaction"), f.P1, r.qty, r.date, r.user, f.Lines[0])
 	}
 	exec(fmt.Sprintf(`INSERT INTO %s (part_id, txn_type, qty, txn_date, username, po_line_id)
-		VALUES ($1,'adjustment',-1,'2026-02-11','carol',$2)`, h.cfg().InventoryTxnTable()), f.P1, f.Lines[0])
+		VALUES ($1,'adjustment',-1,'2026-02-11','carol',$2)`, "inventory_transaction"), f.P1, f.Lines[0])
 
 	// RFQ group: Q1 anchors it (group id = its own id) and has one quoted line; Q2 has no lines
 	// and no supplier name.

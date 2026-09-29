@@ -47,6 +47,8 @@ sql:
       - internal/inventory/inventory.sql
       - internal/reports/reports.sql
       - internal/appconfig/appconfig.sql
+      - internal/auth/auth.sql
+      - internal/settings/settings.sql
       - internal/records/records.sql
     gen:
       go:

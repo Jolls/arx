@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"arx/internal/auth"
 	arxbase "arx/internal/config"
+	"arx/internal/settings"
 )
 
 // landingPreset is one selectable landing-page option (issue #282): a major
@@ -91,58 +93,27 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-type contactOption struct {
-	ID   int
-	Name string
-}
+type contactOption = settings.Option
 
-type supplierOption struct {
-	ID   int
-	Name string
-}
+type supplierOption = settings.Option
 
 // fetchContactOptions returns active contacts for the Default Contact dropdown.
 // When companyID > 0 it is scoped to that company's contacts (the configured
 // default receiver); companyID == 0 returns all contacts as a fallback.
 func (h *Handler) fetchContactOptions(r *http.Request, companyID int) []contactOption {
-	q := fmt.Sprintf(`SELECT id, display_name FROM %s WHERE is_active = TRUE`, h.cfg().ContactTable())
-	var args []any
-	if companyID > 0 {
-		q += ` AND company_id = $1`
-		args = append(args, companyID)
-	}
-	q += ` ORDER BY display_name`
-	rows, err := h.queryContext(r.Context(), q, args...)
+	opts, err := settings.New(handlerDB{h}).ContactOptions(r.Context(), companyID)
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
-	var out []contactOption
-	for rows.Next() {
-		var c contactOption
-		if rows.Scan(&c.ID, &c.Name) == nil {
-			out = append(out, c)
-		}
-	}
-	return out
+	return opts
 }
 
 func (h *Handler) fetchSupplierOptions(r *http.Request) []supplierOption {
-	rows, err := h.queryContext(r.Context(),
-		fmt.Sprintf(`SELECT id, name FROM %s WHERE is_active = TRUE ORDER BY name`,
-			h.cfg().CompanyTable()))
+	opts, err := settings.New(handlerDB{h}).SupplierOptions(r.Context())
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
-	var out []supplierOption
-	for rows.Next() {
-		var s supplierOption
-		if rows.Scan(&s.ID, &s.Name) == nil {
-			out = append(out, s)
-		}
-	}
-	return out
+	return opts
 }
 
 func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map[string]any) map[string]any {
@@ -281,23 +252,8 @@ func (h *Handler) loadAttachmentCategories(ctx context.Context) []string {
 	if h.database() == nil {
 		return nil
 	}
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT display_name FROM %s ORDER BY sort_order, display_name`, h.cfg().AttachmentCategoryTable()))
+	cats, err := settings.New(handlerDB{h}).AttachmentCategories(ctx)
 	if err != nil {
-		log.Printf("warning: could not load attachment categories: %v", err)
-		return nil
-	}
-	defer rows.Close()
-	var cats []string
-	for rows.Next() {
-		var c string
-		if err := rows.Scan(&c); err != nil {
-			log.Printf("warning: could not load attachment categories: %v", err)
-			return nil
-		}
-		cats = append(cats, c)
-	}
-	if err := rows.Err(); err != nil {
 		log.Printf("warning: could not load attachment categories: %v", err)
 		return nil
 	}
@@ -307,25 +263,13 @@ func (h *Handler) loadAttachmentCategories(ctx context.Context) []string {
 // saveAttachmentCategories replaces the attachment_category rows with cats, in
 // order, keeping the first of any repeated name.
 func (h *Handler) saveAttachmentCategories(ctx context.Context, cats []string) error {
-	tbl := h.cfg().AttachmentCategoryTable()
 	tx, err := h.beginTx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, tbl)); err != nil {
+	if err := settings.New(tx).ReplaceAttachmentCategories(ctx, cats); err != nil {
 		return err
-	}
-	seen := map[string]bool{}
-	for _, c := range cats {
-		if seen[c] {
-			continue
-		}
-		seen[c] = true
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (display_name, sort_order) VALUES ($1, $2)`, tbl), c, len(seen)-1); err != nil {
-			return err
-		}
 	}
 	return tx.Commit()
 }
@@ -370,9 +314,7 @@ func (h *Handler) SettingsAccentColorSave(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, "/settings#preferences", http.StatusFound)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET accent_color = $1 WHERE id = $2`,
-		h.cfg().UsersTable()), color, u.ID); err != nil {
+	if err := auth.New(handlerDB{h}).SetAccentColor(r.Context(), u.ID, color); err != nil {
 		log.Printf("warning: could not save accent_color: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
@@ -395,9 +337,7 @@ func (h *Handler) SettingsTimezoneSave(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings#preferences", http.StatusFound)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET timezone = $1 WHERE id = $2`,
-		h.cfg().UsersTable()), tz, u.ID); err != nil {
+	if err := auth.New(handlerDB{h}).SetTimezone(r.Context(), u.ID, tz); err != nil {
 		log.Printf("warning: could not save timezone: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
@@ -430,9 +370,7 @@ func (h *Handler) SettingsDefaultRouteSave(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, "/settings#preferences", http.StatusFound)
 		return
 	}
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET default_route = $1 WHERE id = $2`,
-		h.cfg().UsersTable()), route, u.ID); err != nil {
+	if err := auth.New(handlerDB{h}).SetDefaultRoute(r.Context(), u.ID, route); err != nil {
 		log.Printf("warning: could not save default_route: %v", err)
 	}
 	h.invalidateUserCache(u.ID)
@@ -686,18 +624,8 @@ func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request
 	contactID, _ := strconv.Atoi(r.FormValue("po_default_contact_id"))
 	receiverID, _ := strconv.Atoi(r.FormValue("po_default_receiver_id"))
 
-	// Store 0 as NULL so an unset default leaves new POs' receiver/contact blank.
-	var contactArg, receiverArg any
-	if contactID > 0 {
-		contactArg = contactID
-	}
-	if receiverID > 0 {
-		receiverArg = receiverID
-	}
-
-	if _, err := h.execContext(r.Context(), fmt.Sprintf(
-		`UPDATE %s SET default_po_contact_id = $1, default_po_receiver_id = $2 WHERE id = $3`,
-		h.cfg().UsersTable()), contactArg, receiverArg, u.ID); err != nil {
+	// The service stores 0 as NULL so an unset default leaves new POs' receiver/contact blank.
+	if err := auth.New(handlerDB{h}).SetPODefaults(r.Context(), u.ID, contactID, receiverID); err != nil {
 		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
 			"Error": "Could not save preferences: " + err.Error(),
 		}))
@@ -718,32 +646,18 @@ func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
-	tables := []string{
-		h.cfg().PartsTable(), h.cfg().BOMTable(), h.cfg().CompanyTable(),
-		h.cfg().ContactTable(), h.cfg().POTable(), h.cfg().POLineTable(),
-		h.cfg().AttachmentsTable(), h.cfg().PriceTable(),
-		h.cfg().MfgPartTable(), h.cfg().SupplierPartTable(), h.cfg().CompanyAttachmentsTable(),
-		h.cfg().UomTable(),
-		h.cfg().FormsTable(), h.cfg().RecordsTable(), h.cfg().ResultsTable(),
-		h.cfg().StepsTable(), h.cfg().FormEventsTable(), h.cfg().RecordEventsTable(),
-		h.cfg().NamedQueriesTable(), h.cfg().FormRowHistoryTable(),
-		h.cfg().InventoryTxnTable(), h.cfg().BuildTable(), h.cfg().LotTable(),
-		h.cfg().GenealogyTable(), h.cfg().POHistoryTable(), h.cfg().RecordEventResultsTable(),
-		h.cfg().PartCategoryTable(), h.cfg().AttachmentCategoryTable(),
-	}
-
-	for _, tbl := range tables {
+	for _, tbl := range settings.BackupTables {
 		if err := h.writeTableCSV(r, zw, tbl, nil); err != nil {
 			log.Printf("backup: error exporting %s: %v", tbl, err)
 		}
 	}
-	if err := h.writeTableCSV(r, zw, h.cfg().UsersTable(), nil, "password_hash"); err != nil {
-		log.Printf("backup: error exporting %s: %v", h.cfg().UsersTable(), err)
+	if err := h.writeTableCSV(r, zw, settings.BackupUsers, nil, "password_hash"); err != nil {
+		log.Printf("backup: error exporting %s: %v", settings.BackupUsers, err)
 	}
 	// app_config is key/value, so its credential rows can't be dropped by column
 	// exclusion the way users.password_hash is — they need a row filter (#104).
-	if err := h.writeTableCSV(r, zw, h.cfg().AppConfigTable(), skipAppConfigSecret); err != nil {
-		log.Printf("backup: error exporting %s: %v", h.cfg().AppConfigTable(), err)
+	if err := h.writeTableCSV(r, zw, settings.BackupAppConfig, skipAppConfigSecret); err != nil {
+		log.Printf("backup: error exporting %s: %v", settings.BackupAppConfig, err)
 	}
 }
 
@@ -784,7 +698,7 @@ func cellText(v any) string {
 }
 
 func (h *Handler) writeTableCSV(r *http.Request, zw *zip.Writer, table string, skipRow rowFilter, excludeCols ...string) error {
-	rows, err := h.queryContext(r.Context(), "SELECT * FROM "+table)
+	rows, err := settings.New(handlerDB{h}).QueryTable(r.Context(), table)
 	if err != nil {
 		return err
 	}

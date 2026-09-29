@@ -40,12 +40,12 @@ func seedMfgPart(t *testing.T, h *Handler, ctx context.Context, partID, mfgID in
 	}
 	var mid int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT MAX(id) FROM %s WHERE part_id=$1`, h.cfg().MfgPartTable()), partID,
+		`SELECT MAX(id) FROM %s WHERE part_id=$1`, "mfg_part"), partID,
 	).Scan(&mid); err != nil {
 		t.Fatalf("seedMfgPart: capture new id: %v", err)
 	}
 	return mid, func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", h.cfg().MfgPartTable()), mid)
+		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", "mfg_part"), mid)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestIntegration_MfgPartEdit(t *testing.T) {
 
 	var mpn string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT mfg_part_number FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid,
+		`SELECT mfg_part_number FROM %s WHERE id=$1`, "mfg_part"), mid,
 	).Scan(&mpn); err != nil {
 		t.Fatalf("select seeded mfg_part: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestIntegration_MfgPartUpdate(t *testing.T) {
 	var mpn, desc string
 	var gotMfgID int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT mfg_part_number, description, mfg_id FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid,
+		`SELECT mfg_part_number, description, mfg_id FROM %s WHERE id=$1`, "mfg_part"), mid,
 	).Scan(&mpn, &desc, &gotMfgID); err != nil {
 		t.Fatalf("select updated mfg_part: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestIntegration_MfgPartUpdate_MissingRequired(t *testing.T) {
 
 	var before string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT mfg_part_number FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid,
+		`SELECT mfg_part_number FROM %s WHERE id=$1`, "mfg_part"), mid,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seeded mfg_part: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestIntegration_MfgPartUpdate_MissingRequired(t *testing.T) {
 
 	var after string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT mfg_part_number FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid,
+		`SELECT mfg_part_number FROM %s WHERE id=$1`, "mfg_part"), mid,
 	).Scan(&after); err != nil {
 		t.Fatalf("select mfg_part after rejected update: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestIntegration_MfgPartUpdate_WrongPartScope(t *testing.T) {
 
 	var before string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT mfg_part_number FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid,
+		`SELECT mfg_part_number FROM %s WHERE id=$1`, "mfg_part"), mid,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seeded mfg_part: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestIntegration_MfgPartUpdate_WrongPartScope(t *testing.T) {
 
 	var after string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT mfg_part_number FROM %s WHERE id=$1 AND part_id=$2`, h.cfg().MfgPartTable()), mid, partID,
+		`SELECT mfg_part_number FROM %s WHERE id=$1 AND part_id=$2`, "mfg_part"), mid, partID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select mfg_part under its correct part id: %v", err)
 	}
@@ -272,7 +272,7 @@ func createMfgPart(h *Handler, partID int, form url.Values) *httptest.ResponseRe
 
 // deleteMfgParts hard-deletes every mfg_part row on partID.
 func deleteMfgParts(ctx context.Context, h *Handler, partID int) {
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", h.cfg().MfgPartTable()), partID)
+	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", "mfg_part"), partID)
 }
 
 // TestIntegration_MfgPartCreate pins MfgPartCreate's stored row: trimmed MPN
@@ -300,7 +300,7 @@ func TestIntegration_MfgPartCreate(t *testing.T) {
 	var gotMPN, gotDesc string
 	var active bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT mfg_id, mfg_part_number, description, is_active FROM %s WHERE part_id=$1`, h.cfg().MfgPartTable()), partID,
+		`SELECT mfg_id, mfg_part_number, description, is_active FROM %s WHERE part_id=$1`, "mfg_part"), partID,
 	).Scan(&gotMfgID, &gotMPN, &gotDesc, &active); err != nil {
 		t.Fatalf("select created mfg_part: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestIntegration_MfgPartCreate_EmptyDescription(t *testing.T) {
 	var isNull bool
 	var desc string
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT description IS NULL, COALESCE(description, '') FROM %s WHERE part_id=$1`, h.cfg().MfgPartTable()), partID,
+		`SELECT description IS NULL, COALESCE(description, '') FROM %s WHERE part_id=$1`, "mfg_part"), partID,
 	).Scan(&isNull, &desc); err != nil {
 		t.Fatalf("select created mfg_part: %v", err)
 	}
@@ -365,7 +365,7 @@ func TestIntegration_MfgPartCreate_MissingRequired(t *testing.T) {
 
 	var n int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id=$1`, h.cfg().MfgPartTable()), partID,
+		`SELECT COUNT(*) FROM %s WHERE part_id=$1`, "mfg_part"), partID,
 	).Scan(&n); err != nil {
 		t.Fatalf("count mfg_part: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestIntegration_MfgPartCreate_Duplicate(t *testing.T) {
 
 	var n int
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id=$1 AND is_active`, h.cfg().MfgPartTable()), partID,
+		`SELECT COUNT(*) FROM %s WHERE part_id=$1 AND is_active`, "mfg_part"), partID,
 	).Scan(&n); err != nil {
 		t.Fatalf("count mfg_part: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestIntegration_MfgPartDelete_WrongPartScope(t *testing.T) {
 
 	var active bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_active FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid,
+		`SELECT is_active FROM %s WHERE id=$1`, "mfg_part"), mid,
 	).Scan(&active); err != nil {
 		t.Fatalf("select mfg_part: %v", err)
 	}
@@ -464,12 +464,12 @@ func TestIntegration_MfgPartDelete(t *testing.T) {
 
 	var active1, active2 bool
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_active FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid1,
+		`SELECT is_active FROM %s WHERE id=$1`, "mfg_part"), mid1,
 	).Scan(&active1); err != nil {
 		t.Fatalf("select deleted mfg_part: %v", err)
 	}
 	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT is_active FROM %s WHERE id=$1`, h.cfg().MfgPartTable()), mid2,
+		`SELECT is_active FROM %s WHERE id=$1`, "mfg_part"), mid2,
 	).Scan(&active2); err != nil {
 		t.Fatalf("select sibling mfg_part: %v", err)
 	}
