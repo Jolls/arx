@@ -1742,8 +1742,8 @@ SELECT id, part_number, COALESCE(revision, '') AS revision,
        COALESCE(description, '') AS description, COALESCE(detail, '') AS detail
 FROM part
 WHERE CASE WHEN $1::bool
-           THEN description LIKE $2::text OR detail LIKE $2::text
-           ELSE part_number LIKE $2::text END
+           THEN description ILIKE $2::text OR detail ILIKE $2::text
+           ELSE part_number ILIKE $2::text END
 ORDER BY part_number
 LIMIT $3::int
 `
@@ -1762,7 +1762,7 @@ type SearchPartsRow struct {
 	Detail      string
 }
 
-// Autocomplete: part_number LIKE pattern, or description/detail LIKE pattern when by_desc.
+// Autocomplete: part_number ILIKE pattern, or description/detail ILIKE pattern when by_desc.
 func (q *Queries) SearchParts(ctx context.Context, arg SearchPartsParams) ([]SearchPartsRow, error) {
 	rows, err := q.db.QueryContext(ctx, searchParts, arg.ByDesc, arg.Pattern, arg.N)
 	if err != nil {

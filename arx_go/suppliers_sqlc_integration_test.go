@@ -425,7 +425,7 @@ func seedCompanies(t *testing.T, h *Handler, rows [][3]any) (ids []int, cleanup 
 	return ids, cleanup
 }
 
-// APISupplierSearch: case-sensitive name substring over active companies by name, with the default
+// APISupplierSearch: case-insensitive name substring over active companies by name, with the default
 // contact's city; supplier_only drops non-suppliers.
 func TestIntegration_SupplierSQLC_Search(t *testing.T) {
 	h, done := liveHandler(t)
@@ -455,8 +455,12 @@ func TestIntegration_SupplierSQLC_Search(t *testing.T) {
 	if _, hits := supplierSearch(t, h, "supplier_only=1&q="+base); !reflect.DeepEqual(hits, []supplierHit{a, b}) {
 		t.Errorf("supplier_only = %+v, want %+v", hits, []supplierHit{a, b})
 	}
+	// Case-insensitive: the lowercased query matches the same rows.
+	if _, hits := supplierSearch(t, h, "q="+strings.ToLower(base)); !reflect.DeepEqual(hits, []supplierHit{a, b, c}) {
+		t.Errorf("lowercase search = %+v, want %+v", hits, []supplierHit{a, b, c})
+	}
 	// No match is [] (was null, which broke the typeahead's suppliers.length).
-	if raw, _ := supplierSearch(t, h, "q="+strings.ToLower(base)); raw != "[]" {
+	if raw, _ := supplierSearch(t, h, "q="+base+"-zzz"); raw != "[]" {
 		t.Errorf("no-match body = %s, want []", raw)
 	}
 }

@@ -58,7 +58,7 @@ func partSearch(t *testing.T, h *Handler, query string) (raw string, hits []part
 	return raw, hits
 }
 
-// APIPartSearch matches part_number (case-sensitive substring) by default, description/detail
+// APIPartSearch matches part_number (case-insensitive substring) by default, description/detail
 // when by=desc, ordered by part_number; NULL description/detail come back as "".
 func TestIntegration_APIPartSearch(t *testing.T) {
 	h, done := liveHandler(t)
@@ -95,9 +95,13 @@ func TestIntegration_APIPartSearch(t *testing.T) {
 		t.Errorf("by desc = %+v, want %+v", hits, []partSearchHit{want[0], want[2]})
 	}
 
-	// Case-sensitive LIKE: the lowercased prefix matches nothing, and no match is [] (was null,
-	// which broke the autocomplete's parts.length).
-	if raw, _ := partSearch(t, h, "q="+strings.ToLower(base)); raw != "[]" {
+	// Case-insensitive: the lowercased prefix matches the same rows.
+	if _, lower := partSearch(t, h, "q="+strings.ToLower(base)); !reflect.DeepEqual(lower, want) {
+		t.Errorf("lowercase q = %+v, want %+v", lower, want)
+	}
+
+	// No match is [] (was null, which broke the autocomplete's parts.length).
+	if raw, _ := partSearch(t, h, "q="+base+"-ZZZ"); raw != "[]" {
 		t.Errorf("no-match body = %s, want []", raw)
 	}
 }

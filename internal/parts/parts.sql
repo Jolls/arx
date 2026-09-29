@@ -356,13 +356,13 @@ ORDER BY price_ea LIMIT 1;
 UPDATE part SET default_supplier_id = sqlc.arg(supplier_id)::int WHERE id = sqlc.arg(id) AND default_supplier_id IS NULL;
 
 -- name: SearchParts :many
--- Autocomplete: part_number LIKE pattern, or description/detail LIKE pattern when by_desc.
+-- Autocomplete: part_number ILIKE pattern, or description/detail ILIKE pattern when by_desc.
 SELECT id, part_number, COALESCE(revision, '') AS revision,
        COALESCE(description, '') AS description, COALESCE(detail, '') AS detail
 FROM part
 WHERE CASE WHEN sqlc.arg(by_desc)::bool
-           THEN description LIKE sqlc.arg(pattern)::text OR detail LIKE sqlc.arg(pattern)::text
-           ELSE part_number LIKE sqlc.arg(pattern)::text END
+           THEN description ILIKE sqlc.arg(pattern)::text OR detail ILIKE sqlc.arg(pattern)::text
+           ELSE part_number ILIKE sqlc.arg(pattern)::text END
 ORDER BY part_number
 LIMIT sqlc.arg(n)::int;
 

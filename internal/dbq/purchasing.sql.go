@@ -1507,7 +1507,7 @@ const searchSuppliers = `-- name: SearchSuppliers :many
 SELECT su.id, su.name, COALESCE(cn.city, '') AS city
 FROM company su
 LEFT JOIN contact cn ON su.default_contact = cn.id
-WHERE su.name LIKE $1::text AND su.is_active = TRUE
+WHERE su.name ILIKE $1::text AND su.is_active = TRUE
   AND (NOT $2::boolean OR su.is_supplier = TRUE)
 ORDER BY su.name
 LIMIT $3::int
@@ -1525,7 +1525,7 @@ type SearchSuppliersRow struct {
 	City string
 }
 
-// Typeahead: active companies whose name is LIKE pattern, with the default contact's city.
+// Typeahead: active companies whose name is ILIKE pattern, with the default contact's city.
 func (q *Queries) SearchSuppliers(ctx context.Context, arg SearchSuppliersParams) ([]SearchSuppliersRow, error) {
 	rows, err := q.db.QueryContext(ctx, searchSuppliers, arg.Pattern, arg.SupplierOnly, arg.N)
 	if err != nil {
