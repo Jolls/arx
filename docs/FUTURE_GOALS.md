@@ -62,6 +62,5 @@ Arx grows from a parts catalog + purchasing + test data tool into a full enginee
 
 ## Cleanup Candidates
 
-- Arx header icon ([#22](https://github.com/Jolls/arx/issues/22))
 - **Records index query refactor** (no issue) — the `RecordsIndex` SQL in `records.go` is verbose inline SQL; candidate for a view or stored proc once the schema stabilises.
 - **Debug fields on `TestStep`** (`ArchiveID`, `Revision`, `Category`, `SheetName`) (no issue) — loaded but only needed during form-def authoring; remove once the edit UI stabilises.

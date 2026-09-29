@@ -10,8 +10,6 @@ Move off SQL Server to Postgres, with ArxProd on Azure Database for PostgreSQL, 
 
 - Migrate ArxProd data from Azure SQL to Postgres ([#216](https://github.com/Jolls/arx/issues/216))
 - Package Postgres as a StartOS service for ArxDev and self-hosting ([#24](https://github.com/Jolls/arx/issues/24))
-- Backup/restore ([#26](https://github.com/Jolls/arx/issues/26))
-- Cleanup: Arx header icon ([#22](https://github.com/Jolls/arx/issues/22))
 
 ## v0.9.0 — Parts, sourcing, and audit
 
@@ -22,6 +20,7 @@ New user-facing features for the parts catalog and supplier layer.
 - **Audit:** change log ([#12](https://github.com/Jolls/arx/issues/12)), multi-table audit trigger design ([#25](https://github.com/Jolls/arx/issues/25))
 - **Test records:** result snapshots as revision-controlled definitions ([#18](https://github.com/Jolls/arx/issues/18))
 - **Schema/infra:** flexible part user fields ([#14](https://github.com/Jolls/arx/issues/14))
+- **Ops:** backup/restore ([#26](https://github.com/Jolls/arx/issues/26))
 
 ## Later (unscheduled)
 
