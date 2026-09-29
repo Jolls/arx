@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.28] - 2026-09-28
+### Changed
+- Data-access layer: the records read paths (forms list, records tables incl. the Part/Lot/Unit ones, form definition and edit pages, record view/print/edit/new pages, audit trail and snapshots, test-step report, yield and failure-mode reports, new/duplicate-form pickers) moved to sqlc in `internal/records`; one step-loading and one form-header query replace the copies that were spread over the handlers. `records_yield.go` and `records_failure_modes.go` are now free of raw SQL; the save/lock/approve/event write paths follow ([#249](https://github.com/Jolls/arx/issues/249))
+
+### Fixed
+- A record with an empty serial number, part number, type or test order no longer fails the whole records table or its detail page with a server error ([#249](https://github.com/Jolls/arx/issues/249))
+- The failure-mode report no longer silently drops a step whose result rows have no parameter text, and the audit trail no longer stops at an event with no username ([#249](https://github.com/Jolls/arx/issues/249))
+
 ## [0.8.27] - 2026-09-28
 ### Changed
 - Data-access layer: the users table (login lookup, user count, create, list, password reset, the four admin toggles and the per-user accent/timezone/landing-page/PO-default preferences) moved to sqlc in the new `internal/auth`; `auth.go` is now free of raw SQL, and password hashing, sessions and CSRF are unchanged ([#251](https://github.com/Jolls/arx/issues/251))

@@ -85,27 +85,16 @@ func orderedResultIDs(testOrder string, byTest map[int]models.RecordResultSnapsh
 // by event_id and already diffed against the previous Complete snapshot (added/changed/
 // unchanged). Events without a snapshot are absent from the map.
 func (h *Handler) loadEventSnapshots(ctx context.Context, recordID int) (map[int][]models.SnapshotDiffRow, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT rer.event_id, rer.form_row_id, COALESCE(rer.parameter,''), COALESCE(rer.specification,''),
-		       COALESCE(rer.spec_units,''), COALESCE(rer.result,''), rer.pass_fail, COALESCE(rer.comment,'')
-		FROM %s rer
-		JOIN %s re ON re.id = rer.event_id
-		WHERE re.form_record_id = $1
-		ORDER BY re.event_date ASC, re.id ASC, rer.id ASC`,
-		h.cfg().RecordEventResultsTable(), h.cfg().RecordEventsTable()), recordID)
+	rows, err := h.records().ListEventResults(ctx, recordID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var order []int // event ids in chronological order
 	grouped := map[int][]models.RecordResultSnapshot{}
-	for rows.Next() {
-		var s models.RecordResultSnapshot
-		if err := rows.Scan(&s.EventID, &s.TestID, &s.Parameter, &s.Specification, &s.SpecUnits,
-			&s.Result, &s.PassFail, &s.Comment); err != nil {
-			continue
-		}
+	for _, e := range rows {
+		s := models.RecordResultSnapshot{EventID: e.EventID, TestID: e.FormRowID, Parameter: e.Parameter,
+			Specification: e.Specification, SpecUnits: e.SpecUnits, Result: e.Result, PassFail: e.PassFail, Comment: e.Comment}
 		if _, ok := grouped[s.EventID]; !ok {
 			order = append(order, s.EventID)
 		}

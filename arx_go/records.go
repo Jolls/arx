@@ -18,7 +18,42 @@ import (
 
 	"arx/arx_go/models"
 	"arx/internal/inventory"
+	"arx/internal/records"
 )
+
+func (h *Handler) records() *records.Service { return records.New(handlerDB{h}) }
+
+// testForm copies a form header into the model the templates render.
+func testForm(f records.FormHeader) models.TestForm {
+	return models.TestForm{
+		ID: f.ID, PartNumberID: f.PartNumberID, IsLocked: f.IsLocked, TestOrder: f.TestOrder,
+		PartNumber: f.PartNumber, Description: f.Description, RecordTypes: f.RecordTypes,
+		InstrumentTypes: f.InstrumentTypes, Revision: f.Revision,
+	}
+}
+
+// testRecord copies a record row into the model the templates render.
+func testRecord(r records.Record) models.TestRecord {
+	return models.TestRecord{
+		ID: r.ID, FormID: r.FormID, PartNumberID: r.PartID, SerialNumber: r.SerialNumber,
+		SerialNumberPN: r.SubjectPartNumber, SerialNumberDesc: r.SubjectPNDescription, RecordDate: r.RecordDate,
+		RecordType: r.RecordType, Notes: r.Notes, InstrumentType: r.InstrumentType, IsLocked: r.IsLocked,
+		IsApproved: r.IsApproved, IsActive: r.IsActive, TestOrder: r.TestOrder,
+		LotID: r.LotID, BuildID: r.BuildID, UnitID: r.UnitID,
+	}
+}
+
+// recordStatus is the records-table status label of a listed record.
+func recordStatus(locked, approved bool) string {
+	switch {
+	case approved:
+		return "approved"
+	case locked:
+		return "complete"
+	default:
+		return "wip"
+	}
+}
 
 // refToken matches {123} step-ID tokens, {record.field}, and {form.field} context tokens.
 var refToken = regexp.MustCompile(`\{(\d+|record\.\w+|form\.\w+)\}`)
@@ -197,31 +232,16 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 
 // FormsList â€" GET /
 func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.revision, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE pn.category = 'FORM' AND pn.is_active = TRUE AND f.is_active = TRUE
-		ORDER BY pn.part_number ASC`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()))
+	rows, err := h.records().ListForms(r.Context())
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	defer rows.Close()
 
 	var forms []models.TestForm
-	for rows.Next() {
-		var f models.TestForm
-		if err := rows.Scan(&f.ID, &f.PartNumberID, &f.IsLocked, &f.Revision, &f.PartNumber, &f.Description); err != nil {
-			serverError(w, "scan error", err)
-			return
-		}
-		forms = append(forms, f)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, "rows error", err)
-		return
+	for _, f := range rows {
+		forms = append(forms, models.TestForm{ID: f.ID, PartNumberID: f.PartNumberID, IsLocked: f.IsLocked,
+			Revision: f.Revision, PartNumber: f.PartNumber, Description: f.Description})
 	}
 
 	h.renderRecords(w, r, "index.html", map[string]any{
@@ -240,14 +260,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load the form header.
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -256,28 +269,14 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
 	lockedCount, _ := strconv.Atoi(r.URL.Query().Get("locked"))
 
 	// Distinct Type (record_type) values for this form, to populate the filter datalist.
-	var typeOptions []string
-	typeRows, terr := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT DISTINCT record_type FROM %s
-		WHERE form_id = $1 AND is_active = TRUE AND record_type <> ''
-		ORDER BY record_type`, h.cfg().RecordsTable()), formID)
-	if terr == nil {
-		defer typeRows.Close()
-		for typeRows.Next() {
-			var c string
-			if err := typeRows.Scan(&c); err != nil {
-				log.Printf("RecordsList: type filter scan error: %v", err)
-				break
-			}
-			typeOptions = append(typeOptions, c)
-		}
-		if err := typeRows.Err(); err != nil {
-			log.Printf("RecordsList: type filter rows error: %v", err)
-		}
+	typeOptions, terr := h.records().ListRecordTypes(r.Context(), records.ScopeForm, formID)
+	if terr != nil {
+		log.Printf("RecordsList: type filter error: %v", terr)
 	}
 
 	h.renderRecords(w, r, "records_index.html", map[string]any{
@@ -314,47 +313,21 @@ func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
 		FormRev      string `json:"formRev"`
 	}
 
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, record_type, is_locked, is_approved, form_revision
-		FROM %s
-		WHERE form_id = $1 AND is_active = TRUE
-		ORDER BY `+serialIntExpr("serial_number")+` DESC, record_date DESC`,
-		h.cfg().RecordsTable()), formID)
+	listed, err := h.records().ListFormRecords(r.Context(), formID)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
 	}
-	defer rows.Close()
 
 	out := make([]row, 0)
-	for rows.Next() {
-		var rec row
-		var recordDate *time.Time
-		var formRev *int
-		var locked, approved bool
-		if err := rows.Scan(&rec.ID, &rec.PartNumberID, &rec.SN, &rec.SNPN, &rec.SNDesc,
-			&recordDate, &rec.Type, &locked, &approved, &formRev); err != nil {
-			serverError(w, "database error", err)
-			return
+	for _, l := range listed {
+		rec := row{ID: l.ID, PartNumberID: l.PartID, SN: l.SerialNumber, SNPN: l.SubjectPartNumber,
+			SNDesc: l.SubjectPNDescription, Type: l.RecordType, Status: recordStatus(l.IsLocked, l.IsApproved),
+			FormRev: models.TestRecord{FormRevision: l.FormRevision}.FormRevLabel()}
+		if l.RecordDate != nil {
+			rec.Date = l.RecordDate.Format("2006-01-02 15:04")
 		}
-		if recordDate != nil {
-			rec.Date = recordDate.Format("2006-01-02 15:04")
-		}
-		switch {
-		case approved:
-			rec.Status = "approved"
-		case locked:
-			rec.Status = "complete"
-		default:
-			rec.Status = "wip"
-		}
-		rec.FormRev = models.TestRecord{FormRevision: formRev}.FormRevLabel()
 		out = append(out, rec)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, "database error", err)
-		return
 	}
 	log.Printf("[rows] records form=%d: %d rows in %v", formID, len(out), time.Since(start))
 	writeJSON(w, out)
@@ -379,78 +352,55 @@ type scopedRecordRow struct {
 
 // scopedRecordsRows returns every active form_record matching whereCol = id,
 // across all forms, for the Part/Lot/Unit records tables (#875). whereCol must
-// be "part_id", "lot_id", or "unit_id" — always a caller-supplied constant,
-// never request input.
+// be "part_id", "lot_id", or "unit_id"; anything else is an error.
 func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int) ([]scopedRecordRow, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT r.id, COALESCE(r.part_id,0), r.serial_number, r.subject_part_number, r.subject_pn_description,
-		       r.record_date, r.record_type, r.is_locked, r.is_approved, r.form_revision,
-		       r.form_id, fp.part_number, fp.description
-		FROM %s r
-		JOIN %s f ON f.id = r.form_id
-		JOIN %s fp ON fp.id = f.part_number_id
-		WHERE r.%s = $1 AND r.is_active = TRUE
-		ORDER BY r.record_date DESC`,
-		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(),
-		whereCol), id)
+	scope, err := recordScope(whereCol)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	listed, err := h.records().ListScopedRecords(ctx, scope, id)
+	if err != nil {
+		return nil, err
+	}
 
 	out := make([]scopedRecordRow, 0)
-	for rows.Next() {
-		var rec scopedRecordRow
-		var recordDate *time.Time
-		var formRev *int
-		var locked, approved bool
-		var formPN, formDescription string
-		if err := rows.Scan(&rec.ID, &rec.PartNumberID, &rec.SN, &rec.SNPN, &rec.SNDesc,
-			&recordDate, &rec.Type, &locked, &approved, &formRev,
-			&rec.FormID, &formPN, &formDescription); err != nil {
-			return nil, err
+	for _, l := range listed {
+		rec := scopedRecordRow{ID: l.ID, PartNumberID: l.PartID, SN: l.SerialNumber, SNPN: l.SubjectPartNumber,
+			SNDesc: l.SubjectPNDescription, Type: l.RecordType, Status: recordStatus(l.IsLocked, l.IsApproved),
+			FormRev: models.TestRecord{FormRevision: l.FormRevision}.FormRevLabel(), FormID: l.FormID}
+		if l.RecordDate != nil {
+			rec.Date = l.RecordDate.Format("2006-01-02 15:04")
 		}
-		if recordDate != nil {
-			rec.Date = recordDate.Format("2006-01-02 15:04")
-		}
-		switch {
-		case approved:
-			rec.Status = "approved"
-		case locked:
-			rec.Status = "complete"
-		default:
-			rec.Status = "wip"
-		}
-		rec.FormRev = models.TestRecord{FormRevision: formRev}.FormRevLabel()
-		rec.FormLabel = formPN
-		if formDescription != "" {
-			rec.FormLabel += " — " + formDescription
+		rec.FormLabel = l.FormPartNumber
+		if l.FormDescription != "" {
+			rec.FormLabel += " — " + l.FormDescription
 		}
 		out = append(out, rec)
 	}
-	return out, rows.Err()
+	return out, nil
+}
+
+// recordScope maps the caller-supplied form_record column name to its records scope.
+func recordScope(whereCol string) (records.Scope, error) {
+	switch whereCol {
+	case "part_id":
+		return records.ScopePart, nil
+	case "lot_id":
+		return records.ScopeLot, nil
+	case "unit_id":
+		return records.ScopeUnit, nil
+	}
+	return 0, fmt.Errorf("unsupported record scope %q", whereCol)
 }
 
 // scopedRecordTypeOptions returns distinct non-empty record_type (Type) values for
 // the filter-row datalist, scoped the same way as scopedRecordsRows.
 func (h *Handler) scopedRecordTypeOptions(ctx context.Context, whereCol string, id int) ([]string, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT DISTINCT record_type FROM %s
-		WHERE %s = $1 AND is_active = TRUE AND record_type <> ''
-		ORDER BY record_type`, h.cfg().RecordsTable(), whereCol), id)
+	scope, err := recordScope(whereCol)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var c string
-		if err := rows.Scan(&c); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
+	return h.records().ListRecordTypes(ctx, scope, id)
 }
 
 // FormDef â€" GET /forms/{id}/def
@@ -463,14 +413,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, f.revision, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.Revision, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -479,66 +422,11 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
-	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type,
-		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       instrument_types, format, comment,
-		       created_at, updated_at
-		FROM %s WHERE form_id = $1`, h.cfg().StepsTable()), formID)
+	stepsMap, err := h.loadSteps(r.Context(), formID)
 	if err != nil {
 		serverError(w, "query error", err)
-		return
-	}
-	defer stepRows.Close()
-
-	stepsMap := map[int]*models.TestStep{}
-	for stepRows.Next() {
-		var s models.TestStep
-		var archiveID, revision sql.NullInt32
-		var (
-			param, spec, defaultResult, hideFormula sql.NullString
-			specMin, specMax, pfType                sql.NullString
-			category, sheetName, specUnits, specNom sql.NullString
-			instrumentTypes, format                 sql.NullString
-			stepComment                             sql.NullString
-		)
-		if err := stepRows.Scan(
-			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType,
-			&s.Archived, &archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &instrumentTypes,
-			&format, &stepComment,
-			&s.StepCreatedAt, &s.StepUpdatedAt,
-		); err != nil {
-			serverError(w, "scan error", err)
-			return
-		}
-		s.Parameter = param.String
-		s.Specification = spec.String
-		s.DefaultResult = defaultResult.String
-		s.HideFormula = hideFormula.String
-		s.SpecMin = specMin.String
-		s.SpecMax = specMax.String
-		s.PFType = pfType.String
-		if archiveID.Valid {
-			s.ArchiveID = int(archiveID.Int32)
-		}
-		if revision.Valid {
-			s.Revision = int(revision.Int32)
-		}
-		s.Category = category.String
-		s.SheetName = sheetName.String
-		s.SpecUnits = specUnits.String
-		s.SpecNom = specNom.String
-		s.InstrumentTypes = instrumentTypes.String
-		s.Format = format.String
-		s.StepComment = stepComment.String
-		stepsMap[s.ID] = &s
-	}
-	if err := stepRows.Err(); err != nil {
-		serverError(w, "rows error", err)
 		return
 	}
 
@@ -584,15 +472,9 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		PctLeft float64 // position along timeline bar (5â€"95%)
 	}
 	loc := h.userLocation(r)
-	hRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT changed_at, form_row_id
-		FROM %s
-		WHERE form_row_id IN (SELECT id FROM %s WHERE form_id = $1)
-		ORDER BY changed_at ASC`,
-		h.cfg().FormRowHistoryTable(), h.cfg().StepsTable()), formID)
+	stamps, err := h.records().ListFormHistoryStamps(r.Context(), formID)
 	var histPoints []HistoryPoint
 	if err == nil {
-		defer hRows.Close()
 		// Rows arrive ORDER BY changed_at ASC, so same-day rows (keyed by local date in
 		// loc) are contiguous — track only the current day's bucket instead of a map
 		// keyed by day string.
@@ -603,14 +485,9 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		}
 		var buckets []*dayBucket
 		var current *dayBucket
-		for hRows.Next() {
-			var changedAt time.Time
-			var rowID int
-			if err := hRows.Scan(&changedAt, &rowID); err != nil {
-				log.Printf("FormDef: history scan error: %v", err)
-				break
-			}
-			local := changedAt.In(loc)
+		for _, st := range stamps {
+			rowID := st.FormRowID
+			local := st.ChangedAt.In(loc)
 			key := local.Format("2006-01-02")
 			if current == nil || current.key != key {
 				day, err := time.ParseInLocation("2006-01-02", key, loc)
@@ -621,9 +498,6 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 				buckets = append(buckets, current)
 			}
 			current.rows[rowID] = true
-		}
-		if err := hRows.Err(); err != nil {
-			log.Printf("FormDef: history rows error: %v", err)
 		}
 		for _, b := range buckets {
 			histPoints = append(histPoints, HistoryPoint{At: b.day, Count: len(b.rows)})
@@ -691,51 +565,17 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// see FUTURE_GOALS.md (records index query refactor)
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT t.id,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.type,0)            ELSE COALESCE(t.type,0)            END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.parameter,'')      ELSE COALESCE(t.parameter,'')      END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_nom,'')       ELSE COALESCE(t.spec_nom,'')       END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_min,'')       ELSE COALESCE(t.spec_min,'')       END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_max,'')       ELSE COALESCE(t.spec_max,'')       END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.spec_units,'')     ELSE COALESCE(t.spec_units,'')     END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.pf_type,'')        ELSE COALESCE(t.pf_type,'')        END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.default_result,'') ELSE COALESCE(t.default_result,'') END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.hide_formula,'')   ELSE COALESCE(t.hide_formula,'')   END,
-		       CASE WHEN h.form_row_id IS NOT NULL THEN 1 ELSE 0 END
-		FROM %s t
-		LEFT JOIN (
-		    SELECT form_row_id, type, parameter, spec_nom, spec_min, spec_max,
-		           spec_units, pf_type, default_result, hide_formula
-		    FROM %s
-		    WHERE changed_at >= $2 AND changed_at < $3
-		) h ON h.form_row_id = t.id
-		WHERE t.form_id = $1`,
-		h.cfg().StepsTable(), h.cfg().FormRowHistoryTable()),
-		formID, dayStart.UTC(), dayEnd.UTC())
+	rows, err := h.records().ListFormStepsAt(r.Context(), formID, dayStart.UTC(), dayEnd.UTC())
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	defer rows.Close()
 
 	var steps []stepState
-	for rows.Next() {
-		var s stepState
-		var changed int
-		if err := rows.Scan(&s.ID, &s.Type, &s.Parameter,
-			&s.SpecNom, &s.SpecMin, &s.SpecMax,
-			&s.SpecUnits, &s.PFType, &s.DefaultResult, &s.HideFormula, &changed,
-		); err != nil {
-			serverError(w, "scan error", err)
-			return
-		}
-		s.Changed = changed == 1
-		steps = append(steps, s)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, "rows error", err)
-		return
+	for _, s := range rows {
+		steps = append(steps, stepState{ID: s.ID, Type: s.Type, Parameter: s.Parameter, SpecNom: s.SpecNom,
+			SpecMin: s.SpecMin, SpecMax: s.SpecMax, SpecUnits: s.SpecUnits, PFType: s.PfType,
+			DefaultResult: s.DefaultResult, HideFormula: s.HideFormula, Changed: s.Changed})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -750,15 +590,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	var recordTypes, instrumentTypes sql.NullString
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description,
-		       f.record_types, f.instrument_types
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description,
-			&recordTypes, &instrumentTypes)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -767,53 +599,12 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
-	form.RecordTypes = recordTypes.String
-	form.InstrumentTypes = instrumentTypes.String
+	form := testForm(hdr)
 
 	// Load raw step values â€" no substituteRefs, we want to edit the actual stored values.
-	stepRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, COALESCE(type,0) AS type, parameter, specification, spec_nom, spec_min, spec_max, spec_units,
-		       pf_type, default_result, hide_formula, archived, category, sheet_name,
-		       instrument_types, format, comment
-		FROM %s WHERE form_id = $1`, h.cfg().StepsTable()), formID)
+	stepsMap, err := h.loadSteps(r.Context(), formID)
 	if err != nil {
 		serverError(w, "query error", err)
-		return
-	}
-	defer stepRows.Close()
-
-	stepsMap := map[int]*models.TestStep{}
-	for stepRows.Next() {
-		var s models.TestStep
-		var param, spec, specNom, specMin, specMax, specUnits sql.NullString
-		var pfType, defaultResult, hideFormula, category, sheetName sql.NullString
-		var instrumentTypes, format, comment sql.NullString
-		if err := stepRows.Scan(
-			&s.ID, &s.Type, &param, &spec, &specNom, &specMin, &specMax, &specUnits,
-			&pfType, &defaultResult, &hideFormula, &s.Archived, &category, &sheetName,
-			&instrumentTypes, &format, &comment,
-		); err != nil {
-			serverError(w, "scan error", err)
-			return
-		}
-		s.Parameter = param.String
-		s.Specification = spec.String
-		s.SpecNom = specNom.String
-		s.SpecMin = specMin.String
-		s.SpecMax = specMax.String
-		s.SpecUnits = specUnits.String
-		s.PFType = pfType.String
-		s.DefaultResult = defaultResult.String
-		s.HideFormula = hideFormula.String
-		s.Category = category.String
-		s.SheetName = sheetName.String
-		s.InstrumentTypes = instrumentTypes.String
-		s.Format = format.String
-		s.StepComment = comment.String
-		stepsMap[s.ID] = &s
-	}
-	if err := stepRows.Err(); err != nil {
-		serverError(w, "rows error", err)
 		return
 	}
 
@@ -1156,55 +947,26 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 // loadSteps loads all form_row rows for a form keyed by id, with every field used for
 // rendering and token resolution. Used as the live-definition fallback for un-materialized rows.
 func (h *Handler) loadSteps(ctx context.Context, formID int) (map[int]*models.TestStep, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, form_id, parameter, specification, default_result, hide_formula, COALESCE(type,0) AS type,
-		       spec_min, spec_max, pf_type,
-		       archived, archive_id, revision, category, sheet_name, spec_units, spec_nom,
-		       instrument_types, format, comment,
-		       created_at, updated_at
-		FROM %s WHERE form_id = $1`, h.cfg().StepsTable()), formID)
+	rows, err := h.records().ListFormSteps(ctx, formID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	steps := map[int]*models.TestStep{}
-	for rows.Next() {
-		var s models.TestStep
-		var archiveID, revision sql.NullInt32
-		var param, spec, defaultResult, hideFormula sql.NullString
-		var specMin, specMax, pfType sql.NullString
-		var category, sheetName, specUnits, specNom sql.NullString
-		var instrumentTypes, format, stepComment sql.NullString
-		if err := rows.Scan(
-			&s.ID, &s.FormID, &param, &spec, &defaultResult, &hideFormula, &s.Type,
-			&specMin, &specMax, &pfType,
-			&s.Archived, &archiveID, &revision, &category, &sheetName,
-			&specUnits, &specNom, &instrumentTypes,
-			&format, &stepComment,
-			&s.StepCreatedAt, &s.StepUpdatedAt,
-		); err != nil {
-			continue
+	for _, r := range rows {
+		s := models.TestStep{
+			ID: r.ID, FormID: r.FormID, Parameter: r.Parameter, Specification: r.Specification,
+			DefaultResult: r.DefaultResult, HideFormula: r.HideFormula, Type: r.Type, Archived: r.Archived,
+			SpecMin: r.SpecMin, SpecMax: r.SpecMax, PFType: r.PfType, Category: r.Category,
+			SheetName: r.SheetName, SpecUnits: r.SpecUnits, SpecNom: r.SpecNom,
+			InstrumentTypes: r.InstrumentTypes, Format: r.Format, StepComment: r.Comment,
+			StepCreatedAt: r.CreatedAt, StepUpdatedAt: r.UpdatedAt,
 		}
-		s.Parameter = param.String
-		s.Specification = spec.String
-		s.DefaultResult = defaultResult.String
-		s.HideFormula = hideFormula.String
-		s.SpecMin = specMin.String
-		s.SpecMax = specMax.String
-		s.PFType = pfType.String
-		if archiveID.Valid {
-			s.ArchiveID = int(archiveID.Int32)
+		if r.ArchiveID != nil {
+			s.ArchiveID = *r.ArchiveID
 		}
-		if revision.Valid {
-			s.Revision = int(revision.Int32)
+		if r.Revision != nil {
+			s.Revision = *r.Revision
 		}
-		s.Category = category.String
-		s.SheetName = sheetName.String
-		s.SpecUnits = specUnits.String
-		s.SpecNom = specNom.String
-		s.InstrumentTypes = instrumentTypes.String
-		s.Format = format.String
-		s.StepComment = stepComment.String
 		steps[s.ID] = &s
 	}
 	return steps, nil
@@ -1212,27 +974,21 @@ func (h *Handler) loadSteps(ctx context.Context, formID int) (map[int]*models.Te
 
 // loadRecordResults loads the materialized snapshot rows for a record, keyed by form_row_id (#487).
 func (h *Handler) loadRecordResults(ctx context.Context, recordID int) (map[int]*models.TestResult, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, form_record_id, form_row_id,
-		       COALESCE(parameter,''), COALESCE(specification,''), COALESCE(result,''),
-		       pass_fail, COALESCE(comment,''),
-		       COALESCE(spec_min,''), COALESCE(spec_nom,''), COALESCE(spec_max,''),
-		       COALESCE(spec_units,''), COALESCE(pf_type,''), COALESCE(format,''),
-		       COALESCE(type,0), COALESCE(hide_formula,''), COALESCE(default_result,''),
-		       updated_at
-		FROM %s WHERE form_record_id = $1`, h.cfg().ResultsTable()), recordID)
+	rows, err := h.records().ListResults(ctx, recordID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	results := map[int]*models.TestResult{}
-	for rows.Next() {
-		var res models.TestResult
-		if err := rows.Scan(&res.ID, &res.RecordID, &res.TestID, &res.Parameter,
-			&res.Specification, &res.Result, &res.PassFail, &res.Comment,
-			&res.SpecMin, &res.SpecNom, &res.SpecMax, &res.SpecUnits, &res.PFType, &res.Format,
-			&res.Type, &res.HideFormula, &res.DefaultResult, &res.UpdatedAt); err != nil {
-			continue
+	for _, r := range rows {
+		res := models.TestResult{
+			ID: r.ID, RecordID: r.FormRecordID, TestID: r.FormRowID, Parameter: r.Parameter,
+			Specification: r.Specification, Result: r.Result, Comment: r.Comment,
+			SpecMin: r.SpecMin, SpecNom: r.SpecNom, SpecMax: r.SpecMax, SpecUnits: r.SpecUnits,
+			PFType: r.PfType, Format: r.Format, Type: r.Type, HideFormula: r.HideFormula,
+			DefaultResult: r.DefaultResult, UpdatedAt: r.UpdatedAt,
+		}
+		if r.PassFail.Valid {
+			res.PassFail = &r.PassFail.Bool
 		}
 		results[res.TestID] = &res
 	}
@@ -1310,16 +1066,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var record models.TestRecord
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, record_type, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
-		       lot_id, build_id, unit_id
-		FROM %s WHERE id = $1`, h.cfg().RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType, &record.Notes,
-			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
-			&record.LotID, &record.BuildID, &record.UnitID)
+	rec, err := h.records().GetRecord(r.Context(), recordID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1328,19 +1075,14 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	record := testRecord(rec)
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), record.FormID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
 	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, false)
@@ -1363,17 +1105,9 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Prev/next record IDs within this form, same ordering as the records list.
-	var prevID, nextID int
-	h.queryRowContext(r.Context(), fmt.Sprintf(`
-		WITH ordered AS (
-			SELECT id,
-			       LAG(id)  OVER (ORDER BY `+serialIntExpr("serial_number")+` DESC, record_date DESC) AS prev_id,
-			       LEAD(id) OVER (ORDER BY `+serialIntExpr("serial_number")+` DESC, record_date DESC) AS next_id
-			FROM %s WHERE form_id = $1 AND is_active = TRUE
-		)
-		SELECT COALESCE(prev_id, 0), COALESCE(next_id, 0) FROM ordered WHERE id = $2`,
-		h.cfg().RecordsTable()), record.FormID, recordID).Scan(&prevID, &nextID)
+	// Prev/next record IDs within this form, same ordering as the records list (0 when the
+	// record isn't an active record of it).
+	prevID, nextID, _ := h.records().Neighbors(r.Context(), record.FormID, recordID)
 
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
@@ -1384,26 +1118,13 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 	// Lifecycle audit trail (#250) — complete/approve/unlock events, oldest first.
 	var events []models.RecordEvent
-	eventRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_record_id, event_type, username, event_date, COALESCE(comments,'')
-		FROM %s WHERE form_record_id = $1 ORDER BY event_date ASC, id ASC`,
-		h.cfg().RecordEventsTable()), recordID)
+	eventRows, err := h.records().ListEvents(r.Context(), recordID)
 	if err != nil {
 		log.Printf("RecordDetail: audit trail query error: %v", err)
-	} else {
-		for eventRows.Next() {
-			var ev models.RecordEvent
-			if err := eventRows.Scan(&ev.ID, &ev.TestRecordID, &ev.EventType, &ev.Username,
-				&ev.EventDate, &ev.Comments); err != nil {
-				log.Printf("RecordDetail: audit trail scan error: %v", err)
-				break
-			}
-			events = append(events, ev)
-		}
-		if err := eventRows.Err(); err != nil {
-			log.Printf("RecordDetail: audit trail rows error: %v", err)
-		}
-		eventRows.Close()
+	}
+	for _, e := range eventRows {
+		events = append(events, models.RecordEvent{ID: e.ID, TestRecordID: e.FormRecordID, EventType: e.EventType,
+			Username: e.Username, EventDate: &e.EventDate, Comments: e.Comments})
 	}
 
 	// Per-lock result snapshots (#251), keyed by event_id and diffed against the prior snapshot.
@@ -1449,14 +1170,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var record models.TestRecord
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, record_type, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order
-		FROM %s WHERE id = $1`, h.cfg().RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType, &record.Notes,
-			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder)
+	rec, err := h.records().GetRecord(r.Context(), recordID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1465,19 +1179,14 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	record := testRecord(rec)
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), record.FormID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
 	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, false)
@@ -1532,13 +1241,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	var recordTypes, instrumentTypes sql.NullString
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description, f.record_types, f.instrument_types
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description, &recordTypes, &instrumentTypes)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1547,38 +1250,22 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
-	form.RecordTypes = recordTypes.String
-	form.InstrumentTypes = instrumentTypes.String
+	form := testForm(hdr)
 
 	// BOM lookup: parts listed under the form's own part number in PL.
 	var bomParts []BOMPart
-	bomRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT PN.id, PN.part_number, PN.description
-		FROM %s PL JOIN %s PN ON PL.component_part_id = PN.id
-		WHERE PL.parent_part_id = $1
-		ORDER BY PN.description`,
-		h.cfg().BOMTable(), h.cfg().PartsTable()), form.PartNumberID)
-	if err == nil {
-		defer bomRows.Close()
-		for bomRows.Next() {
-			var p BOMPart
-			if bomRows.Scan(&p.PartNumberID, &p.PartNumber, &p.Description) == nil {
-				bomParts = append(bomParts, p)
-			}
+	if bomRows, err := h.records().ListBOMParts(r.Context(), form.PartNumberID); err == nil {
+		for _, p := range bomRows {
+			bomParts = append(bomParts, BOMPart{PartNumberID: p.ID, PartNumber: p.PartNumber, Description: p.Description})
 		}
 	}
 
 	// Next serial number: max numeric SN + 1, defaulting to 1 if none exist.
 	// This is only a suggestion shown in the form; CreateRecord re-derives the SN
 	// atomically under a lock when the user accepts it, closing the concurrent-create race (#369).
-	var nextSN sql.NullInt64
-	h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT COALESCE(MAX(`+serialIntExpr("serial_number")+`) + 1, 1)
-		FROM %s WHERE form_id = $1`, h.cfg().RecordsTable()), formID).Scan(&nextSN)
-
 	nextSNStr := "1"
-	if nextSN.Valid {
-		nextSNStr = strconv.FormatInt(nextSN.Int64, 10)
+	if nextSN, err := h.records().NextSerial(r.Context(), formID); err == nil {
+		nextSNStr = strconv.Itoa(nextSN)
 	}
 
 	h.renderRecords(w, r, "record_new.html", map[string]any{
@@ -1802,21 +1489,16 @@ func (h *Handler) loadRecordTrace(ctx context.Context, record *models.TestRecord
 	// The tested part's lot-tracking + whether it has a BOM (is buildable).
 	// part_id is a logical reference with no FK, so a stale id may not resolve —
 	// treat that as simply having no trace rather than failing the whole page.
-	var trackingMode sql.NullString
-	var bomCount int
-	err := h.queryRowContext(ctx, fmt.Sprintf(`
-		SELECT p.tracking_mode, (SELECT COUNT(*) FROM %s b WHERE b.parent_part_id = p.id)
-		FROM %s p WHERE p.id = $1`, h.cfg().BOMTable(), h.cfg().PartsTable()), record.PartNumberID).
-		Scan(&trackingMode, &bomCount)
+	tracking, err := h.records().GetPartTracking(ctx, record.PartNumberID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	t.IsLotTracked = models.TracksLots(trackingMode.String)
-	t.TracksSerials = models.TracksSerials(trackingMode.String)
-	t.Buildable = bomCount > 0
+	t.IsLotTracked = models.TracksLots(tracking.TrackingMode)
+	t.TracksSerials = models.TracksSerials(tracking.TrackingMode)
+	t.Buildable = tracking.BomCount > 0
 
 	if lotID != nil {
 		if lr, found, err := h.fetchLotRow(ctx, *lotID); err != nil {
@@ -1934,16 +1616,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var record models.TestRecord
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(part_id,0), serial_number, subject_part_number, subject_pn_description,
-		       record_date, record_type, COALESCE(notes,'') AS notes, COALESCE(instrument_type,'') AS instrument_type, is_locked, is_approved, is_active, test_order,
-		       lot_id, build_id, unit_id
-		FROM %s WHERE id = $1`, h.cfg().RecordsTable()), recordID).
-		Scan(&record.ID, &record.FormID, &record.PartNumberID, &record.SerialNumber, &record.SerialNumberPN,
-			&record.SerialNumberDesc, &record.RecordDate, &record.RecordType, &record.Notes,
-			&record.InstrumentType, &record.IsLocked, &record.IsApproved, &record.IsActive, &record.TestOrder,
-			&record.LotID, &record.BuildID, &record.UnitID)
+	rec, err := h.records().GetRecord(r.Context(), recordID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -1952,23 +1625,18 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	record := testRecord(rec)
 	if record.IsLocked {
 		http.Redirect(w, r, fmt.Sprintf("/records/%d", recordID), http.StatusSeeOther)
 		return
 	}
 
-	var form models.TestForm
-	var editInstrumentTypes sql.NullString
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description, f.instrument_types
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), record.FormID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description, &editInstrumentTypes)
+	hdr, err := h.records().GetFormHeader(r.Context(), record.FormID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	form.InstrumentTypes = editInstrumentTypes.String
+	form := testForm(hdr)
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
 	// Edit always works against the frozen spec; "Update to latest" is the only re-pull path (#487).
@@ -2950,29 +2618,13 @@ type formPN struct {
 // formPNList returns FORM-category PNs that don't already have an active form.
 // Used by both NewForm and DuplicateForm to populate the PN picker.
 func (h *Handler) formPNList(ctx context.Context) ([]formPN, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, description
-		FROM %s
-		WHERE category = 'FORM' AND is_active = TRUE
-		  AND NOT EXISTS (
-		      SELECT 1 FROM %s WHERE part_number_id = %s.id AND is_active = TRUE
-		  )
-		ORDER BY part_number`,
-		h.cfg().PartsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()))
+	rows, err := h.records().ListFormPartOptions(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var list []formPN
-	for rows.Next() {
-		var pn formPN
-		if err := rows.Scan(&pn.PartNumberID, &pn.PartNumber, &pn.Description); err != nil {
-			return nil, err
-		}
-		list = append(list, pn)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	for _, p := range rows {
+		list = append(list, formPN{PartNumberID: p.ID, PartNumber: p.PartNumber, Description: p.Description})
 	}
 	return list, nil
 }
@@ -3083,27 +2735,14 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load existing active forms for the "copy steps from" dropdown.
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, pn.part_number, pn.description
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.is_active = TRUE ORDER BY pn.part_number`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()))
+	rows, err := h.records().ListSourceForms(r.Context())
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	defer rows.Close()
 	var sourceForms []models.TestForm
-	for rows.Next() {
-		var f models.TestForm
-		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Description); err != nil {
-			log.Printf("NewForm: source-forms scan error: %v", err)
-			break
-		}
-		sourceForms = append(sourceForms, f)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("NewForm: source-forms rows error: %v", err)
+	for _, f := range rows {
+		sourceForms = append(sourceForms, models.TestForm{ID: f.ID, PartNumber: f.PartNumber, Description: f.Description})
 	}
 
 	h.renderRecords(w, r, "form_new.html", map[string]any{
@@ -3188,12 +2827,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
-		FROM %s f JOIN %s pn ON f.part_number_id = pn.id WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -3202,10 +2836,9 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
-	var stepCount int
-	h.queryRowContext(r.Context(), fmt.Sprintf(
-		"SELECT COUNT(1) FROM %s WHERE form_id=$1", h.cfg().StepsTable()), formID).Scan(&stepCount)
+	stepCount, _ := h.records().CountFormSteps(r.Context(), formID)
 
 	pns, err := h.formPNList(r.Context())
 	if err != nil {
@@ -3300,14 +2933,7 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form models.TestForm
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT f.id, f.part_number_id, f.is_locked, f.test_order, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE f.id = $1`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()), formID).
-		Scan(&form.ID, &form.PartNumberID, &form.IsLocked, &form.TestOrder, &form.PartNumber, &form.Description)
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -3316,22 +2942,9 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	form := testForm(hdr)
 
-	type stepMeta struct {
-		ID            int
-		FormID        int
-		Parameter     string
-		Specification string
-		SpecUnits     string
-		Format        string
-	}
-	var step stepMeta
-	var param, spec, specUnits, format sql.NullString
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT id, form_id, COALESCE(parameter,''), COALESCE(specification,''),
-		       COALESCE(spec_units,''), COALESCE(format,'')
-		FROM %s WHERE id = $1`, h.cfg().StepsTable()), testID).
-		Scan(&step.ID, &step.FormID, &param, &spec, &specUnits, &format)
+	step, err := h.records().GetStep(r.Context(), testID)
 	if err == sql.ErrNoRows || (err == nil && step.FormID != formID) {
 		http.NotFound(w, r)
 		return
@@ -3340,10 +2953,6 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
-	step.Parameter = param.String
-	step.Specification = spec.String
-	step.SpecUnits = specUnits.String
-	step.Format = format.String
 
 	h.renderRecords(w, r, "test_report.html", map[string]any{
 		"Form":      form,
@@ -3369,10 +2978,7 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 	}
 	start := time.Now()
 
-	var format string
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(
-		`SELECT COALESCE(format,'') FROM %s WHERE id = $1 AND form_id = $2`, h.cfg().StepsTable()), testID, formID).
-		Scan(&format)
+	format, err := h.records().GetStepFormat(r.Context(), testID, formID)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -3394,53 +3000,31 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 		Comment      string `json:"comment"`
 	}
 
-	resRows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT trec.id, trec.serial_number, COALESCE(trec.subject_part_number,''),
-		       COALESCE(trec.part_id,0),
-		       trec.record_date,
-		       COALESCE(res.result,''), res.pass_fail, COALESCE(res.comment,''),
-		       res.updated_at
-		FROM %s res
-		JOIN %s trec ON res.form_record_id = trec.id
-		WHERE res.form_row_id = $1 AND trec.form_id = $2 AND trec.is_active = TRUE
-		ORDER BY `+serialIntExpr("trec.serial_number")+` DESC, trec.record_date DESC`,
-		h.cfg().ResultsTable(), h.cfg().RecordsTable()), testID, formID)
+	results, err := h.records().ListStepResults(r.Context(), formID, testID)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
 	}
-	defer resRows.Close()
 
 	out := make([]row, 0)
-	for resRows.Next() {
-		var rec row
-		var recordDate time.Time
-		var result string
-		var passFail sql.NullBool
-		var updatedAt *time.Time
-		if err := resRows.Scan(&rec.ID, &rec.SN, &rec.SNPN, &rec.PartNumberID, &recordDate,
-			&result, &passFail, &rec.Comment, &updatedAt); err != nil {
-			serverError(w, "scan error", err)
-			return
+	for _, res := range results {
+		rec := row{ID: res.ID, SN: res.SerialNumber, SNPN: res.SubjectPartNumber, PartNumberID: res.PartID,
+			Comment: res.Comment, Result: applyResultFormat(res.Result, format)}
+		if res.RecordDate != nil {
+			rec.Date = res.RecordDate.Format("2006-01-02 15:04")
 		}
-		rec.Date = recordDate.Format("2006-01-02 15:04")
-		if updatedAt != nil {
-			rec.ResultDate = updatedAt.Format("2006-01-02 15:04")
+		if res.UpdatedAt != nil {
+			rec.ResultDate = res.UpdatedAt.Format("2006-01-02 15:04")
 		}
-		rec.Result = applyResultFormat(result, format)
 		switch {
-		case !passFail.Valid:
+		case res.PassFail == nil:
 			rec.PassFail = "—"
-		case passFail.Bool:
+		case *res.PassFail:
 			rec.PassFail = "PASS"
 		default:
 			rec.PassFail = "FAIL"
 		}
 		out = append(out, rec)
-	}
-	if err := resRows.Err(); err != nil {
-		serverError(w, "rows error", err)
-		return
 	}
 	log.Printf("[rows] report form=%d test=%d: %d rows in %v", formID, testID, len(out), time.Since(start))
 	writeJSON(w, out)
