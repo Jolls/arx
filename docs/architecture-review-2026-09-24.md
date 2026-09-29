@@ -127,7 +127,7 @@ The Postgres DDL is open for editing anyway, and the current port copies these p
 
 ## 4. A data-access layer: move SQL out of handlers
 
-> **In progress ([#190](https://github.com/Jolls/arx/issues/190)).** sqlc is set up (`sqlc.yaml` → `internal/dbq`, checked against the reference DDL rather than the migrations, which are only deltas), CI fails on stale generated code, and contacts (`internal/contacts`) and part categories (`internal/parts`) are converted. The remaining domains follow one per PR; each removes its `cfg.*Table()` calls.
+> **Done ([#190](https://github.com/Jolls/arx/issues/190)).** Every domain is on sqlc (`sqlc.yaml` → `internal/dbq`, checked against the reference DDL rather than the migrations, which are only deltas), CI fails on stale generated code, and `cfg.*Table()` is gone. A lint test denies raw SQL in `arx_go` (exemptions: the `handlers.go` plumbing and `execQuery`, see #250).
 
 **Current state:**
 - `package main` holds about 23k lines and 104 struct types, and `*Handler` has 429 methods.

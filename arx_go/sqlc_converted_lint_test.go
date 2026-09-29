@@ -11,7 +11,8 @@ import (
 // TestSQLCConvertedFilesHaveNoRawSQL guards the sqlc conversion (#190): no
 // non-test file in package main may call cfg.*Table() or run raw SQL; queries
 // live in internal/<domain>/<domain>.sql. Deny by default: a new file is
-// checked without being listed.
+// checked without being listed. Tools under cmd/ are out of scope by design
+// (e.g. cmd/backfill_attachment_hash's table-parameterised one-shot SQL).
 func TestSQLCConvertedFilesHaveNoRawSQL(t *testing.T) {
 	raw := regexp.MustCompile(`Table\(\)|\bh\.(queryContext|queryRowContext|execContext)\(|\.(QueryContext|QueryRowContext|ExecContext)\(`)
 	// handlers.go defines the logging DB wrappers and the handlerDB/txLogger DBTX adapters.
