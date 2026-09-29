@@ -3,3 +3,10 @@
 //   sqlc v1.31.1
 
 package dbq
+
+type Uom struct {
+	UomID        int
+	Abbreviation string
+	DisplayName  string
+	UnitType     string
+}

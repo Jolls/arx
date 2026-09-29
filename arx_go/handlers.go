@@ -26,8 +26,10 @@ import (
 	"github.com/gorilla/sessions"
 
 	"arx/arx_go/models"
+	"arx/internal/appconfig"
 	arxbase "arx/internal/config"
 	arxdb "arx/internal/db"
+	"arx/internal/parts"
 	"arx/internal/urlutil"
 )
 
@@ -269,7 +271,7 @@ func (h *Handler) CheckSchemaVersion(ctx context.Context) {
 		h.update(func(s *runtimeState) { s.schemaMismatch, s.dbConnError = "", "" })
 		return
 	}
-	mismatch, connErr := arxbase.CheckSchemaVersion(ctx, h.queryRowContext, h.cfg().AppConfigTable())
+	mismatch, connErr := arxbase.CheckSchemaVersion(ctx, appconfig.New(handlerDB{h}).Get)
 	h.update(func(s *runtimeState) { s.schemaMismatch, s.dbConnError = mismatch, connErr })
 }
 
@@ -405,11 +407,7 @@ func (h *Handler) appConfigGet(ctx context.Context, key string) (string, error) 
 	if h.database() == nil {
 		return "", nil
 	}
-	var val string
-	err := h.queryRowContext(ctx,
-		`SELECT setting_value FROM `+h.cfg().AppConfigTable()+` WHERE setting_key = $1`, key,
-	).Scan(&val)
-	return val, err
+	return appconfig.New(handlerDB{h}).Get(ctx, key)
 }
 
 // appConfigGetOr reads a single key from app_config and returns def on any error or missing key.
@@ -423,9 +421,7 @@ func (h *Handler) appConfigGetOr(ctx context.Context, key, def string) string {
 
 // appConfigSet upserts a key/value pair in app_config.
 func (h *Handler) appConfigSet(ctx context.Context, key, value string) error {
-	_, err := h.execContext(ctx, "INSERT INTO "+h.cfg().AppConfigTable()+" (setting_key, setting_value) VALUES ($1, $2) "+
-		"ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP", key, value)
-	return err
+	return appconfig.New(handlerDB{h}).Set(ctx, key, value)
 }
 
 // DB returns the underlying *sql.DB. Used in integration tests.
@@ -1028,34 +1024,9 @@ func attachLabel(filename, category string) string {
 // ── Units of measure ─────────────────────────────────────────────────────────
 
 // UnitOption is a row from the unit table, used to populate dropdowns.
-type UnitOption struct {
-	ID           int
-	Abbreviation string
-	DisplayName  string
-	UnitType     string
-}
+type UnitOption = parts.UOM
 
 // fetchUnits returns all rows from the uom table ordered by unit_type, abbreviation.
 func (h *Handler) fetchUnits(ctx context.Context) ([]UnitOption, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT uom_id, abbreviation, display_name, unit_type FROM %s ORDER BY unit_type, abbreviation`,
-		h.cfg().UomTable(),
-	))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var units []UnitOption
-	for rows.Next() {
-		var u UnitOption
-		var abbr, name, utype sql.NullString
-		if err := rows.Scan(&u.ID, &abbr, &name, &utype); err != nil {
-			return nil, err
-		}
-		u.Abbreviation = abbr.String
-		u.DisplayName = name.String
-		u.UnitType = utype.String
-		units = append(units, u)
-	}
-	return units, rows.Err()
+	return h.parts().ListUOMs(ctx)
 }

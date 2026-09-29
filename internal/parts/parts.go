@@ -238,6 +238,27 @@ type Service struct{ q *dbq.Queries }
 
 func New(db dbq.DBTX) *Service { return &Service{q: dbq.New(db)} }
 
+// UOM is a unit of measure, for dropdowns.
+type UOM struct {
+	ID           int
+	Abbreviation string
+	DisplayName  string
+	UnitType     string
+}
+
+// ListUOMs returns the uom reference list ordered by unit_type, abbreviation.
+func (s *Service) ListUOMs(ctx context.Context) ([]UOM, error) {
+	rows, err := s.q.ListUOMs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UOM, len(rows))
+	for i, r := range rows {
+		out[i] = UOM{ID: r.UomID, Abbreviation: r.Abbreviation, DisplayName: r.DisplayName, UnitType: r.UnitType}
+	}
+	return out, nil
+}
+
 // ListCategories returns part_category in editor order (#194).
 func (s *Service) ListCategories(ctx context.Context) ([]Category, error) {
 	rows, err := s.q.ListPartCategories(ctx)

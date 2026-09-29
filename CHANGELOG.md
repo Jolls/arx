@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.26] - 2026-09-28
+### Changed
+- Data-access layer: the Reports dashboard and reports (spend, on-time delivery, PO cycle time, data-quality gaps, form pickers) and the Settings → Utilities data-integrity checks moved to sqlc in the new `internal/reports`; the date-range filter is now nullable query parameters instead of string-built SQL, and `reports.go` and `utilities.go` are free of raw SQL ([#246](https://github.com/Jolls/arx/issues/246))
+- Data-access layer: the unit-of-measure list, the `app_config` reads/writes (including the schema-version check, whose `CheckSchemaVersion` now takes a reader function) and the paste-image record lookup moved to sqlc in `internal/parts`, the new `internal/appconfig` and the new `internal/records`; `api.go` is now free of raw SQL, and `handlers.go` keeps only the DB logging wrappers ([#248](https://github.com/Jolls/arx/issues/248))
+
+### Fixed
+- The Utilities "Purchase order is_active drift" check failed outright when any purchase order had a NULL status or `is_active`; such rows are now read as an empty status / false and the check completes ([#246](https://github.com/Jolls/arx/issues/246))
+- The Yield Summary and Failure Modes form pickers silently omitted a form whose part had no description; it is now listed ([#246](https://github.com/Jolls/arx/issues/246))
+
 ## [0.8.25] - 2026-09-28
 ### Changed
 - Data-access layer: the inventory domain (stock ledger, lots, builds, serialized units and genealogy trace) moved to sqlc in the new `internal/inventory`; `inventory.go`, `lot.go`, `unit.go` and `build.go` are now free of raw SQL, and the receiving, adjustment, build and test-record paths keep their single transactions ([#222](https://github.com/Jolls/arx/issues/222))

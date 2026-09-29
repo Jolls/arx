@@ -22,6 +22,7 @@ import (
 	"arx/arx_go/models"
 	"arx/internal/attachments"
 	"arx/internal/folderpick"
+	"arx/internal/records"
 	"arx/internal/urlutil"
 )
 
@@ -570,16 +571,8 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 
 	// Check the record before doing any decode work, so a locked/missing record
 	// is rejected cheaply rather than after paying for the base64 decode.
-	var serial, partNumber string
-	var locked bool
-	err = h.queryRowContext(r.Context(), fmt.Sprintf(`
-		SELECT r.serial_number, r.is_locked, pn.part_number
-		FROM %s r
-		JOIN %s f ON r.form_id = f.id
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE r.id = $1`,
-		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()), recordID).
-		Scan(&serial, &locked, &partNumber)
+	rec, err := records.New(handlerDB{h}).GetHeader(r.Context(), recordID)
+	serial, partNumber, locked := rec.Serial, rec.PartNumber, rec.Locked
 	if err == sql.ErrNoRows {
 		writeJSONError(w, http.StatusNotFound, "Record not found")
 		return

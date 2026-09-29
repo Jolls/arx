@@ -397,3 +397,6 @@ WHERE NOT EXISTS (
 -- name: DeactivatePrices :exec
 UPDATE price SET is_active = FALSE
 WHERE part_id = sqlc.arg(part_id) AND supplier_id = sqlc.arg(supplier_id) AND pack_size = sqlc.arg(pack_size)::numeric AND is_active = TRUE;
+
+-- name: ListUOMs :many
+SELECT uom_id, abbreviation, display_name, unit_type FROM uom ORDER BY unit_type, abbreviation;

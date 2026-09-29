@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
-	"strings"
 	"time"
+
+	"arx/internal/reports"
 )
 
 // dashboardActivityItem is one row in the Reports dashboard's recent-activity
@@ -24,21 +24,11 @@ type dashboardActivityItem struct {
 
 // dashboardFailureModeItem is one row in the Reports dashboard's top-failing-
 // steps summary — a single test step on a single form (issue #245).
-type dashboardFailureModeItem struct {
-	FormID       int
-	PartNumber   string
-	Parameter    string
-	FailureCount int
-}
+type dashboardFailureModeItem = reports.FailureMode
 
 // dashboardYieldItem is one row in the Reports dashboard's lowest-yield
 // summary — a single form's all-time first-pass yield (issue #244).
-type dashboardYieldItem struct {
-	FormID     int
-	PartNumber string
-	Total      int
-	Passed     int
-}
+type dashboardYieldItem = reports.FormYield
 
 // dashboardStaleWIPItem is one row in the Reports dashboard's Stale WIP
 // Records summary — a test record left unlocked (in progress) longer than
@@ -60,12 +50,7 @@ type dashboardPendingApprovalItem struct {
 // dashboardBelowReorderItem is one row in the Reports dashboard's Below Reorder
 // Point card — a part whose on-hand stock has fallen below its reorder minimum
 // (issue #273, INV-2).
-type dashboardBelowReorderItem struct {
-	PartID      int
-	PartNumber  string
-	StockOnHand float64
-	ReorderMin  float64
-}
+type dashboardBelowReorderItem = reports.BelowReorder
 
 // staleWIPThresholdDays is the age (in days since creation) past which an
 // unlocked test record is flagged as stale on the Reports dashboard.
@@ -74,14 +59,6 @@ const staleWIPThresholdDays = 14
 // ageDays returns the number of whole days between t and now.
 func ageDays(t time.Time) int {
 	return int(time.Since(t).Hours() / 24)
-}
-
-// FPYPct returns the first-pass yield percentage, or 0 if there are no records.
-func (item dashboardYieldItem) FPYPct() float64 {
-	if item.Total == 0 {
-		return 0
-	}
-	return float64(item.Passed) / float64(item.Total) * 100
 }
 
 // ReportsDashboard is the Reports tab landing page (issue #282, RPT-1).
@@ -147,22 +124,15 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 // dashboardOpenPOCount counts POs in the 'open' lifecycle status (#271),
 // matching the filter offered on the PO list's Status column.
 func (h *Handler) dashboardOpenPOCount(ctx context.Context) (int, error) {
-	var n int
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE status = 'open'`, h.cfg().POTable()),
-	).Scan(&n)
-	return n, err
+	return h.reports().OpenPOCount(ctx)
 }
+
+func (h *Handler) reports() *reports.Service { return reports.New(handlerDB{h}) }
 
 // dashboardPOsReceivedThisMonth counts distinct POs with at least one line
 // received since the first of the current calendar month.
 func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error) {
-	var n int
-	err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(DISTINCT po_id) FROM %s WHERE date_received >= date_trunc('month', CURRENT_DATE)::date`,
-		h.cfg().POLineTable()),
-	).Scan(&n)
-	return n, err
+	return h.reports().POsReceivedThisMonth(ctx)
 }
 
 // dashboardTopFailureModes lists the top failing test steps across all forms,
@@ -170,34 +140,7 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 // the per-form Failure Modes report (arx_go/records_failure_modes.go, issue
 // #245).
 func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]dashboardFailureModeItem, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT f.id, pn.part_number, (SELECT r2.parameter FROM %s r2
-			WHERE r2.form_row_id = res.form_row_id
-			ORDER BY r2.id DESC LIMIT 1) AS parameter,
-			SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) AS failure_count
-		FROM %s res
-		JOIN %s trec ON res.form_record_id = trec.id
-		JOIN %s f ON trec.form_id = f.id
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE trec.is_active = TRUE AND res.pass_fail IS NOT NULL
-		GROUP BY f.id, pn.part_number, res.form_row_id
-		HAVING SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) > 0
-		ORDER BY failure_count DESC LIMIT $1`,
-		h.cfg().ResultsTable(), h.cfg().ResultsTable(), h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()), limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var items []dashboardFailureModeItem
-	for rows.Next() {
-		var item dashboardFailureModeItem
-		if err := rows.Scan(&item.FormID, &item.PartNumber, &item.Parameter, &item.FailureCount); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return h.reports().TopFailureModes(ctx, limit)
 }
 
 // dashboardLowestYieldForms lists the forms with the lowest all-time
@@ -207,141 +150,50 @@ func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]da
 // record's outcome depends on all of its result rows (any failure fails the
 // record), matching computeYieldBuckets in records_yield.go.
 func (h *Handler) dashboardLowestYieldForms(ctx context.Context, limit int) ([]dashboardYieldItem, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT trec.form_id, pn.part_number, MAX(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END)
-		FROM %s trec
-		JOIN %s f ON trec.form_id = f.id
-		JOIN %s pn ON f.part_number_id = pn.id
-		LEFT JOIN %s res ON res.form_record_id = trec.id
-		WHERE trec.is_active = TRUE
-		GROUP BY trec.id, trec.form_id, pn.part_number`,
-		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable(), h.cfg().ResultsTable()))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	byForm := make(map[int]*dashboardYieldItem)
-	var order []int
-	for rows.Next() {
-		var formID, anyFail int
-		var partNumber string
-		if err := rows.Scan(&formID, &partNumber, &anyFail); err != nil {
-			return nil, err
-		}
-		item, ok := byForm[formID]
-		if !ok {
-			item = &dashboardYieldItem{FormID: formID, PartNumber: partNumber}
-			byForm[formID] = item
-			order = append(order, formID)
-		}
-		item.Total++
-		if anyFail == 0 {
-			item.Passed++
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	items := make([]dashboardYieldItem, 0, len(order))
-	for _, formID := range order {
-		items = append(items, *byForm[formID])
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].FPYPct() < items[j].FPYPct() })
-	if len(items) > limit {
-		items = items[:limit]
-	}
-	return items, nil
+	return h.reports().LowestYieldForms(ctx, limit)
 }
 
 // dashboardStaleWIPRecords lists unlocked test records older than
 // staleWIPThresholdDays, oldest first, so forgotten/abandoned test runs
 // surface on the Reports dashboard (issue #658, RPT-7).
 func (h *Handler) dashboardStaleWIPRecords(ctx context.Context, limit int) ([]dashboardStaleWIPItem, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT trec.id, trec.form_id, pn.part_number, trec.created_at
-		FROM %s trec
-		JOIN %s f ON trec.form_id = f.id
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE trec.is_active = TRUE AND trec.is_locked = FALSE
-			AND trec.created_at <= CURRENT_TIMESTAMP - make_interval(days => $2)
-		ORDER BY trec.created_at ASC LIMIT $1`,
-		h.cfg().RecordsTable(), h.cfg().FormsTable(), h.cfg().PartsTable()), limit, staleWIPThresholdDays)
+	rows, err := h.reports().StaleWIPRecords(ctx, limit, staleWIPThresholdDays)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	var items []dashboardStaleWIPItem
-	for rows.Next() {
-		var item dashboardStaleWIPItem
-		var createdAt time.Time
-		if err := rows.Scan(&item.RecordID, &item.FormID, &item.PartNumber, &createdAt); err != nil {
-			return nil, err
-		}
-		item.AgeDays = ageDays(createdAt)
-		items = append(items, item)
+	for _, r := range rows {
+		items = append(items, dashboardStaleWIPItem{
+			RecordID: r.RecordID, FormID: r.FormID, PartNumber: r.PartNumber, AgeDays: ageDays(r.CreatedAt),
+		})
 	}
-	return items, rows.Err()
+	return items, nil
 }
 
 // dashboardPendingApprovalPOs lists POs awaiting approval, oldest first, as a
 // bottleneck indicator on the Reports dashboard (issue #658, RPT-7). Age is
 // measured from the most recent 'submitted' approval event on each PO.
 func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([]dashboardPendingApprovalItem, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT po.number,
-			(SELECT MAX(h.changed_at) FROM %s h
-			 WHERE h.po_id = po.id AND h.event_type = 'approval' AND h.action = 'submitted') AS submitted_at
-		FROM %s po
-		WHERE po.approval_status = 'pending'
-		ORDER BY submitted_at ASC LIMIT $1`,
-		h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
+	rows, err := h.reports().PendingApprovalPOs(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	var items []dashboardPendingApprovalItem
-	for rows.Next() {
-		var item dashboardPendingApprovalItem
-		var submittedAt sql.NullTime
-		if err := rows.Scan(&item.Number, &submittedAt); err != nil {
-			return nil, err
-		}
-		if submittedAt.Valid {
-			item.AgeDays = ageDays(submittedAt.Time)
+	for _, r := range rows {
+		item := dashboardPendingApprovalItem{Number: r.Number}
+		if r.SubmittedAt != nil {
+			item.AgeDays = ageDays(*r.SubmittedAt)
 		}
 		items = append(items, item)
 	}
-	return items, rows.Err()
+	return items, nil
 }
 
 // dashboardBelowReorderParts lists parts whose on-hand stock has fallen below
 // their reorder minimum, most-depleted first (issue #273, INV-2). Parts with no
 // reorder point set (reorder_min IS NULL) are excluded.
 func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]dashboardBelowReorderItem, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT id, part_number, stock_on_hand, reorder_min
-		FROM %s
-		WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
-		ORDER BY (stock_on_hand - reorder_min) ASC LIMIT $1`,
-		h.cfg().PartsTable()), limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var items []dashboardBelowReorderItem
-	for rows.Next() {
-		var item dashboardBelowReorderItem
-		if err := rows.Scan(&item.PartID, &item.PartNumber, &item.StockOnHand, &item.ReorderMin); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return h.reports().BelowReorderParts(ctx, limit)
 }
 
 // dashboardRecentActivity merges the most recently modified parts with the
@@ -349,65 +201,44 @@ func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]
 func (h *Handler) dashboardRecentActivity(ctx context.Context, limit int) ([]dashboardActivityItem, error) {
 	var items []dashboardActivityItem
 
-	partRows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, part_number, description, modified_date
-		 FROM %s WHERE modified_date IS NOT NULL ORDER BY modified_date DESC LIMIT $1`,
-		h.cfg().PartsTable()), limit)
+	partRows, err := h.reports().RecentModifiedParts(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
 	loc := h.userLocationCtx(ctx)
-	for partRows.Next() {
-		var id int
-		var partNumber, description sql.NullString
-		var modified time.Time // query filters modified_date IS NOT NULL
-		if err := partRows.Scan(&id, &partNumber, &description, &modified); err != nil {
-			partRows.Close()
-			return nil, err
-		}
-		label := partNumber.String
-		if description.String != "" {
-			label += " — " + description.String
+	for _, p := range partRows {
+		modified := p.Modified
+		label := p.PartNumber
+		if p.Description != "" {
+			label += " — " + p.Description
 		}
 		items = append(items, dashboardActivityItem{
-			Label: label, URL: fmt.Sprintf("/part/%d", id),
+			Label: label, URL: fmt.Sprintf("/part/%d", p.ID),
 			// modified_date is a DATE: place it at midnight in the user's zone so it
 			// sorts correctly against PO changed_at instants (#192).
 			Detail: "modified", When: formatDate(&modified),
 			Timestamp: time.Date(modified.Year(), modified.Month(), modified.Day(), 0, 0, 0, 0, loc),
 		})
 	}
-	partRows.Close()
 
-	poRows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT h.po_id, po.number, h.event_type, h.to_status, h.action, h.changed_at
-		 FROM %s h JOIN %s po ON h.po_id = po.id ORDER BY h.changed_at DESC LIMIT $1`,
-		h.cfg().POHistoryTable(), h.cfg().POTable()), limit)
+	poRows, err := h.reports().RecentPOEvents(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
-	for poRows.Next() {
-		var poID int
-		var number, eventType, toStatus, action sql.NullString
-		var changedAt time.Time
-		if err := poRows.Scan(&poID, &number, &eventType, &toStatus, &action, &changedAt); err != nil {
-			poRows.Close()
-			return nil, err
-		}
-		detail := eventType.String
+	for _, e := range poRows {
+		detail := e.EventType
 		switch {
-		case eventType.String == "status" && toStatus.String != "":
-			detail = "→ " + toStatus.String
-		case eventType.String == "approval" && action.String != "":
-			detail = action.String
+		case e.EventType == "status" && e.ToStatus != "":
+			detail = "→ " + e.ToStatus
+		case e.EventType == "approval" && e.Action != "":
+			detail = e.Action
 		}
-		local := changedAt.In(loc)
+		local := e.ChangedAt.In(loc)
 		items = append(items, dashboardActivityItem{
-			Label: "PO " + number.String, URL: fmt.Sprintf("/po/%d", poID),
-			Detail: detail, When: formatDate(&local), Timestamp: changedAt,
+			Label: "PO " + e.Number, URL: fmt.Sprintf("/po/%d", e.POID),
+			Detail: detail, When: formatDate(&local), Timestamp: e.ChangedAt,
 		})
 	}
-	poRows.Close()
 
 	sort.Slice(items, func(i, j int) bool { return items[i].Timestamp.After(items[j].Timestamp) })
 	if len(items) > limit {
@@ -477,66 +308,19 @@ func resolveSpendDateRange(q url.Values, now time.Time) reportDateRange {
 	return rng
 }
 
-// whereClause builds the date-range WHERE fragment (starting with " AND") and
-// its args for filtering the given column expression (e.g. "po.date_ordered",
-// "poh.changed_at"), following the same conditional-bound pattern as
-// recordFilters.whereClauses.
-func (rng reportDateRange) whereClause(column string, startArg int) (string, []any) {
-	var sb strings.Builder
-	var args []any
-	n := startArg
-
-	if !rng.From.IsZero() {
-		fmt.Fprintf(&sb, " AND %s >= $%d", column, n)
-		args = append(args, rng.From)
-		n++
-	}
-	if !rng.To.IsZero() {
-		fmt.Fprintf(&sb, " AND %s < $%d", column, n)
-		args = append(args, rng.To.AddDate(0, 0, 1))
-		n++
-	}
-	return sb.String(), args
+// serviceRange is the reports service's view of the date-range filter.
+func (rng reportDateRange) serviceRange() reports.DateRange {
+	return reports.DateRange{From: rng.From, To: rng.To}
 }
 
-type spendSupplierRow struct {
-	SupplierName string
-	TotalSpend   float64
-}
+type spendSupplierRow = reports.SupplierSpend
 
-type spendPartRow struct {
-	PartNumber  string
-	Description string
-	TotalSpend  float64
-}
+type spendPartRow = reports.PartSpend
 
 // querySpendBySupplier totals PO line spend (qty * unit_cost) by supplier
 // name over the given date range, sorted by total spend descending.
 func (h *Handler) querySpendBySupplier(ctx context.Context, rng reportDateRange) ([]spendSupplierRow, error) {
-	where, args := rng.whereClause("po.date_ordered", 1)
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT po.supplier_name, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.id
-		WHERE 1=1%s
-		GROUP BY po.supplier_name
-		ORDER BY total_spend DESC
-	`, h.cfg().POLineTable(), h.cfg().POTable(), where), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []spendSupplierRow
-	for rows.Next() {
-		var supplierName sql.NullString
-		var total float64
-		if err := rows.Scan(&supplierName, &total); err != nil {
-			return nil, err
-		}
-		result = append(result, spendSupplierRow{SupplierName: supplierName.String, TotalSpend: total})
-	}
-	return result, rows.Err()
+	return h.reports().SpendBySupplier(ctx, rng.serviceRange())
 }
 
 // querySpendByPart totals PO line spend (qty * unit_cost) by part over the
@@ -544,33 +328,7 @@ func (h *Handler) querySpendBySupplier(ctx context.Context, rng reportDateRange)
 // part_id (freeform PO lines) are grouped by their part_number_snapshot
 // text so their spend stays accounted for.
 func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]spendPartRow, error) {
-	where, args := rng.whereClause("po.date_ordered", 1)
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT COALESCE(p.part_number, pol.part_number_snapshot) AS part_number,
-			p.description, COALESCE(SUM(pol.qty * pol.unit_cost), 0) AS total_spend
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.id
-		LEFT JOIN %s p ON pol.part_id = p.id
-		WHERE 1=1%s
-		GROUP BY COALESCE(CAST(pol.part_id AS VARCHAR(20)), CONCAT('snap:', pol.part_number_snapshot)),
-			p.part_number, p.description, pol.part_number_snapshot
-		ORDER BY total_spend DESC
-	`, h.cfg().POLineTable(), h.cfg().POTable(), h.cfg().PartsTable(), where), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []spendPartRow
-	for rows.Next() {
-		var partNumber, description sql.NullString
-		var total float64
-		if err := rows.Scan(&partNumber, &description, &total); err != nil {
-			return nil, err
-		}
-		result = append(result, spendPartRow{PartNumber: partNumber.String, Description: description.String, TotalSpend: total})
-	}
-	return result, rows.Err()
+	return h.reports().SpendByPart(ctx, rng.serviceRange())
 }
 
 // ReportsSpend is the Spend Analysis report page — GET /reports/spend.
@@ -603,62 +361,13 @@ func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
 // po_line rows with both a quoted lead_time_days and a date_received are
 // evaluated; lines with no quote or not yet received are excluded, not
 // counted late.
-type onTimeSupplierRow struct {
-	SupplierName string
-	TotalLines   int
-	OnTimeLines  int
-	OnTimePct    float64 // OnTimeLines/TotalLines*100; TotalLines is always > 0 for a returned row
-	AvgDaysLate  float64 // signed: positive = late, negative = early
-}
+type onTimeSupplierRow = reports.OnTimeSupplier
 
 // queryOnTimeDelivery ranks suppliers by on-time delivery performance over
 // the given date range (filtered on purchase_order.date_ordered), worst
 // on-time % first since this is a watchlist/exception report.
 func (h *Handler) queryOnTimeDelivery(ctx context.Context, rng reportDateRange) ([]onTimeSupplierRow, error) {
-	where, args := rng.whereClause("po.date_ordered", 1)
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT
-			po.supplier_name,
-			COUNT(*) AS total_lines,
-			SUM(CASE WHEN pol.date_received <= po.date_ordered + pol.lead_time_days THEN 1 ELSE 0 END) AS on_time_lines,
-			AVG(CAST(pol.date_received - (po.date_ordered + pol.lead_time_days) AS DOUBLE PRECISION)) AS avg_days_late
-		FROM %s pol
-		JOIN %s po ON pol.po_id = po.id
-		WHERE pol.lead_time_days IS NOT NULL
-		  AND pol.date_received IS NOT NULL
-		  AND po.date_ordered IS NOT NULL%s
-		GROUP BY po.supplier_name
-	`, h.cfg().POLineTable(), h.cfg().POTable(), where), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []onTimeSupplierRow
-	for rows.Next() {
-		var supplierName sql.NullString
-		var row onTimeSupplierRow
-		var avgDaysLate sql.NullFloat64
-		if err := rows.Scan(&supplierName, &row.TotalLines, &row.OnTimeLines, &avgDaysLate); err != nil {
-			return nil, err
-		}
-		row.SupplierName = supplierName.String
-		row.AvgDaysLate = avgDaysLate.Float64
-		// TotalLines is a COUNT(*) under GROUP BY, so it's always >= 1 here.
-		row.OnTimePct = float64(row.OnTimeLines) / float64(row.TotalLines) * 100
-		result = append(result, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].OnTimePct != result[j].OnTimePct {
-			return result[i].OnTimePct < result[j].OnTimePct
-		}
-		return result[i].SupplierName < result[j].SupplierName
-	})
-	return result, nil
+	return h.reports().OnTimeDelivery(ctx, rng.serviceRange())
 }
 
 // ReportsOnTime is the Supplier On-Time Delivery report page — GET /reports/on-time.
@@ -707,11 +416,7 @@ func (h *Handler) ReportsOnTimeExportCSV(w http.ResponseWriter, r *http.Request)
 // transitions with a recorded exit (a later purchase_order_history row for
 // the same po_id) are averaged — POs still sitting in a stage are excluded
 // (open-ended, no end date to measure).
-type cycleTimeStageRow struct {
-	Stage   string
-	POCount int
-	AvgDays float64
-}
+type cycleTimeStageRow = reports.CycleStage
 
 // queryPOCycleTime computes the average time POs spend in each lifecycle
 // stage, filtered on the stage-entry date (entered_at) over the given date
@@ -723,47 +428,7 @@ type cycleTimeStageRow struct {
 // progression (not alphabetical or by avg_days) via the CASE expression
 // below; GROUP BY already omits any stage absent from the data.
 func (h *Handler) queryPOCycleTime(ctx context.Context, rng reportDateRange) ([]cycleTimeStageRow, error) {
-	where, args := rng.whereClause("entered_at", 1)
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		WITH stage_durations AS (
-			SELECT
-				poh.po_id,
-				poh.to_status AS stage,
-				poh.changed_at AS entered_at,
-				LEAD(poh.changed_at) OVER (PARTITION BY poh.po_id ORDER BY poh.changed_at, poh.id) AS exited_at
-			FROM %s poh
-			WHERE poh.event_type = 'status'
-			  AND poh.to_status IN ('draft','open','sent','partially_received','closed')
-		)
-		SELECT
-			stage,
-			COUNT(*) AS po_count,
-			AVG(CAST(EXTRACT(EPOCH FROM (date_trunc('hour', exited_at AT TIME ZONE 'UTC') - date_trunc('hour', entered_at AT TIME ZONE 'UTC'))) AS DOUBLE PRECISION) / 3600.0 / 24.0) AS avg_days
-		FROM stage_durations
-		WHERE exited_at IS NOT NULL%s
-		GROUP BY stage
-		ORDER BY CASE stage
-			WHEN 'draft' THEN 1
-			WHEN 'open' THEN 2
-			WHEN 'sent' THEN 3
-			WHEN 'partially_received' THEN 4
-			WHEN 'closed' THEN 5
-		END
-	`, h.cfg().POHistoryTable(), where), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []cycleTimeStageRow
-	for rows.Next() {
-		var row cycleTimeStageRow
-		if err := rows.Scan(&row.Stage, &row.POCount, &row.AvgDays); err != nil {
-			return nil, err
-		}
-		result = append(result, row)
-	}
-	return result, rows.Err()
+	return h.reports().POCycleTime(ctx, rng.serviceRange())
 }
 
 // ReportsCycleTime is the PO Cycle Time report page — GET /reports/cycle-time.
@@ -806,47 +471,20 @@ func (h *Handler) ReportsCycleTimeExportCSV(w http.ResponseWriter, r *http.Reque
 // Gaps report — shared shape for all three gap checks (Category is
 // redundant/unused for the missing-default-supplier check, which is already
 // scoped to BUY only).
-type dataQualityPartRow struct {
-	PartNumber  string
-	Description string
-	Category    string
-}
-
-func (h *Handler) queryDataQualityParts(ctx context.Context, where string) ([]dataQualityPartRow, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT p.part_number, p.description, p.category
-		FROM %s p
-		WHERE p.is_active = TRUE AND %s
-		ORDER BY p.part_number ASC
-	`, h.cfg().PartsTable(), where))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []dataQualityPartRow
-	for rows.Next() {
-		var partNumber, description, category sql.NullString
-		if err := rows.Scan(&partNumber, &description, &category); err != nil {
-			return nil, err
-		}
-		result = append(result, dataQualityPartRow{PartNumber: partNumber.String, Description: description.String, Category: category.String})
-	}
-	return result, rows.Err()
-}
+type dataQualityPartRow = reports.DataQualityPart
 
 // queryPartsNoAttachments lists active BUY/ASM/DWG parts with no attachments
 // (part.attachment_count is a trigger-maintained denormalized column, so it's
 // selected directly rather than re-COUNTing part_attachment).
 func (h *Handler) queryPartsNoAttachments(ctx context.Context) ([]dataQualityPartRow, error) {
-	return h.queryDataQualityParts(ctx, "p.category IN ('BUY','ASM','DWG') AND p.attachment_count = 0")
+	return h.reports().PartsNoAttachments(ctx)
 }
 
 // queryPartsMissingDefaultSupplier lists active BUY parts with no default
 // supplier set. Scoped to BUY only — ASM/DWG parts are typically manufactured
 // in-house and don't need a direct purchasing default supplier.
 func (h *Handler) queryPartsMissingDefaultSupplier(ctx context.Context) ([]dataQualityPartRow, error) {
-	return h.queryDataQualityParts(ctx, "p.category = 'BUY' AND p.default_supplier_id IS NULL")
+	return h.reports().PartsMissingDefaultSupplier(ctx)
 }
 
 // queryPartsStaleRollup lists active parts with no cost rollup ever computed.
@@ -855,7 +493,7 @@ func (h *Handler) queryPartsMissingDefaultSupplier(ctx context.Context) ([]dataQ
 // unambiguous reading of "missing." Not scoped to BUY/ASM/DWG since any
 // active part can carry a rollup cost.
 func (h *Handler) queryPartsStaleRollup(ctx context.Context) ([]dataQualityPartRow, error) {
-	return h.queryDataQualityParts(ctx, "(p.last_rollup_cost IS NULL OR p.last_rollup_at IS NULL)")
+	return h.reports().PartsStaleRollup(ctx)
 }
 
 // ReportsDataQuality is the Attachment / Data Quality Gaps report page — GET
@@ -932,36 +570,12 @@ func (h *Handler) ReportsDataQualityStaleRollupExportCSV(w http.ResponseWriter, 
 
 // formOption is one form listed on a per-form report picker (e.g. Reports >
 // Yield Summary, issue #244; Reports > Failure Modes, issue #245).
-type formOption struct {
-	ID          int
-	PartNumber  string
-	Description string
-}
+type formOption = reports.FormOption
 
 // loadActiveFormOptions lists active forms for a per-form report picker,
 // shared by ReportsYieldPicker and ReportsFailureModesPicker.
 func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, error) {
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT f.id, pn.part_number, pn.description
-		FROM %s f
-		JOIN %s pn ON f.part_number_id = pn.id
-		WHERE pn.category = 'FORM' AND pn.is_active = TRUE AND f.is_active = TRUE
-		ORDER BY pn.part_number ASC`,
-		h.cfg().FormsTable(), h.cfg().PartsTable()))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var forms []formOption
-	for rows.Next() {
-		var f formOption
-		if err := rows.Scan(&f.ID, &f.PartNumber, &f.Description); err != nil {
-			continue
-		}
-		forms = append(forms, f)
-	}
-	return forms, rows.Err()
+	return h.reports().ActiveFormOptions(ctx)
 }
 
 // ReportsYieldPicker is the Reports tab's entry point into the per-form yield

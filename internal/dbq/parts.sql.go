@@ -1686,6 +1686,38 @@ func (q *Queries) ListSupplierParts(ctx context.Context, partID int) ([]ListSupp
 	return items, nil
 }
 
+const listUOMs = `-- name: ListUOMs :many
+SELECT uom_id, abbreviation, display_name, unit_type FROM uom ORDER BY unit_type, abbreviation
+`
+
+func (q *Queries) ListUOMs(ctx context.Context) ([]Uom, error) {
+	rows, err := q.db.QueryContext(ctx, listUOMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Uom
+	for rows.Next() {
+		var i Uom
+		if err := rows.Scan(
+			&i.UomID,
+			&i.Abbreviation,
+			&i.DisplayName,
+			&i.UnitType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWhereUsed = `-- name: ListWhereUsed :many
 SELECT pl.line_number, pl.qty, pl.parent_part_id,
        pn.part_number, COALESCE(pn.description, '') AS description,
