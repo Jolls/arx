@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"arx/internal/inventory"
+	"arx/internal/records"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -166,7 +167,7 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error tracing lot descendants: "+err.Error())
 		return
 	}
-	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), "lot_id", lotID)
+	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), records.ScopeLot, lotID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving record types: "+err.Error())
 		return
@@ -187,7 +188,7 @@ func (h *Handler) LotRecordsRows(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	out, err := h.scopedRecordsRows(r.Context(), "lot_id", lotID)
+	out, err := h.scopedRecordsRows(r.Context(), records.ScopeLot, lotID)
 	if err != nil {
 		serverError(w, "database error", err)
 		return

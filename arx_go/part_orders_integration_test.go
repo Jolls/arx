@@ -26,22 +26,21 @@ type partOrdersFixture struct {
 func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, po, pol := "part", "purchase_order", "po_line"
 	base := smokeUniq("IPO") // purchase_order.number is VARCHAR(32)
 	f.PO = map[string]string{"A": base + "-A", "B": base + "-B", "C": base + "-C"}
 	f.Sup = map[int]string{}
 	var poIDs []int
 	cleanup = func() {
 		for _, id := range poIDs {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_id=$1`, pol), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, po), id)
+			smokeExec(ctx, h, `DELETE FROM po_line WHERE po_id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM purchase_order WHERE id=$1`, id)
 		}
 		for _, id := range []int{f.P, f.Q, f.R} {
-			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `UPDATE part SET primary_attachment_id=NULL WHERE id=$1`, id)
 			for _, tbl := range []string{"part_attachment", "inventory_transaction", "price", "supplier_part"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
 	}
 	scan := func(dst *int, q string, args ...any) {
@@ -60,16 +59,16 @@ func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func
 	}
 	for _, id := range []int{1002, 1003, 1004} {
 		var name string
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, "company"), id).Scan(&name); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT name FROM company WHERE id=$1`, id).Scan(&name); err != nil {
 			t.Fatalf("company %d: %v", id, err)
 		}
 		f.Sup[id] = name
 	}
 
-	scan(&f.P, fmt.Sprintf(`INSERT INTO %s (part_number, category, default_supplier_id, current_cost, last_rollup_cost, last_rollup_at)
-		VALUES ($1,'BUY',1002,2,1.8,'2026-02-03T04:05:06Z') RETURNING id`, pn), base+"-P")
-	scan(&f.Q, fmt.Sprintf(`INSERT INTO %s (part_number, category) VALUES ($1,'BUY') RETURNING id`, pn), base+"-Q")
-	scan(&f.R, fmt.Sprintf(`INSERT INTO %s (part_number, category, default_supplier_id) VALUES ($1,'BUY',1003) RETURNING id`, pn), base+"-R")
+	scan(&f.P, `INSERT INTO part (part_number, category, default_supplier_id, current_cost, last_rollup_cost, last_rollup_at)
+		VALUES ($1,'BUY',1002,2,1.8,'2026-02-03T04:05:06Z') RETURNING id`, base+"-P")
+	scan(&f.Q, `INSERT INTO part (part_number, category) VALUES ($1,'BUY') RETURNING id`, base+"-Q")
+	scan(&f.R, `INSERT INTO part (part_number, category, default_supplier_id) VALUES ($1,'BUY',1003) RETURNING id`, base+"-R")
 
 	for _, c := range []struct {
 		key, sup, ordered, closed, status string
@@ -82,35 +81,32 @@ func seedPartOrders(t *testing.T, h *Handler) (f partOrdersFixture, cleanup func
 		{"C", "Sup C", "", "", "draft", 1002, 1, 9, "undated", "VPN3"},
 	} {
 		var id int
-		scan(&id, fmt.Sprintf(`INSERT INTO %s (number, supplier_id, supplier_name, date_ordered, date_closed, status)
-			VALUES ($1,$2,NULLIF($3,''),NULLIF($4,'')::date,NULLIF($5,'')::date,$6) RETURNING id`, po),
+		scan(&id, `INSERT INTO purchase_order (number, supplier_id, supplier_name, date_ordered, date_closed, status)
+			VALUES ($1,$2,NULLIF($3,''),NULLIF($4,'')::date,NULLIF($5,'')::date,$6) RETURNING id`,
 			f.PO[c.key], c.supID, c.sup, c.ordered, c.closed, c.status)
 		poIDs = append(poIDs, id)
-		exec(fmt.Sprintf(`INSERT INTO %s (po_id, part_id, line_number, qty, unit_cost, description, vendor_part_number)
-			VALUES ($1,$2,1,$3,$4,$5,$6)`, pol), id, f.P, c.qty, c.cost, c.desc, c.vpn)
+		exec(`INSERT INTO po_line (po_id, part_id, line_number, qty, unit_cost, description, vendor_part_number)
+			VALUES ($1,$2,1,$3,$4,$5,$6)`, id, f.P, c.qty, c.cost, c.desc, c.vpn)
 	}
 
-	txn := "inventory_transaction"
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, txn_type, qty, txn_date) VALUES
-		($1,'receipt',5,'2026-01-15'), ($1,'issue',-2,'2026-01-20'), ($1,'adjustment',1.5,'2026-01-20')`, txn), f.P)
+	exec(`INSERT INTO inventory_transaction (part_id, txn_type, qty, txn_date) VALUES
+		($1,'receipt',5,'2026-01-15'), ($1,'issue',-2,'2026-01-20'), ($1,'adjustment',1.5,'2026-01-20')`, f.P)
 
-	sp := "supplier_part"
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn, supplier_desc, preference) VALUES
-		($1,1002,'PN-B',NULL,2), ($1,1002,'PN-A','Desc A',1), ($1,1003,'PN-X','other',0)`, sp), f.P)
+	exec(`INSERT INTO supplier_part (part_id, supplier_id, supplier_pn, supplier_desc, preference) VALUES
+		($1,1002,'PN-B',NULL,2), ($1,1002,'PN-A','Desc A',1), ($1,1003,'PN-X','other',0)`, f.P)
 
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, pack_size, is_active, effective_date) VALUES
+	exec(`INSERT INTO price (part_id, supplier_id, price_ea, pack_size, is_active, effective_date) VALUES
 		($1,1002,2,1,TRUE,'2026-01-05'), ($1,1002,1.5,10,TRUE,'2026-01-06'), ($1,1002,0.5,100,FALSE,'2026-01-07'),
-		($1,1003,1,1,TRUE,NULL), ($1,1004,NULL,NULL,TRUE,'2026-01-08')`, "price"), f.P)
+		($1,1003,1,1,TRUE,NULL), ($1,1004,NULL,NULL,TRUE,'2026-01-08')`, f.P)
 
-	att := "part_attachment"
-	scan(&f.PrimaryAtt, fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, part_revision, sort_order)
-		VALUES ($1,'https://example.com/p.pdf','Drawing','B',1) RETURNING id`, att), f.P)
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, sort_order, is_active) VALUES
+	scan(&f.PrimaryAtt, `INSERT INTO part_attachment (part_id, file_name, category, part_revision, sort_order)
+		VALUES ($1,'https://example.com/p.pdf','Drawing','B',1) RETURNING id`, f.P)
+	exec(`INSERT INTO part_attachment (part_id, file_name, category, sort_order, is_active) VALUES
 		($1,'LOCAL:itest\photo1.jpg','Photo',2,TRUE), ($1,'LOCAL:itest\thumb.png',$2,3,TRUE),
 		($1,'LOCAL:itest\dir\',NULL,4,TRUE), ($1,'https://example.com/x',NULL,5,TRUE),
 		($1,'LOCAL:itest\photo2.png',NULL,NULL,TRUE), ($1,'plain text',NULL,6,TRUE),
-		($1,'LOCAL:itest\gone.jpg','Photo',0,FALSE)`, att), f.P, thumbnailCategory)
-	exec(fmt.Sprintf(`UPDATE %s SET primary_attachment_id=$2 WHERE id=$1`, pn), f.P, f.PrimaryAtt)
+		($1,'LOCAL:itest\gone.jpg','Photo',0,FALSE)`, f.P, thumbnailCategory)
+	exec(`UPDATE part SET primary_attachment_id=$2 WHERE id=$1`, f.P, f.PrimaryAtt)
 	return f, cleanup
 }
 

@@ -474,7 +474,7 @@ var backupNames = []string{
 	"part", "bom", "company", "contact", "purchase_order", "po_line", "part_attachment", "price",
 	"mfg_part", "supplier_part", "company_attachment", "uom",
 	"form", "form_record", "result", "form_row", "form_events", "record_events",
-	"named_queries", "form_row_history", "inventory_transaction", "build", "lot",
+	"named_queries", "form_row_history", "inventory_transaction", "build", "lot", "unit",
 	"genealogy", "purchase_order_history", "record_event_results", "part_category", "attachment_category",
 	"users", "app_config",
 }

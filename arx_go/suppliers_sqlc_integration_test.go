@@ -30,7 +30,6 @@ type supFixture struct {
 func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co, cn, pn, po, pol := "company", "contact", "part", "purchase_order", "po_line"
 	base := smokeUniq("SQ") // purchase_order.number is VARCHAR(32)
 	f.Name = base + "-co"
 	f.PO = map[string]string{}
@@ -39,22 +38,22 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 		if f.ID == 0 {
 			return
 		}
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=NULL, primary_attachment_id=NULL WHERE id=$1`, co), f.ID)
+		smokeExec(ctx, h, `UPDATE company SET default_contact=NULL, primary_attachment_id=NULL WHERE id=$1`, f.ID)
 		for _, id := range poIDs {
-			for _, tbl := range []string{pol, "purchase_order_history"} {
+			for _, tbl := range []string{"po_line", "purchase_order_history"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_id=$1`, tbl), id)
 			}
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, po), id)
+			smokeExec(ctx, h, `DELETE FROM purchase_order WHERE id=$1`, id)
 		}
 		for _, id := range f.Parts {
 			for _, tbl := range []string{"part_attachment", "supplier_part"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, "company_attachment"), f.ID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE company_id=$1`, cn), f.ID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, co), f.ID)
+		smokeExec(ctx, h, `DELETE FROM company_attachment WHERE supplier_id=$1`, f.ID)
+		smokeExec(ctx, h, `DELETE FROM contact WHERE company_id=$1`, f.ID)
+		smokeExec(ctx, h, `DELETE FROM company WHERE id=$1`, f.ID)
 	}
 	scan := func(dst *int, q string, args ...any) {
 		t.Helper()
@@ -71,46 +70,46 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 		}
 	}
 
-	scan(&f.ID, fmt.Sprintf(`INSERT INTO %s (name, supplier_code, notes, is_active, is_supplier, is_manufacturer,
+	scan(&f.ID, `INSERT INTO company (name, supplier_code, notes, is_active, is_supplier, is_manufacturer,
 		bulk_order_delimiter, bulk_order_pn_source) VALUES ($1,'SQ1','fixture notes',TRUE,TRUE,FALSE,'tab','vendor')
-		RETURNING id`, co), f.Name)
+		RETURNING id`, f.Name)
 
 	f.ConA, f.ConD, f.ConZ, f.ConX = base+"-cA", base+"-cD", base+"-cZ", base+"-cX"
 	var conD int
-	scan(&conD, fmt.Sprintf(`INSERT INTO %s (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active)
-		VALUES ($1,$2,'1 Main St','Townd','ST','12345','Freedonia','555-0101','555-0102','d@example.com',TRUE) RETURNING id`, cn), f.ConD, f.ID)
-	exec(fmt.Sprintf(`INSERT INTO %s (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active) VALUES
+	scan(&conD, `INSERT INTO contact (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active)
+		VALUES ($1,$2,'1 Main St','Townd','ST','12345','Freedonia','555-0101','555-0102','d@example.com',TRUE) RETURNING id`, f.ConD, f.ID)
+	exec(`INSERT INTO contact (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active) VALUES
 		($1,$4,'2 Side St','Towna','AA','99999','Ruritania','555-0201','555-0202','a@example.com',TRUE),
 		($2,$4,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,TRUE),
-		($3,$4,'gone','gone','gone','gone','gone','gone','gone','gone',FALSE)`, cn), f.ConA, f.ConZ, f.ConX, f.ID)
+		($3,$4,'gone','gone','gone','gone','gone','gone','gone','gone',FALSE)`, f.ConA, f.ConZ, f.ConX, f.ID)
 	var att int
-	scan(&att, fmt.Sprintf(`INSERT INTO %s (supplier_id, file_path, notes) VALUES ($1,'https://example.com/sq.pdf','Quote sheet')
-		RETURNING supplier_attachment_id`, "company_attachment"), f.ID)
-	exec(fmt.Sprintf(`UPDATE %s SET default_contact=$2, primary_attachment_id=$3 WHERE id=$1`, co), f.ID, conD, att)
+	scan(&att, `INSERT INTO company_attachment (supplier_id, file_path, notes) VALUES ($1,'https://example.com/sq.pdf','Quote sheet')
+		RETURNING supplier_attachment_id`, f.ID)
+	exec(`UPDATE company SET default_contact=$2, primary_attachment_id=$3 WHERE id=$1`, f.ID, conD, att)
 
 	// Parts 1-6 (inserted out of order): P1 has an explicit purchase unit, a thumbnail and a min
 	// increment; P2 inherits the part's base unit; P3 has no unit at all.
 	var ea, kg int
-	scan(&ea, fmt.Sprintf(`SELECT uom_id FROM %s WHERE abbreviation='EA'`, "uom"))
-	scan(&kg, fmt.Sprintf(`SELECT uom_id FROM %s WHERE abbreviation='kg'`, "uom"))
+	scan(&ea, `SELECT uom_id FROM uom WHERE abbreviation='EA'`)
+	scan(&kg, `SELECT uom_id FROM uom WHERE abbreviation='kg'`)
 	for _, i := range []int{3, 0, 5, 1, 4, 2} {
 		f.PN[i] = fmt.Sprintf("%s-P%d", base, i+1)
 		var uom any
 		if i == 1 {
 			uom = kg
 		}
-		scan(&f.Parts[i], fmt.Sprintf(`INSERT INTO %s (part_number, description, revision, category, uom_id)
-			VALUES ($1,$2,'B','BUY',$3) RETURNING id`, pn), f.PN[i], fmt.Sprintf("desc %d", i+1), uom)
+		scan(&f.Parts[i], `INSERT INTO part (part_number, description, revision, category, uom_id)
+			VALUES ($1,$2,'B','BUY',$3) RETURNING id`, f.PN[i], fmt.Sprintf("desc %d", i+1), uom)
 		var spUom, minIncr any
 		if i == 0 {
 			spUom, minIncr = ea, 2.5
 		}
-		exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn, supplier_desc, lead_time, preference, uom_id, min_increment)
-			VALUES ($1,$2,$3,'sd','3 wk',1,$4,$5)`, "supplier_part"),
+		exec(`INSERT INTO supplier_part (part_id, supplier_id, supplier_pn, supplier_desc, lead_time, preference, uom_id, min_increment)
+			VALUES ($1,$2,$3,'sd','3 wk',1,$4,$5)`,
 			f.Parts[i], f.ID, fmt.Sprintf("SPN-%d", i+1), spUom, minIncr)
 	}
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\sq-thumb.png',$2,TRUE)`,
-		"part_attachment"), f.Parts[0], thumbnailCategory)
+	exec(`INSERT INTO part_attachment (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\sq-thumb.png',$2,TRUE)`,
+		f.Parts[0], thumbnailCategory)
 
 	// POs d1..d6 dated, nd undated, rq an RFQ quote dated last. Lines: P1 on d1, d2 and rq; P2 on nd.
 	for _, c := range []struct {
@@ -125,12 +124,12 @@ func seedSupFixture(t *testing.T, h *Handler) (f supFixture, cleanup func()) {
 	} {
 		f.PO[c.key] = base + "-" + c.key
 		var id int
-		scan(&id, fmt.Sprintf(`INSERT INTO %s (number, supplier_id, date_ordered, total_cost, status, rfq_group_id)
-			VALUES ($1,$2,NULLIF($3,'')::date,$4,'open',$5) RETURNING id`, po), f.PO[c.key], f.ID, c.ordered, c.total, c.rfq)
+		scan(&id, `INSERT INTO purchase_order (number, supplier_id, date_ordered, total_cost, status, rfq_group_id)
+			VALUES ($1,$2,NULLIF($3,'')::date,$4,'open',$5) RETURNING id`, f.PO[c.key], f.ID, c.ordered, c.total, c.rfq)
 		poIDs = append(poIDs, id)
 		if c.part >= 0 {
-			exec(fmt.Sprintf(`INSERT INTO %s (po_id, part_id, line_number, qty, unit_cost, part_number_snapshot, vendor_part_number)
-				VALUES ($1,$2,1,1,1,$3,'VPN-Q')`, pol), id, f.Parts[c.part], f.PN[c.part])
+			exec(`INSERT INTO po_line (po_id, part_id, line_number, qty, unit_cost, part_number_snapshot, vendor_part_number)
+				VALUES ($1,$2,1,1,1,$3,'VPN-Q')`, id, f.Parts[c.part], f.PN[c.part])
 		}
 	}
 	return f, cleanup
@@ -296,7 +295,7 @@ func TestIntegration_SupplierSQLC_Create(t *testing.T) {
 	f, cleanup := seedSupFixture(t, h)
 	defer cleanup()
 	var conD int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT default_contact FROM %s WHERE id=$1`, "company"), f.ID).Scan(&conD); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT default_contact FROM company WHERE id=$1`, f.ID).Scan(&conD); err != nil {
 		t.Fatal(err)
 	}
 
@@ -307,13 +306,13 @@ func TestIntegration_SupplierSQLC_Create(t *testing.T) {
 		"is_active": {"1"}, "is_manufacturer": {"1"}, "notes": {"created"},
 	}))
 	id := locID(t, rec, "/supplier/")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", "company"), id)
+	defer smokeExec(ctx, h, "DELETE FROM company WHERE id=$1", id)
 
 	var gotName, code, notes, delim, pnSrc string
 	var active, supplier, mfg bool
 	var dc *int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name, supplier_code, notes, is_active, is_supplier, is_manufacturer,
-		default_contact, bulk_order_delimiter, bulk_order_pn_source FROM %s WHERE id=$1`, "company"), id,
+	if err := h.queryRowContext(ctx, `SELECT name, supplier_code, notes, is_active, is_supplier, is_manufacturer,
+		default_contact, bulk_order_delimiter, bulk_order_pn_source FROM company WHERE id=$1`, id,
 	).Scan(&gotName, &code, &notes, &active, &supplier, &mfg, &dc, &delim, &pnSrc); err != nil {
 		t.Fatal(err)
 	}
@@ -348,8 +347,8 @@ func TestIntegration_SupplierSQLC_UpdateBulkOrder(t *testing.T) {
 		}), id))
 		assert302(t, "SupplierUpdate", rec)
 		var delim, src string
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT bulk_order_delimiter, bulk_order_pn_source FROM %s WHERE id=$1`,
-			"company"), id).Scan(&delim, &src); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT bulk_order_delimiter, bulk_order_pn_source FROM company WHERE id=$1`,
+			id).Scan(&delim, &src); err != nil {
 			t.Fatal(err)
 		}
 		if delim != c.wantDelim || src != c.wantSrc {
@@ -407,17 +406,16 @@ func supplierSearch(t *testing.T, h *Handler, query string) (raw string, hits []
 func seedCompanies(t *testing.T, h *Handler, rows [][3]any) (ids []int, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co := "company"
 	cleanup = func() {
 		for _, id := range ids {
-			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=NULL WHERE id=$1`, co), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE company_id=$1`, "contact"), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, co), id)
+			smokeExec(ctx, h, `UPDATE company SET default_contact=NULL WHERE id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM contact WHERE company_id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM company WHERE id=$1`, id)
 		}
 	}
 	for _, r := range rows {
 		var id int
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (name, is_active, is_supplier) VALUES ($1,$2,$3) RETURNING id`, co),
+		if err := h.queryRowContext(ctx, `INSERT INTO company (name, is_active, is_supplier) VALUES ($1,$2,$3) RETURNING id`,
 			r[0], r[1], r[2]).Scan(&id); err != nil {
 			cleanup()
 			t.Fatalf("seed company %v: %v", r[0], err)
@@ -439,11 +437,11 @@ func TestIntegration_SupplierSQLC_Search(t *testing.T) {
 	})
 	defer cleanup()
 	var con int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`INSERT INTO %s (display_name, company_id, city) VALUES ('SRC contact',$1,'Townb') RETURNING id`,
-		"contact"), ids[0]).Scan(&con); err != nil {
+	if err := h.queryRowContext(ctx, `INSERT INTO contact (display_name, company_id, city) VALUES ('SRC contact',$1,'Townb') RETURNING id`,
+		ids[0]).Scan(&con); err != nil {
 		t.Fatal(err)
 	}
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=$2 WHERE id=$1`, "company"), ids[0], con)
+	smokeExec(ctx, h, `UPDATE company SET default_contact=$2 WHERE id=$1`, ids[0], con)
 
 	if raw, _ := supplierSearch(t, h, "q=S"); raw != "[]" {
 		t.Errorf("short q body = %s, want []", raw)

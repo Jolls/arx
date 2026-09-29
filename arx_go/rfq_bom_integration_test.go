@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http/httptest"
 	"testing"
 )
@@ -18,23 +17,22 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	pn, pl := "part", "bom"
 	var ids []int
 	defer func() {
 		for _, id := range ids {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id=$1 OR component_part_id=$1`, pl), id)
+			smokeExec(ctx, h, `DELETE FROM bom WHERE parent_part_id=$1 OR component_part_id=$1`, id)
 		}
 		for _, id := range ids {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
 	}()
 	seed := func(label string, category, description, revision, reorderMin, supplierID any, stock float64) (int, string) {
 		t.Helper()
 		partNumber := smokeUniq("ITEST-RFQ-" + label)
 		var id int
-		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_number, category, description, revision, stock_on_hand, reorder_min, default_supplier_id)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, pn),
+		if err := h.queryRowContext(ctx,
+			`INSERT INTO part (part_number, category, description, revision, stock_on_hand, reorder_min, default_supplier_id)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
 			partNumber, category, description, revision, stock, reorderMin, supplierID,
 		).Scan(&id); err != nil {
 			t.Fatalf("seed part %s: %v", label, err)
@@ -44,8 +42,8 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 	}
 	link := func(parent, child int, qty float64) {
 		t.Helper()
-		if _, err := h.execContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (parent_part_id, component_part_id, qty) VALUES ($1,$2,$3)`, pl), parent, child, qty); err != nil {
+		if _, err := h.execContext(ctx,
+			`INSERT INTO bom (parent_part_id, component_part_id, qty) VALUES ($1,$2,$3)`, parent, child, qty); err != nil {
 			t.Fatalf("seed bom %d->%d: %v", parent, child, err)
 		}
 	}
@@ -66,7 +64,7 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 	link(p, d, 1)
 
 	var acmeName string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id = 1001`, "company")).Scan(&acmeName); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT name FROM company WHERE id = 1001`).Scan(&acmeName); err != nil {
 		t.Fatalf("load supplier 1001 name: %v", err)
 	}
 
@@ -120,7 +118,7 @@ func TestIntegration_NextBaseNumber_ScansAllParts(t *testing.T) {
 	_, _, cleanupPart := seedThrowawayPart(t, h, ctx, "NEXTNUM")
 	defer cleanupPart()
 
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`SELECT part_number FROM %s`, "part"))
+	rows, err := h.queryContext(ctx, `SELECT part_number FROM part`)
 	if err != nil {
 		t.Fatalf("scan part numbers: %v", err)
 	}

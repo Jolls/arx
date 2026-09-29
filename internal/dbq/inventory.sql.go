@@ -487,61 +487,6 @@ func (q *Queries) ListActiveLots(ctx context.Context, partID int) ([]ListActiveL
 	return items, nil
 }
 
-const listAllLots = `-- name: ListAllLots :many
-SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
-       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
-FROM lot l JOIN part p ON p.id = l.part_id
-ORDER BY l.created_at DESC, l.id DESC
-`
-
-type ListAllLotsRow struct {
-	ID              int
-	LotNumber       string
-	VendorLot       string
-	PartID          int
-	PartNumber      string
-	PartDescription string
-	LotDescription  string
-	Notes           string
-	CreatedAt       time.Time
-	IsActive        bool
-}
-
-func (q *Queries) ListAllLots(ctx context.Context) ([]ListAllLotsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAllLots)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAllLotsRow
-	for rows.Next() {
-		var i ListAllLotsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.LotNumber,
-			&i.VendorLot,
-			&i.PartID,
-			&i.PartNumber,
-			&i.PartDescription,
-			&i.LotDescription,
-			&i.Notes,
-			&i.CreatedAt,
-			&i.IsActive,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listBuildComponents = `-- name: ListBuildComponents :many
 SELECT b.component_part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS description,
        COALESCE(p.category, '') AS category, b.qty, p.stock_on_hand, p.tracking_mode
@@ -642,6 +587,7 @@ SELECT b.component_part_id, COALESCE(p.part_number, '') AS part_number, b.qty,
        COALESCE(p.category, '') AS category, p.tracking_mode
 FROM bom b JOIN part p ON b.component_part_id = p.id
 WHERE b.parent_part_id = $1
+ORDER BY b.component_part_id, b.line_number
 `
 
 type ListBuildLinesRow struct {
@@ -652,7 +598,8 @@ type ListBuildLinesRow struct {
 	TrackingMode    string
 }
 
-// No ORDER BY: consumption order is not significant.
+// Ascending component id: the build locks each component's part row in this order, so two builds that share
+// components can't lock them in opposite orders and deadlock (#268).
 func (q *Queries) ListBuildLines(ctx context.Context, parentPartID int) ([]ListBuildLinesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listBuildLines, parentPartID)
 	if err != nil {
@@ -668,6 +615,69 @@ func (q *Queries) ListBuildLines(ctx context.Context, parentPartID int) ([]ListB
 			&i.Qty,
 			&i.Category,
 			&i.TrackingMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLots = `-- name: ListLots :many
+SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
+       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
+FROM lot l JOIN part p ON p.id = l.part_id
+WHERE ($1::int IS NULL OR l.part_id = $1::int)
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT $2::int
+`
+
+type ListLotsParams struct {
+	PartID *int
+	N      *int
+}
+
+type ListLotsRow struct {
+	ID              int
+	LotNumber       string
+	VendorLot       string
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	LotDescription  string
+	Notes           string
+	CreatedAt       time.Time
+	IsActive        bool
+}
+
+// Newest first. A NULL part_id lists every part's lots; a NULL n means no limit.
+func (q *Queries) ListLots(ctx context.Context, arg ListLotsParams) ([]ListLotsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLots, arg.PartID, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLotsRow
+	for rows.Next() {
+		var i ListLotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LotNumber,
+			&i.VendorLot,
+			&i.PartID,
+			&i.PartNumber,
+			&i.PartDescription,
+			&i.LotDescription,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.IsActive,
 		); err != nil {
 			return nil, err
 		}
@@ -770,61 +780,6 @@ func (q *Queries) ListPartLedger(ctx context.Context, partID int) ([]ListPartLed
 	return items, nil
 }
 
-const listPartLots = `-- name: ListPartLots :many
-SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
-       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
-FROM lot l JOIN part p ON p.id = l.part_id
-WHERE l.part_id = $1 ORDER BY l.created_at DESC, l.id DESC
-`
-
-type ListPartLotsRow struct {
-	ID              int
-	LotNumber       string
-	VendorLot       string
-	PartID          int
-	PartNumber      string
-	PartDescription string
-	LotDescription  string
-	Notes           string
-	CreatedAt       time.Time
-	IsActive        bool
-}
-
-func (q *Queries) ListPartLots(ctx context.Context, partID int) ([]ListPartLotsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listPartLots, partID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPartLotsRow
-	for rows.Next() {
-		var i ListPartLotsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.LotNumber,
-			&i.VendorLot,
-			&i.PartID,
-			&i.PartNumber,
-			&i.PartDescription,
-			&i.LotDescription,
-			&i.Notes,
-			&i.CreatedAt,
-			&i.IsActive,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPartUnits = `-- name: ListPartUnits :many
 
 SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
@@ -872,66 +827,6 @@ func (q *Queries) ListPartUnits(ctx context.Context, partID int) ([]ListPartUnit
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.Source,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRecentPartLots = `-- name: ListRecentPartLots :many
-SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
-       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
-FROM lot l JOIN part p ON p.id = l.part_id
-WHERE l.part_id = $1 ORDER BY l.created_at DESC, l.id DESC LIMIT $2::int
-`
-
-type ListRecentPartLotsParams struct {
-	PartID int
-	N      int
-}
-
-type ListRecentPartLotsRow struct {
-	ID              int
-	LotNumber       string
-	VendorLot       string
-	PartID          int
-	PartNumber      string
-	PartDescription string
-	LotDescription  string
-	Notes           string
-	CreatedAt       time.Time
-	IsActive        bool
-}
-
-func (q *Queries) ListRecentPartLots(ctx context.Context, arg ListRecentPartLotsParams) ([]ListRecentPartLotsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentPartLots, arg.PartID, arg.N)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRecentPartLotsRow
-	for rows.Next() {
-		var i ListRecentPartLotsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.LotNumber,
-			&i.VendorLot,
-			&i.PartID,
-			&i.PartNumber,
-			&i.PartDescription,
-			&i.LotDescription,
-			&i.Notes,
-			&i.CreatedAt,
-			&i.IsActive,
 		); err != nil {
 			return nil, err
 		}

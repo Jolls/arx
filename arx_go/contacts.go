@@ -205,9 +205,7 @@ func (h *Handler) fetchContact(w http.ResponseWriter, r *http.Request, id string
 // contactInput is contactFromForm plus the company id, for writes.
 func contactInput(r *http.Request) contacts.Contact {
 	c := contactFromForm(r)
-	if n, ok := nullableInt(fv(r, "CNSUID")).(int); ok {
-		c.CompanyID = &n
-	}
+	c.CompanyID = intPtrOrNil(fv(r, "CNSUID"))
 	return c
 }
 

@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -85,7 +84,7 @@ func TestIntegration_RecordDateStaysWallClock(t *testing.T) {
 	defer cleanup()
 	var got time.Time
 	if err := h.queryRowContext(context.Background(),
-		fmt.Sprintf(`SELECT record_date FROM %s WHERE id=$1`, "form_record"), 7001).Scan(&got); err != nil {
+		`SELECT record_date FROM form_record WHERE id=$1`, 7001).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if s := got.Format("2006-01-02 15:04"); s != "2026-06-01 00:00" {
@@ -126,7 +125,7 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 			t.Fatalf("createLot: %v", err)
 		}
 		var at time.Time
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT created_at FROM %s WHERE id=$1`, "lot"), id).Scan(&at); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT created_at FROM lot WHERE id=$1`, id).Scan(&at); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{at}
@@ -138,7 +137,7 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 		}
 		var at time.Time
 		if err := tx.QueryRowContext(ctx,
-			fmt.Sprintf(`SELECT created_at FROM %s WHERE part_id=$1 ORDER BY id DESC LIMIT 1`, "inventory_transaction"), 3007).Scan(&at); err != nil {
+			`SELECT created_at FROM inventory_transaction WHERE part_id=$1 ORDER BY id DESC LIMIT 1`, 3007).Scan(&at); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{at}
@@ -150,10 +149,10 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 		}
 		var changed, modified time.Time
 		if err := tx.QueryRowContext(ctx,
-			fmt.Sprintf(`SELECT changed_at FROM %s WHERE po_id=$1 ORDER BY id DESC LIMIT 1`, "purchase_order_history"), 5002).Scan(&changed); err != nil {
+			`SELECT changed_at FROM purchase_order_history WHERE po_id=$1 ORDER BY id DESC LIMIT 1`, 5002).Scan(&changed); err != nil {
 			t.Fatal(err)
 		}
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT date_modified FROM %s WHERE ID=$1`, "purchase_order"), 5002).Scan(&modified); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT date_modified FROM purchase_order WHERE ID=$1`, 5002).Scan(&modified); err != nil {
 			t.Fatal(err)
 		}
 		return []time.Time{changed, modified}

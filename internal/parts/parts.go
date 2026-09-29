@@ -740,7 +740,7 @@ type PartOrder struct {
 
 // ListPartOrders returns every PO line of a part, newest order first (undated first).
 func (s *Service) ListPartOrders(ctx context.Context, partID int) ([]PartOrder, error) {
-	rows, err := s.q.ListPartOrders(ctx, partID)
+	rows, err := s.q.ListPartOrders(ctx, dbq.ListPartOrdersParams{PartID: partID})
 	if err != nil {
 		return nil, err
 	}
@@ -764,7 +764,7 @@ type RecentPO struct {
 
 // ListRecentPOs returns a part's n newest PO lines (undated first).
 func (s *Service) ListRecentPOs(ctx context.Context, partID, n int) ([]RecentPO, error) {
-	rows, err := s.q.ListRecentPartPOs(ctx, dbq.ListRecentPartPOsParams{PartID: partID, N: n})
+	rows, err := s.q.ListPartOrders(ctx, dbq.ListPartOrdersParams{PartID: partID, N: &n})
 	if err != nil {
 		return nil, err
 	}

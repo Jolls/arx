@@ -103,10 +103,10 @@ func defaultCategoriesWithout(code string) []models.Category {
 // readPersistedCategories reads part_category directly (bypassing the cache).
 func readPersistedCategories(t *testing.T, h *Handler) []models.Category {
 	t.Helper()
-	rows, err := h.queryContext(context.Background(), fmt.Sprintf(
+	rows, err := h.queryContext(context.Background(),
 		`SELECT code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
 		        is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible
-		 FROM %s ORDER BY sort_order, code`, "part_category"))
+		 FROM part_category ORDER BY sort_order, code`)
 	if err != nil {
 		t.Fatalf("SELECT part_category: %v", err)
 	}
@@ -291,8 +291,8 @@ func TestIntegration_SettingsCategoriesSave_InUseMessageCountsParts(t *testing.T
 	withRestoredPartCategories(t, h)
 
 	var n int
-	if err := h.queryRowContext(context.Background(), fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE category='BUY'`, "part")).Scan(&n); err != nil {
+	if err := h.queryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM part WHERE category='BUY'`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()
@@ -338,7 +338,7 @@ func TestIntegration_PartCreate_SettingsAddedCategorySucceeds(t *testing.T) {
 	id, cl := seedPart(t, h, ctx, "ZZT")
 	t.Cleanup(cl) // runs before the category restore (cleanups are LIFO)
 	var got string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT category FROM %s WHERE id=$1`, "part"), id).Scan(&got); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT category FROM part WHERE id=$1`, id).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if got != "ZZT" {
@@ -356,7 +356,7 @@ func TestIntegration_PartCreate_EmptyCategoryStoresNull(t *testing.T) {
 	id, cl := seedPart(t, h, ctx, "")
 	t.Cleanup(cl)
 	var isNull bool
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT category IS NULL FROM %s WHERE id=$1`, "part"), id).Scan(&isNull); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT category IS NULL FROM part WHERE id=$1`, id).Scan(&isNull); err != nil {
 		t.Fatal(err)
 	}
 	if !isNull {
@@ -378,16 +378,16 @@ func TestIntegration_LoadBuildComponents_NullCategory(t *testing.T) {
 	t.Cleanup(clParent)
 	comp, clComp := seedPart(t, h, ctx, "BUY")
 	t.Cleanup(clComp)
-	if _, err := h.execContext(ctx, fmt.Sprintf(`UPDATE %s SET category=NULL WHERE id=$1`, "part"), comp); err != nil {
+	if _, err := h.execContext(ctx, `UPDATE part SET category=NULL WHERE id=$1`, comp); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.execContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES ($1, $2, 1, 1)`,
-		"bom"), parent, comp); err != nil {
+	if _, err := h.execContext(ctx,
+		`INSERT INTO bom (parent_part_id, component_part_id, line_number, qty) VALUES ($1, $2, 1, 1)`,
+		parent, comp); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id=$1`, "bom"), parent)
+		smokeExec(ctx, h, `DELETE FROM bom WHERE parent_part_id=$1`, parent)
 	})
 
 	comps, err := h.loadBuildComponents(ctx, parent)

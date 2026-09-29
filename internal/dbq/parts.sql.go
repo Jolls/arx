@@ -1309,8 +1309,14 @@ SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_order
 FROM po_line pol
 JOIN purchase_order po ON pol.po_id = po.id
 WHERE pol.part_id = $1::int
-ORDER BY po.date_ordered DESC
+ORDER BY po.date_ordered DESC, po.id DESC, pol.line_number
+LIMIT $2::int
 `
+
+type ListPartOrdersParams struct {
+	PartID int
+	N      *int
+}
 
 type ListPartOrdersRow struct {
 	Number           string
@@ -1325,9 +1331,9 @@ type ListPartOrdersRow struct {
 	VendorPartNumber string
 }
 
-// Every PO line of a part with its PO header, newest order first.
-func (q *Queries) ListPartOrders(ctx context.Context, partID int) ([]ListPartOrdersRow, error) {
-	rows, err := q.db.QueryContext(ctx, listPartOrders, partID)
+// Every PO line of a part with its PO header, newest order first (undated first); a NULL n means no limit.
+func (q *Queries) ListPartOrders(ctx context.Context, arg ListPartOrdersParams) ([]ListPartOrdersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPartOrders, arg.PartID, arg.N)
 	if err != nil {
 		return nil, err
 	}
@@ -1514,59 +1520,6 @@ func (q *Queries) ListPriceListPoints(ctx context.Context, partID int) ([]ListPr
 			&i.EffectiveDate,
 			&i.PriceEa,
 			&i.PackSize,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRecentPartPOs = `-- name: ListRecentPartPOs :many
-SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, COALESCE(po.status, '') AS status,
-       po.date_ordered, pol.qty, pol.unit_cost
-FROM po_line pol
-JOIN purchase_order po ON pol.po_id = po.id
-WHERE pol.part_id = $1::int
-ORDER BY po.date_ordered DESC, po.id DESC LIMIT $2::int
-`
-
-type ListRecentPartPOsParams struct {
-	PartID int
-	N      int
-}
-
-type ListRecentPartPOsRow struct {
-	Number       string
-	SupplierName string
-	Status       string
-	DateOrdered  *time.Time
-	Qty          float64
-	UnitCost     float64
-}
-
-func (q *Queries) ListRecentPartPOs(ctx context.Context, arg ListRecentPartPOsParams) ([]ListRecentPartPOsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentPartPOs, arg.PartID, arg.N)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRecentPartPOsRow
-	for rows.Next() {
-		var i ListRecentPartPOsRow
-		if err := rows.Scan(
-			&i.Number,
-			&i.SupplierName,
-			&i.Status,
-			&i.DateOrdered,
-			&i.Qty,
-			&i.UnitCost,
 		); err != nil {
 			return nil, err
 		}

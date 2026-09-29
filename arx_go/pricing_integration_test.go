@@ -32,12 +32,11 @@ type pricingFixture struct {
 func seedPricing(t *testing.T, h *Handler) (f pricingFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, prc := "part", "price"
 	base := smokeUniq("ITEST-PRC")
 	cleanup = func() {
 		for _, id := range []int{f.Part, f.Other} {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, prc), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `DELETE FROM price WHERE part_id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
 	}
 	scan := func(q string, args ...any) int {
@@ -49,10 +48,10 @@ func seedPricing(t *testing.T, h *Handler) (f pricingFixture, cleanup func()) {
 		}
 		return id
 	}
-	part := `INSERT INTO ` + pn + ` (part_number, category, default_supplier_id) VALUES ($1,'BUY',1002) RETURNING id`
+	part := `INSERT INTO part (part_number, category, default_supplier_id) VALUES ($1,'BUY',1002) RETURNING id`
 	f.Part = scan(part, base+"-A")
 	f.Other = scan(part, base+"-B")
-	price := `INSERT INTO ` + prc + ` (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+	price := `INSERT INTO price (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
 		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`
 	f.ActA = scan(price, f.Part, 1002, 10, 0.2, 2, "2026-03-01", true)
 	f.ActB = scan(price, f.Part, 1002, 1, 0.25, 0.25, "2026-03-01", true)
@@ -67,8 +66,8 @@ func seedPricing(t *testing.T, h *Handler) (f pricingFixture, cleanup func()) {
 func priceRow(t *testing.T, h *Handler, id int) map[string]any {
 	t.Helper()
 	var raw string
-	err := h.queryRowContext(context.Background(), fmt.Sprintf(
-		`SELECT COALESCE((SELECT row_to_json(p)::text FROM %s p WHERE id=$1), 'null')`, "price"), id).Scan(&raw)
+	err := h.queryRowContext(context.Background(),
+		`SELECT COALESCE((SELECT row_to_json(p)::text FROM price p WHERE id=$1), 'null')`, id).Scan(&raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,8 +82,8 @@ func priceRow(t *testing.T, h *Handler, id int) map[string]any {
 func defaultSupplier(t *testing.T, h *Handler, part int) int {
 	t.Helper()
 	var v *int
-	if err := h.queryRowContext(context.Background(), fmt.Sprintf(
-		`SELECT default_supplier_id FROM %s WHERE id=$1`, "part"), part).Scan(&v); err != nil {
+	if err := h.queryRowContext(context.Background(),
+		`SELECT default_supplier_id FROM part WHERE id=$1`, part).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
 	if v == nil {
@@ -204,12 +203,12 @@ func TestIntegration_PriceCreate_Columns(t *testing.T) {
 	f, cleanup := seedPricing(t, h)
 	defer cleanup()
 	ctx := context.Background()
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_supplier_id=NULL WHERE id=$1`, "part"), f.Part)
+	smokeExec(ctx, h, `UPDATE part SET default_supplier_id=NULL WHERE id=$1`, f.Part)
 
 	newest := func() map[string]any {
 		t.Helper()
 		var id int
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=$1`, "price"), f.Part).Scan(&id); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT MAX(id) FROM price WHERE part_id=$1`, f.Part).Scan(&id); err != nil {
 			t.Fatal(err)
 		}
 		m := priceRow(t, h, id)
@@ -273,7 +272,7 @@ func TestIntegration_PriceUpdate(t *testing.T) {
 		t.Error("PriceUpdate: old row still active")
 	}
 	var newID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT MAX(id) FROM %s WHERE part_id=$1`, "price"), f.Part).Scan(&newID); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT MAX(id) FROM price WHERE part_id=$1`, f.Part).Scan(&newID); err != nil {
 		t.Fatal(err)
 	}
 	got := priceRow(t, h, newID)
@@ -345,7 +344,7 @@ func TestIntegration_PriceActivateDeactivateDelete(t *testing.T) {
 	if priceRow(t, h, f.InC) != nil {
 		t.Error("PriceDelete: inactive price still there")
 	}
-	smokeExec(context.Background(), h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, "price"), f.OtherPrice)
+	smokeExec(context.Background(), h, `UPDATE price SET is_active=FALSE WHERE id=$1`, f.OtherPrice)
 	act(h.PriceDelete, f.OtherPrice)
 	if priceRow(t, h, f.OtherPrice) == nil {
 		t.Error("PriceDelete: deleted another part's price")

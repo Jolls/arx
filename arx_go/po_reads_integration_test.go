@@ -40,7 +40,6 @@ type poFixture struct {
 func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	co, cn, pn, po, pol := "company", "contact", "part", "purchase_order", "po_line"
 	base := smokeUniq("PR") // purchase_order.number is VARCHAR(32)
 	f.CoName, f.ConDName, f.ConOName = base+"-co", base+"-cD", base+"-cO"
 	f.PN1, f.PN2 = base+"-P1", base+"-P2"
@@ -48,23 +47,23 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 	var poIDs, partIDs []int
 	cleanup = func() {
 		for _, id := range poIDs {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_line_id IN (SELECT id FROM %s WHERE po_id=$1)`, "inventory_transaction", pol), id)
-			for _, tbl := range []string{pol, "purchase_order_history"} {
+			smokeExec(ctx, h, `DELETE FROM inventory_transaction WHERE po_line_id IN (SELECT id FROM po_line WHERE po_id=$1)`, id)
+			for _, tbl := range []string{"po_line", "purchase_order_history"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE po_id=$1`, tbl), id)
 			}
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, po), id)
+			smokeExec(ctx, h, `DELETE FROM purchase_order WHERE id=$1`, id)
 		}
 		for _, id := range partIDs {
-			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `UPDATE part SET primary_attachment_id=NULL WHERE id=$1`, id)
 			for _, tbl := range []string{"part_attachment", "supplier_part", "price"} {
 				smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, tbl), id)
 			}
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
 		if f.Co != 0 {
-			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET default_contact=NULL WHERE id=$1`, co), f.Co)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE company_id=$1`, cn), f.Co)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, co), f.Co)
+			smokeExec(ctx, h, `UPDATE company SET default_contact=NULL WHERE id=$1`, f.Co)
+			smokeExec(ctx, h, `DELETE FROM contact WHERE company_id=$1`, f.Co)
+			smokeExec(ctx, h, `DELETE FROM company WHERE id=$1`, f.Co)
 		}
 	}
 	scan := func(dst *int, q string, args ...any) {
@@ -82,25 +81,25 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 		}
 	}
 
-	scan(&f.Co, fmt.Sprintf(`INSERT INTO %s (name, supplier_code, is_active, is_supplier) VALUES ($1,'PQ1',TRUE,TRUE) RETURNING id`, co), f.CoName)
-	scan(&f.ConD, fmt.Sprintf(`INSERT INTO %s (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active)
-		VALUES ($1,$2,'1 Dock Rd','Dockton','DS','11111','Freedonia','555-0301','555-0302','d@example.com',TRUE) RETURNING id`, cn), f.ConDName, f.Co)
-	scan(&f.ConO, fmt.Sprintf(`INSERT INTO %s (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active)
-		VALUES ($1,$2,'2 Other Ave','Otherton','OS','22222','Ruritania','555-0401','555-0402','o@example.com',TRUE) RETURNING id`, cn), f.ConOName, f.Co)
-	exec(fmt.Sprintf(`UPDATE %s SET default_contact=$2 WHERE id=$1`, co), f.Co, f.ConD)
+	scan(&f.Co, `INSERT INTO company (name, supplier_code, is_active, is_supplier) VALUES ($1,'PQ1',TRUE,TRUE) RETURNING id`, f.CoName)
+	scan(&f.ConD, `INSERT INTO contact (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active)
+		VALUES ($1,$2,'1 Dock Rd','Dockton','DS','11111','Freedonia','555-0301','555-0302','d@example.com',TRUE) RETURNING id`, f.ConDName, f.Co)
+	scan(&f.ConO, `INSERT INTO contact (display_name, company_id, address, city, state, zipcode, country, phone_1, fax, email, is_active)
+		VALUES ($1,$2,'2 Other Ave','Otherton','OS','22222','Ruritania','555-0401','555-0402','o@example.com',TRUE) RETURNING id`, f.ConOName, f.Co)
+	exec(`UPDATE company SET default_contact=$2 WHERE id=$1`, f.Co, f.ConD)
 
-	scan(&f.P1, fmt.Sprintf(`INSERT INTO %s (part_number, description, revision, category, tracking_mode) VALUES ($1,'p1','C','BUY','lot') RETURNING id`, pn), f.PN1)
+	scan(&f.P1, `INSERT INTO part (part_number, description, revision, category, tracking_mode) VALUES ($1,'p1','C','BUY','lot') RETURNING id`, f.PN1)
 	partIDs = append(partIDs, f.P1)
-	scan(&f.P2, fmt.Sprintf(`INSERT INTO %s (part_number, description, revision, category) VALUES ($1,'p2',NULL,'BUY') RETURNING id`, pn), f.PN2)
+	scan(&f.P2, `INSERT INTO part (part_number, description, revision, category) VALUES ($1,'p2',NULL,'BUY') RETURNING id`, f.PN2)
 	partIDs = append(partIDs, f.P2)
-	scan(&f.Att, fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\pr-dwg.pdf','Drawing',TRUE) RETURNING id`,
-		"part_attachment"), f.P1)
-	exec(fmt.Sprintf(`UPDATE %s SET primary_attachment_id=$2 WHERE id=$1`, pn), f.P1, f.Att)
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, supplier_pn) VALUES ($1,$2,'SPN-1')`, "supplier_part"), f.P1, f.Co)
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, price_pack, pack_size, is_active, effective_date) VALUES
-		($1,$3,2.5,25,10,TRUE,'2026-01-01'), ($2,$3,4,4,1,FALSE,'2026-01-01')`, "price"), f.P1, f.P2, f.Co)
+	scan(&f.Att, `INSERT INTO part_attachment (part_id, file_name, category, is_active) VALUES ($1,'LOCAL:itest\pr-dwg.pdf','Drawing',TRUE) RETURNING id`,
+		f.P1)
+	exec(`UPDATE part SET primary_attachment_id=$2 WHERE id=$1`, f.P1, f.Att)
+	exec(`INSERT INTO supplier_part (part_id, supplier_id, supplier_pn) VALUES ($1,$2,'SPN-1')`, f.P1, f.Co)
+	exec(`INSERT INTO price (part_id, supplier_id, price_ea, price_pack, pack_size, is_active, effective_date) VALUES
+		($1,$3,2.5,25,10,TRUE,'2026-01-01'), ($2,$3,4,4,1,FALSE,'2026-01-01')`, f.P1, f.P2, f.Co)
 
-	scan(&f.FullID, fmt.Sprintf(`INSERT INTO %s (number, status, approval_status, is_active, orderer, account_id,
+	scan(&f.FullID, `INSERT INTO purchase_order (number, status, approval_status, is_active, orderer, account_id,
 		supplier_id, supplier_name, supplier_contact, supplier_email, supplier_address, supplier_city, supplier_state,
 		supplier_zipcode, supplier_country, supplier_phone_number, supplier_fax_number,
 		receiver_id, receiver_name, receiver_contact, receiver_email, receiver_address, receiver_city, receiver_state,
@@ -111,11 +110,11 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 		$2,$3,'Sam Sup','s@example.com','3 Sup St','Supton','SS','33333','Freedonia','555-0501','555-0502',
 		$2,'Recv Co','Rae Recv','r@example.com','4 Recv Rd','Recvton','RS','44444','Ruritania','555-0601','555-0602',
 		1.25,2.5,3.75,123.456,'print notes','internal notes',
-		'2026-01-15','2026-01-20','2026-03-01','2026-01-16','2026-02-03 04:05:06+00',$4,$5) RETURNING id`, po),
+		'2026-01-15','2026-01-20','2026-03-01','2026-01-16','2026-02-03 04:05:06+00',$4,$5) RETURNING id`,
 		f.Full, f.Co, f.CoName, f.ConO, f.ConD)
 	poIDs = append(poIDs, f.FullID)
-	scan(&f.BareID, fmt.Sprintf(`INSERT INTO %s (number, supplier_id, status, approval_status, is_active, internal_notes, date_modified)
-		VALUES ($1,$2,NULL,NULL,NULL,NULL,NULL) RETURNING id`, po), f.Bare, f.Co)
+	scan(&f.BareID, `INSERT INTO purchase_order (number, supplier_id, status, approval_status, is_active, internal_notes, date_modified)
+		VALUES ($1,$2,NULL,NULL,NULL,NULL,NULL) RETURNING id`, f.Bare, f.Co)
 	poIDs = append(poIDs, f.BareID)
 
 	// Lines, inserted out of line order. 1: linked vendor PN, price covered (pack 10 <= qty 10);
@@ -136,41 +135,41 @@ func seedPOFixture(t *testing.T, h *Handler) (f poFixture, cleanup func()) {
 			{f.P2, f.PN2, "", "zero", nil, 3, 0, nil, 0, nil},
 			{f.P1, f.PN1, "C", "dup", nil, 5, 2.5, nil, 0, nil},
 		}[i]
-		scan(&f.Lines[i], fmt.Sprintf(`INSERT INTO %s (po_id, part_id, part_number_snapshot, revision_snapshot, description,
+		scan(&f.Lines[i], `INSERT INTO po_line (po_id, part_id, part_number_snapshot, revision_snapshot, description,
 			vendor_part_number, line_number, qty, unit_cost, lead_time_days, received_qty, date_received)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date) RETURNING id`, pol),
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date) RETURNING id`,
 			f.FullID, l.part, l.snap, l.rev, l.desc, l.vpn, i+1, l.qty, l.cost, l.lead, l.recv, l.dateRecv)
 	}
 
 	// History: h3 ties h2's changed_at, so the higher id sorts first.
-	exec(fmt.Sprintf(`INSERT INTO %s (po_id, event_type, from_status, to_status, action, note, changed_by, changed_at) VALUES
-		($1,'status',NULL,'draft',NULL,NULL,'alice','2026-01-01 10:00+00')`, "purchase_order_history"), f.FullID)
-	exec(fmt.Sprintf(`INSERT INTO %s (po_id, event_type, from_status, to_status, action, note, changed_by, changed_at) VALUES
-		($1,'approval',NULL,NULL,'approved','ok','bob','2026-01-02 10:00+00')`, "purchase_order_history"), f.FullID)
-	exec(fmt.Sprintf(`INSERT INTO %s (po_id, event_type, from_status, to_status, changed_at) VALUES
-		($1,'status','draft','open','2026-01-02 10:00+00')`, "purchase_order_history"), f.FullID)
+	exec(`INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, action, note, changed_by, changed_at) VALUES
+		($1,'status',NULL,'draft',NULL,NULL,'alice','2026-01-01 10:00+00')`, f.FullID)
+	exec(`INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, action, note, changed_by, changed_at) VALUES
+		($1,'approval',NULL,NULL,'approved','ok','bob','2026-01-02 10:00+00')`, f.FullID)
+	exec(`INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, changed_at) VALUES
+		($1,'status','draft','open','2026-01-02 10:00+00')`, f.FullID)
 
 	// Receipts on line 1: r[1] and r[2] share a date (higher id first); the adjustment is excluded.
 	for i, r := range []struct {
 		qty        float64
 		date, user string
 	}{{3, "2026-02-05", "alice"}, {1, "2026-02-10", ""}, {2, "2026-02-10", "bob"}} {
-		scan(&f.Rcpt[i], fmt.Sprintf(`INSERT INTO %s (part_id, txn_type, qty, txn_date, username, po_line_id)
-			VALUES ($1,'receipt',$2,$3::date,$4,$5) RETURNING id`, "inventory_transaction"), f.P1, r.qty, r.date, r.user, f.Lines[0])
+		scan(&f.Rcpt[i], `INSERT INTO inventory_transaction (part_id, txn_type, qty, txn_date, username, po_line_id)
+			VALUES ($1,'receipt',$2,$3::date,$4,$5) RETURNING id`, f.P1, r.qty, r.date, r.user, f.Lines[0])
 	}
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, txn_type, qty, txn_date, username, po_line_id)
-		VALUES ($1,'adjustment',-1,'2026-02-11','carol',$2)`, "inventory_transaction"), f.P1, f.Lines[0])
+	exec(`INSERT INTO inventory_transaction (part_id, txn_type, qty, txn_date, username, po_line_id)
+		VALUES ($1,'adjustment',-1,'2026-02-11','carol',$2)`, f.P1, f.Lines[0])
 
 	// RFQ group: Q1 anchors it (group id = its own id) and has one quoted line; Q2 has no lines
 	// and no supplier name.
 	var q2 int
-	scan(&f.Group, fmt.Sprintf(`INSERT INTO %s (number, status, supplier_id, supplier_name, total_cost) VALUES ($1,'rfq',$2,$3,30) RETURNING id`, po), f.Q1, f.Co, f.CoName)
+	scan(&f.Group, `INSERT INTO purchase_order (number, status, supplier_id, supplier_name, total_cost) VALUES ($1,'rfq',$2,$3,30) RETURNING id`, f.Q1, f.Co, f.CoName)
 	poIDs = append(poIDs, f.Group)
-	exec(fmt.Sprintf(`UPDATE %s SET rfq_group_id=id WHERE id=$1`, po), f.Group)
-	scan(&q2, fmt.Sprintf(`INSERT INTO %s (number, status, supplier_id, rfq_group_id) VALUES ($1,'rfq',$2,$3) RETURNING id`, po), f.Q2, f.Co, f.Group)
+	exec(`UPDATE purchase_order SET rfq_group_id=id WHERE id=$1`, f.Group)
+	scan(&q2, `INSERT INTO purchase_order (number, status, supplier_id, rfq_group_id) VALUES ($1,'rfq',$2,$3) RETURNING id`, f.Q2, f.Co, f.Group)
 	poIDs = append(poIDs, q2)
-	exec(fmt.Sprintf(`INSERT INTO %s (po_id, part_id, part_number_snapshot, revision_snapshot, description, line_number, qty, unit_cost, lead_time_days)
-		VALUES ($1,$2,$3,'C','quoted',1,10,3,12)`, pol), f.Group, f.P1, f.PN1)
+	exec(`INSERT INTO po_line (po_id, part_id, part_number_snapshot, revision_snapshot, description, line_number, qty, unit_cost, lead_time_days)
+		VALUES ($1,$2,$3,'C','quoted',1,10,3,12)`, f.Group, f.P1, f.PN1)
 	return f, cleanup
 }
 

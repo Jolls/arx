@@ -286,8 +286,9 @@ UPDATE purchase_order SET rfq_group_id = sqlc.arg(group_id)::int WHERE id = sqlc
 UPDATE purchase_order SET date_printed = sqlc.arg(printed_on)::text::date WHERE number = sqlc.arg(number);
 
 -- name: CreatePOStatusEvent :exec
-INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, changed_by)
-VALUES (sqlc.arg(po_id), 'status', sqlc.narg(from_status)::text, sqlc.arg(to_status)::text, sqlc.arg(changed_by));
+-- from_status and note are NULL when the caller has none (a creation event, a plain transition).
+INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, note, changed_by)
+VALUES (sqlc.arg(po_id), 'status', sqlc.narg(from_status)::text, sqlc.arg(to_status)::text, sqlc.narg(note)::text, sqlc.arg(changed_by));
 
 -- name: CreatePOLine :exec
 INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
@@ -407,8 +408,3 @@ INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot
 SELECT sqlc.arg(po_id)::int, line_number, part_number_snapshot, revision_snapshot,
   description, qty, unit_cost, vendor_part_number, part_id, lead_time_days
 FROM po_line WHERE po_id = sqlc.arg(source_id)::int;
-
--- name: CreatePOStatusEventNote :exec
--- CreatePOStatusEvent with a note.
-INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, note, changed_by)
-VALUES (sqlc.arg(po_id), 'status', sqlc.narg(from_status)::text, sqlc.arg(to_status)::text, sqlc.arg(note)::text, sqlc.arg(changed_by));

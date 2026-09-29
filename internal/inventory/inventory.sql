@@ -55,26 +55,15 @@ SELECT COUNT(*) FROM build WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_i
 INSERT INTO genealogy (parent_lot_id, child_lot_id, qty_consumed)
 VALUES (sqlc.arg(parent_lot_id), sqlc.arg(child_lot_id), sqlc.arg(qty_consumed));
 
--- name: ListPartLots :many
+-- name: ListLots :many
+-- Newest first. A NULL part_id lists every part's lots; a NULL n means no limit.
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
        COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
        l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
 FROM lot l JOIN part p ON p.id = l.part_id
-WHERE l.part_id = sqlc.arg(part_id) ORDER BY l.created_at DESC, l.id DESC;
-
--- name: ListRecentPartLots :many
-SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
-       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
-FROM lot l JOIN part p ON p.id = l.part_id
-WHERE l.part_id = sqlc.arg(part_id) ORDER BY l.created_at DESC, l.id DESC LIMIT sqlc.arg(n)::int;
-
--- name: ListAllLots :many
-SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
-       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
-FROM lot l JOIN part p ON p.id = l.part_id
-ORDER BY l.created_at DESC, l.id DESC;
+WHERE (sqlc.narg(part_id)::int IS NULL OR l.part_id = sqlc.narg(part_id)::int)
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT sqlc.narg(n)::int;
 
 -- name: GetLot :one
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
@@ -224,11 +213,13 @@ WHERE b.parent_part_id = sqlc.arg(parent_part_id)
 ORDER BY b.line_number;
 
 -- name: ListBuildLines :many
--- No ORDER BY: consumption order is not significant.
+-- Ascending component id: the build locks each component's part row in this order, so two builds that share
+-- components can't lock them in opposite orders and deadlock (#268).
 SELECT b.component_part_id, COALESCE(p.part_number, '') AS part_number, b.qty,
        COALESCE(p.category, '') AS category, p.tracking_mode
 FROM bom b JOIN part p ON b.component_part_id = p.id
-WHERE b.parent_part_id = sqlc.arg(parent_part_id);
+WHERE b.parent_part_id = sqlc.arg(parent_part_id)
+ORDER BY b.component_part_id, b.line_number;
 
 -- name: CreateBuild :one
 INSERT INTO build (part_id, qty, build_date, username, note)

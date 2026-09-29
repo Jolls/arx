@@ -364,14 +364,10 @@ type scopedRecordRow struct {
 	FormLabel    string `json:"formLabel"` // "<form part number> — <form description>"
 }
 
-// scopedRecordsRows returns every active form_record matching whereCol = id,
-// across all forms, for the Part/Lot/Unit records tables (#875). whereCol must
-// be "part_id", "lot_id", or "unit_id"; anything else is an error.
-func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int) ([]scopedRecordRow, error) {
-	scope, err := recordScope(whereCol)
-	if err != nil {
-		return nil, err
-	}
+// scopedRecordsRows returns every active form_record of a part, lot or unit
+// (records.ScopePart / ScopeLot / ScopeUnit), across all forms, for the
+// Part/Lot/Unit records tables (#875).
+func (h *Handler) scopedRecordsRows(ctx context.Context, scope records.Scope, id int) ([]scopedRecordRow, error) {
 	listed, err := h.records().ListScopedRecords(ctx, scope, id)
 	if err != nil {
 		return nil, err
@@ -394,26 +390,9 @@ func (h *Handler) scopedRecordsRows(ctx context.Context, whereCol string, id int
 	return out, nil
 }
 
-// recordScope maps the caller-supplied form_record column name to its records scope.
-func recordScope(whereCol string) (records.Scope, error) {
-	switch whereCol {
-	case "part_id":
-		return records.ScopePart, nil
-	case "lot_id":
-		return records.ScopeLot, nil
-	case "unit_id":
-		return records.ScopeUnit, nil
-	}
-	return 0, fmt.Errorf("unsupported record scope %q", whereCol)
-}
-
 // scopedRecordTypeOptions returns distinct non-empty record_type (Type) values for
 // the filter-row datalist, scoped the same way as scopedRecordsRows.
-func (h *Handler) scopedRecordTypeOptions(ctx context.Context, whereCol string, id int) ([]string, error) {
-	scope, err := recordScope(whereCol)
-	if err != nil {
-		return nil, err
-	}
+func (h *Handler) scopedRecordTypeOptions(ctx context.Context, scope records.Scope, id int) ([]string, error) {
 	return h.records().ListRecordTypes(ctx, scope, id)
 }
 
@@ -1523,14 +1502,14 @@ func containsLotOption(lots []LotOption, lotID int) bool {
 
 // recordLinkageArgs reads and validates the lot_id/build_id form fields for a record
 // whose tested part is partID (#677), for saving alongside the record's other metadata.
-// Each returned value is the chosen id, or nil to clear the link when the field is
+// Each returned id is the chosen one, or nil to clear the link when the field is
 // blank. A non-blank id that doesn't belong to the part yields an error (surfaced as a
 // 400). Unlike the build's component-lot check, a lot need not be active here — a record
 // may legitimately reference a since-retired lot.
-func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildArg any, err error) {
+func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildArg *int, err error) {
 	ctx := r.Context()
 	inv := h.inventory()
-	belongs := func(owns func(context.Context, int, int) (bool, error), v string) (any, error) {
+	belongs := func(owns func(context.Context, int, int) (bool, error), v string) (*int, error) {
 		id, convErr := strconv.Atoi(v)
 		if convErr != nil || id <= 0 {
 			return nil, fmt.Errorf("invalid selection")
@@ -1542,7 +1521,7 @@ func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildA
 		if !ok {
 			return nil, fmt.Errorf("selection does not belong to this record's part")
 		}
-		return id, nil
+		return &id, nil
 	}
 	if v := fv(r, "lot_id"); v != "" {
 		if lotArg, err = belongs(inv.PartHasLot, v); err != nil {
@@ -1555,21 +1534,6 @@ func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildA
 		}
 	}
 	return lotArg, buildArg, nil
-}
-
-// upsertUnitForRecord finds or lazily creates the serialized unit a serial/lot_serial
-// part's test record refers to (#745, Q5). The (part_id, serial) pair uniquely
-// identifies the unit, so a retest — a second record with the same serial — re-links
-// the existing unit rather than minting a duplicate. Provenance (buildID, lotID; each
-// an int or nil, as returned by recordLinkageArgs) is set only on creation; a
-// test-minted unit should always have at least one set (the Q5 invariant), so the
-// caller skips the upsert when both are nil — an app-level rule only, not a DB CHECK:
-// CK_unit_provenance was dropped by migrate_799_unit_source.sql (#799), since a
-// `manual` unit legitimately has neither. tx-accepting so a build-at-test-time save
-// (#747) can mint the unit in the same transaction as the build.
-func (h *Handler) upsertUnitForRecord(ctx context.Context, tx *txLogger, partID int, serial string, buildID, lotID any) (int, error) {
-	// An existing unit (retest / re-save) is reused, never duplicated.
-	return inventory.New(tx).UpsertTestUnit(ctx, partID, serial, anyIntPtr(buildID), anyIntPtr(lotID))
 }
 
 // EditRecord — GET /records/{id}/edit
@@ -2166,9 +2130,9 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			serverError(w, "could not build", berr)
 			return
 		}
-		buildArg = bID // the new build is this unit's provenance, overriding any dropdown pick
+		buildArg = &bID // the new build is this unit's provenance, overriding any dropdown pick
 		if outputLotTracked {
-			lotArg = outLot
+			lotArg = &outLot
 		}
 	}
 
@@ -2178,19 +2142,19 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	// other's page-load copy. Placed here so a note can follow a lot the build above just
 	// created, and while lotArg still holds the lot — the Q8 reset below nils it out.
 	if lotNote := strings.TrimSpace(r.FormValue("lot_note")); lotNote != "" {
-		if lotID, ok := lotArg.(int); ok {
+		if lotArg != nil {
 			username := ""
 			if u := h.currentUser(r); u != nil {
 				username = u.Username
 			}
-			if err := h.appendLotNote(r.Context(), tx, lotID, lotNote, username); err != nil {
+			if err := h.appendLotNote(r.Context(), tx, *lotArg, lotNote, username); err != nil {
 				serverError(w, "could not save lot note", err)
 				return
 			}
 		}
 	}
 
-	var unitArg any
+	var unitArg *int
 	if record.UnitID != nil {
 		// Already linked to a unit — reuse it rather than re-deriving from
 		// serial_number. A unit's serial can be edited after the fact (#799, Part →
@@ -2198,21 +2162,25 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		// by serial on every save would then silently mint a duplicate unit and orphan
 		// the original (#876). There is no UI to change a record's serial_number after
 		// creation, so the record<->unit link, once set, is authoritative.
-		unitArg = *record.UnitID
+		unitArg = record.UnitID
 	} else if models.TracksSerials(trackingMode) && record.SerialNumber != "" && (buildArg != nil || lotArg != nil) {
-		uid, uerr := h.upsertUnitForRecord(r.Context(), tx, record.PartNumberID, record.SerialNumber, buildArg, lotArg)
+		// Find or lazily create the unit for (part, serial) (#745, Q5): a retest re-links the existing
+		// unit, and provenance is set only on creation. A test-minted unit should carry at least one of
+		// build/lot, so the upsert is skipped when both are nil (an app rule, not a DB CHECK: #799 dropped
+		// CK_unit_provenance since a manual unit legitimately has neither).
+		uid, uerr := inventory.New(tx).UpsertTestUnit(r.Context(), record.PartNumberID, record.SerialNumber, buildArg, lotArg)
 		if uerr != nil {
 			serverError(w, "could not record unit", uerr)
 			return
 		}
-		unitArg = uid
+		unitArg = &uid
 	}
 	if unitArg != nil {
 		lotArg, buildArg = nil, nil // Q8: provenance lives on the unit, not the record
 	}
 	if err := svc.UpdateRecordAfterSave(r.Context(), recordID, records.RecordSave{
 		RecordDate: rd, RecordType: recordType, Notes: notes, InstrumentType: instrumentType,
-		LotID: anyIntPtr(lotArg), BuildID: anyIntPtr(buildArg), UnitID: anyIntPtr(unitArg),
+		LotID: lotArg, BuildID: buildArg, UnitID: unitArg,
 	}); err != nil {
 		serverError(w, "could not save record", err)
 		return

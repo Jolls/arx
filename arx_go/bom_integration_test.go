@@ -30,17 +30,16 @@ type bomFixture struct {
 func seedBOM(t *testing.T, h *Handler) (f bomFixture, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, bom, prc := "part", "bom", "price"
 	base := smokeUniq("ITEST-BOM")
 	f.PN = map[int]string{}
 	var ids []int
 	cleanup = func() {
 		for _, id := range ids {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id=$1 OR component_part_id=$1`, bom), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, prc), id)
+			smokeExec(ctx, h, `DELETE FROM bom WHERE parent_part_id=$1 OR component_part_id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM price WHERE part_id=$1`, id)
 		}
 		for _, id := range ids {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
 	}
 	scan := func(q string, args ...any) int {
@@ -55,7 +54,7 @@ func seedBOM(t *testing.T, h *Handler) (f bomFixture, cleanup func()) {
 	part := func(suffix, cols, vals string, args ...any) int {
 		t.Helper()
 		number := base + "-" + suffix
-		id := scan(fmt.Sprintf(`INSERT INTO %s (part_number%s) VALUES ($1%s) RETURNING id`, pn, cols, vals),
+		id := scan(fmt.Sprintf(`INSERT INTO part (part_number%s) VALUES ($1%s) RETURNING id`, cols, vals),
 			append([]any{number}, args...)...)
 		ids = append(ids, id)
 		f.PN[id] = number
@@ -63,7 +62,7 @@ func seedBOM(t *testing.T, h *Handler) (f bomFixture, cleanup func()) {
 	}
 	line := func(parent, comp, n int, qty float64) int {
 		t.Helper()
-		return scan(fmt.Sprintf(`INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES ($1,$2,$3,$4) RETURNING id`, bom),
+		return scan(`INSERT INTO bom (parent_part_id, component_part_id, line_number, qty) VALUES ($1,$2,$3,$4) RETURNING id`,
 			parent, comp, n, qty)
 	}
 	f.P = part("P", ", description, revision, category", ",'parent desc','A','ASM'")
@@ -80,7 +79,7 @@ func seedBOM(t *testing.T, h *Handler) (f bomFixture, cleanup func()) {
 		priceEA, pack float64
 		active        bool
 	}{{1001, 0.30, 1, true}, {1001, 0.25, 10, true}, {1001, 0.10, 1, false}, {1002, 0.05, 1, true}} {
-		scan(fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, price_ea, pack_size, is_active) VALUES ($1,$2,$3,$4,$5) RETURNING id`, prc),
+		scan(`INSERT INTO price (part_id, supplier_id, price_ea, pack_size, is_active) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
 			f.L1, p.supplier, p.priceEA, p.pack, p.active)
 	}
 	f.LineS = line(f.P, f.S, 3, 1)
@@ -94,9 +93,9 @@ func seedBOM(t *testing.T, h *Handler) (f bomFixture, cleanup func()) {
 // bomLines reads parent's lines as "component:line:qty", by line then component.
 func bomLines(t *testing.T, h *Handler, parent int) []string {
 	t.Helper()
-	rows, err := h.queryContext(context.Background(), fmt.Sprintf(
-		`SELECT component_part_id, line_number, qty FROM %s WHERE parent_part_id=$1 ORDER BY line_number, component_part_id`,
-		"bom"), parent)
+	rows, err := h.queryContext(context.Background(),
+		`SELECT component_part_id, line_number, qty FROM bom WHERE parent_part_id=$1 ORDER BY line_number, component_part_id`,
+		parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,8 +331,8 @@ func TestIntegration_PartDuplicate_CopiesBOM(t *testing.T) {
 		"duplicate_bom_from": {strconv.Itoa(f.P)},
 	}))
 	id := locID(t, rec, "/part/")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", "part"), id)
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE parent_part_id=$1", "bom"), id)
+	defer smokeExec(ctx, h, "DELETE FROM part WHERE id=$1", id)
+	defer smokeExec(ctx, h, "DELETE FROM bom WHERE parent_part_id=$1", id)
 	if got, want := bomLines(t, h, id), bomLines(t, h, f.P); !reflect.DeepEqual(got, want) || len(got) != 4 {
 		t.Errorf("duplicated BOM = %v, want %v", got, want)
 	}

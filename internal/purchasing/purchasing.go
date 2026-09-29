@@ -597,11 +597,15 @@ func (s *Service) MarkPOPrinted(ctx context.Context, number, on string) error {
 
 // CreatePOStatusEvent records a status change on poID; from is nil on creation.
 func (s *Service) CreatePOStatusEvent(ctx context.Context, poID int, from *string, to, changedBy string) error {
+	return s.createPOStatusEvent(ctx, poID, from, to, sql.NullString{}, changedBy)
+}
+
+func (s *Service) createPOStatusEvent(ctx context.Context, poID int, from *string, to string, note sql.NullString, changedBy string) error {
 	var f sql.NullString
 	if from != nil {
 		f = sql.NullString{String: *from, Valid: true}
 	}
-	return s.q.CreatePOStatusEvent(ctx, dbq.CreatePOStatusEventParams{PoID: poID, FromStatus: f, ToStatus: to, ChangedBy: changedBy})
+	return s.q.CreatePOStatusEvent(ctx, dbq.CreatePOStatusEventParams{PoID: poID, FromStatus: f, ToStatus: to, Note: note, ChangedBy: changedBy})
 }
 
 // CreatePOLine adds l to poID. Only the line number, snapshots, description,
@@ -740,9 +744,5 @@ func (s *Service) CopyPOLines(ctx context.Context, sourceID, poID int) error {
 
 // CreatePOStatusEventNote is CreatePOStatusEvent with a note.
 func (s *Service) CreatePOStatusEventNote(ctx context.Context, poID int, from *string, to, note, changedBy string) error {
-	var f sql.NullString
-	if from != nil {
-		f = sql.NullString{String: *from, Valid: true}
-	}
-	return s.q.CreatePOStatusEventNote(ctx, dbq.CreatePOStatusEventNoteParams{PoID: poID, FromStatus: f, ToStatus: to, Note: note, ChangedBy: changedBy})
+	return s.createPOStatusEvent(ctx, poID, from, to, sql.NullString{String: note, Valid: true}, changedBy)
 }
