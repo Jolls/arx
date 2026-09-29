@@ -747,10 +747,7 @@ func supplierFromForm(r *http.Request) models.Supplier {
 		BulkOrderDelimiter: bulkOrderDelimiterOrDefault(fv(r, "bulk_order_delimiter")),
 		BulkOrderPNSource:  bulkOrderPNSourceOrDefault(fv(r, "bulk_order_pn_source")),
 	}
-	if v := nullableInt(fv(r, "default_contact")); v != nil {
-		i := v.(int)
-		s.DefaultContact = &i
-	}
+	s.DefaultContact = intPtrOrNil(fv(r, "default_contact"))
 	return s
 }
 
@@ -786,16 +783,6 @@ func bulkOrderPNSourceOrDefault(v string) string {
 	default:
 		return "internal"
 	}
-}
-
-func nullableInt(s string) any {
-	if s == "" {
-		return nil
-	}
-	if n, err := strconv.Atoi(s); err == nil {
-		return n
-	}
-	return nil
 }
 
 // intPtrOrNil parses s as an int for a nullable sqlc param: nil for empty or invalid input.

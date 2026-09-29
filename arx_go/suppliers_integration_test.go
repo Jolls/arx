@@ -145,9 +145,9 @@ func TestIntegration_SupplierUpdate(t *testing.T) {
 	var name, code string
 	var active, isSupplier, isManufacturer bool
 	var defaultContact *int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT name, supplier_code, is_active, is_supplier, is_manufacturer, default_contact FROM %s WHERE id=$1`,
-		"company"), supplierID,
+	if err := h.queryRowContext(ctx,
+		`SELECT name, supplier_code, is_active, is_supplier, is_manufacturer, default_contact FROM company WHERE id=$1`,
+		supplierID,
 	).Scan(&name, &code, &active, &isSupplier, &isManufacturer, &defaultContact); err != nil {
 		t.Fatalf("select updated supplier: %v", err)
 	}
@@ -168,8 +168,8 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 	defer cl()
 
 	var before string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT name FROM %s WHERE id=$1`, "company"), supplierID,
+	if err := h.queryRowContext(ctx,
+		`SELECT name FROM company WHERE id=$1`, supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
 	}
@@ -184,8 +184,8 @@ func TestIntegration_SupplierUpdate_MissingName(t *testing.T) {
 	}
 
 	var after string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT name FROM %s WHERE id=$1`, "company"), supplierID,
+	if err := h.queryRowContext(ctx,
+		`SELECT name FROM company WHERE id=$1`, supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
 	}
@@ -205,8 +205,8 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 	defer cl()
 
 	var before string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT supplier_code FROM %s WHERE id=$1`, "company"), supplierID,
+	if err := h.queryRowContext(ctx,
+		`SELECT supplier_code FROM company WHERE id=$1`, supplierID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seed supplier: %v", err)
 	}
@@ -222,8 +222,8 @@ func TestIntegration_SupplierUpdate_InvalidFolderStub(t *testing.T) {
 	}
 
 	var after string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT supplier_code FROM %s WHERE id=$1`, "company"), supplierID,
+	if err := h.queryRowContext(ctx,
+		`SELECT supplier_code FROM company WHERE id=$1`, supplierID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier after rejected update: %v", err)
 	}
@@ -275,13 +275,13 @@ func TestIntegration_SupplierNotesCodeAndCounts(t *testing.T) {
 	h.cfg().POFolderRoot = savedRoot
 	number := strings.TrimSuffix(strings.TrimPrefix(rec.Header().Get("Location"), "/po/"), "?suggest_links=1")
 	var poID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", "purchase_order"), number).Scan(&poID); err != nil {
+	if err := h.queryRowContext(ctx, "SELECT ID FROM purchase_order WHERE number=$1", number).Scan(&poID); err != nil {
 		t.Fatalf("look up created PO %q: %v", number, err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "po_line"), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "purchase_order_history"), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", "purchase_order"), poID)
+		smokeExec(ctx, h, "DELETE FROM po_line WHERE po_id=$1", poID)
+		smokeExec(ctx, h, "DELETE FROM purchase_order_history WHERE po_id=$1", poID)
+		smokeExec(ctx, h, "DELETE FROM purchase_order WHERE ID=$1", poID)
 	}()
 
 	rec = httptest.NewRecorder()
@@ -314,13 +314,13 @@ func TestIntegration_POCreate_FolderUsesSupplierCode(t *testing.T) {
 	h.POCreate(rec, postForm("/pos", url.Values{"supplier_id": {"1001"}}))
 	number := strings.TrimSuffix(strings.TrimPrefix(rec.Header().Get("Location"), "/po/"), "?suggest_links=1")
 	var poID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf("SELECT ID FROM %s WHERE number=$1", "purchase_order"), number).Scan(&poID); err != nil {
+	if err := h.queryRowContext(ctx, "SELECT ID FROM purchase_order WHERE number=$1", number).Scan(&poID); err != nil {
 		t.Fatalf("look up created PO %q: %v", number, err)
 	}
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "po_line"), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE po_id=$1", "purchase_order_history"), poID)
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE ID=$1", "purchase_order"), poID)
+		smokeExec(ctx, h, "DELETE FROM po_line WHERE po_id=$1", poID)
+		smokeExec(ctx, h, "DELETE FROM purchase_order_history WHERE po_id=$1", poID)
+		smokeExec(ctx, h, "DELETE FROM purchase_order WHERE ID=$1", poID)
 	}()
 
 	entries, _ := os.ReadDir(root)

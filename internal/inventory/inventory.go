@@ -166,9 +166,8 @@ type LotRow struct {
 	IsActive        bool
 }
 
-// ListPartLots returns every lot of a part, newest first.
-func (s *Service) ListPartLots(ctx context.Context, partID int) ([]LotRow, error) {
-	rows, err := s.q.ListPartLots(ctx, partID)
+func (s *Service) listLots(ctx context.Context, partID, n *int) ([]LotRow, error) {
+	rows, err := s.q.ListLots(ctx, dbq.ListLotsParams{PartID: partID, N: n})
 	if err != nil {
 		return nil, err
 	}
@@ -177,32 +176,21 @@ func (s *Service) ListPartLots(ctx context.Context, partID int) ([]LotRow, error
 		out[i] = LotRow(r)
 	}
 	return out, nil
+}
+
+// ListPartLots returns every lot of a part, newest first.
+func (s *Service) ListPartLots(ctx context.Context, partID int) ([]LotRow, error) {
+	return s.listLots(ctx, &partID, nil)
 }
 
 // ListRecentPartLots returns a part's n newest lots.
 func (s *Service) ListRecentPartLots(ctx context.Context, partID, n int) ([]LotRow, error) {
-	rows, err := s.q.ListRecentPartLots(ctx, dbq.ListRecentPartLotsParams{PartID: partID, N: n})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]LotRow, len(rows))
-	for i, r := range rows {
-		out[i] = LotRow(r)
-	}
-	return out, nil
+	return s.listLots(ctx, &partID, &n)
 }
 
 // ListAllLots returns every lot of every part, newest first.
 func (s *Service) ListAllLots(ctx context.Context) ([]LotRow, error) {
-	rows, err := s.q.ListAllLots(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]LotRow, len(rows))
-	for i, r := range rows {
-		out[i] = LotRow(r)
-	}
-	return out, nil
+	return s.listLots(ctx, nil, nil)
 }
 
 // GetLot loads one lot; found is false (nil error) when it does not exist.

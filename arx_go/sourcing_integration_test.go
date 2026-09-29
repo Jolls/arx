@@ -43,13 +43,13 @@ func seedSupplierPart(t *testing.T, h *Handler, ctx context.Context, partID, sup
 		t.Fatalf("seedSupplierPart: SupplierPartCreate status %d, body: %s", rec.Code, rec.Body.String())
 	}
 	var spID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT MAX(id) FROM %s WHERE part_id=$1`, "supplier_part"), partID,
+	if err := h.queryRowContext(ctx,
+		`SELECT MAX(id) FROM supplier_part WHERE part_id=$1`, partID,
 	).Scan(&spID); err != nil {
 		t.Fatalf("seedSupplierPart: capture new id: %v", err)
 	}
 	return spID, func() {
-		smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", "supplier_part"), spID)
+		smokeExec(ctx, h, "DELETE FROM supplier_part WHERE id=$1", spID)
 	}
 }
 
@@ -164,8 +164,8 @@ func TestIntegration_SupplierPartUpdate(t *testing.T) {
 
 	var supplierPN, leadTime string
 	var minIncrement float64
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT supplier_pn, lead_time, min_increment FROM %s WHERE id=$1`, "supplier_part"), spID,
+	if err := h.queryRowContext(ctx,
+		`SELECT supplier_pn, lead_time, min_increment FROM supplier_part WHERE id=$1`, spID,
 	).Scan(&supplierPN, &leadTime, &minIncrement); err != nil {
 		t.Fatalf("select updated supplier_part: %v", err)
 	}
@@ -190,8 +190,8 @@ func TestIntegration_SupplierPartUpdate_MissingSupplier(t *testing.T) {
 	defer spc()
 
 	var before string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT supplier_pn FROM %s WHERE id=$1`, "supplier_part"), spID,
+	if err := h.queryRowContext(ctx,
+		`SELECT supplier_pn FROM supplier_part WHERE id=$1`, spID,
 	).Scan(&before); err != nil {
 		t.Fatalf("select seeded supplier_part: %v", err)
 	}
@@ -207,8 +207,8 @@ func TestIntegration_SupplierPartUpdate_MissingSupplier(t *testing.T) {
 	}
 
 	var after string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT supplier_pn FROM %s WHERE id=$1`, "supplier_part"), spID,
+	if err := h.queryRowContext(ctx,
+		`SELECT supplier_pn FROM supplier_part WHERE id=$1`, spID,
 	).Scan(&after); err != nil {
 		t.Fatalf("select supplier_part after rejected update: %v", err)
 	}
@@ -240,8 +240,8 @@ func TestIntegration_SupplierPartDelete(t *testing.T) {
 	assert302(t, "SupplierPartDelete", rec)
 
 	var remaining int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s WHERE part_id=$1`, "supplier_part"), partID,
+	if err := h.queryRowContext(ctx,
+		`SELECT COUNT(*) FROM supplier_part WHERE part_id=$1`, partID,
 	).Scan(&remaining); err != nil {
 		t.Fatalf("count remaining supplier_part rows: %v", err)
 	}
@@ -249,8 +249,8 @@ func TestIntegration_SupplierPartDelete(t *testing.T) {
 		t.Fatalf("remaining supplier_part rows for part %d = %d, want 1", partID, remaining)
 	}
 	var remainingID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE part_id=$1`, "supplier_part"), partID,
+	if err := h.queryRowContext(ctx,
+		`SELECT id FROM supplier_part WHERE part_id=$1`, partID,
 	).Scan(&remainingID); err != nil {
 		t.Fatalf("select remaining supplier_part row: %v", err)
 	}
@@ -270,10 +270,10 @@ func createSupplierPart(h *Handler, partID int, form url.Values) *httptest.Respo
 // included, attachments aside) writes for partID. Defer it after the part and
 // company cleanups so it runs first (FK order).
 func deleteSourcingRows(ctx context.Context, h *Handler, partID int) {
-	smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET default_supplier_id=NULL WHERE id=$1", "part"), partID)
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", "price"), partID)
+	smokeExec(ctx, h, "UPDATE part SET default_supplier_id=NULL WHERE id=$1", partID)
+	smokeExec(ctx, h, "DELETE FROM price WHERE part_id=$1", partID)
 	deleteMfgParts(ctx, h, partID)
-	smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE part_id=$1", "supplier_part"), partID)
+	smokeExec(ctx, h, "DELETE FROM supplier_part WHERE part_id=$1", partID)
 }
 
 // countByPart counts table's rows for partID.
@@ -294,9 +294,9 @@ type importedPrice struct {
 // activeImportedPrices returns partID's active prices from supplierID by pack size.
 func activeImportedPrices(t *testing.T, h *Handler, ctx context.Context, partID, supplierID int) []importedPrice {
 	t.Helper()
-	rows, err := h.queryContext(ctx, fmt.Sprintf(`
-		SELECT pack_size, price_ea, price_pack, effective_date::text FROM %s
-		WHERE part_id=$1 AND supplier_id=$2 AND is_active ORDER BY pack_size`, "price"), partID, supplierID)
+	rows, err := h.queryContext(ctx, `
+		SELECT pack_size, price_ea, price_pack, effective_date::text FROM price
+		WHERE part_id=$1 AND supplier_id=$2 AND is_active ORDER BY pack_size`, partID, supplierID)
 	if err != nil {
 		t.Fatalf("query prices: %v", err)
 	}
@@ -370,9 +370,9 @@ func TestIntegration_SupplierPartCreate_Fields(t *testing.T) {
 	}), partID, lk.ID))
 	assert302(t, "SupplierPartUpdate", rec)
 	var baseUnit string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT COALESCE(u.abbreviation, '') FROM %s p LEFT JOIN %s u ON p.uom_id = u.uom_id WHERE p.id=$1`,
-		"part", "uom"), partID).Scan(&baseUnit); err != nil {
+	if err := h.queryRowContext(ctx,
+		`SELECT COALESCE(u.abbreviation, '') FROM part p LEFT JOIN uom u ON p.uom_id = u.uom_id WHERE p.id=$1`,
+		partID).Scan(&baseUnit); err != nil {
 		t.Fatalf("select part unit: %v", err)
 	}
 	if links, err = h.fetchSupplierLinks(getReq, strconv.Itoa(partID)); err != nil || len(links) != 1 {
@@ -413,7 +413,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyPrices(t *testing.T) {
 		}
 	}
 	var defaultSupplier int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(default_supplier_id, 0) FROM %s WHERE id=$1`, "part"), partID).Scan(&defaultSupplier); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT COALESCE(default_supplier_id, 0) FROM part WHERE id=$1`, partID).Scan(&defaultSupplier); err != nil {
 		t.Fatalf("select default supplier: %v", err)
 	}
 	if defaultSupplier != supplierID {
@@ -432,7 +432,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyNewManufacturer(t *testing.T) {
 	partID, pc := seedPart(t, h, ctx, "BUY")
 	defer pc()
 	mfgName := smokeUniq("SMOKE-MFG")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE name=$1", "company"), mfgName)
+	defer smokeExec(ctx, h, "DELETE FROM company WHERE name=$1", mfgName)
 	defer deleteSourcingRows(ctx, h, partID)
 
 	mpn := smokeUniq("SMOKE-MPN")
@@ -444,7 +444,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyNewManufacturer(t *testing.T) {
 	}))
 	var mfgID int
 	var isSupplier, isMfg bool
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT id, is_supplier, is_manufacturer FROM %s WHERE name=$1`, "company"), mfgName).
+	if err := h.queryRowContext(ctx, `SELECT id, is_supplier, is_manufacturer FROM company WHERE name=$1`, mfgName).
 		Scan(&mfgID, &isSupplier, &isMfg); err != nil {
 		t.Fatalf("select new manufacturer: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyNewManufacturer(t *testing.T) {
 	}
 	var gotMPN string
 	var desc sql.NullString
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT mfg_part_number, description FROM %s WHERE part_id=$1 AND mfg_id=$2 AND is_active`, "mfg_part"), partID, mfgID).
+	if err := h.queryRowContext(ctx, `SELECT mfg_part_number, description FROM mfg_part WHERE part_id=$1 AND mfg_id=$2 AND is_active`, partID, mfgID).
 		Scan(&gotMPN, &desc); err != nil {
 		t.Fatalf("select mfg_part: %v", err)
 	}
@@ -482,7 +482,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyExistingManufacturer(t *testing.T
 		"dk_mfg_part_number": {mpn},
 	}))
 	var n int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE part_id=$1 AND mfg_id=$2 AND mfg_part_number=$3 AND is_active`, "mfg_part"), partID, mfgID, mpn).
+	if err := h.queryRowContext(ctx, `SELECT COUNT(*) FROM mfg_part WHERE part_id=$1 AND mfg_id=$2 AND mfg_part_number=$3 AND is_active`, partID, mfgID, mpn).
 		Scan(&n); err != nil {
 		t.Fatalf("count mfg_part: %v", err)
 	}
@@ -524,8 +524,8 @@ func TestIntegration_SupplierPartCreate_DigiKeyPriceExists(t *testing.T) {
 	partID, pc := seedPart(t, h, ctx, "BUY")
 	defer pc()
 	defer deleteSourcingRows(ctx, h, partID)
-	if _, err := h.execContext(ctx, fmt.Sprintf(`INSERT INTO %s (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
-		VALUES ($1, $2, 1, 0.9, 0.9, '2020-01-01', TRUE)`, "price"), partID, supplierID); err != nil {
+	if _, err := h.execContext(ctx, `INSERT INTO price (part_id, supplier_id, pack_size, price_ea, price_pack, effective_date, is_active)
+		VALUES ($1, $2, 1, 0.9, 0.9, '2020-01-01', TRUE)`, partID, supplierID); err != nil {
 		t.Fatalf("seed price: %v", err)
 	}
 
@@ -559,7 +559,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyMfgPartExists(t *testing.T) {
 	defer deleteSourcingRows(ctx, h, partID)
 	mid, _ := seedMfgPart(t, h, ctx, partID, mfgID)
 	var mpn string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT mfg_part_number FROM %s WHERE id=$1`, "mfg_part"), mid).Scan(&mpn); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT mfg_part_number FROM mfg_part WHERE id=$1`, mid).Scan(&mpn); err != nil {
 		t.Fatalf("select seeded mpn: %v", err)
 	}
 
@@ -591,7 +591,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyManufacturerNameTaken(t *testing.
 	defer cc()
 	defer deleteSourcingRows(ctx, h, partID)
 	var name string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, "company"), companyID).Scan(&name); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT name FROM company WHERE id=$1`, companyID).Scan(&name); err != nil {
 		t.Fatalf("select company name: %v", err)
 	}
 

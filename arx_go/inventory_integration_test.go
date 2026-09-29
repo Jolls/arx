@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"arx/internal/inventory"
 )
 
 // Characterization tests for the inventory domain (#222): gaps the older integration tests
@@ -80,9 +82,9 @@ func TestIntegration_InventoryCreateLot(t *testing.T) {
 	}
 	read := func(id int) lotState {
 		var s lotState
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(
-			`SELECT part_id, lot_number, lot_description, vendor_lot_number, po_line_id, source, is_active, notes, created_at FROM %s WHERE id=$1`,
-			"lot"), id).Scan(&s.Part, &s.Number, &s.Desc, &s.Vendor, &s.POLine, &s.Source, &s.Active, &s.Notes, &s.created); err != nil {
+		if err := tx.QueryRowContext(ctx,
+			`SELECT part_id, lot_number, lot_description, vendor_lot_number, po_line_id, source, is_active, notes, created_at FROM lot WHERE id=$1`,
+			id).Scan(&s.Part, &s.Number, &s.Desc, &s.Vendor, &s.POLine, &s.Source, &s.Active, &s.Notes, &s.created); err != nil {
 			t.Fatal(err)
 		}
 		return s
@@ -116,7 +118,7 @@ func TestIntegration_InventoryRecordTxn(t *testing.T) {
 
 	stock := func() float64 {
 		var v float64
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT stock_on_hand FROM %s WHERE id=3002`, "part")).Scan(&v); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT stock_on_hand FROM part WHERE id=3002`).Scan(&v); err != nil {
 			t.Fatal(err)
 		}
 		return v
@@ -130,9 +132,9 @@ func TestIntegration_InventoryRecordTxn(t *testing.T) {
 		PO, Lot, Build sql.NullInt64
 	}
 	last := func() (r row) {
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(
+		if err := tx.QueryRowContext(ctx,
 			`SELECT txn_type, username, qty::float8, txn_date::text, reference, note, po_line_id, lot_id, build_id
-			 FROM %s WHERE part_id=3002 ORDER BY id DESC LIMIT 1`, "inventory_transaction")).
+			 FROM inventory_transaction WHERE part_id=3002 ORDER BY id DESC LIMIT 1`).
 			Scan(&r.Type, &r.User, &r.Qty, &r.Date, &r.Ref, &r.Note, &r.PO, &r.Lot, &r.Build); err != nil {
 			t.Fatal(err)
 		}
@@ -176,7 +178,7 @@ func TestIntegration_InventoryAppendLotNote(t *testing.T) {
 	}
 	notes := func() sql.NullString {
 		var n sql.NullString
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT notes FROM %s WHERE id=$1`, "lot"), id).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT notes FROM lot WHERE id=$1`, id).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
@@ -320,7 +322,6 @@ func TestIntegration_InventoryUnitCreateUpdate(t *testing.T) {
 	h, done := liveHandler(t)
 	t.Cleanup(done)
 	ctx := context.Background()
-	ut := "unit"
 
 	// Manual unit linked to build 8201 (a build of part 3005), no lot.
 	serial := smokeUniq("SN-222")
@@ -331,11 +332,11 @@ func TestIntegration_InventoryUnitCreateUpdate(t *testing.T) {
 	var lot, build sql.NullInt64
 	var source string
 	var active bool
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT id, lot_id, build_id, source, is_active FROM %s WHERE part_id=3005 AND serial_number=$1`, ut), serial).
+	if err := h.queryRowContext(ctx, `SELECT id, lot_id, build_id, source, is_active FROM unit WHERE part_id=3005 AND serial_number=$1`, serial).
 		Scan(&unitID, &lot, &build, &source, &active); err != nil {
 		t.Fatalf("unit not created: %v", err)
 	}
-	t.Cleanup(func() { smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, ut), unitID) })
+	t.Cleanup(func() { smokeExec(ctx, h, `DELETE FROM unit WHERE id=$1`, unitID) })
 	if lot.Valid || build.Int64 != 8201 || source != "manual" || !active {
 		t.Errorf("unit = lot %v build %v source %q active %v", lot, build, source, active)
 	}
@@ -357,7 +358,7 @@ func TestIntegration_InventoryUnitCreateUpdate(t *testing.T) {
 	state := func() (string, bool) {
 		var s string
 		var a bool
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT serial_number, is_active FROM %s WHERE id=$1`, ut), unitID).Scan(&s, &a); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT serial_number, is_active FROM unit WHERE id=$1`, unitID).Scan(&s, &a); err != nil {
 			t.Fatal(err)
 		}
 		return s, a
@@ -388,12 +389,12 @@ func TestIntegration_InventoryUnitCreateUpdate(t *testing.T) {
 
 	// Locked: a locked record now points at the unit, so the serial is frozen but scrap still saves.
 	var recID int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active, unit_id) VALUES (6001, 3005, $1, 'x', 'x', '', '', TRUE, TRUE, $2) RETURNING id`,
-		"form_record"), serial, unitID).Scan(&recID); err != nil {
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active, unit_id) VALUES (6001, 3005, $1, 'x', 'x', '', '', TRUE, TRUE, $2) RETURNING id`,
+		serial, unitID).Scan(&recID); err != nil {
 		t.Fatalf("seed locked record (ArxDev may need reseed): %v", err)
 	}
-	t.Cleanup(func() { smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "form_record"), recID) })
+	t.Cleanup(func() { smokeExec(ctx, h, `DELETE FROM form_record WHERE id=$1`, recID) })
 	assertStatus(t, "UnitUpdate(locked)", update(3005, url.Values{"serial_number": {"changed"}, "is_active": {"1"}}), http.StatusSeeOther)
 	if s, a := state(); s != serial+"-r" || !a {
 		t.Errorf("after locked update: serial %q active %v; want serial unchanged, active", s, a)
@@ -410,7 +411,7 @@ func TestIntegration_InventoryLotUpdateWrongPart(t *testing.T) {
 		t.Errorf("LotUpdate wrong part: %s", rec.Body.String())
 	}
 	var desc string
-	if err := h.queryRowContext(context.Background(), fmt.Sprintf(`SELECT lot_description FROM %s WHERE id=8301`, "lot")).Scan(&desc); err != nil || desc != "PO 5003" {
+	if err := h.queryRowContext(context.Background(), `SELECT lot_description FROM lot WHERE id=8301`).Scan(&desc); err != nil || desc != "PO 5003" {
 		t.Errorf("lot 8301 description = %q, %v; want unchanged", desc, err)
 	}
 }
@@ -421,13 +422,13 @@ func TestIntegration_InventoryRecordLinkage(t *testing.T) {
 	ctx := context.Background()
 
 	var retired int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (part_id, lot_number, lot_description, is_active) VALUES (3007, 'ITEST-RETIRED', 'itest-222', FALSE) RETURNING id`, "lot")).Scan(&retired); err != nil {
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO lot (part_id, lot_number, lot_description, is_active) VALUES (3007, 'ITEST-RETIRED', 'itest-222', FALSE) RETURNING id`).Scan(&retired); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, "lot"), retired) })
+	t.Cleanup(func() { smokeExec(ctx, h, `DELETE FROM lot WHERE id=$1`, retired) })
 
-	args := func(part int, vals url.Values) (any, any, error) {
+	args := func(part int, vals url.Values) (*int, *int, error) {
 		r := postForm("/x", vals)
 		if err := r.ParseForm(); err != nil {
 			t.Fatal(err)
@@ -436,11 +437,11 @@ func TestIntegration_InventoryRecordLinkage(t *testing.T) {
 	}
 	// A retired lot of the part is still accepted; blank fields stay nil.
 	lot, build, err := args(3007, url.Values{"lot_id": {fmt.Sprint(retired)}})
-	if err != nil || lot != retired || build != nil {
+	if err != nil || lot == nil || *lot != retired || build != nil {
 		t.Errorf("retired lot: got %v, %v, %v", lot, build, err)
 	}
 	lot, build, err = args(3005, url.Values{"build_id": {"8201"}})
-	if err != nil || lot != nil || build != 8201 {
+	if err != nil || lot != nil || build == nil || *build != 8201 {
 		t.Errorf("build: got %v, %v, %v", lot, build, err)
 	}
 	if _, _, err := args(3005, url.Values{"lot_id": {"8301"}}); err == nil || !strings.Contains(err.Error(), "does not belong") {
@@ -461,20 +462,21 @@ func TestIntegration_InventoryUpsertUnitForRecord(t *testing.T) {
 	tx := invTx(t, h)
 
 	serial := smokeUniq("SN-222U")
-	first, err := h.upsertUnitForRecord(ctx, tx, 3005, serial, 8201, nil)
+	build8201 := 8201
+	first, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, serial, &build8201, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var lot, build sql.NullInt64
 	var source string
-	if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT lot_id, build_id, source FROM %s WHERE id=$1`, "unit"), first).Scan(&lot, &build, &source); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT lot_id, build_id, source FROM unit WHERE id=$1`, first).Scan(&lot, &build, &source); err != nil {
 		t.Fatal(err)
 	}
 	if lot.Valid || build.Int64 != 8201 || source != "test" {
 		t.Errorf("new unit = lot %v build %v source %q", lot, build, source)
 	}
 	// A retest with different provenance reuses the unit and leaves its provenance alone.
-	again, err := h.upsertUnitForRecord(ctx, tx, 3005, serial, nil, nil)
+	again, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, serial, nil, nil)
 	if err != nil || again != first {
 		t.Errorf("second upsert = %d, %v; want %d", again, err, first)
 	}

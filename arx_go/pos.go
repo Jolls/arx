@@ -200,8 +200,8 @@ func poFromForm(r *http.Request) purchasing.PO {
 		ReceiverAddress: fv(r, "receiver_address"), ReceiverCity: fv(r, "receiver_city"),
 		ReceiverState: fv(r, "receiver_state"), ReceiverZipcode: fv(r, "receiver_zipcode"),
 		ReceiverCountry: fv(r, "receiver_country"), ReceiverPhone: fv(r, "receiver_phone"), ReceiverFax: fv(r, "receiver_fax"),
-		Tax1: floatPtrOrNil(fv(r, "tax1")), ShippingCost: floatPtrOrNil(fv(r, "shipping_cost")),
-		MiscCost: floatPtrOrNil(fv(r, "misc_cost")), Notes: fv(r, "notes"), InternalNotes: fv(r, "internal_notes"),
+		Tax1: nullableFloat(fv(r, "tax1")), ShippingCost: nullableFloat(fv(r, "shipping_cost")),
+		MiscCost: nullableFloat(fv(r, "misc_cost")), Notes: fv(r, "notes"), InternalNotes: fv(r, "internal_notes"),
 		DateOrdered: parseFormDate(fv(r, "date_ordered")), DateRequested: parseFormDate(fv(r, "date_requested")),
 		DateClosed: parseFormDate(fv(r, "date_closed")), DatePrinted: parseFormDate(fv(r, "date_printed")),
 		SupplierContactID: intPtrOrNil(fv(r, "supplier_contact_id")), ReceiverContactID: intPtrOrNil(fv(r, "receiver_contact_id")),
@@ -238,13 +238,6 @@ func isoDate(t *time.Time) string {
 	return t.Format("2006-01-02")
 }
 
-// floatPtrOrNil parses s as a float for a nullable sqlc param: nil for empty or invalid input.
-func floatPtrOrNil(s string) *float64 {
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return &f
-	}
-	return nil
-}
 
 func parseFormFloat(s string) any {
 	s = strings.TrimSpace(s)

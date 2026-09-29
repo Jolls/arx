@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"net/http/httptest"
 	"reflect"
 	"testing"
@@ -20,33 +19,32 @@ import (
 func seedPartsList(t *testing.T, h *Handler) (full, bare, off string, ids [3]int, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, att := "part", "part_attachment"
 	base := smokeUniq("ITEST-PL")
 	full, bare, off = base+"-A", base+"-B", base+"-C"
 	cleanup = func() {
 		for _, id := range ids {
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, att), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `DELETE FROM part_attachment WHERE part_id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
 	}
 	insert := func(i int, q string, args ...any) {
 		t.Helper()
-		if err := h.queryRowContext(ctx, fmt.Sprintf(q, pn), args...).Scan(&ids[i]); err != nil {
+		if err := h.queryRowContext(ctx, q, args...).Scan(&ids[i]); err != nil {
 			cleanup()
 			t.Fatalf("seed part %d: %v", i, err)
 		}
 	}
-	insert(0, `INSERT INTO %s (part_number, revision, description, detail, requested_by, created_date, category, modified_date, is_active, stock_on_hand, reorder_min)
+	insert(0, `INSERT INTO part (part_number, revision, description, detail, requested_by, created_date, category, modified_date, is_active, stock_on_hand, reorder_min)
 		VALUES ($1,'B','full desc','full detail','JJ','2026-01-02','BUY','2026-03-04',TRUE,1,5) RETURNING id`, full)
-	insert(1, `INSERT INTO %s (part_number, revision, description, detail, requested_by, created_date, category, modified_date, is_active)
+	insert(1, `INSERT INTO part (part_number, revision, description, detail, requested_by, created_date, category, modified_date, is_active)
 		VALUES ($1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL) RETURNING id`, bare)
-	insert(2, `INSERT INTO %s (part_number, created_date, category, modified_date, is_active, stock_on_hand, reorder_min)
+	insert(2, `INSERT INTO part (part_number, created_date, category, modified_date, is_active, stock_on_hand, reorder_min)
 		VALUES ($1,'2026-05-06','RAW','2026-05-07',FALSE,9,5) RETURNING id`, off)
 
 	attach := func(partID int, fileName, category string, active bool) {
 		t.Helper()
-		if _, err := h.execContext(ctx, fmt.Sprintf(
-			`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,$2,$3,$4)`, att),
+		if _, err := h.execContext(ctx,
+			`INSERT INTO part_attachment (part_id, file_name, category, is_active) VALUES ($1,$2,$3,$4)`,
 			partID, fileName, category, active); err != nil {
 			cleanup()
 			t.Fatalf("seed attachment %s: %v", fileName, err)
@@ -60,8 +58,8 @@ func seedPartsList(t *testing.T, h *Handler) (full, bare, off string, ids [3]int
 
 	// Pin the trigger-maintained counts so the test doesn't depend on them.
 	for i, counts := range [][2]any{{7, 4}, {nil, nil}, {0, 0}} {
-		if _, err := h.execContext(ctx, fmt.Sprintf(
-			`UPDATE %s SET attachment_count=$2, po_line_count=$3 WHERE id=$1`, pn), ids[i], counts[0], counts[1]); err != nil {
+		if _, err := h.execContext(ctx,
+			`UPDATE part SET attachment_count=$2, po_line_count=$3 WHERE id=$1`, ids[i], counts[0], counts[1]); err != nil {
 			cleanup()
 			t.Fatalf("pin counts %d: %v", i, err)
 		}

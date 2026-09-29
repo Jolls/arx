@@ -10,6 +10,7 @@ import (
 
 	"arx/arx_go/models"
 	"arx/internal/inventory"
+	"arx/internal/records"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -20,15 +21,6 @@ import (
 // UnitRow is one serialized unit for the Units subtab list and the header of a unit's
 // genealogy trace. LotNumber is joined for display and is "" when LotID is nil.
 type UnitRow = inventory.UnitRow
-
-// anyIntPtr converts a lot/build argument as recordLinkageArgs returns it (nil or an int) to
-// the *int the inventory service takes.
-func anyIntPtr(v any) *int {
-	if id, ok := v.(int); ok {
-		return &id
-	}
-	return nil
-}
 
 // unitsForPart returns every unit of a part, newest first, for the Units subtab list.
 func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, error) {
@@ -122,7 +114,7 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error tracing unit descendants: "+err.Error())
 		return
 	}
-	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), "unit_id", unitID)
+	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), records.ScopeUnit, unitID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving record types: "+err.Error())
 		return
@@ -143,7 +135,7 @@ func (h *Handler) UnitRecordsRows(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	out, err := h.scopedRecordsRows(r.Context(), "unit_id", unitID)
+	out, err := h.scopedRecordsRows(r.Context(), records.ScopeUnit, unitID)
 	if err != nil {
 		serverError(w, "database error", err)
 		return
@@ -210,7 +202,7 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)
 		return
 	}
-	unitID, err := h.inventory().CreateManualUnit(r.Context(), p.ID, serial, anyIntPtr(lotArg), anyIntPtr(buildArg))
+	unitID, err := h.inventory().CreateManualUnit(r.Context(), p.ID, serial, lotArg, buildArg)
 	if err != nil {
 		h.renderUnitSaveErr(w, r, err)
 		return

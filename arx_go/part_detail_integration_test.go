@@ -27,14 +27,13 @@ const partDetailThumb = `LOCAL:itest\t.png`
 func seedPartDetail(t *testing.T, h *Handler) (full, bare, primaryAtt int, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	pn, att, bom := "part", "part_attachment", "bom"
 	base := smokeUniq("ITEST-PD")
 	cleanup = func() {
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE parent_part_id=$1`, bom), full)
+		smokeExec(ctx, h, `DELETE FROM bom WHERE parent_part_id=$1`, full)
 		for _, id := range []int{full, bare} {
-			smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, pn), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE part_id=$1`, att), id)
-			smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, pn), id)
+			smokeExec(ctx, h, `UPDATE part SET primary_attachment_id=NULL WHERE id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM part_attachment WHERE part_id=$1`, id)
+			smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, id)
 		}
 	}
 	scan := func(dst *int, q string, args ...any) {
@@ -51,23 +50,23 @@ func seedPartDetail(t *testing.T, h *Handler) (full, bare, primaryAtt int, clean
 			t.Fatalf("seed: %v", err)
 		}
 	}
-	scan(&full, fmt.Sprintf(`INSERT INTO %s (part_number, revision, description, detail, category, release_status, is_active,
+	scan(&full, `INSERT INTO part (part_number, revision, description, detail, category, release_status, is_active,
 		requested_by, notes, created_date, modified_date, uom_id, current_cost, last_rollup_cost, last_rollup_at,
 		stock_on_hand, reorder_min, tracking_mode,
 		user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
 		VALUES ($1,'C','full desc','full detail','BUY','A',TRUE,'JJ','full notes','2026-01-02','2026-03-04',3,1.25,3.5,
-		'2026-02-03T04:05:06Z',2.5,4,'lot','u1','u2','u3','u4','u5','u6','u7','u8','u9','u10') RETURNING id`, pn), base+"-A")
-	scan(&bare, fmt.Sprintf(`INSERT INTO %s (part_number, revision, description, detail, category, is_active,
+		'2026-02-03T04:05:06Z',2.5,4,'lot','u1','u2','u3','u4','u5','u6','u7','u8','u9','u10') RETURNING id`, base+"-A")
+	scan(&bare, `INSERT INTO part (part_number, revision, description, detail, category, is_active,
 		requested_by, notes, created_date, modified_date, current_cost,
 		user_field_1, user_field_2, user_field_3, user_field_4, user_field_5,
 		user_field_6, user_field_7, user_field_8, user_field_9, user_field_10)
-		VALUES ($1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL) RETURNING id`, pn), base+"-B")
-	exec(fmt.Sprintf(`INSERT INTO %s (parent_part_id, component_part_id, line_number, qty) VALUES ($1, 3002, 1, 2)`, bom), full)
-	scan(&primaryAtt, fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,'https://example.com/d.pdf','Drawing',TRUE) RETURNING id`, att), full)
-	exec(fmt.Sprintf(`INSERT INTO %s (part_id, file_name, category, is_active) VALUES ($1,$2,$3,TRUE)`, att), full, partDetailThumb, thumbnailCategory)
-	exec(fmt.Sprintf(`UPDATE %s SET primary_attachment_id=$2, attachment_count=7, po_line_count=4 WHERE id=$1`, pn), full, primaryAtt)
-	exec(fmt.Sprintf(`UPDATE %s SET attachment_count=NULL, po_line_count=NULL WHERE id=$1`, pn), bare)
+		VALUES ($1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL) RETURNING id`, base+"-B")
+	exec(`INSERT INTO bom (parent_part_id, component_part_id, line_number, qty) VALUES ($1, 3002, 1, 2)`, full)
+	scan(&primaryAtt, `INSERT INTO part_attachment (part_id, file_name, category, is_active) VALUES ($1,'https://example.com/d.pdf','Drawing',TRUE) RETURNING id`, full)
+	exec(`INSERT INTO part_attachment (part_id, file_name, category, is_active) VALUES ($1,$2,$3,TRUE)`, full, partDetailThumb, thumbnailCategory)
+	exec(`UPDATE part SET primary_attachment_id=$2, attachment_count=7, po_line_count=4 WHERE id=$1`, full, primaryAtt)
+	exec(`UPDATE part SET attachment_count=NULL, po_line_count=NULL WHERE id=$1`, bare)
 	return full, bare, primaryAtt, cleanup
 }
 
@@ -177,13 +176,12 @@ func TestIntegration_PartCreateUpdate_Columns(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()
 	ctx := context.Background()
-	pn := "part"
 	today := time.Now().Format("2006-01-02")
 
 	cols := func(id int) map[string]any {
 		t.Helper()
 		var raw string
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT row_to_json(p)::text FROM %s p WHERE id=$1`, pn), id).Scan(&raw); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT row_to_json(p)::text FROM part p WHERE id=$1`, id).Scan(&raw); err != nil {
 			t.Fatalf("read part %d: %v", id, err)
 		}
 		var m map[string]any
@@ -214,7 +212,7 @@ func TestIntegration_PartCreateUpdate_Columns(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.PartsCreate(rec, postForm("/parts", vals))
 	id := locID(t, rec, "/part/")
-	defer smokeExec(ctx, h, fmt.Sprintf("DELETE FROM %s WHERE id=$1", pn), id)
+	defer smokeExec(ctx, h, "DELETE FROM part WHERE id=$1", id)
 
 	want := map[string]any{
 		"part_number": number, "revision": "B", "description": "d", "detail": "dt", "category": "BUY",
@@ -234,7 +232,7 @@ func TestIntegration_PartCreateUpdate_Columns(t *testing.T) {
 	}
 	vals.Set("release_status", "X")
 	vals.Set("tracking_mode", "bogus")
-	smokeExec(ctx, h, fmt.Sprintf("UPDATE %s SET modified_date='2020-01-01', created_date='2020-01-01' WHERE id=$1", pn), id)
+	smokeExec(ctx, h, "UPDATE part SET modified_date='2020-01-01', created_date='2020-01-01' WHERE id=$1", id)
 	rec = httptest.NewRecorder()
 	h.PartUpdate(rec, withID(postForm(fmt.Sprintf("/part/%d", id), vals), id))
 	assert302(t, "PartUpdate", rec)

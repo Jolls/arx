@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.30] - 2026-09-29
+### Changed
+- Review cleanup after the data-access conversion: lot/build ids on the record save path are typed `*int` instead of `any`, the Part/Lot/Unit records tables take a `records.Scope`, one nullable-int and one nullable-float form helper, and the PO status-event, part-orders and lot-list queries are one query each ([#269](https://github.com/Jolls/arx/issues/269))
+- The integration tests write literal table names in their SQL instead of formatting them in ([#190](https://github.com/Jolls/arx/issues/190))
+
+### Fixed
+- The Settings backup now includes the serialized units (`unit` table), so a restore keeps `unit_id` links and unit genealogy; a test fails when a new table is missing from the backup ([#267](https://github.com/Jolls/arx/issues/267))
+- A build's components are now consumed in ascending part id, so two builds that share components can no longer lock them in opposite orders and deadlock ([#268](https://github.com/Jolls/arx/issues/268))
+
 ## [0.8.29] - 2026-09-28
 ### Changed
 - Data-access layer: the records write paths (create, results save, resync, duplicate, complete/approve/unlock with the completion snapshot, form create/duplicate/lock/unlock, step edit/archive) moved to sqlc in `internal/records`. Each transaction keeps its statement order and row locks, with the service built over the handler's transaction; `SaveResults` now loads steps with the same query as every other page. `records.go` and `records_history.go` are free of raw SQL ([#249](https://github.com/Jolls/arx/issues/249))

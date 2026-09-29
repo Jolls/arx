@@ -27,9 +27,9 @@ type partAttachmentRow struct {
 func loadPartAttachment(t *testing.T, h *Handler, ctx context.Context, attID int) partAttachmentRow {
 	t.Helper()
 	var a partAttachmentRow
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
+	if err := h.queryRowContext(ctx,
 		`SELECT file_name, category, part_revision, comment, hash, sort_order, supplier_part_id, mfg_part_id, is_active
-		FROM %s WHERE id=$1`, "part_attachment"), attID,
+		FROM part_attachment WHERE id=$1`, attID,
 	).Scan(&a.FileName, &a.Category, &a.Rev, &a.Comment, &a.Hash, &a.SortOrder, &a.SupplierPartID, &a.MfgPartID, &a.IsActive); err != nil {
 		t.Fatalf("load part_attachment %d: %v", attID, err)
 	}
@@ -43,8 +43,8 @@ func createPartAttachment(t *testing.T, h *Handler, ctx context.Context, partID 
 	h.PartAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/attachments", partID), form), partID))
 	assert302(t, "PartAttachmentCreate", rec)
 	var id int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT MAX(id) FROM %s WHERE part_id=$1`, "part_attachment"), partID).Scan(&id); err != nil {
+	if err := h.queryRowContext(ctx,
+		`SELECT MAX(id) FROM part_attachment WHERE part_id=$1`, partID).Scan(&id); err != nil {
 		t.Fatalf("capture new attachment id: %v", err)
 	}
 	return id
@@ -53,8 +53,8 @@ func createPartAttachment(t *testing.T, h *Handler, ctx context.Context, partID 
 func partPrimary(t *testing.T, h *Handler, ctx context.Context, partID int) int {
 	t.Helper()
 	var id sql.NullInt64
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT primary_attachment_id FROM %s WHERE id=$1`, "part"), partID).Scan(&id); err != nil {
+	if err := h.queryRowContext(ctx,
+		`SELECT primary_attachment_id FROM part WHERE id=$1`, partID).Scan(&id); err != nil {
 		t.Fatalf("select part primary: %v", err)
 	}
 	return int(id.Int64)
@@ -78,7 +78,7 @@ func TestIntegration_PartAttachmentVendorScope(t *testing.T) {
 	defer deletePartAttachments(ctx, h, partID)
 
 	var supplierName string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, "company"), supplierID).Scan(&supplierName); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT name FROM company WHERE id=$1`, supplierID).Scan(&supplierName); err != nil {
 		t.Fatalf("select supplier name: %v", err)
 	}
 
@@ -186,19 +186,19 @@ func TestIntegration_AttachmentWhereUsed(t *testing.T) {
 	defer cleanupGone()
 	goneAtt, cleanupGoneAtt := seedThrowawayAttachment(t, h, ctx, goneID, link, "Test")
 	defer cleanupGoneAtt()
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, "part_attachment"), goneAtt)
+	smokeExec(ctx, h, `UPDATE part_attachment SET is_active=FALSE WHERE id=$1`, goneAtt)
 
 	supplierID, cleanupSupplier := seedSupplier(t, h, ctx)
 	defer cleanupSupplier()
 	var companyAtt int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`INSERT INTO %s (supplier_id, file_path) VALUES ($1,$2) RETURNING supplier_attachment_id`,
-		"company_attachment"), supplierID, link).Scan(&companyAtt); err != nil {
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO company_attachment (supplier_id, file_path) VALUES ($1,$2) RETURNING supplier_attachment_id`,
+		supplierID, link).Scan(&companyAtt); err != nil {
 		t.Fatalf("seed company_attachment: %v", err)
 	}
 	defer deleteCompanyAttachmentRow(ctx, h, companyAtt)
 	var supplierName string
-	if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT name FROM %s WHERE id=$1`, "company"), supplierID).Scan(&supplierName); err != nil {
+	if err := h.queryRowContext(ctx, `SELECT name FROM company WHERE id=$1`, supplierID).Scan(&supplierName); err != nil {
 		t.Fatalf("select supplier name: %v", err)
 	}
 
@@ -230,7 +230,7 @@ func TestIntegration_APIPartLocalAttachments(t *testing.T) {
 	seedThrowawayAttachment(t, h, ctx, partID, "LOCAL:folder/", "Test")
 	seedThrowawayAttachment(t, h, ctx, partID, "http://example.test/x.pdf", "Test")
 	goneAtt, _ := seedThrowawayAttachment(t, h, ctx, partID, "LOCAL:gone.pdf", "Test")
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, "part_attachment"), goneAtt)
+	smokeExec(ctx, h, `UPDATE part_attachment SET is_active=FALSE WHERE id=$1`, goneAtt)
 
 	rec := httptest.NewRecorder()
 	h.APIPartLocalAttachments(rec, withID(httptest.NewRequest(http.MethodGet,
@@ -259,9 +259,9 @@ type companyAttachmentRow struct {
 func loadCompanyAttachment(t *testing.T, h *Handler, ctx context.Context, attID int) companyAttachmentRow {
 	t.Helper()
 	var a companyAttachmentRow
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT file_path, notes, hash, sort_order, is_active FROM %s WHERE supplier_attachment_id=$1`,
-		"company_attachment"), attID,
+	if err := h.queryRowContext(ctx,
+		`SELECT file_path, notes, hash, sort_order, is_active FROM company_attachment WHERE supplier_attachment_id=$1`,
+		attID,
 	).Scan(&a.FilePath, &a.Notes, &a.Hash, &a.SortOrder, &a.IsActive); err != nil {
 		t.Fatalf("load company_attachment %d: %v", attID, err)
 	}
@@ -275,8 +275,8 @@ func createCompanyAttachment(t *testing.T, h *Handler, ctx context.Context, supp
 	h.SupplierAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/supplier/%d/attachments", supplierID), form), supplierID))
 	assert302(t, "SupplierAttachmentCreate", rec)
 	var id int
-	if err := h.queryRowContext(ctx, fmt.Sprintf(
-		`SELECT MAX(supplier_attachment_id) FROM %s WHERE supplier_id=$1`, "company_attachment"), supplierID).Scan(&id); err != nil {
+	if err := h.queryRowContext(ctx,
+		`SELECT MAX(supplier_attachment_id) FROM company_attachment WHERE supplier_id=$1`, supplierID).Scan(&id); err != nil {
 		t.Fatalf("capture new company attachment id: %v", err)
 	}
 	return id
@@ -301,8 +301,8 @@ func TestIntegration_SupplierAttachments_ListUpdateDelete(t *testing.T) {
 	supplierID, cleanupSupplier := seedSupplier(t, h, ctx)
 	defer cleanupSupplier()
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, "company"), supplierID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, "company_attachment"), supplierID)
+		smokeExec(ctx, h, `UPDATE company SET primary_attachment_id=NULL WHERE id=$1`, supplierID)
+		smokeExec(ctx, h, `DELETE FROM company_attachment WHERE supplier_id=$1`, supplierID)
 	}()
 
 	link := "http://example.test/220-sup-" + smokeUniq("x")
@@ -337,8 +337,8 @@ func TestIntegration_SupplierAttachments_ListUpdateDelete(t *testing.T) {
 	supplierPrimary := func() int {
 		t.Helper()
 		var id sql.NullInt64
-		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`SELECT primary_attachment_id FROM %s WHERE id=$1`, "company"), supplierID).Scan(&id); err != nil {
+		if err := h.queryRowContext(ctx,
+			`SELECT primary_attachment_id FROM company WHERE id=$1`, supplierID).Scan(&id); err != nil {
 			t.Fatalf("select supplier primary: %v", err)
 		}
 		return int(id.Int64)
@@ -397,8 +397,8 @@ func TestIntegration_SupplierAttachmentUpdate_RemovesOldFileFromSupplierRoot(t *
 	supplierID, cleanupSupplier := seedSupplier(t, h, ctx)
 	defer cleanupSupplier()
 	defer func() {
-		smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET primary_attachment_id=NULL WHERE id=$1`, "company"), supplierID)
-		smokeExec(ctx, h, fmt.Sprintf(`DELETE FROM %s WHERE supplier_id=$1`, "company_attachment"), supplierID)
+		smokeExec(ctx, h, `UPDATE company SET primary_attachment_id=NULL WHERE id=$1`, supplierID)
+		smokeExec(ctx, h, `DELETE FROM company_attachment WHERE supplier_id=$1`, supplierID)
 	}()
 	attID := createCompanyAttachment(t, h, ctx, supplierID, url.Values{"file_path": {"LOCAL:" + name}})
 

@@ -261,43 +261,21 @@ func (q *Queries) CreatePOLine(ctx context.Context, arg CreatePOLineParams) erro
 }
 
 const createPOStatusEvent = `-- name: CreatePOStatusEvent :exec
-INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, changed_by)
-VALUES ($1, 'status', $2::text, $3::text, $4)
+INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, note, changed_by)
+VALUES ($1, 'status', $2::text, $3::text, $4::text, $5)
 `
 
 type CreatePOStatusEventParams struct {
 	PoID       int
 	FromStatus sql.NullString
 	ToStatus   string
+	Note       sql.NullString
 	ChangedBy  string
 }
 
+// from_status and note are NULL when the caller has none (a creation event, a plain transition).
 func (q *Queries) CreatePOStatusEvent(ctx context.Context, arg CreatePOStatusEventParams) error {
 	_, err := q.db.ExecContext(ctx, createPOStatusEvent,
-		arg.PoID,
-		arg.FromStatus,
-		arg.ToStatus,
-		arg.ChangedBy,
-	)
-	return err
-}
-
-const createPOStatusEventNote = `-- name: CreatePOStatusEventNote :exec
-INSERT INTO purchase_order_history (po_id, event_type, from_status, to_status, note, changed_by)
-VALUES ($1, 'status', $2::text, $3::text, $4::text, $5)
-`
-
-type CreatePOStatusEventNoteParams struct {
-	PoID       int
-	FromStatus sql.NullString
-	ToStatus   string
-	Note       string
-	ChangedBy  string
-}
-
-// CreatePOStatusEvent with a note.
-func (q *Queries) CreatePOStatusEventNote(ctx context.Context, arg CreatePOStatusEventNoteParams) error {
-	_, err := q.db.ExecContext(ctx, createPOStatusEventNote,
 		arg.PoID,
 		arg.FromStatus,
 		arg.ToStatus,

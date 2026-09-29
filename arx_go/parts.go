@@ -22,6 +22,7 @@ import (
 	"arx/arx_go/models"
 	"arx/internal/attachments"
 	"arx/internal/parts"
+	"arx/internal/records"
 	"arx/internal/urlutil"
 )
 
@@ -1680,7 +1681,7 @@ func (h *Handler) PartRecords(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), "part_id", p.ID)
+	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), records.ScopePart, p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving record types: "+err.Error())
 		return
@@ -1700,7 +1701,7 @@ func (h *Handler) PartRecordsRows(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	out, err := h.scopedRecordsRows(r.Context(), "part_id", id)
+	out, err := h.scopedRecordsRows(r.Context(), records.ScopePart, id)
 	if err != nil {
 		serverError(w, "database error", err)
 		return

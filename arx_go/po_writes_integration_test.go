@@ -316,8 +316,8 @@ func TestIntegration_POWrites_AddSuggestions(t *testing.T) {
 	links := func() string {
 		t.Helper()
 		var s string
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(string_agg(part_id::text || ':' || supplier_pn, ',' ORDER BY part_id, supplier_pn), '')
-			FROM %s WHERE supplier_id=$1`, "supplier_part"), f.Co).Scan(&s); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT COALESCE(string_agg(part_id::text || ':' || supplier_pn, ',' ORDER BY part_id, supplier_pn), '')
+			FROM supplier_part WHERE supplier_id=$1`, f.Co).Scan(&s); err != nil {
 			t.Fatalf("links: %v", err)
 		}
 		return s
@@ -325,9 +325,9 @@ func TestIntegration_POWrites_AddSuggestions(t *testing.T) {
 	prices := func() string {
 		t.Helper()
 		var s string
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT string_agg(concat_ws(':', part_id, pack_size::float8, price_ea::float8,
-			price_pack::float8, is_active, effective_date = $2::date), ',' ORDER BY part_id, is_active, id) FROM %s WHERE supplier_id=$1`,
-			"price"), f.Co, time.Now().Format("2006-01-02")).Scan(&s); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT string_agg(concat_ws(':', part_id, pack_size::float8, price_ea::float8,
+			price_pack::float8, is_active, effective_date = $2::date), ',' ORDER BY part_id, is_active, id) FROM price WHERE supplier_id=$1`,
+			f.Co, time.Now().Format("2006-01-02")).Scan(&s); err != nil {
 			t.Fatalf("prices: %v", err)
 		}
 		return s
@@ -335,8 +335,8 @@ func TestIntegration_POWrites_AddSuggestions(t *testing.T) {
 	defaults := func() string {
 		t.Helper()
 		var s string
-		if err := h.queryRowContext(ctx, fmt.Sprintf(`SELECT string_agg(COALESCE(default_supplier_id::text, '-'), ',' ORDER BY id) FROM %s WHERE id IN ($1,$2)`,
-			"part"), f.P1, f.P2).Scan(&s); err != nil {
+		if err := h.queryRowContext(ctx, `SELECT string_agg(COALESCE(default_supplier_id::text, '-'), ',' ORDER BY id) FROM part WHERE id IN ($1,$2)`,
+			f.P1, f.P2).Scan(&s); err != nil {
 			t.Fatalf("defaults: %v", err)
 		}
 		return s
@@ -371,7 +371,7 @@ func TestIntegration_POWrites_AddSuggestions(t *testing.T) {
 	if want := fmt.Sprintf("%d:SPN-1,%d:SPN-NEW", f.P1, f.P1); links() != want {
 		t.Errorf("links = %s, want %s", links(), want)
 	}
-	if n := count(fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE part_id=$1 AND supplier_id=$2 AND supplier_pn='SPN-1'`, "supplier_part"), f.P1, f.Co); n != 1 {
+	if n := count(`SELECT COUNT(*) FROM supplier_part WHERE part_id=$1 AND supplier_id=$2 AND supplier_pn='SPN-1'`, f.P1, f.Co); n != 1 {
 		t.Errorf("SPN-1 links = %d, want 1", n)
 	}
 	wantP := fmt.Sprintf("%[1]d:10:2.5:25:f:f,%[1]d:10:3:30:t:t,%[2]d:1:4:4:f:f,%[2]d:1:4.5:4.5:t:t", f.P1, f.P2)
@@ -485,7 +485,7 @@ func TestIntegration_POWrites_ImportPartFile(t *testing.T) {
 			t.Errorf("POImportPartFile(%s, %s, %s): body missing %q", c.num, c.att, c.part, c.want)
 		}
 	}
-	smokeExec(ctx, h, fmt.Sprintf(`UPDATE %s SET is_active=FALSE WHERE id=$1`, "part_attachment"), f.Att)
+	smokeExec(ctx, h, `UPDATE part_attachment SET is_active=FALSE WHERE id=$1`, f.Att)
 	if body := post(f.Full, att, p1).Body.String(); !strings.Contains(body, "Attachment not found.") {
 		t.Errorf("inactive attachment: body missing not-found message")
 	}
