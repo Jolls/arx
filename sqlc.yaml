@@ -45,6 +45,9 @@ sql:
       - internal/attachments/attachments.sql
       - internal/purchasing/purchasing.sql
       - internal/inventory/inventory.sql
+      - internal/reports/reports.sql
+      - internal/appconfig/appconfig.sql
+      - internal/records/records.sql
     gen:
       go:
         package: dbq

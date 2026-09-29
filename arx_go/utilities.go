@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"arx/internal/reports"
 	"arx/internal/urlutil"
 )
 
@@ -95,54 +96,36 @@ func (h *Handler) checkDeadLinks(ctx context.Context) (utilCheck, error) {
 		Desc:  "Active attachments whose LOCAL: file or folder no longer exists on disk. External http(s) links are not checked.",
 	}
 
-	// scan runs a query returning (link, id, label) and flags rows whose LOCAL:
-	// target is dead under root, linking each to urlPrefix+id.
-	scan := func(query, root, urlPrefix string) error {
-		rows, err := h.queryContext(ctx, query)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var link, label string
-			var id int
-			if err := rows.Scan(&link, &id, &label); err != nil {
-				return err
-			}
-			if reason, dead := deadLocalTarget(root, link); dead {
+	// scan flags rows whose LOCAL: target is dead under root, linking each to urlPrefix+id.
+	scan := func(links []reports.AttachmentLink, root, urlPrefix string) {
+		for _, l := range links {
+			if reason, dead := deadLocalTarget(root, l.Link); dead {
 				check.Rows = append(check.Rows, utilRow{
-					Label:  label,
+					Label:  l.Label,
 					Detail: reason,
-					URL:    urlPrefix + strconv.Itoa(id),
+					URL:    urlPrefix + strconv.Itoa(l.ID),
 				})
 			}
 		}
-		return rows.Err()
 	}
 
 	// Part attachments resolve against DOC_CONTROL_ROOT.
-	partQuery := fmt.Sprintf(
-		`SELECT f.file_name, p.id, p.part_number
-		 FROM %s f JOIN %s p ON f.part_id = p.id
-		 WHERE f.is_active = TRUE`,
-		h.cfg().AttachmentsTable(), h.cfg().PartsTable())
-	if err := scan(partQuery, h.cfg().DocControlRoot, "/part/"); err != nil {
+	partLinks, err := h.reports().PartAttachmentLinks(ctx)
+	if err != nil {
 		return check, err
 	}
+	scan(partLinks, h.cfg().DocControlRoot, "/part/")
 
 	// Company attachments resolve against SUPPLIER_FILES_ROOT (fallback DOC_CONTROL_ROOT).
 	supplierRoot := h.cfg().SupplierFilesRoot
 	if supplierRoot == "" {
 		supplierRoot = h.cfg().DocControlRoot
 	}
-	compQuery := fmt.Sprintf(
-		`SELECT a.file_path, c.id, c.name
-		 FROM %s a JOIN %s c ON a.supplier_id = c.id
-		 WHERE a.is_active = TRUE`,
-		h.cfg().CompanyAttachmentsTable(), h.cfg().CompanyTable())
-	if err := scan(compQuery, supplierRoot, "/supplier/"); err != nil {
+	compLinks, err := h.reports().CompanyAttachmentLinks(ctx)
+	if err != nil {
 		return check, err
 	}
+	scan(compLinks, supplierRoot, "/supplier/")
 
 	check.Count = len(check.Rows)
 	return check, nil
@@ -156,40 +139,27 @@ func (h *Handler) checkOrphanPointers(ctx context.Context) (utilCheck, error) {
 		Title: "Orphaned part pointers",
 		Desc:  "Parts whose supplier / price / primary-attachment pointer references a row that no longer exists.",
 	}
-	specs := []struct{ column, target, targetTable string }{
-		{"default_supplier_id", "company", h.cfg().CompanyTable()},
-		{"price_id", "price", h.cfg().PriceTable()},
-		{"primary_attachment_id", "part_attachment", h.cfg().AttachmentsTable()},
+	rpt := h.reports()
+	specs := []struct {
+		column, target string
+		list           func(context.Context) ([]reports.Orphan, error)
+	}{
+		{"default_supplier_id", "company", rpt.OrphanDefaultSuppliers},
+		{"price_id", "price", rpt.OrphanPrices},
+		{"primary_attachment_id", "part_attachment", rpt.OrphanPrimaryAttachments},
 	}
 	for _, s := range specs {
-		q := fmt.Sprintf(
-			`SELECT p.id, p.part_number, p.%[1]s
-			 FROM %[2]s p
-			 WHERE p.%[1]s > 0
-			   AND NOT EXISTS (SELECT 1 FROM %[3]s t WHERE t.id = p.%[1]s)`,
-			s.column, h.cfg().PartsTable(), s.targetTable)
-		rows, err := h.queryContext(ctx, q)
+		orphans, err := s.list(ctx)
 		if err != nil {
 			return check, err
 		}
-		for rows.Next() {
-			var partID, value int
-			var partNumber string
-			if err := rows.Scan(&partID, &partNumber, &value); err != nil {
-				rows.Close()
-				return check, err
-			}
+		for _, o := range orphans {
 			check.Rows = append(check.Rows, utilRow{
-				Label:  partNumber,
-				Detail: fmt.Sprintf("%s → missing %s #%d", s.column, s.target, value),
-				URL:    fmt.Sprintf("/part/%d", partID),
+				Label:  o.PartNumber,
+				Detail: fmt.Sprintf("%s → missing %s #%d", s.column, s.target, o.Value),
+				URL:    fmt.Sprintf("/part/%d", o.ID),
 			})
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return check, err
-		}
-		rows.Close()
 	}
 	check.Count = len(check.Rows)
 	return check, nil
@@ -206,46 +176,28 @@ func (h *Handler) checkSoftDeletedAttachmentPointers(ctx context.Context) (utilC
 		Desc:  "Parts or companies whose primary attachment references an attachment that has been soft-deleted (is_active = 0).",
 	}
 
-	// scan runs a query returning (id, label) and flags every row, linking each
-	// to urlPrefix+id.
-	scan := func(query, urlPrefix string) error {
-		rows, err := h.queryContext(ctx, query)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id int
-			var label string
-			if err := rows.Scan(&id, &label); err != nil {
-				return err
-			}
+	// flag flags every row, linking each to urlPrefix+id.
+	flag := func(owners []reports.Labeled, urlPrefix string) {
+		for _, o := range owners {
 			check.Rows = append(check.Rows, utilRow{
-				Label:  label,
+				Label:  o.Label,
 				Detail: "primary attachment is soft-deleted",
-				URL:    urlPrefix + strconv.Itoa(id),
+				URL:    urlPrefix + strconv.Itoa(o.ID),
 			})
 		}
-		return rows.Err()
 	}
 
-	partQuery := fmt.Sprintf(
-		`SELECT p.id, p.part_number
-		 FROM %[1]s p JOIN %[2]s f ON f.id = p.primary_attachment_id
-		 WHERE p.primary_attachment_id > 0 AND f.is_active = FALSE`,
-		h.cfg().PartsTable(), h.cfg().AttachmentsTable())
-	if err := scan(partQuery, "/part/"); err != nil {
+	parts, err := h.reports().PartsWithDeletedPrimary(ctx)
+	if err != nil {
 		return check, err
 	}
+	flag(parts, "/part/")
 
-	compQuery := fmt.Sprintf(
-		`SELECT c.id, c.name
-		 FROM %[1]s c JOIN %[2]s a ON a.supplier_attachment_id = c.primary_attachment_id
-		 WHERE c.primary_attachment_id > 0 AND a.is_active = FALSE`,
-		h.cfg().CompanyTable(), h.cfg().CompanyAttachmentsTable())
-	if err := scan(compQuery, "/supplier/"); err != nil {
+	companies, err := h.reports().CompaniesWithDeletedPrimary(ctx)
+	if err != nil {
 		return check, err
 	}
+	flag(companies, "/supplier/")
 
 	check.Count = len(check.Rows)
 	return check, nil
@@ -259,29 +211,18 @@ func (h *Handler) checkPOActiveDrift(ctx context.Context) (utilCheck, error) {
 		Title: "Purchase order is_active drift",
 		Desc:  "POs whose is_active flag disagrees with their status. status is authoritative; is_active should be kept in sync by the app.",
 	}
-	rows, err := h.queryContext(ctx, fmt.Sprintf(
-		`SELECT id, number, status, is_active FROM %s`, h.cfg().POTable()))
+	pos, err := h.reports().POActiveStates(ctx)
 	if err != nil {
 		return check, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int
-		var number, status string
-		var isActive bool
-		if err := rows.Scan(&id, &number, &status, &isActive); err != nil {
-			return check, err
-		}
-		if want := statusIsActive(status); isActive != want {
+	for _, po := range pos {
+		if want := statusIsActive(po.Status); po.IsActive != want {
 			check.Rows = append(check.Rows, utilRow{
-				Label:  number,
-				Detail: fmt.Sprintf("status %q implies is_active=%v, but stored value is %v", status, want, isActive),
-				URL:    fmt.Sprintf("/po/%d", id),
+				Label:  po.Number,
+				Detail: fmt.Sprintf("status %q implies is_active=%v, but stored value is %v", po.Status, want, po.IsActive),
+				URL:    fmt.Sprintf("/po/%d", po.ID),
 			})
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return check, err
 	}
 	check.Count = len(check.Rows)
 	return check, nil

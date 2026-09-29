@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -234,15 +233,11 @@ func (c *Config) RecordEventResultsTable() string  { return "record_event_result
 // CheckSchemaVersion queries app_config for schema_version. connErr is
 // non-empty when the query itself failed (DB unreachable/misconfigured —
 // distinct from a working DB on an old schema). mismatch is non-empty when
-// the query succeeded but returned an unexpected version. The queryRow
-// argument is the handler's h.queryRowContext wrapper so SQL logging is preserved.
+// the query succeeded but returned an unexpected version. get reads one
+// app_config value (the handler passes a service over its logging wrapper).
 func CheckSchemaVersion(ctx context.Context,
-	queryRow func(context.Context, string, ...any) *sql.Row,
-	appConfigTable string) (mismatch string, connErr string) {
-	var val string
-	err := queryRow(ctx,
-		`SELECT setting_value FROM `+appConfigTable+` WHERE setting_key = 'schema_version'`,
-	).Scan(&val)
+	get func(ctx context.Context, key string) (string, error)) (mismatch string, connErr string) {
+	val, err := get(ctx, "schema_version")
 	if err != nil {
 		return "", fmt.Sprintf("could not read schema_version (%v)", err)
 	}
