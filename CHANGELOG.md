@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.31] - 2026-09-29
+### Changed
+- Closed out the data-access conversion: the architecture review now marks it done, and the raw-SQL lint and the attachment-hash backfill tool document why `cmd/` tools keep table-parameterised SQL ([#190](https://github.com/Jolls/arx/issues/190))
+
 ## [0.8.30] - 2026-09-29
 ### Changed
 - Review cleanup after the data-access conversion: lot/build ids on the record save path are typed `*int` instead of `any`, the Part/Lot/Unit records tables take a `records.Scope`, one nullable-int and one nullable-float form helper, and the PO status-event, part-orders and lot-list queries are one query each ([#269](https://github.com/Jolls/arx/issues/269))

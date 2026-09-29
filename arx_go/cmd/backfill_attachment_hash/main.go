@@ -91,6 +91,8 @@ func computeAttachmentHash(root, link string) string {
 	return hex.EncodeToString(sum.Sum(nil))
 }
 
+// backfillTable runs the same statements against two tables, so it stays raw SQL (sqlc can't take a
+// table name; #190). table/idCol/linkCol are constants from main, never user input.
 func backfillTable(ctx context.Context, db *sql.DB, table, idCol, linkCol, root string, apply bool) (updated, failed int) {
 	rows, err := db.QueryContext(ctx,
 		fmt.Sprintf(`SELECT %s, %s FROM %s WHERE hash IS NULL`, idCol, linkCol, table),
