@@ -1,12 +1,11 @@
 package main
 
 import (
-	"database/sql"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"arx/internal/inventory"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -19,33 +18,13 @@ import (
 // buildID (#677) is the build that wrote this row (component issue / output receipt),
 // nil for movements not driven by a build.
 func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, txnType string, qty float64, txnDate time.Time, reference, note string, poLineID, lotID, buildID *int) error {
-	ctx := r.Context()
-	var poArg any
-	if poLineID != nil {
-		poArg = *poLineID
-	}
-	var lotArg any
-	if lotID != nil {
-		lotArg = *lotID
-	}
-	var buildArg any
-	if buildID != nil {
-		buildArg = *buildID
-	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (part_id, txn_type, qty, txn_date, username, reference, note, po_line_id, lot_id, build_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, h.cfg().InventoryTxnTable()),
-		partID, txnType, qty, txnDate, h.actorName(r),
-		nullableText(reference), nullableText(note), poArg, lotArg, buildArg,
-	); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(
-		`UPDATE %s SET stock_on_hand = stock_on_hand + $1 WHERE id = $2`, h.cfg().PartsTable()),
-		qty, partID)
-	return err
+	return inventory.New(tx).RecordTxn(r.Context(), inventory.Txn{
+		PartID: partID, Type: txnType, Qty: qty, Date: txnDate, Username: h.actorName(r),
+		Reference: reference, Note: note, POLineID: poLineID, LotID: lotID, BuildID: buildID,
+	})
 }
+
+func (h *Handler) inventory() *inventory.Service { return inventory.New(handlerDB{h}) }
 
 // InventoryTxnView is one ledger row for the Transactions tab, with the running
 // on-hand balance as of that transaction.
@@ -85,36 +64,17 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := h.queryContext(r.Context(), fmt.Sprintf(`
-		SELECT it.txn_type, it.qty, it.txn_date, it.username, it.reference, it.note, l.id, l.lot_number
-		FROM %s it
-		LEFT JOIN %s l ON l.id = it.lot_id
-		WHERE it.part_id = $1 ORDER BY it.txn_date ASC, it.id ASC
-	`, h.cfg().InventoryTxnTable(), h.cfg().LotTable()), id)
+	rows, err := h.inventory().ListLedger(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving transactions: "+err.Error())
 		return
 	}
-	defer rows.Close()
-	var asc []InventoryTxnView
-	for rows.Next() {
-		var v InventoryTxnView
-		var username, reference, note, lotNumber sql.NullString
-		var lotID sql.NullInt64
-		var date sql.NullTime
-		if err := rows.Scan(&v.Type, &v.Qty, &date, &username, &reference, &note, &lotID, &lotNumber); err != nil {
-			h.renderError(w, r, "Error reading transactions: "+err.Error())
-			return
+	asc := make([]InventoryTxnView, len(rows))
+	for i, row := range rows {
+		asc[i] = InventoryTxnView{
+			Type: row.Type, Qty: row.Qty, Date: row.Date.Format("2006-01-02"), Username: row.Username,
+			Reference: row.Reference, Note: row.Note, LotID: row.LotID, LotNumber: row.LotNumber,
 		}
-		v.Username = username.String
-		v.Reference = reference.String
-		v.Note = note.String
-		v.LotID = int(lotID.Int64)
-		v.LotNumber = lotNumber.String
-		if date.Valid {
-			v.Date = date.Time.Format("2006-01-02")
-		}
-		asc = append(asc, v)
 	}
 	txns := ledgerWithBalances(asc)
 

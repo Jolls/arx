@@ -2218,7 +2218,7 @@ func TestIntegration_SerialUnitCreationAndRetest(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	rt := h.cfg().RecordsTable()
-	ut := h.cfg().UnitTable()
+	ut := "unit"
 
 	const testedPart = 3013 // ASM-1003, tracking_mode lot_serial in seed
 	const provLot = 8306    // a lot of 3013
@@ -2319,14 +2319,14 @@ func TestIntegration_SaveDoesNotDuplicateUnitOnSerialMismatch(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	rt := h.cfg().RecordsTable()
-	ut := h.cfg().UnitTable()
+	ut := "unit"
 
 	const testedPart = 3013 // ASM-1003, tracking_mode lot_serial in seed
 	const provBuild = 8203  // a build of 3013
 	origSerial := smokeUniq("SN-MISMATCH-ORIG")
 
 	// Mint a unit directly (as upsertUnitForRecord would) and a record linked to it.
-	insertUnit := fmt.Sprintf(`INSERT INTO %s (part_id, build_id, serial_number, source) VALUES ($1, $2, $3, 'test') RETURNING id`, h.cfg().UnitTable())
+	insertUnit := fmt.Sprintf(`INSERT INTO %s (part_id, build_id, serial_number, source) VALUES ($1, $2, $3, 'test') RETURNING id`, "unit")
 	var unitID int
 	if err := h.queryRowContext(ctx, insertUnit, testedPart, provBuild, origSerial).Scan(&unitID); err != nil {
 		t.Fatalf("seed unit: %v", err)
@@ -2428,7 +2428,7 @@ func TestIntegration_BuildAtTestTime(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	rt := h.cfg().RecordsTable()
-	ut := h.cfg().UnitTable()
+	ut := "unit"
 	bt := h.cfg().BuildTable()
 	lt := h.cfg().LotTable()
 	lg := h.cfg().GenealogyTable()
@@ -2531,7 +2531,7 @@ func TestIntegration_ManualUnitCreate(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	ut := h.cfg().UnitTable()
+	ut := "unit"
 
 	const partID = 3005 // tracking_mode 'serial'
 	serial := smokeUniq("SN-MANUAL")
@@ -2602,7 +2602,7 @@ func TestIntegration_ManualUnitTestedCountUnaffected(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
-	ut := h.cfg().UnitTable()
+	ut := "unit"
 
 	const partID = 3013
 	const buildID = 8203
@@ -2621,7 +2621,7 @@ func TestIntegration_ManualUnitTestedCountUnaffected(t *testing.T) {
 	}
 
 	serial := smokeUniq("SN-MANUAL-BUILD")
-	insertUnit := fmt.Sprintf(`INSERT INTO %s (part_id, build_id, serial_number, source) VALUES ($1, $2, $3, 'manual') RETURNING id`, h.cfg().UnitTable())
+	insertUnit := fmt.Sprintf(`INSERT INTO %s (part_id, build_id, serial_number, source) VALUES ($1, $2, $3, 'manual') RETURNING id`, "unit")
 	var unitID int
 	if err := h.queryRowContext(ctx, insertUnit, partID, buildID, serial).Scan(&unitID); err != nil {
 		t.Fatalf("insert manual unit: %v", err)

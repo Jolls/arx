@@ -214,7 +214,6 @@ func (c *Config) InventoryTxnTable() string       { return "inventory_transactio
 func (c *Config) BuildTable() string              { return "build" }
 func (c *Config) LotTable() string                { return "lot" }
 func (c *Config) GenealogyTable() string          { return "genealogy" }
-func (c *Config) UnitTable() string               { return "unit" }
 func (c *Config) AppConfigTable() string          { return "app_config" }
 func (c *Config) PartCategoryTable() string       { return "part_category" }
 func (c *Config) AttachmentCategoryTable() string { return "attachment_category" }

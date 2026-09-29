@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
+	"arx/internal/inventory"
 )
 
 // refToken matches {123} step-ID tokens, {record.field}, and {form.field} context tokens.
@@ -1780,18 +1781,15 @@ func (h *Handler) loadRecordTrace(ctx context.Context, record *models.TestRecord
 	// without this, re-saving a serial record would clear its unit link.
 	lotID, buildID := record.LotID, record.BuildID
 	if record.UnitID != nil {
-		var ulot, ubuild sql.NullInt64
-		if err := h.queryRowContext(ctx, fmt.Sprintf(
-			`SELECT lot_id, build_id FROM %s WHERE id = $1`, h.cfg().UnitTable()), *record.UnitID).Scan(&ulot, &ubuild); err != nil && err != sql.ErrNoRows {
+		ulot, ubuild, err := h.inventory().UnitProvenance(ctx, *record.UnitID)
+		if err != nil {
 			return nil, err
 		}
-		if ulot.Valid {
-			v := int(ulot.Int64)
-			lotID = &v
+		if ulot != nil {
+			lotID = ulot
 		}
-		if ubuild.Valid {
-			v := int(ubuild.Int64)
-			buildID = &v
+		if ubuild != nil {
+			buildID = ubuild
 		}
 	}
 	if lotID != nil {
@@ -1885,28 +1883,28 @@ func containsLotOption(lots []LotOption, lotID int) bool {
 // may legitimately reference a since-retired lot.
 func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildArg any, err error) {
 	ctx := r.Context()
-	belongs := func(table, v string) (any, error) {
+	inv := h.inventory()
+	belongs := func(owns func(context.Context, int, int) (bool, error), v string) (any, error) {
 		id, convErr := strconv.Atoi(v)
 		if convErr != nil || id <= 0 {
 			return nil, fmt.Errorf("invalid selection")
 		}
-		var n int
-		if e := h.queryRowContext(ctx, fmt.Sprintf(
-			`SELECT COUNT(*) FROM %s WHERE id = $1 AND part_id = $2`, table), id, partID).Scan(&n); e != nil {
+		ok, e := owns(ctx, id, partID)
+		if e != nil {
 			return nil, e
 		}
-		if n != 1 {
+		if !ok {
 			return nil, fmt.Errorf("selection does not belong to this record's part")
 		}
 		return id, nil
 	}
 	if v := fv(r, "lot_id"); v != "" {
-		if lotArg, err = belongs(h.cfg().LotTable(), v); err != nil {
+		if lotArg, err = belongs(inv.PartHasLot, v); err != nil {
 			return nil, nil, err
 		}
 	}
 	if v := fv(r, "build_id"); v != "" {
-		if buildArg, err = belongs(h.cfg().BuildTable(), v); err != nil {
+		if buildArg, err = belongs(inv.PartHasBuild, v); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -1924,20 +1922,8 @@ func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildA
 // `manual` unit legitimately has neither. tx-accepting so a build-at-test-time save
 // (#747) can mint the unit in the same transaction as the build.
 func (h *Handler) upsertUnitForRecord(ctx context.Context, tx *txLogger, partID int, serial string, buildID, lotID any) (int, error) {
-	var unitID int
-	err := tx.QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT id FROM %s WHERE part_id = $1 AND serial_number = $2`, h.cfg().UnitTable()), partID, serial).Scan(&unitID)
-	if err == nil {
-		return unitID, nil // existing unit (retest / re-save) — reuse, never duplicate
-	}
-	if err != sql.ErrNoRows {
-		return 0, err
-	}
-	insertUnit := fmt.Sprintf(`INSERT INTO %s (part_id, serial_number, build_id, lot_id, source) VALUES ($1,$2,$3,$4,'test') RETURNING id`, h.cfg().UnitTable())
-	if err := tx.QueryRowContext(ctx, insertUnit, partID, serial, buildID, lotID).Scan(&unitID); err != nil {
-		return 0, err
-	}
-	return unitID, nil
+	// An existing unit (retest / re-save) is reused, never duplicated.
+	return inventory.New(tx).UpsertTestUnit(ctx, partID, serial, anyIntPtr(buildID), anyIntPtr(lotID))
 }
 
 // EditRecord — GET /records/{id}/edit
