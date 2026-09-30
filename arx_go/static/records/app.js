@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var tbody = table.querySelector('tbody')
     if (!tbody) return
     var rows = dataRows(tbody)
-    var controls = table.nextElementSibling
+    var controls = (table.closest('.table-responsive-sm') || table).nextElementSibling
     var hasControls = controls && controls.classList.contains('pagination-controls')
 
     var rc = document.querySelector('.record-count')
@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('DOMContentLoaded', function () {
     var table = document.querySelector('table[data-paginate]')
     if (!table) return
-    var controls = table.nextElementSibling
+    var controls = (table.closest('.table-responsive-sm') || table).nextElementSibling
     if (controls && controls.classList.contains('pagination-controls')) {
       var prev = controls.querySelector('.page-nav.prev')
       var next = controls.querySelector('.page-nav.next')

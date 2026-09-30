@@ -13,6 +13,7 @@
                 </div>
                 <div class="card-body">
                     {{if .BySupplier}}
+                    <div class="table-responsive-sm">
                     <table class="table table-sm table-hover mb-0">
                         <thead><tr><th>Supplier</th><th class="text-end">Total Spend</th></tr></thead>
                         <tbody>
@@ -24,6 +25,7 @@
                             {{end}}
                         </tbody>
                     </table>
+                    </div>
                     {{else}}
                     <p class="text-muted mb-0">No spend in this date range.</p>
                     {{end}}
@@ -38,6 +40,7 @@
                 </div>
                 <div class="card-body">
                     {{if .ByPart}}
+                    <div class="table-responsive-sm">
                     <table class="table table-sm table-hover mb-0">
                         <thead><tr><th>Part Number</th><th>Description</th><th class="text-end">Total Spend</th></tr></thead>
                         <tbody>
@@ -50,6 +53,7 @@
                             {{end}}
                         </tbody>
                     </table>
+                    </div>
                     {{else}}
                     <p class="text-muted mb-0">No spend in this date range.</p>
                     {{end}}

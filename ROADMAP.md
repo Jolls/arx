@@ -8,7 +8,6 @@ Plans can change; nothing here is a commitment.
 
 Move off SQL Server to Postgres, with ArxProd on Azure Database for PostgreSQL, and make self-hosting practical. Deployment stays a per-user `Arx.exe` ([#189](https://github.com/Jolls/arx/issues/189)).
 
-- Migrate ArxProd data from Azure SQL to Postgres ([#216](https://github.com/Jolls/arx/issues/216))
 - Package Postgres as a StartOS service for ArxDev and self-hosting ([#24](https://github.com/Jolls/arx/issues/24))
 
 ## v0.9.0 — Parts, sourcing, and audit
@@ -27,7 +26,7 @@ New user-facing features for the parts catalog and supplier layer.
 - Purchasing: one-click draft PO for below-reorder parts ([#23](https://github.com/Jolls/arx/issues/23)), lead time per PO line ([#6](https://github.com/Jolls/arx/issues/6)), supplier performance metrics ([#5](https://github.com/Jolls/arx/issues/5))
 - Catalog: custom field labels ([#9](https://github.com/Jolls/arx/issues/9)), barcode/QR labels ([#11](https://github.com/Jolls/arx/issues/11))
 - Reporting/search: yield dashboard ([#3](https://github.com/Jolls/arx/issues/3)), global record search ([#2](https://github.com/Jolls/arx/issues/2))
-- Access: JSON API ([#15](https://github.com/Jolls/arx/issues/15)), mobile-responsive UI ([#16](https://github.com/Jolls/arx/issues/16))
+- Access: JSON API ([#15](https://github.com/Jolls/arx/issues/15))
 
 ## Before going public
 

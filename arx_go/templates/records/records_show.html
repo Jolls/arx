@@ -1,5 +1,5 @@
 {{define "content"}}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
   <nav aria-label="breadcrumb">
     <ol class="breadcrumb mb-0">
       <li class="breadcrumb-item"><a href="/records">Forms</a></li>
@@ -89,6 +89,7 @@
         </button>
       </form>
     </h4>
+    <div class="table-responsive-sm">
     <table class="table table-sm table-borderless w-auto small mb-0">
       <tr>
         <th class="pe-3 text-muted">Form</th>
@@ -131,6 +132,7 @@
       </tr>
       {{end}}
     </table>
+    </div>
   </div>
 
   {{/* #872 — related lot. Read-only: the batch note is appended to from the record's EDIT
@@ -173,6 +175,7 @@
     </ul>
   </div>
 </div>
+<div class="table-responsive-sm">
 <table class="table table-bordered table-sm align-middle" id="results-table">
   <thead class="table-dark">
     <tr>
@@ -240,6 +243,7 @@
     {{if not .Level}}
     <tr class="collapse" id="step-debug-{{$sid}}">
       <td colspan="6" class="bg-body-tertiary py-2 px-3">
+        <div class="table-responsive-sm">
         <table class="table table-sm table-bordered border-secondary mb-0 small">
           <tbody>
             <tr><th class="text-muted fw-normal w-25">id</th>               <td>{{.Step.ID}}</td></tr>
@@ -263,6 +267,7 @@
             <tr><th class="text-muted fw-normal">updated_at</th>            <td>{{formatDateTime (localTimePtr $.UserLoc .Step.StepUpdatedAt)}}</td></tr>
           </tbody>
         </table>
+        </div>
       </td>
     </tr>
     {{end}}
@@ -271,6 +276,7 @@
     {{end}}
   </tbody>
 </table>
+</div>
 
 {{if .ImageRows}}
 <h5 class="mt-4 mb-3"><i class="bi bi-images"></i> Screenshots</h5>
@@ -326,6 +332,7 @@
     <i class="bi bi-clock-history"></i> Audit log ({{len .Events}})
   </a>
   <div class="collapse" id="auditLog">
+    <div class="table-responsive-sm">
     <table class="table table-sm mt-2 small w-auto">
       <thead>
         <tr><th>Date</th><th>Event</th><th>User</th><th>Comment</th><th>Results</th></tr>
@@ -355,6 +362,7 @@
         {{if $snap}}
         <tr class="collapse" id="snap{{.ID}}">
           <td colspan="5" class="bg-body-tertiary">
+            <div class="table-responsive-sm">
             <table class="table table-sm small mb-0 w-auto">
               <thead>
                 <tr><th>Parameter</th><th>Spec</th><th>Units</th><th>Result</th><th>P/F</th><th>Comment</th><th></th></tr>
@@ -373,12 +381,14 @@
                 {{end}}
               </tbody>
             </table>
+            </div>
           </td>
         </tr>
         {{end}}
         {{end}}
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 {{end}}

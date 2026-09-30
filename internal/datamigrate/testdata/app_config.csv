@@ -1,0 +1,6 @@
+"setting_key","setting_value","updated_at"
+"company_name","Acme Co","2026-01-15 10:00:00.000"
+"secret_digikey_client_id","TOPSECRET","2026-01-15 10:00:00.000"
+"schema_version","10","2026-01-15 10:00:00.000"
+"part_categories","[{""code"":""BUY"",""label"":""Purchased"",""purchased"":true,""orders"":true}]","2026-01-15 10:00:00.000"
+"attachment_categories","Drawing,CAD","2026-01-15 10:00:00.000"

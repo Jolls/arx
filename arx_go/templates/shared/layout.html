@@ -15,11 +15,11 @@
     <div class="app-header{{if .TestMode}} app-header--testmode{{end}}">
         <a href="/" class="app-header-home" title="Home"><img src="/static/shared/icons/arx-brand.svg" alt="" class="app-header-icon">Arx</a>{{if .TestMode}} &mdash; TEST MODE{{end}}
         <div class="header-actions">
-            {{if .CompanyLogo}}<img src="{{.CompanyLogo}}" alt="" class="company-logo">{{end}}
-            {{if .CurrentUser}}<a href="/settings#preferences" style="font-size:0.8em; color:rgba(255,255,255,0.75); margin-right:4px; text-decoration:none;" title="My Preferences">{{.CurrentUser.DisplayName}}</a>
+            {{if .CompanyLogo}}<img src="{{.CompanyLogo}}" alt="" class="company-logo d-none d-sm-inline">{{end}}
+            {{if .CurrentUser}}<a href="/settings#preferences" class="header-muted d-none d-sm-inline" style="font-size:0.8em; margin-right:4px; text-decoration:none;" title="My Preferences">{{.CurrentUser.DisplayName}}</a>
             <form method="post" action="/logout" style="display:inline; margin:0;">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                <button type="submit" style="background:none; border:none; color:rgba(255,255,255,0.75);
+                <button type="submit" class="header-muted" style="background:none; border:none;
                         font-size:0.78em; cursor:pointer; padding:2px 6px; text-decoration:underline;">Sign out</button>
             </form>{{end}}
             <button type="button" class="header-theme-toggle" data-theme-toggle title="Theme: Auto" aria-label="Theme: Auto"><i class="bi bi-circle-half"></i></button>
@@ -43,12 +43,12 @@
         <span><i class="bi bi-stars me-1"></i>What&#39;s new in Arx &mdash; <a href="/whats-new" class="alert-link">See release notes</a></span>
         <button type="button" class="btn-close btn-sm" onclick="dismissWhatsNew('{{.AppVersion}}')" aria-label="Dismiss"></button>
     </div>
-    <div class="container-fluid px-4">
+    <main class="container-fluid px-2 px-sm-4">
         {{template "content" .}}
-    </div>
+    </main>
 
     <footer class="text-center text-muted small py-3">
-        Arx {{.AppVersion}} &mdash; AGPL-3.0. <a href="https://github.com/Jolls/arx">Source</a>
+        Arx {{.AppVersion}} &mdash; AGPL-3.0. <a href="https://github.com/Jolls/arx" class="text-decoration-underline">Source</a>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>

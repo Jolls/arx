@@ -157,6 +157,7 @@
                     <div class="detail-row"><strong>Stock on hand:</strong><span>{{printf "%.2f" .Part.StockOnHand}}{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1">Below Min</span>{{end}}</span></div>
                     {{if .Part.ReorderMin}}<div class="detail-row"><strong>Reorder minimum:</strong><span>{{printf "%g" (deref .Part.ReorderMin)}}</span></div>{{end}}
                     {{if .RecentTxns}}
+                    <div class="table-responsive-sm">
                     <table class="table table-sm mb-0 mt-2">
                         <thead><tr><th>Date</th><th>Type</th><th class="text-end">Qty</th></tr></thead>
                         <tbody>
@@ -165,6 +166,7 @@
                         {{end}}
                         </tbody>
                     </table>
+                    </div>
                     {{else}}<p class="text-muted mb-0 mt-2">No transactions yet.</p>{{end}}
                 </div>
             </div>
@@ -198,6 +200,7 @@
                 </div>
                 <div class="card-body">
                     {{if .RecentPOs}}
+                    <div class="table-responsive-sm">
                     <table class="table table-sm mb-0">
                         <thead><tr><th>Date</th><th>PO</th><th>Supplier</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th>Status</th></tr></thead>
                         <tbody>
@@ -213,6 +216,7 @@
                         {{end}}
                         </tbody>
                     </table>
+                    </div>
                     {{else}}<p class="text-muted mb-0">No orders yet.</p>{{end}}
                 </div>
             </div>
@@ -230,6 +234,7 @@
                 <div class="card-body">
                     <div class="detail-row"><strong>Total lots:</strong><span>{{.LotCount}}</span></div>
                     {{if .RecentLots}}
+                    <div class="table-responsive-sm">
                     <table class="table table-sm mb-0 mt-2">
                         <thead><tr><th>Lot #</th><th>Created</th><th>Status</th></tr></thead>
                         <tbody>
@@ -242,6 +247,7 @@
                         {{end}}
                         </tbody>
                     </table>
+                    </div>
                     {{else}}<p class="text-muted mb-0 mt-2">No lots yet.</p>{{end}}
                 </div>
             </div>
@@ -259,6 +265,7 @@
                 <div class="card-body">
                     <div class="detail-row"><strong>Total units:</strong><span>{{.UnitCount}}</span></div>
                     {{if .RecentUnits}}
+                    <div class="table-responsive-sm">
                     <table class="table table-sm mb-0 mt-2">
                         <thead><tr><th>Serial #</th><th>Created</th><th>Status</th></tr></thead>
                         <tbody>
@@ -271,6 +278,7 @@
                         {{end}}
                         </tbody>
                     </table>
+                    </div>
                     {{else}}<p class="text-muted mb-0 mt-2">No units yet.</p>{{end}}
                 </div>
             </div>

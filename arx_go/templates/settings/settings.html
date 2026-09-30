@@ -53,7 +53,7 @@
 
     <!-- ── Database Connection ───────────────────────────────────────── -->
     <div class="detail-section">
-        <h3 class="d-flex align-items-center gap-2">
+        <h3 class="d-flex flex-wrap align-items-center gap-2">
             Database Connection
             {{if .Connected}}
             <span class="badge rounded-pill text-bg-success fw-normal">&#10003; Connected</span>
@@ -177,7 +177,7 @@
                 <input type="text" name="doc_control_root" id="doc_control_root"
                        value="{{.DocControlRoot}}"
                        placeholder="e.g. C:\DocControl"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('doc_control_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
@@ -189,7 +189,7 @@
                 <input type="text" name="po_folder_root" id="po_folder_root"
                        value="{{.POFolderRoot}}"
                        placeholder="e.g. C:\PurchaseOrders"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('po_folder_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
@@ -201,7 +201,7 @@
                 <input type="text" name="supplier_files_root" id="supplier_files_root"
                        value="{{.SupplierFilesRoot}}"
                        placeholder="e.g. C:\SupplierDocs (blank = use DOC_CONTROL_ROOT)"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('supplier_files_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
@@ -213,7 +213,7 @@
                 <input type="text" name="image_root" id="image_root"
                        value="{{.ImageRoot}}"
                        placeholder="e.g. C:\Images (used by Test Records)"
-                       class="form-control font-monospace" style="width:400px;">
+                       class="form-control font-monospace" style="max-width:400px; min-width:0;">
                 <button type="button" class="btn btn-secondary text-nowrap"
                         onclick="browseFolder('image_root')"
                         style="font-size:0.85em;">Browse&hellip;</button>
@@ -326,6 +326,7 @@
         <form method="post" action="/settings/categories" onsubmit="numberCats(this)">
             <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
             <input type="hidden" name="cat_count">
+            <div class="table-responsive-sm">
             <table class="table table-bordered table-sm">
                 <thead class="table-dark">
                     <tr>
@@ -358,6 +359,7 @@
                     {{end}}
                 </tbody>
             </table>
+            </div>
             <template id="cat-row-tmpl">
                 <tr class="cat-row">
                     <td style="padding:2px 8px;"><input class="form-control" data-f="code" maxlength="10" style="width:80px; text-transform:uppercase;"></td>
@@ -475,6 +477,7 @@
         <div class="alert alert-danger" role="alert">{{.NamedQueriesError}}</div>
         {{end}}
         <input type="hidden" id="nq-csrf" value="{{.CsrfToken}}">
+        <div class="table-responsive-sm">
         <table class="table table-bordered table-sm align-middle">
             <thead class="table-dark">
                 <tr>
@@ -518,6 +521,7 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
         <template id="nq-row-tmpl">
             <tr class="nq-row">
                 <td style="padding:2px 8px;">
@@ -579,6 +583,7 @@
             {{.UsersError}}
         </div>
         {{end}}
+        <div class="table-responsive-sm">
         <table class="table table-sm align-middle mb-3">
             <thead>
                 <tr>
@@ -649,6 +654,7 @@
             {{end}}
             </tbody>
         </table>
+        </div>
 
         <form method="post" action="/settings/users">
             <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
@@ -1054,11 +1060,11 @@ function runNamedQueryTest() {
             return;
         }
         var html = '<div class="text-muted mb-1" style="font-size:0.8em;">' + rows.length + ' row(s) — result_type: ' + nqEscape(res.body.result_type) + '</div>';
-        html += '<table class="table table-sm table-bordered mb-0" style="font-size:0.82em;"><thead><tr><th>Value</th><th>Label</th></tr></thead><tbody>';
+        html += '<div class="table-responsive-sm"><table class="table table-sm table-bordered mb-0" style="font-size:0.82em;"><thead><tr><th>Value</th><th>Label</th></tr></thead><tbody>';
         rows.forEach(function (row) {
             html += '<tr><td class="font-monospace">' + nqEscape(row.value) + '</td><td>' + nqEscape(row.label) + '</td></tr>';
         });
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         out.innerHTML = html;
     })
     .catch(function (e) {

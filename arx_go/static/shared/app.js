@@ -773,7 +773,7 @@ function initColumnOrder() {
     colWidthsBar.addEventListener('click', () => resetColWidths());
     // Join the page's existing button row (right side of the toolbar above the table);
     // pages without one get the button on its own right-aligned line.
-    const wrapper = table.closest('.table-wrapper') || table;
+    const wrapper = table.closest('.table-wrapper, .table-responsive-sm') || table;
     const toolbar = wrapper.previousElementSibling;
     if (toolbar && toolbar.matches('.justify-content-between') && toolbar.children.length > 1) {
         let group = toolbar.lastElementChild;
@@ -1144,3 +1144,58 @@ function collapseAllBOM() {
         if (tip) tip.classList.remove('show')
     })
 })()
+
+// Phone layout (#16): the sub-tab row scrolls sideways below 576px. Center the
+// active tab on load so it's visible. Only scrollLeft changes, so the page
+// never jumps; no-op when the row doesn't overflow (desktop).
+document.addEventListener('DOMContentLoaded', () => {
+    const active = document.querySelector('.sub-tabs .sub-tab.active');
+    if (!active) return;
+    const bar = active.closest('.sub-tabs');
+    const a = active.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
+    bar.scrollLeft += a.left - b.left - (b.width - a.width) / 2;
+});
+
+// #258: list-table filter inputs have no visible label, so name each one after
+// its column header for screen readers.
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('tr.filter-row > th > input, tr.filter-row > th > select').forEach(el => {
+        if (el.hasAttribute('aria-label')) return;
+        const th = el.parentElement;
+        const head = th.closest('thead')?.rows[0]?.cells[th.cellIndex];
+        const name = head ? head.textContent.trim().replace(/\s+/g, ' ') : '';
+        el.setAttribute('aria-label', name ? 'Filter ' + name : 'Filter');
+    });
+});
+
+// #258: a table box that scrolls sideways must be reachable by keyboard
+// (WCAG 2.1.1). Only boxes that actually scroll get a tab stop and a name, so
+// tables that fit add no empty tab stops.
+function markScrollingTables() {
+    document.querySelectorAll('.table-wrapper, .table-responsive-sm').forEach(box => {
+        const scrolls = getComputedStyle(box).overflowX === 'auto' && box.scrollWidth > box.clientWidth;
+        if (scrolls && !box.hasAttribute('tabindex')) {
+            const heading = box.closest('.card')?.querySelector('.card-header');
+            box.tabIndex = 0;
+            box.setAttribute('role', 'region');
+            box.setAttribute('aria-label', (heading ? heading.textContent.trim().replace(/\s+/g, ' ') + ' ' : '') + 'table, scrolls sideways');
+            box.dataset.scrollRegion = '';
+        } else if (!scrolls && 'scrollRegion' in box.dataset) {
+            box.removeAttribute('tabindex');
+            box.removeAttribute('role');
+            box.removeAttribute('aria-label');
+            delete box.dataset.scrollRegion;
+        }
+    });
+}
+// Re-checked whenever a box or its table changes size: window resize, a hidden
+// settings tab being shown, rows loading, desktop column resize.
+document.addEventListener('DOMContentLoaded', () => {
+    const observer = new ResizeObserver(markScrollingTables);
+    document.querySelectorAll('.table-wrapper, .table-responsive-sm').forEach(box => {
+        observer.observe(box);
+        const table = box.querySelector('table');
+        if (table) observer.observe(table);
+    });
+});
