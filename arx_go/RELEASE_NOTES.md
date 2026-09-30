@@ -1,3 +1,24 @@
+Arx v0.8.35 — September 2026
+========================
+
+NEW FEATURES
+
+  PostgreSQL Database
+  Arx now runs on PostgreSQL; your data, logins and history carried over. Open Settings > database to point Arx at the new server, then sign in again.
+
+BUG FIXES
+
+  The purchase order CSV export works again.
+  Supplier and part searches now match regardless of upper or lower case.
+  Empty searches in the BOM, PO and supplier pickers no longer raise a script error.
+  Adding a suggested supplier part link from a PO now saves.
+  Adding a lot note from a test record's edit page now saves.
+  Test records with an empty serial number, part number, description or type no longer cause a server error.
+  Approving or unlocking a record at the same moment no longer leaves an unrecorded or half-saved change.
+  Two builds that share components can no longer deadlock.
+  Adding or editing a price that already exists now shows a clear message.
+  The Settings backup now includes serialized units.
+
 Arx v0.8.5 — September 2026
 ========================
 
