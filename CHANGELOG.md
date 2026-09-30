@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.38] - 2026-09-30
+### Fixed
+- Accessibility: pages have a `<main>` landmark; list-table filter boxes are named after their column for screen readers; a table that scrolls sideways can be reached and scrolled with the keyboard; the test-mode header text and Sign out meet contrast; the footer Source link is underlined; list and record toolbars wrap on narrow phones instead of widening the page ([#258](https://github.com/Jolls/arx/issues/258))
+
 ## [0.8.37] - 2026-09-30
 ### Added
 - Phone layout for look-up pages: below 576px the main nav stacks icon over label, part and settings sub-tabs scroll sideways with the active tab in view, label/value rows stack, the header hides the company logo and user name, and tables scroll inside their own box instead of widening the page ([#16](https://github.com/Jolls/arx/issues/16))
