@@ -163,7 +163,7 @@ reference DDL in `SQL/postgres/*.sql` (and seed, if affected). The timestamp giv
   ```
 - **Not `app_config.schema_version`:** that scalar is the binary↔DB compatibility gate, bumped only by breaking migrations. The ledger records every migration and is read by nothing at runtime. Breaking migrations still bump `schema_version`; the runner records them like any other.
 
-The SQL Server (Azure) DDL and migrations live on `release/0.7`.
+The SQL Server (Azure) DDL and migrations live only at the `archive/release-0.7` tag.
 
 ## Database privileges
 
@@ -207,7 +207,7 @@ SELECT rolsuper FROM pg_roles WHERE rolname = current_user;  -- expect false
 ## Table reference
 
 Key facts per table: primary key, trigger side-effects, and column semantics that affect application code.
-`SQL/azure/...` paths below are historical pointers to the SQL Server migrations, which live on `release/0.7`.
+`SQL/azure/...` paths below are historical pointers to the SQL Server migrations, which live only at the `archive/release-0.7` tag.
 
 | Table | PK | Notes |
 |-------|----|-------|
