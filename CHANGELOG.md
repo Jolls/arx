@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.36] - 2026-09-30
+### Changed
+- Roadmap: removed the shipped ArxProd data migration item ([#216](https://github.com/Jolls/arx/issues/216))
+
 ## [0.8.35] - 2026-09-30
 ### Changed
 - In-app release notes now cover 0.8.6 through 0.8.35 (no code changes)
