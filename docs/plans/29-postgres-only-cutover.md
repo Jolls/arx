@@ -1,6 +1,6 @@
 # #29 — Postgres-only cutover
 
-`main` is Postgres-only; SQL Server lives on `release/0.7`. Remove every SQL Server code path,
+`main` is Postgres-only; SQL Server lived on `release/0.7` (now tag `archive/release-0.7`). Remove every SQL Server code path,
 the Dialect seam, and the runtime `Rewrite()` pass. Version 0.8.3.
 
 ## Resolved decisions

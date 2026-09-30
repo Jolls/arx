@@ -3000,7 +3000,7 @@ func TestIntegration_RunNamedQuery_UnknownName(t *testing.T) {
 
 // TestIntegration_RunNamedQuery_StaleSpecNomParamRename is the regression test
 // for the production incident documented in
-// migrate_max_subbatch_result_param_rename.sql (release/0.7): a named_queries
+// migrate_max_subbatch_result_param_rename.sql (archive/release-0.7 tag): a named_queries
 // row's stored SQL was renamed to a new param name, but a spec_nom usage string
 // elsewhere still referenced the old name. parseQuerySpec builds its param map
 // from the spec_nom text, not from named_queries.params, so this produces a
