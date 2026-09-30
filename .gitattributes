@@ -37,3 +37,6 @@
 *.frx   binary
 *.zip   binary
 *.svg   text eol=lf
+
+# #216 fixtures: byte-exact (CRLF inside quoted fields is asserted)
+internal/datamigrate/testdata/*.csv -text

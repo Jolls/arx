@@ -1,0 +1,2 @@
+"id","name","description","sql","params","result_type","is_active","created_at","updated_at"
+"1","parts_matching","d","SELECT TOP 5 part_number FROM part WHERE is_active = 1","pattern","list","1","2026-01-15 10:00:00.000","2026-01-15 10:00:00.000"

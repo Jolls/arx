@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.34] - 2026-09-30
+### Added
+- Azure SQL to Postgres data migration tool (`arx_go/cmd/migrate_data`), CSV export script and runbook ([#216](https://github.com/Jolls/arx/issues/216))
+
 ## [0.8.33] - 2026-09-29
 ### Fixed
 - Supplier and part typeahead searches now match regardless of case ([#272](https://github.com/Jolls/arx/issues/272))

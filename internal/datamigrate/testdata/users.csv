@@ -1,0 +1,2 @@
+"id","username","display_name","password_hash","is_active","created_at","updated_at","can_approve_po","can_approve_records","default_po_contact_id","default_po_receiver_id","accent_color","default_route","is_admin","timezone"
+"1","admin","Admin","$2a$10$abcdefghijklmnopqrstuv","1","2026-01-15 10:00:00.000","2026-01-15 10:00:00.000","1","0","1","\N","\N","\N","1","America/Los_Angeles"

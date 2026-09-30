@@ -34,3 +34,6 @@ arx-backup-*.zip
 
 # Third-party reference material kept locally, not redistributed
 docs/digikey-api-compliance-assessment.md
+
+# Real ArxProd CSV export for the #216 data migration: contains data and password hashes, never commit
+docs/216-data-migration/arx-export/
