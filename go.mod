@@ -10,7 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/klippa-app/go-pdfium v1.20.3
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/pressly/goose/v3 v3.27.3
+	github.com/pressly/goose/v3 v3.28.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.46.0
 )
