@@ -8,7 +8,6 @@ Plans can change; nothing here is a commitment.
 
 Move off SQL Server to Postgres, with ArxProd on Azure Database for PostgreSQL, and make self-hosting practical. Deployment stays a per-user `Arx.exe` ([#189](https://github.com/Jolls/arx/issues/189)).
 
-- Migrate ArxProd data from Azure SQL to Postgres ([#216](https://github.com/Jolls/arx/issues/216))
 - Package Postgres as a StartOS service for ArxDev and self-hosting ([#24](https://github.com/Jolls/arx/issues/24))
 
 ## v0.9.0 — Parts, sourcing, and audit
