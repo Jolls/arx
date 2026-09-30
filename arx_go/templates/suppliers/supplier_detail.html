@@ -51,6 +51,7 @@
             <div class="card h-100">
                 <div class="card-header">Other Contacts</div>
                 <div class="card-body">
+                    <div class="table-responsive-sm">
                     <table class="table table-sm mb-0">
                         <tbody>
                         {{range .OtherContacts}}
@@ -62,6 +63,7 @@
                         {{end}}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -87,6 +89,7 @@
                     <a href="/supplier/{{.Supplier.ID}}/parts" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
+                    <div class="table-responsive-sm">
                     <table class="table table-sm mb-0">
                         <tbody>
                         {{range .TopParts}}
@@ -94,6 +97,7 @@
                         {{end}}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -108,6 +112,7 @@
                     <a href="/supplier/{{.Supplier.ID}}/pos" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
+                    <div class="table-responsive-sm">
                     <table class="table table-sm mb-0">
                         <thead><tr><th>Date</th><th>PO</th><th class="text-end">Total</th><th>Status</th></tr></thead>
                         <tbody>
@@ -121,6 +126,7 @@
                         {{end}}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>

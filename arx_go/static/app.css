@@ -449,3 +449,26 @@ th.col-drag-over { box-shadow: inset 3px 0 0 var(--bs-primary); }
 @media (min-width: 2000px) {
     .dash-grid > .col { flex: 0 0 auto; width: 33.33333333%; }
 }
+
+/* Phone layout (#16) - below Bootstrap's sm breakpoint. Look-up pages must
+   read well at ~375px; desktop is untouched. */
+@media (max-width: 575.98px) {
+    /* Main nav: icon over label, ~62px per tab. Don't set display on
+       .tab-icon - the default/active and dark-mode -inv swaps depend on it. */
+    .tab { display: flex; flex-direction: column; align-items: center; padding: 6px 0; font-size: 0.75rem; }
+    .tab-icon { width: 24px; height: 24px; margin: 0 0 2px; }
+
+    /* Label above value (detail pages and edit forms). */
+    .detail-row { grid-template-columns: 1fr; gap: 2px; }
+
+    /* JS-loaded list tables: keep readable columns and scroll in their
+       wrapper instead of squashing (fixed layout, % widths). Phone-only so
+       desktop column resizing, which sets an inline px width, is untouched. */
+    table[data-rows-url] { min-width: 900px; }
+
+    /* Sub-tabs: one sideways-scrolling row. overflow would clip the tab's
+       -2px overlap with the container border, so the line becomes an inset
+       shadow (painted under the tabs) and the overlap goes. */
+    .sub-tabs { flex-wrap: nowrap; overflow-x: auto; border-bottom: 0; box-shadow: inset 0 -2px 0 var(--bs-border-color); }
+    .sub-tab { white-space: nowrap; padding: 10px 14px; margin-bottom: 0; }
+}

@@ -773,7 +773,7 @@ function initColumnOrder() {
     colWidthsBar.addEventListener('click', () => resetColWidths());
     // Join the page's existing button row (right side of the toolbar above the table);
     // pages without one get the button on its own right-aligned line.
-    const wrapper = table.closest('.table-wrapper') || table;
+    const wrapper = table.closest('.table-wrapper, .table-responsive-sm') || table;
     const toolbar = wrapper.previousElementSibling;
     if (toolbar && toolbar.matches('.justify-content-between') && toolbar.children.length > 1) {
         let group = toolbar.lastElementChild;
@@ -1144,3 +1144,15 @@ function collapseAllBOM() {
         if (tip) tip.classList.remove('show')
     })
 })()
+
+// Phone layout (#16): the sub-tab row scrolls sideways below 576px. Center the
+// active tab on load so it's visible. Only scrollLeft changes, so the page
+// never jumps; no-op when the row doesn't overflow (desktop).
+document.addEventListener('DOMContentLoaded', () => {
+    const active = document.querySelector('.sub-tabs .sub-tab.active');
+    if (!active) return;
+    const bar = active.closest('.sub-tabs');
+    const a = active.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
+    bar.scrollLeft += a.left - b.left - (b.width - a.width) / 2;
+});
