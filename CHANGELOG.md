@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.45] - 2026-10-01
+### Changed
+- Remove the two ArxDev ledger integration tests: they ran as the app login, which has no grant on `schema_migrations` by design; check the ledger with `migrate status` instead, and add the missing version to the `SCHEMA.md` backfill snippet
+
 ## [0.8.44] - 2026-10-01
 ### Changed
 - BOM cost rollup and build cost load the BOM tree in one query, and rollup saves all assembly costs in one statement (fewer database round trips) ([#278](https://github.com/Jolls/arx/issues/278))

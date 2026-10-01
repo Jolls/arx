@@ -158,9 +158,11 @@ reference DDL in `SQL/postgres/*.sql` (and seed, if affected). The timestamp giv
 - **Ledger baseline:** the runner refuses unless `schema_migrations` exists and holds goose's version-0 row. `build_schema.sh` records version 0 and every migration file as applied, so a fresh DB starts fully migrated. An existing DB whose schema already includes every migration but whose ledger is empty is backfilled once, as the DDL login, listing only migrations whose effect is present:
   ```sql
   INSERT INTO schema_migrations (version_id, is_applied)
-  SELECT v, TRUE FROM (VALUES (0), (20260926092325), (20260926092835), (20260926093727), (20260926120000)) t(v)
+  SELECT v, TRUE FROM (VALUES (0), (20260926092325), (20260926092835), (20260926093727), (20260926120000), (20260930150000)) t(v)
   WHERE NOT EXISTS (SELECT 1 FROM schema_migrations s WHERE s.version_id = t.v);
   ```
+  Add each new migration's version to this list in the PR that adds it.
+- **Checking a database's ledger:** run `go run ./arx_go/cmd/migrate status` as the DDL login. There is deliberately no integration test for it: the ledger belongs to `arx_ddl` and `arx_app` has no grant on it, and "is every migration applied on this database" is the state of one environment, not a property of the code.
 - **Not `app_config.schema_version`:** that scalar is the binary↔DB compatibility gate, bumped only by breaking migrations. The ledger records every migration and is read by nothing at runtime. Breaking migrations still bump `schema_version`; the runner records them like any other.
 
 The SQL Server (Azure) DDL and migrations live only at the `archive/release-0.7` tag.
