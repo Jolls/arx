@@ -100,6 +100,7 @@ Prefer Bootstrap classes over custom CSS/inline styles. Buttons always pair base
 
 ## Auth/middleware
 `RequireAuth` redirects all app routes to /settings when h.db==nil. Settings + /static/* always accessible. CSRF tokens in gorilla session cookie `arx-session`.
+Latency principle (#290): DB is remote (~80 ms RTT to Azure), so optimize round trips on GET/HEAD (display) first; POST/PUT/PATCH/DELETE may pay an extra round trip for freshness. Session-user cache (`cachedUserByID`, 60 s TTL, per-process): expired entry is served stale + refreshed in background on GET/HEAD only; mutating requests always look the user up synchronously so writes never use stale permissions. Preserve that split in any auth/cache change.
 
 ## Plans
 Save implementation plans (Plan Mode, issue-tied) to `docs/plans/<issue-id>-<description-stem>.md`.
