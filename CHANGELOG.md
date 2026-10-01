@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.43] - 2026-10-01
+### Changed
+- docs: merge `docs/FUTURE_GOALS.md` into `ROADMAP.md` (vision, deferred decisions); record the central-server decision as deferred and take #189 out of the v0.8.0 milestone ([#189](https://github.com/Jolls/arx/issues/189))
+- docs: track the `TestStep` debug-field cleanup as an issue instead of a doc entry ([#293](https://github.com/Jolls/arx/issues/293))
+
 ## [0.8.42] - 2026-10-01
 ### Changed
 - Page loads no longer wait on the session-user DB lookup after the 60 s cache expires: GET/HEAD requests use the cached user and refresh it in the background, while POST/PUT/PATCH/DELETE still look it up first (saves one DB round trip, ~80-170 ms on a high-latency link, on the first page load after a pause)
