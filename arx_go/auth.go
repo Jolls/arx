@@ -32,23 +32,36 @@ func (h *Handler) userByID(ctx context.Context, id int) (*User, error) {
 
 // userCacheEntry holds a cached session user with a TTL-based expiry.
 type userCacheEntry struct {
-	user    *User
-	expires time.Time
+	user       *User
+	expires    time.Time
+	refreshing bool // a background refresh is in flight; guarded by Handler.userMu
 }
 
+// userRefreshTimeout bounds a background user refresh, which outlives the request.
+const userRefreshTimeout = 10 * time.Second
+
 // cachedUserByID returns the session user from h.userCache when a fresh entry
-// exists, otherwise fetches it via userByID and caches the result. Only
+// exists, otherwise fetches it via lookupUser and caches the result. Only
 // successful (non-nil) lookups are cached, so an inactive or deleted user is
 // never cached and is re-checked (and rejected) on every request.
-func (h *Handler) cachedUserByID(ctx context.Context, id int) (*User, error) {
+//
+// With allowStale (read-only requests), an expired entry is returned
+// immediately and refreshed in the background so page loads don't wait on a DB
+// round trip; mutating requests always take the synchronous path so writes
+// never act on stale permissions.
+func (h *Handler) cachedUserByID(ctx context.Context, id int, allowStale bool) (*User, error) {
 	h.userMu.RLock()
 	entry, ok := h.userCache[id]
 	h.userMu.RUnlock()
 	if ok && time.Now().Before(entry.expires) {
 		return entry.user, nil
 	}
+	if ok && allowStale {
+		h.refreshUserAsync(id, entry)
+		return entry.user, nil
+	}
 
-	u, err := h.userByID(ctx, id)
+	u, err := h.lookupUser(ctx, id)
 	if err != nil || u == nil {
 		return u, err
 	}
@@ -57,6 +70,39 @@ func (h *Handler) cachedUserByID(ctx context.Context, id int) (*User, error) {
 	h.userCache[id] = &userCacheEntry{user: u, expires: time.Now().Add(userCacheTTL)}
 	h.userMu.Unlock()
 	return u, nil
+}
+
+// refreshUserAsync re-fetches an expired cache entry in the background, at most
+// one refresh per entry. A failed lookup keeps the stale entry for a retry on
+// the next request; an inactive or deleted user evicts it. The result is
+// dropped if the entry was invalidated or replaced meanwhile, so a lookup that
+// started before invalidateUserCache can't re-cache pre-change data.
+func (h *Handler) refreshUserAsync(id int, entry *userCacheEntry) {
+	h.userMu.Lock()
+	if h.userCache[id] != entry || entry.refreshing {
+		h.userMu.Unlock()
+		return
+	}
+	entry.refreshing = true
+	h.userMu.Unlock()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), userRefreshTimeout)
+		defer cancel()
+		u, err := h.lookupUser(ctx, id)
+
+		h.userMu.Lock()
+		defer h.userMu.Unlock()
+		switch {
+		case h.userCache[id] != entry:
+		case err != nil:
+			entry.refreshing = false
+		case u == nil:
+			delete(h.userCache, id)
+		default:
+			h.userCache[id] = &userCacheEntry{user: u, expires: time.Now().Add(userCacheTTL)}
+		}
+	}()
 }
 
 // invalidateUserCache evicts a user's cached entry so the next request
@@ -112,7 +158,7 @@ func (h *Handler) withUser(w http.ResponseWriter, r *http.Request) (*http.Reques
 		sess.Save(r, w)
 		return r, nil
 	}
-	u, err := h.cachedUserByID(r.Context(), id)
+	u, err := h.cachedUserByID(r.Context(), id, r.Method == http.MethodGet || r.Method == http.MethodHead)
 	if err != nil || u == nil {
 		return r, nil
 	}

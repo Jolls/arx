@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.42] - 2026-10-01
+### Changed
+- Page loads no longer wait on the session-user DB lookup after the 60 s cache expires: GET/HEAD requests use the cached user and refresh it in the background, while POST/PUT/PATCH/DELETE still look it up first (saves one DB round trip, ~80-170 ms on a high-latency link, on the first page load after a pause)
+
 ## [0.8.41] - 2026-10-01
 ### Fixed
 - Unlocking a record that doesn't exist returns 404 instead of 500, and part/supplier search matches `%` and `_` literally and takes `*` as the wildcard, like the list-table filters ([#266](https://github.com/Jolls/arx/issues/266))
