@@ -349,15 +349,15 @@ func (h *Handler) fetchSupplierBulkOrderOptions(r *http.Request, supplierID *int
 	if supplierID == nil {
 		return
 	}
-	su, err := h.purchasing().GetSupplier(r.Context(), *supplierID)
+	d, src, err := h.purchasing().GetSupplierBulkOrder(r.Context(), *supplierID)
 	if err != nil {
 		return
 	}
-	if su.BulkOrderDelimiter != "" {
-		delimiter = su.BulkOrderDelimiter
+	if d != "" {
+		delimiter = d
 	}
-	if su.BulkOrderPNSource != "" {
-		pnSource = su.BulkOrderPNSource
+	if src != "" {
+		pnSource = src
 	}
 	return
 }
@@ -377,8 +377,8 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 	}
 	if rid := receiverID; rid > 0 {
 		// A missing receiver company leaves the name and default contact blank.
-		receiver, _ := h.purchasing().GetSupplier(r.Context(), rid)
-		po.ReceiverName = receiver.Name
+		receiverName, receiverDefaultContact, _ := h.purchasing().GetSupplierContactDefault(r.Context(), rid)
+		po.ReceiverName = receiverName
 		v := rid
 		po.ReceiverID = &v
 		receiverContacts = h.contactsForSupplier(r, rid)
@@ -386,8 +386,8 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 		// Pick the receiver contact: the resolved PO default contact wins;
 		// otherwise fall back to the receiver company's own default_contact.
 		wantContact := contactID
-		if wantContact <= 0 && receiver.DefaultContact != nil {
-			wantContact = *receiver.DefaultContact
+		if wantContact <= 0 && receiverDefaultContact != nil {
+			wantContact = *receiverDefaultContact
 		}
 		if wantContact > 0 {
 			for _, c := range receiverContacts {
@@ -901,8 +901,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 
 	var supplierCode string
 	if po.SupplierID != nil {
-		su, _ := h.purchasing().GetSupplier(r.Context(), *po.SupplierID) // missing supplier → no code
-		supplierCode = su.SupplierCode
+		supplierCode, _ = h.purchasing().GetSupplierCode(r.Context(), *po.SupplierID) // missing supplier → no code
 	}
 
 	items, err := h.fetchPOItems(r, num)
@@ -1735,8 +1734,8 @@ func (h *Handler) resolvePolRev(r *http.Request, formRev, pnidStr string) string
 	if err != nil {
 		return ""
 	}
-	p, _ := h.parts().GetPart(r.Context(), id) // unknown part → ""
-	return p.Revision
+	rev, _ := h.parts().GetPartRevision(r.Context(), id) // unknown part → ""
+	return rev
 }
 
 func (h *Handler) createPOFolder(r *http.Request, poNumber, supplierIDStr string) {
@@ -1746,9 +1745,9 @@ func (h *Handler) createPOFolder(r *http.Request, poNumber, supplierIDStr string
 	}
 	folderName := poNumber
 	if id, err := strconv.Atoi(supplierIDStr); err == nil {
-		su, _ := h.purchasing().GetSupplier(r.Context(), id) // missing supplier → no code
-		if su.SupplierCode != "" {
-			folderName += " " + su.SupplierCode
+		code, _ := h.purchasing().GetSupplierCode(r.Context(), id) // missing supplier → no code
+		if code != "" {
+			folderName += " " + code
 		}
 	}
 	if h.cfg().TestMode {

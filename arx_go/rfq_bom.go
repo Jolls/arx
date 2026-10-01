@@ -189,8 +189,8 @@ func (h *Handler) buildRFQPlan(ctx context.Context, root int, n float64) (rfqPla
 		if g == nil {
 			g = &rfqSupplierGroup{SupplierID: sid}
 			bySupplier[sid] = g
-			if s, err := h.purchasing().GetSupplier(ctx, sid); err == nil {
-				g.SupplierName = s.Name
+			if name, err := h.purchasing().GetSupplierName(ctx, sid); err == nil {
+				g.SupplierName = name
 			}
 		}
 		g.Lines = append(g.Lines, l)
@@ -322,11 +322,11 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	}
 	number := base + "R1"
 
-	supplier, _ := h.purchasing().GetSupplier(ctx, g.SupplierID)
+	_, defaultContact, _ := h.purchasing().GetSupplierContactDefault(ctx, g.SupplierID)
 	var sc ContactSummary
-	if supplier.DefaultContact != nil {
+	if defaultContact != nil {
 		for _, c := range h.contactsForSupplier(r, g.SupplierID) {
-			if c.ID == *supplier.DefaultContact {
+			if c.ID == *defaultContact {
 				sc = c
 				break
 			}

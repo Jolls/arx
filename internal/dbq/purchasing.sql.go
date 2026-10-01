@@ -608,6 +608,61 @@ func (q *Queries) GetSupplier(ctx context.Context, id int) (GetSupplierRow, erro
 	return i, err
 }
 
+const getSupplierBulkOrder = `-- name: GetSupplierBulkOrder :one
+SELECT bulk_order_delimiter, bulk_order_pn_source FROM company WHERE id = $1
+`
+
+type GetSupplierBulkOrderRow struct {
+	BulkOrderDelimiter string
+	BulkOrderPnSource  string
+}
+
+func (q *Queries) GetSupplierBulkOrder(ctx context.Context, id int) (GetSupplierBulkOrderRow, error) {
+	row := q.db.QueryRowContext(ctx, getSupplierBulkOrder, id)
+	var i GetSupplierBulkOrderRow
+	err := row.Scan(&i.BulkOrderDelimiter, &i.BulkOrderPnSource)
+	return i, err
+}
+
+const getSupplierCode = `-- name: GetSupplierCode :one
+SELECT COALESCE(supplier_code, '') AS supplier_code FROM company WHERE id = $1
+`
+
+func (q *Queries) GetSupplierCode(ctx context.Context, id int) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSupplierCode, id)
+	var supplier_code string
+	err := row.Scan(&supplier_code)
+	return supplier_code, err
+}
+
+const getSupplierContactDefault = `-- name: GetSupplierContactDefault :one
+SELECT name, default_contact FROM company WHERE id = $1
+`
+
+type GetSupplierContactDefaultRow struct {
+	Name           string
+	DefaultContact *int
+}
+
+// The supplier's name and default contact id, without GetSupplier's contact join.
+func (q *Queries) GetSupplierContactDefault(ctx context.Context, id int) (GetSupplierContactDefaultRow, error) {
+	row := q.db.QueryRowContext(ctx, getSupplierContactDefault, id)
+	var i GetSupplierContactDefaultRow
+	err := row.Scan(&i.Name, &i.DefaultContact)
+	return i, err
+}
+
+const getSupplierName = `-- name: GetSupplierName :one
+SELECT name FROM company WHERE id = $1
+`
+
+func (q *Queries) GetSupplierName(ctx context.Context, id int) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSupplierName, id)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const listOpenRFQLineIDs = `-- name: ListOpenRFQLineIDs :many
 SELECT pol.id FROM po_line pol JOIN purchase_order po ON pol.po_id = po.id
 WHERE po.rfq_group_id = $1::int AND po.status = 'rfq'

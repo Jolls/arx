@@ -201,6 +201,26 @@ type BOMLine struct {
 	POLineCount     int
 }
 
+// BOMTreeEdge is one BOM line in a ListBOMTree result: the component, its quantity and
+// the cost inputs of the component part.
+type BOMTreeEdge struct {
+	ComponentID    int
+	Qty            float64
+	CurrentCost    float64
+	PreferredPrice float64
+	HasBOM         bool
+}
+
+// BOMEdge is a BOM line with just its component's part number and description.
+type BOMEdge struct {
+	ID              int
+	LineNumber      int
+	Qty             float64
+	ComponentPartID int
+	PartNumber      string
+	Description     string
+}
+
 // WhereUsed is a bom line that uses a part, plus its parent's part data.
 type WhereUsed struct {
 	LineNumber   int
@@ -518,6 +538,22 @@ func (s *Service) ListParts(ctx context.Context, thumbCategory string) ([]Listed
 	return out, nil
 }
 
+// ListPartsExport returns every part for the CSV export, by part_number. Only the
+// columns the export writes are filled; the grid-only fields stay zero.
+func (s *Service) ListPartsExport(ctx context.Context) ([]ListedPart, error) {
+	rows, err := s.q.ListPartsExport(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ListedPart, len(rows))
+	for i, r := range rows {
+		out[i] = ListedPart{ID: r.ID, PartNumber: r.PartNumber, Revision: r.Revision, Description: r.Description,
+			Detail: r.Detail, RequestedBy: r.RequestedBy, Category: r.Category, CreatedDate: r.CreatedDate,
+			ModifiedDate: r.ModifiedDate, IsActive: r.IsActive}
+	}
+	return out, nil
+}
+
 // GetPartBasic returns sql.ErrNoRows when no part has the id.
 func (s *Service) GetPartBasic(ctx context.Context, id int, thumbCategory string) (PartBasic, error) {
 	r, err := s.q.GetPartBasic(ctx, dbq.GetPartBasicParams{ID: id, ThumbCategory: thumbCategory})
@@ -545,6 +581,11 @@ func (s *Service) GetPart(ctx context.Context, id int) (Part, error) {
 		UserField1: r.UserField1, UserField2: r.UserField2, UserField3: r.UserField3, UserField4: r.UserField4,
 		UserField5: r.UserField5, UserField6: r.UserField6, UserField7: r.UserField7, UserField8: r.UserField8,
 		UserField9: r.UserField9, UserField10: r.UserField10}, nil
+}
+
+// GetPartRevision returns the part's revision ("" when unset); sql.ErrNoRows when no part has the id.
+func (s *Service) GetPartRevision(ctx context.Context, id int) (string, error) {
+	return s.q.GetPartRevision(ctx, id)
 }
 
 // CreatePart inserts p, dated now, and returns its id.
@@ -583,6 +624,33 @@ func (s *Service) ListBOMLines(ctx context.Context, parentID int) ([]BOMLine, er
 			HasBOM: r.HasBom, AttachmentCount: r.AttachmentCount, POLineCount: r.PoLineCount}
 	}
 	return out, nil
+}
+
+// ListBOMEdges returns parentID's BOM lines by line number, without the cost columns.
+func (s *Service) ListBOMEdges(ctx context.Context, parentID int) ([]BOMEdge, error) {
+	rows, err := s.q.ListBOMEdges(ctx, parentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BOMEdge, len(rows))
+	for i, r := range rows {
+		out[i] = BOMEdge(r)
+	}
+	return out, nil
+}
+
+// ListBOMTree returns every BOM edge reachable from rootID, grouped by parent in line order.
+func (s *Service) ListBOMTree(ctx context.Context, rootID int) (map[int][]BOMTreeEdge, error) {
+	rows, err := s.q.ListBOMTree(ctx, rootID)
+	if err != nil {
+		return nil, err
+	}
+	tree := map[int][]BOMTreeEdge{}
+	for _, r := range rows {
+		tree[r.ParentPartID] = append(tree[r.ParentPartID], BOMTreeEdge{ComponentID: r.ComponentPartID, Qty: r.Qty,
+			CurrentCost: r.CurrentCost, PreferredPrice: r.PreferredPrice, HasBOM: r.HasBom})
+	}
+	return tree, nil
 }
 
 // ListWhereUsed returns the BOM lines that use partID, by parent part number.
@@ -681,9 +749,18 @@ func (s *Service) DeleteInactivePrice(ctx context.Context, id, partID int) error
 	return s.q.DeleteInactivePrice(ctx, dbq.DeleteInactivePriceParams{ID: id, PartID: partID})
 }
 
-// SetPartRollup stores cost as part id's rolled-up cost, stamped now.
-func (s *Service) SetPartRollup(ctx context.Context, id int, cost float64) error {
-	return s.q.SetPartRollup(ctx, dbq.SetPartRollupParams{Cost: cost, ID: id})
+// SetPartRollups stores each part's rolled-up cost, all stamped with the same now.
+func (s *Service) SetPartRollups(ctx context.Context, costs map[int]float64) error {
+	if len(costs) == 0 {
+		return nil
+	}
+	ids := make([]int, 0, len(costs))
+	vals := make([]string, 0, len(costs))
+	for id, cost := range costs {
+		ids = append(ids, id)
+		vals = append(vals, strconv.FormatFloat(cost, 'f', -1, 64))
+	}
+	return s.q.SetPartRollups(ctx, dbq.SetPartRollupsParams{Ids: idList(ids), Costs: strings.Join(vals, ",")})
 }
 
 // idList joins ids with commas for a string_to_array(...)::int[] param.

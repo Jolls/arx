@@ -153,6 +153,15 @@ SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
                  WHERE a.part_id = p.id AND a.is_active = TRUE AND a.category = sqlc.arg(thumb_category)::text), '')::text AS thumb_file
 FROM part p ORDER BY p.part_number;
 
+-- name: ListPartsExport :many
+-- ListParts' columns without the thumbnail/below-min/count extras the CSV export discards.
+SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
+       COALESCE(p.description, '') AS description, COALESCE(p.detail, '') AS detail,
+       COALESCE(p.requested_by, '') AS requested_by, p.created_date,
+       COALESCE(p.category, '') AS category, p.modified_date,
+       COALESCE(p.is_active, TRUE) AS is_active
+FROM part p ORDER BY p.part_number;
+
 -- name: GetPartBasic :one
 -- The part header behind every part sub-tab page; thumb_file as in ListParts.
 SELECT p.id, p.part_number, COALESCE(p.description, '') AS description, COALESCE(p.category, '') AS category,
@@ -180,6 +189,9 @@ SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision, COALESCE(p.des
        COALESCE(p.user_field_9, '') AS user_field_9, COALESCE(p.user_field_10, '') AS user_field_10
 FROM part p LEFT JOIN uom u ON u.uom_id = p.uom_id
 WHERE p.id = $1;
+
+-- name: GetPartRevision :one
+SELECT COALESCE(revision, '')::text AS revision FROM part WHERE id = $1;
 
 -- name: CreatePart :one
 -- A blank category is stored as NULL (uncategorized).
@@ -228,6 +240,35 @@ FROM bom pl
 JOIN part pn ON pl.component_part_id = pn.id
 WHERE pl.parent_part_id = $1
 ORDER BY pl.line_number;
+
+-- name: ListBOMEdges :many
+-- A parent's BOM lines in line order with just the component's part number and
+-- description (the BOM editor and paste preview); ListBOMLines adds the cost columns.
+SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
+       pn.part_number, COALESCE(pn.description, '') AS description
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id = $1
+ORDER BY pl.line_number;
+
+-- name: ListBOMTree :many
+-- Every BOM edge reachable from root_id, with each component's cost inputs, for the
+-- in-memory cost walks. UNION (not UNION ALL) expands each part once and so also
+-- terminates on a cyclic BOM; cycle detection stays with the caller.
+WITH RECURSIVE tree(part_id) AS (
+    SELECT sqlc.arg(root_id)::int
+    UNION
+    SELECT b.component_part_id FROM bom b JOIN tree t ON b.parent_part_id = t.part_id
+)
+SELECT pl.parent_part_id, pl.component_part_id, pl.qty,
+       COALESCE(pn.current_cost, 0) AS current_cost,
+       COALESCE((SELECT MIN(p.price_ea) FROM price p
+        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id), 0)::numeric AS preferred_price,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = pn.id) AS has_bom
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id IN (SELECT part_id FROM tree)
+ORDER BY pl.parent_part_id, pl.line_number, pl.id;
 
 -- name: ListWhereUsed :many
 -- The BOM lines that use a part, with each parent's part data, by parent part number.
@@ -293,8 +334,13 @@ UPDATE price SET is_active = sqlc.arg(is_active)::boolean WHERE id = sqlc.arg(id
 -- name: DeleteInactivePrice :exec
 DELETE FROM price WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id) AND is_active = FALSE;
 
--- name: SetPartRollup :exec
-UPDATE part SET last_rollup_cost = sqlc.arg(cost)::numeric, last_rollup_at = CURRENT_TIMESTAMP WHERE id = sqlc.arg(id);
+-- name: SetPartRollups :exec
+-- Stores every rolled-up cost in one statement, so all parts share one last_rollup_at.
+-- ids and costs are comma-separated, index-aligned (see ListBuildCostParts).
+UPDATE part SET last_rollup_cost = u.cost, last_rollup_at = CURRENT_TIMESTAMP
+FROM (SELECT unnest(string_to_array(sqlc.arg(ids)::text, ',')::int[]) AS id,
+             unnest(string_to_array(sqlc.arg(costs)::text, ',')::numeric[]) AS cost) u
+WHERE part.id = u.id;
 
 -- ListBuildCostParts and ListActivePriceTiers take their ids comma-separated: sqlc's
 -- database/sql output would pass an int[] param through lib/pq's pq.Array.
