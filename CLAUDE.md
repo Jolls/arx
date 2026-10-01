@@ -10,7 +10,7 @@
 
 6. Token-Efficient Messages: terse, no preamble/restating/unrequested trailing summary, no just-in-case caveats. Alternatives welcome (standard/idiomatic ones) but skip esoteric ones unless asked. Prefer short direct statements over headers unless content has genuinely distinct parts. Bullet/Outline style communication is preferred. 
 
-7. Model Selection: default Sonnet. Suggest Opus once (don't repeat if user stays on Sonnet) for: schema/new-table changes, cross-cutting architecture (auth/DB layer/rendering/config), security review (auth/CSRF/session/input validation), multi-package refactor spanning internal/+arx_go/. Not for routine feature work/bugfixes/UI/pattern-following handlers.
+7. Model Selection: default Sonnet. For schema/new-table/migration changes recommend Sonnet 5.5 at high effort or higher (not Opus). Suggest Opus once (don't repeat if user stays on Sonnet) for: cross-cutting architecture (auth/DB layer/rendering/config), security review (auth/CSRF/session/input validation), multi-package refactor spanning internal/+arx_go/. Not for routine feature work/bugfixes/UI/pattern-following handlers.
 
 # Arx Parts Master
 @CLAUDE.local.md
