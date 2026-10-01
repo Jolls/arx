@@ -731,10 +731,15 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, _, err := h.fetchBOMItems(r.Context(), id)
+	edges, err := h.parts().ListBOMEdges(r.Context(), p.ID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
+	}
+	items := make([]models.BOMItem, len(edges))
+	for i, e := range edges {
+		items[i] = models.BOMItem{ID: e.ID, LineNumber: e.LineNumber, Qty: e.Qty, ComponentPartID: e.ComponentPartID,
+			PartNumber: e.PartNumber, Description: e.Description}
 	}
 	p.LastRollupCost, p.LastRollupAt, _ = h.parts().GetPartRollup(r.Context(), p.ID)
 	h.render(w, r, "parts/part_bom_edit.html", map[string]any{
@@ -930,12 +935,12 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lines, err := h.parts().ListBOMLines(r.Context(), p.ID)
+	lines, err := h.parts().ListBOMEdges(r.Context(), p.ID)
 	if err != nil {
 		serverError(w, "Error retrieving BOM", err)
 		return
 	}
-	existing := map[int]parts.BOMLine{}
+	existing := map[int]parts.BOMEdge{}
 	for _, l := range lines {
 		existing[l.ComponentPartID] = l
 	}
@@ -992,46 +997,48 @@ type rollupResult struct {
 	cycle bool
 }
 
-// rollupCost recursively computes the rolled-up cost for part pnid.
-// visited is path-scoped (defer-deleted on return) for cycle detection.
-// memo is global to the walk; once a node is computed its result is reused.
+// rollupCost computes the rolled-up cost for part pnid from the whole BOM tree,
+// loaded in one query. visited is path-scoped for cycle detection; memo is global
+// to the walk, and once a node is computed its result is reused.
 func (h *Handler) rollupCost(ctx context.Context, pnid int, visited map[int]bool, memo map[int]rollupResult) (rollupResult, error) {
+	tree, err := h.parts().ListBOMTree(ctx, pnid)
+	if err != nil {
+		return rollupResult{}, err
+	}
+	return rollupWalk(tree, pnid, visited, memo), nil
+}
+
+// rollupWalk is rollupCost's in-memory recursion over a ListBOMTree result.
+// visited is path-scoped (defer-deleted on return) for cycle detection.
+func rollupWalk(tree map[int][]parts.BOMTreeEdge, pnid int, visited map[int]bool, memo map[int]rollupResult) rollupResult {
 	if visited[pnid] {
-		return rollupResult{cycle: true}, nil
+		return rollupResult{cycle: true}
 	}
 	if res, ok := memo[pnid]; ok {
-		return res, nil
+		return res
 	}
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	lines, err := h.parts().ListBOMLines(ctx, pnid)
-	if err != nil {
-		return rollupResult{}, err
-	}
-
 	var total float64
 	var hasCycle bool
-	for _, l := range lines {
+	for _, e := range tree[pnid] {
 		var unitCost float64
-		if l.HasBOM {
-			res, err := h.rollupCost(ctx, l.ComponentPartID, visited, memo)
-			if err != nil {
-				return rollupResult{}, err
-			}
+		if e.HasBOM {
+			res := rollupWalk(tree, e.ComponentID, visited, memo)
 			if res.cycle {
 				hasCycle = true
 			}
 			unitCost = res.cost
 		} else {
-			unitCost, _ = bomLeafCost(false, 0, l.PreferredPrice, l.CurrentCost, "")
+			unitCost, _ = bomLeafCost(false, 0, e.PreferredPrice, e.CurrentCost, "")
 		}
-		total += unitCost * l.Qty
+		total += unitCost * e.Qty
 	}
 
 	result := rollupResult{cost: total, cycle: hasCycle}
 	memo[pnid] = result
-	return result, nil
+	return result
 }
 
 // ── PartRollupCost — POST /part/{id}/rollup-cost ─────────────────────────────
@@ -1057,7 +1064,7 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Write rollup cost back to every assembly visited during the walk (root + all
-	// sub-assemblies) in one transaction, so now() gives every assembly the same timestamp.
+	// sub-assemblies) in one statement, so now() gives every assembly the same timestamp.
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
 		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
@@ -1069,12 +1076,13 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 			tx.Rollback()
 		}
 	}()
-	svc := parts.New(tx)
+	costs := make(map[int]float64, len(memo))
 	for partID, result := range memo {
-		if err := svc.SetPartRollup(r.Context(), partID, result.cost); err != nil {
-			h.renderError(w, r, "Error saving rollup cost: "+err.Error())
-			return
-		}
+		costs[partID] = result.cost
+	}
+	if err := parts.New(tx).SetPartRollups(r.Context(), costs); err != nil {
+		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
+		return
 	}
 	if err := tx.Commit(); err != nil {
 		h.renderError(w, r, "Error saving rollup cost: "+err.Error())
@@ -1123,41 +1131,40 @@ type buildCostResult struct {
 
 // aggregateLeafQty walks the BOM tree from pnid, multiplying qty by parentQty at
 // each level, and sums extended quantity into leaves (parts with no BOM) by pnid.
-// visited is path-scoped for cycle detection, matching rollupCost.
+// The tree is loaded in one query; visited is path-scoped for cycle detection,
+// matching rollupCost.
 func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty float64, visited map[int]bool, leaves map[int]float64) (bool, error) {
+	tree, err := h.parts().ListBOMTree(ctx, pnid)
+	if err != nil {
+		return false, err
+	}
+	return leafQtyWalk(tree, pnid, parentQty, visited, leaves), nil
+}
+
+// leafQtyWalk is aggregateLeafQty's in-memory recursion over a ListBOMTree result.
+func leafQtyWalk(tree map[int][]parts.BOMTreeEdge, pnid int, parentQty float64, visited map[int]bool, leaves map[int]float64) bool {
 	if visited[pnid] {
-		return true, nil
+		return true
 	}
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	lines, err := h.parts().ListBOMLines(ctx, pnid)
-	if err != nil {
-		return false, err
-	}
-
 	var hasCycle bool
-	for _, l := range lines {
-		extQty := l.Qty * parentQty
-		if l.HasBOM {
-			cycle, err := h.aggregateLeafQty(ctx, l.ComponentPartID, extQty, visited, leaves)
-			if err != nil {
-				return false, err
-			}
-			if cycle {
+	for _, e := range tree[pnid] {
+		extQty := e.Qty * parentQty
+		if e.HasBOM {
+			if leafQtyWalk(tree, e.ComponentID, extQty, visited, leaves) {
 				// A cycle anywhere in the tree makes the whole walk's result
 				// discardable (buildCost returns Cycle:true without using
-				// leaves), so stop issuing further queries for the rest of
-				// this node's siblings instead of walking the remaining tree
-				// for nothing.
+				// leaves), so skip the rest of this node's siblings.
 				hasCycle = true
 				break
 			}
 		} else {
-			leaves[l.ComponentPartID] += extQty
+			leaves[e.ComponentID] += extQty
 		}
 	}
-	return hasCycle, nil
+	return hasCycle
 }
 
 // partSupplierKey identifies one part+supplier pairing, used to key batched
@@ -2087,7 +2094,7 @@ func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
 // ── PartsExportCSV — GET /parts/export.csv ──────────────────────────────────
 
 func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
-	parts, err := h.parts().ListParts(r.Context(), thumbnailCategory)
+	parts, err := h.parts().ListPartsExport(r.Context())
 	if err != nil {
 		serverError(w, "database error", err)
 		return

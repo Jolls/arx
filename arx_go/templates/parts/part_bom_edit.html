@@ -23,11 +23,11 @@
                         <td><input type="number" name="pl[{{.ID}}][PLItem]" value="{{.LineNumber}}" class="form-control form-control-sm" style="width:52px;"></td>
                         <td>
                             <input type="text" name="pl[{{.ID}}][PLPartNumber]" value="{{.PartNumber}}"
-                                   class="tbl-input bom-pn-input" autocomplete="off">
+                                   class="form-control form-control-sm bom-pn-input" autocomplete="off">
                             <input type="hidden" name="pl[{{.ID}}][PLPNID]" value="{{.ComponentPartID}}">
                         </td>
                         <td><input type="text" value="{{.Description}}"
-                                   class="tbl-input bom-desc-input" autocomplete="off"></td>
+                                   class="form-control form-control-sm bom-desc-input" autocomplete="off"></td>
                         <td><input type="number" step="any" name="pl[{{.ID}}][PLQty]" value="{{printf "%g" .Qty}}"
                                    class="form-control form-control-sm" style="text-align:right;"></td>
                         <td style="text-align:center;">
@@ -92,11 +92,11 @@
     <tr class="new-row">
         <td><input type="number" name="new_pl[IDX][PLItem]" class="form-control form-control-sm" style="width:52px;" placeholder="#"></td>
         <td>
-            <input type="text" name="new_pl[IDX][PLPartNumber]" class="tbl-input bom-pn-input"
+            <input type="text" name="new_pl[IDX][PLPartNumber]" class="form-control form-control-sm bom-pn-input"
                    placeholder="Part number" autocomplete="off">
             <input type="hidden" name="new_pl[IDX][PLPNID]">
         </td>
-        <td><input type="text" class="tbl-input bom-desc-input" placeholder="Search description…" autocomplete="off"></td>
+        <td><input type="text" class="form-control form-control-sm bom-desc-input" placeholder="Search description…" autocomplete="off"></td>
         <td><input type="number" step="any" name="new_pl[IDX][PLQty]" class="form-control form-control-sm"
                    style="text-align:right;" placeholder="0"></td>
         <td style="text-align:center;">

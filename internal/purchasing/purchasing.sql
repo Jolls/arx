@@ -21,6 +21,19 @@ FROM company su
 LEFT JOIN contact cn ON su.default_contact = cn.id
 WHERE su.id = $1;
 
+-- name: GetSupplierCode :one
+SELECT COALESCE(supplier_code, '') AS supplier_code FROM company WHERE id = $1;
+
+-- name: GetSupplierName :one
+SELECT name FROM company WHERE id = $1;
+
+-- name: GetSupplierContactDefault :one
+-- The supplier's name and default contact id, without GetSupplier's contact join.
+SELECT name, default_contact FROM company WHERE id = $1;
+
+-- name: GetSupplierBulkOrder :one
+SELECT bulk_order_delimiter, bulk_order_pn_source FROM company WHERE id = $1;
+
 -- name: CreateSupplier :one
 -- The bulk-order options keep their column defaults.
 INSERT INTO company (name, supplier_code, default_contact, is_active, is_supplier, is_manufacturer, notes)

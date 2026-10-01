@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.44] - 2026-10-01
+### Changed
+- BOM cost rollup and build cost load the BOM tree in one query, and rollup saves all assembly costs in one statement (fewer database round trips) ([#278](https://github.com/Jolls/arx/issues/278))
+- Slimmer queries for the BOM editor and paste preview, PO line revision, supplier lookups and the parts CSV export ([#264](https://github.com/Jolls/arx/issues/264))
+
+### Fixed
+- BOM editor Part Number and Description inputs rendered unstyled and truncated; they now use Bootstrap form controls
+
 ## [0.8.43] - 2026-10-01
 ### Changed
 - docs: merge `docs/FUTURE_GOALS.md` into `ROADMAP.md` (vision, deferred decisions); record the central-server decision as deferred and take #189 out of the v0.8.0 milestone ([#189](https://github.com/Jolls/arx/issues/189))

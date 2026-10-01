@@ -616,6 +616,17 @@ func (q *Queries) GetPartPrice(ctx context.Context, arg GetPartPriceParams) (Get
 	return i, err
 }
 
+const getPartRevision = `-- name: GetPartRevision :one
+SELECT COALESCE(revision, '')::text AS revision FROM part WHERE id = $1
+`
+
+func (q *Queries) GetPartRevision(ctx context.Context, id int) (string, error) {
+	row := q.db.QueryRowContext(ctx, getPartRevision, id)
+	var revision string
+	err := row.Scan(&revision)
+	return revision, err
+}
+
 const getPartRollup = `-- name: GetPartRollup :one
 SELECT COALESCE(last_rollup_cost, 0) AS last_rollup_cost, last_rollup_at FROM part WHERE id = $1
 `
@@ -955,6 +966,56 @@ func (q *Queries) ListBOMComponents(ctx context.Context, parentPartID int) ([]Li
 	return items, nil
 }
 
+const listBOMEdges = `-- name: ListBOMEdges :many
+SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
+       pn.part_number, COALESCE(pn.description, '') AS description
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id = $1
+ORDER BY pl.line_number
+`
+
+type ListBOMEdgesRow struct {
+	ID              int
+	LineNumber      int
+	Qty             float64
+	ComponentPartID int
+	PartNumber      string
+	Description     string
+}
+
+// A parent's BOM lines in line order with just the component's part number and
+// description (the BOM editor and paste preview); ListBOMLines adds the cost columns.
+func (q *Queries) ListBOMEdges(ctx context.Context, parentPartID int) ([]ListBOMEdgesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBOMEdges, parentPartID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBOMEdgesRow
+	for rows.Next() {
+		var i ListBOMEdgesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LineNumber,
+			&i.Qty,
+			&i.ComponentPartID,
+			&i.PartNumber,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBOMLines = `-- name: ListBOMLines :many
 SELECT pl.id, pl.line_number, pl.qty, pl.component_part_id,
        pn.part_number, COALESCE(pn.description, '') AS description,
@@ -1013,6 +1074,65 @@ func (q *Queries) ListBOMLines(ctx context.Context, parentPartID int) ([]ListBOM
 			&i.HasBom,
 			&i.AttachmentCount,
 			&i.PoLineCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBOMTree = `-- name: ListBOMTree :many
+WITH RECURSIVE tree(part_id) AS (
+    SELECT $1::int
+    UNION
+    SELECT b.component_part_id FROM bom b JOIN tree t ON b.parent_part_id = t.part_id
+)
+SELECT pl.parent_part_id, pl.component_part_id, pl.qty,
+       COALESCE(pn.current_cost, 0) AS current_cost,
+       COALESCE((SELECT MIN(p.price_ea) FROM price p
+        WHERE p.part_id = pn.id AND p.is_active = TRUE AND p.supplier_id = pn.default_supplier_id), 0)::numeric AS preferred_price,
+       EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = pn.id) AS has_bom
+FROM bom pl
+JOIN part pn ON pl.component_part_id = pn.id
+WHERE pl.parent_part_id IN (SELECT part_id FROM tree)
+ORDER BY pl.parent_part_id, pl.line_number, pl.id
+`
+
+type ListBOMTreeRow struct {
+	ParentPartID    int
+	ComponentPartID int
+	Qty             float64
+	CurrentCost     float64
+	PreferredPrice  float64
+	HasBom          bool
+}
+
+// Every BOM edge reachable from root_id, with each component's cost inputs, for the
+// in-memory cost walks. UNION (not UNION ALL) expands each part once and so also
+// terminates on a cyclic BOM; cycle detection stays with the caller.
+func (q *Queries) ListBOMTree(ctx context.Context, rootID int) ([]ListBOMTreeRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBOMTree, rootID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBOMTreeRow
+	for rows.Next() {
+		var i ListBOMTreeRow
+		if err := rows.Scan(
+			&i.ParentPartID,
+			&i.ComponentPartID,
+			&i.Qty,
+			&i.CurrentCost,
+			&i.PreferredPrice,
+			&i.HasBom,
 		); err != nil {
 			return nil, err
 		}
@@ -1491,6 +1611,63 @@ func (q *Queries) ListParts(ctx context.Context, thumbCategory string) ([]ListPa
 	return items, nil
 }
 
+const listPartsExport = `-- name: ListPartsExport :many
+SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
+       COALESCE(p.description, '') AS description, COALESCE(p.detail, '') AS detail,
+       COALESCE(p.requested_by, '') AS requested_by, p.created_date,
+       COALESCE(p.category, '') AS category, p.modified_date,
+       COALESCE(p.is_active, TRUE) AS is_active
+FROM part p ORDER BY p.part_number
+`
+
+type ListPartsExportRow struct {
+	ID           int
+	PartNumber   string
+	Revision     string
+	Description  string
+	Detail       string
+	RequestedBy  string
+	CreatedDate  *time.Time
+	Category     string
+	ModifiedDate *time.Time
+	IsActive     bool
+}
+
+// ListParts' columns without the thumbnail/below-min/count extras the CSV export discards.
+func (q *Queries) ListPartsExport(ctx context.Context) ([]ListPartsExportRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPartsExport)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartsExportRow
+	for rows.Next() {
+		var i ListPartsExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartNumber,
+			&i.Revision,
+			&i.Description,
+			&i.Detail,
+			&i.RequestedBy,
+			&i.CreatedDate,
+			&i.Category,
+			&i.ModifiedDate,
+			&i.IsActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPriceListPoints = `-- name: ListPriceListPoints :many
 SELECT COALESCE(c.name, '') AS supplier_name, p.effective_date, p.price_ea, p.pack_size
 FROM price p
@@ -1807,17 +1984,22 @@ func (q *Queries) SetDefaultSupplier(ctx context.Context, arg SetDefaultSupplier
 	return err
 }
 
-const setPartRollup = `-- name: SetPartRollup :exec
-UPDATE part SET last_rollup_cost = $1::numeric, last_rollup_at = CURRENT_TIMESTAMP WHERE id = $2
+const setPartRollups = `-- name: SetPartRollups :exec
+UPDATE part SET last_rollup_cost = u.cost, last_rollup_at = CURRENT_TIMESTAMP
+FROM (SELECT unnest(string_to_array($1::text, ',')::int[]) AS id,
+             unnest(string_to_array($2::text, ',')::numeric[]) AS cost) u
+WHERE part.id = u.id
 `
 
-type SetPartRollupParams struct {
-	Cost float64
-	ID   int
+type SetPartRollupsParams struct {
+	Ids   string
+	Costs string
 }
 
-func (q *Queries) SetPartRollup(ctx context.Context, arg SetPartRollupParams) error {
-	_, err := q.db.ExecContext(ctx, setPartRollup, arg.Cost, arg.ID)
+// Stores every rolled-up cost in one statement, so all parts share one last_rollup_at.
+// ids and costs are comma-separated, index-aligned (see ListBuildCostParts).
+func (q *Queries) SetPartRollups(ctx context.Context, arg SetPartRollupsParams) error {
+	_, err := q.db.ExecContext(ctx, setPartRollups, arg.Ids, arg.Costs)
 	return err
 }
 

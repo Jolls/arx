@@ -126,6 +126,30 @@ func (s *Service) GetSupplier(ctx context.Context, id int) (Supplier, error) {
 		ContactCity: r.ContactCity}, err
 }
 
+// GetSupplierCode returns the supplier's code ("" when unset); sql.ErrNoRows when no company has the id.
+func (s *Service) GetSupplierCode(ctx context.Context, id int) (string, error) {
+	return s.q.GetSupplierCode(ctx, id)
+}
+
+// GetSupplierName returns the supplier's name; sql.ErrNoRows when no company has the id.
+func (s *Service) GetSupplierName(ctx context.Context, id int) (string, error) {
+	return s.q.GetSupplierName(ctx, id)
+}
+
+// GetSupplierContactDefault returns the supplier's name and default contact id (nil when
+// unset); sql.ErrNoRows when no company has the id.
+func (s *Service) GetSupplierContactDefault(ctx context.Context, id int) (name string, defaultContact *int, err error) {
+	r, err := s.q.GetSupplierContactDefault(ctx, id)
+	return r.Name, r.DefaultContact, err
+}
+
+// GetSupplierBulkOrder returns the supplier's bulk-order delimiter and part-number source;
+// sql.ErrNoRows when no company has the id.
+func (s *Service) GetSupplierBulkOrder(ctx context.Context, id int) (delimiter, pnSource string, err error) {
+	r, err := s.q.GetSupplierBulkOrder(ctx, id)
+	return r.BulkOrderDelimiter, r.BulkOrderPnSource, err
+}
+
 // CreateSupplier inserts sup and returns the new id.
 func (s *Service) CreateSupplier(ctx context.Context, sup Supplier) (int, error) {
 	return s.q.CreateSupplier(ctx, dbq.CreateSupplierParams{

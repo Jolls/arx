@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"arx/internal/parts"
 )
 
 // noPref is the absence of a preferred-supplier price.
@@ -173,5 +175,60 @@ func TestParseBOMPasteText(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// walkTree is the repeated-sub-assembly BOM of the #278 integration tests: T -> S, M x2, S x5;
+// M -> S x3; S -> L x4 (L priced 2.0).
+var walkTree = map[int][]parts.BOMTreeEdge{
+	1: {{ComponentID: 3, Qty: 1, HasBOM: true}, {ComponentID: 2, Qty: 2, HasBOM: true}, {ComponentID: 3, Qty: 5, HasBOM: true}},
+	2: {{ComponentID: 3, Qty: 3, HasBOM: true}},
+	3: {{ComponentID: 4, Qty: 4, PreferredPrice: 2.0}},
+}
+
+func TestRollupWalk_RepeatedSubAssembly(t *testing.T) {
+	memo := map[int]rollupResult{}
+	res := rollupWalk(walkTree, 1, map[int]bool{}, memo)
+	if res.cycle || res.cost != 96 {
+		t.Errorf("rollupWalk(T) = %+v, want cost 96", res)
+	}
+	if len(memo) != 3 || memo[3].cost != 8 || memo[2].cost != 24 {
+		t.Errorf("memo = %v, want T, M=24, S=8", memo)
+	}
+}
+
+func TestRollupWalk_Cycle(t *testing.T) {
+	for name, tree := range map[string]map[int][]parts.BOMTreeEdge{
+		"two node":   {1: {{ComponentID: 2, Qty: 1, HasBOM: true}}, 2: {{ComponentID: 1, Qty: 1, HasBOM: true}}},
+		"three node": {1: {{ComponentID: 2, Qty: 1, HasBOM: true}}, 2: {{ComponentID: 3, Qty: 1, HasBOM: true}}, 3: {{ComponentID: 1, Qty: 1, HasBOM: true}}},
+		"self loop":  {1: {{ComponentID: 1, Qty: 1, HasBOM: true}}},
+		"below root": {1: {{ComponentID: 2, Qty: 1, HasBOM: true}}, 2: {{ComponentID: 3, Qty: 1, HasBOM: true}}, 3: {{ComponentID: 2, Qty: 1, HasBOM: true}}},
+	} {
+		if res := rollupWalk(tree, 1, map[int]bool{}, map[int]rollupResult{}); !res.cycle {
+			t.Errorf("%s: rollupWalk cycle = false", name)
+		}
+		if !leafQtyWalk(tree, 1, 1, map[int]bool{}, map[int]float64{}) {
+			t.Errorf("%s: leafQtyWalk cycle = false", name)
+		}
+	}
+}
+
+func TestRollupWalk_MemoReusedAndEmptyRoot(t *testing.T) {
+	if res := rollupWalk(walkTree, 1, map[int]bool{}, map[int]rollupResult{3: {cost: 100}}); res.cost != 100*(1+3*2+5)+0 {
+		t.Errorf("memoized S ignored: cost = %v", res.cost)
+	}
+	memo := map[int]rollupResult{}
+	if res := rollupWalk(walkTree, 99, map[int]bool{}, memo); res.cost != 0 || res.cycle || len(memo) != 1 {
+		t.Errorf("empty root = %+v memo=%v, want cost 0 memoized", res, memo)
+	}
+}
+
+func TestLeafQtyWalk_RepeatedSubAssembly(t *testing.T) {
+	leaves := map[int]float64{}
+	if leafQtyWalk(walkTree, 1, 1, map[int]bool{}, leaves) {
+		t.Fatal("cycle = true")
+	}
+	if len(leaves) != 1 || leaves[4] != 48 {
+		t.Errorf("leaves = %v, want {4: 48}", leaves)
 	}
 }
