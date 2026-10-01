@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -77,12 +78,146 @@ func TestCachedUserByID_ReturnsFreshEntryWithoutDB(t *testing.T) {
 	want := &User{ID: 1, Username: "alice"}
 	h.userCache[1] = &userCacheEntry{user: want, expires: time.Now().Add(time.Minute)}
 
-	got, err := h.cachedUserByID(context.Background(), 1)
+	got, err := h.cachedUserByID(context.Background(), 1, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != want {
 		t.Errorf("got %+v, want the cached pointer %+v", got, want)
+	}
+}
+
+// expiredUserHandler returns a handler whose cache holds an expired entry for
+// user 1 (Username "old") and whose lookupUser counts calls and returns next.
+func expiredUserHandler(next *User, err error) (*Handler, *atomic.Int32) {
+	h := testHandler()
+	calls := &atomic.Int32{}
+	h.lookupUser = func(context.Context, int) (*User, error) {
+		calls.Add(1)
+		return next, err
+	}
+	h.userCache[1] = &userCacheEntry{user: &User{ID: 1, Username: "old"}, expires: time.Now().Add(-time.Second)}
+	return h, calls
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		if cond() {
+			return
+		}
+	}
+	t.Fatal("condition not met within 2s")
+}
+
+func cachedUsername(h *Handler, id int) string {
+	h.userMu.RLock()
+	defer h.userMu.RUnlock()
+	if e, ok := h.userCache[id]; ok {
+		return e.user.Username
+	}
+	return ""
+}
+
+func TestCachedUserByID_StaleGETReturnsImmediatelyAndRefreshes(t *testing.T) {
+	h, calls := expiredUserHandler(&User{ID: 1, Username: "new"}, nil)
+
+	got, err := h.cachedUserByID(context.Background(), 1, true)
+	if err != nil || got.Username != "old" {
+		t.Fatalf("got %+v, %v; want the stale user", got, err)
+	}
+	waitFor(t, func() bool { return cachedUsername(h, 1) == "new" })
+	if n := calls.Load(); n != 1 {
+		t.Errorf("lookups = %d, want 1", n)
+	}
+}
+
+func TestCachedUserByID_ExpiredMutatingRequestLooksUpSynchronously(t *testing.T) {
+	h, calls := expiredUserHandler(&User{ID: 1, Username: "new"}, nil)
+
+	got, err := h.cachedUserByID(context.Background(), 1, false)
+	if err != nil || got.Username != "new" {
+		t.Fatalf("got %+v, %v; want the fresh user", got, err)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Errorf("lookups = %d, want 1", n)
+	}
+}
+
+func TestCachedUserByID_NoEntryLooksUpSynchronouslyEvenForGET(t *testing.T) {
+	h, _ := expiredUserHandler(&User{ID: 2, Username: "fresh"}, nil)
+
+	got, err := h.cachedUserByID(context.Background(), 2, true)
+	if err != nil || got.Username != "fresh" {
+		t.Fatalf("got %+v, %v; want the fresh user", got, err)
+	}
+}
+
+func TestCachedUserByID_RefreshOfInactiveUserEvictsEntry(t *testing.T) {
+	h, _ := expiredUserHandler(nil, nil)
+
+	if _, err := h.cachedUserByID(context.Background(), 1, true); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return cachedUsername(h, 1) == "" })
+}
+
+func TestCachedUserByID_RefreshErrorKeepsStaleEntryAndRetries(t *testing.T) {
+	h, calls := expiredUserHandler(nil, errors.New("db down"))
+
+	h.cachedUserByID(context.Background(), 1, true)
+	waitFor(t, func() bool { return calls.Load() == 1 })
+	waitFor(t, func() bool {
+		h.userMu.RLock()
+		defer h.userMu.RUnlock()
+		return !h.userCache[1].refreshing
+	})
+	if got := cachedUsername(h, 1); got != "old" {
+		t.Errorf("cached user = %q, want the stale entry kept", got)
+	}
+
+	h.cachedUserByID(context.Background(), 1, true)
+	waitFor(t, func() bool { return calls.Load() == 2 })
+}
+
+func TestCachedUserByID_ConcurrentStaleGETsTriggerOneRefresh(t *testing.T) {
+	h, calls := expiredUserHandler(&User{ID: 1, Username: "new"}, nil)
+	release := make(chan struct{})
+	h.lookupUser = func(context.Context, int) (*User, error) {
+		calls.Add(1)
+		<-release
+		return &User{ID: 1, Username: "new"}, nil
+	}
+
+	for range 20 {
+		if _, err := h.cachedUserByID(context.Background(), 1, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(release)
+	waitFor(t, func() bool { return cachedUsername(h, 1) == "new" })
+	if n := calls.Load(); n != 1 {
+		t.Errorf("lookups = %d, want 1", n)
+	}
+}
+
+func TestCachedUserByID_RefreshResultDroppedAfterInvalidation(t *testing.T) {
+	h, calls := expiredUserHandler(nil, nil)
+	release := make(chan struct{})
+	h.lookupUser = func(context.Context, int) (*User, error) {
+		calls.Add(1)
+		<-release
+		return &User{ID: 1, Username: "pre-change"}, nil
+	}
+
+	h.cachedUserByID(context.Background(), 1, true)
+	waitFor(t, func() bool { return calls.Load() == 1 })
+	h.invalidateUserCache(1)
+	close(release)
+
+	time.Sleep(50 * time.Millisecond) // let the refresh goroutine finish
+	if got := cachedUsername(h, 1); got != "" {
+		t.Errorf("cached user = %q, want none: a pre-invalidation refresh must not re-cache", got)
 	}
 }
 

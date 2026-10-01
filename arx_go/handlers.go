@@ -65,6 +65,10 @@ type Handler struct {
 	// Overridable in tests so SettingsSave's failure path needs no real dial.
 	connectDB func(dsn string) (*sql.DB, error)
 
+	// lookupUser fetches a session user from the DB; defaults to h.userByID in
+	// New(). Overridable in tests so the user-cache paths need no real DB.
+	lookupUser func(ctx context.Context, id int) (*User, error)
+
 	routeMu    sync.Mutex
 	routeStats map[int]*routeAccumulator
 
@@ -136,6 +140,7 @@ func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *
 		loginAttempts: make(map[string]*loginAttempt),
 		connectDB:     arxdb.Connect,
 	}
+	h.lookupUser = h.userByID
 	h.state.Store(&runtimeState{cfg: cfg, conn: &dbConn{db: db}})
 	return h
 }
