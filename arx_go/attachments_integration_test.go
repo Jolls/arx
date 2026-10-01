@@ -411,3 +411,73 @@ func TestIntegration_SupplierAttachmentUpdate_RemovesOldFileFromSupplierRoot(t *
 		t.Errorf("same-named Doc Control file was removed: %v", err)
 	}
 }
+
+// sharedRootFixture: SupplierFilesRoot blank (so supplier files share Doc Control), one file,
+// and a part attachment and a supplier attachment both linking it (#233).
+func sharedRootFixture(t *testing.T, h *Handler, ctx context.Context) (path string, partID, partAtt, supplierID, supplierAtt int, cleanup func()) {
+	t.Helper()
+	docRoot := tempDocControlRoot(t, h)
+	prev := h.cfg().SupplierFilesRoot
+	h.cfg().SupplierFilesRoot = ""
+	var cleanups []func()
+	cleanup = func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
+	cleanups = append(cleanups, func() { h.cfg().SupplierFilesRoot = prev })
+
+	const name = "foo-233.txt"
+	path = filepath.Join(docRoot, name)
+	if err := os.WriteFile(path, []byte(smokeUniq("233")), 0644); err != nil {
+		t.Fatal(err)
+	}
+	partID, _, cleanupPart := seedThrowawayPart(t, h, ctx, "233")
+	cleanups = append(cleanups, cleanupPart)
+	partAtt, cleanupAtt := seedThrowawayAttachment(t, h, ctx, partID, "LOCAL:"+name, "Test")
+	cleanups = append(cleanups, cleanupAtt)
+	cleanups = append(cleanups, func() { smokeExec(ctx, h, `UPDATE part SET primary_attachment_id=NULL WHERE id=$1`, partID) })
+	supplierID, cleanupSupplier := seedSupplier(t, h, ctx)
+	cleanups = append(cleanups, cleanupSupplier)
+	cleanups = append(cleanups, func() {
+		smokeExec(ctx, h, `UPDATE company SET primary_attachment_id=NULL WHERE id=$1`, supplierID)
+		smokeExec(ctx, h, `DELETE FROM company_attachment WHERE supplier_id=$1`, supplierID)
+	})
+	smokeExec(ctx, h, `INSERT INTO company_attachment (supplier_id, file_path, is_active) VALUES ($1,$2,TRUE)`, supplierID, "LOCAL:"+name)
+	if err := h.queryRowContext(ctx, `SELECT MAX(supplier_attachment_id) FROM company_attachment WHERE supplier_id=$1`, supplierID).Scan(&supplierAtt); err != nil {
+		t.Fatal(err)
+	}
+	return path, partID, partAtt, supplierID, supplierAtt, cleanup
+}
+
+func TestIntegration_SharedRoot_PartReplaceKeepsSupplierLinkedFile(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	path, partID, partAtt, _, _, done := sharedRootFixture(t, h, ctx)
+	defer done()
+
+	rec := httptest.NewRecorder()
+	h.PartAttachmentUpdate(rec, withIDAndAttID(postForm(fmt.Sprintf("/part/%d/attachments/%d", partID, partAtt), url.Values{
+		"FILFileName": {"http://example.test/233-new-" + smokeUniq("x")}, "category": {"Test"},
+	}), partID, partAtt))
+	assert302(t, "PartAttachmentUpdate", rec)
+
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("file still linked by a supplier attachment was removed: %v", err)
+	}
+}
+
+func TestIntegration_SharedRoot_SupplierReplaceKeepsPartLinkedFile(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	path, _, _, supplierID, supplierAtt, done := sharedRootFixture(t, h, ctx)
+	defer done()
+
+	updateCompanyAttachment(t, h, supplierID, supplierAtt, url.Values{"file_path": {"http://example.test/233-new-" + smokeUniq("x")}})
+
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("file still linked by a part attachment was removed: %v", err)
+	}
+}

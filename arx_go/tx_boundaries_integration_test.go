@@ -499,3 +499,48 @@ func TestIntegration_RFQConvert_SiblingChangedConcurrentlyNotCancelled(t *testin
 		t.Errorf("%d cancel history rows for the sibling, want 0", n)
 	}
 }
+
+// A compare save queues behind a convert in flight, then leaves the awarded quote alone (#262).
+func TestIntegration_RFQCompareSave_QueuesBehindConvert(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	acmeID, _ := seedRFQQuote(t, h, ctx, 1001, 0, 10, 2.50)
+	defer cleanupPO(ctx, h, acmeID)
+	pmcID, _ := seedRFQQuote(t, h, ctx, 1002, acmeID, 10, 2.25)
+	defer cleanupPO(ctx, h, pmcID)
+	lineOf := func(poID int) int {
+		var id int
+		if err := h.queryRowContext(ctx, `SELECT MIN(id) FROM po_line WHERE po_id=$1`, poID).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	acmeLine, pmcLine := lineOf(acmeID), lineOf(pmcID)
+
+	group := strconv.Itoa(acmeID)
+	var rec *httptest.ResponseRecorder
+	raceHandler(t, h, ctx,
+		[]string{`UPDATE purchase_order SET status='closed' WHERE ID=$1`},
+		[][]any{{acmeID}},
+		func() {
+			rec = httptest.NewRecorder()
+			h.RFQCompareSave(rec, withGroupParam(postForm("/rfq/"+group+"/compare", url.Values{
+				fmt.Sprintf("cost_%d", acmeLine): {"7"}, fmt.Sprintf("cost_%d", pmcLine): {"7"},
+			}), group))
+		})
+
+	cost := func(id int) float64 {
+		var c float64
+		if err := h.queryRowContext(ctx, `SELECT unit_cost FROM po_line WHERE id=$1`, id).Scan(&c); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	if c := cost(acmeLine); c != 2.50 {
+		t.Errorf("awarded quote's line cost = %v, want 2.5 (untouched)", c)
+	}
+	if c := cost(pmcLine); c != 7 {
+		t.Errorf("open quote's line cost = %v, want 7", c)
+	}
+}

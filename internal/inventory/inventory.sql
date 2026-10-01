@@ -180,12 +180,11 @@ UPDATE unit SET is_active = sqlc.arg(is_active) WHERE id = sqlc.arg(id) AND part
 UPDATE unit SET is_active = sqlc.arg(is_active), serial_number = sqlc.arg(serial_number)
 WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id);
 
--- name: GetUnitIDBySerial :one
-SELECT id FROM unit WHERE part_id = sqlc.arg(part_id) AND serial_number = sqlc.arg(serial_number);
-
--- name: CreateTestUnit :one
+-- name: UpsertTestUnit :one
+-- The no-op DO UPDATE makes RETURNING yield the existing id; provenance is set only on insert.
 INSERT INTO unit (part_id, serial_number, build_id, lot_id, source)
 VALUES (sqlc.arg(part_id), sqlc.arg(serial_number), sqlc.narg(build_id), sqlc.narg(lot_id), 'test')
+ON CONFLICT (part_id, serial_number) DO UPDATE SET serial_number = EXCLUDED.serial_number
 RETURNING id;
 
 -- name: GetUnitProvenance :one

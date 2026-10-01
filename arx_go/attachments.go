@@ -521,7 +521,7 @@ func (h *Handler) attachmentTx(ctx context.Context, fn func(*attachments.Service
 }
 
 // deleteAttachmentFileIfUnshared removes root/<strippedName> unless inUse (the
-// table's PartFileInUse / CompanyFileInUse) reports another active row still has
+// Handler.partFileInUse / companyFileInUse) reports another active row still has
 // fullFileName (e.g. via the "Link to existing file" import flow), in which case
 // the file is left in place for that row. A file that's already gone is treated
 // as success, not an error.
@@ -764,4 +764,43 @@ func (h *Handler) findDuplicatePartAttachment(ctx context.Context, hash string, 
 func (h *Handler) findDuplicateCompanyAttachment(ctx context.Context, hash string, excludeID int) (*duplicateAttachment, error) {
 	d, err := h.attachments().FindDuplicateCompanyAttachment(ctx, hash, excludeID)
 	return duplicateAt(d, err, "/supplier/%d/attachments")
+}
+
+// fileInUseFunc reports whether another active row links fullFileName; excludeID
+// is the caller's own row, skipped by the check.
+type fileInUseFunc func(ctx context.Context, fullFileName string, excludeID int) (bool, error)
+
+// combineInUse returns own, widened to also ask other when shared (part and
+// supplier attachments keep files in the same folder, #233).
+func combineInUse(own, other fileInUseFunc, shared bool) fileInUseFunc {
+	if !shared {
+		return own
+	}
+	return func(ctx context.Context, fullFileName string, excludeID int) (bool, error) {
+		if used, err := own(ctx, fullFileName, excludeID); err != nil || used {
+			return used, err
+		}
+		// excludeID is an id in the caller's table, so it can't exclude a row in the other one.
+		return other(ctx, fullFileName, 0)
+	}
+}
+
+// sharedAttachmentRoot reports whether part and supplier LOCAL: links resolve to the
+// same folder (SUPPLIER_FILES_ROOT blank, or set to the Doc Control folder).
+func (h *Handler) sharedAttachmentRoot() bool {
+	sup, err1 := filepath.Abs(h.companyAttachmentRoot())
+	doc, err2 := filepath.Abs(h.cfg().DocControlRoot)
+	return err1 == nil && err2 == nil && sup == doc
+}
+
+// partFileInUse / companyFileInUse are the deleteAttachmentFileIfUnshared callbacks:
+// each table's own check, plus the other table's when the folder is shared.
+func (h *Handler) partFileInUse(ctx context.Context, fullFileName string, excludeID int) (bool, error) {
+	svc := h.attachments()
+	return combineInUse(svc.PartFileInUse, svc.CompanyFileInUse, h.sharedAttachmentRoot())(ctx, fullFileName, excludeID)
+}
+
+func (h *Handler) companyFileInUse(ctx context.Context, fullFileName string, excludeID int) (bool, error) {
+	svc := h.attachments()
+	return combineInUse(svc.CompanyFileInUse, svc.PartFileInUse, h.sharedAttachmentRoot())(ctx, fullFileName, excludeID)
 }

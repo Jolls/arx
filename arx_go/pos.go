@@ -2022,8 +2022,23 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 
 	pur := purchasing.New(tx)
 
-	// All line ids in the group, so we only accept input for lines that belong to it.
-	polIDs, err := pur.ListRFQLineIDs(r.Context(), groupID)
+	// Queue behind an in-flight RFQConvert, so a stale page can't rewrite quotes it just awarded.
+	if err := pur.LockRFQGroup(r.Context(), groupID); err != nil {
+		h.renderError(w, r, "Error locking RFQ group: "+err.Error())
+		return
+	}
+	total, open, err := pur.CountRFQGroupQuotes(r.Context(), groupID)
+	if err != nil {
+		h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
+		return
+	}
+	if total > 0 && open == 0 {
+		h.renderError(w, r, "No quotes in this RFQ group are still open; nothing was saved.")
+		return
+	}
+
+	// The group's still-open line ids, so we only accept input for lines that belong to it.
+	polIDs, err := pur.ListOpenRFQLineIDs(r.Context(), groupID)
 	if err != nil {
 		h.renderError(w, r, "Error loading RFQ lines: "+err.Error())
 		return

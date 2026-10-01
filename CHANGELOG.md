@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.41] - 2026-10-01
+### Fixed
+- Unlocking a record that doesn't exist returns 404 instead of 500, and part/supplier search matches `%` and `_` literally and takes `*` as the wildcard, like the list-table filters ([#266](https://github.com/Jolls/arx/issues/266))
+- Replacing or discarding an attachment file no longer deletes a file a part or supplier attachment still links when both share the Doc Control folder ([#233](https://github.com/Jolls/arx/issues/233))
+- Saving test results for two records with the same new serial at once no longer fails with a 500; both link to one unit ([#263](https://github.com/Jolls/arx/issues/263))
+- Saving a stale RFQ compare page no longer rewrites quotes already awarded or cancelled, and queues behind an in-flight convert ([#262](https://github.com/Jolls/arx/issues/262))
+
 ## [0.8.40] - 2026-09-30
 ### Security
 - `seed_test_data.sql` aborts before its first `DELETE` on a prod-named database, or on one that has parts but not the seed sentinel row ([#286](https://github.com/Jolls/arx/issues/286))

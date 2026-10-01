@@ -84,6 +84,24 @@ func (q *Queries) CopyPOLines(ctx context.Context, arg CopyPOLinesParams) error 
 	return err
 }
 
+const countRFQGroupQuotes = `-- name: CountRFQGroupQuotes :one
+SELECT COUNT(*)::int AS total, (COUNT(*) FILTER (WHERE status = 'rfq'))::int AS open
+FROM purchase_order WHERE rfq_group_id = $1::int
+`
+
+type CountRFQGroupQuotesRow struct {
+	Total int
+	Open  int
+}
+
+// #262: how many quotes the group has, and how many are still in 'rfq'.
+func (q *Queries) CountRFQGroupQuotes(ctx context.Context, groupID int) (CountRFQGroupQuotesRow, error) {
+	row := q.db.QueryRowContext(ctx, countRFQGroupQuotes, groupID)
+	var i CountRFQGroupQuotesRow
+	err := row.Scan(&i.Total, &i.Open)
+	return i, err
+}
+
 const countRFQQuotes = `-- name: CountRFQQuotes :one
 SELECT COUNT(*)::int FROM purchase_order WHERE rfq_group_id = $1::int
 `
@@ -590,6 +608,35 @@ func (q *Queries) GetSupplier(ctx context.Context, id int) (GetSupplierRow, erro
 	return i, err
 }
 
+const listOpenRFQLineIDs = `-- name: ListOpenRFQLineIDs :many
+SELECT pol.id FROM po_line pol JOIN purchase_order po ON pol.po_id = po.id
+WHERE po.rfq_group_id = $1::int AND po.status = 'rfq'
+`
+
+// Every line of every quote in RFQ group group_id that is still in 'rfq' (#262).
+func (q *Queries) ListOpenRFQLineIDs(ctx context.Context, groupID int) ([]int, error) {
+	rows, err := q.db.QueryContext(ctx, listOpenRFQLineIDs, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenRFQSiblings = `-- name: ListOpenRFQSiblings :many
 SELECT id FROM purchase_order
 WHERE rfq_group_id = $1::int AND status = 'rfq' AND id <> $2::int
@@ -1000,35 +1047,6 @@ func (q *Queries) ListRFQGroupLines(ctx context.Context, groupID int) ([]ListRFQ
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRFQLineIDs = `-- name: ListRFQLineIDs :many
-SELECT pol.id FROM po_line pol JOIN purchase_order po ON pol.po_id = po.id
-WHERE po.rfq_group_id = $1::int
-`
-
-// Every line of every quote in RFQ group group_id.
-func (q *Queries) ListRFQLineIDs(ctx context.Context, groupID int) ([]int, error) {
-	rows, err := q.db.QueryContext(ctx, listRFQLineIDs, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int
-	for rows.Next() {
-		var id int
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1494,10 +1512,10 @@ UPDATE purchase_order
 SET total_cost = COALESCE((SELECT SUM(pol.qty * pol.unit_cost) FROM po_line pol WHERE pol.po_id = purchase_order.id), 0)
     + COALESCE(tax1, 0) + COALESCE(shipping_cost, 0) + COALESCE(misc_cost, 0),
     date_modified = CURRENT_TIMESTAMP
-WHERE rfq_group_id = $1::int
+WHERE rfq_group_id = $1::int AND status = 'rfq'
 `
 
-// Each quote's total: its line sum plus its own tax/shipping/misc.
+// Each still-'rfq' quote's total: its line sum plus its own tax/shipping/misc.
 func (q *Queries) RecomputeRFQTotals(ctx context.Context, groupID int) error {
 	_, err := q.db.ExecContext(ctx, recomputeRFQTotals, groupID)
 	return err
@@ -1507,7 +1525,7 @@ const searchSuppliers = `-- name: SearchSuppliers :many
 SELECT su.id, su.name, COALESCE(cn.city, '') AS city
 FROM company su
 LEFT JOIN contact cn ON su.default_contact = cn.id
-WHERE su.name ILIKE $1::text AND su.is_active = TRUE
+WHERE su.name ILIKE $1::text ESCAPE '\' AND su.is_active = TRUE
   AND (NOT $2::boolean OR su.is_supplier = TRUE)
 ORDER BY su.name
 LIMIT $3::int
@@ -1620,7 +1638,7 @@ func (q *Queries) SetRFQGroup(ctx context.Context, arg SetRFQGroupParams) error 
 
 const setRFQLineQuote = `-- name: SetRFQLineQuote :exec
 UPDATE po_line SET unit_cost = $1::float8, lead_time_days = $2::int
-WHERE id = $3
+WHERE po_line.id = $3 AND po_line.po_id IN (SELECT po.id FROM purchase_order po WHERE po.status = 'rfq')
 `
 
 type SetRFQLineQuoteParams struct {

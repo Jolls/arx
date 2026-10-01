@@ -312,7 +312,7 @@ func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.R
 	}
 
 	if urlutil.IsLocalFile(oldFileName) {
-		if err := deleteAttachmentFileIfUnshared(r.Context(), h.attachments().PartFileInUse,
+		if err := deleteAttachmentFileIfUnshared(r.Context(), h.partFileInUse,
 			attID, oldFileName, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFileName)); err != nil {
 			writeJSON(w, map[string]any{"ok": true, "warning": "Attachment updated, but the old file could not be removed: " + err.Error()})
 			return
@@ -474,7 +474,7 @@ func (h *Handler) upsertGeneratedAttachment(ctx context.Context, partID, rev, ca
 	// treatment of the same failure mode instead of hard-failing the request.
 	oldFile := existing.FileName
 	if urlutil.IsLocalFile(oldFile) && oldFile != newFile {
-		if err := deleteAttachmentFileIfUnshared(ctx, svc.PartFileInUse,
+		if err := deleteAttachmentFileIfUnshared(ctx, h.partFileInUse,
 			existingID, oldFile, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(oldFile)); err != nil {
 			log.Printf("[thumbnail] part %s: attachment %d updated, but old file %q could not be removed: %v", partID, existingID, oldFile, err)
 		}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -174,5 +175,33 @@ func TestIntegration_APISupplierPN_Cases(t *testing.T) {
 		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: got %v, want %v", c.query, got, c.want)
 		}
+	}
+}
+
+// % and _ in the query match themselves; * is the wildcard (#266).
+func TestIntegration_APIPartSearch_LiteralAndGlob(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	base, tok := smokeUniq("APE"), smokeUniq("dsc")
+	ids, cleanup := seedAPIParts(t, h, [][3]any{
+		{base + "-50%", nil, nil},
+		{base + "-505", nil, nil},
+		{base + "-A_1", tok + "_1", nil},
+		{base + "-AX1", tok + "X1", nil},
+	})
+	defer cleanup()
+
+	if _, hits := partSearch(t, h, "q="+url.QueryEscape(base+"-50%")); len(hits) != 1 || hits[0].PNID != ids[0] {
+		t.Errorf("q=%%: hits = %+v, want only id %d", hits, ids[0])
+	}
+	if _, hits := partSearch(t, h, "q="+base+"-A_1"); len(hits) != 1 || hits[0].PNID != ids[2] {
+		t.Errorf("q=_: hits = %+v, want only id %d", hits, ids[2])
+	}
+	if _, hits := partSearch(t, h, "by=desc&q="+tok+"_1"); len(hits) != 1 || hits[0].PNID != ids[2] {
+		t.Errorf("by=desc q=_: hits = %+v, want only id %d", hits, ids[2])
+	}
+	// * matches any run of characters: "-A*1" finds both -A_1 and -AX1.
+	if _, hits := partSearch(t, h, "q="+url.QueryEscape(base+"-A*1")); len(hits) != 2 || hits[0].PNID != ids[2] || hits[1].PNID != ids[3] {
+		t.Errorf("q=*: hits = %+v, want ids %d and %d", hits, ids[2], ids[3])
 	}
 }

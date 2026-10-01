@@ -533,3 +533,25 @@ func TestIntegration_SupplierSQLC_Contacts(t *testing.T) {
 		t.Errorf("no contacts body = %s, want []", raw)
 	}
 }
+
+// % and _ in the query match themselves; * is the wildcard (#266).
+func TestIntegration_SupplierSQLC_Search_LiteralAndGlob(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	base := smokeUniq("SLE")
+	ids, cleanup := seedCompanies(t, h, [][3]any{
+		{base + " 50%", true, true}, {base + " 505", true, true}, {base + " A_1", true, true}, {base + " AX1", true, true},
+	})
+	defer cleanup()
+
+	if _, hits := supplierSearch(t, h, "q="+url.QueryEscape(base+" 50%")); len(hits) != 1 || hits[0].ID != ids[0] {
+		t.Errorf("q=%%: hits = %+v, want only id %d", hits, ids[0])
+	}
+	if _, hits := supplierSearch(t, h, "q="+url.QueryEscape(base+" A_1")); len(hits) != 1 || hits[0].ID != ids[2] {
+		t.Errorf("q=_: hits = %+v, want only id %d", hits, ids[2])
+	}
+	// * matches any run of characters: " A*1" finds both " A_1" and " AX1".
+	if _, hits := supplierSearch(t, h, "q="+url.QueryEscape(base+" A*1")); len(hits) != 2 || hits[0].ID != ids[2] || hits[1].ID != ids[3] {
+		t.Errorf("q=*: hits = %+v, want ids %d and %d", hits, ids[2], ids[3])
+	}
+}

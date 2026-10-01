@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"time"
 
+	"arx/internal/db"
 	"arx/internal/dbq"
 )
 
@@ -145,9 +146,9 @@ func (s *Service) UpdateSupplier(ctx context.Context, id int, sup Supplier) erro
 }
 
 // SearchSuppliers returns up to n active companies whose name contains q
-// (case-insensitive, not LIKE-escaped), by name; supplierOnly drops non-suppliers.
+// (case-insensitive, `*` is a wildcard, `%`/`_` match themselves), by name; supplierOnly drops non-suppliers.
 func (s *Service) SearchSuppliers(ctx context.Context, q string, supplierOnly bool, n int) ([]SupplierMatch, error) {
-	rows, err := s.q.SearchSuppliers(ctx, dbq.SearchSuppliersParams{Pattern: "%" + q + "%", SupplierOnly: supplierOnly, N: n})
+	rows, err := s.q.SearchSuppliers(ctx, dbq.SearchSuppliersParams{Pattern: "%" + db.EscapeLike(q) + "%", SupplierOnly: supplierOnly, N: n})
 	if err != nil {
 		return nil, err
 	}
@@ -692,18 +693,26 @@ func (s *Service) GetRFQQuote(ctx context.Context, number string) (RFQQuote, err
 	return RFQQuote{ID: r.ID, Status: r.Status, RFQGroupID: r.RfqGroupID, SupplierID: r.SupplierID}, err
 }
 
-// ListRFQLineIDs returns the ids of every line of every quote in RFQ group groupID.
-func (s *Service) ListRFQLineIDs(ctx context.Context, groupID int) ([]int, error) {
-	return s.q.ListRFQLineIDs(ctx, groupID)
+// ListOpenRFQLineIDs returns the ids of every line of every quote in RFQ group groupID that is
+// still in 'rfq'.
+func (s *Service) ListOpenRFQLineIDs(ctx context.Context, groupID int) ([]int, error) {
+	return s.q.ListOpenRFQLineIDs(ctx, groupID)
 }
 
-// SetRFQLineQuote sets line id's quoted unit cost and lead time (nil clears it).
+// CountRFQGroupQuotes returns how many quotes RFQ group groupID has and how many are still in 'rfq'.
+func (s *Service) CountRFQGroupQuotes(ctx context.Context, groupID int) (total, open int, err error) {
+	r, err := s.q.CountRFQGroupQuotes(ctx, groupID)
+	return r.Total, r.Open, err
+}
+
+// SetRFQLineQuote sets line id's quoted unit cost and lead time (nil clears it); a no-op on a
+// line whose quote is no longer in 'rfq'.
 func (s *Service) SetRFQLineQuote(ctx context.Context, id int, unitCost float64, leadDays *int) error {
 	return s.q.SetRFQLineQuote(ctx, dbq.SetRFQLineQuoteParams{UnitCost: unitCost, LeadTimeDays: leadDays, ID: id})
 }
 
-// RecomputeRFQTotals sets every quote's total in group groupID to its line sum plus its own
-// tax/shipping/misc.
+// RecomputeRFQTotals sets every still-'rfq' quote's total in group groupID to its line sum plus
+// its own tax/shipping/misc.
 func (s *Service) RecomputeRFQTotals(ctx context.Context, groupID int) error {
 	return s.q.RecomputeRFQTotals(ctx, groupID)
 }

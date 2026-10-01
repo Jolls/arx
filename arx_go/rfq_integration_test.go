@@ -386,3 +386,77 @@ func TestIntegration_RFQ_BOMConfirmCreatesQuotes(t *testing.T) {
 		}
 	}
 }
+
+// Saving a stale compare page must not rewrite quotes already awarded or cancelled (#262).
+func TestIntegration_RFQ_CompareSave_SkipsNonRFQQuotes(t *testing.T) {
+	h, f := lifecycleSetup(t)
+	base := strings.TrimSuffix(f.Full, "-f")
+	qa := seedRFQPO(t, h, f, base+"-aR2", "rfq", 0)
+	qb := seedRFQPO(t, h, f, base+"-bR2", "closed", qa)
+	qc := seedRFQPO(t, h, f, base+"-cR2", "cancelled", qa)
+	la := seedRFQLine(t, h, qa, 1, f.P1, 10, 9, 2)
+	lb := seedRFQLine(t, h, qb, 1, f.P1, 10, 9, 2)
+	lc := seedRFQLine(t, h, qc, 1, f.P1, 10, 9, 2)
+	for _, id := range []int{qa, qb, qc} {
+		if _, err := h.execContext(context.Background(), `UPDATE purchase_order SET total_cost=45 WHERE id=$1`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	group := strconv.Itoa(qa)
+	h.RFQCompareSave(rec, withGroupParam(postForm("/rfq/"+group+"/compare", url.Values{
+		fmt.Sprintf("cost_%d", la): {"1"}, fmt.Sprintf("lead_%d", la): {"4"},
+		fmt.Sprintf("cost_%d", lb): {"1"}, fmt.Sprintf("lead_%d", lb): {"4"},
+		fmt.Sprintf("cost_%d", lc): {"1"}, fmt.Sprintf("lead_%d", lc): {"4"},
+	}), group))
+	assert302(t, "RFQCompareSave", rec)
+
+	line := func(id int) string {
+		return rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM po_line WHERE id=$1`, rfqCols("unit_cost::float8", "lead_time_days")), id)
+	}
+	total := func(id int) string {
+		return rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM purchase_order WHERE id=$1`, rfqCols("total_cost::float8", "date_modified::date")), id)
+	}
+	if got := line(la); got != "1|4" {
+		t.Errorf("open quote line = %q, want 1|4", got)
+	}
+	if got := total(qa); !strings.HasPrefix(got, "10|") {
+		t.Errorf("open quote total|modified = %q, want recomputed 10|...", got)
+	}
+	for name, id := range map[string]int{"closed": lb, "cancelled": lc} {
+		if got := line(id); got != "9|2" {
+			t.Errorf("%s quote line = %q, want 9|2 (untouched)", name, got)
+		}
+	}
+	for name, id := range map[string]int{"closed": qb, "cancelled": qc} {
+		if got := total(id); got != "45|2026-01-01" {
+			t.Errorf("%s quote total|modified = %q, want 45|2026-01-01 (untouched)", name, got)
+		}
+	}
+}
+
+// A group whose quotes are all closed or cancelled rejects the save instead of rewriting them (#262).
+func TestIntegration_RFQ_CompareSave_RejectsWhenNoOpenQuote(t *testing.T) {
+	h, f := lifecycleSetup(t)
+	base := strings.TrimSuffix(f.Full, "-f")
+	qa := seedRFQPO(t, h, f, base+"-aR3", "closed", 0)
+	qb := seedRFQPO(t, h, f, base+"-bR3", "cancelled", qa)
+	la := seedRFQLine(t, h, qa, 1, f.P1, 10, 9, 2)
+	lb := seedRFQLine(t, h, qb, 1, f.P1, 10, 9, 2)
+
+	rec := httptest.NewRecorder()
+	group := strconv.Itoa(qa)
+	h.RFQCompareSave(rec, withGroupParam(postForm("/rfq/"+group+"/compare", url.Values{
+		fmt.Sprintf("cost_%d", la): {"1"}, fmt.Sprintf("cost_%d", lb): {"1"},
+	}), group))
+	assertStatus(t, "RFQCompareSave", rec, 200)
+	if !strings.Contains(rec.Body.String(), "nothing was saved") {
+		t.Errorf("body missing the no-open-quote error: %s", rec.Body.String())
+	}
+	for _, id := range []int{la, lb} {
+		if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM po_line WHERE id=$1`, rfqCols("unit_cost::float8", "lead_time_days")), id); got != "9|2" {
+			t.Errorf("line %d = %q, want 9|2 (untouched)", id, got)
+		}
+	}
+}

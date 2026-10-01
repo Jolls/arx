@@ -362,7 +362,7 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 	// it unless some other active row already links the same name.
 	if link := fv(r, "discard_import"); link != "" {
 		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
-			_ = deleteAttachmentFileIfUnshared(r.Context(), h.attachments().CompanyFileInUse,
+			_ = deleteAttachmentFileIfUnshared(r.Context(), h.companyFileInUse,
 				0, link, h.companyAttachmentRoot(), urlutil.StripLocalPrefix(link))
 		}
 		http.Redirect(w, r, fmt.Sprintf("/supplier/%s/attachments", id), http.StatusFound)
@@ -521,7 +521,7 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 	}
 
 	if fileChanged && urlutil.IsLocalFile(oldFilePath) {
-		if err := deleteAttachmentFileIfUnshared(r.Context(), h.attachments().CompanyFileInUse,
+		if err := deleteAttachmentFileIfUnshared(r.Context(), h.companyFileInUse,
 			attIDInt, oldFilePath, h.companyAttachmentRoot(), urlutil.StripLocalPrefix(oldFilePath)); err != nil {
 			h.renderError(w, r, "Attachment updated, but the old file could not be removed: "+err.Error())
 			return

@@ -423,17 +423,11 @@ func (s *Service) UpdateUnit(ctx context.Context, unitID, partID int, serial str
 	return s.q.UpdateUnit(ctx, dbq.UpdateUnitParams{IsActive: active, SerialNumber: serial, ID: unitID, PartID: partID})
 }
 
-// UpsertTestUnit finds or creates the unit for (partID, serial). Provenance is set only on
+// UpsertTestUnit finds or creates the unit for (partID, serial) in one statement, so
+// concurrent saves of a new serial converge on one unit. Provenance is set only on
 // creation, so a retest re-links the existing unit unchanged.
 func (s *Service) UpsertTestUnit(ctx context.Context, partID int, serial string, buildID, lotID *int) (int, error) {
-	id, err := s.q.GetUnitIDBySerial(ctx, dbq.GetUnitIDBySerialParams{PartID: partID, SerialNumber: serial})
-	if err == nil {
-		return id, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
-	}
-	return s.q.CreateTestUnit(ctx, dbq.CreateTestUnitParams{PartID: partID, SerialNumber: serial, BuildID: buildID, LotID: lotID})
+	return s.q.UpsertTestUnit(ctx, dbq.UpsertTestUnitParams{PartID: partID, SerialNumber: serial, BuildID: buildID, LotID: lotID})
 }
 
 // UnitProvenance returns a unit's lot and build; both nil when the unit doesn't exist.

@@ -397,3 +397,13 @@ func TestIntegration_LockLotTrackedRecordWithNoLot(t *testing.T) {
 		t.Errorf("is_locked = false, want true (current disabled-gate behavior)")
 	}
 }
+
+// A missing record is a 404, not a 500 (#266).
+func TestIntegration_UnlockRecord_Missing(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.UnlockRecord(rec, reviewerCtx(withID(postForm("/records/2147483647/unlock", url.Values{"comment": {"x"}}), 2147483647)))
+	assertStatus(t, "UnlockRecord missing", rec, http.StatusNotFound)
+}

@@ -481,3 +481,121 @@ func TestIntegration_InventoryUpsertUnitForRecord(t *testing.T) {
 		t.Errorf("second upsert = %d, %v; want %d", again, err, first)
 	}
 }
+
+// An existing unit is re-linked with its provenance untouched (#263).
+func TestIntegration_InventoryUpsertTestUnit_ExistingSeedSerial(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	row := func() (build, lot sql.NullInt64, source string) {
+		t.Helper()
+		if err := tx.QueryRowContext(ctx, `SELECT build_id, lot_id, source FROM unit WHERE id=8503`).Scan(&build, &lot, &source); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	b0, l0, s0 := row()
+	id, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, "SN-3005-001", nil, nil)
+	if err != nil || id != 8503 {
+		t.Fatalf("upsert seed serial = %d, %v; want 8503", id, err)
+	}
+	if b1, l1, s1 := row(); b1 != b0 || l1 != l0 || s1 != s0 {
+		t.Errorf("seed unit changed: build %v->%v lot %v->%v source %q->%q", b0, b1, l0, l1, s0, s1)
+	}
+}
+
+// The same serial on two parts is two units (#263).
+func TestIntegration_InventoryUpsertTestUnit_SamePartSerialDifferentPart(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	serial := smokeUniq("SN-263P")
+	b1, b2 := 8201, 8202
+	a, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, serial, &b1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := inventory.New(tx).UpsertTestUnit(ctx, 3012, serial, &b2, nil)
+	if err != nil || a == b {
+		t.Errorf("units = %d, %d (err %v); want two different ids", a, b, err)
+	}
+}
+
+// Two transactions saving the same new serial at once: the second links to the unit the first
+// created instead of failing on uq_unit_serial (#263). Returns both ids and the second's error.
+func concurrentUpsertSameSerial(t *testing.T, h *Handler, serial string, build1, build2 *int) (id1, id2 int, err2 error) {
+	t.Helper()
+	ctx := context.Background()
+	t.Cleanup(func() { smokeExec(ctx, h, `DELETE FROM unit WHERE part_id=3005 AND serial_number=$1`, serial) })
+
+	tx1, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx1.Rollback()
+	tx2, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx2.Rollback()
+
+	if id1, err = inventory.New(tx1).UpsertTestUnit(ctx, 3005, serial, build1, nil); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		id2, err2 = inventory.New(tx2).UpsertTestUnit(ctx, 3005, serial, build2, nil)
+	}()
+	time.Sleep(300 * time.Millisecond) // let tx2 run past any existence check and block on tx1's row
+	if err := tx1.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if err2 == nil {
+		if err := tx2.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return id1, id2, err2
+}
+
+func TestIntegration_InventoryUpsertTestUnit_Concurrent(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	serial := smokeUniq("SN-263C")
+	b := 8201
+
+	id1, id2, err2 := concurrentUpsertSameSerial(t, h, serial, &b, &b)
+	if err2 != nil || id2 != id1 {
+		t.Fatalf("second save = %d, %v; want %d, nil", id2, err2, id1)
+	}
+	var n int
+	if err := h.queryRowContext(context.Background(), `SELECT count(*) FROM unit WHERE part_id=3005 AND serial_number=$1`, serial).Scan(&n); err != nil || n != 1 {
+		t.Errorf("units for serial = %d, %v; want 1", n, err)
+	}
+}
+
+func TestIntegration_InventoryUpsertTestUnit_ConcurrentProvenanceKept(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	serial := smokeUniq("SN-263K")
+	b := 8201
+
+	id1, id2, err2 := concurrentUpsertSameSerial(t, h, serial, &b, nil)
+	if err2 != nil || id2 != id1 {
+		t.Fatalf("second save = %d, %v; want %d, nil", id2, err2, id1)
+	}
+	var build sql.NullInt64
+	var source string
+	if err := h.queryRowContext(context.Background(), `SELECT build_id, source FROM unit WHERE id=$1`, id1).Scan(&build, &source); err != nil {
+		t.Fatal(err)
+	}
+	if build.Int64 != 8201 || source != "test" {
+		t.Errorf("unit build %v source %q; want 8201, test", build, source)
+	}
+}
