@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.8.39] - 2026-09-30
+### Added
+- CONTRIBUTING.md: how to run a throwaway local test database (Postgres 17 with TLS, schema and seed) and point Settings at it
 ### Fixed
 - `/parts` grid load time: index on `part_attachment` so the per-part thumbnail lookup no longer seq-scans the table once per part (migration `20260930150000_285_part_attachment_index`) ([#285](https://github.com/Jolls/arx/issues/285))
 
