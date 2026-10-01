@@ -4,11 +4,10 @@ import "testing"
 
 func TestEscapeLike(t *testing.T) {
 	for in, want := range map[string]string{
-		"%":     `\%`,
-		"_":     `\_`,
-		"50%":   "50%",
-		"A_1":   "A_1",
-		"%%":    "%%",
+		"50%":   `50\%`,
+		"A_1":   `A\_1`,
+		"A*1":   "A%1",
+		"*":     "%",
 		`a\b`:   `a\\b`,
 		"plain": "plain",
 		"":      "",

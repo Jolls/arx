@@ -178,8 +178,8 @@ func TestIntegration_APISupplierPN_Cases(t *testing.T) {
 	}
 }
 
-// % and _ in the query stay wildcards (#266).
-func TestIntegration_APIPartSearch_Wildcards(t *testing.T) {
+// % and _ in the query match themselves; * is the wildcard (#266).
+func TestIntegration_APIPartSearch_LiteralAndGlob(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()
 	base, tok := smokeUniq("APE"), smokeUniq("dsc")
@@ -191,15 +191,17 @@ func TestIntegration_APIPartSearch_Wildcards(t *testing.T) {
 	})
 	defer cleanup()
 
-	// "-5%" matches both -50% and -505, not -A_1.
-	if _, hits := partSearch(t, h, "q="+url.QueryEscape(base+"-5%")); len(hits) != 2 || hits[0].PNID != ids[0] || hits[1].PNID != ids[1] {
-		t.Errorf("q=%%: hits = %+v, want ids %d and %d", hits, ids[0], ids[1])
+	if _, hits := partSearch(t, h, "q="+url.QueryEscape(base+"-50%")); len(hits) != 1 || hits[0].PNID != ids[0] {
+		t.Errorf("q=%%: hits = %+v, want only id %d", hits, ids[0])
 	}
-	// _ is a single-character wildcard: "-A_1" matches both -A_1 and -AX1.
-	if _, hits := partSearch(t, h, "q="+base+"-A_1"); len(hits) != 2 || hits[0].PNID != ids[2] || hits[1].PNID != ids[3] {
-		t.Errorf("q=_: hits = %+v, want ids %d and %d", hits, ids[2], ids[3])
+	if _, hits := partSearch(t, h, "q="+base+"-A_1"); len(hits) != 1 || hits[0].PNID != ids[2] {
+		t.Errorf("q=_: hits = %+v, want only id %d", hits, ids[2])
 	}
-	if _, hits := partSearch(t, h, "by=desc&q="+tok+"_1"); len(hits) != 2 {
-		t.Errorf("by=desc q=_: hits = %+v, want 2", hits)
+	if _, hits := partSearch(t, h, "by=desc&q="+tok+"_1"); len(hits) != 1 || hits[0].PNID != ids[2] {
+		t.Errorf("by=desc q=_: hits = %+v, want only id %d", hits, ids[2])
+	}
+	// * matches any run of characters: "-A*1" finds both -A_1 and -AX1.
+	if _, hits := partSearch(t, h, "q="+url.QueryEscape(base+"-A*1")); len(hits) != 2 || hits[0].PNID != ids[2] || hits[1].PNID != ids[3] {
+		t.Errorf("q=*: hits = %+v, want ids %d and %d", hits, ids[2], ids[3])
 	}
 }

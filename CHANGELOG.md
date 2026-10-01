@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.41] - 2026-10-01
 ### Fixed
-- Unlocking a record that doesn't exist returns 404 instead of 500, and part/supplier search escapes backslashes in the query (they are now the LIKE escape character); `%` and `_` stay wildcards ([#266](https://github.com/Jolls/arx/issues/266))
+- Unlocking a record that doesn't exist returns 404 instead of 500, and part/supplier search matches `%` and `_` literally and takes `*` as the wildcard, like the list-table filters ([#266](https://github.com/Jolls/arx/issues/266))
 - Replacing or discarding an attachment file no longer deletes a file a part or supplier attachment still links when both share the Doc Control folder ([#233](https://github.com/Jolls/arx/issues/233))
 - Saving test results for two records with the same new serial at once no longer fails with a 500; both link to one unit ([#263](https://github.com/Jolls/arx/issues/263))
 - Saving a stale RFQ compare page no longer rewrites quotes already awarded or cancelled, and queues behind an in-flight convert ([#262](https://github.com/Jolls/arx/issues/262))

@@ -146,7 +146,7 @@ func (s *Service) UpdateSupplier(ctx context.Context, id int, sup Supplier) erro
 }
 
 // SearchSuppliers returns up to n active companies whose name contains q
-// (case-insensitive, `%`/`_` are wildcards unless q is just one of them), by name; supplierOnly drops non-suppliers.
+// (case-insensitive, `*` is a wildcard, `%`/`_` match themselves), by name; supplierOnly drops non-suppliers.
 func (s *Service) SearchSuppliers(ctx context.Context, q string, supplierOnly bool, n int) ([]SupplierMatch, error) {
 	rows, err := s.q.SearchSuppliers(ctx, dbq.SearchSuppliersParams{Pattern: "%" + db.EscapeLike(q) + "%", SupplierOnly: supplierOnly, N: n})
 	if err != nil {

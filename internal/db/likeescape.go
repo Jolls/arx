@@ -2,18 +2,11 @@ package db
 
 import "strings"
 
-var (
-	likeBackslash = strings.NewReplacer(`\`, `\\`)
-	likeAlone     = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-)
+var likeGlob = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`, `*`, `%`)
 
-// EscapeLike prepares a user search string for LIKE/ILIKE ... ESCAPE '\'. `%` and `_` stay
-// wildcards (multi- and single-character) so users can search "ABC%123" or "ABC_23", except when
-// s is just one of them, which is searched as the literal character. Backslashes are always
-// escaped, since they are the escape character.
+// EscapeLike prepares a user search string for LIKE/ILIKE ... ESCAPE '\'. `*` is the one
+// wildcard users get (any run of characters, as in the list-table filters); `%`, `_` and `\`
+// match themselves.
 func EscapeLike(s string) string {
-	if s == "%" || s == "_" {
-		return likeAlone.Replace(s)
-	}
-	return likeBackslash.Replace(s)
+	return likeGlob.Replace(s)
 }
