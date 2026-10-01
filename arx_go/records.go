@@ -1700,6 +1700,10 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 	// Approved records may only be unlocked by a TR reviewer. This read gives the 403; the UPDATE
 	// re-checks under the row lock, so an approval that lands in between still wins.
 	rec, err := h.records().GetRecord(r.Context(), recordID)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
 	if err != nil {
 		serverError(w, "unlock error", err)
 		return

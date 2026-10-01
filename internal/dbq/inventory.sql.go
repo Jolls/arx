@@ -270,31 +270,6 @@ func (q *Queries) CreateManualUnit(ctx context.Context, arg CreateManualUnitPara
 	return id, err
 }
 
-const createTestUnit = `-- name: CreateTestUnit :one
-INSERT INTO unit (part_id, serial_number, build_id, lot_id, source)
-VALUES ($1, $2, $3, $4, 'test')
-RETURNING id
-`
-
-type CreateTestUnitParams struct {
-	PartID       int
-	SerialNumber string
-	BuildID      *int
-	LotID        *int
-}
-
-func (q *Queries) CreateTestUnit(ctx context.Context, arg CreateTestUnitParams) (int, error) {
-	row := q.db.QueryRowContext(ctx, createTestUnit,
-		arg.PartID,
-		arg.SerialNumber,
-		arg.BuildID,
-		arg.LotID,
-	)
-	var id int
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getBuild = `-- name: GetBuild :one
 SELECT id, qty, build_date FROM build WHERE id = $1
 `
@@ -392,22 +367,6 @@ func (q *Queries) GetUnit(ctx context.Context, id int) (GetUnitRow, error) {
 		&i.Source,
 	)
 	return i, err
-}
-
-const getUnitIDBySerial = `-- name: GetUnitIDBySerial :one
-SELECT id FROM unit WHERE part_id = $1 AND serial_number = $2
-`
-
-type GetUnitIDBySerialParams struct {
-	PartID       int
-	SerialNumber string
-}
-
-func (q *Queries) GetUnitIDBySerial(ctx context.Context, arg GetUnitIDBySerialParams) (int, error) {
-	row := q.db.QueryRowContext(ctx, getUnitIDBySerial, arg.PartID, arg.SerialNumber)
-	var id int
-	err := row.Scan(&id)
-	return id, err
 }
 
 const getUnitProvenance = `-- name: GetUnitProvenance :one
@@ -1156,4 +1115,31 @@ func (q *Queries) UpdateUnit(ctx context.Context, arg UpdateUnitParams) error {
 		arg.PartID,
 	)
 	return err
+}
+
+const upsertTestUnit = `-- name: UpsertTestUnit :one
+INSERT INTO unit (part_id, serial_number, build_id, lot_id, source)
+VALUES ($1, $2, $3, $4, 'test')
+ON CONFLICT (part_id, serial_number) DO UPDATE SET serial_number = EXCLUDED.serial_number
+RETURNING id
+`
+
+type UpsertTestUnitParams struct {
+	PartID       int
+	SerialNumber string
+	BuildID      *int
+	LotID        *int
+}
+
+// The no-op DO UPDATE makes RETURNING yield the existing id; provenance is set only on insert.
+func (q *Queries) UpsertTestUnit(ctx context.Context, arg UpsertTestUnitParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, upsertTestUnit,
+		arg.PartID,
+		arg.SerialNumber,
+		arg.BuildID,
+		arg.LotID,
+	)
+	var id int
+	err := row.Scan(&id)
+	return id, err
 }

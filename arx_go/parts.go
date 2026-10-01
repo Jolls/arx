@@ -1371,7 +1371,7 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 	// unless some other active row already links the same name.
 	if link := fv(r, "discard_import"); link != "" {
 		if urlutil.IsLocalFile(link) && !urlutil.IsLocalDir(link) {
-			_ = deleteAttachmentFileIfUnshared(r.Context(), h.attachments().PartFileInUse,
+			_ = deleteAttachmentFileIfUnshared(r.Context(), h.partFileInUse,
 				0, link, h.cfg().DocControlRoot, urlutil.StripLocalPrefix(link))
 		}
 		http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
@@ -1575,7 +1575,7 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if fileChanged && replaceName != "" {
-		if err := deleteAttachmentFileIfUnshared(r.Context(), h.attachments().PartFileInUse,
+		if err := deleteAttachmentFileIfUnshared(r.Context(), h.partFileInUse,
 			attIDInt, oldFileName, h.cfg().DocControlRoot, replaceName); err != nil {
 			h.renderPartAttachments(w, r, id, map[string]any{
 				"Error": "Attachment updated, but the old file could not be removed: " + err.Error()})

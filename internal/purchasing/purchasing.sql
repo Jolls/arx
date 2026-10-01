@@ -43,7 +43,7 @@ WHERE id = sqlc.arg(id);
 SELECT su.id, su.name, COALESCE(cn.city, '') AS city
 FROM company su
 LEFT JOIN contact cn ON su.default_contact = cn.id
-WHERE su.name ILIKE sqlc.arg(pattern)::text AND su.is_active = TRUE
+WHERE su.name ILIKE sqlc.arg(pattern)::text ESCAPE '\' AND su.is_active = TRUE
   AND (NOT sqlc.arg(supplier_only)::boolean OR su.is_supplier = TRUE)
 ORDER BY su.name
 LIMIT sqlc.arg(n)::int;
@@ -335,22 +335,27 @@ WHERE id = sqlc.arg(id);
 -- name: ListPOLineQtys :many
 SELECT COALESCE(qty, 0) AS qty, COALESCE(received_qty, 0) AS received_qty FROM po_line WHERE po_id = $1;
 
--- name: ListRFQLineIDs :many
--- Every line of every quote in RFQ group group_id.
+-- name: ListOpenRFQLineIDs :many
+-- Every line of every quote in RFQ group group_id that is still in 'rfq' (#262).
 SELECT pol.id FROM po_line pol JOIN purchase_order po ON pol.po_id = po.id
-WHERE po.rfq_group_id = sqlc.arg(group_id)::int;
+WHERE po.rfq_group_id = sqlc.arg(group_id)::int AND po.status = 'rfq';
+
+-- name: CountRFQGroupQuotes :one
+-- #262: how many quotes the group has, and how many are still in 'rfq'.
+SELECT COUNT(*)::int AS total, (COUNT(*) FILTER (WHERE status = 'rfq'))::int AS open
+FROM purchase_order WHERE rfq_group_id = sqlc.arg(group_id)::int;
 
 -- name: SetRFQLineQuote :exec
 UPDATE po_line SET unit_cost = sqlc.arg(unit_cost)::float8, lead_time_days = sqlc.narg(lead_time_days)::int
-WHERE id = sqlc.arg(id);
+WHERE po_line.id = sqlc.arg(id) AND po_line.po_id IN (SELECT po.id FROM purchase_order po WHERE po.status = 'rfq');
 
 -- name: RecomputeRFQTotals :exec
--- Each quote's total: its line sum plus its own tax/shipping/misc.
+-- Each still-'rfq' quote's total: its line sum plus its own tax/shipping/misc.
 UPDATE purchase_order
 SET total_cost = COALESCE((SELECT SUM(pol.qty * pol.unit_cost) FROM po_line pol WHERE pol.po_id = purchase_order.id), 0)
     + COALESCE(tax1, 0) + COALESCE(shipping_cost, 0) + COALESCE(misc_cost, 0),
     date_modified = CURRENT_TIMESTAMP
-WHERE rfq_group_id = sqlc.arg(group_id)::int;
+WHERE rfq_group_id = sqlc.arg(group_id)::int AND status = 'rfq';
 
 -- name: GetRFQQuote :one
 SELECT id, COALESCE(status, '') AS status, rfq_group_id, supplier_id FROM purchase_order WHERE number = $1;

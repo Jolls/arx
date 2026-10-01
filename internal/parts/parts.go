@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"arx/internal/db"
 	"arx/internal/dbq"
 )
 
@@ -896,10 +897,10 @@ type PartMatch struct {
 }
 
 // SearchParts returns up to n parts whose part_number contains q, or whose
-// description/detail does when byDesc, ordered by part_number. q is not
-// LIKE-escaped.
+// description/detail does when byDesc, ordered by part_number. `%` and `_`
+// in q are wildcards unless q is just one of them (db.EscapeLike).
 func (s *Service) SearchParts(ctx context.Context, q string, byDesc bool, n int) ([]PartMatch, error) {
-	rows, err := s.q.SearchParts(ctx, dbq.SearchPartsParams{ByDesc: byDesc, Pattern: "%" + q + "%", N: n})
+	rows, err := s.q.SearchParts(ctx, dbq.SearchPartsParams{ByDesc: byDesc, Pattern: "%" + db.EscapeLike(q) + "%", N: n})
 	if err != nil {
 		return nil, err
 	}

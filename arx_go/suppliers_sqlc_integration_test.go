@@ -533,3 +533,23 @@ func TestIntegration_SupplierSQLC_Contacts(t *testing.T) {
 		t.Errorf("no contacts body = %s, want []", raw)
 	}
 }
+
+// % and _ in the query stay wildcards (#266).
+func TestIntegration_SupplierSQLC_Search_Wildcards(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	base := smokeUniq("SLE")
+	ids, cleanup := seedCompanies(t, h, [][3]any{
+		{base + " 50%", true, true}, {base + " 505", true, true}, {base + " A_1", true, true}, {base + " AX1", true, true},
+	})
+	defer cleanup()
+
+	// " 5%" matches both " 50%" and " 505", not " A_1".
+	if _, hits := supplierSearch(t, h, "q="+url.QueryEscape(base+" 5%")); len(hits) != 2 || hits[0].ID != ids[0] || hits[1].ID != ids[1] {
+		t.Errorf("q=%%: hits = %+v, want ids %d and %d", hits, ids[0], ids[1])
+	}
+	// _ is a single-character wildcard: " A_1" matches both " A_1" and " AX1".
+	if _, hits := supplierSearch(t, h, "q="+url.QueryEscape(base+" A_1")); len(hits) != 2 || hits[0].ID != ids[2] || hits[1].ID != ids[3] {
+		t.Errorf("q=_: hits = %+v, want ids %d and %d", hits, ids[2], ids[3])
+	}
+}
