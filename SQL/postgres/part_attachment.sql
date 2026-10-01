@@ -27,3 +27,5 @@ CREATE TABLE part_attachment (
   CONSTRAINT CK_part_attachment_vendor_scope
     CHECK (supplier_part_id IS NULL OR mfg_part_id IS NULL)
 );
+
+CREATE INDEX IX_part_attachment_part ON part_attachment (part_id, category) WHERE is_active;  -- Thumbnail subquery in ListParts (#285).
