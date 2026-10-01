@@ -34,6 +34,23 @@
 BEGIN;
 SET LOCAL TimeZone = 'UTC';  -- zoneless audit literals below mean UTC (#192)
 
+-- Guard (#286): abort before the first DELETE unless this is a test database.
+-- A name allowlist would break fresh loads (build_schema.sh, CI, containers), so:
+-- deny prod-named databases, and only wipe one that is empty or already seeded.
+-- The sentinel (part 3005) must match integration_test.go's liveHandler check.
+DO $$
+BEGIN
+  IF current_database() ILIKE '%arxprod%' THEN
+    RAISE EXCEPTION 'seed_test_data.sql refuses to run against %', current_database();
+  END IF;
+  IF EXISTS (SELECT 1 FROM part)
+     AND NOT EXISTS (SELECT 1 FROM part
+                     WHERE id = 3005 AND part_number = 'ASM-1001'
+                       AND description = 'Skyrunner Standard Drone') THEN
+    RAISE EXCEPTION 'part has rows but not the seed sentinel (id 3005 / ASM-1001); refusing to wipe a non-seed database';
+  END IF;
+END $$;
+
     -- ============================================================
     -- 1. DELETE existing rows, children-first (schema/constraints/triggers stay).
     -- ============================================================

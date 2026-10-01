@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.40] - 2026-09-30
+### Security
+- `seed_test_data.sql` aborts before its first `DELETE` on a prod-named database, or on one that has parts but not the seed sentinel row ([#286](https://github.com/Jolls/arx/issues/286))
+
 ## [0.8.38] - 2026-09-30
 ### Fixed
 - Accessibility: pages have a `<main>` landmark; list-table filter boxes are named after their column for screen readers; a table that scrolls sideways can be reached and scrolled with the keyboard; the test-mode header text and Sign out meet contrast; the footer Source link is underlined; list and record toolbars wrap on narrow phones instead of widening the page ([#258](https://github.com/Jolls/arx/issues/258))
