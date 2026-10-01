@@ -1,8 +1,16 @@
 # Roadmap
 
-Near-term plan, organized by milestone. Status is tracked on the [milestones](https://github.com/Jolls/arx/milestones) and issues themselves; this file is the high-level view. Long-term direction lives in [`docs/FUTURE_GOALS.md`](docs/FUTURE_GOALS.md).
+Plan and long-term direction, organized by horizon. Status is tracked on the [milestones](https://github.com/Jolls/arx/milestones) and issues themselves; this file is the high-level view. Read it before proposing structural or schema changes so decisions point toward the end state, not away from it. Issue numbers are `Jolls/arx` issues; work with no open issue is treated as shipped.
 
 Plans can change; nothing here is a commitment.
+
+## Vision
+
+Arx is a lightweight parts, purchasing, and records system, not a large-ERP competitor. It serves small R&D teams replacing spreadsheet BOMs alongside a company ERP, and small companies that want one all-in-one package. It grows deeper in those jobs, not wider into full ERP scope.
+
+- **Parts & purchasing:** catalog with compliance, revision history, alternates and custom fields; sourcing layer (AVL, lead times, supplier performance); inventory-driven purchasing; reporting and data exchange.
+- **Records (test data & quality):** revision-controlled form definitions; analytics (yield dashboard, cross-form search).
+- **Platform:** Postgres-only, self-hostable (StartOS), backup/restore; audit trail across all tables; JSON API and mobile-friendly UI.
 
 ## v0.8.0 — Postgres and platform
 
@@ -27,6 +35,12 @@ New user-facing features for the parts catalog and supplier layer.
 - Catalog: custom field labels ([#9](https://github.com/Jolls/arx/issues/9)), barcode/QR labels ([#11](https://github.com/Jolls/arx/issues/11))
 - Reporting/search: yield dashboard ([#3](https://github.com/Jolls/arx/issues/3)), global record search ([#2](https://github.com/Jolls/arx/issues/2))
 - Access: JSON API ([#15](https://github.com/Jolls/arx/issues/15))
+- Platform: structured `app_config` instead of a flat key-value table ([#17](https://github.com/Jolls/arx/issues/17))
+
+## Deferred decisions
+
+- **Central Arx server instead of a per-user `Arx.exe`** ([#189](https://github.com/Jolls/arx/issues/189)) — current model is per-user exe + shared Postgres. Revisit if shop-floor tablets or the JSON API become a real need, the user base grows beyond trusted staff, or Graph API access becomes available (removes the service-account OneDrive box a server-side file store needs).
+  - Cheaper hardening within the current model: Entra ID auth to Azure Postgres (no shared DB password); normalize absolute OneDrive/SharePoint attachment paths to root-relative `LOCAL:` form.
 
 ## Before going public
 

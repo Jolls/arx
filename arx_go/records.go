@@ -557,7 +557,6 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		Changed       bool   `json:"changed"`
 	}
 
-	// see FUTURE_GOALS.md (records index query refactor)
 	rows, err := h.records().ListFormStepsAt(r.Context(), formID, dayStart.UTC(), dayEnd.UTC())
 	if err != nil {
 		serverError(w, "query error", err)
