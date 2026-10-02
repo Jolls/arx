@@ -12,7 +12,7 @@ import (
 // OneDrive) every user shares that file, so a plaintext DB password would be
 // readable by anyone with folder access and a shared session_secret would let
 // any user forge another user's session cookie (#732). These are stored per-user
-// under os.UserConfigDir() instead (%APPDATA%\Arx on Windows, ~/.config/arx on
+// under os.UserConfigDir() instead (%APPDATA%\Arx on Windows, ~/.config/Arx on
 // Linux).
 type SecretsConfig struct {
 	DBPassword     string `json:"db_password,omitempty"`

@@ -19,6 +19,9 @@ updates:
     directory: /SQL/postgres
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: devcontainers
     directory: /
