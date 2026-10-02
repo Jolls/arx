@@ -125,18 +125,18 @@ func TestIntegration_FetchBOMItems_Fields(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []models.BOMItem{
-		{ID: f.LineL1, LineNumber: 1, Qty: 2, ComponentPartID: f.L1, PartNumber: f.PN[f.L1], Description: "l1 desc", Revision: "A",
-			Category: "BUY", CurrentCost: 0.4, AttachCount: 2, POLineCount: 5, LineUnitCost: 0.25, LineExtCost: 0.5, CostSource: "price"},
-		{ID: f.LineL2, LineNumber: 2, Qty: 0.5, ComponentPartID: f.L2, PartNumber: f.PN[f.L2], Description: "labor desc", Category: "OPS",
-			CurrentCost: 35, LineUnitCost: 35, LineExtCost: 17.5, CostSource: "labor"},
-		{ID: f.LineS, LineNumber: 3, Qty: 1, ComponentPartID: f.S, PartNumber: f.PN[f.S], Description: "sub desc", Revision: "A",
-			Category: "ASM", LastRollupCost: 3.5, ChildHasBOM: true, LineUnitCost: 3.5, LineExtCost: 3.5, CostSource: "rollup"},
-		{ID: f.LineL3, LineNumber: 4, Qty: 3, ComponentPartID: f.L3, PartNumber: f.PN[f.L3], CostSource: "missing"},
+		{ID: f.LineL1, LineNumber: 1, Qty: d(2), ComponentPartID: f.L1, PartNumber: f.PN[f.L1], Description: "l1 desc", Revision: "A",
+			Category: "BUY", CurrentCost: d(0.4), AttachCount: 2, POLineCount: 5, LineUnitCost: d(0.25), LineExtCost: d(0.5), CostSource: "price"},
+		{ID: f.LineL2, LineNumber: 2, Qty: d(0.5), ComponentPartID: f.L2, PartNumber: f.PN[f.L2], Description: "labor desc", Category: "OPS",
+			CurrentCost: d(35), LineUnitCost: d(35), LineExtCost: d(17.5), CostSource: "labor"},
+		{ID: f.LineS, LineNumber: 3, Qty: d(1), ComponentPartID: f.S, PartNumber: f.PN[f.S], Description: "sub desc", Revision: "A",
+			Category: "ASM", LastRollupCost: d(3.5), ChildHasBOM: true, LineUnitCost: d(3.5), LineExtCost: d(3.5), CostSource: "rollup"},
+		{ID: f.LineL3, LineNumber: 4, Qty: d(3), ComponentPartID: f.L3, PartNumber: f.PN[f.L3], CostSource: "missing"},
 	}
-	if !reflect.DeepEqual(items, want) {
+	if !deepEqualDec(items, want) {
 		t.Errorf("fetchBOMItems:\n got %+v\nwant %+v", items, want)
 	}
-	if total != 21.5 {
+	if !total.Equal(d(21.5)) {
 		t.Errorf("fetchBOMItems total = %v, want 21.5", total)
 	}
 	if items, _, err := h.fetchBOMItems(context.Background(), strconv.Itoa(f.L3)); err != nil || items != nil {

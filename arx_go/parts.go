@@ -9,7 +9,6 @@ import (
 	"html/template"
 	"log"
 	"maps"
-	"math"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
 	"arx/internal/attachments"
@@ -249,16 +249,16 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	// to current_cost when no preferred-supplier price exists.
 	purchasePrice := p.CurrentCost
 	prefPrice, _ := h.parts().PreferredSupplierPrice(r.Context(), p.ID)
-	if prefPrice != nil && *prefPrice > 0 {
+	if prefPrice != nil && prefPrice.IsPositive() {
 		purchasePrice = *prefPrice
 	}
 
-	var rollupDelta, rollupDeltaPct float64
+	var rollupDelta, rollupDeltaPct decimal.Decimal
 	var rollupSignificant bool
-	if p.LastRollupAt != nil && purchasePrice > 0 {
-		rollupDelta = p.LastRollupCost - purchasePrice
-		rollupDeltaPct = rollupDelta / purchasePrice * 100
-		rollupSignificant = math.Abs(rollupDeltaPct) >= 5.0
+	if p.LastRollupAt != nil && purchasePrice.IsPositive() {
+		rollupDelta = p.LastRollupCost.Sub(purchasePrice)
+		rollupDeltaPct = rollupDelta.Div(purchasePrice).Mul(decimal.NewFromInt(100))
+		rollupSignificant = rollupDeltaPct.Abs().GreaterThanOrEqual(decimal.NewFromInt(5))
 	}
 
 	var recentPOs []parts.RecentPO
@@ -536,7 +536,7 @@ func partFromForm(r *http.Request) models.Part {
 		IsLotTracked: models.TracksLots(mode),
 	}
 	if v := fv(r, "current_cost"); v != "" {
-		if c, err := strconv.ParseFloat(v, 64); err == nil {
+		if c, err := parseDecimal(v); err == nil {
 			p.CurrentCost = c
 		}
 	}
@@ -546,7 +546,7 @@ func partFromForm(r *http.Request) models.Part {
 		}
 	}
 	if v := fv(r, "reorder_min"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
+		if f, err := parseDecimal(v); err == nil {
 			p.ReorderMin = &f
 		}
 	}
@@ -594,47 +594,47 @@ func partInput(p models.Part) parts.Part {
 // Assembly rows use the stored rollup; leaf rows prefer the preferred-supplier
 // price (0 = none), else current_cost — labelled "labor" for OPS lines whose current_cost
 // is an hourly rate. Mirrors the leaf-cost rule in rollupCost.
-func bomLeafCost(childHasBOM bool, lastRollupCost float64, preferredPrice float64, currentCost float64, category string) (float64, string) {
+func bomLeafCost(childHasBOM bool, lastRollupCost decimal.Decimal, preferredPrice decimal.Decimal, currentCost decimal.Decimal, category string) (decimal.Decimal, string) {
 	if childHasBOM {
-		if lastRollupCost > 0 {
+		if lastRollupCost.IsPositive() {
 			return lastRollupCost, "rollup"
 		}
-		return 0, "missing"
+		return decimal.Zero, "missing"
 	}
-	if preferredPrice > 0 {
+	if preferredPrice.IsPositive() {
 		return preferredPrice, "price"
 	}
-	if currentCost > 0 {
+	if currentCost.IsPositive() {
 		if category == "OPS" {
 			return currentCost, "labor"
 		}
 		return currentCost, "current_cost"
 	}
-	return 0, "missing"
+	return decimal.Zero, "missing"
 }
 
 // fetchBOMItems returns partID's BOM rows, with line costs, and their total, shared by the
 // read-only BOM view (PartBOM), its lazy-loaded children endpoint
 // (APIPartBOMChildren), the BOM editor and the CSV export.
-func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BOMItem, float64, error) {
+func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BOMItem, decimal.Decimal, error) {
 	pid, err := strconv.Atoi(partID)
 	if err != nil {
-		return nil, 0, err
+		return nil, decimal.Zero, err
 	}
 	lines, err := h.parts().ListBOMLines(ctx, pid)
 	if err != nil {
-		return nil, 0, err
+		return nil, decimal.Zero, err
 	}
 	var items []models.BOMItem
-	var bomTotal float64
+	var bomTotal decimal.Decimal
 	for _, l := range lines {
 		item := models.BOMItem{ID: l.ID, LineNumber: l.LineNumber, Qty: l.Qty, ComponentPartID: l.ComponentPartID,
 			PartNumber: l.PartNumber, Description: l.Description, Revision: l.Revision, Category: l.Category,
 			CurrentCost: l.CurrentCost, AttachCount: l.AttachmentCount, POLineCount: l.POLineCount,
 			LastRollupCost: l.LastRollupCost, ChildHasBOM: l.HasBOM}
 		item.LineUnitCost, item.CostSource = bomLeafCost(l.HasBOM, l.LastRollupCost, l.PreferredPrice, l.CurrentCost, l.Category)
-		item.LineExtCost = item.LineUnitCost * item.Qty
-		bomTotal += item.LineExtCost
+		item.LineExtCost = item.LineUnitCost.Mul(item.Qty)
+		bomTotal = bomTotal.Add(item.LineExtCost)
 		items = append(items, item)
 	}
 	return items, bomTotal, nil
@@ -780,7 +780,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 	// component didn't resolve (no id and no matching part number).
 	line := func(row bomRow) parts.BOMLine {
 		item, _ := strconv.Atoi(row.Item)
-		qty, _ := strconv.ParseFloat(row.Qty, 64)
+		qty, _ := parseDecimal(row.Qty)
 		var pnid int
 		if row.PNID != "" {
 			pnid, _ = strconv.Atoi(row.PNID)
@@ -852,7 +852,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 type bomPastePreviewRow struct {
 	PartNumber  string  // canonical part_number from the DB match, or the raw pasted text on error
 	Description string
-	Qty         float64
+	Qty         decimal.Decimal
 	Status      string // "new" | "update" | "noop" | "error"
 	RowClass    string // Bootstrap row class for the status
 	StatusLabel string
@@ -869,7 +869,7 @@ type bomPastePreviewRow struct {
 type bomPasteLine struct {
 	PartNumber string
 	QtyText    string
-	Qty        float64
+	Qty        decimal.Decimal
 	QtyOK      bool
 	RawText    string
 }
@@ -890,7 +890,7 @@ func parseBOMPasteText(text string) []bomPasteLine {
 		if len(cols) > 1 {
 			qtyText = strings.TrimSpace(cols[1])
 		}
-		qty, err := strconv.ParseFloat(qtyText, 64)
+		qty, err := parseDecimal(qtyText)
 		// Row 1 is sniffed as a header and skipped only when there's at least
 		// one more row to import — a single-line paste is always treated as
 		// data, even with a malformed qty column, so a one-line typo surfaces
@@ -973,7 +973,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 			row.PNID = pnid
 			if ex, ok := existing[pnid]; ok {
 				row.PLID = ex.ID
-				if ex.Qty == line.Qty {
+				if ex.Qty.Equal(line.Qty) {
 					row.Status, row.RowClass, row.StatusLabel = "noop", "table-secondary text-muted", "No change"
 				} else {
 					row.Status, row.RowClass, row.StatusLabel = "update", "table-warning", "Update"
@@ -993,7 +993,7 @@ func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
 // ── BOM cost rollup ──────────────────────────────────────────────────────────
 
 type rollupResult struct {
-	cost  float64
+	cost  decimal.Decimal
 	cycle bool
 }
 
@@ -1020,10 +1020,10 @@ func rollupWalk(tree map[int][]parts.BOMTreeEdge, pnid int, visited map[int]bool
 	visited[pnid] = true
 	defer delete(visited, pnid)
 
-	var total float64
+	var total decimal.Decimal
 	var hasCycle bool
 	for _, e := range tree[pnid] {
-		var unitCost float64
+		var unitCost decimal.Decimal
 		if e.HasBOM {
 			res := rollupWalk(tree, e.ComponentID, visited, memo)
 			if res.cycle {
@@ -1031,9 +1031,9 @@ func rollupWalk(tree map[int][]parts.BOMTreeEdge, pnid int, visited map[int]bool
 			}
 			unitCost = res.cost
 		} else {
-			unitCost, _ = bomLeafCost(false, 0, e.PreferredPrice, e.CurrentCost, "")
+			unitCost, _ = bomLeafCost(false, decimal.Zero, e.PreferredPrice, e.CurrentCost, "")
 		}
-		total += unitCost * e.Qty
+		total = total.Add(unitCost.Mul(e.Qty))
 	}
 
 	result := rollupResult{cost: total, cycle: hasCycle}
@@ -1076,7 +1076,7 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 			tx.Rollback()
 		}
 	}()
-	costs := make(map[int]float64, len(memo))
+	costs := make(map[int]decimal.Decimal, len(memo))
 	for partID, result := range memo {
 		costs[partID] = result.cost
 	}
@@ -1096,16 +1096,16 @@ func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
 
 // priceTier is one active price row for a part+supplier, used for tier selection.
 type priceTier struct {
-	PriceEA  float64
-	PackSize float64
+	PriceEA  decimal.Decimal
+	PackSize decimal.Decimal
 }
 
 // pickTier selects the tier with the largest PackSize <= qty. Returns ok=false
 // if qty is below every tier's PackSize (or there are no tiers at all).
-func pickTier(tiers []priceTier, qty float64) (unitPrice, packSize float64, ok bool) {
+func pickTier(tiers []priceTier, qty decimal.Decimal) (unitPrice, packSize decimal.Decimal, ok bool) {
 	found := false
 	for _, t := range tiers {
-		if t.PackSize <= qty && (!found || t.PackSize > packSize) {
+		if t.PackSize.LessThanOrEqual(qty) && (!found || t.PackSize.GreaterThan(packSize)) {
 			unitPrice, packSize, found = t.PriceEA, t.PackSize, true
 		}
 	}
@@ -1116,16 +1116,16 @@ type buildCostLine struct {
 	PNID        int
 	PartNumber  string
 	Description string
-	QtyNeeded   float64
-	PackSize    float64
-	UnitPrice   float64
-	ExtCost     float64
+	QtyNeeded   decimal.Decimal
+	PackSize    decimal.Decimal
+	UnitPrice   decimal.Decimal
+	ExtCost     decimal.Decimal
 	Source      string // "price" | "missing"
 }
 
 type buildCostResult struct {
 	Lines []buildCostLine
-	Total float64
+	Total decimal.Decimal
 	Cycle bool
 }
 
@@ -1133,7 +1133,7 @@ type buildCostResult struct {
 // each level, and sums extended quantity into leaves (parts with no BOM) by pnid.
 // The tree is loaded in one query; visited is path-scoped for cycle detection,
 // matching rollupCost.
-func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty float64, visited map[int]bool, leaves map[int]float64) (bool, error) {
+func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty decimal.Decimal, visited map[int]bool, leaves map[int]decimal.Decimal) (bool, error) {
 	tree, err := h.parts().ListBOMTree(ctx, pnid)
 	if err != nil {
 		return false, err
@@ -1142,7 +1142,7 @@ func (h *Handler) aggregateLeafQty(ctx context.Context, pnid int, parentQty floa
 }
 
 // leafQtyWalk is aggregateLeafQty's in-memory recursion over a ListBOMTree result.
-func leafQtyWalk(tree map[int][]parts.BOMTreeEdge, pnid int, parentQty float64, visited map[int]bool, leaves map[int]float64) bool {
+func leafQtyWalk(tree map[int][]parts.BOMTreeEdge, pnid int, parentQty decimal.Decimal, visited map[int]bool, leaves map[int]decimal.Decimal) bool {
 	if visited[pnid] {
 		return true
 	}
@@ -1151,7 +1151,7 @@ func leafQtyWalk(tree map[int][]parts.BOMTreeEdge, pnid int, parentQty float64, 
 
 	var hasCycle bool
 	for _, e := range tree[pnid] {
-		extQty := e.Qty * parentQty
+		extQty := e.Qty.Mul(parentQty)
 		if e.HasBOM {
 			if leafQtyWalk(tree, e.ComponentID, extQty, visited, leaves) {
 				// A cycle anywhere in the tree makes the whole walk's result
@@ -1161,7 +1161,7 @@ func leafQtyWalk(tree map[int][]parts.BOMTreeEdge, pnid int, parentQty float64, 
 				break
 			}
 		} else {
-			leaves[e.ComponentID] += extQty
+			leaves[e.ComponentID] = leaves[e.ComponentID].Add(extQty)
 		}
 	}
 	return hasCycle
@@ -1181,8 +1181,8 @@ type partSupplierKey struct {
 // below every tier's pack_size are reported as "missing" — no current_cost
 // fallback, no extrapolation. Pass 2 batches its part and price lookups, so
 // pricing N leaves costs O(1) round trips instead of O(N).
-func (h *Handler) buildCost(ctx context.Context, pnid int, qty float64) (buildCostResult, error) {
-	leaves := map[int]float64{}
+func (h *Handler) buildCost(ctx context.Context, pnid int, qty decimal.Decimal) (buildCostResult, error) {
+	leaves := map[int]decimal.Decimal{}
 	hasCycle, err := h.aggregateLeafQty(ctx, pnid, qty, map[int]bool{}, leaves)
 	if err != nil {
 		return buildCostResult{}, err
@@ -1222,12 +1222,12 @@ func (h *Handler) buildCost(ctx context.Context, pnid int, qty float64) (buildCo
 			if unitPrice, packSize, ok := pickTier(tiers, totalQty); ok {
 				line.UnitPrice = unitPrice
 				line.PackSize = packSize
-				line.ExtCost = unitPrice * totalQty
+				line.ExtCost = unitPrice.Mul(totalQty)
 				line.Source = "price"
 			}
 		}
 
-		result.Total += line.ExtCost
+		result.Total = result.Total.Add(line.ExtCost)
 		result.Lines = append(result.Lines, line)
 	}
 	sort.Slice(result.Lines, func(i, j int) bool {
@@ -1249,8 +1249,8 @@ func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Invalid part ID")
 		return
 	}
-	qty, err := strconv.ParseFloat(r.URL.Query().Get("qty"), 64)
-	if err != nil || qty <= 0 {
+	qty, err := parseDecimal(r.URL.Query().Get("qty"))
+	if err != nil || !qty.IsPositive() {
 		h.renderError(w, r, "Invalid build quantity")
 		return
 	}
@@ -1719,7 +1719,7 @@ func (h *Handler) PartRecordsRows(w http.ResponseWriter, r *http.Request) {
 // partTxnSummary is one row in the Part dashboard "Inventory" card (#521).
 type partTxnSummary struct {
 	Type string
-	Qty  float64
+	Qty  decimal.Decimal
 	Date string
 }
 
@@ -1747,7 +1747,7 @@ type preferredSupplierSummary struct {
 	SupplierPN   string
 	SupplierDesc string
 	HasLink      bool
-	Price        *float64 // cheapest active price from this supplier; nil = none
+	Price        *decimal.Decimal // cheapest active price from this supplier; nil = none
 }
 
 // preferredSupplier loads the part's preferred supplier and its supplier_part
@@ -1767,11 +1767,11 @@ func (h *Handler) preferredSupplier(ctx context.Context, partID int) *preferredS
 // shared by the Price History tab and the Part dashboard trend card (#521).
 type pricePoint struct {
 	Date     string   `json:"date"` // YYYY-MM-DD
-	Cost     float64  `json:"cost"`
-	PO       string   `json:"po"`
-	Supplier string   `json:"supplier"`
-	Source   string   `json:"source"`             // "po" | "price"
-	PackSize *float64 `json:"packSize,omitempty"` // qty-break tier, "price" source only (#612)
+	Cost     decimal.Decimal  `json:"cost"`
+	PO       string           `json:"po"`
+	Supplier string           `json:"supplier"`
+	Source   string           `json:"source"`             // "po" | "price"
+	PackSize *decimal.Decimal `json:"packSize,omitempty"` // qty-break tier, "price" source only (#612)
 }
 
 // partPricePoints assembles the unit-cost-over-time samples for a part from its
@@ -1944,7 +1944,7 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 		effectiveDate = h.userNow(r).Format("2006-01-02")
 	}
 	priceEA, pricePack := resolvePriceFields(r)
-	err = h.parts().CreatePrice(r.Context(), p.ID, supplierID, nullableFloat(r.FormValue("pack_size")), priceEA, pricePack, effectiveDate)
+	err = h.parts().CreatePrice(r.Context(), p.ID, supplierID, nullableDecimal(r.FormValue("pack_size")), priceEA, pricePack, effectiveDate)
 	if err != nil {
 		if isDuplicatePrice(err) {
 			h.renderError(w, r, "A price already exists for this supplier and pack size. Deactivate the existing row first.")
@@ -2016,7 +2016,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	priceEA, pricePack := resolvePriceFields(r)
-	err = svc.CreatePrice(r.Context(), p.ID, supplierID, nullableFloat(r.FormValue("pack_size")), priceEA, pricePack, effectiveDate)
+	err = svc.CreatePrice(r.Context(), p.ID, supplierID, nullableDecimal(r.FormValue("pack_size")), priceEA, pricePack, effectiveDate)
 	if err != nil {
 		tx.Rollback()
 		if isDuplicatePrice(err) {
@@ -2134,10 +2134,10 @@ func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
 	for _, item := range items {
 		_ = cw.Write([]string{
 			fmt.Sprintf("%d", item.LineNumber),
-			fmt.Sprintf("%.4g", item.Qty),
+			item.Qty.String(),
 			item.PartNumber, item.Description, item.Revision, item.Category,
-			fmt.Sprintf("%.2f", item.LineUnitCost),
-			fmt.Sprintf("%.2f", item.LineExtCost),
+			item.LineUnitCost.StringFixed(2),
+			item.LineExtCost.StringFixed(2),
 			item.CostSource,
 		})
 	}

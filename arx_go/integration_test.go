@@ -749,7 +749,7 @@ func TestIntegration_BuildCostConsolidation(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	res, err := h.buildCost(ctx, 3005, 300)
+	res, err := h.buildCost(ctx, 3005, d(300))
 	if err != nil {
 		t.Fatalf("buildCost(3005, 300): %v", err)
 	}
@@ -766,14 +766,14 @@ func TestIntegration_BuildCostConsolidation(t *testing.T) {
 	if !ok {
 		t.Fatalf("buildCost(3005, 300): no consolidated line for BUY-1001 (ArxDev may need reseeding): %+v", res.Lines)
 	}
-	if screw.QtyNeeded != 1500 {
+	if !screw.QtyNeeded.Equal(d(1500)) {
 		t.Errorf("BUY-1001 QtyNeeded = %v, want 1500 (600 direct + 900 via sub-assembly 3012)", screw.QtyNeeded)
 	}
-	if screw.Source != "price" || screw.PackSize != 1000 || screw.UnitPrice != 0.03 {
+	if screw.Source != "price" || !screw.PackSize.Equal(d(1000)) || !screw.UnitPrice.Equal(d(0.03)) {
 		t.Errorf("BUY-1001 tier = {Source:%q PackSize:%v UnitPrice:%v}, want {price 1000 0.03} — consolidated qty 1500 should cross into the 1000-pack tier",
 			screw.Source, screw.PackSize, screw.UnitPrice)
 	}
-	if screw.ExtCost != 45 {
+	if !screw.ExtCost.Equal(d(45)) {
 		t.Errorf("BUY-1001 ExtCost = %v, want 45 (1500 * 0.03)", screw.ExtCost)
 	}
 
@@ -781,7 +781,7 @@ func TestIntegration_BuildCostConsolidation(t *testing.T) {
 	if !ok {
 		t.Fatalf("buildCost(3005, 300): no consolidated line for RAW-1001: %+v", res.Lines)
 	}
-	if raw.QtyNeeded != 600 || raw.Source != "price" || raw.PackSize != 10 || raw.UnitPrice != 2.50 {
+	if !raw.QtyNeeded.Equal(d(600)) || raw.Source != "price" || !raw.PackSize.Equal(d(10)) || !raw.UnitPrice.Equal(d(2.50)) {
 		t.Errorf("RAW-1001 = {Qty:%v Source:%q Pack:%v Price:%v}, want {600 price 10 2.50}",
 			raw.QtyNeeded, raw.Source, raw.PackSize, raw.UnitPrice)
 	}
@@ -810,7 +810,7 @@ func TestIntegration_BuildCostBelowAllTiers(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	res, err := h.buildCost(ctx, 3005, 0.001)
+	res, err := h.buildCost(ctx, 3005, d(0.001))
 	if err != nil {
 		t.Fatalf("buildCost(3005, 0.001): %v", err)
 	}
@@ -831,7 +831,7 @@ func TestIntegration_BuildCostBelowAllTiers(t *testing.T) {
 		if line.Source != "missing" {
 			t.Errorf("%s Source = %q, want \"missing\" (aggregated qty %v is below every tier's pack_size)", pn, line.Source, line.QtyNeeded)
 		}
-		if line.ExtCost != 0 {
+		if !line.ExtCost.IsZero() {
 			t.Errorf("%s ExtCost = %v, want 0 for a missing line", pn, line.ExtCost)
 		}
 	}
@@ -849,7 +849,7 @@ func TestIntegration_BuildCostCycleDetection(t *testing.T) {
 	idA, _, cyclesCleanup := seedCyclePair(t, h, ctx)
 	defer cyclesCleanup()
 
-	res, err := h.buildCost(ctx, idA, 10)
+	res, err := h.buildCost(ctx, idA, d(10))
 	if err != nil {
 		t.Fatalf("buildCost(cycle): %v", err)
 	}
@@ -905,7 +905,7 @@ func TestIntegration_BuildCostTierShiftsWithQty(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	res, err := h.buildCost(ctx, 3005, 1)
+	res, err := h.buildCost(ctx, 3005, d(1))
 	if err != nil {
 		t.Fatalf("buildCost(3005, 1): %v", err)
 	}
@@ -918,10 +918,10 @@ func TestIntegration_BuildCostTierShiftsWithQty(t *testing.T) {
 	if screw == nil {
 		t.Fatalf("buildCost(3005, 1): no consolidated line for BUY-1001 (ArxDev may need reseeding): %+v", res.Lines)
 	}
-	if screw.QtyNeeded != 5 {
+	if !screw.QtyNeeded.Equal(d(5)) {
 		t.Errorf("BUY-1001 QtyNeeded at qty=1 = %v, want 5 (2 direct + 3 via sub-assembly 3012)", screw.QtyNeeded)
 	}
-	if screw.Source != "price" || screw.PackSize != 1 || screw.UnitPrice != 0.10 {
+	if screw.Source != "price" || !screw.PackSize.Equal(d(1)) || !screw.UnitPrice.Equal(d(0.10)) {
 		t.Errorf("BUY-1001 tier at qty=1 = {Source:%q PackSize:%v UnitPrice:%v}, want {price 1 0.10} — qty 5 should pick the 1-unit tier, not the 100 or 1000 tier used at higher build qtys",
 			screw.Source, screw.PackSize, screw.UnitPrice)
 	}
@@ -954,7 +954,7 @@ func TestIntegration_BuildCostDoesNotWriteRollup(t *testing.T) {
 	beforeCost5, beforeAt5 := readRollup(3005)
 	beforeCost12, beforeAt12 := readRollup(3012)
 
-	if _, err := h.buildCost(ctx, 3005, 300); err != nil {
+	if _, err := h.buildCost(ctx, 3005, d(300)); err != nil {
 		t.Fatalf("buildCost(3005, 300): %v", err)
 	}
 
@@ -992,7 +992,7 @@ func TestIntegration_RollupCostNested(t *testing.T) {
 	if res12.cycle {
 		t.Error("rollupCost(3012): cycle = true, want false")
 	}
-	assertFloatEqual(t, "rollupCost(3012) cost", res12.cost, 9.19)
+	assertFloatEqual(t, "rollupCost(3012) cost", res12.cost.InexactFloat64(), 9.19)
 
 	res5, err := h.rollupCost(ctx, 3005, map[int]bool{}, map[int]rollupResult{})
 	if err != nil {
@@ -1001,7 +1001,7 @@ func TestIntegration_RollupCostNested(t *testing.T) {
 	if res5.cycle {
 		t.Error("rollupCost(3005): cycle = true, want false")
 	}
-	assertFloatEqual(t, "rollupCost(3005) cost", res5.cost, 27.23)
+	assertFloatEqual(t, "rollupCost(3005) cost", res5.cost.InexactFloat64(), 27.23)
 }
 
 // TestIntegration_RollupCostMemoization proves a shared memo map is reused
@@ -1013,13 +1013,13 @@ func TestIntegration_RollupCostMemoization(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	memo := map[int]rollupResult{3012: {cost: 999, cycle: false}}
+	memo := map[int]rollupResult{3012: {cost: d(999), cycle: false}}
 	res, err := h.rollupCost(ctx, 3005, map[int]bool{}, memo)
 	if err != nil {
 		t.Fatalf("rollupCost(3005) with poisoned memo: %v", err)
 	}
 	// 0.06 (screw) + 0.48 (o-ring) + 17.50 (labor) + 999 (poisoned 3012) = 1017.04
-	assertFloatEqual(t, "rollupCost(3005) with poisoned memo[3012]=999 (memo entry must be reused, not recomputed)", res.cost, 1017.04)
+	assertFloatEqual(t, "rollupCost(3005) with poisoned memo[3012]=999 (memo entry must be reused, not recomputed)", res.cost.InexactFloat64(), 1017.04)
 }
 
 // TestIntegration_RollupCostCycleDetection mirrors
@@ -1153,7 +1153,7 @@ func TestIntegration_BuildCostNonAssemblyPart(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	res, err := h.buildCost(ctx, 3004, 10)
+	res, err := h.buildCost(ctx, 3004, d(10))
 	if err != nil {
 		t.Fatalf("buildCost(3004, 10): %v", err)
 	}
@@ -1436,16 +1436,16 @@ func TestIntegration_DashboardBelowReorderParts(t *testing.T) {
 		if items[i].PartID == 3007 {
 			found = &items[i]
 		}
-		if items[i].StockOnHand >= items[i].ReorderMin {
-			t.Errorf("dashboardBelowReorderParts: part %d returned with on-hand %g >= min %g",
+		if items[i].StockOnHand.GreaterThanOrEqual(items[i].ReorderMin) {
+			t.Errorf("dashboardBelowReorderParts: part %d returned with on-hand %s >= min %s",
 				items[i].PartID, items[i].StockOnHand, items[i].ReorderMin)
 		}
 	}
 	if found == nil {
 		t.Fatalf("dashboardBelowReorderParts: seed part 3007 not found (ArxDev may need reseeding): %+v", items)
 	}
-	if found.StockOnHand != 16 || found.ReorderMin != 25 {
-		t.Errorf("dashboardBelowReorderParts: part 3007 = {on-hand %g, min %g}, want {16, 25} (ArxDev may need reseeding)",
+	if !found.StockOnHand.Equal(d(16)) || !found.ReorderMin.Equal(d(25)) {
+		t.Errorf("dashboardBelowReorderParts: part 3007 = {on-hand %s, min %s}, want {16, 25} (ArxDev may need reseeding)",
 			found.StockOnHand, found.ReorderMin)
 	}
 }
@@ -6305,7 +6305,7 @@ func TestIntegration_QuerySpendBySupplier(t *testing.T) {
 	byName := map[string]float64{}
 	var order []string
 	for _, row := range rows {
-		byName[row.SupplierName] = row.TotalSpend
+		byName[row.SupplierName] = row.TotalSpend.InexactFloat64()
 		order = append(order, row.SupplierName)
 	}
 	assertFloatEqual(t, "Acme Fasteners total spend", byName["Acme Fasteners"], 282.50)
@@ -6338,7 +6338,7 @@ func TestIntegration_QuerySpendByPart(t *testing.T) {
 	byPart := map[string]float64{}
 	var order []string
 	for _, row := range rows {
-		byPart[row.PartNumber] = row.TotalSpend
+		byPart[row.PartNumber] = row.TotalSpend.InexactFloat64()
 		order = append(order, row.PartNumber)
 	}
 	assertFloatEqual(t, "RAW-1002 total spend", byPart["RAW-1002"], 205.00)

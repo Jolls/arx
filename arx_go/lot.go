@@ -10,6 +10,7 @@ import (
 	"arx/internal/inventory"
 	"arx/internal/records"
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 )
 
 // Lot control (#676, part of the #568 lot epic). A lot is one batch instance of a
@@ -50,7 +51,7 @@ func (h *Handler) lotBelongsToPart(ctx context.Context, tx *txLogger, lotID, par
 // recordGenealogy inserts one genealogy edge linking a consumed parent (component)
 // lot to the child (output) lot it fed, inside the caller's tx. Lot→lot only; unit
 // endpoints (parent_unit_id/child_unit_id) are written from slice 8 (#736).
-func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID, childLotID int, qtyConsumed float64) error {
+func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID, childLotID int, qtyConsumed decimal.Decimal) error {
 	return inventory.New(tx).RecordGenealogy(ctx, parentLotID, childLotID, qtyConsumed)
 }
 

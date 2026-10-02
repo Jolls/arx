@@ -135,7 +135,7 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 	})
 
 	inTx("inventory_transaction.created_at", func(tx *txLogger) []time.Time {
-		if err := h.recordInventoryTxn(req, tx, 3007, "adjustment", 1, time.Now(), "itest-192", "", nil, nil, nil); err != nil {
+		if err := h.recordInventoryTxn(req, tx, 3007, "adjustment", d(1), time.Now(), "itest-192", "", nil, nil, nil); err != nil {
 			t.Fatalf("recordInventoryTxn: %v", err)
 		}
 		var at time.Time

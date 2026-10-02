@@ -170,7 +170,7 @@ func TestIntegration_PartDashboardCards(t *testing.T) {
 		if s.DateOrdered != nil {
 			d = s.DateOrdered.Format("2006-01-02")
 		}
-		gotPOs = append(gotPOs, po{s.Number, s.SupplierName, s.Status, d, s.Qty, s.UnitCost})
+		gotPOs = append(gotPOs, po{s.Number, s.SupplierName, s.Status, d, s.Qty.InexactFloat64(), s.UnitCost.InexactFloat64()})
 	}
 	wantPOs := []po{{f.PO["C"], "Sup C", "draft", "", 1, 9}, {f.PO["B"], "", "open", "2026-02-01", 10, 1.1}}
 	if !reflect.DeepEqual(gotPOs, wantPOs) {
@@ -183,8 +183,8 @@ func TestIntegration_PartDashboardCards(t *testing.T) {
 		t.Errorf("ListRecentPOs(Q) = %+v, want none", got)
 	}
 
-	wantTxns := []partTxnSummary{{"adjustment", 1.5, "2026-01-20"}, {"issue", -2, "2026-01-20"}}
-	if got := h.recentPartTxns(ctx, f.P, 2); !reflect.DeepEqual(got, wantTxns) {
+	wantTxns := []partTxnSummary{{"adjustment", d(1.5), "2026-01-20"}, {"issue", d(-2), "2026-01-20"}}
+	if got := h.recentPartTxns(ctx, f.P, 2); !deepEqualDec(got, wantTxns) {
 		t.Errorf("recentPartTxns(P, 2):\n got %+v\nwant %+v", got, wantTxns)
 	}
 	if got := h.recentPartTxns(ctx, f.Q, 5); got != nil {
@@ -205,12 +205,12 @@ func TestIntegration_PartDashboardCards(t *testing.T) {
 	}
 
 	wantPts := []pricePoint{
-		{Date: "2026-01-10", Cost: 1.25, PO: f.PO["A"], Supplier: "Sup A", Source: "po"},
-		{Date: "2026-02-01", Cost: 1.1, PO: f.PO["B"], Supplier: "", Source: "po"},
-		{Date: "2026-01-05", Cost: 2, Supplier: f.Sup[1002], Source: "price", PackSize: floatPtr(1)},
-		{Date: "2026-01-06", Cost: 1.5, Supplier: f.Sup[1002], Source: "price", PackSize: floatPtr(10)},
+		{Date: "2026-01-10", Cost: d(1.25), PO: f.PO["A"], Supplier: "Sup A", Source: "po"},
+		{Date: "2026-02-01", Cost: d(1.1), PO: f.PO["B"], Supplier: "", Source: "po"},
+		{Date: "2026-01-05", Cost: d(2), Supplier: f.Sup[1002], Source: "price", PackSize: dp(1)},
+		{Date: "2026-01-06", Cost: d(1.5), Supplier: f.Sup[1002], Source: "price", PackSize: dp(10)},
 	}
-	if got := h.partPricePoints(ctx, f.P); !reflect.DeepEqual(got, wantPts) {
+	if got := h.partPricePoints(ctx, f.P); !deepEqualDec(got, wantPts) {
 		t.Errorf("partPricePoints(P):\n got %+v\nwant %+v", got, wantPts)
 	}
 	if got := h.partPricePoints(ctx, f.Q); got != nil {

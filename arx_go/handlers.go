@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/gorilla/sessions"
+	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
 	"arx/internal/appconfig"
@@ -893,11 +894,11 @@ func coreTemplateFuncs() template.FuncMap {
 		"attachLabel":          attachLabel,
 		"isPDF":                urlutil.IsPDF,
 		"isImage":              urlutil.IsImage,
-		"deref": func(f *float64) float64 {
-			if f == nil {
-				return 0
+		"deref": func(d *decimal.Decimal) decimal.Decimal {
+			if d == nil {
+				return decimal.Zero
 			}
-			return *f
+			return *d
 		},
 		"derefInt": func(i *int) int {
 			if i == nil {
@@ -905,11 +906,11 @@ func coreTemplateFuncs() template.FuncMap {
 			}
 			return *i
 		},
-		"packSizeStr": func(f *float64) string {
-			if f == nil {
+		"packSizeStr": func(d *decimal.Decimal) string {
+			if d == nil {
 				return "—"
 			}
-			return fmt.Sprintf("%g", *f)
+			return d.String()
 		},
 		"supplierPrefLabel": func(i *int) string {
 			if i == nil {
@@ -973,13 +974,18 @@ func coreTemplateFuncs() template.FuncMap {
 			}
 			return strconv.FormatFloat(f, 'f', -1, 64)
 		},
-		"fmtOptFloat": func(f *float64) string {
-			if f == nil || *f == 0 {
+		"fmtOptFloat": func(d *decimal.Decimal) string {
+			if d == nil || d.IsZero() {
 				return ""
 			}
-			return strconv.FormatFloat(*f, 'f', -1, 64)
+			return d.String()
 		},
-		"mul": func(a, b float64) float64 { return a * b },
+		"mul":     func(a, b decimal.Decimal) decimal.Decimal { return a.Mul(b) },
+		"printf":  templatePrintf,
+		"isPos":   func(d decimal.Decimal) bool { return d.IsPositive() },
+		"nonZero": func(d decimal.Decimal) bool { return !d.IsZero() },
+		"decGE":   func(a, b decimal.Decimal) bool { return a.GreaterThanOrEqual(b) },
+		"decGT":   func(a decimal.Decimal, n int) bool { return a.GreaterThan(decimal.NewFromInt(int64(n))) },
 		"cityLine": func(city, state, zip string) string {
 			var parts []string
 			if city != "" {

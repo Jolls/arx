@@ -8,6 +8,8 @@ package dbq
 import (
 	"context"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const countOpenPOs = `-- name: CountOpenPOs :one
@@ -77,7 +79,7 @@ func (q *Queries) ListActiveFormOptions(ctx context.Context) ([]ListActiveFormOp
 }
 
 const listBelowReorderParts = `-- name: ListBelowReorderParts :many
-SELECT id AS part_id, part_number, stock_on_hand::float8 AS stock_on_hand, reorder_min::float8 AS reorder_min
+SELECT id AS part_id, part_number, stock_on_hand::numeric AS stock_on_hand, reorder_min::numeric AS reorder_min
 FROM part
 WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
 ORDER BY (stock_on_hand - reorder_min) ASC LIMIT $1::int
@@ -86,8 +88,8 @@ ORDER BY (stock_on_hand - reorder_min) ASC LIMIT $1::int
 type ListBelowReorderPartsRow struct {
 	PartID      int
 	PartNumber  string
-	StockOnHand float64
-	ReorderMin  float64
+	StockOnHand decimal.Decimal
+	ReorderMin  decimal.Decimal
 }
 
 func (q *Queries) ListBelowReorderParts(ctx context.Context, rowLimit int) ([]ListBelowReorderPartsRow, error) {
@@ -915,7 +917,7 @@ func (q *Queries) POCycleTimeByStage(ctx context.Context, arg POCycleTimeByStage
 const spendByPart = `-- name: SpendByPart :many
 SELECT COALESCE(p.part_number, pol.part_number_snapshot, '')::text AS part_number,
        COALESCE(p.description, '') AS description,
-       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::float8 AS total_spend
+       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::numeric AS total_spend
 FROM po_line pol
 JOIN purchase_order po ON pol.po_id = po.id
 LEFT JOIN part p ON pol.part_id = p.id
@@ -934,7 +936,7 @@ type SpendByPartParams struct {
 type SpendByPartRow struct {
 	PartNumber  string
 	Description string
-	TotalSpend  float64
+	TotalSpend  decimal.Decimal
 }
 
 // Lines with no part_id (freeform) are grouped by their part_number_snapshot so the spend stays counted.
@@ -964,7 +966,7 @@ func (q *Queries) SpendByPart(ctx context.Context, arg SpendByPartParams) ([]Spe
 const spendBySupplier = `-- name: SpendBySupplier :many
 
 SELECT COALESCE(po.supplier_name, '') AS supplier_name,
-       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::float8 AS total_spend
+       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::numeric AS total_spend
 FROM po_line pol
 JOIN purchase_order po ON pol.po_id = po.id
 WHERE ($1::date IS NULL OR po.date_ordered >= $1::date)
@@ -980,7 +982,7 @@ type SpendBySupplierParams struct {
 
 type SpendBySupplierRow struct {
 	SupplierName string
-	TotalSpend   float64
+	TotalSpend   decimal.Decimal
 }
 
 // ── Spend / on-time / cycle time ───────────────────────────────────────────────

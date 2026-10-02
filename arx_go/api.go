@@ -119,7 +119,7 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{"supplier_pn": d.SupplierPN}
-	if d.MinIncrement != nil && *d.MinIncrement > 0 {
+	if d.MinIncrement != nil && d.MinIncrement.IsPositive() {
 		resp["min_increment"] = *d.MinIncrement
 	}
 	if d.PriceEA != nil {

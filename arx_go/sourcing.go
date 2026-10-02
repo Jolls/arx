@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
 	"arx/internal/parts"
@@ -141,7 +142,7 @@ func supplierPartFromForm(r *http.Request) *parts.SupplierPart {
 	if v, err := strconv.Atoi(strings.TrimSpace(r.FormValue("preference"))); err == nil {
 		sp.Preference = &v
 	}
-	if v, err := strconv.ParseFloat(strings.TrimSpace(r.FormValue("min_increment")), 64); err == nil {
+	if v, err := parseDecimal(strings.TrimSpace(r.FormValue("min_increment"))); err == nil {
 		sp.MinIncrement = &v
 	}
 	if v, err := strconv.Atoi(strings.TrimSpace(r.FormValue("unit_id"))); err == nil {
@@ -246,7 +247,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 		effectiveDate := h.userNow(r).Format("2006-01-02")
 		for _, b := range breaks {
 			// An active price already at this pack size is left alone (inserted=false).
-			inserted, err := svc.ImportPrice(ctx, partID, supplierID, b.BreakQuantity, b.UnitPrice, b.TotalPrice, effectiveDate)
+			inserted, err := svc.ImportPrice(ctx, partID, supplierID, decimal.NewFromFloat(b.BreakQuantity), decimal.NewFromFloat(b.UnitPrice), decimal.NewFromFloat(b.TotalPrice), effectiveDate)
 			if err != nil {
 				return false, nil, fmt.Errorf("could not save imported price: %w", err)
 			}
@@ -485,33 +486,33 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// nullableFloat returns nil for empty/unparseable strings, otherwise the float64 value.
-func nullableFloat(s string) *float64 {
+// nullableDecimal returns nil for empty/unparseable strings, otherwise the decimal value.
+func nullableDecimal(s string) *decimal.Decimal {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
-	f, err := strconv.ParseFloat(s, 64)
+	d, err := parseDecimal(s)
 	if err != nil {
 		return nil
 	}
-	return &f
+	return &d
 }
 
 // resolvePriceFields fills in a missing price_ea/price_pack from the other
 // using pack_size, when only one was submitted (#75).
-func resolvePriceFields(r *http.Request) (priceEA, pricePack *float64) {
-	priceEA = nullableFloat(r.FormValue("price_ea"))
-	pricePack = nullableFloat(r.FormValue("price_pack"))
-	packSize, err := strconv.ParseFloat(r.FormValue("pack_size"), 64)
-	if err != nil || packSize <= 0 {
+func resolvePriceFields(r *http.Request) (priceEA, pricePack *decimal.Decimal) {
+	priceEA = nullableDecimal(r.FormValue("price_ea"))
+	pricePack = nullableDecimal(r.FormValue("price_pack"))
+	packSize, err := parseDecimal(r.FormValue("pack_size"))
+	if err != nil || !packSize.IsPositive() {
 		return priceEA, pricePack
 	}
 	if priceEA == nil && pricePack != nil {
-		v := *pricePack / packSize
+		v := pricePack.Div(packSize)
 		priceEA = &v
 	} else if pricePack == nil && priceEA != nil {
-		v := *priceEA * packSize
+		v := priceEA.Mul(packSize)
 		pricePack = &v
 	}
 	return priceEA, pricePack

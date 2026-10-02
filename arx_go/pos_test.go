@@ -135,11 +135,11 @@ func TestRFQBaseNumber(t *testing.T) {
 
 func TestBuildRFQGrid(t *testing.T) {
 	lines := []rfqScanLine{
-		{Number: "1050R1", SupplierName: "Acme", Status: "rfq", Total: 30, HasLine: true, POLID: 1, PartNumber: "P-1", Qty: 2, Cost: 10},
-		{Number: "1050R1", SupplierName: "Acme", Status: "rfq", Total: 30, HasLine: true, POLID: 2, PartNumber: "P-2", Qty: 1, Cost: 10},
-		{Number: "1050R2", SupplierName: "Globex", Status: "rfq", Total: 50, HasLine: true, POLID: 3, PartNumber: "P-1", Qty: 2, Cost: 25},
+		{Number: "1050R1", SupplierName: "Acme", Status: "rfq", Total: d(30), HasLine: true, POLID: 1, PartNumber: "P-1", Qty: d(2), Cost: d(10)},
+		{Number: "1050R1", SupplierName: "Acme", Status: "rfq", Total: d(30), HasLine: true, POLID: 2, PartNumber: "P-2", Qty: d(1), Cost: d(10)},
+		{Number: "1050R2", SupplierName: "Globex", Status: "rfq", Total: d(50), HasLine: true, POLID: 3, PartNumber: "P-1", Qty: d(2), Cost: d(25)},
 		// Globex did not quote P-2 → tests the ragged-row padding path.
-		{Number: "1050R3", SupplierName: "Initech", Status: "rfq", Total: 0, HasLine: false}, // a quote with no lines
+		{Number: "1050R3", SupplierName: "Initech", Status: "rfq", Total: d(0), HasLine: false}, // a quote with no lines
 	}
 	suppliers, rows := buildRFQGrid(lines)
 
@@ -208,7 +208,7 @@ func TestBuildRFQGridEmpty(t *testing.T) {
 
 func TestDerivePOReceiptStatus(t *testing.T) {
 	line := func(ordered, received float64) models.PurchaseOrderLine {
-		return models.PurchaseOrderLine{Qty: ordered, ReceivedQty: received}
+		return models.PurchaseOrderLine{Qty: d(ordered), ReceivedQty: d(received)}
 	}
 	cases := []struct {
 		name  string
@@ -238,7 +238,7 @@ func TestParseReceiveDeltas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 1 || got[1] != 4.5 {
+	if len(got) != 1 || !got[1].Equal(d(4.5)) {
 		t.Errorf("got %v, want only {1:4.5}", got)
 	}
 

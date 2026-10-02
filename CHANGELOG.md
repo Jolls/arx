@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.57] - 2026-10-02
+### Fixed
+- Money and quantities (prices, PO line/tax/shipping/total costs, BOM and build quantities, rollup costs, stock) are now exact decimals (`shopspring/decimal`) from the database through the handlers and templates, instead of `float64`, so rollups and PO totals no longer pick up binary floating-point error. Decimals marshal as JSON numbers; the BOM/PO CSV exports now write quantities in full instead of 4 significant figures ([#193](https://github.com/Jolls/arx/issues/193))
+
 ## [0.8.56] - 2026-10-02
 ### Changed
 - `build.build_date`, `inventory_transaction.txn_date`, `part.created_date`/`modified_date` and `price.effective_date` no longer default to the database's `CURRENT_DATE` (migration `20261002151500_279_drop_date_defaults`, no rows change); the app already supplies the user's local day. `SCHEMA.md` records which pre-go-live timestamps and dates are not corrected ([#279](https://github.com/Jolls/arx/issues/279))

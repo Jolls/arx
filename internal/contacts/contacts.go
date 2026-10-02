@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"arx/internal/dbq"
+
+	"github.com/shopspring/decimal"
 )
 
 // Contact is a contact row plus its company's name. List fills only the
@@ -39,7 +41,7 @@ type PO struct {
 	Role         string // "Supplier" or "Receiver" — how this contact is linked to the PO
 	Counterparty string // supplier name snapshot, for context
 	DateOrdered  *time.Time
-	Total        float64
+	Total        decimal.Decimal
 }
 
 // Sibling is one row in the Contact dashboard "Related" card (#521).

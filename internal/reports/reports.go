@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"arx/internal/dbq"
+
+	"github.com/shopspring/decimal"
 )
 
 // Service wraps the generated queries over one DBTX.
@@ -161,8 +163,8 @@ func (s *Service) PendingApprovalPOs(ctx context.Context, limit int) ([]PendingA
 type BelowReorder struct {
 	PartID      int
 	PartNumber  string
-	StockOnHand float64
-	ReorderMin  float64
+	StockOnHand decimal.Decimal
+	ReorderMin  decimal.Decimal
 }
 
 func (s *Service) BelowReorderParts(ctx context.Context, limit int) ([]BelowReorder, error) {
@@ -227,7 +229,7 @@ func (s *Service) RecentPOEvents(ctx context.Context, limit int) ([]POEvent, err
 // SupplierSpend is PO line spend (qty * unit_cost) for one supplier name.
 type SupplierSpend struct {
 	SupplierName string
-	TotalSpend   float64
+	TotalSpend   decimal.Decimal
 }
 
 // SpendBySupplier totals spend by supplier over the range (on PO date_ordered), biggest first.
@@ -248,7 +250,7 @@ func (s *Service) SpendBySupplier(ctx context.Context, r DateRange) ([]SupplierS
 type PartSpend struct {
 	PartNumber  string
 	Description string
-	TotalSpend  float64
+	TotalSpend  decimal.Decimal
 }
 
 func (s *Service) SpendByPart(ctx context.Context, r DateRange) ([]PartSpend, error) {

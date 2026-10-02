@@ -3,6 +3,8 @@ package models
 import (
 	"fmt"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type Part struct {
@@ -20,12 +22,12 @@ type Part struct {
 	CreatedDate         *time.Time
 	ModifiedDate        *time.Time
 	PrimaryAttachmentID *int // part_attachment.id of the primary attachment; nil = none set
-	StockOnHand         float64
-	ReorderMin          *float64 // reorder point (#273); nil = none set, never flagged below-min
+	StockOnHand         decimal.Decimal
+	ReorderMin          *decimal.Decimal // reorder point (#273); nil = none set, never flagged below-min
 	IsLotTracked        bool     // derived from TrackingMode via TracksLots (#745); not a DB column
 	TrackingMode        string   // lot/serial control (#743): none|lot|serial|lot_serial; drives reads as of slice 8 (#745)
-	CurrentCost         float64
-	LastRollupCost      float64
+	CurrentCost         decimal.Decimal
+	LastRollupCost      decimal.Decimal
 	LastRollupAt        *time.Time
 	AttachmentCount     int
 	ThumbnailURL        string // resolved URL of the active "Thumbnail"-category attachment, if any (#56); empty when none generated
@@ -168,7 +170,7 @@ func TracksSerials(mode string) bool { return mode == "serial" || mode == "lot_s
 // BelowReorder reports whether on-hand stock has dropped below the part's reorder
 // point (#273). False when no reorder point is set (ReorderMin == nil).
 func (p Part) BelowReorder() bool {
-	return p.ReorderMin != nil && p.StockOnHand < *p.ReorderMin
+	return p.ReorderMin != nil && p.StockOnHand.LessThan(*p.ReorderMin)
 }
 
 // UserFieldsForEdit returns all 10 PNUser fields for the edit form (including empty ones).
@@ -208,21 +210,21 @@ func (p Part) UserFields() []struct{ Label, Value string } {
 type BOMItem struct {
 	ID              int
 	LineNumber      int
-	Qty             float64
+	Qty             decimal.Decimal
 	ComponentPartID int
 	ParentPartID    int
 	PartNumber      string
 	Description     string
 	Revision        string
 	Category        string
-	CurrentCost     float64
+	CurrentCost     decimal.Decimal
 	AttachCount     int
 	POLineCount     int
 	// Rollup display fields — populated by PartBOM handler.
-	LastRollupCost float64
+	LastRollupCost decimal.Decimal
 	ChildHasBOM    bool
-	LineUnitCost   float64
-	LineExtCost    float64
+	LineUnitCost   decimal.Decimal
+	LineExtCost    decimal.Decimal
 	CostSource     string // "rollup" | "price" | "labor" | "current_cost" | "missing"
 }
 

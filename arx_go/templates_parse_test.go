@@ -206,7 +206,7 @@ func TestYieldTemplateRenders(t *testing.T) {
 // print template) with fake data and asserts bound values appear in output (#825).
 func TestPOPrintTemplateRenders(t *testing.T) {
 	po := models.PurchaseOrder{Number: "PO-TEST-100", Status: "open", SupplierName: "Acme Supply"}
-	items := []models.PurchaseOrderLine{{LineNumber: 1, PartNumberSnapshot: "PN-100", Qty: 2, UnitCost: 5.00}}
+	items := []models.PurchaseOrderLine{{LineNumber: 1, PartNumberSnapshot: "PN-100", Qty: d(2), UnitCost: d(5.00)}}
 	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS, "templates/pos/po_print.html")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -214,13 +214,19 @@ func TestPOPrintTemplateRenders(t *testing.T) {
 	data := map[string]any{
 		"PO":           po,
 		"POItems":      items,
-		"LineTotal":    10.0,
+		"LineTotal":    d(10.0),
 		"SupplierCode": "",
 		"TestMode":     false,
 		"POFolderPath": "",
 		"IsRFQ":        false,
 	}
 	out := renderToString(t, tmpl, "po_print.html", data)
+	// Decimal money renders through the decimal-aware printf: unit cost to 4 places, extension to 2.
+	for _, want := range []string{"$5.0000", "$10.00"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("po_print.html output missing formatted money %q; got:\n%s", want, out)
+		}
+	}
 	if !strings.Contains(out, "PO-TEST-100") {
 		t.Errorf("po_print.html output missing bound PO number; got:\n%s", out)
 	}

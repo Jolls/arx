@@ -59,8 +59,8 @@
                     <td data-col="col-rev">{{.Revision}}</td>
                     <td data-col="col-cat">{{.Category}}</td>
                     <td data-col="col-qty" class="text-end">{{printf "%.5g" .Qty}}</td>
-                    <td data-col="col-unit-cost" class="text-end">{{if .LineUnitCost}}${{printf "%.4f" .LineUnitCost}}{{end}}</td>
-                    <td data-col="col-ext-cost" class="text-end">{{if .LineExtCost}}${{printf "%.4f" .LineExtCost}}{{end}}</td>
+                    <td data-col="col-unit-cost" class="text-end">{{if nonZero .LineUnitCost}}${{printf "%.4f" .LineUnitCost}}{{end}}</td>
+                    <td data-col="col-ext-cost" class="text-end">{{if nonZero .LineExtCost}}${{printf "%.4f" .LineExtCost}}{{end}}</td>
                     <td data-col="col-source">
                         {{if eq .CostSource "rollup"}}<span class="badge bg-info text-dark">Rollup</span>
                         {{else if eq .CostSource "price"}}<span class="badge bg-success">Price</span>

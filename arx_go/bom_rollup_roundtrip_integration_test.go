@@ -134,9 +134,9 @@ func TestIntegration_RollupCost_RepeatedSubAssembly(t *testing.T) {
 	if res.cycle {
 		t.Error("cycle = true, want false")
 	}
-	assertFloatEqual(t, "rollupCost(T)", res.cost, 96) // S=8, M=24, T=8+48+40
-	assertFloatEqual(t, "memo[S]", memo[f.S].cost, 8)
-	assertFloatEqual(t, "memo[M]", memo[f.M].cost, 24)
+	assertFloatEqual(t, "rollupCost(T)", res.cost.InexactFloat64(), 96) // S=8, M=24, T=8+48+40
+	assertFloatEqual(t, "memo[S]", memo[f.S].cost.InexactFloat64(), 8)
+	assertFloatEqual(t, "memo[M]", memo[f.M].cost.InexactFloat64(), 24)
 	if len(memo) != 3 {
 		t.Errorf("memo = %v, want exactly T, M and S", memo)
 	}
@@ -148,16 +148,16 @@ func TestIntegration_BuildCost_RepeatedSubAssembly(t *testing.T) {
 	f := seedRepeatedSub(t, h)
 
 	for _, c := range []struct{ qty, wantQty, wantTotal float64 }{{1, 48, 96}, {10, 480, 960}} {
-		res, err := h.buildCost(context.Background(), f.T, c.qty)
+		res, err := h.buildCost(context.Background(), f.T, d(c.qty))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if res.Cycle || len(res.Lines) != 1 || res.Lines[0].PNID != f.L {
 			t.Fatalf("buildCost(T, %v) = %+v, want one line for L", c.qty, res)
 		}
-		assertFloatEqual(t, "QtyNeeded", res.Lines[0].QtyNeeded, c.wantQty)
-		assertFloatEqual(t, "UnitPrice", res.Lines[0].UnitPrice, 2.0)
-		assertFloatEqual(t, "Total", res.Total, c.wantTotal)
+		assertFloatEqual(t, "QtyNeeded", res.Lines[0].QtyNeeded.InexactFloat64(), c.wantQty)
+		assertFloatEqual(t, "UnitPrice", res.Lines[0].UnitPrice.InexactFloat64(), 2.0)
+		assertFloatEqual(t, "Total", res.Total.InexactFloat64(), c.wantTotal)
 	}
 }
 
@@ -191,7 +191,7 @@ func TestIntegration_RollupCost_EmptyBOMRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.cycle || res.cost != 0 || len(memo) != 1 {
+	if res.cycle || !res.cost.IsZero() || len(memo) != 1 {
 		t.Errorf("rollupCost(empty) = %+v memo=%v, want cost 0, no cycle, memo {root}", res, memo)
 	}
 	assertStatus(t, "PartRollupCost", postRollup(h, context.Background(), root), http.StatusSeeOther)
@@ -233,7 +233,7 @@ func TestIntegration_Cycles_NonRootAndLongerShapes(t *testing.T) {
 			if err != nil || !res.cycle {
 				t.Errorf("rollupCost = %+v, %v; want cycle", res, err)
 			}
-			bc, err := h.buildCost(ctx, root, 1)
+			bc, err := h.buildCost(ctx, root, d(1))
 			if err != nil || !bc.Cycle {
 				t.Errorf("buildCost = %+v, %v; want Cycle", bc, err)
 			}
@@ -267,7 +267,7 @@ func TestIntegration_BuildCost_ReadsIndependentOfRepeats(t *testing.T) {
 	defer done()
 	f := seedRepeatedSub(t, h)
 	ctx, st := withStats(context.Background())
-	if _, err := h.buildCost(ctx, f.T, 1); err != nil {
+	if _, err := h.buildCost(ctx, f.T, d(1)); err != nil {
 		t.Fatal(err)
 	}
 	if st.count != 3 {
@@ -279,7 +279,7 @@ func TestIntegration_BuildCost_SeedTreeReads(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()
 	ctx, st := withStats(context.Background())
-	if _, err := h.buildCost(ctx, 3005, 300); err != nil {
+	if _, err := h.buildCost(ctx, 3005, d(300)); err != nil {
 		t.Fatal(err)
 	}
 	if st.count != 3 {

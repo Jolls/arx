@@ -92,8 +92,8 @@ func TestIntegration_FetchActivePricesBySupplier(t *testing.T) {
 		if row.PackSize == nil || row.PriceEA == nil {
 			t.Fatalf("prices[1002][%d] has nil PackSize/PriceEA: %+v", i, row)
 		}
-		assertFloatEqual(t, fmt.Sprintf("prices[1002][%d].PackSize", i), *row.PackSize, wantPackSize[i])
-		assertFloatEqual(t, fmt.Sprintf("prices[1002][%d].PriceEA", i), *row.PriceEA, wantPriceEA[i])
+		assertFloatEqual(t, fmt.Sprintf("prices[1002][%d].PackSize", i), row.PackSize.InexactFloat64(), wantPackSize[i])
+		assertFloatEqual(t, fmt.Sprintf("prices[1002][%d].PriceEA", i), row.PriceEA.InexactFloat64(), wantPriceEA[i])
 	}
 }
 
@@ -356,7 +356,7 @@ func TestIntegration_SupplierPartCreate_Fields(t *testing.T) {
 	if lk.MinIncrement == nil {
 		t.Errorf("MinIncrement = nil, want 2.5")
 	} else {
-		assertFloatEqual(t, "MinIncrement", *lk.MinIncrement, 2.5)
+		assertFloatEqual(t, "MinIncrement", lk.MinIncrement.InexactFloat64(), 2.5)
 	}
 	if lk.UnitID == nil || *lk.UnitID != 2 || lk.PurchaseUnitAbbr != "PC" || !lk.PurchaseUnitIsExplicit {
 		t.Errorf("unit = %v %q explicit=%v, want 2 PC true", lk.UnitID, lk.PurchaseUnitAbbr, lk.PurchaseUnitIsExplicit)

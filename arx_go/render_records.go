@@ -54,6 +54,7 @@ func (h *Handler) renderPrintRecords(w http.ResponseWriter, page string, data an
 // recordsTemplateFuncs returns the template function map for Test Records views.
 func recordsTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"printf":       templatePrintf,
 		"localTimePtr": localTimePtr,
 		"formatDate":   recordsFormatDate,
 		"formatDateInput": func(t *time.Time) string {

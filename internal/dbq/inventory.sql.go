@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const addPartStock = `-- name: AddPartStock :exec
@@ -16,7 +18,7 @@ UPDATE part SET stock_on_hand = stock_on_hand + $1 WHERE id = $2
 `
 
 type AddPartStockParams struct {
-	Qty float64
+	Qty decimal.Decimal
 	ID  int
 }
 
@@ -137,7 +139,7 @@ RETURNING id
 
 type CreateBuildParams struct {
 	PartID    int
-	Qty       float64
+	Qty       decimal.Decimal
 	BuildDate time.Time
 	Username  string
 	Note      sql.NullString
@@ -164,7 +166,7 @@ VALUES ($1, $2, $3)
 type CreateGenealogyEdgeParams struct {
 	ParentLotID *int
 	ChildLotID  *int
-	QtyConsumed float64
+	QtyConsumed decimal.Decimal
 }
 
 // Lot→lot edge; unit endpoints are written by the record/unit flows.
@@ -184,7 +186,7 @@ VALUES ($1, $2, $3, $4, $5,
 type CreateInventoryTxnParams struct {
 	PartID    int
 	TxnType   string
-	Qty       float64
+	Qty       decimal.Decimal
 	TxnDate   time.Time
 	Username  string
 	Reference sql.NullString
@@ -196,7 +198,6 @@ type CreateInventoryTxnParams struct {
 
 // Inventory domain (#190, #222): the stock ledger, lots, builds, units and genealogy. sqlc
 // generates internal/dbq/inventory.sql.go from this file; the service is inventory.go.
-// Quantities stay float64 (#193 decimal type not landed).
 // ── Ledger ─────────────────────────────────────────────────────────────────────
 func (q *Queries) CreateInventoryTxn(ctx context.Context, arg CreateInventoryTxnParams) error {
 	_, err := q.db.ExecContext(ctx, createInventoryTxn,
@@ -276,7 +277,7 @@ SELECT id, qty, build_date FROM build WHERE id = $1
 
 type GetBuildRow struct {
 	ID        int
-	Qty       float64
+	Qty       decimal.Decimal
 	BuildDate time.Time
 }
 
@@ -459,8 +460,8 @@ type ListBuildComponentsRow struct {
 	PartNumber      string
 	Description     string
 	Category        string
-	Qty             float64
-	StockOnHand     float64
+	Qty             decimal.Decimal
+	StockOnHand     decimal.Decimal
 	TrackingMode    string
 }
 
@@ -503,7 +504,7 @@ FROM build b WHERE b.part_id = $1 ORDER BY b.build_date DESC, b.id DESC
 
 type ListBuildHistoryRow struct {
 	ID          int
-	Qty         float64
+	Qty         decimal.Decimal
 	BuildDate   time.Time
 	Username    string
 	Note        string
@@ -552,7 +553,7 @@ ORDER BY b.component_part_id, b.line_number
 type ListBuildLinesRow struct {
 	ComponentPartID int
 	PartNumber      string
-	Qty             float64
+	Qty             decimal.Decimal
 	Category        string
 	TrackingMode    string
 }
@@ -658,7 +659,7 @@ SELECT id, qty, build_date FROM build WHERE part_id = $1 ORDER BY build_date DES
 
 type ListPartBuildsRow struct {
 	ID        int
-	Qty       float64
+	Qty       decimal.Decimal
 	BuildDate time.Time
 }
 
@@ -697,7 +698,7 @@ WHERE it.part_id = $1 ORDER BY it.txn_date ASC, it.id ASC
 
 type ListPartLedgerRow struct {
 	TxnType   string
-	Qty       float64
+	Qty       decimal.Decimal
 	TxnDate   time.Time
 	Username  string
 	Reference string
@@ -901,7 +902,7 @@ type ListTraceAncestorsRow struct {
 	PartID          int
 	PartNumber      string
 	PartDescription string
-	Qty             float64
+	Qty             decimal.Decimal
 }
 
 // ── Genealogy trace ────────────────────────────────────────────────────────────
@@ -978,7 +979,7 @@ type ListTraceDescendantsRow struct {
 	PartID          int
 	PartNumber      string
 	PartDescription string
-	Qty             float64
+	Qty             decimal.Decimal
 }
 
 func (q *Queries) ListTraceDescendants(ctx context.Context, arg ListTraceDescendantsParams) ([]ListTraceDescendantsRow, error) {

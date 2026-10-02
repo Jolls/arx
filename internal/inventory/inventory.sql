@@ -1,6 +1,5 @@
 -- Inventory domain (#190, #222): the stock ledger, lots, builds, units and genealogy. sqlc
 -- generates internal/dbq/inventory.sql.go from this file; the service is inventory.go.
--- Quantities stay float64 (#193 decimal type not landed).
 
 -- ── Ledger ─────────────────────────────────────────────────────────────────────
 

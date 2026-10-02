@@ -201,7 +201,6 @@ func TestIntegration_POReads_FetchPO(t *testing.T) {
 		t.Errorf("DateModified = %v", got.DateModified)
 	}
 	got.DateOrdered, got.DateRequested, got.DateClosed, got.DatePrinted, got.DateModified = nil, nil, nil, nil, nil
-	fl := func(v float64) *float64 { return &v }
 	in := func(v int) *int { return &v }
 	want := models.PurchaseOrder{ID: f.FullID, Number: f.Full, Status: "partially_received", ApprovalStatus: "approved",
 		IsActive: true, Orderer: "Olive Orderer", AccountID: "ACCT-9",
@@ -211,9 +210,9 @@ func TestIntegration_POReads_FetchPO(t *testing.T) {
 		ReceiverID: in(f.Co), ReceiverName: "Recv Co", ReceiverContact: "Rae Recv", ReceiverContactID: in(f.ConD),
 		ReceiverEmail: "r@example.com", ReceiverAddress: "4 Recv Rd", ReceiverCity: "Recvton", ReceiverState: "RS",
 		ReceiverZipcode: "44444", ReceiverCountry: "Ruritania", ReceiverPhone: "555-0601", ReceiverFax: "555-0602",
-		Tax1: fl(1.25), ShippingCost: fl(2.5), MiscCost: fl(3.75), TotalCost: fl(123.456),
+		Tax1: dp(1.25), ShippingCost: dp(2.5), MiscCost: dp(3.75), TotalCost: dp(123.456),
 		Notes: "print notes", InternalNotes: "internal notes"}
-	if !reflect.DeepEqual(got, want) {
+	if !deepEqualDec(got, want) {
 		t.Errorf("full PO =\n%+v\nwant\n%+v", got, want)
 	}
 
@@ -252,18 +251,18 @@ func TestIntegration_POReads_FetchPOItems(t *testing.T) {
 	in := func(v int) *int { return &v }
 	att := &models.Attachment{ID: f.Att, FileName: `LOCAL:itest\pr-dwg.pdf`, Category: "Drawing"}
 	want := []models.PurchaseOrderLine{
-		{ID: f.Lines[0], LineNumber: 1, PartNumberSnapshot: f.PN1, RevisionSnapshot: "C", Description: "first", Qty: 10, UnitCost: 2.5,
-			VendorPN: "SPN-1", PartID: in(f.P1), LeadTimeDays: in(7), ReceivedQty: 4, IsLotTracked: true, PrimaryAtt: att},
-		{ID: f.Lines[1], LineNumber: 2, PartNumberSnapshot: f.PN1, RevisionSnapshot: "C", Description: "second", Qty: 5, UnitCost: 2.5,
+		{ID: f.Lines[0], LineNumber: 1, PartNumberSnapshot: f.PN1, RevisionSnapshot: "C", Description: "first", Qty: d(10), UnitCost: d(2.5),
+			VendorPN: "SPN-1", PartID: in(f.P1), LeadTimeDays: in(7), ReceivedQty: d(4), IsLotTracked: true, PrimaryAtt: att},
+		{ID: f.Lines[1], LineNumber: 2, PartNumberSnapshot: f.PN1, RevisionSnapshot: "C", Description: "second", Qty: d(5), UnitCost: d(2.5),
 			VendorPN: "SPN-NEW", PartID: in(f.P1), IsLotTracked: true, PrimaryAtt: att},
-		{ID: f.Lines[2], LineNumber: 3, PartNumberSnapshot: f.PN2, Qty: 1, UnitCost: 4, PartID: in(f.P2)},
-		{ID: f.Lines[3], LineNumber: 4, Description: "freeform", Qty: 2, UnitCost: 9, VendorPN: "FREE-V"},
-		{ID: f.Lines[4], LineNumber: 5, PartNumberSnapshot: f.PN2, Description: "zero", Qty: 3, PartID: in(f.P2)},
-		{ID: f.Lines[5], LineNumber: 6, PartNumberSnapshot: f.PN1, RevisionSnapshot: "C", Description: "dup", Qty: 5, UnitCost: 2.5,
+		{ID: f.Lines[2], LineNumber: 3, PartNumberSnapshot: f.PN2, Qty: d(1), UnitCost: d(4), PartID: in(f.P2)},
+		{ID: f.Lines[3], LineNumber: 4, Description: "freeform", Qty: d(2), UnitCost: d(9), VendorPN: "FREE-V"},
+		{ID: f.Lines[4], LineNumber: 5, PartNumberSnapshot: f.PN2, Description: "zero", Qty: d(3), PartID: in(f.P2)},
+		{ID: f.Lines[5], LineNumber: 6, PartNumberSnapshot: f.PN1, RevisionSnapshot: "C", Description: "dup", Qty: d(5), UnitCost: d(2.5),
 			PartID: in(f.P1), IsLotTracked: true, PrimaryAtt: att},
 	}
 	for i := range want {
-		if !reflect.DeepEqual(items[i], want[i]) {
+		if !deepEqualDec(items[i], want[i]) {
 			t.Errorf("line %d =\n%+v\nwant\n%+v", i+1, items[i], want[i])
 		}
 	}
@@ -284,11 +283,11 @@ func TestIntegration_POReads_ReceiptsAndHistory(t *testing.T) {
 
 	p1 := f.P1
 	wantR := []POReceiptView{
-		{Date: "2026-02-10", PartID: &p1, PartNumber: f.PN1, Qty: 2, Username: "bob"},
-		{Date: "2026-02-10", PartID: &p1, PartNumber: f.PN1, Qty: 1, Username: ""},
-		{Date: "2026-02-05", PartID: &p1, PartNumber: f.PN1, Qty: 3, Username: "alice"},
+		{Date: "2026-02-10", PartID: &p1, PartNumber: f.PN1, Qty: d(2), Username: "bob"},
+		{Date: "2026-02-10", PartID: &p1, PartNumber: f.PN1, Qty: d(1), Username: ""},
+		{Date: "2026-02-05", PartID: &p1, PartNumber: f.PN1, Qty: d(3), Username: "alice"},
 	}
-	if got := h.fetchPOReceipts(req, f.FullID); !reflect.DeepEqual(got, wantR) {
+	if got := h.fetchPOReceipts(req, f.FullID); !deepEqualDec(got, wantR) {
 		t.Errorf("receipts =\n%+v\nwant\n%+v", got, wantR)
 	}
 	if got := h.fetchPOReceipts(req, f.BareID); len(got) != 0 {
@@ -334,17 +333,16 @@ func TestIntegration_POReads_Suggestions(t *testing.T) {
 	}
 
 	prices := h.fetchSuggestPrices(req, f.Full) // no ORDER BY: compare as a set
-	got := map[SuggestPrice]bool{}
+	got := map[string]bool{}
 	for i, p := range prices {
 		if p.Index != i {
 			t.Errorf("price %d has Index %d", i, p.Index)
 		}
-		p.Index = 0
-		got[p] = true
+		got[fmt.Sprintf("%d %s %s %s", p.PartID, p.PartNumber, p.Cost, p.PackSize)] = true
 	}
-	wantP := map[SuggestPrice]bool{
-		{PartID: f.P1, PartNumber: f.PN1, Cost: 2.5, PackSize: 5}: true,
-		{PartID: f.P2, PartNumber: f.PN2, Cost: 4, PackSize: 1}:   true,
+	wantP := map[string]bool{
+		fmt.Sprintf("%d %s %s %s", f.P1, f.PN1, d(2.5), d(5)): true,
+		fmt.Sprintf("%d %s %s %s", f.P2, f.PN2, d(4), d(1)):   true,
 	}
 	if len(prices) != len(wantP) || !reflect.DeepEqual(got, wantP) {
 		t.Errorf("prices = %+v, want %v", prices, wantP)

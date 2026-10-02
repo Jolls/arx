@@ -98,7 +98,7 @@ func TestIntegration_ReportsDateRangeBounds(t *testing.T) {
 		}
 		for _, r := range rows {
 			if r.SupplierName == name {
-				return r.TotalSpend, true
+				return r.TotalSpend.InexactFloat64(), true
 			}
 		}
 		return 0, false
@@ -148,7 +148,7 @@ func TestIntegration_ReportsDateRangeBounds(t *testing.T) {
 		var raw1001 float64
 		for _, r := range rows {
 			if r.PartNumber == "RAW-1001" {
-				raw1001 = r.TotalSpend
+				raw1001 = r.TotalSpend.InexactFloat64()
 			}
 			if r.PartNumber == "RAW-1002" {
 				t.Errorf("RAW-1002 (ordered 2026-04-01) must be outside the range: %+v", r)

@@ -7,6 +7,7 @@ import (
 
 	"arx/internal/inventory"
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 )
 
 // recordInventoryTxn appends one row to the inventory ledger and updates the
@@ -17,7 +18,7 @@ import (
 // output lot produced by a build receipt — and is nil for non-lot-tracked parts.
 // buildID (#677) is the build that wrote this row (component issue / output receipt),
 // nil for movements not driven by a build.
-func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, txnType string, qty float64, txnDate time.Time, reference, note string, poLineID, lotID, buildID *int) error {
+func (h *Handler) recordInventoryTxn(r *http.Request, tx *txLogger, partID int, txnType string, qty decimal.Decimal, txnDate time.Time, reference, note string, poLineID, lotID, buildID *int) error {
 	return inventory.New(tx).RecordTxn(r.Context(), inventory.Txn{
 		PartID: partID, Type: txnType, Qty: qty, Date: txnDate, Username: h.actorName(r),
 		Reference: reference, Note: note, POLineID: poLineID, LotID: lotID, BuildID: buildID,
@@ -30,23 +31,23 @@ func (h *Handler) inventory() *inventory.Service { return inventory.New(handlerD
 // on-hand balance as of that transaction.
 type InventoryTxnView struct {
 	Type      string
-	Qty       float64
+	Qty       decimal.Decimal
 	Date      string
 	Username  string
 	Reference string
 	Note      string
 	LotID     int
 	LotNumber string
-	Balance   float64
+	Balance   decimal.Decimal
 }
 
 // ledgerWithBalances takes ledger rows oldest-first, fills each row's running
 // on-hand Balance (accumulated oldest→newest), and returns them newest-first for
 // display. Pure function so the balance math is unit-testable.
 func ledgerWithBalances(asc []InventoryTxnView) []InventoryTxnView {
-	var balance float64
+	var balance decimal.Decimal
 	for i := range asc {
-		balance += asc[i].Qty
+		balance = balance.Add(asc[i].Qty)
 		asc[i].Balance = balance
 	}
 	out := make([]InventoryTxnView, len(asc))
@@ -107,8 +108,8 @@ func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
-	qty, err := strconv.ParseFloat(fv(r, "qty"), 64)
-	if err != nil || qty == 0 {
+	qty, err := parseDecimal(fv(r, "qty"))
+	if err != nil || qty.IsZero() {
 		h.renderError(w, r, "Enter a non-zero quantity (use a negative value to remove stock).")
 		return
 	}

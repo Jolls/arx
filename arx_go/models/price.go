@@ -1,14 +1,18 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 type Price struct {
 	ID            int
 	PartID        int
 	SupplierID    *int
-	PriceEA       *float64
-	PricePack     *float64
-	PackSize      *float64
+	PriceEA       *decimal.Decimal
+	PricePack     *decimal.Decimal
+	PackSize      *decimal.Decimal
 	IsActive      bool
 	EffectiveDate *time.Time
 	// joined

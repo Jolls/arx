@@ -20,6 +20,8 @@ import (
 
 	"arx/internal/db"
 	"arx/internal/dbq"
+
+	"github.com/shopspring/decimal"
 )
 
 // Category is a part_category row: a code, a display label, the Purchased
@@ -63,7 +65,7 @@ type SupplierPart struct {
 	SupplierPN   string
 	SupplierDesc string
 	LeadTime     string
-	MinIncrement *float64
+	MinIncrement *decimal.Decimal
 	UnitID       *int
 	// joined
 	SupplierName string
@@ -75,9 +77,9 @@ type SupplierPart struct {
 // Price is an active price row of a part.
 type Price struct {
 	SupplierID    int
-	PriceEA       *float64
-	PricePack     *float64
-	PackSize      *float64
+	PriceEA       *decimal.Decimal
+	PricePack     *decimal.Decimal
+	PackSize      *decimal.Decimal
 	EffectiveDate *time.Time
 }
 
@@ -85,9 +87,9 @@ type Price struct {
 type PartPrice struct {
 	ID            int
 	SupplierID    int
-	PriceEA       *float64
-	PricePack     *float64
-	PackSize      *float64
+	PriceEA       *decimal.Decimal
+	PricePack     *decimal.Decimal
+	PackSize      *decimal.Decimal
 	IsActive      bool
 	EffectiveDate *time.Time
 	// joined
@@ -97,13 +99,13 @@ type PartPrice struct {
 // BOMComponent is one bom line below a parent, with the component's part data.
 type BOMComponent struct {
 	ID          int
-	Qty         float64
+	Qty         decimal.Decimal
 	PartNumber  string
 	Description string
 	Revision    string
 	Category    string
-	Stock       float64
-	ReorderMin  *float64
+	Stock       decimal.Decimal
+	ReorderMin  *decimal.Decimal
 	SupplierID  *int
 	HasBOM      bool
 }
@@ -135,7 +137,7 @@ type PartBasic struct {
 	Category            string
 	HasBOM              bool
 	PrimaryAttachmentID *int
-	StockOnHand         float64
+	StockOnHand         decimal.Decimal
 	TrackingMode        string
 	ThumbFile           string
 }
@@ -158,15 +160,15 @@ type Part struct {
 	CreatedDate         *time.Time
 	ModifiedDate        *time.Time
 	PrimaryAttachmentID *int
-	CurrentCost         float64
-	LastRollupCost      float64
+	CurrentCost         decimal.Decimal
+	LastRollupCost      decimal.Decimal
 	LastRollupAt        *time.Time
 	AttachmentCount     int
 	POLineCount         int
 	UnitID              *int
 	UnitAbbr            string
-	StockOnHand         float64
-	ReorderMin          *float64
+	StockOnHand         decimal.Decimal
+	ReorderMin          *decimal.Decimal
 	TrackingMode        string
 	UserField1          string
 	UserField2          string
@@ -187,15 +189,15 @@ type Part struct {
 type BOMLine struct {
 	ID              int
 	LineNumber      int
-	Qty             float64
+	Qty             decimal.Decimal
 	ComponentPartID int
 	PartNumber      string
 	Description     string
 	Revision        string
 	Category        string
-	CurrentCost     float64
-	LastRollupCost  float64
-	PreferredPrice  float64
+	CurrentCost     decimal.Decimal
+	LastRollupCost  decimal.Decimal
+	PreferredPrice  decimal.Decimal
 	HasBOM          bool
 	AttachmentCount int
 	POLineCount     int
@@ -205,9 +207,9 @@ type BOMLine struct {
 // the cost inputs of the component part.
 type BOMTreeEdge struct {
 	ComponentID    int
-	Qty            float64
-	CurrentCost    float64
-	PreferredPrice float64
+	Qty            decimal.Decimal
+	CurrentCost    decimal.Decimal
+	PreferredPrice decimal.Decimal
 	HasBOM         bool
 }
 
@@ -215,7 +217,7 @@ type BOMTreeEdge struct {
 type BOMEdge struct {
 	ID              int
 	LineNumber      int
-	Qty             float64
+	Qty             decimal.Decimal
 	ComponentPartID int
 	PartNumber      string
 	Description     string
@@ -224,7 +226,7 @@ type BOMEdge struct {
 // WhereUsed is a bom line that uses a part, plus its parent's part data.
 type WhereUsed struct {
 	LineNumber   int
-	Qty          float64
+	Qty          decimal.Decimal
 	ParentPartID int
 	PartNumber   string
 	Description  string
@@ -251,8 +253,8 @@ type BuildCostPart struct {
 type PriceTier struct {
 	PartID     int
 	SupplierID int
-	PriceEA    float64
-	PackSize   float64
+	PriceEA    decimal.Decimal
+	PackSize   decimal.Decimal
 }
 
 type Service struct{ q *dbq.Queries }
@@ -468,7 +470,7 @@ func (s *Service) ActivePricesBySupplier(ctx context.Context, partID int) (map[i
 
 // ImportPrice inserts an active price break dated effectiveDate (YYYY-MM-DD).
 // It reports false, without error, when the pack size already has an active price.
-func (s *Service) ImportPrice(ctx context.Context, partID, supplierID int, packSize, priceEA, pricePack float64, effectiveDate string) (bool, error) {
+func (s *Service) ImportPrice(ctx context.Context, partID, supplierID int, packSize, priceEA, pricePack decimal.Decimal, effectiveDate string) (bool, error) {
 	n, err := s.q.ImportPrice(ctx, dbq.ImportPriceParams{
 		PartID: partID, SupplierID: supplierID, PackSize: packSize,
 		PriceEa: priceEA, PricePack: pricePack, EffectiveDate: effectiveDate,
@@ -667,7 +669,7 @@ func (s *Service) ListWhereUsed(ctx context.Context, partID int) ([]WhereUsed, e
 }
 
 // GetPartRollup returns a part's last rollup cost (0 when never run) and time.
-func (s *Service) GetPartRollup(ctx context.Context, id int) (float64, *time.Time, error) {
+func (s *Service) GetPartRollup(ctx context.Context, id int) (decimal.Decimal, *time.Time, error) {
 	r, err := s.q.GetPartRollup(ctx, id)
 	return r.LastRollupCost, r.LastRollupAt, err
 }
@@ -734,7 +736,7 @@ func (s *Service) SetDefaultSupplier(ctx context.Context, partID, supplierID int
 }
 
 // CreatePrice inserts an active price dated effectiveDate (YYYY-MM-DD).
-func (s *Service) CreatePrice(ctx context.Context, partID, supplierID int, packSize, priceEA, pricePack *float64, effectiveDate string) error {
+func (s *Service) CreatePrice(ctx context.Context, partID, supplierID int, packSize, priceEA, pricePack *decimal.Decimal, effectiveDate string) error {
 	return s.q.CreatePrice(ctx, dbq.CreatePriceParams{PartID: partID, SupplierID: supplierID,
 		PackSize: packSize, PriceEa: priceEA, PricePack: pricePack, EffectiveDate: effectiveDate})
 }
@@ -750,7 +752,7 @@ func (s *Service) DeleteInactivePrice(ctx context.Context, id, partID int) error
 }
 
 // SetPartRollups stores each part's rolled-up cost, all stamped with the same now.
-func (s *Service) SetPartRollups(ctx context.Context, costs map[int]float64) error {
+func (s *Service) SetPartRollups(ctx context.Context, costs map[int]decimal.Decimal) error {
 	if len(costs) == 0 {
 		return nil
 	}
@@ -758,7 +760,7 @@ func (s *Service) SetPartRollups(ctx context.Context, costs map[int]float64) err
 	vals := make([]string, 0, len(costs))
 	for id, cost := range costs {
 		ids = append(ids, id)
-		vals = append(vals, strconv.FormatFloat(cost, 'f', -1, 64))
+		vals = append(vals, cost.String())
 	}
 	return s.q.SetPartRollups(ctx, dbq.SetPartRollupsParams{Ids: idList(ids), Costs: strings.Join(vals, ",")})
 }
@@ -810,8 +812,8 @@ type PartOrder struct {
 	DateClosed   *time.Time
 	Status       string
 	LineNumber   int
-	Qty          float64
-	UnitCost     float64
+	Qty          decimal.Decimal
+	UnitCost     decimal.Decimal
 	Description  string
 	VendorPN     string
 }
@@ -836,8 +838,8 @@ type RecentPO struct {
 	SupplierName string
 	Status       string
 	DateOrdered  *time.Time
-	Qty          float64
-	UnitCost     float64
+	Qty          decimal.Decimal
+	UnitCost     decimal.Decimal
 }
 
 // ListRecentPOs returns a part's n newest PO lines (undated first).
@@ -857,7 +859,7 @@ func (s *Service) ListRecentPOs(ctx context.Context, partID, n int) ([]RecentPO,
 // InventoryTxn is an inventory movement of a part.
 type InventoryTxn struct {
 	Type string
-	Qty  float64
+	Qty  decimal.Decimal
 	Date time.Time
 }
 
@@ -894,7 +896,7 @@ func (s *Service) GetPreferredSupplier(ctx context.Context, partID int) (Preferr
 
 // PreferredSupplierPrice returns the cheapest active price_ea from a part's
 // preferred supplier, nil when there is none.
-func (s *Service) PreferredSupplierPrice(ctx context.Context, partID int) (*float64, error) {
+func (s *Service) PreferredSupplierPrice(ctx context.Context, partID int) (*decimal.Decimal, error) {
 	p, err := s.q.PreferredSupplierMinPrice(ctx, partID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -914,7 +916,7 @@ func (s *Service) LinkSupplierPN(ctx context.Context, partID, supplierID int, pn
 }
 
 // DeactivatePrices deactivates partID's active supplierID prices at packSize.
-func (s *Service) DeactivatePrices(ctx context.Context, partID, supplierID int, packSize float64) error {
+func (s *Service) DeactivatePrices(ctx context.Context, partID, supplierID int, packSize decimal.Decimal) error {
 	return s.q.DeactivatePrices(ctx, dbq.DeactivatePricesParams{PartID: partID, SupplierID: supplierID, PackSize: packSize})
 }
 
@@ -923,7 +925,7 @@ type POPricePoint struct {
 	PONumber     string
 	SupplierName string
 	DateOrdered  time.Time
-	UnitCost     float64
+	UnitCost     decimal.Decimal
 }
 
 // ListPOPricePoints returns a part's dated PO lines, oldest first.
@@ -943,8 +945,8 @@ func (s *Service) ListPOPricePoints(ctx context.Context, partID int) ([]POPriceP
 type PriceListPoint struct {
 	SupplierName  string
 	EffectiveDate time.Time
-	PriceEA       float64
-	PackSize      *float64
+	PriceEA       decimal.Decimal
+	PackSize      *decimal.Decimal
 }
 
 // ListPriceListPoints returns a part's dated active prices, oldest first,
@@ -992,8 +994,8 @@ func (s *Service) SearchParts(ctx context.Context, q string, byDesc bool, n int)
 // minimum order increment, and its smallest-pack active unit price.
 type SupplierPartDefaults struct {
 	SupplierPN   string
-	MinIncrement *float64
-	PriceEA      *float64
+	MinIncrement *decimal.Decimal
+	PriceEA      *decimal.Decimal
 }
 
 // GetSupplierPartDefaults returns a (part, supplier) pair's PO-line defaults;
