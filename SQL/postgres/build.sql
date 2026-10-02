@@ -15,7 +15,7 @@ CREATE TABLE build (
   part_id        INTEGER       NOT NULL,                          -- FK to part.id (output/parent part built).
   output_lot_id  INTEGER       NULL,                              -- Produced lot; wired to lot table in a later PR (#568).
   qty            NUMERIC(15,5) NOT NULL DEFAULT 1,                -- Number of output parts built.
-  build_date     DATE          NOT NULL DEFAULT CURRENT_DATE,
+  build_date     DATE          NOT NULL,                          -- User's local day, supplied by the app (#265, #279).
   username       VARCHAR(128)  NOT NULL DEFAULT '',               -- App user login handle.
   note           TEXT,                                            -- Optional free-text comment.
   created_at     TIMESTAMPTZ   NOT NULL DEFAULT now()

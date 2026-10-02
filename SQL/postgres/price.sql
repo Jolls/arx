@@ -12,7 +12,7 @@ CREATE TABLE price (
   price_pack     NUMERIC(13,6)  DEFAULT 0,   -- Total price for pack_size units.
   pack_size      NUMERIC(13,6)  DEFAULT 1,   -- Units per pack.
   is_active      BOOLEAN        DEFAULT TRUE,
-  effective_date DATE           DEFAULT CURRENT_DATE
+  effective_date DATE           NULL         -- User's local day, supplied by the app (#265, #279).
 );
 
 ALTER TABLE price ADD CONSTRAINT FK_price_PN       FOREIGN KEY (part_id)     REFERENCES part (id);

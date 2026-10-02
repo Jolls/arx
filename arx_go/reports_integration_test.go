@@ -56,7 +56,8 @@ func repCompany(t *testing.T, h *Handler) (int, string) {
 func repPart(t *testing.T, h *Handler, category string) (int, string) {
 	t.Helper()
 	pn := smokeUniq("RPT-P")
-	id := repInsert(t, h, `INSERT INTO part (part_number, description, revision, category) VALUES ($1,'rpt desc','A',$2) RETURNING id`,
+	// modified_date has no column default (#279); the recent-activity feed lists parts that have one.
+	id := repInsert(t, h, `INSERT INTO part (part_number, description, revision, category, modified_date) VALUES ($1,'rpt desc','A',$2,CURRENT_DATE) RETURNING id`,
 		[]any{pn, category},
 		`UPDATE part SET primary_attachment_id=NULL WHERE id=$1`,
 		`DELETE FROM part_attachment WHERE part_id=$1`,

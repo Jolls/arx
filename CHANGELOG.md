@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.56] - 2026-10-02
+### Changed
+- `build.build_date`, `inventory_transaction.txn_date`, `part.created_date`/`modified_date` and `price.effective_date` no longer default to the database's `CURRENT_DATE` (migration `20261002151500_279_drop_date_defaults`, no rows change); the app already supplies the user's local day. `SCHEMA.md` records which pre-go-live timestamps and dates are not corrected ([#279](https://github.com/Jolls/arx/issues/279))
+
+### Fixed
+- The test report's Result Date column now shows the time in the viewing user's timezone instead of the server's ([#279](https://github.com/Jolls/arx/issues/279))
+
 ## [0.8.55] - 2026-10-02
 ### Changed
 - Seed data: every seeded PO lifecycle state (rejected/reset, partially received, closed, cancelled, RFQ) now has a purchase_order_history trail ([#312](https://github.com/Jolls/arx/issues/312))

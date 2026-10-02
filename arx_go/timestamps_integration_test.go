@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,7 +13,9 @@ import (
 
 // auditTimestampColumns is every audit/event column #192 moves to a
 // DB-assigned timestamptz, with whether it is NOT NULL and whether it carries a
-// now() default (part.last_rollup_at is NULL until a rollup runs).
+// now() default (part.last_rollup_at is NULL until a rollup runs). schema_migrations.tstamp
+// is not listed: the ledger belongs to the DDL login and the app login can't see it in
+// information_schema (check it with `migrate status`).
 var auditTimestampColumns = []struct {
 	table, column string
 	notNull       bool
@@ -37,10 +40,21 @@ var auditTimestampColumns = []struct {
 	{"purchase_order_history", "changed_at", true, true},
 	{"record_events", "event_date", true, true},
 	{"result", "updated_at", false, true},
-	{"schema_migrations", "tstamp", false, true},
 	{"unit", "created_at", true, true},
 	{"users", "created_at", true, true},
 	{"users", "updated_at", true, true},
+}
+
+// columnInfo returns a column's data type, default expression ("" if none) and is_nullable.
+func columnInfo(t *testing.T, h *Handler, table, column string) (dataType, def, nullable string) {
+	t.Helper()
+	if err := h.queryRowContext(context.Background(),
+		`SELECT data_type, COALESCE(column_default,''), is_nullable FROM information_schema.columns
+		 WHERE table_schema = current_schema() AND table_name=$1 AND column_name=$2`, table, column,
+	).Scan(&dataType, &def, &nullable); err != nil {
+		t.Fatalf("%s.%s: %v", table, column, err)
+	}
+	return
 }
 
 // TestIntegration_AuditColumnsAreTimestamptz pins the #192 column types; the
@@ -48,20 +62,9 @@ var auditTimestampColumns = []struct {
 func TestIntegration_AuditColumnsAreTimestamptz(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
-	ctx := context.Background()
 
-	colInfo := func(table, column string) (dataType, def, nullable string) {
-		t.Helper()
-		if err := h.queryRowContext(ctx,
-			`SELECT data_type, COALESCE(column_default,''), is_nullable FROM information_schema.columns
-			 WHERE table_schema = current_schema() AND table_name=$1 AND column_name=$2`, table, column,
-		).Scan(&dataType, &def, &nullable); err != nil {
-			t.Fatalf("%s.%s: %v", table, column, err)
-		}
-		return
-	}
 	for _, c := range auditTimestampColumns {
-		dataType, def, nullable := colInfo(c.table, c.column)
+		dataType, def, nullable := columnInfo(t, h, c.table, c.column)
 		if dataType != "timestamp with time zone" {
 			t.Errorf("%s.%s type = %q, want timestamp with time zone", c.table, c.column, dataType)
 		}
@@ -72,7 +75,7 @@ func TestIntegration_AuditColumnsAreTimestamptz(t *testing.T) {
 			t.Errorf("%s.%s is_nullable = %s, want %s", c.table, c.column, nullable, wantNullable)
 		}
 	}
-	if dataType, _, _ := colInfo("form_record", "record_date"); dataType != "timestamp without time zone" {
+	if dataType, _, _ := columnInfo(t, h, "form_record", "record_date"); dataType != "timestamp without time zone" {
 		t.Errorf("form_record.record_date type = %q, want timestamp without time zone", dataType)
 	}
 }
@@ -157,4 +160,60 @@ func TestIntegration_AuditTimestampsAreDBAssigned(t *testing.T) {
 		}
 		return []time.Time{changed, modified}
 	})
+}
+
+// TestIntegration_DateOnlyColumnsHaveNoDefault: the date-only business columns have no
+// DEFAULT CURRENT_DATE, which would record the DB-zone day instead of the user's local
+// day; every writer supplies the date explicitly (#279, #265).
+func TestIntegration_DateOnlyColumnsHaveNoDefault(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	for _, c := range []struct{ table, column string }{
+		{"build", "build_date"}, {"inventory_transaction", "txn_date"},
+		{"part", "created_date"}, {"part", "modified_date"}, {"price", "effective_date"},
+	} {
+		if _, def, _ := columnInfo(t, h, c.table, c.column); def != "" {
+			t.Errorf("%s.%s default = %q, want none", c.table, c.column, def)
+		}
+	}
+}
+
+// TestIntegration_TestReportRowsResultDateUsesUserZone: the report's resultDate shows
+// result.updated_at (a timestamptz that pgx scans in the server's zone) in the viewing
+// user's zone (#279). Report row ids are record ids; seeded records 7001-7003 (form 6001) have
+// results pinned to 2020-01-01T00:00:00Z.
+func TestIntegration_TestReportRowsResultDateUsesUserZone(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	for _, c := range []struct{ tz, want string }{
+		{"UTC", "2020-01-01 00:00"},
+		{"America/Los_Angeles", "2019-12-31 16:00"},
+	} {
+		req := userCtxTZ(withIDAndTestID(httptest.NewRequest(http.MethodGet, "/x", nil), 6001, 6102), c.tz)
+		rec := httptest.NewRecorder()
+		h.TestReportRows(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d: %s", c.tz, rec.Code, rec.Body.String())
+		}
+		var rows []struct {
+			ID         int    `json:"id"`
+			ResultDate string `json:"resultDate"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+			t.Fatal(err)
+		}
+		seen := 0
+		for _, r := range rows {
+			if r.ID < 7001 || r.ID > 7003 {
+				continue
+			}
+			seen++
+			if r.ResultDate != c.want {
+				t.Errorf("%s: result %d resultDate = %q, want %q", c.tz, r.ID, r.ResultDate, c.want)
+			}
+		}
+		if seen == 0 {
+			t.Errorf("%s: no seeded results in report rows: %s", c.tz, rec.Body.String())
+		}
+	}
 }

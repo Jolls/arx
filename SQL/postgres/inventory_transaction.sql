@@ -10,7 +10,7 @@ CREATE TABLE inventory_transaction (
   part_id     INTEGER       NOT NULL,                                                    -- FK to part.id.
   txn_type    VARCHAR(20)   NOT NULL CONSTRAINT CK_inv_txn_type CHECK (txn_type IN ('receipt','issue','adjustment','count')),
   qty         NUMERIC(16,8) NOT NULL,                                                     -- Signed.
-  txn_date    DATE          NOT NULL DEFAULT CURRENT_DATE,
+  txn_date    DATE          NOT NULL,                                                    -- User's local day, supplied by the app (#265, #279).
   username    VARCHAR(128)  NOT NULL DEFAULT '',
   reference   VARCHAR(255),
   note        TEXT,
