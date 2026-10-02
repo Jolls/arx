@@ -4,6 +4,7 @@ services:
   dev:
     build:
       context: ../../.devcontainer
+    working_dir: /workspaces/arx
     command: sleep infinity
     volumes:
       - ../..:/workspaces/arx:cached
