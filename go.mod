@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/sessions v1.4.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
-	github.com/klippa-app/go-pdfium v1.21.0
+	github.com/klippa-app/go-pdfium v1.21.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/pressly/goose/v3 v3.28.0
 	golang.org/x/crypto v0.57.0
