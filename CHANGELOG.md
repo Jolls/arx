@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `SQL/postgres/compose.yml`: one-command throwaway local Postgres with schema and test seed on tmpfs, so the live integration suite runs in about a minute against a fresh DB instead of the remote ArxDev ([#300](https://github.com/Jolls/arx/issues/300), [#298](https://github.com/Jolls/arx/issues/298))
 
+## [0.8.47] - 2026-10-01
+### Removed
+- `TestStep` debug fields `ArchiveID`, `Revision`, `Category` and `SheetName` and their rows in the record-detail debug panel ([#293](https://github.com/Jolls/arx/issues/293))
+
 ## [0.8.46] - 2026-10-01
 ### Fixed
 - Date-only business dates (RFQ/PO dates, PO closed date, part and price effective dates, form "Today" defaults, dashboard month-to-date) now all use the user's local day instead of a mix of the server's and the database's; fixes `TestIntegration_RFQ_BOMConfirmCreatesQuotes` failing in the evening. Existing rows are not corrected ([#265](https://github.com/Jolls/arx/issues/265))
