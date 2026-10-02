@@ -549,6 +549,12 @@ func (s *Service) GetPOState(ctx context.Context, number string) (POState, error
 	return POState(r), err
 }
 
+// LockPOState is GetPOState that also locks the PO row for the rest of the transaction (#261).
+func (s *Service) LockPOState(ctx context.Context, number string) (POState, error) {
+	r, err := s.q.LockPOState(ctx, number)
+	return POState(r), err
+}
+
 // GetPONumber returns PO id's number; sql.ErrNoRows when there is none.
 func (s *Service) GetPONumber(ctx context.Context, id int) (string, error) {
 	return s.q.GetPONumber(ctx, id)
