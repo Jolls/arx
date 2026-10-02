@@ -6,7 +6,7 @@
 # Needs only docker (or podman); `podman compose` works in place of `docker compose`.
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     container_name: arx-test-db
     environment:
       POSTGRES_PASSWORD: postgres
