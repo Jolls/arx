@@ -18,20 +18,19 @@ On Linux you also need `libayatana-appindicator3-dev` (systray's cgo dependency)
 
 ## Local test database
 
-For manual testing without access to a shared `ArxDev`, run a throwaway Postgres 17 with the schema and test seed. The app always connects with `sslmode=require`, so the server needs a certificate; a self-signed one is fine. Replace `<password>` with one you choose (`podman` works in place of `docker`):
+For manual testing without access to a shared `ArxDev`, run a throwaway Postgres 17 with the schema and test seed. It needs only docker (`podman compose` works too), with no psql, bash or WSL on the host. The data lives on tmpfs, so stopping the container wipes it:
 
 ```
-docker run -d --name arx-pg -p 127.0.0.1:55432:5432 -e POSTGRES_PASSWORD=<password> -e POSTGRES_DB=ArxDev postgres:17 \
-  bash -c 'openssl req -new -x509 -days 30 -nodes -subj /CN=localhost -out /tmp/server.crt -keyout /tmp/server.key 2>/dev/null && chown postgres /tmp/server.* && chmod 600 /tmp/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key'
-until docker exec arx-pg pg_isready -h 127.0.0.1 -U postgres -d ArxDev; do sleep 1; done
-bash SQL/postgres/build_schema.sh | docker exec -i -e PGOPTIONS=--client-min-messages=warning arx-pg psql -U postgres -d ArxDev -q -v ON_ERROR_STOP=1
+docker compose -f SQL/postgres/compose.yml up -d --wait db   # returns once the seed has loaded
+docker compose -f SQL/postgres/compose.yml restart db        # reset to a fresh seed
+docker compose -f SQL/postgres/compose.yml down              # remove
 ```
 
-Then in Settings, turn on Test Mode, set DB Server to `127.0.0.1:55432` (the field takes `host:port`), Username to `postgres` and the password you chose, and save. The Test Connection fields can stay blank because they inherit these, and the test database name defaults to `ArxDev`. Log in as `admin`/`admin` or `tester`/`tester` (see [`SQL/SCHEMA.md`](SQL/SCHEMA.md)). The same database works for the integration tests below. Remove it with `docker rm -f arx-pg`.
+Then in Settings, turn on Test Mode, set DB Server to `127.0.0.1:55432` (the field takes `host:port`), Username to `postgres` and Password to `postgres`, and save. The Test Connection fields can stay blank because they inherit these, and the test database name defaults to `ArxDev`. Log in as `admin`/`admin` or `tester`/`tester` (see [`SQL/SCHEMA.md`](SQL/SCHEMA.md)).
 
 ## Integration tests
 
-`go test -tags integration ./arx_go/...` needs `ARX_TEST_DSN` pointing at a seeded test database (or `ARX_TEST_FROM_CONFIG=1` to use the test-mode connection saved via Settings). The database must be named `ArxDev` (any case); anything else, and anything containing `arxprod`, is refused. The seed data uses fixed IDs that the tests assert against (e.g. part `3005`), so don't renumber seed rows. They are excluded from the default `go test ./...`.
+`go test -tags integration ./arx_go/...` needs `ARX_TEST_DSN` pointing at a seeded test database (or `ARX_TEST_FROM_CONFIG=1` to use the test-mode connection saved via Settings). Against the local container above (about a minute): `ARX_TEST_DSN=postgres://postgres:postgres@127.0.0.1:55432/ArxDev?sslmode=require`. Run `restart db` between runs, since rows left by one run can fail the next. The database must be named `ArxDev` (any case); anything else, and anything containing `arxprod`, is refused. The seed data uses fixed IDs that the tests assert against (e.g. part `3005`), so don't renumber seed rows. They are excluded from the default `go test ./...`.
 
 ## Licensing
 
