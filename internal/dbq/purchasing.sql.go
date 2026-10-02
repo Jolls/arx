@@ -1480,6 +1480,25 @@ func (q *Queries) ListTopSupplierParts(ctx context.Context, arg ListTopSupplierP
 	return items, nil
 }
 
+const lockPOState = `-- name: LockPOState :one
+SELECT id, COALESCE(status, '') AS status, COALESCE(approval_status, '') AS approval_status
+FROM purchase_order WHERE number = $1 FOR UPDATE
+`
+
+type LockPOStateRow struct {
+	ID             int
+	Status         string
+	ApprovalStatus string
+}
+
+// #261: GetPOState that also locks the PO row for the rest of the transaction.
+func (q *Queries) LockPOState(ctx context.Context, number string) (LockPOStateRow, error) {
+	row := q.db.QueryRowContext(ctx, lockPOState, number)
+	var i LockPOStateRow
+	err := row.Scan(&i.ID, &i.Status, &i.ApprovalStatus)
+	return i, err
+}
+
 const lockPOStatus = `-- name: LockPOStatus :one
 SELECT COALESCE(status, '') FROM purchase_order WHERE id = $1 FOR UPDATE
 `
