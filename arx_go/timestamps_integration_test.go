@@ -13,7 +13,9 @@ import (
 
 // auditTimestampColumns is every audit/event column #192 moves to a
 // DB-assigned timestamptz, with whether it is NOT NULL and whether it carries a
-// now() default (part.last_rollup_at is NULL until a rollup runs).
+// now() default (part.last_rollup_at is NULL until a rollup runs). schema_migrations.tstamp
+// is not listed: the ledger belongs to the DDL login and the app login can't see it in
+// information_schema (check it with `migrate status`).
 var auditTimestampColumns = []struct {
 	table, column string
 	notNull       bool
@@ -38,7 +40,6 @@ var auditTimestampColumns = []struct {
 	{"purchase_order_history", "changed_at", true, true},
 	{"record_events", "event_date", true, true},
 	{"result", "updated_at", false, true},
-	{"schema_migrations", "tstamp", false, true},
 	{"unit", "created_at", true, true},
 	{"users", "created_at", true, true},
 	{"users", "updated_at", true, true},
