@@ -27,6 +27,20 @@ body.theme-teal    { --accent-1: #20c997; --accent-2: #1cb185; --header-bg: #0d3
 body.theme-green   { --accent-1: #198754; --accent-2: #157347; --header-bg: #123420; }
 body.theme-slate   { --accent-1: #6c757d; --accent-2: #5c636a; --header-bg: #2b2e33; }
 
+/* Accent as TEXT (#258): --accent-1 is for fills/borders; text needs >=4.5:1
+   on the page bg and on --bs-tertiary-bg, which differs per light/dark mode.
+   Declared on body (not :root) so the per-preset values can follow theme-*. */
+body                { --accent-text: #0a58ca; --accent-text-hover: #084298; }
+body.theme-indigo   { --accent-text: #6610f2; --accent-text-hover: #520dc2; }
+body.theme-teal     { --accent-text: #0f7a5c; --accent-text-hover: #0c6a4f; }
+body.theme-green    { --accent-text: #146c43; --accent-text-hover: #0f5132; }
+body.theme-slate    { --accent-text: #5c636a; --accent-text-hover: #495057; }
+[data-bs-theme=dark] body              { --accent-text: #6ea8fe; --accent-text-hover: #8bb9fe; }
+[data-bs-theme=dark] body.theme-indigo { --accent-text: #b18cf9; --accent-text-hover: #c4a8fb; }
+[data-bs-theme=dark] body.theme-teal   { --accent-text: #20c997; --accent-text-hover: #6fe0bd; }
+[data-bs-theme=dark] body.theme-green  { --accent-text: #75b798; --accent-text-hover: #9fd0b6; }
+[data-bs-theme=dark] body.theme-slate  { --accent-text: #adb5bd; --accent-text-hover: #ced4da; }
+
 body.theme-indigo .btn-primary,
 body.theme-teal .btn-primary,
 body.theme-green .btn-primary,
@@ -43,7 +57,7 @@ body.theme-slate .bg-primary, body.theme-slate .badge.bg-primary { background-co
 body.theme-indigo .text-primary,
 body.theme-teal .text-primary,
 body.theme-green .text-primary,
-body.theme-slate .text-primary { color: var(--accent-1) !important; }
+body.theme-slate .text-primary { color: var(--accent-text) !important; }
 
 /* Settings swatches (#537): standalone, not scoped to a themed <body>, so
    they can preview every preset regardless of the currently active theme. */
@@ -105,6 +119,13 @@ body {
 [data-bs-theme=dark] .tab .tab-icon-default { display: none; }
 [data-bs-theme=dark] .tab .tab-icon-active { display: inline; }
 
+/* #258: Bootstrap's dark outline-secondary (#6c757d) is 3.3:1 on the dark bg. */
+[data-bs-theme=dark] .btn-outline-secondary {
+    --bs-btn-color: #adb5bd; --bs-btn-border-color: #adb5bd;
+    --bs-btn-hover-bg: #adb5bd; --bs-btn-hover-border-color: #adb5bd; --bs-btn-hover-color: #000;
+    --bs-btn-active-bg: #adb5bd; --bs-btn-active-border-color: #adb5bd; --bs-btn-active-color: #000;
+}
+
 /* Dark mode (#202): .table-light is a fixed light surface in Bootstrap; re-point it. */
 [data-bs-theme=dark] .table-light { --bs-table-bg: var(--bs-tertiary-bg); --bs-table-color: var(--bs-body-color); --bs-table-border-color: var(--bs-border-color); }
 
@@ -136,8 +157,8 @@ thead.table-dark th.sort-desc::after { content: ' \25BC'; font-size: 0.7em; opac
     border-bottom: 3px solid transparent; margin-bottom: -2px;
     font-size: 0.95em; transition: color 0.2s, border-color 0.2s;
 }
-.sub-tab:hover         { color: var(--accent-1); text-decoration: none; }
-.sub-tab.active        { color: var(--accent-1); border-bottom-color: var(--accent-1); }
+.sub-tab:hover         { color: var(--accent-text); text-decoration: none; }
+.sub-tab.active        { color: var(--accent-text); border-bottom-color: var(--accent-1); }
 .sub-tab.disabled      { color: var(--bs-tertiary-color); cursor: default; pointer-events: none; }
 .sub-tab-edit          { margin-left: auto; }
 
@@ -218,24 +239,24 @@ table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* A
 .row-inactive a.part-number-link { text-decoration: line-through; }
 
 /* --- Links --------------------------------------------------- */
-a { color: var(--accent-1); text-decoration: none; transition: color 0.2s; }
-a:hover { color: var(--accent-2); text-decoration: underline; }
+a { color: var(--accent-text); text-decoration: none; transition: color 0.2s; }
+a:hover { color: var(--accent-text-hover); text-decoration: underline; }
 
-.part-number-link { color: var(--accent-1); text-decoration: none; font-weight: 600; transition: color 0.2s; }
-.part-number-link:hover { color: var(--accent-2); text-decoration: underline; }
+.part-number-link { color: var(--accent-text); text-decoration: none; font-weight: 600; transition: color 0.2s; }
+.part-number-link:hover { color: var(--accent-text-hover); text-decoration: underline; }
 
 /* --- Detail sections ----------------------------------------- */
 .detail-section { margin-bottom: 20px; padding: 20px; background: var(--bs-tertiary-bg); border-radius: 4px; border-left: 4px solid var(--accent-1); }
 .detail-section h3 { margin-bottom: 10px; color: var(--bs-body-color); }
 .detail-row { display: grid; grid-template-columns: 150px 1fr; margin-bottom: 12px; gap: 20px; }
-.detail-row strong { color: var(--accent-1); }
+.detail-row strong { color: var(--accent-text); }
 
 /* --- Misc ---------------------------------------------------- */
 .no-results        { text-align: center; padding: 40px; color: var(--bs-secondary-color); font-size: 1.1em; }
 .table-footer-note { margin-top: 12px; color: var(--bs-secondary-color); font-size: 0.9em; }
 
 /* --- Forms --------------------------------------------------- */
-.form-label { display: block; font-weight: 600; color: var(--accent-1); font-size: 0.95em; }
+.form-label { display: block; font-weight: 600; color: var(--accent-text); font-size: 0.95em; }
 .form-checkbox-row { display: flex; align-items: center; gap: 10px; }
 .form-checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-1); cursor: pointer; }
 .form-actions { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--bs-border-color); }
@@ -253,7 +274,7 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 .part-status-cell:last-child { border-right: none; }
 .part-status-label {
     font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.5px;
-    color: var(--accent-1); font-weight: 700; margin-bottom: 6px;
+    color: var(--accent-text); font-weight: 700; margin-bottom: 6px;
 }
 .part-status-value { font-weight: 600; font-size: 0.95em; }
 
@@ -274,7 +295,7 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 }
 .search-dropdown-item:last-child { border-bottom: none; }
 .search-dropdown-item:hover, .search-dropdown-item.active { background: var(--bs-primary-bg-subtle); }
-.search-dropdown-item strong { color: var(--accent-1); font-weight: 600; }
+.search-dropdown-item strong { color: var(--accent-text); font-weight: 600; }
 .search-dropdown-desc { color: var(--bs-secondary-color); }
 
 .suggest-links-row {
@@ -417,7 +438,7 @@ th.col-drag-over { box-shadow: inset 3px 0 0 var(--bs-primary); }
     background: none; border: none; padding: 0; margin-right: 4px;
     cursor: pointer; font-size: 0.7em; color: var(--bs-secondary-color); line-height: 1;
 }
-.bom-expand-toggle:hover { color: var(--accent-1); }
+.bom-expand-toggle:hover { color: var(--accent-text); }
 .bom-sub-row td:first-child { padding-left: calc(8px + 1em * var(--bom-depth, 1)); }
 
 /* Records list select column (#502): shown only when the table carries

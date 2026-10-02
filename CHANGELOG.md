@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.53] - 2026-10-02
+### Fixed
+- Dark-mode contrast: accent-coloured text (links, active sub-tab, detail labels) and `btn-outline-secondary` now reach 4.5:1, and the login card fits 320px viewports ([#258](https://github.com/Jolls/arx/issues/258))
+
 ## [0.8.52] - 2026-10-02
 ### Fixed
 - PO status changes, approval actions and edits now lock the PO row and re-check its status/approval inside the transaction, so a concurrent close, cancel or approval reset can no longer be overwritten or let a PO be marked Sent without approval ([#261](https://github.com/Jolls/arx/issues/261))
