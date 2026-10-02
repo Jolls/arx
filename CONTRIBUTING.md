@@ -32,6 +32,16 @@ Then in Settings, turn on Test Mode, set DB Server to `127.0.0.1:55432` (the fie
 
 `go test -tags integration ./arx_go/...` needs `ARX_TEST_DSN` pointing at a seeded test database (or `ARX_TEST_FROM_CONFIG=1` to use the test-mode connection saved via Settings). Against the local container above (about a minute): `ARX_TEST_DSN=postgres://postgres:postgres@127.0.0.1:55432/ArxDev?sslmode=require`. Run `restart db` between runs, since rows left by one run can fail the next. The database must be named `ArxDev` (any case); anything else, and anything containing `arxprod`, is refused. The seed data uses fixed IDs that the tests assert against (e.g. part `3005`), so don't renumber seed rows. They are excluded from the default `go test ./...`.
 
+## Dev container
+
+`.devcontainer/` gives a Go toolchain, the systray build dependencies, `sqlc`, `psql` and the seeded `ArxDev` database from `SQL/postgres/compose.yml` (reachable as `db:5432`), with no manual setup. In VS Code use "Reopen in Container". `go build ./...`, `go test ./...` and `go test -tags integration ./arx_go/...` work as-is. The dev container and the local test database recipe above share a container name, so run one at a time.
+
+- Start the app with the "Run Arx (headless)" task (Terminal > Run Task). Browse to `http://localhost:4568` and log in as `admin`/`admin`.
+- Browsing works only through VS Code port forwarding. The listener binds `127.0.0.1`, so the devcontainer CLI and podman can run builds and tests but cannot browse. Port 4568 is set to `requireLocalPort`, because the Host check accepts only `localhost:4568` and a remapped port would fail every request with 421.
+- GitHub Codespaces: build and test work; browsing fails because forwarded URLs are `*.app.github.dev` and the Host check rejects them.
+- File-backed features (PO folders, attachments, folder picker, open-folder) use container paths only.
+- Windows and macOS: clone into a container volume (or WSL) rather than a bind mount, for Go build speed.
+
 ## Licensing
 
 Contributions are accepted under the project's AGPL-3.0 license.

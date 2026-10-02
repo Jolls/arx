@@ -1,0 +1,13 @@
+# Adds the dev service next to the db service from SQL/postgres/compose.yml (#302).
+# Paths are relative to SQL/postgres/ (the first compose file), not this directory.
+services:
+  dev:
+    build:
+      context: ../../.devcontainer
+    working_dir: /workspaces/arx
+    command: sleep infinity
+    volumes:
+      - ../..:/workspaces/arx:cached
+    depends_on:
+      db:
+        condition: service_healthy

@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Arx (headless)",
+      "type": "shell",
+      "command": "go run .",
+      "options": {
+        "cwd": "${workspaceFolder}/arx_go",
+        "env": { "ARX_HEADLESS": "1" }
+      },
+      "problemMatcher": []
+    }
+  ]
+}

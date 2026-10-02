@@ -7,6 +7,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	_ "time/tzdata" // embed the IANA tz database: time.LoadLocation must work on machines with no Go toolchain (#847)
 
@@ -25,10 +28,25 @@ var AppVersion = "dev"
 var h *Handler
 
 func main() {
+	if headlessEnabled() {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := runHeadless(ctx, startServer, func() { h.CloseDB() })
+		stop()
+		os.Exit(code)
+	}
+	// Ctrl+C / SIGTERM quit via the tray so onExit closes the DB instead of the process dying mid-flight.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		systray.Quit()
+	}()
 	systray.Run(onReady, onExit)
 }
 
-func onReady() {
+// startServer does the startup shared by the tray and headless paths and returns the
+// server and its port. onStopped runs if the listener stops.
+func startServer(onStopped func()) (*http.Server, string) {
 	cfg := arxbase.Load(AppVersion)
 
 	var database *sql.DB
@@ -52,7 +70,7 @@ func onReady() {
 	h.loadPartCategories(context.Background())
 	h.loadDigiKeyCredentials(context.Background())
 
-	if cfg.DebugMode {
+	if cfg.DebugMode && !headlessEnabled() {
 		openDebugConsole()
 	}
 
@@ -65,12 +83,16 @@ func onReady() {
 		log.Printf("Arx: starting on %s", server.Addr)
 		if err := server.ListenAndServe(); err != nil {
 			log.Printf("Arx: server stopped: %v", err)
-			systray.Quit()
+			onStopped()
 		}
 	}()
+	return server, cfg.Port
+}
 
-	url := "http://localhost:" + cfg.Port
-	go openWhenReady(url, cfg.Port)
+func onReady() {
+	_, port := startServer(systray.Quit)
+	url := "http://localhost:" + port
+	go openWhenReady(url, port)
 
 	systray.SetIcon(appIcon())
 	systray.SetTooltip("Arx")
@@ -427,4 +449,35 @@ func buildRouter(h *Handler) *chi.Mux {
 	r.NotFound(h.NotFound)
 
 	return r
+}
+
+// headlessEnabled reports whether ARX_HEADLESS=1: serve with no systray (container, StartOS).
+func headlessEnabled() bool { return os.Getenv("ARX_HEADLESS") == "1" }
+
+// runHeadless starts the server and blocks until ctx is cancelled (clean shutdown, 0)
+// or the listener stops on its own (1).
+func runHeadless(ctx context.Context, start func(onStopped func()) (*http.Server, string), closeDB func()) int {
+	stopped := make(chan struct{}, 1)
+	server, _ := start(func() {
+		select {
+		case stopped <- struct{}{}:
+		default:
+		}
+	})
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := server.Shutdown(shutdownCtx)
+		cancel()
+		closeDB()
+		if err != nil {
+			log.Printf("Arx: shutdown: %v", err)
+			return 1
+		}
+		return 0
+	case <-stopped:
+		log.Printf("Arx: listener failed, exiting")
+		closeDB()
+		return 1
+	}
 }
