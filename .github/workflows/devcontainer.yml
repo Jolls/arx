@@ -1,0 +1,33 @@
+name: devcontainer
+
+on:
+  pull_request:
+    paths:
+      - '.devcontainer/**'
+      - 'go.mod'
+      - 'sqlc.yaml'
+      - 'SQL/postgres/compose.yml'
+      - '.github/workflows/devcontainer.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - 'go.mod'
+      - 'sqlc.yaml'
+      - 'SQL/postgres/compose.yml'
+      - '.github/workflows/devcontainer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-in-devcontainer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build dev image
+        run: docker compose -f SQL/postgres/compose.yml -f .devcontainer/compose.yml build dev
+
+      - name: go build inside the dev image
+        run: docker compose -f SQL/postgres/compose.yml -f .devcontainer/compose.yml run --rm --no-deps dev go build ./...

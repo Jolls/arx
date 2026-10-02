@@ -1,0 +1,20 @@
+{
+  "name": "Arx",
+  "dockerComposeFile": ["../SQL/postgres/compose.yml", "compose.yml"],
+  "service": "dev",
+  "workspaceFolder": "/workspaces/arx",
+  "containerEnv": {
+    "TEST_MODE": "true",
+    "DB_SERVER": "db:5432",
+    "DB_USER": "postgres",
+    "ARX_TEST_DSN": "postgres://postgres:postgres@db:5432/ArxDev?sslmode=require"
+  },
+  "postCreateCommand": "mkdir -p ~/.config/Arx && printf '{\"db_password\":\"postgres\"}' > ~/.config/Arx/local.json && chmod 600 ~/.config/Arx/local.json",
+  "forwardPorts": [4568],
+  "portsAttributes": {
+    "4568": { "requireLocalPort": true }
+  },
+  "customizations": {
+    "vscode": { "extensions": ["golang.go"] }
+  }
+}
