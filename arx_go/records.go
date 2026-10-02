@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
 	"arx/internal/inventory"
@@ -2085,7 +2086,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "This record is already linked to a build.", http.StatusBadRequest)
 			return
 		}
-		qty := 1.0
+		qty := decimal.NewFromInt(1)
 		if models.TracksSerials(trackingMode) {
 			// A serial/lot_serial part must carry a serial before building — otherwise
 			// the unit can't be minted and the build would consume stock for a unit

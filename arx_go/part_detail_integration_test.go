@@ -96,7 +96,7 @@ func TestIntegration_FetchPartFull_Fields(t *testing.T) {
 	want := map[int]models.Part{
 		full: {ID: full, Revision: "C", Description: "full desc", Detail: "full detail", Category: "BUY",
 			HasBOM: true, ReleaseStatus: "A", IsActive: true, RequestedBy: "JJ", Notes: "full notes",
-			UnitID: intPtr(3), CurrentCost: 1.25, ReorderMin: floatPtr(4), TrackingMode: "lot", IsLotTracked: true,
+			UnitID: intPtr(3), CurrentCost: d(1.25), ReorderMin: dp(4), TrackingMode: "lot", IsLotTracked: true,
 			UserField1: "u1", UserField2: "u2", UserField3: "u3", UserField4: "u4", UserField5: "u5",
 			UserField6: "u6", UserField7: "u7", UserField8: "u8", UserField9: "u9", UserField10: "u10"},
 		bare: {ID: bare, ReleaseStatus: "U", TrackingMode: "none"},
@@ -107,7 +107,7 @@ func TestIntegration_FetchPartFull_Fields(t *testing.T) {
 			t.Fatalf("fetchPartFull %d: %v", id, err)
 		}
 		w.PartNumber = p.PartNumber
-		if got := partEditFields(p); !reflect.DeepEqual(got, w) {
+		if got := partEditFields(p); !deepEqualDec(got, w) {
 			t.Errorf("fetchPartFull %d:\n got %+v\nwant %+v", id, got, w)
 		}
 	}
@@ -126,7 +126,7 @@ func TestIntegration_FetchPartBasic_Fields(t *testing.T) {
 
 	want := map[int]models.Part{
 		full: {ID: full, Description: "full desc", Category: "BUY", HasBOM: true, PrimaryAttachmentID: intPtr(primaryAtt),
-			StockOnHand: 2.5, TrackingMode: "lot", IsLotTracked: true,
+			StockOnHand: d(2.5), TrackingMode: "lot", IsLotTracked: true,
 			ThumbnailURL: urlutil.LocalFileURL(partDetailThumb, "/local/")},
 		bare: {ID: bare, TrackingMode: "none"},
 	}
@@ -136,7 +136,7 @@ func TestIntegration_FetchPartBasic_Fields(t *testing.T) {
 			t.Fatalf("fetchPartBasic %d: %v", id, err)
 		}
 		w.PartNumber = p.PartNumber
-		if !reflect.DeepEqual(p, w) {
+		if !deepEqualDec(p, w) {
 			t.Errorf("fetchPartBasic %d:\n got %+v\nwant %+v", id, p, w)
 		}
 	}

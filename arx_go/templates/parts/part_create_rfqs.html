@@ -44,7 +44,7 @@
                     <td>{{.Part.Description}}</td>
                     <td class="text-end">{{printf "%.5g" .Need}}</td>
                     <td class="text-end">{{printf "%.5g" .Part.Stock}}</td>
-                    <td class="text-end">{{if .Part.ReorderMin.Valid}}{{printf "%.5g" .Part.ReorderMin.Float64}}{{end}}</td>
+                    <td class="text-end">{{if .Part.ReorderMin}}{{printf "%.5g" (deref .Part.ReorderMin)}}{{end}}</td>
                     <td>
                         <input type="hidden" name="pid" value="{{.Part.ID}}">
                         <input type="number" name="qty" class="form-control form-control-sm" min="0" step="any" value="{{printf "%.5g" .Qty}}">

@@ -72,7 +72,7 @@ type lineKey struct {
 func lineKeys(items []models.PurchaseOrderLine) []lineKey {
 	out := make([]lineKey, len(items))
 	for i, l := range items {
-		out[i] = lineKey{l.LineNumber, l.PartNumberSnapshot, l.RevisionSnapshot, l.Description, l.Qty, l.UnitCost, l.VendorPN, 0}
+		out[i] = lineKey{l.LineNumber, l.PartNumberSnapshot, l.RevisionSnapshot, l.Description, l.Qty.InexactFloat64(), l.UnitCost.InexactFloat64(), l.VendorPN, 0}
 		if l.PartID != nil {
 			out[i].PartID = *l.PartID
 		}
@@ -121,7 +121,6 @@ func TestIntegration_POWrites_Create(t *testing.T) {
 		t.Errorf("dates: ordered %v requested %v closed %v printed %v modified %v", po.DateOrdered, po.DateRequested, po.DateClosed, po.DatePrinted, po.DateModified)
 	}
 	po.DateOrdered, po.DateRequested, po.DateModified = nil, nil, nil
-	fl := func(v float64) *float64 { return &v }
 	in := func(v int) *int { return &v }
 	want := models.PurchaseOrder{ID: id, Number: num, Status: "draft", ApprovalStatus: "not_submitted", IsActive: true,
 		Orderer: "Olive", AccountID: "ACCT-1",
@@ -131,8 +130,8 @@ func TestIntegration_POWrites_Create(t *testing.T) {
 		ReceiverID: in(f.Co), ReceiverName: "Recv Name", ReceiverContact: "Rae", ReceiverContactID: in(f.ConD), ReceiverEmail: "r@x",
 		ReceiverAddress: "2 B St", ReceiverCity: "Bcity", ReceiverState: "BS", ReceiverZipcode: "222", ReceiverCountry: "Bland",
 		ReceiverPhone: "555-3", ReceiverFax: "555-4",
-		Tax1: fl(1.5), ShippingCost: fl(2), MiscCost: fl(0.25), TotalCost: fl(15.75), Notes: "pn", InternalNotes: "in"}
-	if !reflect.DeepEqual(po, want) {
+		Tax1: dp(1.5), ShippingCost: dp(2), MiscCost: dp(0.25), TotalCost: dp(15.75), Notes: "pn", InternalNotes: "in"}
+	if !deepEqualDec(po, want) {
 		t.Errorf("PO =\n%+v\nwant\n%+v", po, want)
 	}
 
@@ -149,10 +148,10 @@ func TestIntegration_POWrites_Create(t *testing.T) {
 	// Minimal form: empty/invalid optional numbers and dates → NULL, total 0.
 	num2, id2 := createPO(t, h, "", url.Values{"supplier_id": {co}, "receiver_id": {""}, "tax1": {""}, "supplier_contact_id": {"x"}})
 	want2 := models.PurchaseOrder{ID: id2, Number: num2, Status: "draft", ApprovalStatus: "not_submitted", IsActive: true,
-		SupplierID: in(f.Co), TotalCost: fl(0)}
+		SupplierID: in(f.Co), TotalCost: dp(0)}
 	po2 := mustPO(t, h, num2)
 	po2.DateModified = nil
-	if !reflect.DeepEqual(po2, want2) {
+	if !deepEqualDec(po2, want2) {
 		t.Errorf("minimal PO = %+v, want %+v", po2, want2)
 	}
 }
@@ -255,12 +254,11 @@ func TestIntegration_POWrites_Update(t *testing.T) {
 		t.Errorf("date_modified not bumped: %v → %v", before.DateModified, po.DateModified)
 	}
 	po.DateOrdered, po.DateClosed, po.DatePrinted, po.DateModified = nil, nil, nil, nil
-	fl := func(v float64) *float64 { return &v }
 	in := func(v int) *int { return &v }
 	want := models.PurchaseOrder{ID: id, Number: num, Status: "draft", ApprovalStatus: "not_submitted", IsActive: true,
 		Orderer: "New Orderer", SupplierID: in(f.Co), SupplierName: "Sup2", ReceiverContactID: in(f.ConD),
-		ShippingCost: fl(3), TotalCost: fl(10 + 10 + 2 + 3), Notes: "n2"}
-	if !reflect.DeepEqual(po, want) {
+		ShippingCost: dp(3), TotalCost: dp(10 + 10 + 2 + 3), Notes: "n2"}
+	if !deepEqualDec(po, want) {
 		t.Errorf("PO =\n%+v\nwant\n%+v", po, want)
 	}
 	wantL := []lineKey{{3, "", "", "l3", 2, 5, "", 0}, {5, f.PN1, "C", "upd", 4, 2.5, "V9", f.P1}, {7, "", "", "added", 2, 1, "", 0}}

@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const copyBOM = `-- name: CopyBOM :exec
@@ -70,7 +72,7 @@ type CreateBOMLineParams struct {
 	ParentPartID    int
 	ComponentPartID int
 	LineNumber      int
-	Qty             float64
+	Qty             decimal.Decimal
 }
 
 func (q *Queries) CreateBOMLine(ctx context.Context, arg CreateBOMLineParams) error {
@@ -172,8 +174,8 @@ type CreatePartParams struct {
 	Notes         string
 	Now           time.Time
 	UomID         *int
-	CurrentCost   float64
-	ReorderMin    *float64
+	CurrentCost   decimal.Decimal
+	ReorderMin    *decimal.Decimal
 	UserField1    string
 	UserField2    string
 	UserField3    string
@@ -229,9 +231,9 @@ VALUES ($1, $2, $3, $4, $5,
 type CreatePriceParams struct {
 	PartID        int
 	SupplierID    int
-	PackSize      *float64
-	PriceEa       *float64
-	PricePack     *float64
+	PackSize      *decimal.Decimal
+	PriceEa       *decimal.Decimal
+	PricePack     *decimal.Decimal
 	EffectiveDate string
 }
 
@@ -260,7 +262,7 @@ type CreateSupplierPartParams struct {
 	SupplierPn   string
 	SupplierDesc string
 	LeadTime     string
-	MinIncrement *float64
+	MinIncrement *decimal.Decimal
 	UomID        *int
 }
 
@@ -286,7 +288,7 @@ WHERE part_id = $1 AND supplier_id = $2 AND pack_size = $3::numeric AND is_activ
 type DeactivatePricesParams struct {
 	PartID     int
 	SupplierID int
-	PackSize   float64
+	PackSize   decimal.Decimal
 }
 
 func (q *Queries) DeactivatePrices(ctx context.Context, arg DeactivatePricesParams) error {
@@ -451,15 +453,15 @@ type GetPartRow struct {
 	CreatedDate         *time.Time
 	ModifiedDate        *time.Time
 	PrimaryAttachmentID *int
-	CurrentCost         float64
-	LastRollupCost      float64
+	CurrentCost         decimal.Decimal
+	LastRollupCost      decimal.Decimal
 	LastRollupAt        *time.Time
 	AttachmentCount     int
 	PoLineCount         int
 	UomID               *int
 	UnitAbbr            string
-	StockOnHand         float64
-	ReorderMin          *float64
+	StockOnHand         decimal.Decimal
+	ReorderMin          *decimal.Decimal
 	TrackingMode        string
 	UserField1          string
 	UserField2          string
@@ -536,7 +538,7 @@ type GetPartBasicRow struct {
 	Category            string
 	HasBom              bool
 	PrimaryAttachmentID *int
-	StockOnHand         float64
+	StockOnHand         decimal.Decimal
 	TrackingMode        string
 	ThumbFile           string
 }
@@ -591,9 +593,9 @@ type GetPartPriceParams struct {
 
 type GetPartPriceRow struct {
 	ID            int
-	PriceEa       *float64
-	PricePack     *float64
-	PackSize      *float64
+	PriceEa       *decimal.Decimal
+	PricePack     *decimal.Decimal
+	PackSize      *decimal.Decimal
 	IsActive      bool
 	EffectiveDate *time.Time
 	SupplierID    int
@@ -632,7 +634,7 @@ SELECT COALESCE(last_rollup_cost, 0) AS last_rollup_cost, last_rollup_at FROM pa
 `
 
 type GetPartRollupRow struct {
-	LastRollupCost float64
+	LastRollupCost decimal.Decimal
 	LastRollupAt   *time.Time
 }
 
@@ -698,7 +700,7 @@ type GetSupplierPartRow struct {
 	SupplierPn   string
 	SupplierDesc string
 	LeadTime     string
-	MinIncrement *float64
+	MinIncrement *decimal.Decimal
 	UomID        *int
 	SupplierName string
 }
@@ -739,8 +741,8 @@ type GetSupplierPartDefaultsParams struct {
 
 type GetSupplierPartDefaultsRow struct {
 	SupplierPn   string
-	MinIncrement *float64
-	PriceEa      *float64
+	MinIncrement *decimal.Decimal
+	PriceEa      *decimal.Decimal
 }
 
 // The pair's most-preferred supplier_part row plus its smallest-pack active price_ea; no row when
@@ -780,9 +782,9 @@ ON CONFLICT (part_id, supplier_id, pack_size) WHERE is_active DO NOTHING
 type ImportPriceParams struct {
 	PartID        int
 	SupplierID    int
-	PackSize      float64
-	PriceEa       float64
-	PricePack     float64
+	PackSize      decimal.Decimal
+	PriceEa       decimal.Decimal
+	PricePack     decimal.Decimal
 	EffectiveDate string
 }
 
@@ -831,8 +833,8 @@ FROM price WHERE is_active = TRUE AND part_id = ANY(string_to_array($1::text, ',
 type ListActivePriceTiersRow struct {
 	PartID     int
 	SupplierID int
-	PriceEa    *float64
-	PackSize   *float64
+	PriceEa    *decimal.Decimal
+	PackSize   *decimal.Decimal
 }
 
 func (q *Queries) ListActivePriceTiers(ctx context.Context, partIds string) ([]ListActivePriceTiersRow, error) {
@@ -872,9 +874,9 @@ ORDER BY supplier_id, pack_size
 
 type ListActivePricesRow struct {
 	SupplierID    int
-	PriceEa       *float64
-	PricePack     *float64
-	PackSize      *float64
+	PriceEa       *decimal.Decimal
+	PricePack     *decimal.Decimal
+	PackSize      *decimal.Decimal
 	EffectiveDate *time.Time
 }
 
@@ -919,13 +921,13 @@ WHERE pl.parent_part_id = $1
 
 type ListBOMComponentsRow struct {
 	ID                int
-	Qty               float64
+	Qty               decimal.Decimal
 	PartNumber        string
 	Description       string
 	Revision          string
 	Category          string
-	StockOnHand       float64
-	ReorderMin        *float64
+	StockOnHand       decimal.Decimal
+	ReorderMin        *decimal.Decimal
 	DefaultSupplierID *int
 	HasBom            bool
 }
@@ -978,7 +980,7 @@ ORDER BY pl.line_number
 type ListBOMEdgesRow struct {
 	ID              int
 	LineNumber      int
-	Qty             float64
+	Qty             decimal.Decimal
 	ComponentPartID int
 	PartNumber      string
 	Description     string
@@ -1034,15 +1036,15 @@ ORDER BY pl.line_number
 type ListBOMLinesRow struct {
 	ID              int
 	LineNumber      int
-	Qty             float64
+	Qty             decimal.Decimal
 	ComponentPartID int
 	PartNumber      string
 	Description     string
 	Revision        string
 	Category        string
-	CurrentCost     float64
-	LastRollupCost  float64
-	PreferredPrice  float64
+	CurrentCost     decimal.Decimal
+	LastRollupCost  decimal.Decimal
+	PreferredPrice  decimal.Decimal
 	HasBom          bool
 	AttachmentCount int
 	PoLineCount     int
@@ -1108,9 +1110,9 @@ ORDER BY pl.parent_part_id, pl.line_number, pl.id
 type ListBOMTreeRow struct {
 	ParentPartID    int
 	ComponentPartID int
-	Qty             float64
-	CurrentCost     float64
-	PreferredPrice  float64
+	Qty             decimal.Decimal
+	CurrentCost     decimal.Decimal
+	PreferredPrice  decimal.Decimal
 	HasBom          bool
 }
 
@@ -1285,7 +1287,7 @@ type ListPOPricePointsRow struct {
 	Number       string
 	SupplierName string
 	DateOrdered  *time.Time
-	UnitCost     float64
+	UnitCost     decimal.Decimal
 }
 
 func (q *Queries) ListPOPricePoints(ctx context.Context, partID int) ([]ListPOPricePointsRow, error) {
@@ -1445,8 +1447,8 @@ type ListPartOrdersRow struct {
 	DateClosed       *time.Time
 	Status           string
 	LineNumber       int
-	Qty              float64
-	UnitCost         float64
+	Qty              decimal.Decimal
+	UnitCost         decimal.Decimal
 	Description      string
 	VendorPartNumber string
 }
@@ -1497,9 +1499,9 @@ ORDER BY s.name, p.effective_date DESC, p.pack_size
 
 type ListPartPricesRow struct {
 	ID            int
-	PriceEa       *float64
-	PricePack     *float64
-	PackSize      *float64
+	PriceEa       *decimal.Decimal
+	PricePack     *decimal.Decimal
+	PackSize      *decimal.Decimal
 	IsActive      bool
 	EffectiveDate *time.Time
 	SupplierID    int
@@ -1679,8 +1681,8 @@ ORDER BY p.effective_date
 type ListPriceListPointsRow struct {
 	SupplierName  string
 	EffectiveDate *time.Time
-	PriceEa       *float64
-	PackSize      *float64
+	PriceEa       *decimal.Decimal
+	PackSize      *decimal.Decimal
 }
 
 func (q *Queries) ListPriceListPoints(ctx context.Context, partID int) ([]ListPriceListPointsRow, error) {
@@ -1723,7 +1725,7 @@ type ListRecentPartTxnsParams struct {
 
 type ListRecentPartTxnsRow struct {
 	TxnType string
-	Qty     float64
+	Qty     decimal.Decimal
 	TxnDate time.Time
 }
 
@@ -1773,7 +1775,7 @@ type ListSupplierPartsRow struct {
 	SupplierPn             string
 	SupplierDesc           string
 	LeadTime               string
-	MinIncrement           *float64
+	MinIncrement           *decimal.Decimal
 	UomID                  *int
 	SupplierName           string
 	PurchaseUnitAbbr       string
@@ -1860,7 +1862,7 @@ ORDER BY pn.part_number
 
 type ListWhereUsedRow struct {
 	LineNumber   int
-	Qty          float64
+	Qty          decimal.Decimal
 	ParentPartID int
 	PartNumber   string
 	Description  string
@@ -1907,9 +1909,9 @@ ORDER BY price_ea LIMIT 1
 `
 
 // The preferred supplier's cheapest active price (NULL prices sort last); no row when there is none.
-func (q *Queries) PreferredSupplierMinPrice(ctx context.Context, partID int) (*float64, error) {
+func (q *Queries) PreferredSupplierMinPrice(ctx context.Context, partID int) (*decimal.Decimal, error) {
 	row := q.db.QueryRowContext(ctx, preferredSupplierMinPrice, partID)
-	var price_ea *float64
+	var price_ea *decimal.Decimal
 	err := row.Scan(&price_ea)
 	return price_ea, err
 }
@@ -2025,7 +2027,7 @@ WHERE id = $4 AND parent_part_id = $5
 
 type UpdateBOMLineParams struct {
 	LineNumber      int
-	Qty             float64
+	Qty             decimal.Decimal
 	ComponentPartID int
 	ID              int
 	ParentPartID    int
@@ -2095,8 +2097,8 @@ type UpdatePartParams struct {
 	Notes         string
 	Now           time.Time
 	UomID         *int
-	CurrentCost   float64
-	ReorderMin    *float64
+	CurrentCost   decimal.Decimal
+	ReorderMin    *decimal.Decimal
 	UserField1    string
 	UserField2    string
 	UserField3    string
@@ -2155,7 +2157,7 @@ type UpdateSupplierPartParams struct {
 	SupplierPn   string
 	SupplierDesc string
 	LeadTime     string
-	MinIncrement *float64
+	MinIncrement *decimal.Decimal
 	UomID        *int
 	ID           int
 	PartID       int

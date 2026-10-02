@@ -55,7 +55,7 @@ ORDER BY display_name;
 SELECT number,
        CASE WHEN supplier_contact_id = sqlc.arg(contact_id)::int THEN 'Supplier' ELSE 'Receiver' END AS role,
        COALESCE(supplier_name, '') AS supplier_name, COALESCE(status, '') AS status, date_ordered,
-       COALESCE(total_cost, 0)::float8 AS total_cost
+       COALESCE(total_cost, 0)::numeric AS total_cost
 FROM purchase_order
 WHERE supplier_contact_id = sqlc.arg(contact_id)::int OR receiver_contact_id = sqlc.arg(contact_id)::int
 ORDER BY date_ordered DESC, id DESC;

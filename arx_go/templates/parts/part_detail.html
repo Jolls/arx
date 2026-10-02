@@ -136,7 +136,7 @@
                     <div class="detail-row"><strong>Last Rollup:</strong><span>${{printf "%.4f" .Part.LastRollupCost}}</span></div>
                     <div class="detail-row"><strong>Rollup vs Price &Delta;:</strong>
                         <span class="{{if .RollupSignificant}}badge bg-warning text-dark{{end}}">
-                            {{if gt .RollupDelta 0.0}}+{{end}}${{printf "%.4f" .RollupDelta}} ({{if gt .RollupDeltaPct 0.0}}+{{end}}{{printf "%.1f" .RollupDeltaPct}}%)
+                            {{if isPos .RollupDelta}}+{{end}}${{printf "%.4f" .RollupDelta}} ({{if isPos .RollupDeltaPct}}+{{end}}{{printf "%.1f" .RollupDeltaPct}}%)
                         </span>
                     </div>
                     {{end}}

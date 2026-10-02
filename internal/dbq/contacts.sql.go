@@ -8,6 +8,8 @@ package dbq
 import (
 	"context"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const createContact = `-- name: CreateContact :one
@@ -183,7 +185,7 @@ const listContactPOs = `-- name: ListContactPOs :many
 SELECT number,
        CASE WHEN supplier_contact_id = $1::int THEN 'Supplier' ELSE 'Receiver' END AS role,
        COALESCE(supplier_name, '') AS supplier_name, COALESCE(status, '') AS status, date_ordered,
-       COALESCE(total_cost, 0)::float8 AS total_cost
+       COALESCE(total_cost, 0)::numeric AS total_cost
 FROM purchase_order
 WHERE supplier_contact_id = $1::int OR receiver_contact_id = $1::int
 ORDER BY date_ordered DESC, id DESC
@@ -195,7 +197,7 @@ type ListContactPOsRow struct {
 	SupplierName string
 	Status       string
 	DateOrdered  *time.Time
-	TotalCost    float64
+	TotalCost    decimal.Decimal
 }
 
 func (q *Queries) ListContactPOs(ctx context.Context, contactID int) ([]ListContactPOsRow, error) {

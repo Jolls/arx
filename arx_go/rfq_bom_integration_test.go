@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/shopspring/decimal"
 )
 
 // TestIntegration_BuildRFQPlan_Graph pins buildRFQPlan over a live BOM: needs sum
@@ -68,7 +70,7 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 		t.Fatalf("load supplier 1001 name: %v", err)
 	}
 
-	plan, err := h.buildRFQPlan(ctx, root, 2)
+	plan, err := h.buildRFQPlan(ctx, root, decimal.NewFromInt(2))
 	if err != nil {
 		t.Fatalf("buildRFQPlan: %v", err)
 	}
@@ -85,13 +87,13 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 	}
 	l := g.Lines[0]
 	// B1: 2×3 direct + (2−1 SUB stock)×2 = 8 needed; 8 − 1 stock + 5 reorder_min = 12.
-	if l.Part.ID != b1 || l.Part.PartNumber != b1PN || l.Need != 8 || l.Qty != 12 {
+	if l.Part.ID != b1 || l.Part.PartNumber != b1PN || !l.Need.Equal(decimal.NewFromInt(8)) || !l.Qty.Equal(decimal.NewFromInt(12)) {
 		t.Errorf("B1 line = id %d %q need %v qty %v, want %d %q need 8 qty 12", l.Part.ID, l.Part.PartNumber, l.Need, l.Qty, b1, b1PN)
 	}
-	if l.Part.Description != "bought one" || l.Part.Revision != "B" || l.Part.Category != "BUY" || l.Part.Stock != 1 {
+	if l.Part.Description != "bought one" || l.Part.Revision != "B" || l.Part.Category != "BUY" || !l.Part.Stock.Equal(decimal.NewFromInt(1)) {
 		t.Errorf("B1 fields = %+v", l.Part)
 	}
-	if !l.Part.ReorderMin.Valid || l.Part.ReorderMin.Float64 != 5 || !l.Part.SupplierID.Valid || l.Part.SupplierID.Int64 != 1001 || l.Part.HasBOM {
+	if l.Part.ReorderMin == nil || !l.Part.ReorderMin.Equal(decimal.NewFromInt(5)) || !l.Part.SupplierID.Valid || l.Part.SupplierID.Int64 != 1001 || l.Part.HasBOM {
 		t.Errorf("B1 reorder/supplier/bom = %+v", l.Part)
 	}
 
@@ -99,10 +101,10 @@ func TestIntegration_BuildRFQPlan_Graph(t *testing.T) {
 		t.Fatalf("unsupplied = %+v, want only C", plan.Unsupplied)
 	}
 	cl := plan.Unsupplied[0]
-	if cl.Part.ID != c || cl.Part.PartNumber != cPN || cl.Need != 4 || cl.Qty != 4 {
+	if cl.Part.ID != c || cl.Part.PartNumber != cPN || !cl.Need.Equal(decimal.NewFromInt(4)) || !cl.Qty.Equal(decimal.NewFromInt(4)) {
 		t.Errorf("C line = id %d %q need %v qty %v, want %d %q need 4 qty 4", cl.Part.ID, cl.Part.PartNumber, cl.Need, cl.Qty, c, cPN)
 	}
-	if cl.Part.Description != "" || cl.Part.Revision != "" || cl.Part.ReorderMin.Valid || cl.Part.SupplierID.Valid {
+	if cl.Part.Description != "" || cl.Part.Revision != "" || cl.Part.ReorderMin != nil || cl.Part.SupplierID.Valid {
 		t.Errorf("C fields = %+v, want blank text, no reorder_min, no supplier", cl.Part)
 	}
 }

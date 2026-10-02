@@ -63,7 +63,7 @@ LIMIT sqlc.arg(n)::int;
 
 -- name: ListSupplierPOs :many
 -- A supplier's POs (RFQ quotes included), most recent first; a NULL n means no limit.
-SELECT number, COALESCE(status, '') AS status, date_ordered, COALESCE(total_cost, 0)::float8 AS total_cost
+SELECT number, COALESCE(status, '') AS status, date_ordered, COALESCE(total_cost, 0)::numeric AS total_cost
 FROM purchase_order
 WHERE supplier_id = sqlc.arg(supplier_id)::int
 ORDER BY date_ordered DESC, id DESC
@@ -289,12 +289,12 @@ UPDATE purchase_order SET
   notes = sqlc.arg(notes)::text, internal_notes = sqlc.arg(internal_notes)::text,
   date_ordered = sqlc.narg(date_ordered), date_requested = sqlc.narg(date_requested),
   date_closed = sqlc.narg(date_closed), date_printed = sqlc.narg(date_printed),
-  date_modified = CURRENT_TIMESTAMP, total_cost = sqlc.arg(total_cost)::float8,
+  date_modified = CURRENT_TIMESTAMP, total_cost = sqlc.arg(total_cost)::numeric,
   supplier_contact_id = sqlc.narg(supplier_contact_id)::int, receiver_contact_id = sqlc.narg(receiver_contact_id)::int
 WHERE number = sqlc.arg(number);
 
 -- name: SetPOTotal :exec
-UPDATE purchase_order SET total_cost = sqlc.arg(total_cost)::float8 WHERE id = sqlc.arg(id);
+UPDATE purchase_order SET total_cost = sqlc.arg(total_cost)::numeric WHERE id = sqlc.arg(id);
 
 -- name: SetRFQGroup :exec
 UPDATE purchase_order SET rfq_group_id = sqlc.arg(group_id)::int WHERE id = sqlc.arg(id);
@@ -313,12 +313,12 @@ VALUES (sqlc.arg(po_id), 'status', sqlc.narg(from_status)::text, sqlc.arg(to_sta
 -- name: CreatePOLine :exec
 INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
 VALUES (sqlc.arg(po_id), sqlc.arg(line_number), sqlc.arg(part_number)::text, sqlc.arg(revision)::text, sqlc.arg(description)::text,
-        sqlc.arg(qty)::float8, sqlc.arg(unit_cost)::float8, sqlc.arg(vendor_part_number)::text, sqlc.narg(part_id)::int);
+        sqlc.arg(qty)::numeric, sqlc.arg(unit_cost)::numeric, sqlc.arg(vendor_part_number)::text, sqlc.narg(part_id)::int);
 
 -- name: UpdatePOLine :exec
 UPDATE po_line SET line_number = sqlc.arg(line_number), part_number_snapshot = sqlc.arg(part_number)::text,
   revision_snapshot = sqlc.arg(revision)::text, description = sqlc.arg(description)::text,
-  qty = sqlc.arg(qty)::float8, unit_cost = sqlc.arg(unit_cost)::float8,
+  qty = sqlc.arg(qty)::numeric, unit_cost = sqlc.arg(unit_cost)::numeric,
   vendor_part_number = sqlc.arg(vendor_part_number)::text, part_id = sqlc.narg(part_id)::int
 WHERE id = sqlc.arg(id) AND po_id = sqlc.arg(po_id);
 
@@ -326,7 +326,7 @@ WHERE id = sqlc.arg(id) AND po_id = sqlc.arg(po_id);
 DELETE FROM po_line WHERE id = sqlc.arg(id) AND po_id = sqlc.arg(po_id);
 
 -- name: SumPOLines :one
-SELECT COALESCE(SUM(qty * unit_cost), 0)::float8 FROM po_line WHERE po_id = $1;
+SELECT COALESCE(SUM(qty * unit_cost), 0)::numeric FROM po_line WHERE po_id = $1;
 
 -- name: SetPOStatus :exec
 -- Also mirrors date_closed: set to today (the caller's local day, #265) when closing (if unset), cleared when reopening from closed.
@@ -349,7 +349,7 @@ VALUES (sqlc.arg(po_id), 'approval', sqlc.arg(action)::text, sqlc.narg(note)::te
 SELECT COALESCE(status, '') FROM purchase_order WHERE id = $1 FOR UPDATE;
 
 -- name: ReceivePOLine :exec
-UPDATE po_line SET received_qty = received_qty + sqlc.arg(qty)::float8, date_received = sqlc.arg(date_received)
+UPDATE po_line SET received_qty = received_qty + sqlc.arg(qty)::numeric, date_received = sqlc.arg(date_received)
 WHERE id = sqlc.arg(id);
 
 -- name: ListPOLineQtys :many
@@ -366,7 +366,7 @@ SELECT COUNT(*)::int AS total, (COUNT(*) FILTER (WHERE status = 'rfq'))::int AS 
 FROM purchase_order WHERE rfq_group_id = sqlc.arg(group_id)::int;
 
 -- name: SetRFQLineQuote :exec
-UPDATE po_line SET unit_cost = sqlc.arg(unit_cost)::float8, lead_time_days = sqlc.narg(lead_time_days)::int
+UPDATE po_line SET unit_cost = sqlc.arg(unit_cost)::numeric, lead_time_days = sqlc.narg(lead_time_days)::int
 WHERE po_line.id = sqlc.arg(id) AND po_line.po_id IN (SELECT po.id FROM purchase_order po WHERE po.status = 'rfq');
 
 -- name: RecomputeRFQTotals :exec

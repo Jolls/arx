@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"arx/internal/dbq"
+
+	"github.com/shopspring/decimal"
 )
 
 // Service wraps the generated queries over one DBTX (a connection wrapper or a tx).
@@ -31,7 +33,7 @@ func nullText(s string) sql.NullString { return sql.NullString{String: s, Valid:
 type Txn struct {
 	PartID    int
 	Type      string
-	Qty       float64
+	Qty       decimal.Decimal
 	Date      time.Time
 	Username  string
 	Reference string
@@ -57,7 +59,7 @@ func (s *Service) RecordTxn(ctx context.Context, t Txn) error {
 // LedgerRow is one ledger row with its lot (LotID 0 / LotNumber "" when none).
 type LedgerRow struct {
 	Type      string
-	Qty       float64
+	Qty       decimal.Decimal
 	Date      time.Time
 	Username  string
 	Reference string
@@ -145,7 +147,7 @@ func (s *Service) PartHasBuild(ctx context.Context, buildID, partID int) (bool, 
 }
 
 // RecordGenealogy inserts one lot→lot edge: parentLotID was consumed (qty) into childLotID.
-func (s *Service) RecordGenealogy(ctx context.Context, parentLotID, childLotID int, qty float64) error {
+func (s *Service) RecordGenealogy(ctx context.Context, parentLotID, childLotID int, qty decimal.Decimal) error {
 	return s.q.CreateGenealogyEdge(ctx, dbq.CreateGenealogyEdgeParams{
 		ParentLotID: &parentLotID, ChildLotID: &childLotID, QtyConsumed: qty,
 	})
@@ -242,7 +244,7 @@ type TraceNode struct {
 	PartNumber      string
 	PartDescription string
 	IsVendorLot     bool // lot nodes only: po_line_id set, a purchased raw lot (a genealogy leaf)
-	Qty             float64
+	Qty             decimal.Decimal
 	Depth           int
 }
 
@@ -448,8 +450,8 @@ type BuildOption struct {
 }
 
 // buildOptionLabel formats a build, e.g. "Build #12 — qty 1 — 2026-05-25".
-func buildOptionLabel(id int, qty float64, date time.Time) string {
-	return fmt.Sprintf("Build #%d — qty %g — %s", id, qty, date.Format("2006-01-02"))
+func buildOptionLabel(id int, qty decimal.Decimal, date time.Time) string {
+	return fmt.Sprintf("Build #%d — qty %s — %s", id, qty, date.Format("2006-01-02"))
 }
 
 // ListBuildOptions returns a part's builds, newest first. Empty (not an error) when none.
@@ -481,7 +483,7 @@ func (s *Service) GetBuildOption(ctx context.Context, id int) (*BuildOption, err
 // far, excluding manual back-fills.
 type BuildHistoryRow struct {
 	ID          int
-	Qty         float64
+	Qty         decimal.Decimal
 	Date        time.Time
 	Username    string
 	Note        string
@@ -507,8 +509,8 @@ type BuildComponent struct {
 	PartNumber   string
 	Description  string
 	Category     string
-	QtyPer       float64
-	StockOnHand  float64
+	QtyPer       decimal.Decimal
+	StockOnHand  decimal.Decimal
 	TrackingMode string
 }
 
@@ -529,7 +531,7 @@ func (s *Service) ListBuildComponents(ctx context.Context, outputPartID int) ([]
 type BuildLine struct {
 	ComponentPartID int
 	PartNumber      string
-	Qty             float64
+	Qty             decimal.Decimal
 	Category        string
 	TrackingMode    string
 }
@@ -548,7 +550,7 @@ func (s *Service) ListBuildLines(ctx context.Context, partID int) ([]BuildLine, 
 }
 
 // CreateBuild records a build event (output lot unset) and returns its id.
-func (s *Service) CreateBuild(ctx context.Context, partID int, qty float64, date time.Time, username, note string) (int, error) {
+func (s *Service) CreateBuild(ctx context.Context, partID int, qty decimal.Decimal, date time.Time, username, note string) (int, error) {
 	return s.q.CreateBuild(ctx, dbq.CreateBuildParams{PartID: partID, Qty: qty, BuildDate: date, Username: username, Note: nullText(note)})
 }
 

@@ -142,7 +142,7 @@ func TestIntegration_InventoryRecordTxn(t *testing.T) {
 	}
 
 	day := time.Date(2026, 3, 4, 0, 0, 0, 0, time.Local)
-	if err := h.recordInventoryTxn(req, tx, 3002, "adjustment", -2.5, day, "", "", nil, nil, nil); err != nil {
+	if err := h.recordInventoryTxn(req, tx, 3002, "adjustment", d(-2.5), day, "", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	r := last()
@@ -154,7 +154,7 @@ func TestIntegration_InventoryRecordTxn(t *testing.T) {
 	}
 
 	po, lot, build := 5504, 8301, 8201
-	if err := h.recordInventoryTxn(req, tx, 3002, "receipt", 4, day, "REF", "a note", &po, &lot, &build); err != nil {
+	if err := h.recordInventoryTxn(req, tx, 3002, "receipt", d(4), day, "REF", "a note", &po, &lot, &build); err != nil {
 		t.Fatal(err)
 	}
 	r = last()
@@ -216,7 +216,7 @@ func TestIntegration_InventoryDescendantTrace(t *testing.T) {
 	}
 	flat := func(ns []TraceNode) (out []node) {
 		for _, n := range ns {
-			out = append(out, node{n.NodeType, n.ID, n.Number, n.Depth, n.Qty, n.IsVendorLot})
+			out = append(out, node{n.NodeType, n.ID, n.Number, n.Depth, n.Qty.InexactFloat64(), n.IsVendorLot})
 		}
 		return
 	}

@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 type Supplier struct {
 	ID                  int
@@ -45,7 +49,7 @@ type SupplierPart struct {
 	SupplierPN   string
 	SupplierDesc string
 	LeadTime     string
-	MinIncrement *float64
+	MinIncrement *decimal.Decimal
 	// joined — part info (supplier parts view)
 	PartNumber  string
 	Description string

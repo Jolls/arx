@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
 	"arx/internal/purchasing"
@@ -87,8 +88,8 @@ type SuggestPrice struct {
 	Index      int
 	PartID     int
 	PartNumber string
-	Cost       float64
-	PackSize   float64
+	Cost       decimal.Decimal
+	PackSize   decimal.Decimal
 }
 
 func (h *Handler) fetchSuggestPrices(r *http.Request, poNum string) []SuggestPrice {
@@ -163,10 +164,10 @@ func extractPolRows(form url.Values, prefix string) map[string]polRow {
 	return rows
 }
 
-func polRowToArgs(row polRow) (item int, qty, cost float64, pnid any) {
+func polRowToArgs(row polRow) (item int, qty, cost decimal.Decimal, pnid any) {
 	item, _ = strconv.Atoi(row.Item)
-	qty, _ = strconv.ParseFloat(row.Qty, 64)
-	cost, _ = strconv.ParseFloat(row.Cost, 64)
+	qty, _ = parseDecimal(row.Qty)
+	cost, _ = parseDecimal(row.Cost)
 	if row.PNID != "" {
 		if v, err := strconv.Atoi(row.PNID); err == nil && v > 0 {
 			pnid = v
@@ -200,20 +201,20 @@ func poFromForm(r *http.Request) purchasing.PO {
 		ReceiverAddress: fv(r, "receiver_address"), ReceiverCity: fv(r, "receiver_city"),
 		ReceiverState: fv(r, "receiver_state"), ReceiverZipcode: fv(r, "receiver_zipcode"),
 		ReceiverCountry: fv(r, "receiver_country"), ReceiverPhone: fv(r, "receiver_phone"), ReceiverFax: fv(r, "receiver_fax"),
-		Tax1: nullableFloat(fv(r, "tax1")), ShippingCost: nullableFloat(fv(r, "shipping_cost")),
-		MiscCost: nullableFloat(fv(r, "misc_cost")), Notes: fv(r, "notes"), InternalNotes: fv(r, "internal_notes"),
+		Tax1: nullableDecimal(fv(r, "tax1")), ShippingCost: nullableDecimal(fv(r, "shipping_cost")),
+		MiscCost: nullableDecimal(fv(r, "misc_cost")), Notes: fv(r, "notes"), InternalNotes: fv(r, "internal_notes"),
 		DateOrdered: parseFormDate(fv(r, "date_ordered")), DateRequested: parseFormDate(fv(r, "date_requested")),
 		DateClosed: parseFormDate(fv(r, "date_closed")), DatePrinted: parseFormDate(fv(r, "date_printed")),
 		SupplierContactID: intPtrOrNil(fv(r, "supplier_contact_id")), ReceiverContactID: intPtrOrNil(fv(r, "receiver_contact_id")),
 	}
 }
 
-func rowLineTotal(rows map[string]polRow) float64 {
-	var total float64
+func rowLineTotal(rows map[string]polRow) decimal.Decimal {
+	var total decimal.Decimal
 	for _, row := range rows {
-		qty, _ := strconv.ParseFloat(row.Qty, 64)
-		cost, _ := strconv.ParseFloat(row.Cost, 64)
-		total += qty * cost
+		qty, _ := parseDecimal(row.Qty)
+		cost, _ := parseDecimal(row.Cost)
+		total = total.Add(qty.Mul(cost))
 	}
 	return total
 }
@@ -239,18 +240,6 @@ func isoDate(t *time.Time) string {
 }
 
 
-func parseFormFloat(s string) any {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil
-	}
-	return f
-}
-
 // ── POList — GET /pos ────────────────────────────────────────────────────────
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
@@ -270,7 +259,7 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		Ordered  string  `json:"ordered"`
 		Closed   string  `json:"closed"`
 		Orderer  string  `json:"orderer"`
-		Cost     float64 `json:"cost"`
+		Cost     decimal.Decimal `json:"cost"`
 	}
 	pos, err := h.purchasing().ListPORows(r.Context())
 	if err != nil {
@@ -299,9 +288,9 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading PO items: "+err.Error())
 		return
 	}
-	var lineTotal float64
+	var lineTotal decimal.Decimal
 	for _, item := range items {
-		lineTotal += item.Qty * item.UnitCost
+		lineTotal = lineTotal.Add(item.Qty.Mul(item.UnitCost))
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/po/%s", po.Number), "PO #"+po.Number)
 	sess := h.session(r)
@@ -523,7 +512,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newRows := extractPolRows(r.Form, "new_pol")
-	var lineTotal float64
+	var lineTotal decimal.Decimal
 	for _, row := range newRows {
 		if row.isBlank() {
 			continue
@@ -533,13 +522,13 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error adding PO line: "+err.Error())
 			return
 		}
-		lineTotal += l.Qty * l.UnitCost
+		lineTotal = lineTotal.Add(l.Qty.Mul(l.UnitCost))
 	}
 
-	tax, _ := strconv.ParseFloat(fv(r, "tax1"), 64)
-	ship, _ := strconv.ParseFloat(fv(r, "shipping_cost"), 64)
-	misc, _ := strconv.ParseFloat(fv(r, "misc_cost"), 64)
-	totalCost := lineTotal + tax + ship + misc
+	tax, _ := parseDecimal(fv(r, "tax1"))
+	ship, _ := parseDecimal(fv(r, "shipping_cost"))
+	misc, _ := parseDecimal(fv(r, "misc_cost"))
+	totalCost := lineTotal.Add(tax).Add(ship).Add(misc)
 	if err := pur.SetPOTotal(r.Context(), newID, totalCost); err != nil {
 		h.renderError(w, r, "Error updating PO total: "+err.Error())
 		return
@@ -681,10 +670,10 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tax, _ := strconv.ParseFloat(fv(r, "tax1"), 64)
-	ship, _ := strconv.ParseFloat(fv(r, "shipping_cost"), 64)
-	misc, _ := strconv.ParseFloat(fv(r, "misc_cost"), 64)
-	totalCost := lineSum + tax + ship + misc
+	tax, _ := parseDecimal(fv(r, "tax1"))
+	ship, _ := parseDecimal(fv(r, "shipping_cost"))
+	misc, _ := parseDecimal(fv(r, "misc_cost"))
+	totalCost := lineSum.Add(tax).Add(ship).Add(misc)
 
 	// status and is_active are intentionally NOT updated here — they change only
 	// via POStatusTransition (POST /po/{id}/status), which records the transition.
@@ -757,8 +746,8 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 		}
 		pid, err1 := strconv.Atoi(partID)
 		sid, err2 := strconv.Atoi(supplierID)
-		packSizeF, err3 := strconv.ParseFloat(packSize, 64)
-		costF, err4 := strconv.ParseFloat(cost, 64)
+		packSizeF, err3 := parseDecimal(packSize)
+		costF, err4 := parseDecimal(cost)
 		// Deactivate any existing active price at this pack size for this part+supplier.
 		err := errors.Join(err1, err2, err3, err4)
 		if err == nil {
@@ -768,7 +757,7 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, "Error updating price: "+err.Error())
 			return
 		}
-		packPrice := costF * packSizeF
+		packPrice := costF.Mul(packSizeF)
 		if err := h.parts().CreatePrice(r.Context(), pid, sid, &packSizeF, &costF, &packPrice, today); err != nil {
 			h.renderError(w, r, "Error inserting price: "+err.Error())
 			return
@@ -909,9 +898,9 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading PO items: "+err.Error())
 		return
 	}
-	var lineTotal float64
+	var lineTotal decimal.Decimal
 	for _, item := range items {
-		lineTotal += item.Qty * item.UnitCost
+		lineTotal = lineTotal.Add(item.Qty.Mul(item.UnitCost))
 	}
 
 	var folderPath string
@@ -1351,10 +1340,10 @@ func derivePOReceiptStatus(items []models.PurchaseOrderLine) string {
 	}
 	anyReceived, allFull := false, true
 	for _, it := range items {
-		if it.ReceivedQty > 0 {
+		if it.ReceivedQty.IsPositive() {
 			anyReceived = true
 		}
-		if it.ReceivedQty < it.Qty {
+		if it.ReceivedQty.LessThan(it.Qty) {
 			allFull = false
 		}
 	}
@@ -1373,18 +1362,18 @@ func derivePOReceiptStatus(items []models.PurchaseOrderLine) string {
 // skipped and non-positive values are ignored. A value that is present but not a
 // number is a hard error. The returned map holds only the positive deltas keyed by
 // po_line id; an empty map means nothing was entered to receive.
-func parseReceiveDeltas(items []models.PurchaseOrderLine, get func(string) string) (map[int]float64, error) {
-	deltas := map[int]float64{}
+func parseReceiveDeltas(items []models.PurchaseOrderLine, get func(string) string) (map[int]decimal.Decimal, error) {
+	deltas := map[int]decimal.Decimal{}
 	for _, it := range items {
 		raw := strings.TrimSpace(get(fmt.Sprintf("recv[%d]", it.ID)))
 		if raw == "" {
 			continue
 		}
-		d, err := strconv.ParseFloat(raw, 64)
+		d, err := parseDecimal(raw)
 		if err != nil {
 			return nil, fmt.Errorf("invalid quantity %q for line %d", raw, it.ID)
 		}
-		if d > 0 {
+		if d.IsPositive() {
 			deltas[it.ID] = d
 		}
 	}
@@ -1704,7 +1693,7 @@ type POReceiptView struct {
 	Date       string
 	PartID     *int // catalog part, for linking to its transactions tab
 	PartNumber string
-	Qty        float64
+	Qty        decimal.Decimal
 	Username   string
 }
 
@@ -1815,7 +1804,7 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range items {
-		items[i].UnitCost = 0
+		items[i].UnitCost = decimal.Zero
 		items[i].VendorPN = ""
 		items[i].LeadTimeDays = nil
 	}
@@ -1845,7 +1834,7 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 // rfqCell is one supplier's quote for one part (a cell in the comparison grid).
 type rfqCell struct {
 	POLID    int
-	Cost     float64
+	Cost     decimal.Decimal
 	LeadDays *int
 	Quoted   bool // supplier entered a unit cost
 	Best     bool // lowest quoted cost in the row
@@ -1856,7 +1845,7 @@ type rfqRow struct {
 	PartNumber  string
 	Rev         string
 	Description string
-	Qty         float64
+	Qty         decimal.Decimal
 	Cells       []rfqCell // aligned to the suppliers slice
 }
 
@@ -1866,7 +1855,7 @@ type rfqSupplier struct {
 	SupplierName string
 	SupplierID   *int
 	Status       string
-	TotalCost    float64
+	TotalCost    decimal.Decimal
 	Best         bool // lowest non-zero total in the group
 }
 
@@ -1878,14 +1867,14 @@ type rfqScanLine struct {
 	SupplierName string
 	SupplierID   *int
 	Status       string
-	Total        float64
+	Total        decimal.Decimal
 	HasLine      bool
 	POLID        int
 	PartNumber   string
 	Rev          string
 	Description  string
-	Qty          float64
-	Cost         float64
+	Qty          decimal.Decimal
+	Cost         decimal.Decimal
 	LeadDays     *int
 }
 
@@ -1925,7 +1914,7 @@ func buildRFQGrid(lines []rfqScanLine) (suppliers []rfqSupplier, rows []*rfqRow)
 		for len(row.Cells) <= col {
 			row.Cells = append(row.Cells, rfqCell{})
 		}
-		row.Cells[col] = rfqCell{POLID: ln.POLID, Cost: ln.Cost, Quoted: ln.Cost > 0, LeadDays: ln.LeadDays}
+		row.Cells[col] = rfqCell{POLID: ln.POLID, Cost: ln.Cost, Quoted: ln.Cost.IsPositive(), LeadDays: ln.LeadDays}
 	}
 
 	// Pad every row to the full column count so the grid is rectangular, and mark
@@ -1934,9 +1923,9 @@ func buildRFQGrid(lines []rfqScanLine) (suppliers []rfqSupplier, rows []*rfqRow)
 		for len(row.Cells) < len(suppliers) {
 			row.Cells = append(row.Cells, rfqCell{})
 		}
-		bestIdx, bestCost := -1, 0.0
+		bestIdx, bestCost := -1, decimal.Zero
 		for i, c := range row.Cells {
-			if c.Quoted && (bestIdx < 0 || c.Cost < bestCost) {
+			if c.Quoted && (bestIdx < 0 || c.Cost.LessThan(bestCost)) {
 				bestIdx, bestCost = i, c.Cost
 			}
 		}
@@ -1946,9 +1935,9 @@ func buildRFQGrid(lines []rfqScanLine) (suppliers []rfqSupplier, rows []*rfqRow)
 	}
 
 	// Mark the quote with the lowest non-zero total.
-	bestSup, bestTotal := -1, 0.0
+	bestSup, bestTotal := -1, decimal.Zero
 	for i, s := range suppliers {
-		if s.TotalCost > 0 && (bestSup < 0 || s.TotalCost < bestTotal) {
+		if s.TotalCost.IsPositive() && (bestSup < 0 || s.TotalCost.LessThan(bestTotal)) {
 			bestSup, bestTotal = i, s.TotalCost
 		}
 	}
@@ -2048,9 +2037,9 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 
 	for _, id := range polIDs {
 		idStr := strconv.Itoa(id)
-		cost := 0.0
-		if v, ok := parseFormFloat(fv(r, "cost_"+idStr)).(float64); ok {
-			cost = v
+		cost := decimal.Zero
+		if v := nullableDecimal(fv(r, "cost_" + idStr)); v != nil {
+			cost = *v
 		}
 		if err := pur.SetRFQLineQuote(r.Context(), id, cost, intPtrOrNil(fv(r, "lead_"+idStr))); err != nil {
 			h.renderError(w, r, "Error saving quote: "+err.Error())
@@ -2324,9 +2313,9 @@ func (h *Handler) POsExportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = cw.Write([]string{
 			p.Number, p.Status, p.SupplierName, isoDate(p.DateOrdered), isoDate(p.DateClosed),
-			p.Orderer, fmt.Sprintf("%.2f", p.Total),
+			p.Orderer, p.Total.StringFixed(2),
 			lineNumStr, p.PartNumber, p.Description,
-			fmt.Sprintf("%.4g", p.Qty), fmt.Sprintf("%.2f", p.UnitCost),
+			p.Qty.String(), p.UnitCost.StringFixed(2),
 			p.VendorPN,
 		})
 	}

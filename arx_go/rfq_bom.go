@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"arx/internal/purchasing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 )
 
 // ── Create RFQs from an assembly's BOM (#99) ─────────────────────────────────
@@ -24,23 +24,23 @@ type rfqPart struct {
 	Description string
 	Revision    string
 	Category    string
-	Stock       float64
-	ReorderMin  sql.NullFloat64
+	Stock       decimal.Decimal
+	ReorderMin  *decimal.Decimal
 	SupplierID  sql.NullInt64
 	HasBOM      bool
 }
 
 type bomEdge struct {
 	child int
-	qty   float64
+	qty   decimal.Decimal
 }
 
 // rfqLine is one purchased part to order: total Need across the BOM, and the
 // computed order Qty after netting stock and reorder_min.
 type rfqLine struct {
 	Part rfqPart
-	Need float64
-	Qty  float64
+	Need decimal.Decimal
+	Qty  decimal.Decimal
 }
 
 type rfqSupplierGroup struct {
@@ -59,7 +59,7 @@ type rfqPlan struct {
 // against stock once; non-purchased sub-assemblies are netted before exploding.
 // Parts are visited parents-first (reverse DFS post-order) so each part's total
 // need is final before it's netted. A BOM cycle is an error.
-func planRFQLines(root int, n float64, edges map[int][]bomEdge, parts map[int]rfqPart, purchased func(category string) bool) ([]rfqLine, error) {
+func planRFQLines(root int, n decimal.Decimal, edges map[int][]bomEdge, parts map[int]rfqPart, purchased func(category string) bool) ([]rfqLine, error) {
 	const (
 		visiting = 1
 		done     = 2
@@ -91,7 +91,7 @@ func planRFQLines(root int, n float64, edges map[int][]bomEdge, parts map[int]rf
 		return nil, err
 	}
 
-	need := map[int]float64{root: n}
+	need := map[int]decimal.Decimal{root: n}
 	var lines []rfqLine
 	for i := len(order) - 1; i >= 0; i-- {
 		id := order[i]
@@ -99,10 +99,10 @@ func planRFQLines(root int, n float64, edges map[int][]bomEdge, parts map[int]rf
 		if id != root {
 			p := parts[id]
 			if purchased(p.Category) {
-				if x > p.Stock {
-					qty := x - p.Stock
-					if p.ReorderMin.Valid && p.ReorderMin.Float64 > 0 {
-						qty += p.ReorderMin.Float64
+				if x.GreaterThan(p.Stock) {
+					qty := x.Sub(p.Stock)
+					if p.ReorderMin != nil && p.ReorderMin.IsPositive() {
+						qty = qty.Add(*p.ReorderMin)
 					}
 					lines = append(lines, rfqLine{Part: p, Need: x, Qty: qty})
 				}
@@ -111,10 +111,10 @@ func planRFQLines(root int, n float64, edges map[int][]bomEdge, parts map[int]rf
 			if !p.HasBOM {
 				continue
 			}
-			x = math.Max(x-p.Stock, 0)
+			x = decimal.Max(x.Sub(p.Stock), decimal.Zero)
 		}
 		for _, e := range edges[id] {
-			need[e.child] += x * e.qty
+			need[e.child] = need[e.child].Add(x.Mul(e.qty))
 		}
 	}
 	sort.Slice(lines, func(i, j int) bool { return lines[i].Part.PartNumber < lines[j].Part.PartNumber })
@@ -148,9 +148,7 @@ func (h *Handler) loadRFQGraph(ctx context.Context, root int) (map[int][]bomEdge
 		for _, c := range comps {
 			p := rfqPart{ID: c.ID, PartNumber: c.PartNumber, Description: c.Description, Revision: c.Revision,
 				Category: c.Category, Stock: c.Stock, HasBOM: c.HasBOM}
-			if c.ReorderMin != nil {
-				p.ReorderMin = sql.NullFloat64{Float64: *c.ReorderMin, Valid: true}
-			}
+			p.ReorderMin = c.ReorderMin
 			if c.SupplierID != nil {
 				p.SupplierID = sql.NullInt64{Int64: int64(*c.SupplierID), Valid: true}
 			}
@@ -167,7 +165,7 @@ func (h *Handler) loadRFQGraph(ctx context.Context, root int) (map[int][]bomEdge
 
 // buildRFQPlan computes the purchase lines for n assemblies of root and groups
 // them by default supplier.
-func (h *Handler) buildRFQPlan(ctx context.Context, root int, n float64) (rfqPlan, error) {
+func (h *Handler) buildRFQPlan(ctx context.Context, root int, n decimal.Decimal) (rfqPlan, error) {
 	edges, parts, err := h.loadRFQGraph(ctx, root)
 	if err != nil {
 		return rfqPlan{}, err
@@ -216,8 +214,8 @@ func (h *Handler) PartCreateRFQs(w http.ResponseWriter, r *http.Request) {
 		"CSRFToken": h.csrfToken(w, r),
 	}
 	if nStr := fv(r, "n"); nStr != "" {
-		n, err := strconv.ParseFloat(nStr, 64)
-		if err != nil || n <= 0 {
+		n, err := parseDecimal(nStr)
+		if err != nil || !n.IsPositive() {
 			data["Error"] = "Enter a number of assemblies greater than zero."
 		} else if plan, err := h.buildRFQPlan(r.Context(), p.ID, n); err != nil {
 			data["Error"] = err.Error()
@@ -243,8 +241,8 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
 	}
-	n, err := strconv.ParseFloat(fv(r, "n"), 64)
-	if err != nil || n <= 0 {
+	n, err := parseDecimal(fv(r, "n"))
+	if err != nil || !n.IsPositive() {
 		h.renderError(w, r, "Invalid number of assemblies")
 		return
 	}
@@ -253,11 +251,11 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 		h.renderError(w, r, "Error planning RFQs: "+err.Error())
 		return
 	}
-	qtys := map[int]float64{}
+	qtys := map[int]decimal.Decimal{}
 	for i, pid := range r.Form["pid"] {
 		pidN, _ := strconv.Atoi(pid)
 		if i < len(r.Form["qty"]) {
-			if q, _ := strconv.ParseFloat(r.Form["qty"][i], 64); q > 0 {
+			if q, _ := parseDecimal(r.Form["qty"][i]); q.IsPositive() {
 				qtys[pidN] = q
 			}
 		}
@@ -333,7 +331,7 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	}
 
 	now := h.userNow(r)
-	zero := 0.0
+	zero := decimal.Zero
 	rfq := purchasing.PO{Number: number, Status: "rfq", IsActive: statusIsActive("rfq"), Orderer: po.Orderer,
 		SupplierID: &g.SupplierID, SupplierName: g.SupplierName, SupplierContact: sc.DisplayName, SupplierEmail: sc.Email,
 		SupplierAddress: sc.Address, SupplierCity: sc.City, SupplierState: sc.State, SupplierZipcode: sc.Zipcode,

@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/shopspring/decimal"
 )
 
 func TestResolvePriceFields(t *testing.T) {
@@ -19,11 +20,11 @@ func TestResolvePriceFields(t *testing.T) {
 		return req
 	}
 
-	ptr := func(v float64) *float64 { return &v }
+	ptr := dp
 	cases := []struct {
 		name             string
 		vals             url.Values
-		wantEA, wantPack *float64
+		wantEA, wantPack *decimal.Decimal
 	}{
 		{
 			name:     "price_ea only computes price_pack",
@@ -60,12 +61,20 @@ func TestResolvePriceFields(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			gotEA, gotPack := resolvePriceFields(newReq(c.vals))
-			if !reflect.DeepEqual(gotEA, c.wantEA) {
+			// decimals compare with Equal: DeepEqual sees internal representation, not value.
+			if !decimalPtrEqual(gotEA, c.wantEA) {
 				t.Errorf("priceEA = %v, want %v", gotEA, c.wantEA)
 			}
-			if !reflect.DeepEqual(gotPack, c.wantPack) {
+			if !decimalPtrEqual(gotPack, c.wantPack) {
 				t.Errorf("pricePack = %v, want %v", gotPack, c.wantPack)
 			}
 		})
 	}
+}
+
+func decimalPtrEqual(a, b *decimal.Decimal) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(*b)
 }

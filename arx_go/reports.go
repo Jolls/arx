@@ -640,7 +640,7 @@ func (h *Handler) ReportsSpendBySupplierExportCSV(w http.ResponseWriter, r *http
 	}
 	csvRows := make([][]string, len(rows))
 	for i, row := range rows {
-		csvRows[i] = []string{row.SupplierName, fmt.Sprintf("%.2f", row.TotalSpend)}
+		csvRows[i] = []string{row.SupplierName, row.TotalSpend.StringFixed(2)}
 	}
 	writeSpendCSV(w, "spend-by-supplier.csv", []string{"Supplier", "Total Spend"}, csvRows)
 }
@@ -656,7 +656,7 @@ func (h *Handler) ReportsSpendByPartExportCSV(w http.ResponseWriter, r *http.Req
 	}
 	csvRows := make([][]string, len(rows))
 	for i, row := range rows {
-		csvRows[i] = []string{row.PartNumber, row.Description, fmt.Sprintf("%.2f", row.TotalSpend)}
+		csvRows[i] = []string{row.PartNumber, row.Description, row.TotalSpend.StringFixed(2)}
 	}
 	writeSpendCSV(w, "spend-by-part.csv", []string{"Part Number", "Description", "Total Spend"}, csvRows)
 }

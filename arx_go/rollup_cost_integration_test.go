@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -31,7 +30,7 @@ func TestIntegration_RollupCost_Fixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rollupCost(S): %v", err)
 	}
-	assertFloatEqual(t, "rollupCost(S)", resS.cost, 1.0) // 4 × 0.25
+	assertFloatEqual(t, "rollupCost(S)", resS.cost.InexactFloat64(), 1.0) // 4 × 0.25
 
 	memo := map[int]rollupResult{}
 	resP, err := h.rollupCost(ctx, f.P, map[int]bool{}, memo)
@@ -41,7 +40,7 @@ func TestIntegration_RollupCost_Fixture(t *testing.T) {
 	if resP.cycle {
 		t.Error("rollupCost(P): cycle = true, want false")
 	}
-	assertFloatEqual(t, "rollupCost(P)", resP.cost, 19.0) // 2×0.25 + 0.5×35 + 1×1.0 + 3×0
+	assertFloatEqual(t, "rollupCost(P)", resP.cost.InexactFloat64(), 19.0) // 2×0.25 + 0.5×35 + 1×1.0 + 3×0
 	if len(memo) != 2 {
 		t.Errorf("rollupCost(P) memo = %v, want exactly P and S", memo)
 	}
@@ -55,20 +54,20 @@ func TestIntegration_BuildCost_Fixture(t *testing.T) {
 	f, cleanupBOM := seedBOM(t, h)
 	defer cleanupBOM()
 
-	res, err := h.buildCost(context.Background(), f.P, 10)
+	res, err := h.buildCost(context.Background(), f.P, d(10))
 	if err != nil {
 		t.Fatalf("buildCost(P, 10): %v", err)
 	}
 	want := buildCostResult{
 		Lines: []buildCostLine{
 			// 2×10 direct + 1×10×4 via S = 60 → the 10-pack tier.
-			{PNID: f.L1, PartNumber: f.PN[f.L1], Description: "l1 desc", QtyNeeded: 60, PackSize: 10, UnitPrice: 0.25, ExtCost: 15, Source: "price"},
-			{PNID: f.L2, PartNumber: f.PN[f.L2], Description: "labor desc", QtyNeeded: 5, Source: "missing"},
-			{PNID: f.L3, PartNumber: f.PN[f.L3], Description: "", QtyNeeded: 30, Source: "missing"},
+			{PNID: f.L1, PartNumber: f.PN[f.L1], Description: "l1 desc", QtyNeeded: d(60), PackSize: d(10), UnitPrice: d(0.25), ExtCost: d(15), Source: "price"},
+			{PNID: f.L2, PartNumber: f.PN[f.L2], Description: "labor desc", QtyNeeded: d(5), Source: "missing"},
+			{PNID: f.L3, PartNumber: f.PN[f.L3], Description: "", QtyNeeded: d(30), Source: "missing"},
 		},
-		Total: 15,
+		Total: d(15),
 	}
-	if !reflect.DeepEqual(res, want) {
+	if !deepEqualDec(res, want) {
 		t.Errorf("buildCost(P, 10):\n got %+v\nwant %+v", res, want)
 	}
 }

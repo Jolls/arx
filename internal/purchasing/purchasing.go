@@ -15,6 +15,8 @@ import (
 
 	"arx/internal/db"
 	"arx/internal/dbq"
+
+	"github.com/shopspring/decimal"
 )
 
 // SupplierRow is one row in the /suppliers grid.
@@ -65,7 +67,7 @@ type SupplierPO struct {
 	Number      string
 	Status      string
 	DateOrdered *time.Time
-	Total       float64
+	Total       decimal.Decimal
 }
 
 // SupplierPartSummary is one row in the supplier dashboard's "Linked Parts" card.
@@ -84,7 +86,7 @@ type LinkedPart struct {
 	SupplierPN     string
 	SupplierDesc   string
 	LeadTime       string
-	MinIncrement   *float64
+	MinIncrement   *decimal.Decimal
 	PartNumber     string
 	Description    string
 	Revision       string
@@ -257,7 +259,7 @@ type PORow struct {
 	DateOrdered  *time.Time
 	DateClosed   *time.Time
 	Orderer      string
-	Total        float64
+	Total        decimal.Decimal
 }
 
 // POExportRow is one PO line (or a line-less PO, LineNumber nil) for the CSV export.
@@ -268,12 +270,12 @@ type POExportRow struct {
 	DateOrdered  *time.Time
 	DateClosed   *time.Time
 	Orderer      string
-	Total        float64
+	Total        decimal.Decimal
 	LineNumber   *int
 	PartNumber   string
 	Description  string
-	Qty          float64
-	UnitCost     float64
+	Qty          decimal.Decimal
+	UnitCost     decimal.Decimal
 	VendorPN     string
 }
 
@@ -316,10 +318,10 @@ type PO struct {
 	ReceiverCountry     string
 	ReceiverPhone       string
 	ReceiverFax         string
-	Tax1                *float64
-	ShippingCost        *float64
-	MiscCost            *float64
-	TotalCost           *float64
+	Tax1                *decimal.Decimal
+	ShippingCost        *decimal.Decimal
+	MiscCost            *decimal.Decimal
+	TotalCost           *decimal.Decimal
 	Notes               string
 	InternalNotes       string
 	RFQGroupID          *int
@@ -333,12 +335,12 @@ type POLine struct {
 	PartNumberSnapshot string
 	RevisionSnapshot   string
 	Description        string
-	Qty                float64
-	UnitCost           float64
+	Qty                decimal.Decimal
+	UnitCost           decimal.Decimal
 	VendorPartNumber   string
 	PartID             *int
 	LeadTimeDays       *int
-	ReceivedQty        float64
+	ReceivedQty        decimal.Decimal
 	DateReceived       *time.Time
 	TrackingMode       string
 	AttID              *int
@@ -351,7 +353,7 @@ type POReceipt struct {
 	TxnDate    time.Time
 	PartID     *int
 	PartNumber string
-	Qty        float64
+	Qty        decimal.Decimal
 	Username   string
 }
 
@@ -377,8 +379,8 @@ type SuggestedLink struct {
 type SuggestedPrice struct {
 	PartID     int
 	PartNumber string
-	UnitCost   float64
-	Qty        float64
+	UnitCost   decimal.Decimal
+	Qty        decimal.Decimal
 }
 
 // RFQGroupLine is one (quote, line) row of an RFQ group; PolID is nil for a
@@ -388,13 +390,13 @@ type RFQGroupLine struct {
 	SupplierName string
 	SupplierID   int
 	Status       string
-	TotalCost    float64
+	TotalCost    decimal.Decimal
 	PolID        *int
 	PartNumber   string
 	Revision     string
 	Description  string
-	Qty          float64
-	UnitCost     float64
+	Qty          decimal.Decimal
+	UnitCost     decimal.Decimal
 	LeadTimeDays *int
 }
 
@@ -593,7 +595,7 @@ func (s *Service) CreatePO(ctx context.Context, po PO) (int, error) {
 // UpdatePOHeader overwrites the editable header fields of PO number with po's
 // (including DatePrinted), sets total_cost and bumps date_modified. Status,
 // is_active and approval are left alone.
-func (s *Service) UpdatePOHeader(ctx context.Context, number string, total float64, po PO) error {
+func (s *Service) UpdatePOHeader(ctx context.Context, number string, total decimal.Decimal, po PO) error {
 	return s.q.UpdatePOHeader(ctx, dbq.UpdatePOHeaderParams{
 		Orderer: po.Orderer, AccountID: po.AccountID,
 		SupplierID: po.SupplierID, SupplierName: po.SupplierName, SupplierContact: po.SupplierContact,
@@ -612,7 +614,7 @@ func (s *Service) UpdatePOHeader(ctx context.Context, number string, total float
 }
 
 // SetPOTotal sets PO id's total_cost.
-func (s *Service) SetPOTotal(ctx context.Context, id int, total float64) error {
+func (s *Service) SetPOTotal(ctx context.Context, id int, total decimal.Decimal) error {
 	return s.q.SetPOTotal(ctx, dbq.SetPOTotalParams{TotalCost: total, ID: id})
 }
 
@@ -689,7 +691,7 @@ func (s *Service) LockPOStatus(ctx context.Context, id int) (string, error) {
 }
 
 // ReceivePOLine adds qty to line id's received_qty and sets date_received to on.
-func (s *Service) ReceivePOLine(ctx context.Context, id int, qty float64, on time.Time) error {
+func (s *Service) ReceivePOLine(ctx context.Context, id int, qty decimal.Decimal, on time.Time) error {
 	return s.q.ReceivePOLine(ctx, dbq.ReceivePOLineParams{Qty: qty, DateReceived: &on, ID: id})
 }
 
@@ -707,7 +709,7 @@ func (s *Service) ListPOLineQtys(ctx context.Context, poID int) ([]POLine, error
 }
 
 // SumPOLines returns the sum of qty × unit cost over poID's lines.
-func (s *Service) SumPOLines(ctx context.Context, poID int) (float64, error) {
+func (s *Service) SumPOLines(ctx context.Context, poID int) (decimal.Decimal, error) {
 	return s.q.SumPOLines(ctx, poID)
 }
 
@@ -739,7 +741,7 @@ func (s *Service) CountRFQGroupQuotes(ctx context.Context, groupID int) (total, 
 
 // SetRFQLineQuote sets line id's quoted unit cost and lead time (nil clears it); a no-op on a
 // line whose quote is no longer in 'rfq'.
-func (s *Service) SetRFQLineQuote(ctx context.Context, id int, unitCost float64, leadDays *int) error {
+func (s *Service) SetRFQLineQuote(ctx context.Context, id int, unitCost decimal.Decimal, leadDays *int) error {
 	return s.q.SetRFQLineQuote(ctx, dbq.SetRFQLineQuoteParams{UnitCost: unitCost, LeadTimeDays: leadDays, ID: id})
 }
 

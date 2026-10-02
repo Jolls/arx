@@ -10,12 +10,13 @@ import (
 	"arx/arx_go/models"
 	"arx/internal/inventory"
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 )
 
 // BuildView is one past-build row for the Build tab's history table.
 type BuildView struct {
 	ID          int
-	Qty         float64
+	Qty         decimal.Decimal
 	Date        string
 	Username    string
 	Note        string
@@ -47,8 +48,8 @@ type buildComponent struct {
 	PartNumber   string
 	Description  string
 	Category     string
-	QtyPer       float64
-	StockOnHand  float64
+	QtyPer       decimal.Decimal
+	StockOnHand  decimal.Decimal
 	IsLotTracked bool
 	Lots         []LotOption // active lots to choose from; only populated when a lot pick is needed
 }
@@ -151,7 +152,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 type bomLine struct {
 	componentPartID int
 	partNumber      string
-	qty             float64
+	qty             decimal.Decimal
 	category        string
 	isLotTracked    bool
 }
@@ -200,7 +201,7 @@ func (h *Handler) collectLotPicks(r *http.Request, lines []bomLine) (map[int]int
 // and receipts the built quantity. Returns the new build id and (when lot-tracked) the
 // output lot id. It does NOT begin/commit the tx or touch any test record — the caller
 // owns those, so the same helper serves both the standalone build and the record save.
-func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, outputLotTracked bool, qty float64, buildDate time.Time, note string, lines []bomLine, lotPicks map[int]int) (buildID, outputLotID int, err error) {
+func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, outputLotTracked bool, qty decimal.Decimal, buildDate time.Time, note string, lines []bomLine, lotPicks map[int]int) (buildID, outputLotID int, err error) {
 	// Record the build event first so its id can label the ledger rows and output lot.
 	inv := inventory.New(tx)
 	if buildID, err = inv.CreateBuild(r.Context(), partID, qty, buildDate, h.actorName(r), note); err != nil {
@@ -231,8 +232,8 @@ func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, output
 		if !models.TabsForCategory(h.st().partCategories, l.category).Inventory {
 			continue
 		}
-		consumed := l.qty * qty
-		if consumed == 0 {
+		consumed := l.qty.Mul(qty)
+		if consumed.IsZero() {
 			continue // degenerate BOM line (qty 0) — nothing to issue.
 		}
 		var lotID *int
@@ -247,7 +248,7 @@ func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, output
 			}
 			lotID = &picked
 		}
-		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", -consumed, buildDate, "", ledgerNote, nil, lotID, &buildID); err != nil {
+		if err := h.recordInventoryTxn(r, tx, l.componentPartID, "issue", consumed.Neg(), buildDate, "", ledgerNote, nil, lotID, &buildID); err != nil {
 			return 0, 0, fmt.Errorf("issuing component stock: %w", err)
 		}
 		if outputLotTracked && l.isLotTracked {
@@ -271,10 +272,10 @@ func (h *Handler) performBuild(r *http.Request, tx *txLogger, partID int, output
 
 // parseBuildQty parses and validates a positive build quantity from the request's "qty"
 // field, shared by the standalone Build tab and the inline build-at-test-time panel (#867).
-func parseBuildQty(r *http.Request) (float64, error) {
-	qty, err := strconv.ParseFloat(fv(r, "qty"), 64)
-	if err != nil || qty <= 0 {
-		return 0, fmt.Errorf("Enter a positive build quantity.")
+func parseBuildQty(r *http.Request) (decimal.Decimal, error) {
+	qty, err := parseDecimal(fv(r, "qty"))
+	if err != nil || !qty.IsPositive() {
+		return decimal.Zero, fmt.Errorf("Enter a positive build quantity.")
 	}
 	return qty, nil
 }
@@ -385,5 +386,5 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/records/%d/edit?built=1", linkedRecord), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/part/%s/build?built=%g", id, qty), http.StatusFound)
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/build?built=%s", id, qty), http.StatusFound)
 }

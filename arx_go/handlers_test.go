@@ -135,8 +135,8 @@ func TestPolRowToArgs(t *testing.T) {
 	}
 	for _, c := range cases {
 		item, qty, cost, pnid := polRowToArgs(c.row)
-		if item != c.wantItem || qty != c.wantQty || cost != c.wantCost || pnid != c.wantPNID {
-			t.Errorf("polRowToArgs(%+v) = (%d, %g, %g, %v), want (%d, %g, %g, %v)",
+		if item != c.wantItem || !qty.Equal(d(c.wantQty)) || !cost.Equal(d(c.wantCost)) || pnid != c.wantPNID {
+			t.Errorf("polRowToArgs(%+v) = (%d, %s, %s, %v), want (%d, %g, %g, %v)",
 				c.row, item, qty, cost, pnid, c.wantItem, c.wantQty, c.wantCost, c.wantPNID)
 		}
 	}

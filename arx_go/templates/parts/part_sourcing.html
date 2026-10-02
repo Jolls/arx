@@ -132,7 +132,7 @@
                         <span class="text-muted me-2">Pricing:</span>
                         {{range $i, $pr := $prices}}{{if $i}}<span class="text-muted mx-1">|</span>{{end}}
                         {{if $pr.PriceEA}}<strong>{{printf "$%.4f" (deref $pr.PriceEA)}}</strong> ea{{end}}
-                        {{if and $pr.PackSize (gt (deref $pr.PackSize) 1.0)}} &nbsp;(pack of {{printf "%g" (deref $pr.PackSize)}}{{if $pr.PricePack}} = {{printf "$%.4f" (deref $pr.PricePack)}}{{end}}){{end}}
+                        {{if and $pr.PackSize (decGT (deref $pr.PackSize) 1)}} &nbsp;(pack of {{printf "%g" (deref $pr.PackSize)}}{{if $pr.PricePack}} = {{printf "$%.4f" (deref $pr.PricePack)}}{{end}}){{end}}
                         {{end}}
                         &nbsp;&mdash;&nbsp;<a href="/part/{{$.Part.ID}}/pricing" style="font-size:0.85em;">View pricing tab &rarr;</a>
                     </td>

@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const awardRFQQuote = `-- name: AwardRFQQuote :execrows
@@ -167,9 +169,9 @@ type CreatePOParams struct {
 	ReceiverCountry     string
 	ReceiverPhone       string
 	ReceiverFax         string
-	Tax1                *float64
-	ShippingCost        *float64
-	MiscCost            *float64
+	Tax1                *decimal.Decimal
+	ShippingCost        *decimal.Decimal
+	MiscCost            *decimal.Decimal
 	Notes               string
 	InternalNotes       string
 	DateOrdered         *time.Time
@@ -249,7 +251,7 @@ func (q *Queries) CreatePOApprovalEvent(ctx context.Context, arg CreatePOApprova
 const createPOLine = `-- name: CreatePOLine :exec
 INSERT INTO po_line (po_id, line_number, part_number_snapshot, revision_snapshot, description, qty, unit_cost, vendor_part_number, part_id)
 VALUES ($1, $2, $3::text, $4::text, $5::text,
-        $6::float8, $7::float8, $8::text, $9::int)
+        $6::numeric, $7::numeric, $8::text, $9::int)
 `
 
 type CreatePOLineParams struct {
@@ -258,8 +260,8 @@ type CreatePOLineParams struct {
 	PartNumber       string
 	Revision         string
 	Description      string
-	Qty              float64
-	UnitCost         float64
+	Qty              decimal.Decimal
+	UnitCost         decimal.Decimal
 	VendorPartNumber string
 	PartID           *int
 }
@@ -425,10 +427,10 @@ type GetPORow struct {
 	ReceiverCountry     string
 	ReceiverPhone       string
 	ReceiverFax         string
-	Tax1                *float64
-	ShippingCost        *float64
-	MiscCost            *float64
-	TotalCost           *float64
+	Tax1                *decimal.Decimal
+	ShippingCost        *decimal.Decimal
+	MiscCost            *decimal.Decimal
+	TotalCost           *decimal.Decimal
 	Notes               string
 	InternalNotes       string
 	RfqGroupID          *int
@@ -745,12 +747,12 @@ type ListPOExportRowsRow struct {
 	DateOrdered      *time.Time
 	DateClosed       *time.Time
 	Orderer          string
-	TotalCost        float64
+	TotalCost        decimal.Decimal
 	LineNumber       *int
 	PartNumber       string
 	Description      string
-	Qty              float64
-	UnitCost         float64
+	Qty              decimal.Decimal
+	UnitCost         decimal.Decimal
 	VendorPartNumber string
 }
 
@@ -847,8 +849,8 @@ SELECT COALESCE(qty, 0) AS qty, COALESCE(received_qty, 0) AS received_qty FROM p
 `
 
 type ListPOLineQtysRow struct {
-	Qty         float64
-	ReceivedQty float64
+	Qty         decimal.Decimal
+	ReceivedQty decimal.Decimal
 }
 
 func (q *Queries) ListPOLineQtys(ctx context.Context, poID int) ([]ListPOLineQtysRow, error) {
@@ -895,12 +897,12 @@ type ListPOLinesRow struct {
 	PartNumberSnapshot string
 	RevisionSnapshot   string
 	Description        string
-	Qty                float64
-	UnitCost           float64
+	Qty                decimal.Decimal
+	UnitCost           decimal.Decimal
 	VendorPartNumber   string
 	PartID             *int
 	LeadTimeDays       *int
-	ReceivedQty        float64
+	ReceivedQty        decimal.Decimal
 	DateReceived       *time.Time
 	TrackingMode       string
 	AttID              *int
@@ -961,7 +963,7 @@ type ListPOReceiptsRow struct {
 	TxnDate    time.Time
 	PartID     *int
 	PartNumber string
-	Qty        float64
+	Qty        decimal.Decimal
 	Username   string
 }
 
@@ -1011,7 +1013,7 @@ type ListPORowsRow struct {
 	DateOrdered  *time.Time
 	DateClosed   *time.Time
 	Orderer      string
-	TotalCost    float64
+	TotalCost    decimal.Decimal
 }
 
 // The /pos grid, number descending.
@@ -1065,13 +1067,13 @@ type ListRFQGroupLinesRow struct {
 	SupplierName string
 	SupplierID   int
 	Status       string
-	TotalCost    float64
+	TotalCost    decimal.Decimal
 	PolID        *int
 	PartNumber   string
 	Revision     string
 	Description  string
-	Qty          float64
-	UnitCost     float64
+	Qty          decimal.Decimal
+	UnitCost     decimal.Decimal
 	LeadTimeDays *int
 }
 
@@ -1180,8 +1182,8 @@ WHERE po.number = $1
 type ListSuggestedPricesRow struct {
 	PartID     int
 	PartNumber string
-	UnitCost   float64
-	Qty        float64
+	UnitCost   decimal.Decimal
+	Qty        decimal.Decimal
 }
 
 // Distinct priced catalog lines on a PO whose cost no active price of the PO's supplier covers at
@@ -1245,7 +1247,7 @@ type ListSupplierLinkedPartsRow struct {
 	SupplierPn     string
 	SupplierDesc   string
 	LeadTime       string
-	MinIncrement   *float64
+	MinIncrement   *decimal.Decimal
 	PartNumber     string
 	Description    string
 	Revision       string
@@ -1335,7 +1337,7 @@ func (q *Queries) ListSupplierPOLinks(ctx context.Context, supplierID int) ([]Li
 }
 
 const listSupplierPOs = `-- name: ListSupplierPOs :many
-SELECT number, COALESCE(status, '') AS status, date_ordered, COALESCE(total_cost, 0)::float8 AS total_cost
+SELECT number, COALESCE(status, '') AS status, date_ordered, COALESCE(total_cost, 0)::numeric AS total_cost
 FROM purchase_order
 WHERE supplier_id = $1::int
 ORDER BY date_ordered DESC, id DESC
@@ -1351,7 +1353,7 @@ type ListSupplierPOsRow struct {
 	Number      string
 	Status      string
 	DateOrdered *time.Time
-	TotalCost   float64
+	TotalCost   decimal.Decimal
 }
 
 // A supplier's POs (RFQ quotes included), most recent first; a NULL n means no limit.
@@ -1572,12 +1574,12 @@ func (q *Queries) NextPONumber(ctx context.Context) (string, error) {
 }
 
 const receivePOLine = `-- name: ReceivePOLine :exec
-UPDATE po_line SET received_qty = received_qty + $1::float8, date_received = $2
+UPDATE po_line SET received_qty = received_qty + $1::numeric, date_received = $2
 WHERE id = $3
 `
 
 type ReceivePOLineParams struct {
-	Qty          float64
+	Qty          decimal.Decimal
 	DateReceived *time.Time
 	ID           int
 }
@@ -1691,11 +1693,11 @@ func (q *Queries) SetPOStatus(ctx context.Context, arg SetPOStatusParams) error 
 }
 
 const setPOTotal = `-- name: SetPOTotal :exec
-UPDATE purchase_order SET total_cost = $1::float8 WHERE id = $2
+UPDATE purchase_order SET total_cost = $1::numeric WHERE id = $2
 `
 
 type SetPOTotalParams struct {
-	TotalCost float64
+	TotalCost decimal.Decimal
 	ID        int
 }
 
@@ -1719,12 +1721,12 @@ func (q *Queries) SetRFQGroup(ctx context.Context, arg SetRFQGroupParams) error 
 }
 
 const setRFQLineQuote = `-- name: SetRFQLineQuote :exec
-UPDATE po_line SET unit_cost = $1::float8, lead_time_days = $2::int
+UPDATE po_line SET unit_cost = $1::numeric, lead_time_days = $2::int
 WHERE po_line.id = $3 AND po_line.po_id IN (SELECT po.id FROM purchase_order po WHERE po.status = 'rfq')
 `
 
 type SetRFQLineQuoteParams struct {
-	UnitCost     float64
+	UnitCost     decimal.Decimal
 	LeadTimeDays *int
 	ID           int
 }
@@ -1735,12 +1737,12 @@ func (q *Queries) SetRFQLineQuote(ctx context.Context, arg SetRFQLineQuoteParams
 }
 
 const sumPOLines = `-- name: SumPOLines :one
-SELECT COALESCE(SUM(qty * unit_cost), 0)::float8 FROM po_line WHERE po_id = $1
+SELECT COALESCE(SUM(qty * unit_cost), 0)::numeric FROM po_line WHERE po_id = $1
 `
 
-func (q *Queries) SumPOLines(ctx context.Context, poID int) (float64, error) {
+func (q *Queries) SumPOLines(ctx context.Context, poID int) (decimal.Decimal, error) {
 	row := q.db.QueryRowContext(ctx, sumPOLines, poID)
-	var column_1 float64
+	var column_1 decimal.Decimal
 	err := row.Scan(&column_1)
 	return column_1, err
 }
@@ -1764,7 +1766,7 @@ UPDATE purchase_order SET
   notes = $28::text, internal_notes = $29::text,
   date_ordered = $30, date_requested = $31,
   date_closed = $32, date_printed = $33,
-  date_modified = CURRENT_TIMESTAMP, total_cost = $34::float8,
+  date_modified = CURRENT_TIMESTAMP, total_cost = $34::numeric,
   supplier_contact_id = $35::int, receiver_contact_id = $36::int
 WHERE number = $37
 `
@@ -1794,16 +1796,16 @@ type UpdatePOHeaderParams struct {
 	ReceiverCountry     string
 	ReceiverPhone       string
 	ReceiverFax         string
-	Tax1                *float64
-	ShippingCost        *float64
-	MiscCost            *float64
+	Tax1                *decimal.Decimal
+	ShippingCost        *decimal.Decimal
+	MiscCost            *decimal.Decimal
 	Notes               string
 	InternalNotes       string
 	DateOrdered         *time.Time
 	DateRequested       *time.Time
 	DateClosed          *time.Time
 	DatePrinted         *time.Time
-	TotalCost           float64
+	TotalCost           decimal.Decimal
 	SupplierContactID   *int
 	ReceiverContactID   *int
 	Number              string
@@ -1856,7 +1858,7 @@ func (q *Queries) UpdatePOHeader(ctx context.Context, arg UpdatePOHeaderParams) 
 const updatePOLine = `-- name: UpdatePOLine :exec
 UPDATE po_line SET line_number = $1, part_number_snapshot = $2::text,
   revision_snapshot = $3::text, description = $4::text,
-  qty = $5::float8, unit_cost = $6::float8,
+  qty = $5::numeric, unit_cost = $6::numeric,
   vendor_part_number = $7::text, part_id = $8::int
 WHERE id = $9 AND po_id = $10
 `
@@ -1866,8 +1868,8 @@ type UpdatePOLineParams struct {
 	PartNumber       string
 	Revision         string
 	Description      string
-	Qty              float64
-	UnitCost         float64
+	Qty              decimal.Decimal
+	UnitCost         decimal.Decimal
 	VendorPartNumber string
 	PartID           *int
 	ID               int

@@ -61,7 +61,7 @@ WHERE po.approval_status = 'pending'
 ORDER BY h.changed_at ASC LIMIT sqlc.arg(row_limit)::int;
 
 -- name: ListBelowReorderParts :many
-SELECT id AS part_id, part_number, stock_on_hand::float8 AS stock_on_hand, reorder_min::float8 AS reorder_min
+SELECT id AS part_id, part_number, stock_on_hand::numeric AS stock_on_hand, reorder_min::numeric AS reorder_min
 FROM part
 WHERE reorder_min IS NOT NULL AND stock_on_hand < reorder_min
 ORDER BY (stock_on_hand - reorder_min) ASC LIMIT sqlc.arg(row_limit)::int;
@@ -81,7 +81,7 @@ ORDER BY h.changed_at DESC LIMIT sqlc.arg(row_limit)::int;
 
 -- name: SpendBySupplier :many
 SELECT COALESCE(po.supplier_name, '') AS supplier_name,
-       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::float8 AS total_spend
+       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::numeric AS total_spend
 FROM po_line pol
 JOIN purchase_order po ON pol.po_id = po.id
 WHERE (sqlc.narg(date_from)::date IS NULL OR po.date_ordered >= sqlc.narg(date_from)::date)
@@ -93,7 +93,7 @@ ORDER BY total_spend DESC;
 -- Lines with no part_id (freeform) are grouped by their part_number_snapshot so the spend stays counted.
 SELECT COALESCE(p.part_number, pol.part_number_snapshot, '')::text AS part_number,
        COALESCE(p.description, '') AS description,
-       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::float8 AS total_spend
+       COALESCE(SUM(pol.qty * pol.unit_cost), 0)::numeric AS total_spend
 FROM po_line pol
 JOIN purchase_order po ON pol.po_id = po.id
 LEFT JOIN part p ON pol.part_id = p.id

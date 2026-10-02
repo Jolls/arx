@@ -73,18 +73,21 @@ func TestParseFormDate(t *testing.T) {
 	}
 }
 
-func TestParseFormFloat(t *testing.T) {
-	if got := parseFormFloat(""); got != nil {
-		t.Errorf("parseFormFloat(\"\") = %v, want nil", got)
+func TestNullableDecimal(t *testing.T) {
+	// Empty, junk, ParseFloat-style specials and out-of-range exponents all read as nil;
+	// "1e2000000000" parses under decimal.NewFromString but would hang the next Add/String.
+	for _, in := range []string{"", "abc", "inf", "NaN", "1e2000000000", "1e-2000000000", "1e16"} {
+		if got := nullableDecimal(in); got != nil {
+			t.Errorf("nullableDecimal(%q) = %v, want nil", in, got)
+		}
 	}
-	if got := parseFormFloat("abc"); got != nil {
-		t.Errorf("parseFormFloat(invalid) = %v, want nil", got)
+	for in, want := range map[string]float64{" 2.5 ": 2.5, "0": 0, "1e3": 1000, "0.00000001": 0.00000001} {
+		if got := nullableDecimal(in); got == nil || !got.Equal(d(want)) {
+			t.Errorf("nullableDecimal(%q) = %v, want %v", in, got, want)
+		}
 	}
-	if got := parseFormFloat(" 2.5 "); got != 2.5 { // trimmed then parsed
-		t.Errorf("parseFormFloat(\" 2.5 \") = %v, want 2.5", got)
-	}
-	if got := parseFormFloat("0"); got != 0.0 {
-		t.Errorf("parseFormFloat(\"0\") = %v, want 0", got)
+	if _, err := parseDecimal("1e2000000000"); err == nil {
+		t.Error("parseDecimal accepted an out-of-range exponent")
 	}
 }
 
@@ -96,11 +99,11 @@ func TestRowLineTotal(t *testing.T) {
 		"4": {Qty: "3", Cost: ""},      // cost empty -> 0
 	}
 	got := rowLineTotal(rows)
-	if got != 26.0 {
-		t.Errorf("rowLineTotal = %g, want 26", got)
+	if !got.Equal(d(26)) {
+		t.Errorf("rowLineTotal = %s, want 26", got)
 	}
-	if total := rowLineTotal(map[string]polRow{}); total != 0 {
-		t.Errorf("rowLineTotal(empty) = %g, want 0", total)
+	if total := rowLineTotal(map[string]polRow{}); !total.IsZero() {
+		t.Errorf("rowLineTotal(empty) = %s, want 0", total)
 	}
 }
 

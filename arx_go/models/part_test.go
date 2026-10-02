@@ -1,6 +1,10 @@
 package models
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/shopspring/decimal"
+)
 
 func TestBelowReorder(t *testing.T) {
 	min := func(v float64) *float64 { return &v }
@@ -19,7 +23,11 @@ func TestBelowReorder(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			p := Part{StockOnHand: c.stock, ReorderMin: c.reorderMin}
+			p := Part{StockOnHand: decimal.NewFromFloat(c.stock)}
+			if c.reorderMin != nil {
+				m := decimal.NewFromFloat(*c.reorderMin)
+				p.ReorderMin = &m
+			}
 			if got := p.BelowReorder(); got != c.want {
 				t.Errorf("BelowReorder() = %v, want %v", got, c.want)
 			}

@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 type PurchaseOrder struct {
 	ID                  int
@@ -39,10 +43,10 @@ type PurchaseOrder struct {
 	ReceiverCountry     string
 	ReceiverPhone       string
 	ReceiverFax         string
-	Tax1                *float64
-	ShippingCost        *float64
-	MiscCost            *float64
-	TotalCost           *float64
+	Tax1                *decimal.Decimal
+	ShippingCost        *decimal.Decimal
+	MiscCost            *decimal.Decimal
+	TotalCost           *decimal.Decimal
 	Notes               string
 	InternalNotes       string
 	RFQGroupID          *int
@@ -55,12 +59,12 @@ type PurchaseOrderLine struct {
 	PartNumberSnapshot string
 	RevisionSnapshot   string
 	Description        string
-	Qty                float64
-	UnitCost           float64
+	Qty                decimal.Decimal
+	UnitCost           decimal.Decimal
 	VendorPN           string
 	PartID             *int
 	LeadTimeDays       *int
-	ReceivedQty        float64
+	ReceivedQty        decimal.Decimal
 	DateReceived       *time.Time
 	IsLotTracked       bool // derived from part.tracking_mode (TracksLots, #745): receiving this line creates a lot row
 	PrimaryAtt         *Attachment
