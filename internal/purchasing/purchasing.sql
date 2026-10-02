@@ -230,6 +230,11 @@ ORDER BY po.id, pol.line_number;
 SELECT id, COALESCE(status, '') AS status, COALESCE(approval_status, '') AS approval_status
 FROM purchase_order WHERE number = $1;
 
+-- name: LockPOState :one
+-- #261: GetPOState that also locks the PO row for the rest of the transaction.
+SELECT id, COALESCE(status, '') AS status, COALESCE(approval_status, '') AS approval_status
+FROM purchase_order WHERE number = $1 FOR UPDATE;
+
 -- name: GetPONumber :one
 SELECT number FROM purchase_order WHERE id = $1;
 

@@ -618,7 +618,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	// Editing a PO that was already approved (or awaiting approval) invalidates
 	// that decision (#267) — capture the current state so we can reset it below.
 	pur := purchasing.New(tx)
-	state, err := pur.GetPOState(r.Context(), num)
+	state, err := pur.LockPOState(r.Context(), num) // #261: lock so the approval read can't go stale
 	if err != nil {
 		h.renderError(w, r, "Error loading PO: "+err.Error())
 		return
@@ -1269,7 +1269,20 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	st, err := h.purchasing().GetPOState(r.Context(), num)
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	// #261: lock the PO row and check its state inside the tx.
+	st, err := purchasing.New(tx).LockPOState(r.Context(), num)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
 		return
@@ -1288,18 +1301,6 @@ func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "This PO must be approved before it can be marked Sent.")
 		return
 	}
-
-	tx, err := h.beginTx(r.Context())
-	if err != nil {
-		h.renderError(w, r, "Error starting transaction: "+err.Error())
-		return
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			tx.Rollback()
-		}
-	}()
 
 	if err := h.recordPOStatusChange(r, tx, poID, current, target); err != nil {
 		h.renderError(w, r, "Error updating PO status: "+err.Error())
@@ -1608,7 +1609,21 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	st, err := h.purchasing().GetPOState(r.Context(), num)
+	tx, err := h.beginTx(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error starting transaction: "+err.Error())
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	// #261: lock the PO row and check its state inside the tx.
+	pur := purchasing.New(tx)
+	st, err := pur.LockPOState(r.Context(), num)
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Purchase order not found")
 		return
@@ -1629,23 +1644,10 @@ func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
 	logged := map[string]string{"submit": "submitted", "approve": "approved", "reject": "rejected"}[action]
 	note := fv(r, "note")
 
-	tx, err := h.beginTx(r.Context())
-	if err != nil {
-		h.renderError(w, r, "Error starting transaction: "+err.Error())
-		return
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			tx.Rollback()
-		}
-	}()
-
 	var notePtr *string // blank note → NULL
 	if note != "" {
 		notePtr = &note
 	}
-	pur := purchasing.New(tx)
 	if err := pur.CreatePOApprovalEvent(r.Context(), poID, logged, notePtr, h.actorName(r)); err != nil {
 		h.renderError(w, r, "Error recording approval: "+err.Error())
 		return
