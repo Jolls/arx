@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.58] - 2026-10-02
+### Changed
+- Replaced the unmaintained `getlantern/systray` with the actively maintained `fyne.io/systray` fork, dropping 6 stale getlantern indirect dependencies ([#317](https://github.com/Jolls/arx/issues/317))
+- Replaced the dormant `pkg/browser` dependency with a small stdlib `os/exec` helper for opening the app URL ([#318](https://github.com/Jolls/arx/issues/318))
+
 ## [0.8.57] - 2026-10-02
 ### Fixed
 - Money and quantities (prices, PO line/tax/shipping/total costs, BOM and build quantities, rollup costs, stock) are now exact decimals (`shopspring/decimal`) from the database through the handlers and templates, instead of `float64`, so rollups and PO totals no longer pick up binary floating-point error. Decimals marshal as JSON numbers; the BOM/PO CSV exports now write quantities in full instead of 4 significant figures ([#193](https://github.com/Jolls/arx/issues/193))

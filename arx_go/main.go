@@ -8,15 +8,16 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 	_ "time/tzdata" // embed the IANA tz database: time.LoadLocation must work on machines with no Go toolchain (#847)
 
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/pkg/browser"
 
 	arxbase "arx/internal/config"
 	arxdb "arx/internal/db"
@@ -105,7 +106,7 @@ func onReady() {
 		for {
 			select {
 			case <-mOpen.ClickedCh:
-				_ = browser.OpenURL(url)
+				_ = openURL(url)
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 			}
@@ -128,7 +129,20 @@ func openWhenReady(url, port string) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	_ = browser.OpenURL(url)
+	_ = openURL(url)
+}
+
+// openURL opens url in the system's default browser. Arx only ever opens its own
+// localhost URL, so no input-sanitization is needed here.
+func openURL(url string) error {
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		return exec.Command("open", url).Start()
+	default:
+		return exec.Command("xdg-open", url).Start()
+	}
 }
 
 func buildRouter(h *Handler) *chi.Mux {
