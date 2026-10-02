@@ -44,9 +44,10 @@ right, which is what migration 192 did. Both zones are flags (`--server-zone`, d
 | Desktop (Go `time.Now()`, Pacific) | `build.created_at`, `company.date_modified`, `contact.updated_at`, `inventory_transaction.created_at`, `lot.created_at`, `named_queries.created_at/updated_at`, `part.last_rollup_at`, `purchase_order.date_modified`, `purchase_order_history.changed_at` |
 | Not converted | `form_record.record_date` (user-typed, stays a zoneless `TIMESTAMP`); all `DATE` columns |
 
-Known imprecision, **not corrected** by this load (tracked in #279, to be fixed by the post-cutover
-UTC migration): `purchase_order.date_modified` is also written with `GETDATE()` (UTC) at one path, so those
-rows are 7-8 hours off; `DATE` columns defaulting to `GETDATE()` can be a day off for evening Pacific writes.
+Known imprecision, **not corrected** by this load and left as is (#279; cutoffs in `SQL/SCHEMA.md`,
+"Timestamp and date provenance"): `purchase_order.date_modified` is also written with `GETDATE()` (UTC) at
+one path, so those rows are 7-8 hours off; `DATE` columns set from `GETDATE()` can be a day off for evening
+Pacific writes.
 
 Also not corrected: a desktop-clock time inside the one-hour daylight-saving overlap (or gap) resolves to one
 of the two possible instants, so a handful of rows can be off by an hour. The 10 canonical `named_queries` rows get

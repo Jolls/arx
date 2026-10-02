@@ -26,7 +26,7 @@ CREATE TABLE part (
   user_field_8        VARCHAR(255)     DEFAULT '',
   user_field_9        VARCHAR(255)     DEFAULT '',
   user_field_10       VARCHAR(255)     DEFAULT '',
-  created_date        DATE             DEFAULT CURRENT_DATE,
+  created_date        DATE             NULL,                  -- User's local day, supplied by the app (#265, #279).
   last_rollup_cost    NUMERIC(16,8)    NULL,
   last_rollup_at      TIMESTAMPTZ      NULL,
   attachment_count    INTEGER          DEFAULT 0,             -- Denormalized; see header note.
@@ -34,7 +34,7 @@ CREATE TABLE part (
   current_cost        NUMERIC(16,8)    DEFAULT 0,
   is_active           BOOLEAN          DEFAULT TRUE,
   po_line_count       INTEGER          DEFAULT 0,             -- Denormalized; see header note.
-  modified_date       DATE             DEFAULT CURRENT_DATE,
+  modified_date       DATE             NULL,                  -- User's local day, supplied by the app (#265, #279).
   price_id            INTEGER          NULL,                  -- FK to price.id.
   default_supplier_id INTEGER          NULL,                 -- FK to company.id.
   uom_id              INTEGER          NULL,                 -- FK to uom.uom_id.

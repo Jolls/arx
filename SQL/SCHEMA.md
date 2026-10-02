@@ -17,6 +17,7 @@ All new tables use snake_case. Do not extend the legacy prefix style for new wor
 - Foreign key: `{stem}_id` referencing that table's `id` — e.g. `supplier_id INT` pointing at `company.id`. Stems: `part`, `po`, `attachment`, `form`, `record`, `test`.
 - Booleans: `is_` prefix — `is_active`, `is_locked` (not `active`, `locked`)
 - Timestamps: `created_at`, `updated_at` — `TIMESTAMPTZ DEFAULT now()`, assigned by the database (never sent from Go); displayed in the viewing user's zone (#192). User-typed dates are `DATE`; `form_record.record_date` is a user-typed zoneless `TIMESTAMP`.
+- Date-only business columns (`DATE`) have no `DEFAULT CURRENT_DATE`: that records the database's zone day, so the app supplies the user's local day explicitly (#265, #279).
 - Avoid SQL reserved words as column names: `name`, `date`, `type`, `order`, `value`, `key`
   — use `display_name`, `order_date`, `record_type`, etc.
 
@@ -113,6 +114,16 @@ No `company_attachment` rows are seeded (would require real files/URLs on compan
 `form_row_history` gets one
 trigger-written row (the seed updates step 6103 after insert to exercise the history timeline).
 
+## Timestamp and date provenance (#279)
+
+ArxProd went live on Postgres on **2026-10-01**. Its rows are the load from the 0.7 Azure SQL database (#216), written by two clocks and **not corrected** (the tool read each column by the clock that wrote it: server clock UTC, desktop clock `America/Los_Angeles` because every 0.7 desktop ran in Pacific time; table in `docs/216-data-migration/runbook.md`).
+
+- **Before 2026-10-01** (loaded rows):
+  - `purchase_order.date_modified` on RFQ quotes saved from the compare page was written with `GETDATE()` (UTC) but read as Pacific, so it is 7-8 hours early. That path wrote no history row, so those rows can't be told apart from correct ones. The column is only shown, as a date, on the PO page; nothing sorts or filters on it.
+  - `purchase_order.date_closed` (set on closing) and `date_ordered` (set when an RFQ quote is awarded) were set from the database clock's date, i.e. UTC, so an evening Pacific write can be a day off. A `DATE` has no zone, so the original can't be recovered.
+  - A desktop-clock time inside a daylight-saving overlap can be an hour off.
+- **From 2026-10-01:** every audit timestamp is the database's `now()` (UTC instant) shown in the viewing user's zone (#192), and every date-only business date is the user's local day, supplied by the app (#265, #279).
+
 ## Triggers
 
 Trigger DDL lives in `SQL/postgres/triggers.sql`. These fire identically in ArxDev, since ArxDev shares the exact same schema (bare table names, no `_Test` suffix) — only row data differs, seeded by `SQL/postgres/seed_test_data.sql`. The count triggers are statement-level with transition tables — see the header of `triggers.sql` for why each count needs a per-operation trigger.
@@ -161,7 +172,7 @@ reference DDL in `SQL/postgres/*.sql` (and seed, if affected). The timestamp giv
 - **Ledger baseline:** the runner refuses unless `schema_migrations` exists and holds goose's version-0 row. `build_schema.sh` records version 0 and every migration file as applied, so a fresh DB starts fully migrated. An existing DB whose schema already includes every migration but whose ledger is empty is backfilled once, as the DDL login, listing only migrations whose effect is present:
   ```sql
   INSERT INTO schema_migrations (version_id, is_applied)
-  SELECT v, TRUE FROM (VALUES (0), (20260926092325), (20260926092835), (20260926093727), (20260926120000), (20260930150000)) t(v)
+  SELECT v, TRUE FROM (VALUES (0), (20260926092325), (20260926092835), (20260926093727), (20260926120000), (20260930150000), (20261002151500)) t(v)
   WHERE NOT EXISTS (SELECT 1 FROM schema_migrations s WHERE s.version_id = t.v);
   ```
   Add each new migration's version to this list in the PR that adds it.

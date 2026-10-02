@@ -2617,6 +2617,7 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	loc := h.userLocation(r)
 	out := make([]row, 0)
 	for _, res := range results {
 		rec := row{ID: res.ID, SN: res.SerialNumber, SNPN: res.SubjectPartNumber, PartNumberID: res.PartID,
@@ -2625,7 +2626,8 @@ func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
 			rec.Date = res.RecordDate.Format("2006-01-02 15:04")
 		}
 		if res.UpdatedAt != nil {
-			rec.ResultDate = res.UpdatedAt.Format("2006-01-02 15:04")
+			// updated_at is a timestamptz scanned in time.Local; show it in the viewer's zone (#279).
+			rec.ResultDate = res.UpdatedAt.In(loc).Format("2006-01-02 15:04")
 		}
 		switch {
 		case res.PassFail == nil:
