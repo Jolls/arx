@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.54] - 2026-10-02
+### Fixed
+- Marking a PO printed now checks approval in the UPDATE itself, so a concurrent edit or cancel can't leave a stamped `date_printed` on an unapproved PO ([#311](https://github.com/Jolls/arx/issues/311))
+- The PO print page now sends its CSRF token, so Date Printed is recorded and the PO folder opens; background shading is kept when saving to PDF ([#311](https://github.com/Jolls/arx/issues/311))
+
 ## [0.8.53] - 2026-10-02
 ### Fixed
 - Dark-mode contrast: accent-coloured text (links, active sub-tab, detail labels) and `btn-outline-secondary` now reach 4.5:1, and the login card fits 320px viewports ([#258](https://github.com/Jolls/arx/issues/258))

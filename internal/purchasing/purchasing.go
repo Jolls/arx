@@ -621,9 +621,11 @@ func (s *Service) SetRFQGroup(ctx context.Context, id, groupID int) error {
 	return s.q.SetRFQGroup(ctx, dbq.SetRFQGroupParams{GroupID: groupID, ID: id})
 }
 
-// MarkPOPrinted sets PO number's date_printed to on (YYYY-MM-DD).
-func (s *Service) MarkPOPrinted(ctx context.Context, number, on string) error {
-	return s.q.MarkPOPrinted(ctx, dbq.MarkPOPrintedParams{PrintedOn: on, Number: number})
+// MarkPOPrinted sets PO number's date_printed to on (YYYY-MM-DD) and reports
+// whether it did; false means the PO is missing or neither an RFQ nor approved.
+func (s *Service) MarkPOPrinted(ctx context.Context, number, on string) (bool, error) {
+	n, err := s.q.MarkPOPrinted(ctx, dbq.MarkPOPrintedParams{PrintedOn: on, Number: number})
+	return n > 0, err
 }
 
 // CreatePOStatusEvent records a status change on poID; from is nil on creation.

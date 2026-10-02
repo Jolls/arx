@@ -1539,8 +1539,9 @@ func (q *Queries) LockRFQGroup(ctx context.Context, groupID int) ([]int, error) 
 	return items, nil
 }
 
-const markPOPrinted = `-- name: MarkPOPrinted :exec
-UPDATE purchase_order SET date_printed = $1::text::date WHERE number = $2
+const markPOPrinted = `-- name: MarkPOPrinted :execrows
+UPDATE purchase_order SET date_printed = $1::text::date
+WHERE number = $2 AND (status = 'rfq' OR approval_status = 'approved')
 `
 
 type MarkPOPrintedParams struct {
@@ -1548,10 +1549,14 @@ type MarkPOPrintedParams struct {
 	Number    string
 }
 
-// printed_on is a YYYY-MM-DD date string.
-func (q *Queries) MarkPOPrinted(ctx context.Context, arg MarkPOPrintedParams) error {
-	_, err := q.db.ExecContext(ctx, markPOPrinted, arg.PrintedOn, arg.Number)
-	return err
+// printed_on is a YYYY-MM-DD date string. Only RFQs and approved POs are stamped
+// (mirrors poApprovalAllowsSend in arx_go/pos.go); 0 rows affected = not printable.
+func (q *Queries) MarkPOPrinted(ctx context.Context, arg MarkPOPrintedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markPOPrinted, arg.PrintedOn, arg.Number)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const nextPONumber = `-- name: NextPONumber :one
