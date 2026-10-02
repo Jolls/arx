@@ -299,9 +299,11 @@ UPDATE purchase_order SET total_cost = sqlc.arg(total_cost)::float8 WHERE id = s
 -- name: SetRFQGroup :exec
 UPDATE purchase_order SET rfq_group_id = sqlc.arg(group_id)::int WHERE id = sqlc.arg(id);
 
--- name: MarkPOPrinted :exec
--- printed_on is a YYYY-MM-DD date string.
-UPDATE purchase_order SET date_printed = sqlc.arg(printed_on)::text::date WHERE number = sqlc.arg(number);
+-- name: MarkPOPrinted :execrows
+-- printed_on is a YYYY-MM-DD date string. Only RFQs and approved POs are stamped
+-- (mirrors poApprovalAllowsSend in arx_go/pos.go); 0 rows affected = not printable.
+UPDATE purchase_order SET date_printed = sqlc.arg(printed_on)::text::date
+WHERE number = sqlc.arg(number) AND (status = 'rfq' OR approval_status = 'approved');
 
 -- name: CreatePOStatusEvent :exec
 -- from_status and note are NULL when the caller has none (a creation event, a plain transition).

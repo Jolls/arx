@@ -925,7 +925,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"SupplierCode": supplierCode, "TestMode": h.cfg().TestMode,
 		"POFolderPath": folderPath, "IsRFQ": po.Status == "rfq",
-		"CompanyLogo": h.companyLogoURL(),
+		"CompanyLogo": h.companyLogoURL(), "CSRFToken": h.csrfToken(w, r),
 	})
 }
 
@@ -934,14 +934,15 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
 	num := chi.URLParam(r, "id")
 	// Approval gate (#267): only set date_printed for approved POs. RFQs (#270)
-	// print without approval.
-	st, err := h.purchasing().GetPOState(r.Context(), num)
-	if err != nil || (st.Status != "rfq" && !poApprovalAllowsSend(st.ApprovalStatus)) {
-		http.Error(w, "PO is not approved", http.StatusForbidden)
+	// print without approval. The gate is in the UPDATE itself (#311) so a
+	// concurrent edit/cancel can't slip between check and write.
+	ok, err := h.purchasing().MarkPOPrinted(r.Context(), num, h.userNow(r).Format("2006-01-02"))
+	if err != nil {
+		serverError(w, "database error", err)
 		return
 	}
-	if err := h.purchasing().MarkPOPrinted(r.Context(), num, h.userNow(r).Format("2006-01-02")); err != nil {
-		serverError(w, "database error", err)
+	if !ok {
+		http.Error(w, "PO is not approved", http.StatusForbidden)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

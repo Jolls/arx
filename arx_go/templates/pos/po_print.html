@@ -37,6 +37,7 @@
     .po-notes p { font-size:9.5pt; line-height:1.5; white-space:pre-wrap; }
     @page { margin: 0; }
     @media print {
+      * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .print-btn { display:none !important; }
       body { padding:12mm; }
       .po-doc { max-width:100%; }
@@ -59,8 +60,9 @@ function printPO(btn) {
       if (hint) { hint.innerHTML = '&#10003; Folder path copied &mdash; paste in the save dialog address bar'; hint.style.color = '#155724'; }
     }).catch(function(){});
   }
-  fetch('/po/{{.PO.Number}}/mark-printed', {method:'POST'}).catch(function(){}).then(function() {
-    fetch('/po/{{.PO.Number}}/open-folder', {method:'POST'}).catch(function(){});
+  var body = new URLSearchParams({csrf_token: '{{.CSRFToken}}'});
+  fetch('/po/{{.PO.Number}}/mark-printed', {method:'POST', body:body}).catch(function(){}).then(function() {
+    fetch('/po/{{.PO.Number}}/open-folder', {method:'POST', body:body}).catch(function(){});
     window.print();
   });
 }
