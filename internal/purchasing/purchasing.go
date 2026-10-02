@@ -656,9 +656,9 @@ func (s *Service) DeletePOLine(ctx context.Context, poID, id int) error {
 }
 
 // SetPOStatus moves PO id from from to to (with isActive) and bumps
-// date_modified; closing sets date_closed if unset, reopening from closed clears it.
-func (s *Service) SetPOStatus(ctx context.Context, id int, from, to string, isActive bool) error {
-	return s.q.SetPOStatus(ctx, dbq.SetPOStatusParams{ToStatus: to, IsActive: isActive, FromStatus: from, ID: id})
+// date_modified; closing sets date_closed to today if unset, reopening from closed clears it.
+func (s *Service) SetPOStatus(ctx context.Context, id int, from, to string, isActive bool, today time.Time) error {
+	return s.q.SetPOStatus(ctx, dbq.SetPOStatusParams{ToStatus: to, IsActive: isActive, FromStatus: from, ID: id, Today: today})
 }
 
 // SetPOApproval sets PO id's approval_status.
@@ -766,8 +766,8 @@ func (s *Service) ListOpenRFQSiblings(ctx context.Context, groupID, exceptID int
 
 // CopyPOForConversion duplicates PO sourceID's header as a draft PO at number (no RFQ group,
 // ordered today, approval not submitted) and returns its id.
-func (s *Service) CopyPOForConversion(ctx context.Context, sourceID int, number string) (int, error) {
-	return s.q.CopyPOForConversion(ctx, dbq.CopyPOForConversionParams{Number: number, SourceID: sourceID})
+func (s *Service) CopyPOForConversion(ctx context.Context, sourceID int, number string, today time.Time) (int, error) {
+	return s.q.CopyPOForConversion(ctx, dbq.CopyPOForConversionParams{Number: number, SourceID: sourceID, Today: today})
 }
 
 // CopyPOLines copies PO sourceID's lines onto PO poID.

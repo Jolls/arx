@@ -321,7 +321,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 		"ApprovalActions":    poApprovalActions(po.ApprovalStatus, canApprove),
 		"History":            h.fetchPOHistory(r, po.ID),
 		"Receipts":           h.fetchPOReceipts(r, po.ID),
-		"Today":              time.Now().Format("2006-01-02"),
+		"Today":              h.userNow(r).Format("2006-01-02"),
 		"CanSend":            poApprovalAllowsSend(po.ApprovalStatus),
 		"CSRFToken":          h.csrfToken(w, r),
 		"BulkOrderDelimiter": bulkOrderDelimiter,
@@ -410,7 +410,7 @@ func (h *Handler) applyPODefaults(r *http.Request, po *models.PurchaseOrder) (su
 }
 
 func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
+	now := h.userNow(r)
 	po := models.PurchaseOrder{Status: "draft", IsActive: true, DateOrdered: &now, DateRequested: &now}
 	if u := h.currentUser(r); u != nil {
 		po.Orderer = u.DisplayName
@@ -740,7 +740,7 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	today := time.Now().Format("2006-01-02")
+	today := h.userNow(r).Format("2006-01-02")
 	pricesCount, _ := strconv.Atoi(r.FormValue("prices_count"))
 	for i := range pricesCount {
 		if r.FormValue(fmt.Sprintf("add_price_%d", i)) != "1" {
@@ -940,7 +940,7 @@ func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "PO is not approved", http.StatusForbidden)
 		return
 	}
-	if err := h.purchasing().MarkPOPrinted(r.Context(), num, time.Now().Format("2006-01-02")); err != nil {
+	if err := h.purchasing().MarkPOPrinted(r.Context(), num, h.userNow(r).Format("2006-01-02")); err != nil {
 		serverError(w, "database error", err)
 		return
 	}
@@ -1334,7 +1334,7 @@ func (h *Handler) recordPOStatusChange(r *http.Request, tx *txLogger, poID int, 
 	}
 	// date_closed mirrors the closed state: set it when closing (if unset),
 	// clear it when reopening from closed.
-	return pur.SetPOStatus(r.Context(), poID, from, to, statusIsActive(to))
+	return pur.SetPOStatus(r.Context(), poID, from, to, statusIsActive(to), h.userNow(r))
 }
 
 // ── PO receiving / goods receipt (issue #269) ────────────────────────────────
@@ -1423,7 +1423,7 @@ func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
 	}
 	txnDate := parseFormDate(fv(r, "txn_date"))
 	if txnDate == nil {
-		now := time.Now()
+		now := h.userNow(r)
 		txnDate = &now
 	}
 
@@ -1774,7 +1774,7 @@ func rfqBaseNumber(number string) string {
 
 // RFQNew — GET /rfqs/new
 func (h *Handler) RFQNew(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
+	now := h.userNow(r)
 	po := models.PurchaseOrder{Status: "rfq", IsActive: true, DateRequested: &now}
 	if u := h.currentUser(r); u != nil {
 		po.Orderer = u.DisplayName
@@ -2145,7 +2145,7 @@ func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
 
 	// Duplicate the winning quote's header into a new real PO: bare base number,
 	// draft, no rfq_group_id (so it always shows on the PO list).
-	newID, err := pur.CopyPOForConversion(r.Context(), poID, base)
+	newID, err := pur.CopyPOForConversion(r.Context(), poID, base, h.userNow(r))
 	if err != nil {
 		h.renderError(w, r, "Error creating PO: "+err.Error())
 		return

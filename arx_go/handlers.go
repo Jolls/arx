@@ -385,6 +385,13 @@ func (h *Handler) userLocation(r *http.Request) *time.Location {
 	return h.userLocationCtx(r.Context())
 }
 
+// userNow is the current time in the user's timezone. Date-only business columns take
+// their calendar day from it (never the DB's CURRENT_DATE or the server's local zone) so
+// every path agrees on "today" (#265).
+func (h *Handler) userNow(r *http.Request) time.Time {
+	return time.Now().In(h.userLocation(r))
+}
+
 // userLocationCtx is userLocation for code that only has the request context.
 func (h *Handler) userLocationCtx(ctx context.Context) *time.Location {
 	tz := defaultTimezone

@@ -29,11 +29,11 @@ func (q *Queries) CountOpenPOs(ctx context.Context) (int, error) {
 
 const countPOsReceivedThisMonth = `-- name: CountPOsReceivedThisMonth :one
 SELECT COUNT(DISTINCT po_id)::int FROM po_line
-WHERE date_received >= date_trunc('month', CURRENT_DATE)::date
+WHERE date_received >= date_trunc('month', $1::date)::date
 `
 
-func (q *Queries) CountPOsReceivedThisMonth(ctx context.Context) (int, error) {
-	row := q.db.QueryRowContext(ctx, countPOsReceivedThisMonth)
+func (q *Queries) CountPOsReceivedThisMonth(ctx context.Context, today time.Time) (int, error) {
+	row := q.db.QueryRowContext(ctx, countPOsReceivedThisMonth, today)
 	var column_1 int
 	err := row.Scan(&column_1)
 	return column_1, err

@@ -1220,7 +1220,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		"Form":      form,
 		"BOMParts":  bomParts,
 		"NextSN":    nextSNStr,
-		"Today":     time.Now().Format("2006-01-02T15:04"),
+		"Today":     h.userNow(r).Format("2006-01-02T15:04"),
 		"CSRFToken": h.csrfToken(w, r),
 		"ActiveTab": "records",
 		"TestMode":  h.cfg().TestMode,
@@ -1273,7 +1273,7 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	recordDate := time.Now()
+	recordDate := h.userNow(r)
 	if rdStr := r.FormValue("record_date"); rdStr != "" {
 		if rd, parseErr := time.Parse("2006-01-02T15:04", rdStr); parseErr == nil {
 			recordDate = rd
@@ -2124,7 +2124,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, pickErr, http.StatusBadRequest)
 			return
 		}
-		buildDate := time.Now()
+		buildDate := h.userNow(r)
 		if rd != nil {
 			buildDate = *rd
 		}

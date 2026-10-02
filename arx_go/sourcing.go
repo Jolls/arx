@@ -10,7 +10,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -244,7 +243,7 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 				return false, nil, fmt.Errorf("could not read imported prices: %w", err)
 			}
 		}
-		effectiveDate := time.Now().Format("2006-01-02")
+		effectiveDate := h.userNow(r).Format("2006-01-02")
 		for _, b := range breaks {
 			// An active price already at this pack size is left alone (inserted=false).
 			inserted, err := svc.ImportPrice(ctx, partID, supplierID, b.BreakQuantity, b.UnitPrice, b.TotalPrice, effectiveDate)

@@ -93,6 +93,12 @@ func dbToday(t *testing.T, h *Handler) string {
 	return s
 }
 
+// userToday is the calendar day in the zone the app writes date-only business columns in
+// (the request user's timezone, #265), unlike dbToday which is the DB session's day.
+func userToday(h *Handler) string {
+	return time.Now().In(h.userLocationCtx(context.Background())).Format("2006-01-02")
+}
+
 // POStatusTransition: closing keeps an existing date_closed, reopening clears it; is_active,
 // date_modified and the history actor; cancel resets only a live approval.
 func TestIntegration_POLifecycle_StatusTransition(t *testing.T) {
@@ -198,7 +204,6 @@ func TestIntegration_POLifecycle_ApprovalAction(t *testing.T) {
 func TestIntegration_POLifecycle_Receive(t *testing.T) {
 	h, f := lifecycleSetup(t)
 	ctx := context.Background()
-	today := dbToday(t, h)
 	num, id, lines := seedLifecyclePO(t, h, f, "r1", "sent", "approved", "",
 		lcLine{f.P2, 4}, lcLine{nil, 2}, lcLine{f.P2, 5})
 	receive := func(n string, vals url.Values) *httptest.ResponseRecorder {
@@ -245,7 +250,7 @@ func TestIntegration_POLifecycle_Receive(t *testing.T) {
 	if got, want := lineState(), fmt.Sprintf("4@2026-03-10,2@%[1]s,5@%[1]s", localToday); got != want {
 		t.Errorf("lines = %s, want %s", got, want)
 	}
-	if got := readPOState(t, h, id); got.Status != "closed" || got.Active || got.Closed != today {
+	if got := readPOState(t, h, id); got.Status != "closed" || got.Active || got.Closed != userToday(h) {
 		t.Errorf("after full: %+v", got)
 	}
 	if got := lastEvent(t, h, id, "status"); got != "partially_received>closed|∅|∅|system" {

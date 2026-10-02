@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.46] - 2026-10-01
+### Fixed
+- Date-only business dates (RFQ/PO dates, PO closed date, part and price effective dates, form "Today" defaults, dashboard month-to-date) now all use the user's local day instead of a mix of the server's and the database's; fixes `TestIntegration_RFQ_BOMConfirmCreatesQuotes` failing in the evening. Existing rows are not corrected ([#265](https://github.com/Jolls/arx/issues/265))
+
 ## [0.8.45] - 2026-10-01
 ### Changed
 - Remove the two ArxDev ledger integration tests: they ran as the app login, which has no grant on `schema_migrations` by design; check the ledger with `migrate status` instead, and add the missing version to the `SCHEMA.md` backfill snippet
