@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"arx/arx_go/models"
 )
@@ -327,7 +326,7 @@ func TestIntegration_POWrites_AddSuggestions(t *testing.T) {
 		var s string
 		if err := h.queryRowContext(ctx, `SELECT string_agg(concat_ws(':', part_id, pack_size::float8, price_ea::float8,
 			price_pack::float8, is_active, effective_date = $2::date), ',' ORDER BY part_id, is_active, id) FROM price WHERE supplier_id=$1`,
-			f.Co, time.Now().Format("2006-01-02")).Scan(&s); err != nil {
+			f.Co, userToday(h)).Scan(&s); err != nil {
 			t.Fatalf("prices: %v", err)
 		}
 		return s
@@ -389,7 +388,7 @@ func TestIntegration_POWrites_MarkPrinted(t *testing.T) {
 	t.Cleanup(done) // t.Cleanup, not defer: the POs createPO registers must go before the fixture
 	f, cleanup := seedPOFixture(t, h)
 	t.Cleanup(cleanup)
-	today := time.Now().Format("2006-01-02")
+	today := userToday(h)
 
 	for _, c := range []struct {
 		num       string

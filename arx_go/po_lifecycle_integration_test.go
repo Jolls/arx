@@ -245,7 +245,7 @@ func TestIntegration_POLifecycle_Receive(t *testing.T) {
 		t.Errorf("partial event = %q", got)
 	}
 
-	localToday := time.Now().Format("2006-01-02")
+	localToday := userToday(h)
 	assert302(t, "full", receive(num, url.Values{recv(1): {"1"}, recv(2): {"5"}}))
 	if got, want := lineState(), fmt.Sprintf("4@2026-03-10,2@%[1]s,5@%[1]s", localToday); got != want {
 		t.Errorf("lines = %s, want %s", got, want)

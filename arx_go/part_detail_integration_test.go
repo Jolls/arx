@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"arx/arx_go/models"
 	"arx/internal/urlutil"
@@ -176,7 +175,7 @@ func TestIntegration_PartCreateUpdate_Columns(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()
 	ctx := context.Background()
-	today := time.Now().Format("2006-01-02")
+	today := userToday(h)
 
 	cols := func(id int) map[string]any {
 		t.Helper()
