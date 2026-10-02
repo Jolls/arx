@@ -418,7 +418,28 @@ END $$;
         (5802, 5002, 'approval', NULL,     NULL,    'submitted',  NULL,                     'tester','2026-04-29'),
         (5803, 5002, 'approval', NULL,     NULL,    'approved',   'Looks good',             'admin', '2026-04-30'),
         (5804, 5002, 'status',   'draft',  'open',  NULL,         NULL,                     'admin', '2026-05-01'),
-        (5805, 5009, 'approval', NULL,     NULL,    'submitted',  NULL,                     'tester','2026-06-20');
+        (5805, 5009, 'approval', NULL,     NULL,    'submitted',  NULL,                     'tester','2026-06-20'),
+        (5806, 5001, 'status',   NULL,     'draft', NULL,         NULL,                     'tester','2026-05-02'),
+        (5807, 5001, 'approval', NULL,     NULL,    'submitted',  NULL,                     'tester','2026-05-03'),
+        (5808, 5001, 'approval', NULL,     NULL,    'rejected',   'Quantities need review', 'admin', '2026-05-04'),
+        (5809, 5001, 'approval', NULL,     NULL,    'reset',      NULL,                     'tester','2026-05-05'),
+        (5810, 5003, 'status',   NULL,     'draft', NULL,         NULL,                     'admin', '2026-03-25'),
+        (5811, 5003, 'approval', NULL,     NULL,    'submitted',  NULL,                     'tester','2026-03-26'),
+        (5812, 5003, 'approval', NULL,     NULL,    'approved',   NULL,                     'admin', '2026-03-28'),
+        (5813, 5003, 'status',   'draft',  'open',  NULL,         NULL,                     'admin', '2026-04-01'),
+        (5814, 5003, 'status',   'open',   'partially_received', NULL, 'Receipt against PO 5003', 'admin', '2026-05-15'),
+        (5815, 5004, 'status',   NULL,     'draft', NULL,         NULL,                     'admin', '2026-01-08'),
+        (5816, 5004, 'approval', NULL,     NULL,    'approved',   NULL,                     'admin', '2026-01-09'),
+        (5817, 5004, 'status',   'draft',  'open',  NULL,         NULL,                     'admin', '2026-01-10'),
+        (5818, 5004, 'status',   'open',   'closed', NULL,        'Fully received',         'admin', '2026-01-20'),
+        (5819, 5005, 'status',   NULL,     'draft', NULL,         NULL,                     'tester','2026-01-28'),
+        (5820, 5005, 'status',   'draft',  'cancelled', NULL,     'Supplier discontinued part', 'admin', '2026-02-03'),
+        (5821, 5010, 'status',   NULL,     'rfq',   NULL,         NULL,                     'tester','2026-06-10'),
+        (5822, 5011, 'status',   NULL,     'rfq',   NULL,         NULL,                     'tester','2026-06-10'),
+        (5823, 5006, 'status',   NULL,     'rfq',   NULL,         NULL,                     'tester','2026-05-20'),
+        (5824, 5006, 'status',   'rfq',    'cancelled', NULL,     'Quote declined',         'tester','2026-05-27'),
+        (5825, 5007, 'status',   NULL,     'rfq',   NULL,         NULL,                     'tester','2026-05-20'),
+        (5826, 5007, 'status',   'rfq',    'closed', NULL,        'Quote awarded',          'tester','2026-05-27');
 
     -- ============================================================
     -- 10. Inventory transactions (drives part.stock_on_hand for 3007)

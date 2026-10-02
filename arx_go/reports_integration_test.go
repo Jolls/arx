@@ -181,6 +181,7 @@ func TestIntegration_ReportsDateRangeBounds(t *testing.T) {
 	})
 	t.Run("cycle_time", func(t *testing.T) {
 		// 5002's status history: draft entered 2026-04-28, exited into open on 2026-05-01.
+		// Other seeded POs enter draft earlier (5004: 2026-01-08) or never exit it (#312).
 		find := func(rng reportDateRange) *cycleTimeStageRow {
 			rows, err := h.queryPOCycleTime(ctx, rng)
 			if err != nil {
@@ -202,8 +203,8 @@ func TestIntegration_ReportsDateRangeBounds(t *testing.T) {
 			t.Errorf("draft entered 2026-04-28 must be excluded from 2026-05-02..: %+v", out)
 		}
 		// Margin of two days: the seed's changed_at is midnight UTC, i.e. the evening before in PDT.
-		if out := find(reportDateRange{To: repDay(2026, 4, 26)}); out != nil {
-			t.Errorf("draft entered 2026-04-28 must be excluded from ..2026-04-26: %+v", out)
+		if out := find(reportDateRange{To: repDay(2026, 1, 6)}); out != nil {
+			t.Errorf("no draft entered by 2026-01-06; got: %+v", out)
 		}
 	})
 }

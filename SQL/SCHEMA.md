@@ -88,7 +88,7 @@ because the value is a large base64 data URI that would swamp `seed_test_data.sq
 | 4201-4299 | `price` | Active + superseded (history) price rows |
 | 5001-5099 | `purchase_order` | One PO per status (`draft`/`open`/`partially_received`/`closed`/`cancelled`), a resolved RFQ group (5006/5007→awarded 5008), and an in-flight `rfq` group (5010/5011); financials on the open/closed POs; 5002/5003 carry full supplier/receiver address + contact snapshot blocks for PO print; 5009 sits in `approval_status='pending'` (Reports dashboard POs Pending Approval card, #658) |
 | 5501-5599 | `po_line` | Line items across the above POs, incl. a partial receipt and RFQ-quote lines carrying `lead_time_days` |
-| 5801-5899 | `purchase_order_history` | Status + approval events on PO 5002; a `submitted` approval event on PO 5009 (#658) |
+| 5801-5899 | `purchase_order_history` | Status/approval trails for POs 5001-5007, 5010, 5011 (draft, rejected+reset, partially received, closed, cancelled, RFQ); a `submitted` approval event on PO 5009 (#658) |
 | 5901-5999 | `inventory_transaction` | Receipt/issue/adjustment/count ledger driving `part.stock_on_hand` for part 3007 (on-hand 16); 3007 also has `reorder_min = 25`, leaving it below its reorder point (#273) |
 | 6001-6099 | `form` | One locked, released test form (FORM part 3010, unit-under-test 3004) |
 | 6101-6199 | `form_row` | A heading, range-checked data steps, an archived/retired step (6104, still rendered on the historical records that recorded it), and feature steps 6105-6108: `pf_type` filled/comment, `format`, `default_result`, `List:`/`query:` spec_nom pickers, a `{6102}` cross-step token, and a `hide_formula` (6103 is also updated post-insert so `form_row_history` has a timeline row) |
