@@ -6391,8 +6391,8 @@ func TestIntegration_QueryOnTimeDelivery(t *testing.T) {
 }
 
 // TestIntegration_QueryPOCycleTime verifies queryPOCycleTime's LEAD-paired
-// stage-duration math against the one seed purchase_order_history pair
-// (5801 draft -> 5804 open, PO 5002) that has both an entry and an exit (#815).
+// stage-duration math against the seed purchase_order_history entry/exit pairs:
+// draft 5002 (3d), 5003 (7d), 5004 (2d); open 5003 (44d), 5004 (10d) (#815, #312).
 func TestIntegration_QueryPOCycleTime(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
@@ -6401,17 +6401,22 @@ func TestIntegration_QueryPOCycleTime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("queryPOCycleTime: %v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("len(rows) = %d, want 1 (rows=%+v)", len(rows), rows)
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2 (rows=%+v)", len(rows), rows)
 	}
-	row := rows[0]
-	if row.Stage != "draft" {
-		t.Errorf("Stage = %q, want %q", row.Stage, "draft")
+	for i, want := range []struct {
+		stage string
+		count int
+		avg   float64
+	}{{"draft", 3, 4.0}, {"open", 2, 27.0}} {
+		if rows[i].Stage != want.stage {
+			t.Errorf("rows[%d].Stage = %q, want %q", i, rows[i].Stage, want.stage)
+		}
+		if rows[i].POCount != want.count {
+			t.Errorf("%s POCount = %d, want %d", want.stage, rows[i].POCount, want.count)
+		}
+		assertFloatEqual(t, want.stage+" AvgDays", rows[i].AvgDays, want.avg)
 	}
-	if row.POCount != 1 {
-		t.Errorf("POCount = %d, want 1", row.POCount)
-	}
-	assertFloatEqual(t, "AvgDays", row.AvgDays, 3.0)
 }
 
 // TestIntegration_QueryDataQualityParts verifies the three data-quality gap
@@ -6594,8 +6599,8 @@ func TestIntegration_ReportsCycleTimeExportCSV(t *testing.T) {
 	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Stage", "PO Count", "Avg Days"}) {
 		t.Fatalf("header row = %v, want [Stage PO Count Avg Days]", records)
 	}
-	if !csvRowsContain(records[1:], []string{"draft", "1", "3.0"}) {
-		t.Errorf("rows = %v, want to contain [draft 1 3.0]", records[1:])
+	if !csvRowsContain(records[1:], []string{"draft", "3", "4.0"}) {
+		t.Errorf("rows = %v, want to contain [draft 3 4.0]", records[1:])
 	}
 }
 

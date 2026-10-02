@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.55] - 2026-10-02
+### Changed
+- Seed data: every seeded PO lifecycle state (rejected/reset, partially received, closed, cancelled, RFQ) now has a purchase_order_history trail ([#312](https://github.com/Jolls/arx/issues/312))
+
 ## [0.8.54] - 2026-10-02
 ### Fixed
 - Marking a PO printed now checks approval in the UPDATE itself, so a concurrent edit or cancel can't leave a stamped `date_printed` on an unapproved PO ([#311](https://github.com/Jolls/arx/issues/311))
