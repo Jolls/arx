@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.48] - 2026-10-01
+### Added
+- `SQL/postgres/compose.yml`: one-command throwaway local Postgres with schema and test seed on tmpfs, so the live integration suite runs in about a minute against a fresh DB instead of the remote ArxDev ([#300](https://github.com/Jolls/arx/issues/300), [#298](https://github.com/Jolls/arx/issues/298))
+
 ## [0.8.46] - 2026-10-01
 ### Fixed
 - Date-only business dates (RFQ/PO dates, PO closed date, part and price effective dates, form "Today" defaults, dashboard month-to-date) now all use the user's local day instead of a mix of the server's and the database's; fixes `TestIntegration_RFQ_BOMConfirmCreatesQuotes` failing in the evening. Existing rows are not corrected ([#265](https://github.com/Jolls/arx/issues/265))

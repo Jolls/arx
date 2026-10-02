@@ -1,0 +1,39 @@
+# Throwaway local test Postgres with the schema and test seed loaded (#300).
+#   docker compose -f SQL/postgres/compose.yml up -d --wait db   # returns once seeded
+#   docker compose -f SQL/postgres/compose.yml restart db        # reset to a fresh seed
+#   docker compose -f SQL/postgres/compose.yml down              # remove
+# Connect: postgres://postgres:postgres@127.0.0.1:55432/ArxDev?sslmode=require
+# Needs only docker (or podman); `podman compose` works in place of `docker compose`.
+services:
+  db:
+    image: postgres:17
+    container_name: arx-test-db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      # Exactly "ArxDev": test mode's TestDBName defaults to it and the name is case-sensitive.
+      POSTGRES_DB: ArxDev
+    ports:
+      - "127.0.0.1:55432:5432"
+    # The app always connects with sslmode=require, so the server needs a certificate; a
+    # self-signed one generated at start is fine.
+    command:
+      - bash
+      - -c
+      - >-
+        openssl req -new -x509 -days 1 -nodes -subj /CN=localhost -out /tmp/server.crt -keyout /tmp/server.key 2>/dev/null
+        && chown postgres /tmp/server.* && chmod 600 /tmp/server.key
+        && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key
+        -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+    volumes:
+      - ./:/arx-sql:ro
+      - ./compose_init.sh:/docker-entrypoint-initdb.d/10-arx-schema.sh:ro
+    # Wiped whenever the container stops, so the next start re-runs initdb and the init script.
+    tmpfs:
+      - /var/lib/postgresql/data:size=1g
+    healthcheck:
+      # TCP, not the socket: during init the temporary server listens on the socket only, so a
+      # socket check would report ready before the seed finishes.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "ArxDev"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
