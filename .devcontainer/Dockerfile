@@ -11,5 +11,8 @@ RUN apt-get update \
 RUN curl -fsSL "https://downloads.sqlc.dev/sqlc_${SQLC_VERSION}_linux_${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local/bin sqlc
 
+# The bind-mounted repo is owned by the host user, so git (and go build's VCS stamping) rejects it otherwise.
+RUN git config --system --add safe.directory /workspaces/arx
+
 # The official golang image sets GOTOOLCHAIN=local; let go.mod pick the Go version.
 ENV GOTOOLCHAIN=auto

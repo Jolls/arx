@@ -34,6 +34,13 @@ func main() {
 		stop()
 		os.Exit(code)
 	}
+	// Ctrl+C / SIGTERM quit via the tray so onExit closes the DB instead of the process dying mid-flight.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		systray.Quit()
+	}()
 	systray.Run(onReady, onExit)
 }
 
