@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"time"
 
 	"arx/arx_go/models"
 	"arx/internal/purchasing"
@@ -333,7 +332,7 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 		}
 	}
 
-	now := time.Now()
+	now := h.userNow(r)
 	zero := 0.0
 	rfq := purchasing.PO{Number: number, Status: "rfq", IsActive: statusIsActive("rfq"), Orderer: po.Orderer,
 		SupplierID: &g.SupplierID, SupplierName: g.SupplierName, SupplierContact: sc.DisplayName, SupplierEmail: sc.Email,

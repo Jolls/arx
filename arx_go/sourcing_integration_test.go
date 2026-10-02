@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -403,7 +402,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyPrices(t *testing.T) {
 		"dk_prices_json":   {dkTwoBreaks},
 	}))
 	got := activeImportedPrices(t, h, ctx, partID, supplierID)
-	want := []importedPrice{{1, 0.5, 0.5, time.Now().Format("2006-01-02")}, {10, 0.4, 4, time.Now().Format("2006-01-02")}}
+	want := []importedPrice{{1, 0.5, 0.5, userToday(h)}, {10, 0.4, 4, userToday(h)}}
 	if len(got) != len(want) {
 		t.Fatalf("prices = %+v, want %+v", got, want)
 	}
@@ -536,7 +535,7 @@ func TestIntegration_SupplierPartCreate_DigiKeyPriceExists(t *testing.T) {
 	})
 	assert302(t, "SupplierPartCreate", rec)
 	got := activeImportedPrices(t, h, ctx, partID, supplierID)
-	want := []importedPrice{{1, 0.9, 0.9, "2020-01-01"}, {10, 0.4, 4, time.Now().Format("2006-01-02")}}
+	want := []importedPrice{{1, 0.9, 0.9, "2020-01-01"}, {10, 0.4, 4, userToday(h)}}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("prices = %+v, want %+v", got, want)
 	}

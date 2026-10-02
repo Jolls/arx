@@ -46,20 +46,21 @@ SELECT $1::text, 'draft', TRUE, 'not_submitted', NULL,
   receiver_address, receiver_city, receiver_state, receiver_zipcode,
   receiver_country, receiver_phone, receiver_fax,
   tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
-  CAST(CURRENT_TIMESTAMP AS DATE), date_requested, NULL, NULL, CURRENT_TIMESTAMP,
+  $2::date, date_requested, NULL, NULL, CURRENT_TIMESTAMP,
   supplier_contact_id, receiver_contact_id
-FROM purchase_order WHERE id = $2::int
+FROM purchase_order WHERE id = $3::int
 RETURNING id
 `
 
 type CopyPOForConversionParams struct {
 	Number   string
+	Today    time.Time
 	SourceID int
 }
 
 // Duplicates PO source_id's header as a draft at number, outside any RFQ group, ordered today.
 func (q *Queries) CopyPOForConversion(ctx context.Context, arg CopyPOForConversionParams) (int, error) {
-	row := q.db.QueryRowContext(ctx, copyPOForConversion, arg.Number, arg.SourceID)
+	row := q.db.QueryRowContext(ctx, copyPOForConversion, arg.Number, arg.Today, arg.SourceID)
 	var id int
 	err := row.Scan(&id)
 	return id, err
@@ -1639,24 +1640,26 @@ func (q *Queries) SetPOApproval(ctx context.Context, arg SetPOApprovalParams) er
 const setPOStatus = `-- name: SetPOStatus :exec
 UPDATE purchase_order SET status = $1::text, is_active = $2::boolean,
   date_modified = CURRENT_TIMESTAMP,
-  date_closed = CASE WHEN $1::text = 'closed' THEN COALESCE(date_closed, CAST(CURRENT_TIMESTAMP AS DATE))
-                     WHEN $3::text = 'closed' THEN NULL
+  date_closed = CASE WHEN $1::text = 'closed' THEN COALESCE(date_closed, $3::date)
+                     WHEN $4::text = 'closed' THEN NULL
                      ELSE date_closed END
-WHERE id = $4
+WHERE id = $5
 `
 
 type SetPOStatusParams struct {
 	ToStatus   string
 	IsActive   bool
+	Today      time.Time
 	FromStatus string
 	ID         int
 }
 
-// Also mirrors date_closed: set when closing (if unset), cleared when reopening from closed.
+// Also mirrors date_closed: set to today (the caller's local day, #265) when closing (if unset), cleared when reopening from closed.
 func (q *Queries) SetPOStatus(ctx context.Context, arg SetPOStatusParams) error {
 	_, err := q.db.ExecContext(ctx, setPOStatus,
 		arg.ToStatus,
 		arg.IsActive,
+		arg.Today,
 		arg.FromStatus,
 		arg.ID,
 	)

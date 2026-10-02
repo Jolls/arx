@@ -322,10 +322,10 @@ DELETE FROM po_line WHERE id = sqlc.arg(id) AND po_id = sqlc.arg(po_id);
 SELECT COALESCE(SUM(qty * unit_cost), 0)::float8 FROM po_line WHERE po_id = $1;
 
 -- name: SetPOStatus :exec
--- Also mirrors date_closed: set when closing (if unset), cleared when reopening from closed.
+-- Also mirrors date_closed: set to today (the caller's local day, #265) when closing (if unset), cleared when reopening from closed.
 UPDATE purchase_order SET status = sqlc.arg(to_status)::text, is_active = sqlc.arg(is_active)::boolean,
   date_modified = CURRENT_TIMESTAMP,
-  date_closed = CASE WHEN sqlc.arg(to_status)::text = 'closed' THEN COALESCE(date_closed, CAST(CURRENT_TIMESTAMP AS DATE))
+  date_closed = CASE WHEN sqlc.arg(to_status)::text = 'closed' THEN COALESCE(date_closed, sqlc.arg(today)::date)
                      WHEN sqlc.arg(from_status)::text = 'closed' THEN NULL
                      ELSE date_closed END
 WHERE id = sqlc.arg(id);
@@ -414,7 +414,7 @@ SELECT sqlc.arg(number)::text, 'draft', TRUE, 'not_submitted', NULL,
   receiver_address, receiver_city, receiver_state, receiver_zipcode,
   receiver_country, receiver_phone, receiver_fax,
   tax1, shipping_cost, misc_cost, total_cost, notes, internal_notes,
-  CAST(CURRENT_TIMESTAMP AS DATE), date_requested, NULL, NULL, CURRENT_TIMESTAMP,
+  sqlc.arg(today)::date, date_requested, NULL, NULL, CURRENT_TIMESTAMP,
   supplier_contact_id, receiver_contact_id
 FROM purchase_order WHERE id = sqlc.arg(source_id)::int
 RETURNING id;

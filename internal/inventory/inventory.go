@@ -222,8 +222,8 @@ func (s *Service) UpdateLot(ctx context.Context, lotID, partID int, description,
 // AppendLotNote appends one "[username date] text" entry to a lot's notes. The concatenation
 // happens in SQL from just the new text, so a caller holding a stale copy of the field can't
 // overwrite entries added meanwhile.
-func (s *Service) AppendLotNote(ctx context.Context, lotID int, text, username string) error {
-	entry := fmt.Sprintf("[%s %s] %s", username, time.Now().Format("2006-01-02"), strings.TrimSpace(text))
+func (s *Service) AppendLotNote(ctx context.Context, lotID int, text, username string, now time.Time) error {
+	entry := fmt.Sprintf("[%s %s] %s", username, now.Format("2006-01-02"), strings.TrimSpace(text))
 	return s.q.AppendLotNote(ctx, dbq.AppendLotNoteParams{Entry: entry, SeparatedEntry: "\n\n" + entry, ID: lotID})
 }
 

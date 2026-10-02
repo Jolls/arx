@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"arx/internal/inventory"
 	"arx/internal/records"
@@ -268,7 +269,7 @@ func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
 // is unreadable without attribution. Takes the caller's tx so an append made while saving
 // a record rolls back with the record if that save fails.
 func (h *Handler) appendLotNote(ctx context.Context, tx *txLogger, lotID int, text, username string) error {
-	return inventory.New(tx).AppendLotNote(ctx, lotID, text, username)
+	return inventory.New(tx).AppendLotNote(ctx, lotID, text, username, time.Now().In(h.userLocationCtx(ctx)))
 }
 
 // ── All lots (#701) ──────────────────────────────────────────────────────────

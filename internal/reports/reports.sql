@@ -9,7 +9,7 @@ SELECT COUNT(*)::int FROM purchase_order WHERE status = 'open';
 
 -- name: CountPOsReceivedThisMonth :one
 SELECT COUNT(DISTINCT po_id)::int FROM po_line
-WHERE date_received >= date_trunc('month', CURRENT_DATE)::date;
+WHERE date_received >= date_trunc('month', sqlc.arg(today)::date)::date;
 
 -- name: ListTopFailureModes :many
 -- Failing steps across all forms, all-time, most-failed first.

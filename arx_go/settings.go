@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"arx/internal/auth"
 	arxbase "arx/internal/config"
@@ -639,7 +638,7 @@ func (h *Handler) SettingsPreferencesSave(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) SettingsBackup(w http.ResponseWriter, r *http.Request) {
-	date := time.Now().Format("2006-01-02")
+	date := h.userNow(r).Format("2006-01-02")
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="arx-backup-`+date+`.zip"`)
 

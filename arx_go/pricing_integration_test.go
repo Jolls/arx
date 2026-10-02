@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -232,7 +231,7 @@ func TestIntegration_PriceCreate_Columns(t *testing.T) {
 	// Blank pack size and date: NULL pack, no fill-in, dated today; the default supplier stays.
 	pricePost(h, h.PriceCreate, target, f.Part, url.Values{"supplier_id": {"1003"}, "price_pack": {"7"}}, 0)
 	want = map[string]any{"part_id": float64(f.Part), "supplier_id": 1003.0, "pack_size": nil, "price_ea": nil, "price_pack": 7.0,
-		"effective_date": time.Now().Format("2006-01-02"), "is_active": true}
+		"effective_date": userToday(h), "is_active": true}
 	if got := newest(); !reflect.DeepEqual(got, want) {
 		t.Errorf("created price (blanks):\n got %v\nwant %v", got, want)
 	}

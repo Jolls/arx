@@ -132,7 +132,7 @@ func (h *Handler) reports() *reports.Service { return reports.New(handlerDB{h}) 
 // dashboardPOsReceivedThisMonth counts distinct POs with at least one line
 // received since the first of the current calendar month.
 func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error) {
-	return h.reports().POsReceivedThisMonth(ctx)
+	return h.reports().POsReceivedThisMonth(ctx, time.Now().In(h.userLocationCtx(ctx)))
 }
 
 // dashboardTopFailureModes lists the top failing test steps across all forms,
@@ -333,7 +333,7 @@ func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]
 
 // ReportsSpend is the Spend Analysis report page — GET /reports/spend.
 func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
-	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rng := resolveSpendDateRange(r.URL.Query(), h.userNow(r))
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "spend", "Range": rng, "DateRangeAction": "/reports/spend"}
 	if h.database() == nil {
 		h.render(w, r, "reports/spend.html", data)
@@ -372,7 +372,7 @@ func (h *Handler) queryOnTimeDelivery(ctx context.Context, rng reportDateRange) 
 
 // ReportsOnTime is the Supplier On-Time Delivery report page — GET /reports/on-time.
 func (h *Handler) ReportsOnTime(w http.ResponseWriter, r *http.Request) {
-	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rng := resolveSpendDateRange(r.URL.Query(), h.userNow(r))
 	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "on-time", "Range": rng, "DateRangeAction": "/reports/on-time"}
 	if h.database() == nil {
 		h.render(w, r, "reports/on_time.html", data)
@@ -391,7 +391,7 @@ func (h *Handler) ReportsOnTime(w http.ResponseWriter, r *http.Request) {
 // ReportsOnTimeExportCSV streams the Supplier On-Time Delivery table as CSV
 // — GET /reports/on-time/export.csv.
 func (h *Handler) ReportsOnTimeExportCSV(w http.ResponseWriter, r *http.Request) {
-	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rng := resolveSpendDateRange(r.URL.Query(), h.userNow(r))
 	rows, err := h.queryOnTimeDelivery(r.Context(), rng)
 	if err != nil {
 		serverError(w, "database error", err)
@@ -632,7 +632,7 @@ func writeSpendCSV(w http.ResponseWriter, filename string, header []string, rows
 // ReportsSpendBySupplierExportCSV streams the spend-by-supplier table as CSV
 // — GET /reports/spend/export-suppliers.csv.
 func (h *Handler) ReportsSpendBySupplierExportCSV(w http.ResponseWriter, r *http.Request) {
-	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rng := resolveSpendDateRange(r.URL.Query(), h.userNow(r))
 	rows, err := h.querySpendBySupplier(r.Context(), rng)
 	if err != nil {
 		serverError(w, "database error", err)
@@ -648,7 +648,7 @@ func (h *Handler) ReportsSpendBySupplierExportCSV(w http.ResponseWriter, r *http
 // ReportsSpendByPartExportCSV streams the spend-by-part table as CSV — GET
 // /reports/spend/export-parts.csv.
 func (h *Handler) ReportsSpendByPartExportCSV(w http.ResponseWriter, r *http.Request) {
-	rng := resolveSpendDateRange(r.URL.Query(), time.Now())
+	rng := resolveSpendDateRange(r.URL.Query(), h.userNow(r))
 	rows, err := h.querySpendByPart(r.Context(), rng)
 	if err != nil {
 		serverError(w, "database error", err)

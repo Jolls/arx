@@ -185,7 +185,7 @@ func TestIntegration_InventoryAppendLotNote(t *testing.T) {
 	}
 	// The raw CONCAT(notes, $2) left $2 untyped, which Postgres rejected, so no lot note could
 	// ever be appended before this conversion (#222).
-	today := time.Now().Format("2006-01-02")
+	today := userToday(h)
 	if err := h.appendLotNote(ctx, tx, id, "  first  ", "bob"); err != nil {
 		t.Fatal(err)
 	}

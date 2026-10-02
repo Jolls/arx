@@ -203,7 +203,7 @@ func TestIntegration_RFQ_ConvertCopiesQuote(t *testing.T) {
 	}
 	newID, _ := strconv.Atoi(rfqStr(t, h, `SELECT id FROM purchase_order WHERE number=$1`, base))
 	if got := rfqStr(t, h, fmt.Sprintf(`SELECT %s FROM purchase_order WHERE id=$1`, rfqCols("status", "approval_status", "is_active", "rfq_group_id",
-		"date_ordered", "date_closed", "date_printed", "date_modified::date")), newID); got != "draft|not_submitted|true|∅|"+today+"|∅|∅|"+today {
+		"date_ordered", "date_closed", "date_printed", "date_modified::date")), newID); got != "draft|not_submitted|true|∅|"+userToday(h)+"|∅|∅|"+today {
 		t.Errorf("new PO state = %q", got)
 	}
 
@@ -277,7 +277,6 @@ func TestIntegration_RFQ_ConvertEdges(t *testing.T) {
 func TestIntegration_RFQ_BOMConfirmCreatesQuotes(t *testing.T) {
 	h, f := lifecycleSetup(t)
 	ctx := context.Background()
-	today := dbToday(t, h)
 
 	root := smokeUniq("ITEST-RFQ-ROOT")
 	var rootID, p3 int
@@ -367,11 +366,11 @@ func TestIntegration_RFQ_BOMConfirmCreatesQuotes(t *testing.T) {
 	wantCo := strings.Join([]string{"rfq", "true", "not_submitted", "", "", strconv.Itoa(f.Co), f.CoName, f.ConDName, "d@example.com",
 		"1 Dock Rd", "Dockton", "DS", "11111", "Freedonia", "555-0301", "555-0302",
 		"∅", "", "", "", "", "", "", "", "", "", "",
-		"0", "0", "0", "0", "", notes, "∅", today, "∅", "true", strconv.Itoa(f.ConD), "∅"}, "|")
+		"0", "0", "0", "0", "", notes, "∅", userToday(h), "∅", "true", strconv.Itoa(f.ConD), "∅"}, "|")
 	if got := header(qs[1].id); got != wantCo {
 		t.Errorf("fixture-company quote header:\n got %q\nwant %q", got, wantCo)
 	}
-	if got := header(qs[0].id); !strings.HasPrefix(got, "rfq|true|not_submitted|||1001|Acme Fasteners|") || !strings.Contains(got, "|"+notes+"|∅|"+today+"|∅|true|") {
+	if got := header(qs[0].id); !strings.HasPrefix(got, "rfq|true|not_submitted|||1001|Acme Fasteners|") || !strings.Contains(got, "|"+notes+"|∅|"+userToday(h)+"|∅|true|") {
 		t.Errorf("Acme quote header = %q", got)
 	}
 	if got, w := lineStr(qs[1].id), fmt.Sprintf("1|%s|C|p1|7|0||%d|∅", f.PN1, f.P1); got != w {

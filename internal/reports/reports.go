@@ -37,9 +37,9 @@ func (r DateRange) bounds() (from, to *time.Time) {
 // OpenPOCount counts POs in the 'open' lifecycle status.
 func (s *Service) OpenPOCount(ctx context.Context) (int, error) { return s.q.CountOpenPOs(ctx) }
 
-// POsReceivedThisMonth counts distinct POs with a line received since the first of this month.
-func (s *Service) POsReceivedThisMonth(ctx context.Context) (int, error) {
-	return s.q.CountPOsReceivedThisMonth(ctx)
+// POsReceivedThisMonth counts distinct POs with a line received since the first of today's month.
+func (s *Service) POsReceivedThisMonth(ctx context.Context, today time.Time) (int, error) {
+	return s.q.CountPOsReceivedThisMonth(ctx, today)
 }
 
 // FailureMode is one failing test step on one form.

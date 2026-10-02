@@ -88,7 +88,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "parts/part_transactions.html", map[string]any{
-		"Part": p, "Txns": txns, "Lots": lots, "Today": time.Now().Format("2006-01-02"),
+		"Part": p, "Txns": txns, "Lots": lots, "Today": h.userNow(r).Format("2006-01-02"),
 		"ActiveTab": "parts", "ActiveSubTab": "transactions",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
@@ -119,7 +119,7 @@ func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
 	}
 	txnDate := parseFormDate(fv(r, "txn_date"))
 	if txnDate == nil {
-		now := time.Now()
+		now := h.userNow(r)
 		txnDate = &now
 	}
 

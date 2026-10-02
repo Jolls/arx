@@ -381,7 +381,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		}))
 		return
 	}
-	newID, err := h.parts().CreatePart(r.Context(), partInput(partFromForm(r)), time.Now())
+	newID, err := h.parts().CreatePart(r.Context(), partInput(partFromForm(r)), h.userNow(r))
 	if err != nil {
 		units, _ := h.fetchUnits(r.Context())
 		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
@@ -468,7 +468,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 	in := partInput(partFromForm(r))
 	var err error
 	if in.ID, err = strconv.Atoi(id); err == nil {
-		err = h.parts().UpdatePart(r.Context(), in, time.Now())
+		err = h.parts().UpdatePart(r.Context(), in, h.userNow(r))
 	}
 	if err != nil {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
@@ -1941,7 +1941,7 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	effectiveDate := r.FormValue("effective_date")
 	if effectiveDate == "" {
-		effectiveDate = time.Now().Format("2006-01-02")
+		effectiveDate = h.userNow(r).Format("2006-01-02")
 	}
 	priceEA, pricePack := resolvePriceFields(r)
 	err = h.parts().CreatePrice(r.Context(), p.ID, supplierID, nullableFloat(r.FormValue("pack_size")), priceEA, pricePack, effectiveDate)
@@ -1998,7 +1998,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	effectiveDate := r.FormValue("effective_date")
 	if effectiveDate == "" {
-		effectiveDate = time.Now().Format("2006-01-02")
+		effectiveDate = h.userNow(r).Format("2006-01-02")
 	}
 	tx, err := h.beginTx(r.Context())
 	if err != nil {
