@@ -118,7 +118,9 @@ type TestStep struct {
 	PFType        string // evaluator type: 'range' or empty = range check
 
 	// debug fields still needed for form-def authoring
-	SpecUnits      string
+	Category        string
+	SheetName       string
+	SpecUnits     string
 	SpecNom         string
 	InstrumentTypes string
 	Format          string

@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.49] - 2026-10-01
 ### Removed
-- `TestStep` debug fields `ArchiveID`, `Revision`, `Category` and `SheetName` and their rows in the record-detail debug panel ([#293](https://github.com/Jolls/arx/issues/293))
+- `TestStep` debug fields `ArchiveID` and `Revision` and their rows in the record-detail debug panel ([#293](https://github.com/Jolls/arx/issues/293))
 
 ## [0.8.48] - 2026-10-01
 ### Added

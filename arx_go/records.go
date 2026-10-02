@@ -904,8 +904,8 @@ func (h *Handler) loadSteps(ctx context.Context, svc *records.Service, formID in
 		s := models.TestStep{
 			ID: r.ID, FormID: r.FormID, Parameter: r.Parameter, Specification: r.Specification,
 			DefaultResult: r.DefaultResult, HideFormula: r.HideFormula, Type: r.Type, Archived: r.Archived,
-			SpecMin: r.SpecMin, SpecMax: r.SpecMax, PFType: r.PfType,
-			SpecUnits: r.SpecUnits, SpecNom: r.SpecNom,
+			SpecMin: r.SpecMin, SpecMax: r.SpecMax, PFType: r.PfType, Category: r.Category,
+			SheetName: r.SheetName, SpecUnits: r.SpecUnits, SpecNom: r.SpecNom,
 			InstrumentTypes: r.InstrumentTypes, Format: r.Format, StepComment: r.Comment,
 			StepCreatedAt: r.CreatedAt, StepUpdatedAt: r.UpdatedAt,
 		}
