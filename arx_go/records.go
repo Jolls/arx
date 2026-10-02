@@ -909,12 +909,6 @@ func (h *Handler) loadSteps(ctx context.Context, svc *records.Service, formID in
 			InstrumentTypes: r.InstrumentTypes, Format: r.Format, StepComment: r.Comment,
 			StepCreatedAt: r.CreatedAt, StepUpdatedAt: r.UpdatedAt,
 		}
-		if r.ArchiveID != nil {
-			s.ArchiveID = *r.ArchiveID
-		}
-		if r.Revision != nil {
-			s.Revision = *r.Revision
-		}
 		steps[s.ID] = &s
 	}
 	return steps, nil

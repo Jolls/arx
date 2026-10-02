@@ -117,12 +117,10 @@ type TestStep struct {
 	SpecMax       string // acceptance window upper bound (VARCHAR in DB)
 	PFType        string // evaluator type: 'range' or empty = range check
 
-	// debug fields still needed for form-def authoring — see #293
-	ArchiveID       int
-	Revision        int
+	// debug fields still needed for form-def authoring
 	Category        string
 	SheetName       string
-	SpecUnits       string
+	SpecUnits     string
 	SpecNom         string
 	InstrumentTypes string
 	Format          string
