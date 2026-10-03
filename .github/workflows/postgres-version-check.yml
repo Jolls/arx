@@ -1,0 +1,60 @@
+name: Postgres version check
+
+# Dependabot ignores major-version bumps for the postgres image (.github/dependabot.yml)
+# since upgrading isn't a drop-in change. This just opens an issue so a newer major
+# version doesn't go unnoticed; it never opens a PR or touches the pin itself.
+on:
+  schedule:
+    - cron: "0 13 * * 1" # Monday 13:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare pinned vs latest major version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          pinned=$(grep -oP 'image: postgres:\K[0-9]+' SQL/postgres/compose.yml)
+          echo "Pinned major version: $pinned"
+
+          latest=$(curl -s "https://hub.docker.com/v2/repositories/library/postgres/tags?page_size=100" \
+            | jq -r '.results[].name' \
+            | grep -E '^[0-9]+$' \
+            | sort -n \
+            | tail -1)
+          echo "Latest available major version: $latest"
+
+          if [ "$latest" -le "$pinned" ]; then
+            echo "Up to date, nothing to do."
+            exit 0
+          fi
+
+          title="Postgres $latest is available (pinned to $pinned)"
+          existing=$(gh issue list --search "in:title \"Postgres\" \"is available\"" --state open --json title \
+            --jq '.[] | select(.title | test("^Postgres [0-9]+ is available")) | .title')
+
+          if [ -n "$existing" ]; then
+            echo "Open issue already tracking a newer version ($existing), skipping."
+            exit 0
+          fi
+
+          gh issue create \
+            --title "$title" \
+            --body "$(cat <<EOF
+Docker Hub's latest major \`postgres\` tag is **$latest**; we're pinned to **$pinned** in \`SQL/postgres/compose.yml\` and \`.github/workflows/test.yml\`.
+
+This is informational only — Dependabot is configured to ignore major-version bumps for this image (see \`.github/dependabot.yml\`) since a Postgres major upgrade needs manual review (deprecated features, pg_upgrade/initdb, extension compatibility) rather than a drop-in bump.
+
+Close this once evaluated, whether or not the upgrade happens now.
+EOF
+)" \
+            --label "area: infra"
