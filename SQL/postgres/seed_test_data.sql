@@ -578,8 +578,12 @@ END $$;
     -- form's test_order but not the records' snapshots, so new records pick them up while
     -- existing ones don't (realistic form evolution, and keeps the frozen-row model honest).
     -- form_type (#744) = the kind of quality document (orthogonal to record_types); this seed form is a test.
+    -- 6002 hangs off the spare FORM part 3011 — exists purely to carry a level-2 and
+    -- level-3 heading (6001 only ever exercises level-1), so a real record shows all
+    -- three .row-heading-N shades at once.
     INSERT INTO form (id, part_number_id, test_order, is_locked, is_active, form_type, record_types, instrument_types, revision) VALUES
-        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108', TRUE, TRUE, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1);
+        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108', TRUE, TRUE, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1),
+        (6002, 3011, '6109,6110,6111,6112,6113,6114', TRUE, TRUE, 'test', 'New Release', NULL, 1);
 
     -- 6104 is an archived (retired) step: hidden from new records and the live definition view
     -- (revealed by the "Show archived" toggle), but still rendered on historical records that
@@ -598,7 +602,14 @@ END $$;
         (6105, 6001, 1, 0, 'Firmware Version',      'Record installed version', NULL, NULL, NULL, NULL, 'filled', NULL, FALSE, NULL,   'v2.1',NULL, '2020-01-01T00:00:00', 'unit'),
         (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
-        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, FALSE, '0.00', '=min(max({6102},4.75),5.25)', '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'); -- only shown on Re-Test records; default_result clamps the prior reading to this step's spec range
+        (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, FALSE, '0.00', '=min(max({6102},4.75),5.25)', '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'), -- only shown on Re-Test records; default_result clamps the prior reading to this step's spec range
+        -- 6109-6114 (form 6002): one data row under each heading level 1/2/3.
+        (6109, 6002, 1, 1, 'Mechanical Tests',   NULL,                  NULL,  NULL,  NULL, NULL,  NULL,    NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
+        (6110, 6002, 1, 0, 'Weight',             '500g +/-10g',         'g',   '490', '500','510', 'range', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
+        (6111, 6002, 1, 2, 'Dimensional Checks', NULL,                  NULL,  NULL,  NULL, NULL,  NULL,    NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
+        (6112, 6002, 1, 0, 'Overall Length',     '<=120mm',             'mm',  NULL,  NULL, '120', 'range', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
+        (6113, 6002, 1, 3, 'Visual Checks',      NULL,                  NULL,  NULL,  NULL, NULL,  NULL,    NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
+        (6114, 6002, 1, 0, 'Surface Finish',     'No visible defects',  NULL,  NULL, 'List:Pass;Fail', NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit');
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
     -- trg_form_row_history snapshots the old row into form_row_history.
@@ -634,7 +645,10 @@ END $$;
         -- retest-as-same-unit case. serial_number matches unit 8501's ('SN-3013-001') and
         -- unit_id is reused; lot_id/build_id are NULL (the slice-8 write-shape: provenance is
         -- read THROUGH the unit, Q8), so this row also exercises loadRecordTrace's read-through.
-        (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00', NULL);
+        (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00', NULL),
+        -- 7015 (form 6002): Complete, all pass — the only record carrying a level-2 AND
+        -- level-3 heading, so records_show.html renders all three .row-heading-N shades.
+        (7015, 6002, 3004, '2026-07-15', '7015', 'MFG-1001', 'Drone Frame Housing', '6109,6110,6111,6112,6113,6114', 'New Release', NULL, TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-15T00:00:00', NULL);
 
     -- One materialized row per step per record, headings included (type=1) — matching what
     -- materializeRecordSteps produces for post-#487 records. Grouped by record.
@@ -696,7 +710,14 @@ END $$;
         (7149, 7014, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
         (7150, 7014, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7151, 7014, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
-        (7152, 7014, 6108, NULL, NULL,   'Retest Voltage Check',  'Re-measure output', 'V', '4.75', NULL, '5.25','range', 0, '2020-01-01T00:00:00');
+        (7152, 7014, 6108, NULL, NULL,   'Retest Voltage Check',  'Re-measure output', 'V', '4.75', NULL, '5.25','range', 0, '2020-01-01T00:00:00'),
+        -- 7015 (form 6002): all three heading levels (type 1/2/3) plus a passing data row under each.
+        (7153, 7015, 6109, NULL, NULL,   'Mechanical Tests',   NULL,                 NULL, NULL,  NULL, NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7154, 7015, 6110, TRUE, '502',  'Weight',             '500g +/-10g',        'g',  '490', '500','510', 'range', 0, '2020-01-01T00:00:00'),
+        (7155, 7015, 6111, NULL, NULL,   'Dimensional Checks', NULL,                 NULL, NULL,  NULL, NULL,  NULL,    2, '2020-01-01T00:00:00'),
+        (7156, 7015, 6112, TRUE, '115',  'Overall Length',     '<=120mm',            'mm', NULL,  NULL, '120', 'range', 0, '2020-01-01T00:00:00'),
+        (7157, 7015, 6113, NULL, NULL,   'Visual Checks',      NULL,                 NULL, NULL,  NULL, NULL,  NULL,    3, '2020-01-01T00:00:00'),
+        (7158, 7015, 6114, TRUE, 'Pass', 'Surface Finish',     'No visible defects', NULL, NULL,  NULL, NULL,  'filled',0, '2020-01-01T00:00:00');
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).
     -- 7003 was locked twice (result 6104 corrected 300→310 in between) so the record detail
@@ -711,7 +732,8 @@ END $$;
         (7206, 7006, 'completed', 'tester','2026-05-15', 'Marked complete'),
         (7207, 7007, 'completed', 'tester','2026-05-20', 'Marked complete'),
         (7208, 7008, 'completed', 'tester','2026-07-01', 'Marked complete'),
-        (7209, 7009, 'completed', 'tester','2026-07-05', 'Marked complete');
+        (7209, 7009, 'completed', 'tester','2026-07-05', 'Marked complete'),
+        (7210, 7015, 'completed', 'tester','2026-07-15', 'Marked complete');
 
     INSERT INTO record_event_results (id, event_id, form_row_id, parameter, specification, spec_units, result, pass_fail) VALUES
         (7301, 7201, 6102, 'Output Voltage',        '5V +/-0.25V', 'V',   '4.98', TRUE),
