@@ -4,6 +4,8 @@
 #   docker compose -f SQL/postgres/compose.yml down              # remove
 # Connect: postgres://postgres:postgres@127.0.0.1:55432/ArxDev?sslmode=require
 # Needs only docker (or podman); `podman compose` works in place of `docker compose`.
+# Without a name the project defaults to this directory, "postgres", which also prefixes the dev container's names.
+name: arx
 services:
   db:
     image: postgres:17

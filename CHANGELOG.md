@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.60] - 2026-10-02
+### Changed
+- The local test DB and dev container compose project is now named `arx`, so the dev container is `arx-dev-1` instead of `postgres-dev-1`, and the dev container stops immediately instead of waiting 10s for SIGKILL
+
+### Removed
+- `libayatana-appindicator3-dev` from the dev container image, CI and Linux setup docs; `fyne.io/systray` needs no cgo ([#317](https://github.com/Jolls/arx/issues/317))
+
 ## [0.8.59] - 2026-10-02
 ### Changed
 - Test record section headings (`.row-heading-1`/`-2`) now use the Settings-selected accent theme (`--accent-1`/`--header-bg`) instead of hardcoded gray/orange, so they follow the chosen theme like the rest of the app

@@ -6,6 +6,8 @@ services:
       context: ../../.devcontainer
     working_dir: /workspaces/arx
     command: sleep infinity
+    # sleep as PID 1 ignores SIGTERM, so stopping waited 10s for SIGKILL.
+    init: true
     volumes:
       - ../..:/workspaces/arx:cached
     depends_on:
