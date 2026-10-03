@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.59] - 2026-10-02
+### Changed
+- Test record section headings (`.row-heading-1`/`-2`) now use the Settings-selected accent theme (`--accent-1`/`--header-bg`) instead of hardcoded gray/orange, so they follow the chosen theme like the rest of the app
+- Seed data: added form 6002 and record 7015, the only seeded record with level-2 and level-3 section headings, so all three heading shades are visible on a real record
+
 ## [0.8.58] - 2026-10-02
 ### Changed
 - Replaced the unmaintained `getlantern/systray` with the actively maintained `fyne.io/systray` fork, dropping 6 stale getlantern indirect dependencies ([#317](https://github.com/Jolls/arx/issues/317))
