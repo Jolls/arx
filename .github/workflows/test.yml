@@ -18,9 +18,6 @@ jobs:
         with:
           go-version: '1.27.0'
 
-      - name: Install systray cgo dependency
-        run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev
-
       # Fails when internal/dbq is stale against sqlc.yaml's queries/DDL (#190).
       - uses: sqlc-dev/setup-sqlc@v5
         with:
@@ -63,8 +60,8 @@ jobs:
         with:
           go-version: '1.27.0'
 
-      - name: Install systray cgo dependency and psql
-        run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev postgresql-client
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Load schema, triggers, and seed data
         run: bash SQL/postgres/build_schema.sh | psql "$ARX_TEST_DSN" -q -v ON_ERROR_STOP=1

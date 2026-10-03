@@ -8,7 +8,7 @@ The repo is a single Go module rooted at the repo root. From the root:
 go vet ./... && go build ./... && go test ./...
 ```
 
-On Linux you also need `libayatana-appindicator3-dev` (systray's cgo dependency). Windows-only source files need a `!windows`-tagged counterpart so the Linux CI job compiles.
+Windows-only source files need a `!windows`-tagged counterpart so the Linux CI job compiles.
 
 ## Database and migrations
 
@@ -34,9 +34,9 @@ Then in Settings, turn on Test Mode, set DB Server to `127.0.0.1:55432` (the fie
 
 ## Dev container
 
-`.devcontainer/` gives a Go toolchain, the systray build dependencies, `sqlc`, `psql` and the seeded `ArxDev` database from `SQL/postgres/compose.yml` (reachable as `db:5432`), with no manual setup. In VS Code use "Reopen in Container". `go build ./...`, `go test ./...` and `go test -tags integration ./arx_go/...` work as-is. The dev container and the local test database recipe above share a container name, so run one at a time.
+`.devcontainer/` gives a Go toolchain, `sqlc`, `psql` and the seeded `ArxDev` database from `SQL/postgres/compose.yml` (reachable as `db:5432`), with no manual setup. In VS Code use "Reopen in Container". `go build ./...`, `go test ./...` and `go test -tags integration ./arx_go/...` work as-is. The dev container and the local test database recipe above share a container name, so run one at a time.
 
-- Start the app with the "Run Arx (headless)" task (Terminal > Run Task). Browse to `http://localhost:4568` and log in as `admin`/`admin`.
+- Start the app with the "Run Arx (headless)" task (Terminal > Run Task). Browse to `http://localhost:4568` and log in as `admin`/`admin`. Chrome warns that this password appeared in a data breach; that's expected for the throwaway seed logins and can be dismissed.
 - Browsing works only through VS Code port forwarding. The listener binds `127.0.0.1`, so the devcontainer CLI and podman can run builds and tests but cannot browse. Port 4568 is set to `requireLocalPort`, because the Host check accepts only `localhost:4568` and a remapped port would fail every request with 421.
 - GitHub Codespaces: build and test work; browsing fails because forwarded URLs are `*.app.github.dev` and the Host check rejects them.
 - File-backed features (PO folders, attachments, folder picker, open-folder) use container paths only.
