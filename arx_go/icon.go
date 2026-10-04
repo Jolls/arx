@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/binary"
+	"image/color"
 	"image/png"
 )
 
@@ -24,11 +25,13 @@ func appIcon() []byte {
 		for x := range w {
 			row := h - 1 - y
 			idx := (row*w + x) * 4
-			rv, gv, bv, av := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
-			xor[idx+0] = byte(bv >> 8)
-			xor[idx+1] = byte(gv >> 8)
-			xor[idx+2] = byte(rv >> 8)
-			xor[idx+3] = byte(av >> 8)
+			// NRGBA (not the premultiplied RGBA() method) so partially transparent
+			// edge pixels keep their true color instead of darkening toward black.
+			c := color.NRGBAModel.Convert(img.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.NRGBA)
+			xor[idx+0] = c.B
+			xor[idx+1] = c.G
+			xor[idx+2] = c.R
+			xor[idx+3] = c.A
 		}
 	}
 

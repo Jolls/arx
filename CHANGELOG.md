@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.67] - 2026-10-04
+### Fixed
+- Replaced the systray/favicon icon (previously an unrelated gear placeholder) with a black rendering of the Arx brand mark on a transparent background, matching the app's header logo; also fixed `appIcon()` using premultiplied-alpha pixel values, which darkened anti-aliased edges ([#348](https://github.com/Jolls/arx/issues/348))
+
 ## [0.8.66] - 2026-10-04
 ### Removed
 - Removed 140 `docs/plans/` and 5 `docs/superpowers/` implementation planning/design docs tied to closed issues, plus the `docs/archive/` point-in-time review docs; their content is already captured in CHANGELOG history and the closed issues themselves ([#339](https://github.com/Jolls/arx/issues/339))
