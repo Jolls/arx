@@ -1,5 +1,7 @@
 # Contributing
 
+Contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Build and test
 
 The repo is a single Go module rooted at the repo root. From the root:

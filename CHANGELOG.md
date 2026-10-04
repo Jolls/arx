@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.64] - 2026-10-04
+### Added
+- Added `CODE_OF_CONDUCT.md`, linked from README and CONTRIBUTING ([#336](https://github.com/Jolls/arx/issues/336))
+
 ## [0.8.63] - 2026-10-03
 ### Changed
 - `handleWildcard` now takes the bare-prefix sibling handler as a parameter instead of hardcoding `h.NotFound`, so the PO/supplier folder and folder-upload routes (whose bare path is a real folder-root view, not a dead end) register through the same mechanism as every other `{rest...}` route ([#328](https://github.com/Jolls/arx/issues/328))
