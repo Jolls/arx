@@ -1,3 +1,30 @@
+Arx v0.8.63 — October 2026
+========================
+
+NEW FEATURES
+
+  Phone-Friendly Layout
+  Lookup pages now adapt to narrow phone screens.
+
+  Improved Accessibility
+  Better keyboard navigation, screen reader support, and dark mode contrast throughout.
+
+  Exact Money and Quantities
+  Prices, costs, and quantities are now exact, eliminating tiny rounding errors in totals.
+
+BUG FIXES
+
+  Business dates (RFQs, POs, part and price dates) now use your local day instead of the server's.
+  The parts grid loads faster.
+  Deleting or replacing an attachment no longer removes a file still used elsewhere.
+  Saving test results for two new units with the same serial number at once now works correctly.
+  Saving a purchase order comparison you had open a while no longer overwrites quotes someone else already acted on.
+  Unlocking a record that no longer exists shows a proper error instead of crashing.
+  The BOM editor's part number and description fields display correctly.
+  Marking a purchase order printed and opening its folder works reliably again.
+  Editing, approving, or cancelling a purchase order at the same time as someone else can no longer corrupt its status.
+  Test record section headings now follow your chosen color theme.
+
 Arx v0.8.35 — September 2026
 ========================
 
