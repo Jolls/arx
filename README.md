@@ -1,5 +1,8 @@
 # Arx
 
+[![Tests](https://github.com/Jolls/arx/actions/workflows/test.yml/badge.svg)](https://github.com/Jolls/arx/actions/workflows/test.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
+
 Parts catalog, purchasing, and test-record management for an engineering/manufacturing shop. One Windows desktop app — single executable, no installer, PostgreSQL backend, running at `http://localhost:4568`.
 
 ![Screenshot: Parts view (default `/` route)](docs/screenshots/PartsView.png)
