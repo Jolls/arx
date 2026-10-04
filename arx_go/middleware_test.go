@@ -114,6 +114,32 @@ func TestBuildRouter_WildcardRoutesPreserveChiMatchingSemantics(t *testing.T) {
 	}
 }
 
+// TestBuildRouter_WildcardRoutesHaveBarePrefixSibling confirms every
+// "{rest...}" route in the table has a matching bare-prefix (no trailing
+// slash) sibling registered for the same method — the guard handleWildcard
+// adds against net/http's implicit 307-redirect-to-slash (#319). A
+// "{rest...}" route added by hand instead of through handleWildcard, without
+// copying that sibling, would 307 instead of reaching a handler for the bare
+// path the way chi's old "/x/*" did (#328).
+func TestBuildRouter_WildcardRoutesHaveBarePrefixSibling(t *testing.T) {
+	_, routes := buildRouter(testHandlerWithDB())
+
+	registered := make(map[string]bool, len(routes))
+	for _, rt := range routes {
+		registered[rt.method+" "+rt.pattern] = true
+	}
+
+	for _, rt := range routes {
+		if !strings.HasSuffix(rt.pattern, "/{rest...}") {
+			continue
+		}
+		sibling := strings.TrimSuffix(rt.pattern, "/{rest...}")
+		if !registered[rt.method+" "+sibling] {
+			t.Errorf("%s %s has no bare-prefix sibling %q registered", rt.method, rt.pattern, sibling)
+		}
+	}
+}
+
 // TestBuildRouter_MethodMismatchIsNotFalseNotFound confirms withNotFound
 // tells a true 404 apart from a path that's registered under a different
 // method: net/http's ServeMux reports pattern=="" for both (#319), so a

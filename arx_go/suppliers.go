@@ -732,9 +732,12 @@ func (h *Handler) serveSupplierFile(w http.ResponseWriter, r *http.Request, s mo
 
 	base := filepath.Join(root, s.SupplierCode)
 	prefix := fmt.Sprintf("/supplier/%s/file/", id)
-	// A bare "/supplier/{id}/file" with no trailing slash still matches this
-	// route's "{rest...}" wildcard (unlike chi's old "/supplier/{id}/file/*",
-	// which required the literal slash) — reject it the same way chi did (#319).
+	// The router's own handleWildcard sibling already 404s a bare
+	// "/supplier/{id}/file" (no trailing slash) before this handler ever
+	// runs (#319) — but serveSupplierFile is also called directly by
+	// tests (and could be reused outside the router), so it re-asserts
+	// its own prefix invariant rather than trusting every caller only
+	// ever passes a path with the literal prefix (#329).
 	if !strings.HasPrefix(r.URL.Path, prefix) {
 		h.NotFound(w, r)
 		return

@@ -155,7 +155,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	// Static assets under /static/<tab>/, plus /static/shared/ for cross-tab assets (icons, nav CSS/JS).
 	subStatic, _ := fs.Sub(staticFS, "static")
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(subStatic)))
-	b.handleWildcard(h, http.MethodGet, "/static/", nil, staticHandler.ServeHTTP)
+	b.handleWildcard(http.MethodGet, "/static/", nil, staticHandler.ServeHTTP, h.NotFound)
 
 	// Always accessible — no DB connection required.
 	b.handle(http.MethodGet, "/login", nil, h.LoginGet)
@@ -230,15 +230,15 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodPost, "/settings/timezone", withAuth, h.SettingsTimezoneSave)
 
 	// Local file serving (Parts Master)
-	b.handleWildcard(h, http.MethodGet, "/local/", withAuth, h.ServeLocalFile)
-	b.handleWildcard(h, http.MethodGet, "/local-dir/", withAuth, h.ServeLocalDir)
-	b.handleWildcard(h, http.MethodPost, "/local-dir-upload/", withAuth, h.ServeLocalDirUpload)
-	b.handleWildcard(h, http.MethodGet, "/supplier-local/", withAuth, h.ServeSupplierFile)
-	b.handleWildcard(h, http.MethodGet, "/supplier-local-dir/", withAuth, h.ServeSupplierDir)
-	b.handleWildcard(h, http.MethodPost, "/supplier-local-dir-upload/", withAuth, h.ServeSupplierDirUpload)
+	b.handleWildcard(http.MethodGet, "/local/", withAuth, h.ServeLocalFile, h.NotFound)
+	b.handleWildcard(http.MethodGet, "/local-dir/", withAuth, h.ServeLocalDir, h.NotFound)
+	b.handleWildcard(http.MethodPost, "/local-dir-upload/", withAuth, h.ServeLocalDirUpload, h.NotFound)
+	b.handleWildcard(http.MethodGet, "/supplier-local/", withAuth, h.ServeSupplierFile, h.NotFound)
+	b.handleWildcard(http.MethodGet, "/supplier-local-dir/", withAuth, h.ServeSupplierDir, h.NotFound)
+	b.handleWildcard(http.MethodPost, "/supplier-local-dir-upload/", withAuth, h.ServeSupplierDirUpload, h.NotFound)
 
 	// Test Records image serving
-	b.handleWildcard(h, http.MethodGet, "/images/", withAuth, h.ServeImage)
+	b.handleWildcard(http.MethodGet, "/images/", withAuth, h.ServeImage, h.NotFound)
 
 	// Reports (issue #282)
 	b.handle(http.MethodGet, "/reports", withAuth, h.ReportsDashboard)
@@ -349,11 +349,9 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodPost, "/supplier/{id}/attachments/{attID}", withAuth, h.SupplierAttachmentUpdate)
 	b.handle(http.MethodPost, "/supplier/{id}/attachments/{attID}/delete", withAuth, h.SupplierAttachmentDelete)
 	b.handle(http.MethodPost, "/supplier/{id}/primary_attachment", withAuth, h.SupplierSetPrimaryAttachment)
-	b.handle(http.MethodGet, "/supplier/{id}/folder", withAuth, h.SupplierFolder)
-	b.handle(http.MethodGet, "/supplier/{id}/folder/{rest...}", withAuth, h.SupplierFolderSub)
-	b.handle(http.MethodPost, "/supplier/{id}/folder-upload", withAuth, h.SupplierFolderUpload)
-	b.handle(http.MethodPost, "/supplier/{id}/folder-upload/{rest...}", withAuth, h.SupplierFolderUploadSub)
-	b.handleWildcard(h, http.MethodGet, "/supplier/{id}/file/", withAuth, h.SupplierFile)
+	b.handleWildcard(http.MethodGet, "/supplier/{id}/folder/", withAuth, h.SupplierFolderSub, h.SupplierFolder)
+	b.handleWildcard(http.MethodPost, "/supplier/{id}/folder-upload/", withAuth, h.SupplierFolderUploadSub, h.SupplierFolderUpload)
+	b.handleWildcard(http.MethodGet, "/supplier/{id}/file/", withAuth, h.SupplierFile, h.NotFound)
 
 	// Parts Master — Contacts
 	b.handle(http.MethodGet, "/contacts", withAuth, h.ContactsList)
@@ -388,11 +386,9 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodPost, "/po/{id}/import-part-file", withAuth, h.POImportPartFile)
 	b.handle(http.MethodGet, "/po/{id}/duplicate", withAuth, h.PODuplicate)
 	b.handle(http.MethodGet, "/po/{id}/start-rfq", withAuth, h.POStartRFQ)
-	b.handle(http.MethodGet, "/po/{id}/folder", withAuth, h.POFolder)
-	b.handle(http.MethodGet, "/po/{id}/folder/{rest...}", withAuth, h.POFolderSub)
-	b.handle(http.MethodPost, "/po/{id}/folder-upload", withAuth, h.POFolderUpload)
-	b.handle(http.MethodPost, "/po/{id}/folder-upload/{rest...}", withAuth, h.POFolderUploadSub)
-	b.handleWildcard(h, http.MethodGet, "/po/{id}/file/", withAuth, h.POFile)
+	b.handleWildcard(http.MethodGet, "/po/{id}/folder/", withAuth, h.POFolderSub, h.POFolder)
+	b.handleWildcard(http.MethodPost, "/po/{id}/folder-upload/", withAuth, h.POFolderUploadSub, h.POFolderUpload)
+	b.handleWildcard(http.MethodGet, "/po/{id}/file/", withAuth, h.POFile, h.NotFound)
 
 	// Parts Master — API
 	b.handle(http.MethodGet, "/api/suppliers/search", withAuth, h.APISupplierSearch)
