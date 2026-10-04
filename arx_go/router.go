@@ -52,16 +52,23 @@ func chain(mws ...func(http.Handler) http.Handler) func(http.Handler) http.Handl
 }
 
 // handleWildcard registers prefix+"{rest...}" for method (wrapped in mw),
-// plus an exact sibling for the bare prefix (no trailing slash) that 404s.
-// net/http's ServeMux otherwise silently 307-redirects that bare request to
-// prefix+"{rest...}" before any handler runs — any "x/{name...}" pattern
-// implies the subtree pattern "x/" the same way a bare "x" implies it — so
-// without the sibling, a bare "/local" would 307 to "/local/" instead of
-// 404ing the way chi's old "/local/*" did when dialed without the trailing
-// slash (#319). prefix must end in "/".
-func (b *routeBuilder) handleWildcard(h *Handler, method, prefix string, mw func(http.Handler) http.Handler, handler http.HandlerFunc) {
+// plus an exact sibling for the bare prefix (no trailing slash) using
+// bareHandler. net/http's ServeMux otherwise silently 307-redirects that
+// bare request to prefix+"{rest...}" before any handler runs — any
+// "x/{name...}" pattern implies the subtree pattern "x/" the same way a bare
+// "x" implies it — so without the sibling, a bare "/local" would 307 to
+// "/local/" instead of reaching bareHandler the way chi's old "/local/*" did
+// when dialed without the trailing slash (#319). prefix must end in "/".
+// Most callers pass h.NotFound as bareHandler, since no meaningful
+// bare-prefix page exists; the PO/supplier folder and folder-upload routes
+// pass their real bare-prefix handler instead, since that bare path is a
+// legitimate route (the folder root), not a dead end (#328). bareHandler
+// runs behind the same mw as handler, so an auth-gated prefix redirects an
+// unauthenticated bare request to /login rather than reaching bareHandler
+// at all (#327).
+func (b *routeBuilder) handleWildcard(method, prefix string, mw func(http.Handler) http.Handler, handler, bareHandler http.HandlerFunc) {
 	b.handle(method, prefix+"{rest...}", mw, handler)
-	b.handle(method, strings.TrimSuffix(prefix, "/"), mw, h.NotFound)
+	b.handle(method, strings.TrimSuffix(prefix, "/"), mw, bareHandler)
 }
 
 // withNotFound serves mux normally. A request whose path matches no

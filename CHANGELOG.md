@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.63] - 2026-10-03
+### Changed
+- `handleWildcard` now takes the bare-prefix sibling handler as a parameter instead of hardcoding `h.NotFound`, so the PO/supplier folder and folder-upload routes (whose bare path is a real folder-root view, not a dead end) register through the same mechanism as every other `{rest...}` route ([#328](https://github.com/Jolls/arx/issues/328))
+- Documented that `handleWildcard`'s bare-prefix sibling runs behind the same auth middleware as its wildcard route, so an unauthenticated request to an auth-gated bare prefix (e.g. `GET /local`) redirects to `/login` rather than 404ing — already covered by `TestBuildRouter_AllAppRoutesRequireAuth` ([#327](https://github.com/Jolls/arx/issues/327))
+- Corrected the stale comment on `POFile`/`serveSupplierFile`'s bare-prefix-rejection checks: the router's own `handleWildcard` sibling already intercepts that path in production, but the checks stay as each handler's own invariant since both are also called directly by tests ([#329](https://github.com/Jolls/arx/issues/329))
+
 ## [0.8.62] - 2026-10-03
 ### Changed
 - Bumped the dev/CI Postgres pin from 17 to 18, matching ArxProd's actual Azure version (18.6); the local throwaway container's tmpfs mount moved from `/var/lib/postgresql/data` to `/var/lib/postgresql` since 18+ images store data in a version-specific subdirectory ([#326](https://github.com/Jolls/arx/issues/326))

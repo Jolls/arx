@@ -1116,9 +1116,12 @@ func (h *Handler) POFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prefix := fmt.Sprintf("/po/%s/file/", num)
-	// A bare "/po/{id}/file" with no trailing slash still matches this route's
-	// "{rest...}" wildcard (unlike chi's old "/po/{id}/file/*", which required
-	// the literal slash) — reject it the same way chi did (#319).
+	// The router's own handleWildcard sibling already 404s a bare
+	// "/po/{id}/file" (no trailing slash) before this handler ever runs
+	// (#319) — but POFile is also called directly by tests (and could be
+	// reused outside the router), so it re-asserts its own prefix
+	// invariant rather than trusting every caller only ever passes a
+	// path with the literal prefix (#329).
 	if !strings.HasPrefix(r.URL.Path, prefix) {
 		h.NotFound(w, r)
 		return
