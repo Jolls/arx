@@ -2,4 +2,4 @@
 
 Be respectful. 
 
-Maintainer(s) reserves the right to warn, block and ban anyone who violates this standard
+Maintainer(s) reserves the right to warn, block and ban anyone who violates this standard.
