@@ -11,7 +11,6 @@ import (
 	"arx/arx_go/models"
 	"arx/internal/inventory"
 	"arx/internal/records"
-	"github.com/go-chi/chi/v5"
 )
 
 // Unit — Tier-3 serialized instance of a part (#740, traceability epic #736). A unit
@@ -48,7 +47,7 @@ func (h *Handler) fetchUnitRow(ctx context.Context, unitID int) (UnitRow, bool, 
 // PartUnits — GET /part/{id}/units. Lists a serial/lot_serial-tracked part's units,
 // each linking to its genealogy trace (#746).
 func (h *Handler) PartUnits(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "units")
 	if !ok {
 		return
@@ -69,12 +68,12 @@ func (h *Handler) PartUnits(w http.ResponseWriter, r *http.Request) {
 // its ancestors (recursed to raw vendor lots and serialized parent units) and
 // descendants — the per-serial "birth certificate" (#746).
 func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "units")
 	if !ok {
 		return
 	}
-	unitID, err := strconv.Atoi(chi.URLParam(r, "unitID"))
+	unitID, err := strconv.Atoi(r.PathValue("unitID"))
 	if err != nil {
 		h.renderError(w, r, "Invalid unit id")
 		return
@@ -130,7 +129,7 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 // UnitRecordsRows — GET /api/part/{id}/units/{unitID}/records/rows. JSON rows
 // for the records table on the unit trace page (#875).
 func (h *Handler) UnitRecordsRows(w http.ResponseWriter, r *http.Request) {
-	unitID, err := strconv.Atoi(chi.URLParam(r, "unitID"))
+	unitID, err := strconv.Atoi(r.PathValue("unitID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -154,7 +153,7 @@ func (h *Handler) unitSerialLocked(ctx context.Context, unitID int) (bool, error
 // part with no test record involved (#799: a pre-existing unit that predates Arx's
 // traceability data). Optionally links a lot and/or build for provenance.
 func (h *Handler) UnitNew(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "units")
 	if !ok {
 		return
@@ -186,7 +185,7 @@ func (h *Handler) UnitNew(w http.ResponseWriter, r *http.Request) {
 // test-minted unit, may both be blank — the provenance CHECK dropped in migrate_799
 // no longer requires either.
 func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
+	partID := r.PathValue("id")
 	p, ok := h.requireTab(w, r, partID, "units")
 	if !ok {
 		return
@@ -226,12 +225,12 @@ func (h *Handler) renderUnitSaveErr(w http.ResponseWriter, r *http.Request, err 
 // toggle scrap (#799). Serial is read-only once the unit's serial is locked (see
 // unitSerialLocked).
 func (h *Handler) UnitEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "units")
 	if !ok {
 		return
 	}
-	unitID, err := strconv.Atoi(chi.URLParam(r, "unitID"))
+	unitID, err := strconv.Atoi(r.PathValue("unitID"))
 	if err != nil {
 		h.renderError(w, r, "Invalid unit id")
 		return
@@ -262,12 +261,12 @@ func (h *Handler) UnitEdit(w http.ResponseWriter, r *http.Request) {
 // the serial only when not locked (server-side re-check — never trust a disabled
 // input alone) (#799).
 func (h *Handler) UnitUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "units")
 	if !ok {
 		return
 	}
-	unitID, err := strconv.Atoi(chi.URLParam(r, "unitID"))
+	unitID, err := strconv.Atoi(r.PathValue("unitID"))
 	if err != nil {
 		h.renderError(w, r, "Invalid unit id")
 		return

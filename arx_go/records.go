@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
@@ -268,7 +267,7 @@ func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
 
 // RecordsList â€" GET /forms/{id}/records
 func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -309,7 +308,7 @@ func (h *Handler) RecordsList(w http.ResponseWriter, r *http.Request) {
 // Filtering/sorting/pagination are done client-side; this returns every active record
 // for the form in the same default order RecordsList used to apply server-side.
 func (h *Handler) RecordsRows(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -401,7 +400,7 @@ func (h *Handler) scopedRecordTypeOptions(ctx context.Context, scope records.Sco
 // Shows all test step definitions for a form without any result data.
 // Used as a reference when creating a new test record.
 func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -527,7 +526,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 // Returns the form definition state at that timestamp as JSON.
 // Changed rows are those with a history entry at exactly that timestamp (pre-change values).
 func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
@@ -577,7 +576,7 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 
 // EditFormDef â€" GET /forms/{id}/def/edit
 func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -631,7 +630,7 @@ func (h *Handler) EditFormDef(w http.ResponseWriter, r *http.Request) {
 
 // SaveFormDef â€" POST /forms/{id}/def/edit
 func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1003,7 +1002,7 @@ func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord,
 
 // RecordDetail â€" GET /records/{id}
 func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1107,7 +1106,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 
 // RecordPrint — GET /records/{id}/print
 func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1178,7 +1177,7 @@ type BOMPart struct {
 
 // NewRecord — GET /forms/{id}/records/new
 func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1224,7 +1223,7 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 
 // CreateRecord — POST /forms/{id}/records/new
 func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1532,7 +1531,7 @@ func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildA
 
 // EditRecord — GET /records/{id}/edit
 func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1616,7 +1615,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 // LockRecord — POST /records/{id}/lock
 // Sets locked=1 on the record and writes a 'locked' event to record_events.
 func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1644,7 +1643,7 @@ func (h *Handler) LockRecord(w http.ResponseWriter, r *http.Request) {
 // Reviewer sign-off (#249). Requires the can_approve_records permission and a Complete
 // record (is_locked=1, is_approved=0). Sets is_approved=1 and logs an 'approved' event.
 func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1675,7 +1674,7 @@ func (h *Handler) ApproveRecord(w http.ResponseWriter, r *http.Request) {
 // Requires a comment, returns the record to WIP, and writes an 'unlocked' event. Unlocking an
 // approved record requires the can_approve_records permission (#249).
 func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1733,7 +1732,7 @@ func (h *Handler) UnlockRecord(w http.ResponseWriter, r *http.Request) {
 // Marks multiple WIP records as Complete (is_locked=1) and logs a 'completed' event per record.
 // The form_id guard in the UPDATE ensures records belong to this form.
 func (h *Handler) BulkLockRecords(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1766,7 +1765,7 @@ func (h *Handler) BulkLockRecords(w http.ResponseWriter, r *http.Request) {
 // Creates a new WIP record with the same serial number as the source, copying all result rows.
 // Redirects to the new record's edit view on success.
 func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1808,7 +1807,7 @@ func (h *Handler) DuplicateRecord(w http.ResponseWriter, r *http.Request) {
 // LockForm — POST /forms/{id}/lock
 // Sets locked=1 on the form and writes a 'locked' event to form_events.
 func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1836,7 +1835,7 @@ func (h *Handler) LockForm(w http.ResponseWriter, r *http.Request) {
 // UnlockForm — POST /forms/{id}/unlock
 // Requires a comment, sets locked=0, and writes an 'unlocked' event to form_events.
 func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1876,12 +1875,12 @@ func (h *Handler) UnlockForm(w http.ResponseWriter, r *http.Request) {
 // anything else unarchives. No hard delete. Wrapped in a transaction so SetAuditUser
 // attributes the history-trigger row to the current user (same pattern as SaveFormDef).
 func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	testID, err := strconv.Atoi(chi.URLParam(r, "testID"))
+	testID, err := strconv.Atoi(r.PathValue("testID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1919,7 +1918,7 @@ func (h *Handler) ArchiveStep(w http.ResponseWriter, r *http.Request) {
 
 // SaveResults â€" POST /records/{id}/edit
 func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -2198,7 +2197,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 // and refreshes the record's test_order. Locked records are rejected. Rows for steps removed/archived
 // from the form are left untouched, preserving their historical result.
 func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -2442,7 +2441,7 @@ func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
 
 // DuplicateForm — GET /forms/{id}/duplicate
 func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -2480,7 +2479,7 @@ func (h *Handler) DuplicateForm(w http.ResponseWriter, r *http.Request) {
 // CreateDuplicate — POST /forms/{id}/duplicate
 // Copies all steps from the source form into a new form with the chosen PN.
 func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
-	sourceID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	sourceID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -2534,12 +2533,12 @@ func (h *Handler) CreateDuplicate(w http.ResponseWriter, r *http.Request) {
 // TestReport – GET /forms/{id}/tests/{testID}/report
 // Shows all recorded results for a single test step across every active record of the form.
 func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	testID, err := strconv.Atoi(chi.URLParam(r, "testID"))
+	testID, err := strconv.Atoi(r.PathValue("testID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -2578,12 +2577,12 @@ func (h *Handler) TestReport(w http.ResponseWriter, r *http.Request) {
 // JSON rows for the test report's shared client-side table: every active record's
 // recorded result for one test step, in the default report order.
 func (h *Handler) TestReportRows(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	testID, err := strconv.Atoi(chi.URLParam(r, "testID"))
+	testID, err := strconv.Atoi(r.PathValue("testID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return

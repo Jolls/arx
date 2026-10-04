@@ -12,16 +12,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 )
 
-// withIDAndSpID injects chi route params "id" and "spID" (sourcing routes).
+// withIDAndSpID sets the "id" and "spID" path values (sourcing routes).
 func withIDAndSpID(req *http.Request, id, spID int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	rctx.URLParams.Add("spID", strconv.Itoa(spID))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	req.SetPathValue("spID", strconv.Itoa(spID))
+	return req
 }
 
 // seedSupplierPart creates a supplier_part row via SupplierPartCreate and

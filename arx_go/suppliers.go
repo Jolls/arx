@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"arx/arx_go/models"
 	"arx/internal/attachments"
 	"arx/internal/purchasing"
@@ -72,7 +70,7 @@ func (h *Handler) SuppliersRows(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -152,7 +150,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -170,7 +168,7 @@ func (h *Handler) SupplierEdit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	name := fv(r, "name")
 	idInt := 0
 	if v, err2 := strconv.Atoi(id); err2 == nil {
@@ -208,7 +206,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -250,7 +248,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -269,7 +267,7 @@ func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierAttachments(w http.ResponseWriter, r *http.Request) {
-	h.renderSupplierAttachments(w, r, chi.URLParam(r, "id"), nil)
+	h.renderSupplierAttachments(w, r, r.PathValue("id"), nil)
 }
 
 // renderSupplierAttachments loads a supplier's attachments and renders the
@@ -355,7 +353,7 @@ func (h *Handler) saveSupplierUpload(hdr *multipart.FileHeader) (filePath string
 }
 
 func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 
 	// Cancel from a duplicate-hash warning (#71): the file was already copied
 	// into SupplierFilesRoot by the time the duplicate was detected, so discard
@@ -447,11 +445,11 @@ func (h *Handler) companyAttachmentDuplicateWarning(w http.ResponseWriter, r *ht
 }
 
 func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	supplierID, err := strconv.Atoi(id)
 	var attID int
 	if err == nil {
-		attID, err = strconv.Atoi(chi.URLParam(r, "attID"))
+		attID, err = strconv.Atoi(r.PathValue("attID"))
 	}
 	if err == nil {
 		err = h.attachmentTx(r.Context(), func(s *attachments.Service) error {
@@ -469,8 +467,8 @@ func (h *Handler) SupplierAttachmentDelete(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	attID := chi.URLParam(r, "attID")
+	id := r.PathValue("id")
+	attID := r.PathValue("attID")
 	attIDInt, _ := strconv.Atoi(attID)
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
@@ -555,7 +553,7 @@ func (h *Handler) fetchSupplier(w http.ResponseWriter, r *http.Request, id strin
 }
 
 func (h *Handler) SupplierSetPrimaryAttachment(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	idInt, _ := strconv.Atoi(id)
 	attIDStr := r.FormValue("attachment_id")
 	var val *int
@@ -636,7 +634,7 @@ func (h *Handler) SupplierFolderUpload(w http.ResponseWriter, r *http.Request) {
 
 // SupplierFolderUploadSub — POST /supplier/{id}/folder-upload/*
 func (h *Handler) SupplierFolderUploadSub(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/supplier/%s/folder-upload/", id))
 	var subParts []string
 	for seg := range strings.SplitSeq(splat, "/") {
@@ -649,7 +647,7 @@ func (h *Handler) SupplierFolderUploadSub(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) supplierFolderUpload(w http.ResponseWriter, r *http.Request, subParts []string) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -680,7 +678,7 @@ func (h *Handler) supplierFolderUpload(w http.ResponseWriter, r *http.Request, s
 }
 
 func (h *Handler) SupplierFolder(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -690,7 +688,7 @@ func (h *Handler) SupplierFolder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierFolderSub(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -708,7 +706,7 @@ func (h *Handler) SupplierFolderSub(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SupplierFile(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	s, ok := h.fetchSupplier(w, r, id)
 	if !ok {
 		return
@@ -733,7 +731,15 @@ func (h *Handler) serveSupplierFile(w http.ResponseWriter, r *http.Request, s mo
 	}
 
 	base := filepath.Join(root, s.SupplierCode)
-	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/supplier/%s/file/", id))
+	prefix := fmt.Sprintf("/supplier/%s/file/", id)
+	// A bare "/supplier/{id}/file" with no trailing slash still matches this
+	// route's "{rest...}" wildcard (unlike chi's old "/supplier/{id}/file/*",
+	// which required the literal slash) — reject it the same way chi did (#319).
+	if !strings.HasPrefix(r.URL.Path, prefix) {
+		h.NotFound(w, r)
+		return
+	}
+	splat := strings.TrimPrefix(r.URL.Path, prefix)
 	h.serveLocalizedFile(w, r, fileServingParams{Root: base, Splat: splat})
 }
 

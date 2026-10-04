@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.61] - 2026-10-02
+### Changed
+- Replaced `go-chi/chi/v5` routing with stdlib `net/http.ServeMux` (Go 1.22+ method+pattern routing), dropping the dependency entirely; a route-walking auth-tier test confirms no route's RequireAuth/RequireAdmin/RequireAdminJSON protection changed ([#319](https://github.com/Jolls/arx/issues/319))
+
+### Fixed
+- A request to an existing route with the wrong HTTP method now gets a 405 with an `Allow` header instead of a false 404 ([#319](https://github.com/Jolls/arx/issues/319))
+
 ## [0.8.60] - 2026-10-02
 ### Changed
 - The local test DB and dev container compose project is now named `arx`, so the dev container is `arx-dev-1` instead of `postgres-dev-1`, and the dev container stops immediately instead of waiting 10s for SIGKILL

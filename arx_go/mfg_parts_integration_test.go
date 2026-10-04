@@ -11,16 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 )
 
-// withIDAndMidID injects chi route params "id" and "mid" (mfg-parts routes).
+// withIDAndMidID sets the "id" and "mid" path values (mfg-parts routes).
 func withIDAndMidID(req *http.Request, id, mid int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	rctx.URLParams.Add("mid", strconv.Itoa(mid))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	req.SetPathValue("mid", strconv.Itoa(mid))
+	return req
 }
 
 // seedMfgPart creates a mfg_part row via MfgPartCreate and returns its id plus

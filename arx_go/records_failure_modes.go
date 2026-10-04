@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
-
-	"github.com/go-chi/chi/v5"
 )
 
 // failureModeRow is one test step's failure tally within a form's failure
@@ -30,7 +28,7 @@ func (row failureModeRow) FailureRatePct() float64 {
 // all of a form's records, ranked by failure count descending, over a
 // selectable date range (issue #245).
 func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return

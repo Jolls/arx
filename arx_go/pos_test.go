@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 
 	"arx/arx_go/models"
 )
@@ -432,14 +429,13 @@ func TestRenderPOFolder_ParentURLAtDepth(t *testing.T) {
 
 // ── POFile ───────────────────────────────────────────────────────────────────
 // POFile has no DB dependency (unlike SupplierFile), so it's tested directly
-// through the exported handler via chi's URLParam.
+// through the exported handler, setting its "id" path value by hand.
 
 func poFileRequest(t *testing.T, num, subpath string) *http.Request {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/po/"+num+"/file/"+subpath, nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", num)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", num)
+	return req
 }
 
 func TestPOFile_RootUnconfigured(t *testing.T) {
@@ -456,6 +452,26 @@ func TestPOFile_NoMatchingBaseFolder(t *testing.T) {
 	h := filesTestHandler()
 	h.cfg().POFolderRoot = t.TempDir()
 	req := poFileRequest(t, "PO-100", "doc.pdf")
+	rec := httptest.NewRecorder()
+	h.POFile(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// TestPOFile_BarePrefixNotFound: a bare "/po/PO-100/file" with no trailing
+// slash still matches this route's "{rest...}" wildcard pattern (unlike
+// chi's old "/po/{id}/file/*", which required the literal slash) — POFile
+// must reject it the same way chi did (#319).
+func TestPOFile_BarePrefixNotFound(t *testing.T) {
+	h := filesTestHandler()
+	root := t.TempDir()
+	h.cfg().POFolderRoot = root
+	if err := os.Mkdir(filepath.Join(root, "PO-100 Vendor"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/po/PO-100/file", nil)
+	req.SetPathValue("id", "PO-100")
 	rec := httptest.NewRecorder()
 	h.POFile(rec, req)
 	if rec.Code != http.StatusNotFound {
@@ -597,9 +613,7 @@ func TestPOOpenFolder_RejectsTraversalID(t *testing.T) {
 	h.cfg().POFolderRoot = root
 	for _, id := range []string{"..", `..\escaped`, "../escaped"} {
 		req := httptest.NewRequest(http.MethodPost, "/po/x/open-folder", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", id)
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req.SetPathValue("id", id)
 		rec := httptest.NewRecorder()
 		h.POOpenFolder(rec, req)
 		if rec.Code != http.StatusBadRequest {

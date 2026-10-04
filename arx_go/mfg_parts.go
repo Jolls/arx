@@ -7,15 +7,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-
 	"arx/internal/parts"
 )
 
 // ── PartMfgParts — GET /part/{id}/mfg-parts ─────────────────────────────────
 
 func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "mfg-parts")
 	if !ok {
 		return
@@ -47,7 +45,7 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 // ── MfgPartCreate — POST /part/{id}/mfg-parts ───────────────────────────────
 
 func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "mfg-parts")
 	if !ok {
 		return
@@ -76,8 +74,8 @@ func (h *Handler) MfgPartCreate(w http.ResponseWriter, r *http.Request) {
 // ── MfgPartEdit — GET /part/{id}/mfg-parts/{mid}/edit ───────────────────────
 
 func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	mid := chi.URLParam(r, "mid")
+	id := r.PathValue("id")
+	mid := r.PathValue("mid")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "mfg-parts")
 	if !ok {
 		return
@@ -125,12 +123,12 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 // ── MfgPartUpdate — POST /part/{id}/mfg-parts/{mid} ─────────────────────────
 
 func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "mfg-parts")
 	if !ok {
 		return
 	}
-	mfgPartID, err := strconv.Atoi(chi.URLParam(r, "mid"))
+	mfgPartID, err := strconv.Atoi(r.PathValue("mid"))
 	if err != nil {
 		h.renderError(w, r, "Manufacturer part not found")
 		return
@@ -160,12 +158,12 @@ func (h *Handler) MfgPartUpdate(w http.ResponseWriter, r *http.Request) {
 // ── MfgPartDelete — POST /part/{id}/mfg-parts/{mid}/delete ──────────────────
 
 func (h *Handler) MfgPartDelete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "mfg-parts")
 	if !ok {
 		return
 	}
-	mfgPartID, err := strconv.Atoi(chi.URLParam(r, "mid"))
+	mfgPartID, err := strconv.Atoi(r.PathValue("mid"))
 	if err != nil {
 		h.renderError(w, r, "Manufacturer part not found")
 		return

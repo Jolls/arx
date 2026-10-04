@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 // yieldRecord is one form record's date and whether any of its results failed.
@@ -86,7 +84,7 @@ func computeYieldBuckets(records []yieldRecord, grouped bool) (total yieldBucket
 // Shows total/passed/failed record counts and first-pass yield % for a form
 // over a selectable date range, optionally broken down by month.
 func (h *Handler) RecordsYieldSummary(w http.ResponseWriter, r *http.Request) {
-	formID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return

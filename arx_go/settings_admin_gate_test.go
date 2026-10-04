@@ -144,7 +144,7 @@ func TestAdminOnlyRoutes_RefuseNonAdmin(t *testing.T) {
 	for _, rt := range routes {
 		t.Run(rt.method+" "+rt.path, func(t *testing.T) {
 			h := testHandlerWithDB()
-			r := buildRouter(h)
+			r, _ := buildRouter(h)
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, requestAs(t, h, rt.method, rt.path, &User{ID: 7, Username: "tester"}))
 

@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
@@ -21,7 +20,7 @@ import (
 // ── PartSourcing — GET /part/{id}/suppliers ──────────────────────────────────
 
 func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "suppliers")
 	if !ok {
 		return
@@ -61,7 +60,7 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 // are written in the same transaction as the supplier link so a failure
 // midway never leaves a supplier link with half-imported data.
 func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "suppliers")
 	if !ok {
 		return
@@ -296,8 +295,8 @@ func (h *Handler) applyDigiKeyImportExtras(r *http.Request, tx *txLogger, partID
 // ── SupplierPartEdit — GET /part/{id}/suppliers/{spID}/edit ──────────────────
 
 func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	spID := chi.URLParam(r, "spID")
+	id := r.PathValue("id")
+	spID := r.PathValue("spID")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "suppliers")
 	if !ok {
 		return
@@ -346,12 +345,12 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 // ── SupplierPartUpdate — POST /part/{id}/suppliers/{spID} ────────────────────
 
 func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "suppliers")
 	if !ok {
 		return
 	}
-	spIDInt, spIDErr := strconv.Atoi(chi.URLParam(r, "spID"))
+	spIDInt, spIDErr := strconv.Atoi(r.PathValue("spID"))
 	fail := func(msg string) {
 		draft := supplierPartFromForm(r)
 		draft.ID = spIDInt
@@ -416,12 +415,12 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 // ── SupplierPartDelete — POST /part/{id}/suppliers/{spID}/delete ─────────────
 
 func (h *Handler) SupplierPartDelete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "suppliers")
 	if !ok {
 		return
 	}
-	spID, err := strconv.Atoi(chi.URLParam(r, "spID"))
+	spID, err := strconv.Atoi(r.PathValue("spID"))
 	if err == nil {
 		err = h.parts().DeleteSupplierPart(r.Context(), spID, p.ID)
 	}

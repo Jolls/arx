@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"arx/internal/auth"
@@ -417,7 +416,7 @@ func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "bad form data", http.StatusBadRequest)
 		return
 	}
-	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
+	id, err := strconv.Atoi(r.PathValue("userID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -441,7 +440,7 @@ func (h *Handler) SettingsUsersResetPassword(w http.ResponseWriter, r *http.Requ
 
 // POST /settings/users/{userID}/toggle-active — toggle is_active.
 func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
+	id, err := strconv.Atoi(r.PathValue("userID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -460,7 +459,7 @@ func (h *Handler) SettingsUsersToggleActive(w http.ResponseWriter, r *http.Reque
 
 // POST /settings/users/{userID}/toggle-approve — toggle can_approve_po (PO approver, #267).
 func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
+	id, err := strconv.Atoi(r.PathValue("userID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -475,7 +474,7 @@ func (h *Handler) SettingsUsersToggleApprove(w http.ResponseWriter, r *http.Requ
 
 // POST /settings/users/{userID}/toggle-approve-records — toggle can_approve_records (TR reviewer, #249).
 func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
+	id, err := strconv.Atoi(r.PathValue("userID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -492,7 +491,7 @@ func (h *Handler) SettingsUsersToggleApproveRecords(w http.ResponseWriter, r *ht
 // An admin can't remove their own admin rights, mirroring the self-deactivate
 // guard, so the last admin can't accidentally lock everyone out of user admin.
 func (h *Handler) SettingsUsersToggleAdmin(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "userID"))
+	id, err := strconv.Atoi(r.PathValue("userID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
