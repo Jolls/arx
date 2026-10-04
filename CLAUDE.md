@@ -180,12 +180,7 @@ Area (all issues): `area: security` auth/CSRF/session/crypto; `area: db` queries
 Existing feature-area labels (ux, export, search, analytics, audit, batch, form-mgmt, data-quality, record-lifecycle) used for feature issues.
 
 ### Closing issues
-Prefer `closes #NNN`/`fixes #NNN` in PR description for auto-close. Multi-issue PRs: keyword must precede EVERY issue number (bare numbers after a comma don't auto-close) — repeat keyword per line:
-```
-Closes #451
-Closes #450
-```
-Add a one-sentence resolution comment before closing.
+Fill in the PR template's `Closes #` line(s) (`.github/PULL_REQUEST_TEMPLATE.md`) for auto-close. Add a one-sentence resolution comment before closing.
 
 ## What NOT to touch
 SQL/postgres/*.sql = reference DDL only, not a migration runner (keep in sync but never auto-run). No DB password in .env. No raw SQL in handlers — queries go in `internal/<domain>/<domain>.sql`. Never edit `internal/dbq` by hand — `sqlc generate`. Never query/connect ArxProd directly.
