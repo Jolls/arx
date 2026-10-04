@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.62] - 2026-10-03
+### Changed
+- Bumped the dev/CI Postgres pin from 17 to 18, matching ArxProd's actual Azure version (18.6); the local throwaway container's tmpfs mount moved from `/var/lib/postgresql/data` to `/var/lib/postgresql` since 18+ images store data in a version-specific subdirectory ([#326](https://github.com/Jolls/arx/issues/326))
+
 ## [0.8.61] - 2026-10-02
 ### Changed
 - Replaced `go-chi/chi/v5` routing with stdlib `net/http.ServeMux` (Go 1.22+ method+pattern routing), dropping the dependency entirely; a route-walking auth-tier test confirms no route's RequireAuth/RequireAdmin/RequireAdminJSON protection changed ([#319](https://github.com/Jolls/arx/issues/319))
