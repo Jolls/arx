@@ -104,7 +104,7 @@ Prefer Bootstrap classes over custom CSS/inline styles. Buttons always pair base
 Latency principle (#290): DB is remote (~80 ms RTT to Azure), so optimize round trips on GET/HEAD (display) first; POST/PUT/PATCH/DELETE may pay an extra round trip for freshness. Session-user cache (`cachedUserByID`, 60 s TTL, per-process): expired entry is served stale + refreshed in background on GET/HEAD only; mutating requests always look the user up synchronously so writes never use stale permissions. Preserve that split in any auth/cache change.
 
 ## Plans
-Save implementation plans (Plan Mode, issue-tied) to `docs/plans/<issue-id>-<description-stem>.md`.
+Post implementation plans (Plan Mode, issue-tied) as a comment on the tracking issue (`gh issue comment <issue-id> --body-file <plan>.md`), not as a committed file.
 
 ## Branching
 Never commit to main. Before first commit in session, check current branch; if on main, create the branch yourself using the standard below — don't ask for a name. Naming: `feature/<issue-id>-<short-slug>` when the work maps to a GitHub issue (e.g. `feature/754-settings-backup-table-list`), else `feature/<short-description>`. Push branch + open PR, never push main directly.
