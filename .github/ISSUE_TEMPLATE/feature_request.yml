@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest something new or an improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this needed, and who benefits?
+    validations:
+      required: false
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What do you want to happen? (No need to describe how to build it.)
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else — related issues, mockups, examples elsewhere
+    validations:
+      required: false

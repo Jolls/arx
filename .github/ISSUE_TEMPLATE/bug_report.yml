@@ -1,0 +1,54 @@
+name: Bug report
+description: Report something that's broken or behaving incorrectly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's wrong, and who's affected?
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If known — numbered steps are easiest to follow
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What did you expect to happen?
+    validations:
+      required: false
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What happened instead?
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (your best guess)
+      description: Maintainers may adjust this — it just helps with triage
+      options:
+        - Critical — security hole, data loss, crash in production
+        - High — user-visible correctness bug
+        - Medium — latent bug, low practical risk
+        - Low — cosmetic, log noise, style
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else — screenshots, logs, environment details
+    validations:
+      required: false
