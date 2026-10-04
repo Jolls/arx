@@ -91,7 +91,7 @@ go test -tags integration ./arx_go/...
 $env:ARX_TEST_FROM_CONFIG="1"; go test -tags integration ./arx_go/...
 ```
 
-See [`CLAUDE.md`](CLAUDE.md) for schema conventions, branching rules, and architecture decisions, and [`ROADMAP.md`](ROADMAP.md) for what's planned.
+See [`CLAUDE.md`](CLAUDE.md) for schema conventions, branching rules, and architecture decisions, and [`ROADMAP.md`](ROADMAP.md) for what's planned. Contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
