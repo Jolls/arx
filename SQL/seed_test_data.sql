@@ -1,10 +1,10 @@
 -- seed_test_data.sql (Postgres) — Wipe ArxDev row data and load a fixed, synthetic
 -- reference dataset (#829). This script assumes the
 -- ArxDev SCHEMA (tables/constraints/triggers/po_number_seq) already exists — created
--- once from the SQL/postgres/*.sql DDL files — and only owns row data: DELETE
+-- once from the SQL/*.sql DDL files — and only owns row data: DELETE
 -- everything, INSERT a documented set of records at pinned IDs.
 --
--- Human-run, like the rest of SQL/postgres/*.sql — not auto-applied.
+-- Human-run, like the rest of SQL/*.sql — not auto-applied.
 -- Re-run any time to reset ArxDev to a known state. Safe to run repeatedly.
 --
 -- ID ranges (see also SQL/schema.md "Reference test data"):
@@ -127,7 +127,7 @@ END $$;
     -- test can assert these rows go untouched by unrelated code paths — see
     -- TestIntegration_UpdatedAtSentinel in integration_test.go.
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
-    -- swamp this file's diff) — run SQL/postgres/seed_company_logo.sql separately, after this script.
+    -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO app_config (setting_key, setting_value, updated_at) VALUES
         ('schema_version', '12', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
@@ -781,7 +781,7 @@ END $$;
     -- last updated); out of #829's scope.
 
     -- po_number_seq: restart well above the highest fixed PO base number (5010).
-    -- The sequence itself is created unconditionally in SQL/postgres/purchase_order.sql.
+    -- The sequence itself is created unconditionally in SQL/purchase_order.sql.
     ALTER SEQUENCE po_number_seq RESTART WITH 9001;
 
 COMMIT;

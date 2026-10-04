@@ -1,10 +1,10 @@
 # Throwaway local test Postgres with the schema and test seed loaded (#300).
-#   docker compose -f SQL/postgres/compose.yml up -d --wait db   # returns once seeded
-#   docker compose -f SQL/postgres/compose.yml restart db        # reset to a fresh seed
-#   docker compose -f SQL/postgres/compose.yml down              # remove
+#   docker compose -f SQL/compose.yml up -d --wait db   # returns once seeded
+#   docker compose -f SQL/compose.yml restart db        # reset to a fresh seed
+#   docker compose -f SQL/compose.yml down              # remove
 # Connect: postgres://postgres:postgres@127.0.0.1:55432/ArxDev?sslmode=require
 # Needs only docker (or podman); `podman compose` works in place of `docker compose`.
-# Without a name the project defaults to this directory, "postgres", which also prefixes the dev container's names.
+# Without a name the project defaults to this directory, "SQL", which also prefixes the dev container's names.
 name: arx
 services:
   db:

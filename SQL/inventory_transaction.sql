@@ -22,6 +22,6 @@ CREATE TABLE inventory_transaction (
 
 ALTER TABLE inventory_transaction ADD CONSTRAINT FK_inv_txn_PN      FOREIGN KEY (part_id)    REFERENCES part (id);
 ALTER TABLE inventory_transaction ADD CONSTRAINT FK_inv_txn_po_line FOREIGN KEY (po_line_id) REFERENCES po_line (id);
--- FK_inv_txn_lot (lot_id → lot.id) is added in SQL/postgres/lot.sql, after lot exists.
--- FK_inv_txn_build (build_id → build.id) is added in SQL/postgres/build.sql, after build exists.
+-- FK_inv_txn_lot (lot_id → lot.id) is added in SQL/lot.sql, after lot exists.
+-- FK_inv_txn_build (build_id → build.id) is added in SQL/build.sql, after build exists.
 CREATE INDEX IX_inv_txn_part ON inventory_transaction (part_id, txn_date);

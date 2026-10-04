@@ -3,7 +3,7 @@
 -- PO numbers are auto-assigned via nextval('po_number_seq') (arx_go/pos.go,
 -- arx_go/rfq_bom.go).
 -- po_count on company is a denormalized count maintained by a trigger
--- (SQL/postgres/triggers.sql).
+-- (SQL/triggers.sql).
 
 -- Sequence used to generate PO numbers.
 CREATE SEQUENCE IF NOT EXISTS po_number_seq AS integer START WITH 1 INCREMENT BY 1 NO CYCLE;

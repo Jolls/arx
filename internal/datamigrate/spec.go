@@ -1,5 +1,5 @@
 // Package datamigrate loads a CSV export of the Azure SQL ArxProd database (schema
-// version 10, archive/release-0.7 tag) into a Postgres database built from SQL/postgres (#216). It
+// version 10, archive/release-0.7 tag) into a Postgres database built from SQL (#216). It
 // backs the console command arx_go/cmd/migrate_data; the runbook is
 // docs/216-data-migration/runbook.md.
 //

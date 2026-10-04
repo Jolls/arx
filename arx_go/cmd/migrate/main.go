@@ -1,4 +1,4 @@
-// Command migrate applies SQL/postgres/migrations with goose (#91). Run from the
+// Command migrate applies SQL/migrations with goose (#91). Run from the
 // repo root with ARX_MIGRATE_DSN set to a DSN for a DDL-capable login:
 //
 //	go run ./arx_go/cmd/migrate status        # applied / pending per file

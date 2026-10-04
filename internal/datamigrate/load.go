@@ -15,7 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"arx/SQL/postgres/migrations"
+	"arx/SQL/migrations"
 )
 
 // DSNEnv is the only source of the connection string: a DDL-capable login (TRUNCATE,

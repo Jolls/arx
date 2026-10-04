@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// scratchDSNEnv names a throwaway Postgres database built with SQL/postgres/build_schema.sh,
+// scratchDSNEnv names a throwaway Postgres database built with SQL/build_schema.sh,
 // e.g. a docker container. The test TRUNCATES it, so the database name must start with
 // "arxscratch"; ArxDev and ArxProd can never match.
 const scratchDSNEnv = "ARX_DATAMIGRATE_SCRATCH_DSN"

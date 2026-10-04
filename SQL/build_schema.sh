@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints the full Postgres schema + test seed + migration-ledger baseline as one SQL script, for a fresh database:
-#   bash SQL/postgres/build_schema.sh | psql "$DSN" -q -v ON_ERROR_STOP=1
+#   bash SQL/build_schema.sh | psql "$DSN" -q -v ON_ERROR_STOP=1
 # Used by the postgres-integration CI job (#19). FKs form cycles (company <-> contact,
 # part <-> part_attachment), so no per-file order works: tables load first with their
 # single-line `ALTER TABLE ... FOREIGN KEY` statements held back, then all FKs, then

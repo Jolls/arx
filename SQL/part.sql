@@ -1,6 +1,6 @@
 -- part: the core parts catalog. The part_number COLUMN is the human-readable PN.
 -- attachment_count and po_line_count are denormalized counts, maintained by
--- triggers (SQL/postgres/triggers.sql).
+-- triggers (SQL/triggers.sql).
 -- price_id / default_supplier_id / uom_id FKs are all enforced now (#735, follow-up to #213).
 
 DROP TABLE IF EXISTS part CASCADE;

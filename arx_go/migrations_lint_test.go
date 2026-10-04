@@ -25,7 +25,7 @@ var migrationForbidden = []struct {
 	{"current_database() guard (the runner confirms the target)", regexp.MustCompile(`(?i)current_database\s*\(`)},
 }
 
-const migrationDir = "../SQL/postgres/migrations"
+const migrationDir = "../SQL/migrations"
 
 // migrationProblems checks a migration body against the goose format: header
 // comments, then one Up section that is a single StatementBegin/End block.

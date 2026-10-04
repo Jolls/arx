@@ -1,4 +1,4 @@
-// Package migrate applies the embedded SQL/postgres/migrations files with goose
+// Package migrate applies the embedded SQL/migrations files with goose
 // (#91). It backs the console command arx_go/cmd/migrate:
 //
 //	go run ./arx_go/cmd/migrate status        # applied / pending per file
@@ -26,7 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"arx/SQL/postgres/migrations"
+	"arx/SQL/migrations"
 )
 
 // DSNEnv is the only source of the runner's connection string.
@@ -131,7 +131,7 @@ func confirm(database string, in io.Reader, out io.Writer) error {
 func checkLedger(ctx context.Context, db *sql.DB) error {
 	var n int
 	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations WHERE version_id = 0").Scan(&n); err != nil {
-		return fmt.Errorf("reading schema_migrations (load SQL/postgres/schema_migrations.sql first): %w", err)
+		return fmt.Errorf("reading schema_migrations (load SQL/schema_migrations.sql first): %w", err)
 	}
 	if n == 0 {
 		return errors.New("schema_migrations has no baseline row (version_id 0); baseline the ledger first, see SQL/SCHEMA.md#migrations")

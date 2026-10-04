@@ -64,7 +64,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Load schema, triggers, and seed data
-        run: bash SQL/postgres/build_schema.sh | psql "$ARX_TEST_DSN" -q -v ON_ERROR_STOP=1
+        run: bash SQL/build_schema.sh | psql "$ARX_TEST_DSN" -q -v ON_ERROR_STOP=1
 
       - name: Integration test
         run: go test -tags integration ./arx_go/...
