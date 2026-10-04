@@ -8,7 +8,7 @@
 name: arx
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     container_name: arx-test-db
     environment:
       POSTGRES_PASSWORD: postgres
@@ -30,8 +30,10 @@ services:
       - ./:/arx-sql:ro
       - ./compose_init.sh:/docker-entrypoint-initdb.d/10-arx-schema.sh:ro
     # Wiped whenever the container stops, so the next start re-runs initdb and the init script.
+    # Mounted at the parent dir, not .../data: 18+ images store data in a version-specific
+    # subdirectory (PGDATA defaults to /var/lib/postgresql/18/docker) for pg_upgrade compatibility.
     tmpfs:
-      - /var/lib/postgresql/data:size=1g
+      - /var/lib/postgresql:size=1g
     healthcheck:
       # TCP, not the socket: during init the temporary server listens on the socket only, so a
       # socket check would report ready before the seed finishes.
