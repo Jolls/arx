@@ -14,8 +14,8 @@ Windows-only source files need a `!windows`-tagged counterpart so the Linux CI j
 
 ## Database and migrations
 
-- Schema changes ship as a goose migration in `SQL/postgres/migrations/`, applied with `go run ./arx_go/cmd/migrate up` (never at app startup) by a DDL-capable login from `ARX_MIGRATE_DSN`.
-- `SQL/postgres/*.sql` is reference DDL, not a migration runner; keep it in sync with the migrations.
+- Schema changes ship as a goose migration in `SQL/migrations/`, applied with `go run ./arx_go/cmd/migrate up` (never at app startup) by a DDL-capable login from `ARX_MIGRATE_DSN`.
+- `SQL/*.sql` is reference DDL, not a migration runner; keep it in sync with the migrations.
 - Details: [`SQL/SCHEMA.md`](SQL/SCHEMA.md).
 
 ## Local test database
@@ -23,9 +23,9 @@ Windows-only source files need a `!windows`-tagged counterpart so the Linux CI j
 For manual testing without access to a shared `ArxDev`, run a throwaway Postgres 17 with the schema and test seed. It needs only docker (`podman compose` works too), with no psql, bash or WSL on the host. The data lives on tmpfs, so stopping the container wipes it:
 
 ```
-docker compose -f SQL/postgres/compose.yml up -d --wait db   # returns once the seed has loaded
-docker compose -f SQL/postgres/compose.yml restart db        # reset to a fresh seed
-docker compose -f SQL/postgres/compose.yml down              # remove
+docker compose -f SQL/compose.yml up -d --wait db   # returns once the seed has loaded
+docker compose -f SQL/compose.yml restart db        # reset to a fresh seed
+docker compose -f SQL/compose.yml down              # remove
 ```
 
 Then in Settings, turn on Test Mode, set DB Server to `127.0.0.1:55432` (the field takes `host:port`), Username to `postgres` and Password to `postgres`, and save. The Test Connection fields can stay blank because they inherit these, and the test database name defaults to `ArxDev`. Log in as `admin`/`admin` or `tester`/`tester` (see [`SQL/SCHEMA.md`](SQL/SCHEMA.md)).
@@ -36,7 +36,7 @@ Then in Settings, turn on Test Mode, set DB Server to `127.0.0.1:55432` (the fie
 
 ## Dev container
 
-`.devcontainer/` gives a Go toolchain, `sqlc`, `psql` and the seeded `ArxDev` database from `SQL/postgres/compose.yml` (reachable as `db:5432`), with no manual setup. In VS Code use "Reopen in Container". `go build ./...`, `go test ./...` and `go test -tags integration ./arx_go/...` work as-is. The dev container and the local test database recipe above share a container name, so run one at a time.
+`.devcontainer/` gives a Go toolchain, `sqlc`, `psql` and the seeded `ArxDev` database from `SQL/compose.yml` (reachable as `db:5432`), with no manual setup. In VS Code use "Reopen in Container". `go build ./...`, `go test ./...` and `go test -tags integration ./arx_go/...` work as-is. The dev container and the local test database recipe above share a container name, so run one at a time.
 
 - Start the app with the "Run Arx (headless)" task (Terminal > Run Task). Browse to `http://localhost:4568` and log in as `admin`/`admin`. Chrome warns that this password appeared in a data breach; that's expected for the throwaway seed logins and can be dismissed.
 - Browsing works only through VS Code port forwarding. The listener binds `127.0.0.1`, so the devcontainer CLI and podman can run builds and tests but cannot browse. Port 4568 is set to `requireLocalPort`, because the Host check accepts only `localhost:4568` and a remapped port would fail every request with 421.

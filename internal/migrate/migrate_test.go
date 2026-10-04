@@ -145,7 +145,7 @@ func TestNewProvider_ListsEmbeddedMigrations(t *testing.T) {
 		t.Fatalf("NewProvider: %v", err)
 	}
 
-	files, err := filepath.Glob(filepath.Join("..", "..", "SQL", "postgres", "migrations", "*.sql"))
+	files, err := filepath.Glob(filepath.Join("..", "..", "SQL", "migrations", "*.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}

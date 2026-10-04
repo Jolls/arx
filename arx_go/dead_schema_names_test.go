@@ -43,7 +43,7 @@ func TestDeadSchemaNamesRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlFiles, err := filepath.Glob(filepath.Join("..", "SQL", "postgres", "*.sql"))
+	sqlFiles, err := filepath.Glob(filepath.Join("..", "SQL", "*.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,8 +52,8 @@ func TestDeadSchemaNamesRemoved(t *testing.T) {
 		check(f, deadTable)
 	}
 	for _, f := range []string{"logs.sql", "release_notes.sql"} {
-		if _, err := os.Stat(filepath.Join("..", "SQL", "postgres", f)); err == nil {
-			t.Errorf("SQL/postgres/%s still exists", f)
+		if _, err := os.Stat(filepath.Join("..", "SQL", f)); err == nil {
+			t.Errorf("SQL/%s still exists", f)
 		}
 	}
 }

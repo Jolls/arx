@@ -2,7 +2,7 @@
 
 One-time, human-run. The tool (`arx_go/cmd/migrate_data`, logic in `internal/datamigrate`) reads a CSV
 export of the Azure SQL ArxProd database (schema_version 10, the 0.7 line) and loads it into a Postgres
-database built from `SQL/postgres`. The same tool and steps serve the ArxDev rehearsal and the ArxProd
+database built from `SQL`. The same tool and steps serve the ArxDev rehearsal and the ArxProd
 cutover; only the target database differs.
 
 **Agents never touch the source or the new ArxProd.** Everything in steps 1 and 4 below that names them is run
@@ -95,13 +95,13 @@ go run ./arx_go/cmd/migrate_data --csv-dir C:\arx-export --target-db <DB> --conf
    part id 3005 is gone).
 2. **ArxProd (same server):** you create the database `ArxProd` and two logins (DDL role for the load and
    migrations, app role with DML only; see `SQL/SCHEMA.md`, "Database privileges"). Build the schema:
-   `bash SQL/postgres/build_schema.sh | psql "<DDL DSN to ArxProd>" -q -v ON_ERROR_STOP=1` (it also seeds
+   `bash SQL/build_schema.sh | psql "<DDL DSN to ArxProd>" -q -v ON_ERROR_STOP=1` (it also seeds
    test rows and baselines the ledger; the load truncates the seed). Then steps 1 and 2 with `<DB>` = `ArxProd`
    and `--allow-prod`. Take a fresh export after the write freeze for the real run.
 3. **Point `Arx.exe` at ArxProd:** Settings > database on each desktop (server, name, app login). Users
    re-enter nothing else: logins and password hashes, preferences, PO defaults and history carry over. The
    session secret is per user and not migrated, so each user may need to log in once more.
-4. **Reseed ArxDev** with `SQL/postgres/seed_test_data.sql` (human action), then rerun the integration suite
+4. **Reseed ArxDev** with `SQL/seed_test_data.sql` (human action), then rerun the integration suite
    (`ARX_TEST_FROM_CONFIG=1 go test -tags integration ./arx_go/...`, about 30 minutes).
 
 ## 4. Checks after the real load

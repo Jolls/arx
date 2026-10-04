@@ -13,7 +13,7 @@ import (
 // rows carry fixed ids, like every other seed block, at or below the table's
 // setval floor, so the reference set is identical on every (re-)run.
 func TestSeedNamedQueriesFixedIDs(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "SQL", "postgres", "seed_test_data.sql"))
+	b, err := os.ReadFile(filepath.Join("..", "SQL", "seed_test_data.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,7 @@
 -- Deletions are soft-delete only (is_active = FALSE); never hard-delete rows.
 -- supplier_part_id / mfg_part_id optionally scope an attachment to one of the part's
 -- vendor links (#56); both NULL = a plain part-level attachment.
--- attachment_count on part is maintained by a trigger (SQL/postgres/triggers.sql);
+-- attachment_count on part is maintained by a trigger (SQL/triggers.sql);
 -- it counts only active (is_active) rows.
 
 DROP TABLE IF EXISTS part_attachment CASCADE;

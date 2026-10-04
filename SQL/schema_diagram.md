@@ -1,6 +1,6 @@
 # Database Schema
 
-Reflects the DDL in `SQL/postgres/*.sql`. Column types keep their original SQL Server
+Reflects the DDL in `SQL/*.sql`. Column types keep their original SQL Server
 spelling: `bit` = `BOOLEAN`, `datetime` = `TIMESTAMPTZ`, `decimal` = `NUMERIC`,
 `nvarchar` = `VARCHAR`. Solid relationship lines (`--`) are enforced
 FOREIGN KEY constraints; dotted lines (`..`) are logical-only references with no DB-level
@@ -475,9 +475,9 @@ erDiagram
   have no foreign key relationships to other tables.
 - Denormalized/trigger-maintained columns (`company.supplier_part_count`/`po_count`,
   `part.attachment_count`/`po_line_count`) are recalculated by triggers in
-  `SQL/postgres/triggers.sql` — never updated directly in application code.
+  `SQL/triggers.sql` — never updated directly in application code.
 - Per-table column semantics, trigger side-effects, and full DDL live in `SQL/SCHEMA.md`
-  and `SQL/postgres/*.sql`.
+  and `SQL/*.sql`.
 
 ## Diagrams by domain
 

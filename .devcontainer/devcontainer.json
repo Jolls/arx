@@ -1,6 +1,6 @@
 {
   "name": "Arx",
-  "dockerComposeFile": ["../SQL/postgres/compose.yml", "compose.yml"],
+  "dockerComposeFile": ["../SQL/compose.yml", "compose.yml"],
   "service": "dev",
   "workspaceFolder": "/workspaces/arx",
   "containerEnv": {

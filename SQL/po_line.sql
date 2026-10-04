@@ -1,7 +1,7 @@
 -- po_line: Purchase Order line items. Each row is one line on a PO.
 -- po_id FKs to purchase_order.id. part_id FKs to part.id (nullable).
 -- part.po_line_count is a denormalized count maintained by a trigger
--- (SQL/postgres/triggers.sql).
+-- (SQL/triggers.sql).
 
 DROP TABLE IF EXISTS po_line CASCADE;
 

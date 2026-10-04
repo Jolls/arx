@@ -20,7 +20,7 @@
 -- separate INSERT / UPDATE / DELETE trigger sharing one function; the function
 -- branches on TG_OP and only touches the transition table valid for that branch.
 --
--- Human-run reference DDL, like the rest of SQL/postgres. Run last, after all
+-- Human-run reference DDL, like the rest of SQL. Run last, after all
 -- table DDL exists. Re-runnable: CREATE OR REPLACE FUNCTION + DROP TRIGGER IF
 -- EXISTS. The seed script assumes these already exist and lets them fire on its
 -- INSERTs (bare table names in the Postgres ArxDev database).

@@ -6,8 +6,8 @@ on:
       - '.devcontainer/**'
       - 'go.mod'
       - 'sqlc.yaml'
-      - 'SQL/postgres/compose.yml'
-      - 'SQL/postgres/compose_init.sh'
+      - 'SQL/compose.yml'
+      - 'SQL/compose_init.sh'
       - '.github/workflows/devcontainer.yml'
   push:
     branches: [main]
@@ -15,8 +15,8 @@ on:
       - '.devcontainer/**'
       - 'go.mod'
       - 'sqlc.yaml'
-      - 'SQL/postgres/compose.yml'
-      - 'SQL/postgres/compose_init.sh'
+      - 'SQL/compose.yml'
+      - 'SQL/compose_init.sh'
       - '.github/workflows/devcontainer.yml'
 
 permissions:
@@ -29,14 +29,14 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build dev image
-        run: docker compose -f SQL/postgres/compose.yml -f .devcontainer/compose.yml build dev
+        run: docker compose -f SQL/compose.yml -f .devcontainer/compose.yml build dev
 
       - name: go build inside the dev image
-        run: docker compose -f SQL/postgres/compose.yml -f .devcontainer/compose.yml run --rm --no-deps dev go build ./...
+        run: docker compose -f SQL/compose.yml -f .devcontainer/compose.yml run --rm --no-deps dev go build ./...
 
       - name: Start the seeded DB
-        run: docker compose -f SQL/postgres/compose.yml up -d --wait db
+        run: docker compose -f SQL/compose.yml up -d --wait db
 
       - name: DB logs on failure
         if: failure()
-        run: docker compose -f SQL/postgres/compose.yml logs db
+        run: docker compose -f SQL/compose.yml logs db

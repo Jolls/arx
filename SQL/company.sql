@@ -1,6 +1,6 @@
 -- company: supplier, manufacturer, and vendor records.
 -- supplier_part_count and po_count are denormalized counts, kept in sync by triggers
--- (SQL/postgres/triggers.sql — run last, after all tables exist).
+-- (SQL/triggers.sql — run last, after all tables exist).
 
 DROP TABLE IF EXISTS company CASCADE;
 

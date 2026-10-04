@@ -13,7 +13,7 @@ import (
 // Every table in the reference DDL must be in the backup (#267), or a restore silently loses it;
 // users and app_config are exported separately and schema_migrations is the migration ledger.
 func TestBackupCoversEveryTable(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join("..", "..", "SQL", "postgres", "*.sql"))
+	files, err := filepath.Glob(filepath.Join("..", "..", "SQL", "*.sql"))
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no DDL files found (err %v)", err)
 	}
