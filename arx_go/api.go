@@ -17,8 +17,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-chi/chi/v5"
-
 	"arx/arx_go/models"
 	"arx/internal/attachments"
 	"arx/internal/folderpick"
@@ -50,7 +48,7 @@ func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) APISupplierContacts(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.Atoi(chi.URLParam(r, "id")) // a non-numeric id matches nothing
+	id, _ := strconv.Atoi(r.PathValue("id")) // a non-numeric id matches nothing
 	contacts, err := h.contacts().ListActiveForCompany(r.Context(), id)
 	if err != nil {
 		writeJSON(w, []any{})
@@ -131,7 +129,7 @@ func (h *Handler) APISupplierPN(w http.ResponseWriter, r *http.Request) {
 // APIPartBOMChildren returns a part's direct BOM lines as JSON, used to
 // lazily expand a sub-assembly row in the BOM view without a page reload.
 func (h *Handler) APIPartBOMChildren(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	items, _, err := h.fetchBOMItems(r.Context(), id)
 	if err != nil {
 		writeJSON(w, []any{})
@@ -190,7 +188,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 // Returns the filename buildAttachmentFileName would produce, so the Browse
 // live preview in part_attachments.html matches the saved name exactly (#558).
 func (h *Handler) APIPartAttachmentName(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, err := h.fetchPartBasic(r.Context(), id)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "Error loading part: "+err.Error())
@@ -204,7 +202,7 @@ func (h *Handler) APIPartAttachmentName(w http.ResponseWriter, r *http.Request) 
 // APIPartPasteAttachment saves a clipboard-pasted image as a new part_attachment
 // row with category "Photo". POST /api/part/{id}/paste-attachment.
 func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	if h.cfg().DocControlRoot == "" {
 		writeJSONError(w, http.StatusBadRequest, "DOC_CONTROL_ROOT is not configured; cannot save pasted images.")
 		return
@@ -252,8 +250,8 @@ func (h *Handler) APIPartPasteAttachment(w http.ResponseWriter, r *http.Request)
 // file for an existing part_attachment row, replacing its current file.
 // POST /api/part/{id}/attachments/{attID}/paste-attachment.
 func (h *Handler) APIPartPasteAttachmentReplace(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	attID, err := strconv.Atoi(chi.URLParam(r, "attID"))
+	id := r.PathValue("id")
+	attID, err := strconv.Atoi(r.PathValue("attID"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid attachment id")
 		return
@@ -371,8 +369,8 @@ func lockPartForThumbnail(partID string) func() {
 // own part_attachment row. Re-running edits those rows in place rather than
 // creating duplicates. POST /api/part/{id}/attachments/{attID}/generate-thumbnail.
 func (h *Handler) APIPartGenerateThumbnail(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	attID, err := strconv.Atoi(chi.URLParam(r, "attID"))
+	id := r.PathValue("id")
+	attID, err := strconv.Atoi(r.PathValue("attID"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid attachment id")
 		return
@@ -554,12 +552,12 @@ func (h *Handler) generateThumbnailFromPhoto(ctx context.Context, partID string,
 // along with the rest of the record's edits.
 // POST /api/record/{id}/step/{tid}/paste-image.
 func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid record id")
 		return
 	}
-	testID, err := strconv.Atoi(chi.URLParam(r, "tid"))
+	testID, err := strconv.Atoi(r.PathValue("tid"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid test id")
 		return

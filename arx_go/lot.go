@@ -9,7 +9,6 @@ import (
 
 	"arx/internal/inventory"
 	"arx/internal/records"
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 )
 
@@ -120,7 +119,7 @@ func (h *Handler) genealogyTraceRoots(ctx context.Context, roots []traceRoot, an
 // PartLots — GET /part/{id}/lots. Lists a lot-controlled part's lots, each linking
 // to its genealogy trace.
 func (h *Handler) PartLots(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "lots")
 	if !ok {
 		return
@@ -140,12 +139,12 @@ func (h *Handler) PartLots(w http.ResponseWriter, r *http.Request) {
 // PartLotTrace — GET /part/{id}/lots/{lotID}. Shows one lot's genealogy: its
 // ancestors (recursed to raw vendor lots) and descendants.
 func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "lots")
 	if !ok {
 		return
 	}
-	lotID, err := strconv.Atoi(chi.URLParam(r, "lotID"))
+	lotID, err := strconv.Atoi(r.PathValue("lotID"))
 	if err != nil {
 		h.renderError(w, r, "Invalid lot id")
 		return
@@ -185,7 +184,7 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 // LotRecordsRows — GET /api/part/{id}/lots/{lotID}/records/rows. JSON rows for
 // the records table on the lot trace page (#875).
 func (h *Handler) LotRecordsRows(w http.ResponseWriter, r *http.Request) {
-	lotID, err := strconv.Atoi(chi.URLParam(r, "lotID"))
+	lotID, err := strconv.Atoi(r.PathValue("lotID"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -202,12 +201,12 @@ func (h *Handler) LotRecordsRows(w http.ResponseWriter, r *http.Request) {
 // Description and Vendor Lot (#701) — the only two free-text fields set at
 // creation that are safe to revise after the fact.
 func (h *Handler) LotEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "lots")
 	if !ok {
 		return
 	}
-	lotID, err := strconv.Atoi(chi.URLParam(r, "lotID"))
+	lotID, err := strconv.Atoi(r.PathValue("lotID"))
 	if err != nil {
 		h.renderError(w, r, "Invalid lot id")
 		return
@@ -232,12 +231,12 @@ func (h *Handler) LotEdit(w http.ResponseWriter, r *http.Request) {
 // LotUpdate — POST /part/{id}/lots/{lotID}. Saves Lot Description and Vendor
 // Lot; every other lot field is read-only (#701).
 func (h *Handler) LotUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "lots")
 	if !ok {
 		return
 	}
-	lotID, err := strconv.Atoi(chi.URLParam(r, "lotID"))
+	lotID, err := strconv.Atoi(r.PathValue("lotID"))
 	if err != nil {
 		h.renderError(w, r, "Invalid lot id")
 		return

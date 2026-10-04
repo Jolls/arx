@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
@@ -239,7 +238,6 @@ func isoDate(t *time.Time) string {
 	return t.Format("2006-01-02")
 }
 
-
 // ── POList — GET /pos ────────────────────────────────────────────────────────
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
@@ -278,7 +276,7 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 // ── PODetail — GET /po/{id} ──────────────────────────────────────────────────
 
 func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	po, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -552,7 +550,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 // ── POEdit — GET /po/{id}/edit ───────────────────────────────────────────────
 
 func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	po, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -586,7 +584,7 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 // ── POUpdate — POST /po/{id} ─────────────────────────────────────────────────
 
 func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -701,7 +699,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 // ── POAddSuggestions — POST /po/{id}/add-suggestions ──────────────────────────
 
 func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -771,7 +769,7 @@ func (h *Handler) POAddSuggestions(w http.ResponseWriter, r *http.Request) {
 // ── PODuplicate — GET /po/{id}/duplicate ─────────────────────────────────────
 
 func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	source, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -815,7 +813,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 // into a brand-new RFQ as the first quote. The source PO is left untouched —
 // no renumbering, no status change.
 func (h *Handler) POStartRFQ(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	source, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -859,7 +857,7 @@ func (h *Handler) POStartRFQ(w http.ResponseWriter, r *http.Request) {
 // ── PONote — GET /po/{id}/note ───────────────────────────────────────────────
 
 func (h *Handler) PONote(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	po, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -876,7 +874,7 @@ func (h *Handler) PONote(w http.ResponseWriter, r *http.Request) {
 // ── POPrint — GET /po/{id}/print ─────────────────────────────────────────────
 
 func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	po, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -921,7 +919,7 @@ func (h *Handler) POPrint(w http.ResponseWriter, r *http.Request) {
 // ── POMarkPrinted — POST /po/{id}/mark-printed ───────────────────────────────
 
 func (h *Handler) POMarkPrinted(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	// Approval gate (#267): only set date_printed for approved POs. RFQs (#270)
 	// print without approval. The gate is in the UPDATE itself (#311) so a
 	// concurrent edit/cancel can't slip between check and write.
@@ -945,7 +943,7 @@ func (h *Handler) POOpenFolder(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := validateFolderStub(num); err != nil {
 		http.Error(w, "invalid PO number", http.StatusBadRequest)
 		return
@@ -1036,7 +1034,7 @@ func (h *Handler) POFolderUpload(w http.ResponseWriter, r *http.Request) {
 
 // POFolderUploadSub — POST /po/{id}/folder-upload/*
 func (h *Handler) POFolderUploadSub(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/po/%s/folder-upload/", num))
 	var subParts []string
 	for seg := range strings.SplitSeq(splat, "/") {
@@ -1049,7 +1047,7 @@ func (h *Handler) POFolderUploadSub(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) poFolderUpload(w http.ResponseWriter, r *http.Request, subParts []string) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	po, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -1078,7 +1076,7 @@ func (h *Handler) poFolderUpload(w http.ResponseWriter, r *http.Request, subPart
 }
 
 func (h *Handler) POFolder(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	po, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -1088,7 +1086,7 @@ func (h *Handler) POFolder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) POFolderSub(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	po, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -1106,7 +1104,7 @@ func (h *Handler) POFolderSub(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) POFile(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	root := h.cfg().POFolderRoot
 	if root == "" {
 		http.Error(w, "PO_FOLDER_ROOT is not configured", http.StatusServiceUnavailable)
@@ -1117,7 +1115,15 @@ func (h *Handler) POFile(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	splat := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/po/%s/file/", num))
+	prefix := fmt.Sprintf("/po/%s/file/", num)
+	// A bare "/po/{id}/file" with no trailing slash still matches this route's
+	// "{rest...}" wildcard (unlike chi's old "/po/{id}/file/*", which required
+	// the literal slash) — reject it the same way chi did (#319).
+	if !strings.HasPrefix(r.URL.Path, prefix) {
+		h.NotFound(w, r)
+		return
+	}
+	splat := strings.TrimPrefix(r.URL.Path, prefix)
 	h.serveLocalizedFile(w, r, fileServingParams{Root: filepath.Join(root, baseName), Splat: splat})
 }
 
@@ -1248,7 +1254,7 @@ func (h *Handler) fetchPOHistory(r *http.Request, poID int) []POHistoryEvent {
 // ── POStatusTransition — POST /po/{id}/status ────────────────────────────────
 
 func (h *Handler) POStatusTransition(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -1386,7 +1392,7 @@ func parseReceiveDeltas(items []models.PurchaseOrderLine, get func(string) strin
 // inventory ledger (raising stock_on_hand). The PO status is then re-derived
 // (partially_received / closed) through the audited status path.
 func (h *Handler) POReceive(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -1581,7 +1587,7 @@ func poApprovalActions(current string, canApprove bool) []ApprovalAction {
 // ── POApprovalAction — POST /po/{id}/approval ────────────────────────────────
 
 func (h *Handler) POApprovalAction(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -1785,7 +1791,7 @@ func (h *Handler) RFQNew(w http.ResponseWriter, r *http.Request) {
 // Clones an existing RFQ into the same group for a different supplier: same parts
 // and quantities, blank supplier and quoted figures.
 func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	source, ok := h.fetchPO(w, r, num)
 	if !ok {
 		return
@@ -1950,7 +1956,7 @@ func buildRFQGrid(lines []rfqScanLine) (suppliers []rfqSupplier, rows []*rfqRow)
 
 // RFQCompare — GET /rfq/{group}/compare
 func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
-	group := chi.URLParam(r, "group")
+	group := r.PathValue("group")
 	var lines []rfqScanLine
 	if groupID, err := strconv.Atoi(group); err == nil { // non-numeric → no quotes → not found
 		rows, err := h.purchasing().ListRFQGroupLines(r.Context(), groupID)
@@ -1988,7 +1994,7 @@ func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
 // Persists the quoted unit cost + lead time entered per cell, then recomputes
 // every quote's total in the group.
 func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
-	group := chi.URLParam(r, "group")
+	group := r.PathValue("group")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -2066,7 +2072,7 @@ func (h *Handler) RFQCompareSave(w http.ResponseWriter, r *http.Request) {
 // number, and closes out the RFQ group (awarded quote -> closed, others ->
 // cancelled). The RFQ quotes are retained with their history for the record.
 func (h *Handler) RFQConvert(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return
@@ -2234,7 +2240,7 @@ func copyFile(src, dst string) error {
 // POImportPartFile — POST /po/{id}/import-part-file (#156)
 // Copies a LOCAL: file attachment from a catalog part into the PO's folder.
 func (h *Handler) POImportPartFile(w http.ResponseWriter, r *http.Request) {
-	num := chi.URLParam(r, "id")
+	num := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, "Error parsing form: "+err.Error())
 		return

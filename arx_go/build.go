@@ -9,7 +9,6 @@ import (
 
 	"arx/arx_go/models"
 	"arx/internal/inventory"
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 )
 
@@ -97,7 +96,7 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 // component so the build can record lot genealogy.
 
 func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "build")
 	if !ok {
 		return
@@ -283,7 +282,7 @@ func parseBuildQty(r *http.Request) (decimal.Decimal, error) {
 // ── PartBuildCreate — POST /part/{id}/build ──────────────────────────────────
 
 func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	// Guard mirroring the Build tab's visibility: only inventory-tracked parts
 	// with actual BOM lines can be built (blocks a direct POST to a FORM/other
 	// non-stocked part).

@@ -199,6 +199,22 @@ func TestServeSupplierFile_RootUnconfiguredNoDB(t *testing.T) {
 	}
 }
 
+// TestServeSupplierFile_BarePrefixNotFound: a bare "/supplier/1/file" with no
+// trailing slash still matches this route's "{rest...}" wildcard pattern
+// (unlike chi's old "/supplier/{id}/file/*", which required the literal
+// slash) — serveSupplierFile must reject it the same way chi did (#319).
+func TestServeSupplierFile_BarePrefixNotFound(t *testing.T) {
+	h := filesTestHandler()
+	h.cfg().SupplierFilesRoot = t.TempDir()
+	s := models.Supplier{SupplierCode: "ACME"}
+	req := httptest.NewRequest(http.MethodGet, "/supplier/1/file", nil)
+	rec := httptest.NewRecorder()
+	h.serveSupplierFile(rec, req, s, "1")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
 func TestServeSupplierFile_EmptySupplierCode(t *testing.T) {
 	h := filesTestHandler()
 	h.cfg().SupplierFilesRoot = t.TempDir()

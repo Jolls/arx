@@ -16,8 +16,6 @@ import (
 	_ "time/tzdata" // embed the IANA tz database: time.LoadLocation must work on machines with no Go toolchain (#847)
 
 	"fyne.io/systray"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	arxbase "arx/internal/config"
 	arxdb "arx/internal/db"
@@ -75,7 +73,7 @@ func startServer(onStopped func()) (*http.Server, string) {
 		openDebugConsole()
 	}
 
-	router := buildRouter(h)
+	router, _ := buildRouter(h)
 	server := &http.Server{
 		Addr:    "127.0.0.1:" + cfg.Port,
 		Handler: router,
@@ -145,43 +143,33 @@ func openURL(url string) error {
 	}
 }
 
-func buildRouter(h *Handler) *chi.Mux {
-	r := chi.NewRouter()
-	r.Use(h.RequireLocalHost)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(h.profileRequest)
-	// Must run before RequireCsrfOnPost: its verifyCsrf call reads
-	// r.FormValue, which for a multipart POST fully parses the body via
-	// r.ParseMultipartForm before any handler runs — a handler's own
-	// ParseMultipartForm(maxUploadBytes) call afterward is then a no-op
-	// (net/http: "subsequent calls have no effect"), so this is the only
-	// place a size ceiling can still apply to multipart uploads (#36).
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-			next.ServeHTTP(w, r)
-		})
-	})
-	r.Use(h.RequireCsrfOnPost)
+func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
+	b := newRouteBuilder()
+
+	withAuth := chain(h.RequireAuth)
+	withAdmin := chain(h.RequireAuth, h.RequireAdmin)
+	withAdminJSON := chain(h.RequireAuth, h.RequireAdminJSON)
+	withAuthOnceConnected := chain(h.RequireAuthOnceConnected)
+	withAdminOnceConnected := chain(h.RequireAdminOnceConnected)
 
 	// Static assets under /static/<tab>/, plus /static/shared/ for cross-tab assets (icons, nav CSS/JS).
 	subStatic, _ := fs.Sub(staticFS, "static")
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(subStatic))))
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(subStatic)))
+	b.handleWildcard(h, http.MethodGet, "/static/", nil, staticHandler.ServeHTTP)
 
 	// Always accessible — no DB connection required.
-	r.Get("/login", h.LoginGet)
-	r.Post("/login", h.LoginPost)
-	r.Post("/logout", h.Logout)
+	b.handle(http.MethodGet, "/login", nil, h.LoginGet)
+	b.handle(http.MethodPost, "/login", nil, h.LoginPost)
+	b.handle(http.MethodPost, "/logout", nil, h.Logout)
 	// GET/POST /settings must stay reachable during first-run setup (no DB connected) but
 	// require a logged-in user once a database is connected — GET renders db_server,
 	// db_user, and filesystem roots, which is a config-disclosure hole to an
 	// unauthenticated caller once connected (#781, read-side sibling of #748).
 	// GET stays open to any logged-in user — the page also hosts My Preferences.
 	// POST is admin-only once connected: it rewrites the DB connection (#106).
-	r.With(h.RequireAuthOnceConnected).Get("/settings", h.Settings)
-	r.With(h.RequireAdminOnceConnected).Post("/settings", h.SettingsSave)
-	r.Get("/whats-new", h.WhatsNew)
+	b.handle(http.MethodGet, "/settings", withAuthOnceConnected, h.Settings)
+	b.handle(http.MethodPost, "/settings", withAdminOnceConnected, h.SettingsSave)
+	b.handle(http.MethodGet, "/whats-new", nil, h.WhatsNew)
 	// Gated the same way as POST /settings: reachable unauthenticated only during
 	// first-run setup, since it spawns a native folder-picker dialog and an
 	// unauthenticated GET on a connected instance would be a local DoS/nuisance (#757).
@@ -189,280 +177,291 @@ func buildRouter(h *Handler) *chi.Mux {
 	// File Paths pickers on the Connection tab, which is now admin-only, so leaving
 	// it on RequireAuthOnceConnected would let a non-admin with no Connection UI
 	// still pop a native dialog on the host.
-	r.With(h.RequireAdminOnceConnected).Get("/api/browse-folder", h.APIBrowseFolder)
+	b.handle(http.MethodGet, "/api/browse-folder", withAdminOnceConnected, h.APIBrowseFolder)
 
 	// Admin-only routes, plain-text 403 for non-admins. RequireAuth runs first so the
 	// session user is on the context. Every admin-only endpoint is declared here or
 	// behind RequireAdminOnceConnected above — not gated inside the handler (#120).
-	r.Group(func(r chi.Router) {
-		r.Use(h.RequireAuth, h.RequireAdmin)
 
-		// Shop-wide API credentials (#106)
-		r.Post("/settings/digikey", h.SettingsDigiKeySave)
+	// Shop-wide API credentials (#106)
+	b.handle(http.MethodPost, "/settings/digikey", withAdmin, h.SettingsDigiKeySave)
 
-		// User management (Settings → Users tab): a non-admin must not be able to
-		// self-grant rights, reset passwords, or deactivate others (#750).
-		r.Post("/settings/users", h.SettingsUsersCreate)
-		r.Post("/settings/users/{userID}/password", h.SettingsUsersResetPassword)
-		r.Post("/settings/users/{userID}/toggle-active", h.SettingsUsersToggleActive)
-		r.Post("/settings/users/{userID}/toggle-approve", h.SettingsUsersToggleApprove)
-		r.Post("/settings/users/{userID}/toggle-approve-records", h.SettingsUsersToggleApproveRecords)
-		r.Post("/settings/users/{userID}/toggle-admin", h.SettingsUsersToggleAdmin)
+	// User management (Settings → Users tab): a non-admin must not be able to
+	// self-grant rights, reset passwords, or deactivate others (#750).
+	b.handle(http.MethodPost, "/settings/users", withAdmin, h.SettingsUsersCreate)
+	b.handle(http.MethodPost, "/settings/users/{userID}/password", withAdmin, h.SettingsUsersResetPassword)
+	b.handle(http.MethodPost, "/settings/users/{userID}/toggle-active", withAdmin, h.SettingsUsersToggleActive)
+	b.handle(http.MethodPost, "/settings/users/{userID}/toggle-approve", withAdmin, h.SettingsUsersToggleApprove)
+	b.handle(http.MethodPost, "/settings/users/{userID}/toggle-approve-records", withAdmin, h.SettingsUsersToggleApproveRecords)
+	b.handle(http.MethodPost, "/settings/users/{userID}/toggle-admin", withAdmin, h.SettingsUsersToggleAdmin)
 
-		// Data backup: a full export of every table (#106)
-		r.Get("/settings/backup", h.SettingsBackup)
+	// Data backup: a full export of every table (#106)
+	b.handle(http.MethodGet, "/settings/backup", withAdmin, h.SettingsBackup)
 
-		// Data diagnostics (Settings → Utilities): row counts and data-quality stats
-		// across every table (#106)
-		r.Get("/settings/utilities", h.UtilitiesReport)
-	})
+	// Data diagnostics (Settings → Utilities): row counts and data-quality stats
+	// across every table (#106)
+	b.handle(http.MethodGet, "/settings/utilities", withAdmin, h.UtilitiesReport)
 
 	// Admin-only routes, JSON 403 for non-admins: the Settings page parses every
 	// response from these with r.json().
-	r.Group(func(r chi.Router) {
-		r.Use(h.RequireAuth, h.RequireAdminJSON)
 
-		// Named Queries editor (Settings → Named Queries tab). Admin-only because save
-		// persists SQL that execQuery later runs and test runs caller-supplied SQL;
-		// isSafeQuery blocks writes but not reads, so any user could otherwise SELECT
-		// from any table (#103). Saving is per-row, not a bulk table submit.
-		r.Post("/settings/named-queries/save", h.SettingsNamedQueryRowSave)
-		r.Post("/settings/named-queries/test", h.SettingsNamedQueryTest)
-	})
+	// Named Queries editor (Settings → Named Queries tab). Admin-only because save
+	// persists SQL that execQuery later runs and test runs caller-supplied SQL;
+	// isSafeQuery blocks writes but not reads, so any user could otherwise SELECT
+	// from any table (#103). Saving is per-row, not a bulk table submit.
+	b.handle(http.MethodPost, "/settings/named-queries/save", withAdminJSON, h.SettingsNamedQueryRowSave)
+	b.handle(http.MethodPost, "/settings/named-queries/test", withAdminJSON, h.SettingsNamedQueryTest)
 
 	// All other routes require a live database connection.
-	r.Group(func(r chi.Router) {
-		r.Use(h.RequireAuth)
 
-		// Configuration tab saves (Settings → Configuration: attachment categories,
-		// categories, part numbering, company logo). Behind auth because these mutate
-		// shop-wide app_config that affects data integrity (#771).
-		r.Post("/settings/attachment-categories", h.SettingsAttachmentCategoriesSave)
-		r.Post("/settings/categories", h.SettingsCategoriesSave)
-		r.Post("/settings/part-numbering", h.SettingsPartNumberingSave)
-		r.Post("/settings/company-logo", h.SettingsCompanyLogoSave)
-		r.Post("/settings/company-logo/remove", h.SettingsCompanyLogoRemove)
+	// Configuration tab saves (Settings → Configuration: attachment categories,
+	// categories, part numbering, company logo). Behind auth because these mutate
+	// shop-wide app_config that affects data integrity (#771).
+	b.handle(http.MethodPost, "/settings/attachment-categories", withAuth, h.SettingsAttachmentCategoriesSave)
+	b.handle(http.MethodPost, "/settings/categories", withAuth, h.SettingsCategoriesSave)
+	b.handle(http.MethodPost, "/settings/part-numbering", withAuth, h.SettingsPartNumberingSave)
+	b.handle(http.MethodPost, "/settings/company-logo", withAuth, h.SettingsCompanyLogoSave)
+	b.handle(http.MethodPost, "/settings/company-logo/remove", withAuth, h.SettingsCompanyLogoRemove)
 
-		// Per-user preferences (Settings → My Preferences tab; PO defaults — issue #463)
-		r.Post("/settings/preferences", h.SettingsPreferencesSave)
-		r.Post("/settings/accent-color", h.SettingsAccentColorSave)
-		r.Post("/settings/default-route", h.SettingsDefaultRouteSave)
-		r.Post("/settings/timezone", h.SettingsTimezoneSave)
+	// Per-user preferences (Settings → My Preferences tab; PO defaults — issue #463)
+	b.handle(http.MethodPost, "/settings/preferences", withAuth, h.SettingsPreferencesSave)
+	b.handle(http.MethodPost, "/settings/accent-color", withAuth, h.SettingsAccentColorSave)
+	b.handle(http.MethodPost, "/settings/default-route", withAuth, h.SettingsDefaultRouteSave)
+	b.handle(http.MethodPost, "/settings/timezone", withAuth, h.SettingsTimezoneSave)
 
-		// Local file serving (Parts Master)
-		r.Get("/local/*", h.ServeLocalFile)
-		r.Get("/local-dir/*", h.ServeLocalDir)
-		r.Post("/local-dir-upload/*", h.ServeLocalDirUpload)
-		r.Get("/supplier-local/*", h.ServeSupplierFile)
-		r.Get("/supplier-local-dir/*", h.ServeSupplierDir)
-		r.Post("/supplier-local-dir-upload/*", h.ServeSupplierDirUpload)
+	// Local file serving (Parts Master)
+	b.handleWildcard(h, http.MethodGet, "/local/", withAuth, h.ServeLocalFile)
+	b.handleWildcard(h, http.MethodGet, "/local-dir/", withAuth, h.ServeLocalDir)
+	b.handleWildcard(h, http.MethodPost, "/local-dir-upload/", withAuth, h.ServeLocalDirUpload)
+	b.handleWildcard(h, http.MethodGet, "/supplier-local/", withAuth, h.ServeSupplierFile)
+	b.handleWildcard(h, http.MethodGet, "/supplier-local-dir/", withAuth, h.ServeSupplierDir)
+	b.handleWildcard(h, http.MethodPost, "/supplier-local-dir-upload/", withAuth, h.ServeSupplierDirUpload)
 
-		// Test Records image serving
-		r.Get("/images/*", h.ServeImage)
+	// Test Records image serving
+	b.handleWildcard(h, http.MethodGet, "/images/", withAuth, h.ServeImage)
 
-		// Reports (issue #282)
-		r.Get("/reports", h.ReportsDashboard)
-		r.Get("/reports/spend", h.ReportsSpend)
-		r.Get("/reports/yield", h.ReportsYieldPicker)
-		r.Get("/reports/failure-modes", h.ReportsFailureModesPicker)
-		r.Get("/reports/spend/export-suppliers.csv", h.ReportsSpendBySupplierExportCSV)
-		r.Get("/reports/spend/export-parts.csv", h.ReportsSpendByPartExportCSV)
+	// Reports (issue #282)
+	b.handle(http.MethodGet, "/reports", withAuth, h.ReportsDashboard)
+	b.handle(http.MethodGet, "/reports/spend", withAuth, h.ReportsSpend)
+	b.handle(http.MethodGet, "/reports/yield", withAuth, h.ReportsYieldPicker)
+	b.handle(http.MethodGet, "/reports/failure-modes", withAuth, h.ReportsFailureModesPicker)
+	b.handle(http.MethodGet, "/reports/spend/export-suppliers.csv", withAuth, h.ReportsSpendBySupplierExportCSV)
+	b.handle(http.MethodGet, "/reports/spend/export-parts.csv", withAuth, h.ReportsSpendByPartExportCSV)
 
-		// Supplier performance and data quality reports (issue #659, RPT-8)
-		r.Get("/reports/on-time", h.ReportsOnTime)
-		r.Get("/reports/on-time/export.csv", h.ReportsOnTimeExportCSV)
-		r.Get("/reports/cycle-time", h.ReportsCycleTime)
-		r.Get("/reports/cycle-time/export.csv", h.ReportsCycleTimeExportCSV)
-		r.Get("/reports/data-quality", h.ReportsDataQuality)
-		r.Get("/reports/data-quality/export-no-attachments.csv", h.ReportsDataQualityNoAttachmentsExportCSV)
-		r.Get("/reports/data-quality/export-missing-supplier.csv", h.ReportsDataQualityMissingSupplierExportCSV)
-		r.Get("/reports/data-quality/export-stale-rollup.csv", h.ReportsDataQualityStaleRollupExportCSV)
+	// Supplier performance and data quality reports (issue #659, RPT-8)
+	b.handle(http.MethodGet, "/reports/on-time", withAuth, h.ReportsOnTime)
+	b.handle(http.MethodGet, "/reports/on-time/export.csv", withAuth, h.ReportsOnTimeExportCSV)
+	b.handle(http.MethodGet, "/reports/cycle-time", withAuth, h.ReportsCycleTime)
+	b.handle(http.MethodGet, "/reports/cycle-time/export.csv", withAuth, h.ReportsCycleTimeExportCSV)
+	b.handle(http.MethodGet, "/reports/data-quality", withAuth, h.ReportsDataQuality)
+	b.handle(http.MethodGet, "/reports/data-quality/export-no-attachments.csv", withAuth, h.ReportsDataQualityNoAttachmentsExportCSV)
+	b.handle(http.MethodGet, "/reports/data-quality/export-missing-supplier.csv", withAuth, h.ReportsDataQualityMissingSupplierExportCSV)
+	b.handle(http.MethodGet, "/reports/data-quality/export-stale-rollup.csv", withAuth, h.ReportsDataQualityStaleRollupExportCSV)
 
-		// App root: redirect to each user's configured landing page (issue #282).
-		r.Get("/", h.RootRedirect)
+	// App root: redirect to each user's configured landing page (issue #282).
+	// "/{$}" matches only the exact root path — unlike a bare "/" pattern, it
+	// is not a subtree wildcard, so it doesn't swallow unmatched paths that
+	// should 404 instead (#319).
+	b.handle(http.MethodGet, "/{$}", withAuth, h.RootRedirect)
 
-		// Parts Master — Parts
-		r.Get("/parts", h.PartsList)
-		r.Get("/parts/new", h.PartsNew)
-		r.Get("/parts/export.csv", h.PartsExportCSV)
-		r.Get("/lots", h.AllLots)
-		r.Post("/parts", h.PartsCreate)
-		r.Get("/part/{id}", h.PartDetail)
-		r.Get("/part/{id}/details", h.PartDetail)
-		r.Get("/part/{id}/edit", h.PartEdit)
-		r.Get("/part/{id}/duplicate", h.PartDuplicate)
-		r.Post("/part/{id}", h.PartUpdate)
-		r.Get("/part/{id}/bom", h.PartBOM)
-		r.Get("/part/{id}/bom/edit", h.PartBOMEdit)
-		r.Get("/part/{id}/bom/export.csv", h.BOMExportCSV)
-		r.Post("/part/{id}/bom", h.PartBOMSave)
-		r.Post("/part/{id}/bom/preview", h.PartBOMPastePreview)
-		r.Post("/part/{id}/rollup-cost", h.PartRollupCost)
-		r.Get("/part/{id}/create-rfqs", h.PartCreateRFQs)
-		r.Post("/part/{id}/create-rfqs", h.PartCreateRFQsConfirm)
-		r.Get("/part/{id}/build-cost", h.PartBuildCost)
-		r.Get("/part/{id}/where-used", h.PartWhereUsed)
-		r.Get("/part/{id}/attachments", h.PartAttachments)
-		r.Post("/part/{id}/attachments", h.PartAttachmentCreate)
-		r.Post("/part/{id}/attachments/{attID}", h.PartAttachmentUpdate)
-		r.Post("/part/{id}/primary_attachment", h.PartSetPrimaryAttachment)
-		r.Post("/part/{id}/attachments/{attID}/delete", h.PartAttachmentDelete)
-		r.Get("/attachments/where-used", h.AttachmentWhereUsed)
-		r.Get("/api/part/{id}/attachment-name", h.APIPartAttachmentName)
-		r.Post("/api/part/{id}/paste-attachment", h.APIPartPasteAttachment)
-		r.Post("/api/part/{id}/attachments/{attID}/paste-attachment", h.APIPartPasteAttachmentReplace)
-		r.Post("/api/part/{id}/attachments/{attID}/generate-thumbnail", h.APIPartGenerateThumbnail)
-		r.Get("/part/{id}/orders", h.PartOrders)
-		r.Get("/part/{id}/records", h.PartRecords)
-		r.Get("/api/part/{id}/records/rows", h.PartRecordsRows)
-		r.Get("/part/{id}/price-history", h.PartPriceHistory)
-		r.Get("/part/{id}/transactions", h.PartTransactions)
-		r.Post("/part/{id}/adjust-stock", h.PartStockAdjust)
-		r.Get("/part/{id}/build", h.PartBuild)
-		r.Post("/part/{id}/build", h.PartBuildCreate)
-		r.Get("/part/{id}/lots", h.PartLots)
-		r.Get("/part/{id}/lots/{lotID}", h.PartLotTrace)
-		r.Get("/part/{id}/lots/{lotID}/edit", h.LotEdit)
-		r.Post("/part/{id}/lots/{lotID}", h.LotUpdate)
-		r.Get("/api/part/{id}/lots/{lotID}/records/rows", h.LotRecordsRows)
-		r.Get("/part/{id}/units", h.PartUnits)
-		r.Get("/part/{id}/units/new", h.UnitNew) // before {unitID}
-		r.Post("/part/{id}/units", h.UnitCreate)
-		r.Get("/part/{id}/units/{unitID}", h.PartUnitTrace)
-		r.Get("/part/{id}/units/{unitID}/edit", h.UnitEdit)
-		r.Post("/part/{id}/units/{unitID}", h.UnitUpdate)
-		r.Get("/api/part/{id}/units/{unitID}/records/rows", h.UnitRecordsRows)
-		r.Get("/part/{id}/pricing", h.PartPricing)
-		r.Get("/part/{id}/pricing/new", h.PriceNew)
-		r.Post("/part/{id}/pricing", h.PriceCreate)
-		r.Post("/part/{id}/pricing/preferred", h.PricePreferred)
-		r.Get("/part/{id}/pricing/{priceID}/edit", h.PriceEdit)
-		r.Post("/part/{id}/pricing/{priceID}", h.PriceUpdate)
-		r.Post("/part/{id}/pricing/{priceID}/deactivate", h.PriceDeactivate)
-		r.Post("/part/{id}/pricing/{priceID}/activate", h.PriceActivate)
-		r.Post("/part/{id}/pricing/{priceID}/delete", h.PriceDelete)
-		r.Get("/part/{id}/mfg-parts", h.PartMfgParts)
-		r.Post("/part/{id}/mfg-parts", h.MfgPartCreate)
-		r.Get("/part/{id}/mfg-parts/{mid}/edit", h.MfgPartEdit)
-		r.Post("/part/{id}/mfg-parts/{mid}", h.MfgPartUpdate)
-		r.Post("/part/{id}/mfg-parts/{mid}/delete", h.MfgPartDelete)
-		r.Get("/part/{id}/suppliers", h.PartSourcing)
-		r.Post("/part/{id}/suppliers", h.SupplierPartCreate)
-		r.Get("/part/{id}/suppliers/{spID}/edit", h.SupplierPartEdit)
-		r.Post("/part/{id}/suppliers/{spID}", h.SupplierPartUpdate)
-		r.Post("/part/{id}/suppliers/{spID}/delete", h.SupplierPartDelete)
+	// Parts Master — Parts
+	b.handle(http.MethodGet, "/parts", withAuth, h.PartsList)
+	b.handle(http.MethodGet, "/parts/new", withAuth, h.PartsNew)
+	b.handle(http.MethodGet, "/parts/export.csv", withAuth, h.PartsExportCSV)
+	b.handle(http.MethodGet, "/lots", withAuth, h.AllLots)
+	b.handle(http.MethodPost, "/parts", withAuth, h.PartsCreate)
+	b.handle(http.MethodGet, "/part/{id}", withAuth, h.PartDetail)
+	b.handle(http.MethodGet, "/part/{id}/details", withAuth, h.PartDetail)
+	b.handle(http.MethodGet, "/part/{id}/edit", withAuth, h.PartEdit)
+	b.handle(http.MethodGet, "/part/{id}/duplicate", withAuth, h.PartDuplicate)
+	b.handle(http.MethodPost, "/part/{id}", withAuth, h.PartUpdate)
+	b.handle(http.MethodGet, "/part/{id}/bom", withAuth, h.PartBOM)
+	b.handle(http.MethodGet, "/part/{id}/bom/edit", withAuth, h.PartBOMEdit)
+	b.handle(http.MethodGet, "/part/{id}/bom/export.csv", withAuth, h.BOMExportCSV)
+	b.handle(http.MethodPost, "/part/{id}/bom", withAuth, h.PartBOMSave)
+	b.handle(http.MethodPost, "/part/{id}/bom/preview", withAuth, h.PartBOMPastePreview)
+	b.handle(http.MethodPost, "/part/{id}/rollup-cost", withAuth, h.PartRollupCost)
+	b.handle(http.MethodGet, "/part/{id}/create-rfqs", withAuth, h.PartCreateRFQs)
+	b.handle(http.MethodPost, "/part/{id}/create-rfqs", withAuth, h.PartCreateRFQsConfirm)
+	b.handle(http.MethodGet, "/part/{id}/build-cost", withAuth, h.PartBuildCost)
+	b.handle(http.MethodGet, "/part/{id}/where-used", withAuth, h.PartWhereUsed)
+	b.handle(http.MethodGet, "/part/{id}/attachments", withAuth, h.PartAttachments)
+	b.handle(http.MethodPost, "/part/{id}/attachments", withAuth, h.PartAttachmentCreate)
+	b.handle(http.MethodPost, "/part/{id}/attachments/{attID}", withAuth, h.PartAttachmentUpdate)
+	b.handle(http.MethodPost, "/part/{id}/primary_attachment", withAuth, h.PartSetPrimaryAttachment)
+	b.handle(http.MethodPost, "/part/{id}/attachments/{attID}/delete", withAuth, h.PartAttachmentDelete)
+	b.handle(http.MethodGet, "/attachments/where-used", withAuth, h.AttachmentWhereUsed)
+	b.handle(http.MethodGet, "/api/part/{id}/attachment-name", withAuth, h.APIPartAttachmentName)
+	b.handle(http.MethodPost, "/api/part/{id}/paste-attachment", withAuth, h.APIPartPasteAttachment)
+	b.handle(http.MethodPost, "/api/part/{id}/attachments/{attID}/paste-attachment", withAuth, h.APIPartPasteAttachmentReplace)
+	b.handle(http.MethodPost, "/api/part/{id}/attachments/{attID}/generate-thumbnail", withAuth, h.APIPartGenerateThumbnail)
+	b.handle(http.MethodGet, "/part/{id}/orders", withAuth, h.PartOrders)
+	b.handle(http.MethodGet, "/part/{id}/records", withAuth, h.PartRecords)
+	b.handle(http.MethodGet, "/api/part/{id}/records/rows", withAuth, h.PartRecordsRows)
+	b.handle(http.MethodGet, "/part/{id}/price-history", withAuth, h.PartPriceHistory)
+	b.handle(http.MethodGet, "/part/{id}/transactions", withAuth, h.PartTransactions)
+	b.handle(http.MethodPost, "/part/{id}/adjust-stock", withAuth, h.PartStockAdjust)
+	b.handle(http.MethodGet, "/part/{id}/build", withAuth, h.PartBuild)
+	b.handle(http.MethodPost, "/part/{id}/build", withAuth, h.PartBuildCreate)
+	b.handle(http.MethodGet, "/part/{id}/lots", withAuth, h.PartLots)
+	b.handle(http.MethodGet, "/part/{id}/lots/{lotID}", withAuth, h.PartLotTrace)
+	b.handle(http.MethodGet, "/part/{id}/lots/{lotID}/edit", withAuth, h.LotEdit)
+	b.handle(http.MethodPost, "/part/{id}/lots/{lotID}", withAuth, h.LotUpdate)
+	b.handle(http.MethodGet, "/api/part/{id}/lots/{lotID}/records/rows", withAuth, h.LotRecordsRows)
+	b.handle(http.MethodGet, "/part/{id}/units", withAuth, h.PartUnits)
+	b.handle(http.MethodGet, "/part/{id}/units/new", withAuth, h.UnitNew) // before {unitID}
+	b.handle(http.MethodPost, "/part/{id}/units", withAuth, h.UnitCreate)
+	b.handle(http.MethodGet, "/part/{id}/units/{unitID}", withAuth, h.PartUnitTrace)
+	b.handle(http.MethodGet, "/part/{id}/units/{unitID}/edit", withAuth, h.UnitEdit)
+	b.handle(http.MethodPost, "/part/{id}/units/{unitID}", withAuth, h.UnitUpdate)
+	b.handle(http.MethodGet, "/api/part/{id}/units/{unitID}/records/rows", withAuth, h.UnitRecordsRows)
+	b.handle(http.MethodGet, "/part/{id}/pricing", withAuth, h.PartPricing)
+	b.handle(http.MethodGet, "/part/{id}/pricing/new", withAuth, h.PriceNew)
+	b.handle(http.MethodPost, "/part/{id}/pricing", withAuth, h.PriceCreate)
+	b.handle(http.MethodPost, "/part/{id}/pricing/preferred", withAuth, h.PricePreferred)
+	b.handle(http.MethodGet, "/part/{id}/pricing/{priceID}/edit", withAuth, h.PriceEdit)
+	b.handle(http.MethodPost, "/part/{id}/pricing/{priceID}", withAuth, h.PriceUpdate)
+	b.handle(http.MethodPost, "/part/{id}/pricing/{priceID}/deactivate", withAuth, h.PriceDeactivate)
+	b.handle(http.MethodPost, "/part/{id}/pricing/{priceID}/activate", withAuth, h.PriceActivate)
+	b.handle(http.MethodPost, "/part/{id}/pricing/{priceID}/delete", withAuth, h.PriceDelete)
+	b.handle(http.MethodGet, "/part/{id}/mfg-parts", withAuth, h.PartMfgParts)
+	b.handle(http.MethodPost, "/part/{id}/mfg-parts", withAuth, h.MfgPartCreate)
+	b.handle(http.MethodGet, "/part/{id}/mfg-parts/{mid}/edit", withAuth, h.MfgPartEdit)
+	b.handle(http.MethodPost, "/part/{id}/mfg-parts/{mid}", withAuth, h.MfgPartUpdate)
+	b.handle(http.MethodPost, "/part/{id}/mfg-parts/{mid}/delete", withAuth, h.MfgPartDelete)
+	b.handle(http.MethodGet, "/part/{id}/suppliers", withAuth, h.PartSourcing)
+	b.handle(http.MethodPost, "/part/{id}/suppliers", withAuth, h.SupplierPartCreate)
+	b.handle(http.MethodGet, "/part/{id}/suppliers/{spID}/edit", withAuth, h.SupplierPartEdit)
+	b.handle(http.MethodPost, "/part/{id}/suppliers/{spID}", withAuth, h.SupplierPartUpdate)
+	b.handle(http.MethodPost, "/part/{id}/suppliers/{spID}/delete", withAuth, h.SupplierPartDelete)
 
-		// Parts Master — Suppliers / Vendors
-		r.Get("/suppliers", h.SuppliersList)
-		r.Get("/suppliers/new", h.SuppliersNew)
-		r.Post("/suppliers", h.SuppliersCreate)
-		r.Get("/supplier/{id}", h.SupplierDetail)
-		r.Get("/supplier/{id}/edit", h.SupplierEdit)
-		r.Post("/supplier/{id}", h.SupplierUpdate)
-		r.Get("/supplier/{id}/parts", h.SupplierParts)
-		r.Get("/supplier/{id}/pos", h.SupplierPOs)
-		r.Get("/supplier/{id}/attachments", h.SupplierAttachments)
-		r.Post("/supplier/{id}/attachments", h.SupplierAttachmentCreate)
-		r.Post("/supplier/{id}/attachments/{attID}", h.SupplierAttachmentUpdate)
-		r.Post("/supplier/{id}/attachments/{attID}/delete", h.SupplierAttachmentDelete)
-		r.Post("/supplier/{id}/primary_attachment", h.SupplierSetPrimaryAttachment)
-		r.Get("/supplier/{id}/folder", h.SupplierFolder)
-		r.Get("/supplier/{id}/folder/*", h.SupplierFolderSub)
-		r.Post("/supplier/{id}/folder-upload", h.SupplierFolderUpload)
-		r.Post("/supplier/{id}/folder-upload/*", h.SupplierFolderUploadSub)
-		r.Get("/supplier/{id}/file/*", h.SupplierFile)
+	// Parts Master — Suppliers / Vendors
+	b.handle(http.MethodGet, "/suppliers", withAuth, h.SuppliersList)
+	b.handle(http.MethodGet, "/suppliers/new", withAuth, h.SuppliersNew)
+	b.handle(http.MethodPost, "/suppliers", withAuth, h.SuppliersCreate)
+	b.handle(http.MethodGet, "/supplier/{id}", withAuth, h.SupplierDetail)
+	b.handle(http.MethodGet, "/supplier/{id}/edit", withAuth, h.SupplierEdit)
+	b.handle(http.MethodPost, "/supplier/{id}", withAuth, h.SupplierUpdate)
+	b.handle(http.MethodGet, "/supplier/{id}/parts", withAuth, h.SupplierParts)
+	b.handle(http.MethodGet, "/supplier/{id}/pos", withAuth, h.SupplierPOs)
+	b.handle(http.MethodGet, "/supplier/{id}/attachments", withAuth, h.SupplierAttachments)
+	b.handle(http.MethodPost, "/supplier/{id}/attachments", withAuth, h.SupplierAttachmentCreate)
+	b.handle(http.MethodPost, "/supplier/{id}/attachments/{attID}", withAuth, h.SupplierAttachmentUpdate)
+	b.handle(http.MethodPost, "/supplier/{id}/attachments/{attID}/delete", withAuth, h.SupplierAttachmentDelete)
+	b.handle(http.MethodPost, "/supplier/{id}/primary_attachment", withAuth, h.SupplierSetPrimaryAttachment)
+	b.handle(http.MethodGet, "/supplier/{id}/folder", withAuth, h.SupplierFolder)
+	b.handle(http.MethodGet, "/supplier/{id}/folder/{rest...}", withAuth, h.SupplierFolderSub)
+	b.handle(http.MethodPost, "/supplier/{id}/folder-upload", withAuth, h.SupplierFolderUpload)
+	b.handle(http.MethodPost, "/supplier/{id}/folder-upload/{rest...}", withAuth, h.SupplierFolderUploadSub)
+	b.handleWildcard(h, http.MethodGet, "/supplier/{id}/file/", withAuth, h.SupplierFile)
 
-		// Parts Master — Contacts
-		r.Get("/contacts", h.ContactsList)
-		r.Get("/contacts/new", h.ContactsNew)
-		r.Post("/contacts", h.ContactsCreate)
-		r.Get("/contact/{id}", h.ContactDetail)
-		r.Get("/contact/{id}/edit", h.ContactEdit)
-		r.Post("/contact/{id}", h.ContactUpdate)
+	// Parts Master — Contacts
+	b.handle(http.MethodGet, "/contacts", withAuth, h.ContactsList)
+	b.handle(http.MethodGet, "/contacts/new", withAuth, h.ContactsNew)
+	b.handle(http.MethodPost, "/contacts", withAuth, h.ContactsCreate)
+	b.handle(http.MethodGet, "/contact/{id}", withAuth, h.ContactDetail)
+	b.handle(http.MethodGet, "/contact/{id}/edit", withAuth, h.ContactEdit)
+	b.handle(http.MethodPost, "/contact/{id}", withAuth, h.ContactUpdate)
 
-		// Parts Master — Purchase Orders
-		r.Get("/pos", h.POList)
-		r.Get("/pos/new", h.PONew)
-		r.Get("/pos/export.csv", h.POsExportCSV)
-		r.Post("/pos", h.POCreate)
-		// RFQ (issue #270) — an RFQ is a purchase_order with status 'rfq'
-		r.Get("/rfqs/new", h.RFQNew)
-		r.Get("/rfq/{id}/add-supplier", h.RFQAddSupplier)
-		r.Get("/rfq/{group}/compare", h.RFQCompare)
-		r.Post("/rfq/{group}/compare", h.RFQCompareSave)
-		r.Post("/rfq/{id}/convert", h.RFQConvert)
-		r.Get("/po/{id}", h.PODetail)
-		r.Get("/po/{id}/edit", h.POEdit)
-		r.Post("/po/{id}", h.POUpdate)
-		r.Post("/po/{id}/status", h.POStatusTransition)
-		r.Post("/po/{id}/receive", h.POReceive)
-		r.Post("/po/{id}/approval", h.POApprovalAction)
-		r.Get("/po/{id}/note", h.PONote)
-		r.Get("/po/{id}/print", h.POPrint)
-		r.Post("/po/{id}/mark-printed", h.POMarkPrinted)
-		r.Post("/po/{id}/add-suggestions", h.POAddSuggestions)
-		r.Post("/po/{id}/open-folder", h.POOpenFolder)
-		r.Post("/po/{id}/import-part-file", h.POImportPartFile)
-		r.Get("/po/{id}/duplicate", h.PODuplicate)
-		r.Get("/po/{id}/start-rfq", h.POStartRFQ)
-		r.Get("/po/{id}/folder", h.POFolder)
-		r.Get("/po/{id}/folder/*", h.POFolderSub)
-		r.Post("/po/{id}/folder-upload", h.POFolderUpload)
-		r.Post("/po/{id}/folder-upload/*", h.POFolderUploadSub)
-		r.Get("/po/{id}/file/*", h.POFile)
+	// Parts Master — Purchase Orders
+	b.handle(http.MethodGet, "/pos", withAuth, h.POList)
+	b.handle(http.MethodGet, "/pos/new", withAuth, h.PONew)
+	b.handle(http.MethodGet, "/pos/export.csv", withAuth, h.POsExportCSV)
+	b.handle(http.MethodPost, "/pos", withAuth, h.POCreate)
+	// RFQ (issue #270) — an RFQ is a purchase_order with status 'rfq'
+	b.handle(http.MethodGet, "/rfqs/new", withAuth, h.RFQNew)
+	b.handle(http.MethodGet, "/rfq/{id}/add-supplier", withAuth, h.RFQAddSupplier)
+	b.handle(http.MethodGet, "/rfq/{group}/compare", withAuth, h.RFQCompare)
+	b.handle(http.MethodPost, "/rfq/{group}/compare", withAuth, h.RFQCompareSave)
+	b.handle(http.MethodPost, "/rfq/{id}/convert", withAuth, h.RFQConvert)
+	b.handle(http.MethodGet, "/po/{id}", withAuth, h.PODetail)
+	b.handle(http.MethodGet, "/po/{id}/edit", withAuth, h.POEdit)
+	b.handle(http.MethodPost, "/po/{id}", withAuth, h.POUpdate)
+	b.handle(http.MethodPost, "/po/{id}/status", withAuth, h.POStatusTransition)
+	b.handle(http.MethodPost, "/po/{id}/receive", withAuth, h.POReceive)
+	b.handle(http.MethodPost, "/po/{id}/approval", withAuth, h.POApprovalAction)
+	b.handle(http.MethodGet, "/po/{id}/note", withAuth, h.PONote)
+	b.handle(http.MethodGet, "/po/{id}/print", withAuth, h.POPrint)
+	b.handle(http.MethodPost, "/po/{id}/mark-printed", withAuth, h.POMarkPrinted)
+	b.handle(http.MethodPost, "/po/{id}/add-suggestions", withAuth, h.POAddSuggestions)
+	b.handle(http.MethodPost, "/po/{id}/open-folder", withAuth, h.POOpenFolder)
+	b.handle(http.MethodPost, "/po/{id}/import-part-file", withAuth, h.POImportPartFile)
+	b.handle(http.MethodGet, "/po/{id}/duplicate", withAuth, h.PODuplicate)
+	b.handle(http.MethodGet, "/po/{id}/start-rfq", withAuth, h.POStartRFQ)
+	b.handle(http.MethodGet, "/po/{id}/folder", withAuth, h.POFolder)
+	b.handle(http.MethodGet, "/po/{id}/folder/{rest...}", withAuth, h.POFolderSub)
+	b.handle(http.MethodPost, "/po/{id}/folder-upload", withAuth, h.POFolderUpload)
+	b.handle(http.MethodPost, "/po/{id}/folder-upload/{rest...}", withAuth, h.POFolderUploadSub)
+	b.handleWildcard(h, http.MethodGet, "/po/{id}/file/", withAuth, h.POFile)
 
-		// Parts Master — API
-		r.Get("/api/suppliers/search", h.APISupplierSearch)
-		r.Get("/api/suppliers/{id}/contacts", h.APISupplierContacts)
-		r.Get("/api/parts/search", h.APIPartSearch)
-		r.Get("/api/parts/next-number", h.PartsNextNumber)
-		r.Get("/api/supplier-part", h.APISupplierPN)
-		r.Get("/api/digikey/lookup", h.APIDigiKeyLookup)
-		r.Get("/api/part/{id}/local-attachments", h.APIPartLocalAttachments)
-		r.Get("/api/part/{id}/bom-children", h.APIPartBOMChildren)
-		r.Get("/api/parts/rows", h.PartsRows)
-		r.Get("/api/suppliers/rows", h.SuppliersRows)
-		r.Get("/api/contacts/rows", h.ContactsRows)
-		r.Get("/api/pos/rows", h.PORows)
+	// Parts Master — API
+	b.handle(http.MethodGet, "/api/suppliers/search", withAuth, h.APISupplierSearch)
+	b.handle(http.MethodGet, "/api/suppliers/{id}/contacts", withAuth, h.APISupplierContacts)
+	b.handle(http.MethodGet, "/api/parts/search", withAuth, h.APIPartSearch)
+	b.handle(http.MethodGet, "/api/parts/next-number", withAuth, h.PartsNextNumber)
+	b.handle(http.MethodGet, "/api/supplier-part", withAuth, h.APISupplierPN)
+	b.handle(http.MethodGet, "/api/digikey/lookup", withAuth, h.APIDigiKeyLookup)
+	b.handle(http.MethodGet, "/api/part/{id}/local-attachments", withAuth, h.APIPartLocalAttachments)
+	b.handle(http.MethodGet, "/api/part/{id}/bom-children", withAuth, h.APIPartBOMChildren)
+	b.handle(http.MethodGet, "/api/parts/rows", withAuth, h.PartsRows)
+	b.handle(http.MethodGet, "/api/suppliers/rows", withAuth, h.SuppliersRows)
+	b.handle(http.MethodGet, "/api/contacts/rows", withAuth, h.ContactsRows)
+	b.handle(http.MethodGet, "/api/pos/rows", withAuth, h.PORows)
 
-		// Test Records — Forms and Records
-		r.Get("/records", h.FormsList)
-		r.Get("/forms/{id}/records", h.RecordsList)
-		r.Get("/forms/{id}/yield", h.RecordsYieldSummary)
-		r.Get("/forms/{id}/failure-modes", h.RecordsFailureModes)
-		r.Get("/api/forms/{id}/records/rows", h.RecordsRows)
-		r.Post("/forms/{id}/records/bulk-lock", h.BulkLockRecords)
-		r.Get("/forms/{id}/records/new", h.NewRecord)
-		r.Post("/forms/{id}/records/new", h.CreateRecord)
-		r.Get("/forms/{id}/def", h.FormDef)
-		r.Get("/forms/{id}/def/edit", h.EditFormDef)
-		r.Post("/forms/{id}/def/edit", h.SaveFormDef)
-		r.Get("/api/forms/{id}/def/history", h.FormDefHistory)
-		r.Get("/forms/{id}/tests/{testID}/report", h.TestReport)
-		r.Get("/api/forms/{id}/tests/{testID}/report/rows", h.TestReportRows)
-		r.Post("/forms/{id}/tests/{testID}/archive", h.ArchiveStep)
-		r.Get("/records/{id}", h.RecordDetail)
-		r.Get("/records/{id}/print", h.RecordPrint)
-		r.Get("/records/{id}/edit", h.EditRecord)
-		r.Post("/records/{id}/edit", h.SaveResults)
-		r.Post("/api/record/{id}/step/{tid}/paste-image", h.APIRecordPasteResultImage)
-		r.Post("/records/{id}/resync", h.ResyncRecord)
-		r.Post("/records/{id}/lock", h.LockRecord)
-		r.Post("/records/{id}/approve", h.ApproveRecord)
-		r.Post("/records/{id}/unlock", h.UnlockRecord)
-		r.Post("/records/{id}/duplicate", h.DuplicateRecord)
-		r.Get("/forms/new", h.NewForm)
-		r.Post("/forms/new", h.CreateForm)
-		r.Get("/forms/{id}/duplicate", h.DuplicateForm)
-		r.Post("/forms/{id}/duplicate", h.CreateDuplicate)
-		r.Post("/forms/{id}/lock", h.LockForm)
-		r.Post("/forms/{id}/unlock", h.UnlockForm)
-		r.Get("/api/named-query", h.APINamedQuery)
-	})
+	// Test Records — Forms and Records
+	b.handle(http.MethodGet, "/records", withAuth, h.FormsList)
+	b.handle(http.MethodGet, "/forms/{id}/records", withAuth, h.RecordsList)
+	b.handle(http.MethodGet, "/forms/{id}/yield", withAuth, h.RecordsYieldSummary)
+	b.handle(http.MethodGet, "/forms/{id}/failure-modes", withAuth, h.RecordsFailureModes)
+	b.handle(http.MethodGet, "/api/forms/{id}/records/rows", withAuth, h.RecordsRows)
+	b.handle(http.MethodPost, "/forms/{id}/records/bulk-lock", withAuth, h.BulkLockRecords)
+	b.handle(http.MethodGet, "/forms/{id}/records/new", withAuth, h.NewRecord)
+	b.handle(http.MethodPost, "/forms/{id}/records/new", withAuth, h.CreateRecord)
+	b.handle(http.MethodGet, "/forms/{id}/def", withAuth, h.FormDef)
+	b.handle(http.MethodGet, "/forms/{id}/def/edit", withAuth, h.EditFormDef)
+	b.handle(http.MethodPost, "/forms/{id}/def/edit", withAuth, h.SaveFormDef)
+	b.handle(http.MethodGet, "/api/forms/{id}/def/history", withAuth, h.FormDefHistory)
+	b.handle(http.MethodGet, "/forms/{id}/tests/{testID}/report", withAuth, h.TestReport)
+	b.handle(http.MethodGet, "/api/forms/{id}/tests/{testID}/report/rows", withAuth, h.TestReportRows)
+	b.handle(http.MethodPost, "/forms/{id}/tests/{testID}/archive", withAuth, h.ArchiveStep)
+	b.handle(http.MethodGet, "/records/{id}", withAuth, h.RecordDetail)
+	b.handle(http.MethodGet, "/records/{id}/print", withAuth, h.RecordPrint)
+	b.handle(http.MethodGet, "/records/{id}/edit", withAuth, h.EditRecord)
+	b.handle(http.MethodPost, "/records/{id}/edit", withAuth, h.SaveResults)
+	b.handle(http.MethodPost, "/api/record/{id}/step/{tid}/paste-image", withAuth, h.APIRecordPasteResultImage)
+	b.handle(http.MethodPost, "/records/{id}/resync", withAuth, h.ResyncRecord)
+	b.handle(http.MethodPost, "/records/{id}/lock", withAuth, h.LockRecord)
+	b.handle(http.MethodPost, "/records/{id}/approve", withAuth, h.ApproveRecord)
+	b.handle(http.MethodPost, "/records/{id}/unlock", withAuth, h.UnlockRecord)
+	b.handle(http.MethodPost, "/records/{id}/duplicate", withAuth, h.DuplicateRecord)
+	b.handle(http.MethodGet, "/forms/new", withAuth, h.NewForm)
+	b.handle(http.MethodPost, "/forms/new", withAuth, h.CreateForm)
+	b.handle(http.MethodGet, "/forms/{id}/duplicate", withAuth, h.DuplicateForm)
+	b.handle(http.MethodPost, "/forms/{id}/duplicate", withAuth, h.CreateDuplicate)
+	b.handle(http.MethodPost, "/forms/{id}/lock", withAuth, h.LockForm)
+	b.handle(http.MethodPost, "/forms/{id}/unlock", withAuth, h.UnlockForm)
+	b.handle(http.MethodGet, "/api/named-query", withAuth, h.APINamedQuery)
 
-	r.NotFound(h.NotFound)
+	var router http.Handler = withNotFound(b.mux, h.NotFound)
+	router = h.RequireCsrfOnPost(router)
+	// Must run before RequireCsrfOnPost: its verifyCsrf call reads
+	// r.FormValue, which for a multipart POST fully parses the body via
+	// r.ParseMultipartForm before any handler runs — a handler's own
+	// ParseMultipartForm(maxUploadBytes) call afterward is then a no-op
+	// (net/http: "subsequent calls have no effect"), so this is the only
+	// place a size ceiling can still apply to multipart uploads (#36).
+	router = (func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+			next.ServeHTTP(w, r)
+		})
+	})(router)
+	router = h.profileRequest(router)
+	router = recovererMiddleware(router)
+	router = loggingMiddleware(router)
+	router = h.RequireLocalHost(router)
 
-	return r
+	return router, b.routes
 }
 
 // headlessEnabled reports whether ARX_HEADLESS=1: serve with no systray (container, StartOS).

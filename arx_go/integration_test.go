@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	arxbase "arx/internal/config"
@@ -147,44 +146,39 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 	return h, cleanup
 }
 
-// withID injects a chi route context carrying the given "id" URL parameter.
+// withID sets the "id" path value on req.
 func withID(req *http.Request, id int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	return req
 }
 
-// withIDAndAttID injects chi route params for both "id" and "attID".
+// withIDAndAttID sets the "id" and "attID" path values.
 func withIDAndAttID(req *http.Request, id, attID int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	rctx.URLParams.Add("attID", strconv.Itoa(attID))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	req.SetPathValue("attID", strconv.Itoa(attID))
+	return req
 }
 
-// withIDAndTestID injects chi route params "id" and "testID" (used by ArchiveStep's
+// withIDAndTestID sets the "id" and "testID" path values (used by ArchiveStep's
 // POST /forms/{id}/tests/{testID}/archive route).
 func withIDAndTestID(req *http.Request, id, testID int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	rctx.URLParams.Add("testID", strconv.Itoa(testID))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	req.SetPathValue("testID", strconv.Itoa(testID))
+	return req
 }
 
-// withIDAndLotID injects chi route params for both "id" and "lotID".
+// withIDAndLotID sets the "id" and "lotID" path values.
 func withIDAndLotID(req *http.Request, id, lotID int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	rctx.URLParams.Add("lotID", strconv.Itoa(lotID))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	req.SetPathValue("lotID", strconv.Itoa(lotID))
+	return req
 }
 
-// withIDAndUnitID injects chi route params for both "id" and "unitID".
+// withIDAndUnitID sets the "id" and "unitID" path values.
 func withIDAndUnitID(req *http.Request, id, unitID int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	rctx.URLParams.Add("unitID", strconv.Itoa(unitID))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	req.SetPathValue("unitID", strconv.Itoa(unitID))
+	return req
 }
 
 // postForm builds a POST request with URL-encoded form body.
@@ -549,10 +543,8 @@ func TestIntegration_PasteResultImageGuards(t *testing.T) {
 			fmt.Sprintf("/api/record/%d/step/%d/paste-image", recordID, testID),
 			strings.NewReader(fmt.Sprintf(`{"image_data":%q}`, tinyPNG)))
 		req.Header.Set("Content-Type", "application/json")
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", strconv.Itoa(recordID))
-		rctx.URLParams.Add("tid", strconv.Itoa(testID))
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req.SetPathValue("id", strconv.Itoa(recordID))
+		req.SetPathValue("tid", strconv.Itoa(testID))
 		rec := httptest.NewRecorder()
 		h.APIRecordPasteResultImage(rec, req)
 		return rec
@@ -2523,13 +2515,11 @@ func userCtxTZ(req *http.Request, tz string) *http.Request {
 		&User{ID: 8001, Username: "admin", IsAdmin: true, Timezone: tz}))
 }
 
-// withUserID injects a chi route context carrying the given "userID" URL
-// parameter — the SettingsUsers* handlers read chi.URLParam(r, "userID"),
-// unlike withID's "id" param used elsewhere in this file.
+// withUserID sets the "userID" path value — the SettingsUsers* handlers read
+// r.PathValue("userID"), unlike withID's "id" param used elsewhere in this file.
 func withUserID(req *http.Request, id int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("userID", strconv.Itoa(id))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("userID", strconv.Itoa(id))
+	return req
 }
 
 // TestIntegration_SettingsUsersCreate_Success/_MissingFields cover
@@ -3431,12 +3421,11 @@ func TestIntegration_POApprovalAction_FullWorkflow(t *testing.T) {
 	}
 }
 
-// withGroupParam injects a chi route context carrying the given "group" URL
-// parameter — RFQCompare/RFQCompareSave key off "group", unlike withID's "id".
+// withGroupParam sets the "group" path value — RFQCompare/RFQCompareSave key
+// off "group", unlike withID's "id".
 func withGroupParam(req *http.Request, group string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("group", group)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("group", group)
+	return req
 }
 
 // seedRFQQuote creates one RFQ quote (a purchase_order with status 'rfq') for
@@ -3516,9 +3505,7 @@ func TestIntegration_RFQAddSupplier_ClonesLinesBlanksSupplier(t *testing.T) {
 	defer cleanupPO(ctx, h, quoteID)
 
 	req := httptest.NewRequest(http.MethodGet, "/rfq/{id}/add-supplier", nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", quoteNumber)
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", quoteNumber)
 
 	rec := httptest.NewRecorder()
 	h.RFQAddSupplier(rec, req)
@@ -3602,13 +3589,12 @@ func TestIntegration_RFQCompareSave_PersistsCostAndRecomputesTotal(t *testing.T)
 	}
 }
 
-// withIDStr injects a chi route context carrying the given "id" URL parameter
-// as a literal string — unlike withID, which only handles numeric PO numbers,
-// RFQ quote numbers (e.g. "5010R1") aren't numeric.
+// withIDStr sets the "id" path value as a literal string — unlike withID,
+// which only handles numeric PO numbers, RFQ quote numbers (e.g. "5010R1")
+// aren't numeric.
 func withIDStr(req *http.Request, id string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", id)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", id)
+	return req
 }
 
 func TestIntegration_RFQConvert_AwardsWinnerAndCancelsSiblings(t *testing.T) {
@@ -3781,11 +3767,9 @@ func TestIntegration_PartUnitTraceHandler(t *testing.T) {
 	}
 
 	// Invalid unitID: non-numeric route param.
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", "3013")
-	rctx.URLParams.Add("unitID", "abc")
-	badReq := httptest.NewRequest(http.MethodGet, "/part/3013/units/abc", nil).
-		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	badReq := httptest.NewRequest(http.MethodGet, "/part/3013/units/abc", nil)
+	badReq.SetPathValue("id", "3013")
+	badReq.SetPathValue("unitID", "abc")
 	badRec := httptest.NewRecorder()
 	h.PartUnitTrace(badRec, badReq)
 	if !strings.Contains(badRec.Body.String(), "Invalid unit id") {
@@ -4456,11 +4440,9 @@ func TestIntegration_PartLotTrace(t *testing.T) {
 		t.Errorf("PartLotTrace(3007,999999999): expected \"Lot not found for this part\", got body: %s", missingRec.Body.String())
 	}
 
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", "3007")
-	rctx.URLParams.Add("lotID", "abc")
-	badReq := httptest.NewRequest(http.MethodGet, "/part/3007/lots/abc", nil).
-		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	badReq := httptest.NewRequest(http.MethodGet, "/part/3007/lots/abc", nil)
+	badReq.SetPathValue("id", "3007")
+	badReq.SetPathValue("lotID", "abc")
 	badRec := httptest.NewRecorder()
 	h.PartLotTrace(badRec, badReq)
 	if !strings.Contains(badRec.Body.String(), "Invalid lot id") {
@@ -4544,11 +4526,9 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 	}
 
 	// Invalid lotID: non-numeric route param.
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", "3007")
-	rctx.URLParams.Add("lotID", "abc")
-	badReq := postForm("/part/3007/lots/abc", url.Values{}).
-		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	badReq := postForm("/part/3007/lots/abc", url.Values{})
+	badReq.SetPathValue("id", "3007")
+	badReq.SetPathValue("lotID", "abc")
 	badRec := httptest.NewRecorder()
 	h.LotUpdate(badRec, badReq)
 	if !strings.Contains(badRec.Body.String(), "Invalid lot id") {
@@ -5768,10 +5748,8 @@ func TestIntegration_APIPartPasteAttachmentReplace(t *testing.T) {
 			fmt.Sprintf("/api/part/%d/attachments/abc/paste-attachment", partID),
 			strings.NewReader(fmt.Sprintf(`{"image_data":%q}`, tinyPNG)))
 		req.Header.Set("Content-Type", "application/json")
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", strconv.Itoa(partID))
-		rctx.URLParams.Add("attID", "abc")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req.SetPathValue("id", strconv.Itoa(partID))
+		req.SetPathValue("attID", "abc")
 		rec := httptest.NewRecorder()
 		h.APIPartPasteAttachmentReplace(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -5938,10 +5916,8 @@ func TestIntegration_APIPartGenerateThumbnail(t *testing.T) {
 		defer cleanupPart()
 		req := httptest.NewRequest(http.MethodPost,
 			fmt.Sprintf("/api/part/%d/attachments/abc/generate-thumbnail", partID), nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", strconv.Itoa(partID))
-		rctx.URLParams.Add("attID", "abc")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req.SetPathValue("id", strconv.Itoa(partID))
+		req.SetPathValue("attID", "abc")
 		rec := httptest.NewRecorder()
 		h.APIPartGenerateThumbnail(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -6228,10 +6204,8 @@ func TestIntegration_PasteResultImageWrite(t *testing.T) {
 			fmt.Sprintf("/api/record/%d/step/1/paste-image", recordID),
 			strings.NewReader(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", strconv.Itoa(recordID))
-		rctx.URLParams.Add("tid", "1")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		req.SetPathValue("id", strconv.Itoa(recordID))
+		req.SetPathValue("tid", "1")
 		rec := httptest.NewRecorder()
 		h.APIRecordPasteResultImage(rec, req)
 		return rec

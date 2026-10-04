@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
@@ -189,7 +188,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 // ── PartDetail — GET /part/{id} and /part/{id}/details ──────────────────────
 
 func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 
 	p, err := h.fetchPartFull(r.Context(), id)
 	if err == sql.ErrNoRows {
@@ -348,7 +347,7 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 // field and copied by PartsCreate on save; everything else (attachments, pricing,
 // suppliers, mfg parts, history) is intentionally excluded (#548).
 func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	src, err := h.fetchPartFull(r.Context(), id)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving part: "+err.Error())
@@ -418,7 +417,7 @@ func dupContext(r *http.Request, m map[string]any) map[string]any {
 // ── PartEdit — GET /part/{id}/edit ──────────────────────────────────────────
 
 func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "edit")
 	if !ok {
 		return
@@ -448,7 +447,7 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 // ── PartUpdate — POST /part/{id} ────────────────────────────────────────────
 
 func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	partNumber := fv(r, "part_number")
 	if partNumber == "" {
 		p, backURL, backLabel, _ := h.partPageBase(w, r, id, "edit")
@@ -641,7 +640,7 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 }
 
 func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
 	if !ok {
 		return
@@ -659,7 +658,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "where-used")
 	if !ok {
 		return
@@ -726,7 +725,7 @@ func extractBOMRows(form map[string][]string, prefix string) map[string]bomRow {
 // ── PartBOMEdit — GET /part/{id}/bom/edit ───────────────────────────────────
 
 func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
 	if !ok {
 		return
@@ -753,7 +752,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 // ── PartBOMSave — POST /part/{id}/bom ───────────────────────────────────────
 
 func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "bom")
 	if !ok {
 		return
@@ -910,7 +909,7 @@ func parseBOMPasteText(text string) []bomPasteLine {
 // and diffs against the part's current BOM by component_part_id. Writes
 // nothing; returns an HTML preview fragment (parts/part_bom_paste_preview.html).
 func (h *Handler) PartBOMPastePreview(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	// Not h.requireTab: that renders a full page via h.renderError on failure,
 	// but this handler is fetched by JS and its response is dropped straight
 	// into a small preview <div> — a full-page error response would end up
@@ -1044,7 +1043,7 @@ func rollupWalk(tree map[int][]parts.BOMTreeEdge, pnid int, visited map[int]bool
 // ── PartRollupCost — POST /part/{id}/rollup-cost ─────────────────────────────
 
 func (h *Handler) PartRollupCost(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	if _, ok := h.requireTab(w, r, id, "bom"); !ok {
 		return
 	}
@@ -1239,7 +1238,7 @@ func (h *Handler) buildCost(ctx context.Context, pnid int, qty decimal.Decimal) 
 // ── PartBuildCost — GET /part/{id}/build-cost?qty=N ─────────────────────────
 
 func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
 	if !ok {
 		return
@@ -1271,7 +1270,7 @@ func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
-	h.renderPartAttachments(w, r, chi.URLParam(r, "id"), nil)
+	h.renderPartAttachments(w, r, r.PathValue("id"), nil)
 }
 
 // renderPartAttachments loads a part's attachments and renders the attachments
@@ -1371,7 +1370,7 @@ func (h *Handler) insertAttachmentRow(ctx context.Context, partID, fileName, rev
 }
 
 func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 
 	// Cancel from a duplicate-hash warning (#71): the file was already copied
 	// into Doc Control by the time the duplicate was detected, so discard it
@@ -1504,7 +1503,7 @@ func (h *Handler) partAttachmentDuplicateWarning(w http.ResponseWriter, r *http.
 }
 
 func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
-	id, attID := chi.URLParam(r, "id"), chi.URLParam(r, "attID")
+	id, attID := r.PathValue("id"), r.PathValue("attID")
 	attIDInt, _ := strconv.Atoi(attID)
 	oID := intPtrOrNil(fv(r, "order_id"))
 	rev, category := fv(r, "FILPNRev"), fv(r, "category")
@@ -1593,8 +1592,8 @@ func (h *Handler) PartAttachmentUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	attIDInt, _ := strconv.Atoi(chi.URLParam(r, "attID"))
+	id := r.PathValue("id")
+	attIDInt, _ := strconv.Atoi(r.PathValue("attID"))
 	partID, err := strconv.Atoi(id)
 	if err == nil {
 		err = h.attachmentTx(r.Context(), func(s *attachments.Service) error {
@@ -1612,7 +1611,7 @@ func (h *Handler) PartAttachmentDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	idInt, _ := strconv.Atoi(id)
 	filID := r.FormValue("filid")
 	var val *int
@@ -1629,7 +1628,7 @@ func (h *Handler) PartSetPrimaryAttachment(w http.ResponseWriter, r *http.Reques
 // APIPartLocalAttachments — GET /api/part/{id}/local-attachments (#156)
 // Returns LOCAL: file (not directory) attachments for a part, for the PO import picker.
 func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	id, _ := strconv.Atoi(r.PathValue("id"))
 	rows, err := h.attachments().ListPartAttachments(r.Context(), id)
 	if err != nil {
 		serverError(w, "database error", err)
@@ -1657,7 +1656,7 @@ func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "orders")
 	if !ok {
 		return
@@ -1683,7 +1682,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 // PartRecords — GET /part/{id}/records. Lists every active test record across
 // every form where subject part_id = this part (#875).
 func (h *Handler) PartRecords(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "records")
 	if !ok {
 		return
@@ -1703,7 +1702,7 @@ func (h *Handler) PartRecords(w http.ResponseWriter, r *http.Request) {
 // PartRecordsRows — GET /api/part/{id}/records/rows. JSON rows for PartRecords'
 // table (#875).
 func (h *Handler) PartRecordsRows(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1806,7 +1805,7 @@ func (h *Handler) partPricePoints(ctx context.Context, partID int) []pricePoint 
 // price-list entries (#284). Points are emitted as JSON for the SVG renderer in
 // static/parts/price_history.js.
 func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "price-history")
 	if !ok {
 		return
@@ -1831,7 +1830,7 @@ type SupplierPriceGroup struct {
 }
 
 func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "pricing")
 	if !ok {
 		return
@@ -1889,7 +1888,7 @@ func isDuplicatePrice(err error) bool {
 }
 
 func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "pricing")
 	if !ok {
 		return
@@ -1911,7 +1910,7 @@ func (h *Handler) ensureDefaultSupplier(ctx context.Context, partID, supplierID 
 // PricePreferred — POST /part/{id}/pricing/preferred. Sets the preferred supplier
 // used for cost rollup (the multi-supplier review case from migration #484).
 func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
+	partID := r.PathValue("id")
 	p, ok := h.requireTab(w, r, partID, "pricing")
 	if !ok {
 		return
@@ -1929,7 +1928,7 @@ func (h *Handler) PricePreferred(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
+	partID := r.PathValue("id")
 	p, ok := h.requireTab(w, r, partID, "pricing")
 	if !ok {
 		return
@@ -1958,8 +1957,8 @@ func (h *Handler) PriceCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
-	priceID := chi.URLParam(r, "priceID")
+	partID := r.PathValue("id")
+	priceID := r.PathValue("priceID")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, partID, "pricing")
 	if !ok {
 		return
@@ -1986,7 +1985,7 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
+	partID := r.PathValue("id")
 	p, ok := h.requireTab(w, r, partID, "pricing")
 	if !ok {
 		return
@@ -2006,7 +2005,7 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svc := parts.New(tx)
-	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	priceID, err := strconv.Atoi(r.PathValue("priceID"))
 	if err == nil {
 		err = svc.SetPriceActive(r.Context(), priceID, p.ID, false)
 	}
@@ -2035,12 +2034,12 @@ func (h *Handler) PriceUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
+	partID := r.PathValue("id")
 	p, ok := h.requireTab(w, r, partID, "pricing")
 	if !ok {
 		return
 	}
-	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	priceID, err := strconv.Atoi(r.PathValue("priceID"))
 	if err == nil {
 		err = h.parts().SetPriceActive(r.Context(), priceID, p.ID, false)
 	}
@@ -2054,12 +2053,12 @@ func (h *Handler) PriceDeactivate(w http.ResponseWriter, r *http.Request) {
 // PriceDelete hard-deletes a price row. Only deactivated rows may be deleted —
 // active pricing must be deactivated first (#57).
 func (h *Handler) PriceDelete(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
+	partID := r.PathValue("id")
 	p, ok := h.requireTab(w, r, partID, "pricing")
 	if !ok {
 		return
 	}
-	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	priceID, err := strconv.Atoi(r.PathValue("priceID"))
 	if err == nil {
 		err = h.parts().DeleteInactivePrice(r.Context(), priceID, p.ID)
 	}
@@ -2071,12 +2070,12 @@ func (h *Handler) PriceDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PriceActivate(w http.ResponseWriter, r *http.Request) {
-	partID := chi.URLParam(r, "id")
+	partID := r.PathValue("id")
 	p, ok := h.requireTab(w, r, partID, "pricing")
 	if !ok {
 		return
 	}
-	priceID, err := strconv.Atoi(chi.URLParam(r, "priceID"))
+	priceID, err := strconv.Atoi(r.PathValue("priceID"))
 	if err == nil {
 		err = h.parts().SetPriceActive(r.Context(), priceID, p.ID, true)
 	}
@@ -2113,7 +2112,7 @@ func (h *Handler) PartsExportCSV(w http.ResponseWriter, r *http.Request) {
 // ── BOMExportCSV — GET /part/{id}/bom/export.csv ────────────────────────────
 
 func (h *Handler) BOMExportCSV(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "bom")
 	if !ok {
 		return

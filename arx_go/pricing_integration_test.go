@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 )
 
 // pricingFixture is a BUY part preferring supplier 1002, with prices:
@@ -103,12 +101,11 @@ func pricePost(h *Handler, fn http.HandlerFunc, target string, part int, vals ur
 	return rec
 }
 
-// withIDAndPriceID injects chi route params for both "id" and "priceID".
+// withIDAndPriceID sets the "id" and "priceID" path values.
 func withIDAndPriceID(req *http.Request, id, priceID int) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", strconv.Itoa(id))
-	rctx.URLParams.Add("priceID", strconv.Itoa(priceID))
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("id", strconv.Itoa(id))
+	req.SetPathValue("priceID", strconv.Itoa(priceID))
+	return req
 }
 
 var (

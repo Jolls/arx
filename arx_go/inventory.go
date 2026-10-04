@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"arx/internal/inventory"
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 )
 
@@ -60,7 +59,7 @@ func ledgerWithBalances(asc []InventoryTxnView) []InventoryTxnView {
 // ── PartTransactions — GET /part/{id}/transactions ───────────────────────────
 
 func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "transactions")
 	if !ok {
 		return
@@ -98,7 +97,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 // ── PartStockAdjust — POST /part/{id}/adjust-stock ───────────────────────────
 
 func (h *Handler) PartStockAdjust(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "transactions")
 	if !ok {
 		return

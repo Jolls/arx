@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	arxbase "arx/internal/config"
 )
 
@@ -47,7 +45,7 @@ func testHandlerWithDB() *Handler {
 }
 
 func TestBuildRouter_RejectsForeignHost(t *testing.T) {
-	r := buildRouter(testHandlerWithDB())
+	r, _ := buildRouter(testHandlerWithDB())
 	for _, path := range []string{"/login", "/settings"} {
 		for host, want := range map[string]bool{
 			"evil.example.com":      false,
@@ -66,6 +64,85 @@ func TestBuildRouter_RejectsForeignHost(t *testing.T) {
 				t.Errorf("GET %s Host %q: status = %d, allowed = %v, want allowed = %v", path, host, rec.Code, got, want)
 			}
 		}
+	}
+}
+
+// TestBuildRouter_WildcardRoutesPreserveChiMatchingSemantics confirms the
+// static-prefix wildcard file-serving routes still require their literal
+// trailing slash. Go's "{rest...}" wildcard matches a bare "/local" request
+// (no trailing slash at all) by itself, unlike chi's old "/local/*", which
+// required the slash — buildRouter guards against that gap (#319); this
+// confirms the guard is wired up for every affected route.
+func TestBuildRouter_WildcardRoutesPreserveChiMatchingSemantics(t *testing.T) {
+	h := testHandlerWithDB()
+	h.userCache[7] = &userCacheEntry{user: &User{ID: 7}, expires: time.Now().Add(time.Minute)}
+
+	seed := httptest.NewRequest(http.MethodGet, "/", nil)
+	seedRec := httptest.NewRecorder()
+	sess := h.session(seed)
+	sess.Values["user_id"] = 7
+	if err := sess.Save(seed, seedRec); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	cookies := seedRec.Result().Cookies()
+
+	r, _ := buildRouter(h)
+	dial := func(path string) int {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Host = "localhost:4568"
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	for _, path := range []string{"/local", "/local-dir", "/supplier-local", "/supplier-local-dir", "/images", "/static"} {
+		if got := dial(path); got != http.StatusNotFound {
+			t.Errorf("GET %s: status = %d, want %d (bare prefix must not match the wildcard route)", path, got, http.StatusNotFound)
+		}
+	}
+
+	for _, path := range []string{"/local/", "/local-dir/", "/supplier-local/", "/supplier-local-dir/", "/images/"} {
+		if got := dial(path); got == http.StatusNotFound {
+			t.Errorf("GET %s: status = %d, want anything but %d (trailing slash must still match the wildcard route)", path, got, http.StatusNotFound)
+		}
+	}
+	if got := dial("/static/"); got != http.StatusOK {
+		t.Errorf("GET /static/: status = %d, want %d", got, http.StatusOK)
+	}
+}
+
+// TestBuildRouter_MethodMismatchIsNotFalseNotFound confirms withNotFound
+// tells a true 404 apart from a path that's registered under a different
+// method: net/http's ServeMux reports pattern=="" for both (#319), so a
+// naive check would render the app's custom 404 page for a request like
+// "GET /logout" (POST-only) instead of the 405 a client expects.
+func TestBuildRouter_MethodMismatchIsNotFalseNotFound(t *testing.T) {
+	r, _ := buildRouter(testHandlerWithDB())
+	dial := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.Host = "localhost:4568"
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+
+	rec := dial(http.MethodGet, "/logout")
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET /logout: status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+	if allow := rec.Header().Get("Allow"); !strings.Contains(allow, "POST") {
+		t.Errorf("GET /logout: Allow header = %q, want it to mention POST", allow)
+	}
+
+	rec = dial(http.MethodGet, "/this-path-does-not-exist")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /this-path-does-not-exist: status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	if strings.Contains(rec.Body.String(), "404 page not found") {
+		t.Errorf("GET /this-path-does-not-exist: got net/http's default 404 body, want the app's custom not_found page")
 	}
 }
 
@@ -306,18 +383,20 @@ var routeAllowlist = map[string]bool{
 	"POST /login":    true,
 	"POST /logout":   true,
 	"GET /whats-new": true,
+	// The bare-prefix 404 sibling of the public /static/{rest...} route
+	// (#319) — same no-auth tier as its wildcard counterpart.
+	"GET /static": true,
 }
 
-// staticRoutePrefix is served directly (no auth) and chi.Walk visits it once
-// per HTTP method chi registers a catch-all for; skip by prefix rather than
-// listing every method explicitly.
-const staticRoutePrefix = "/static/*"
+// staticRoutePrefix is served directly (no auth) — skipped by exact pattern
+// match rather than listing every method explicitly.
+const staticRoutePrefix = "/static/{rest...}"
 
-// substituteRouteParams replaces chi route params ({id}, {userID}, ...) and the
-// trailing wildcard (*) with a concrete placeholder value so the pattern can be
-// dialed as a real request path. The concrete value never matters here: an
-// anonymous request is rejected by RequireAuth before any handler (or its
-// param parsing) runs.
+// substituteRouteParams replaces route params ({id}, {userID}, the "{$}"
+// exact-root marker, the trailing "{rest...}" wildcard, ...) with a concrete
+// placeholder value so the pattern can be dialed as a real request path. The
+// concrete value never matters here: an anonymous request is rejected by
+// RequireAuth before any handler (or its param parsing) runs.
 func substituteRouteParams(pattern string) string {
 	var out strings.Builder
 	i := 0
@@ -331,15 +410,15 @@ func substituteRouteParams(pattern string) string {
 				continue
 			}
 			name := pattern[i+1 : i+end]
-			if strings.Contains(strings.ToLower(name), "id") {
+			switch {
+			case name == "$":
+				// matches only the exact path up to here; nothing to add.
+			case strings.Contains(strings.ToLower(name), "id"):
 				out.WriteString("1")
-			} else {
+			default:
 				out.WriteString("x")
 			}
 			i += end + 1
-		case '*':
-			out.WriteString("x")
-			i++
 		default:
 			out.WriteByte(pattern[i])
 			i++
@@ -350,7 +429,7 @@ func substituteRouteParams(pattern string) string {
 
 func TestBuildRouter_AllAppRoutesRequireAuth(t *testing.T) {
 	h := testHandlerWithDB()
-	r := buildRouter(h)
+	r, routes := buildRouter(h)
 
 	// Seed a valid CSRF cookie/token once, reused for every POST route dialed
 	// below, so the global RequireCsrfOnPost middleware doesn't reject the
@@ -361,10 +440,11 @@ func TestBuildRouter_AllAppRoutesRequireAuth(t *testing.T) {
 	csrfCookies := seedRec.Result().Cookies()
 
 	visited := 0
-	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+	for _, rt := range routes {
+		method, route := rt.method, rt.pattern
 		key := method + " " + route
 		if routeAllowlist[key] || route == staticRoutePrefix {
-			return nil
+			continue
 		}
 		visited++
 		path := substituteRouteParams(route)
@@ -389,10 +469,6 @@ func TestBuildRouter_AllAppRoutesRequireAuth(t *testing.T) {
 		} else if loc := rec.Header().Get("Location"); loc != "/login" {
 			t.Errorf("%s %s: Location = %q, want /login", method, route, loc)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("chi.Walk: %v", err)
 	}
 	if visited < 150 {
 		t.Errorf("only visited %d non-allowlisted routes, want >= 150 (route table may not have been walked)", visited)

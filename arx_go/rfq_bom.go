@@ -11,7 +11,6 @@ import (
 	"arx/arx_go/models"
 	"arx/internal/purchasing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 )
 
@@ -203,7 +202,7 @@ func (h *Handler) buildRFQPlan(ctx context.Context, root int, n decimal.Decimal)
 // Without ?n= shows the assembly-count prompt; with it, the editable preview.
 
 func (h *Handler) PartCreateRFQs(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
 	if !ok {
 		return
@@ -232,7 +231,7 @@ func (h *Handler) PartCreateRFQs(w http.ResponseWriter, r *http.Request) {
 // so only parts it produces can be ordered.
 
 func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	p, ok := h.requireTab(w, r, id, "bom")
 	if !ok {
 		return

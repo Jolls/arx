@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"arx/internal/contacts"
 )
 
@@ -62,7 +60,7 @@ func (h *Handler) ContactsRows(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	c, ok := h.fetchContact(w, r, id)
 	if !ok {
 		return
@@ -139,7 +137,7 @@ func (h *Handler) ContactsCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	c, ok := h.fetchContact(w, r, id)
 	if !ok {
 		return
@@ -156,7 +154,7 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
 	name := fv(r, "CNName")
 	if name == "" {
 		h.render(w, r, "contacts/contact_edit.html", map[string]any{
