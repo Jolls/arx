@@ -582,7 +582,7 @@ END $$;
     -- level-3 heading (6001 only ever exercises level-1), so a real record shows all
     -- three .row-heading-N shades at once.
     INSERT INTO form (id, part_number_id, test_order, is_locked, is_active, form_type, record_types, instrument_types, revision) VALUES
-        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108', TRUE, TRUE, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1),
+        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108,6115', TRUE, TRUE, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1),
         (6002, 3011, '6109,6110,6111,6112,6113,6114', TRUE, TRUE, 'test', 'New Release', NULL, 1);
 
     -- 6104 is an archived (retired) step: hidden from new records and the live definition view
@@ -603,6 +603,11 @@ END $$;
         (6106, 6001, 1, 0, 'Visual Inspection',     'No scratches or dents',    NULL, NULL, 'List:Pass;Fail', NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6107, 6001, 1, 0, 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, 'query:recent_serial_numbers_for_form(@form_id={form.id})', NULL, 'comment', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6108, 6001, 1, 0, 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', NULL, FALSE, '0.00', '=min(max({6102},4.75),5.25)', '{record.type}!=Re-Test', '2020-01-01T00:00:00', 'unit'), -- only shown on Re-Test records; default_result clamps the prior reading to this step's spec range
+        -- 6115 added after 7001-7015 were created too (same "added later" pattern as 6105-6108
+        -- above). Exercises round()/arithmetic from #95 (6108 only exercises min/max), and is
+        -- filled on record 7016 below so the formula's computed output is actually stored,
+        -- not just defined.
+        (6115, 6001, 1, 0, 'Power Draw',            '<=1.00W', 'W', NULL, NULL, '1.00', 'range', 'ModelA,ModelB', FALSE, '0.00', '=round({6102}*{6103}/1000,2)', NULL, '2020-01-01T00:00:00', 'unit'),
         -- 6109-6114 (form 6002): one data row under each heading level 1/2/3.
         (6109, 6002, 1, 1, 'Mechanical Tests',   NULL,                  NULL,  NULL,  NULL, NULL,  NULL,    NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6110, 6002, 1, 0, 'Weight',             '500g +/-10g',         'g',   '490', '500','510', 'range', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
@@ -648,7 +653,13 @@ END $$;
         (7014, 6001, 3013, '2026-06-15', 'SN-3013-001', 'ASM-1003', 'Skyrunner Deluxe Drone', '6101,6102,6103,6104,6108', 'Re-Test', 'ModelA', FALSE, FALSE, TRUE, 1, NULL, NULL, 8501, '2020-01-01T00:00:00', '2026-06-15T00:00:00', NULL),
         -- 7015 (form 6002): Complete, all pass — the only record carrying a level-2 AND
         -- level-3 heading, so records_show.html renders all three .row-heading-N shades.
-        (7015, 6002, 3004, '2026-07-15', '7015', 'MFG-1001', 'Drone Frame Housing', '6109,6110,6111,6112,6113,6114', 'New Release', NULL, TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-15T00:00:00', NULL);
+        (7015, 6002, 3004, '2026-07-15', '7015', 'MFG-1001', 'Drone Frame Housing', '6109,6110,6111,6112,6113,6114', 'New Release', NULL, TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-15T00:00:00', NULL),
+        -- 7016: Complete Re-Test — the only record whose results actually fill a step that
+        -- carries a default_result formula (6108's min/max clamp and 6115's round/arithmetic
+        -- power calc), vs. just defining the formula on the step. Output Voltage (6102) fails
+        -- high; Retest Voltage Check (6108) shows the clamped value from the formula. Also the
+        -- only record that fills 6105-6107 (filled/List:/query: pf_types) with real data.
+        (7016, 6001, 3004, '2026-07-20', '7016', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6105,6106,6107,6108,6115', 'Re-Test', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-20T00:00:00', NULL);
 
     -- One materialized row per step per record, headings included (type=1) — matching what
     -- materializeRecordSteps produces for post-#487 records. Grouped by record.
@@ -717,7 +728,20 @@ END $$;
         (7155, 7015, 6111, NULL, NULL,   'Dimensional Checks', NULL,                 NULL, NULL,  NULL, NULL,  NULL,    2, '2020-01-01T00:00:00'),
         (7156, 7015, 6112, TRUE, '115',  'Overall Length',     '<=120mm',            'mm', NULL,  NULL, '120', 'range', 0, '2020-01-01T00:00:00'),
         (7157, 7015, 6113, NULL, NULL,   'Visual Checks',      NULL,                 NULL, NULL,  NULL, NULL,  NULL,    3, '2020-01-01T00:00:00'),
-        (7158, 7015, 6114, TRUE, 'Pass', 'Surface Finish',     'No visible defects', NULL, NULL,  NULL, NULL,  'filled',0, '2020-01-01T00:00:00');
+        (7158, 7015, 6114, TRUE, 'Pass', 'Surface Finish',     'No visible defects', NULL, NULL,  NULL, NULL,  'filled',0, '2020-01-01T00:00:00'),
+        -- 7016: Output Voltage (6102) reads 5.30V, above its 5.25V max — a real FAIL feeding
+        -- a formula. Retest Voltage Check (6108) evaluates min(max(5.30,4.75),5.25)=5.25,
+        -- the clamped value, which is itself within 6108's own spec → PASS. Power Draw (6115)
+        -- evaluates round(5.30*165/1000,2)=0.87, within its <=1.00W spec → PASS. 6105-6107 are
+        -- filled with real values for the first time (previously only defined, never recorded).
+        (7159, 7016, 6101, NULL,  NULL,   'Electrical Tests',      NULL,                        NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
+        (7160, 7016, 6102, FALSE, '5.30', 'Output Voltage',        '5V +/-0.25V',               'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7161, 7016, 6103, TRUE,  '165',  'Current Draw',          '<=200mA',                   'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7162, 7016, 6105, TRUE,  'v2.1', 'Firmware Version',      'Record installed version',  NULL, NULL,  NULL,  NULL,  'filled',0, '2020-01-01T00:00:00'),
+        (7163, 7016, 6106, TRUE,  'Pass', 'Visual Inspection',     'No scratches or dents',      NULL, NULL,  NULL,  NULL,  'filled',0, '2020-01-01T00:00:00'),
+        (7164, 7016, 6107, TRUE,  '7015', 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, NULL, NULL, 'comment', 0, '2020-01-01T00:00:00'),
+        (7165, 7016, 6108, TRUE,  '5.25', 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', 0, '2020-01-01T00:00:00'),
+        (7166, 7016, 6115, TRUE,  '0.87', 'Power Draw',            '<=1.00W',                   'W',  NULL,  NULL,  '1.00', 'range', 0, '2020-01-01T00:00:00');
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).
     -- 7003 was locked twice (result 6104 corrected 300→310 in between) so the record detail
