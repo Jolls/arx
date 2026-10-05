@@ -41,7 +41,7 @@ arx_go: package main, port 4568, go-chi router, fyne.io/systray, templates `temp
 
 ## Config load order (later wins)
 1. `.env` (godotenv, from `../.env` then `.env`) 2. env vars 3. `config/local.json` (always wins; gitignored) 4. per-user secrets store.
-local.json resolves relative to Arx.exe's cwd — run from arx_go/ or use start.ps1. First run: Settings writes it. PO defaults (contact/receiver) saved there via Settings UI. Attachment category options in the `attachment_category` table and part categories in `part_category`, edited via Settings UI.
+local.json resolves relative to Arx.exe's cwd — run from arx_go/. First run: Settings writes it. PO defaults (contact/receiver) saved there via Settings UI. Attachment category options in the `attachment_category` table and part categories in `part_category`, edited via Settings UI.
 Secrets (`db_password`, `test_db_password`, `session_secret`) do NOT live in `config/local.json` — they're per-user in `%APPDATA%\Arx\local.json` (`~/.config/Arx/local.json` on Linux, via `os.UserConfigDir()`), so a shared/OneDrive exe doesn't leak them across users (#732). `internal/config/secrets.go`: `LoadSecrets`/`SaveSecrets`/`SecretsConfig`. First run after upgrade migrates any secrets out of `config/local.json` into the per-user file and scrubs them from the shared file. DB password never in `.env`; first-run prompt via /settings saves it to the per-user store.
 
 ## Test mode
