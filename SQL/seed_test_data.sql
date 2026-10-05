@@ -46,7 +46,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM part)
      AND NOT EXISTS (SELECT 1 FROM part
                      WHERE id = 3005 AND part_number = 'ASM-1001'
-                       AND description = 'Skyrunner Standard Drone') THEN
+                       AND description = 'Skyrunner Standard Drone (Serialized)') THEN
     RAISE EXCEPTION 'part has rows but not the seed sentinel (id 3005 / ASM-1001); refusing to wipe a non-seed database';
   END IF;
 END $$;
@@ -254,9 +254,9 @@ END $$;
         (3002, 'BUY-1001', 'BUY', 'A', 'M3x8 SHCS',                  'A', TRUE, 1,  0.05,   1002, NULL, NULL),
         (3003, 'BUY-1002', 'BUY', 'A', 'O-Ring 2-014',               'A', TRUE, 1,  0.12,   1001, NULL, NULL),
         (3004, 'MFG-1001', 'MFG', 'B', 'Drone Frame Housing',        'A', TRUE, 1,  0,      NULL, NULL, NULL),
-        (3005, 'ASM-1001', 'ASM', 'A', 'Skyrunner Standard Drone',   'A', TRUE, 1,  0,      1002, 4.30, CURRENT_TIMESTAMP),
+        (3005, 'ASM-1001', 'ASM', 'A', 'Skyrunner Standard Drone (Serialized)',   'A', TRUE, 1,  0,      1002, 4.30, CURRENT_TIMESTAMP),
         (3006, 'OPS-1001', 'OPS', '',  'Assembler Labor',            'A', TRUE, 1,  35.00,  NULL, NULL, NULL),
-        (3007, 'RAW-1002', 'RAW', 'A', 'Stainless Steel Bar Stock',  'A', TRUE, 6,  4.10,   1001, NULL, NULL),
+        (3007, 'RAW-1002', 'RAW', 'A', 'Stainless Steel Bar Stock (Lot-Controlled)',  'A', TRUE, 6,  4.10,   1001, NULL, NULL),
         (3008, 'BUY-1003', 'BUY', '-', 'Prototype Bracket',          'U', TRUE, 1,  0,      NULL, NULL, NULL), -- Under Review
         (3009, 'BUY-1004', 'BUY', 'A', 'Obsolete Retaining Clip',    'D', FALSE, 1,  0.08,   NULL, NULL, NULL), -- Deprecated + inactive
         -- FORM-category parts: FormsList and the new-form part picker filter on category='FORM',
@@ -267,13 +267,13 @@ END $$;
         -- toggle and the "rollup" cost-source badge, neither of which any other seeded
         -- assembly-of-assemblies line reaches. last_rollup_cost matches the sum of its own
         -- BOM lines below (2*2.50 + 1*4.10 = 9.10) as if the rollup engine had just run.
-        (3012, 'ASM-1002', 'ASM', 'A', 'Flight Controller Sub-Assembly', 'A', TRUE, 1,  0,      NULL, 9.10,  CURRENT_TIMESTAMP),
+        (3012, 'ASM-1002', 'ASM', 'A', 'Flight Controller Sub-Assembly (Lot-Controlled)', 'A', TRUE, 1,  0,      NULL, 9.10,  CURRENT_TIMESTAMP),
         -- Top-level lot-tracked assembly (#737): consumes sub-assembly 3012 AND raw 3007
         -- directly, so its build writes a two-parent genealogy edge into a two-level-deep
         -- chain (8301→8302→8306, plus 8303→8306) — a PRE-state tree for the future
         -- traceability view (epic #736 slice 9) and completes the
         -- receipt→incoming-inspection→build→build→final-test flow (§0 of the plan).
-        (3013, 'ASM-1003', 'ASM', 'A', 'Skyrunner Deluxe Drone',     'A', TRUE, 1,  0,      NULL, NULL, NULL);
+        (3013, 'ASM-1003', 'ASM', 'A', 'Skyrunner Deluxe Drone (Lot+Serial)',     'A', TRUE, 1,  0,      NULL, NULL, NULL);
 
     -- Fully populated part so the detail card and edit round-trip show detail/notes/user fields.
     UPDATE part SET
