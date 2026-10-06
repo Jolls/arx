@@ -637,6 +637,18 @@ func (h *Handler) renderPrint(w http.ResponseWriter, page string, data any) {
 	}
 }
 
+// renderPopout executes one named fragment from templates/shared/popouts.html (no layout),
+// for the hover-popout component (#365).
+func (h *Handler) renderPopout(w http.ResponseWriter, name string, data any) {
+	tmpl := h.tmpl(w, "popouts")
+	if tmpl == nil {
+		return
+	}
+	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
+		serverError(w, "template execute error", err)
+	}
+}
+
 // pmTabFavicons maps each nav tab to its favicon, reusing the same icon
 // shown in the nav bar so the browser tab matches the active section.
 var pmTabFavicons = map[string]string{

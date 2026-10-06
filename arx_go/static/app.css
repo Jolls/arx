@@ -412,6 +412,23 @@ input.formula-overridden { background-color: var(--bs-warning-bg-subtle) !import
 .pn-thumb-tip.show { display: block; }
 .pn-thumb-tip img { display: block; max-width: 250px; max-height: 250px; }
 
+/* Generic hover popout (#365): any element with data-popout-url. One shared
+   position:fixed element, filled with a server-rendered fragment. Unlike the image
+   previews it takes pointer events so links inside are clickable. */
+.hover-popout {
+    display: none;
+    position: fixed;
+    z-index: 1080;
+    max-width: min(640px, 90vw);
+    padding: 8px 10px;
+    font-size: 0.875rem;
+    pointer-events: auto;
+}
+.hover-popout.show { display: block; }
+.hover-popout .popout-title { font-weight: 600; margin-bottom: 4px; }
+.hover-popout .popout-list { list-style: none; margin: 0; padding: 0; }
+.hover-popout .popout-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* Photo attachment thumbnail grid (part detail page) */
 .photo-thumb-grid .photo-thumb-img {
     width: 100%;

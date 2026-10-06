@@ -31,7 +31,7 @@
                 <tr data-path="{{.ID}}">
                     <td>
                         {{if index $.HasSources .ID}}<button type="button" class="bom-expand-toggle" data-lot-id="{{.ID}}" aria-expanded="false" aria-label="Show source lots" onclick="toggleLotRow(this)">&#9656;</button>{{end}}
-                        <a href="/part/{{$.Part.ID}}/lots/{{.ID}}" class="part-number-link">{{.LotNumber}}</a>
+                        <a href="/part/{{$.Part.ID}}/lots/{{.ID}}" class="part-number-link" data-popout-url="/popout/part/{{$.Part.ID}}/lots/{{.ID}}/consumers">{{.LotNumber}}</a>
                     </td>
                     <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{if .LotDescription}}{{.LotDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
