@@ -154,6 +154,36 @@ func (h *Handler) APILotSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, nodes)
 }
 
+// PopoutLotConsumers renders the "Consumed into" hover-popout fragment for a lot.
+func (h *Handler) PopoutLotConsumers(w http.ResponseWriter, r *http.Request) {
+	lotID, err := strconv.Atoi(r.PathValue("lotID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	nodes, err := h.inventory().Consumers(r.Context(), lotID)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	h.renderPopout(w, "popout_lot_consumers", nodes)
+}
+
+// PopoutPartWhereUsed renders the "Used in" hover-popout fragment for a part.
+func (h *Handler) PopoutPartWhereUsed(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	used, err := h.parts().ListWhereUsed(r.Context(), id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	h.renderPopout(w, "popout_part_where_used", used)
+}
+
 // APIBrowseFolder opens a native Windows folder-picker dialog and returns
 // the selected path as JSON. Used by the Settings page browse buttons.
 func (h *Handler) APIBrowseFolder(w http.ResponseWriter, r *http.Request) {

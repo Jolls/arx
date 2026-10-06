@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.70] - 2026-10-06
+### Added
+- Reusable hover popout: any element with `data-popout-url` shows a lazily loaded, server-rendered fragment (`templates/shared/popouts.html`) with clickable links; first uses are a "Consumed into" popout on lot numbers in the part Lots list and a "Used in" (where-used) popout on BOM part numbers, including expanded sub-rows ([#365](https://github.com/Jolls/arx/issues/365))
+
 ## [0.8.69] - 2026-10-05
 ### Added
 - Cross-part All Units (`/units`) and All Builds (`/builds`) list pages, linked from All Lots ([#362](https://github.com/Jolls/arx/issues/362))

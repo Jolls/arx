@@ -1025,7 +1025,7 @@ function buildBOMSubRow(item, num) {
         : ''
     tr.innerHTML =
         '<td data-col="col-item" style="--bom-depth:' + depth + '">' + toggle + num + '</td>' +
-        '<td data-col="col-pn"><a href="/part/' + item.ComponentPartID + '" class="part-number-link">' + escHtml(item.PartNumber) + '</a></td>' +
+        '<td data-col="col-pn"><a href="/part/' + item.ComponentPartID + '" class="part-number-link" data-popout-url="/popout/part/' + item.ComponentPartID + '/where-used">' + escHtml(item.PartNumber) + '</a></td>' +
         '<td data-col="col-title">' + escHtml(item.Description) + '</td>' +
         '<td data-col="col-rev">' + escHtml(item.Revision) + '</td>' +
         '<td data-col="col-cat">' + escHtml(item.Category) + '</td>' +
@@ -1137,8 +1137,9 @@ function buildLotSubRow(node, parentPath) {
         ? ' <span class="badge bg-info text-dark" title="Serialized unit">unit</span>'
         : (node.IsVendorLot ? ' <span class="badge bg-warning text-dark" title="Purchased raw/vendor lot">vendor</span>' : '')
     var notes = node.Notes ? escHtml(node.Notes) : ''
+    var popout = isUnit ? '' : ' data-popout-url="/popout/part/' + node.PartID + '/lots/' + node.ID + '/consumers"'
     tr.innerHTML =
-        '<td style="--bom-depth:' + depth + '">' + toggle + '<a href="' + href + '" class="part-number-link">' + escHtml(node.Number) + '</a>' + badge + '</td>' +
+        '<td style="--bom-depth:' + depth + '">' + toggle + '<a href="' + href + '" class="part-number-link"' + popout + '>' + escHtml(node.Number) + '</a>' + badge + '</td>' +
         '<td>' + (node.VendorLot ? escHtml(node.VendorLot) : '<span class="text-muted">&mdash;</span>') + '</td>' +
         '<td><a href="/part/' + node.PartID + '">' + escHtml(node.PartNumber) + '</a>' +
             (node.PartDescription ? ' &mdash; ' + escHtml(node.PartDescription) : '') +
@@ -1243,6 +1244,79 @@ function collapseAllLots() {
         if (!wrap) return
         if (e.relatedTarget && wrap.contains(e.relatedTarget)) return
         if (tip) tip.classList.remove('show')
+    })
+})()
+
+// Generic hover popout (#365). Put data-popout-url="<endpoint>" on any element; the
+// endpoint returns an HTML fragment (a template in templates/shared/popouts.html),
+// fetched on first hover and cached per URL. One shared position:fixed element on
+// <body> (escapes table clipping), flipped above/below to fit. Stays open while the
+// pointer is over the trigger or the popout so links inside are clickable; also opens
+// on keyboard focus.
+;(function () {
+    var SHOW_DELAY = 250, HIDE_DELAY = 150
+    var pop, current, showTimer, hideTimer
+    var cache = {}
+    function ensurePop() {
+        if (pop) return
+        pop = document.createElement('div')
+        pop.className = 'hover-popout hover-preview-box'
+        pop.addEventListener('mouseenter', function () { clearTimeout(hideTimer) })
+        pop.addEventListener('mouseleave', scheduleHide)
+        document.body.appendChild(pop)
+    }
+    function place(el) {
+        var r = el.getBoundingClientRect()
+        var h = pop.offsetHeight
+        var above = r.top > h + 16
+        pop.style.top = (above ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px'
+        pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)) + 'px'
+    }
+    function show(el) {
+        ensurePop()
+        current = el
+        var url = el.dataset.popoutUrl
+        function render(html) {
+            if (current !== el) return
+            pop.innerHTML = html
+            pop.classList.add('show')
+            place(el)
+        }
+        if (cache[url] !== undefined) { render(cache[url]); return }
+        fetch(url)
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text() })
+            .then(function (html) { cache[url] = html; render(html) })
+            .catch(function (err) { console.error('Failed to load popout:', err) })
+    }
+    function hide() {
+        current = null
+        if (pop) pop.classList.remove('show')
+    }
+    function scheduleHide() {
+        clearTimeout(showTimer)
+        clearTimeout(hideTimer)
+        hideTimer = setTimeout(hide, HIDE_DELAY)
+    }
+    function trigger(e) { return e.target.closest ? e.target.closest('[data-popout-url]') : null }
+    document.addEventListener('mouseover', function (e) {
+        var t = trigger(e)
+        if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return
+        clearTimeout(hideTimer)
+        clearTimeout(showTimer)
+        if (t === current) return
+        showTimer = setTimeout(function () { show(t) }, SHOW_DELAY)
+    })
+    document.addEventListener('mouseout', function (e) {
+        var t = trigger(e)
+        if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return
+        scheduleHide()
+    })
+    document.addEventListener('focusin', function (e) {
+        var t = trigger(e)
+        if (t) show(t)
+    })
+    document.addEventListener('focusout', function (e) {
+        if (trigger(e)) scheduleHide()
     })
 })()
 

@@ -1,0 +1,38 @@
+{{/* Hover-popout fragments (#365). Each is the body of a popout loaded lazily by the
+   shared popout JS (static/shared/app.js) from a trigger's data-popout-url. Rendered
+   alone via renderPopout, so they must not depend on layout/partials. To add one:
+   define a template here, add an endpoint that calls renderPopout, and put
+   data-popout-url on the trigger element. Links inside are clickable. */}}
+
+{{define "popout_lot_consumers"}}
+<div class="popout-title">Consumed into</div>
+{{if .}}
+<ul class="popout-list">
+    {{range .}}
+    <li>
+        {{if .IsUnit}}<a href="/part/{{.PartID}}/units/{{.ID}}">{{.Number}}</a> <span class="badge bg-info text-dark">unit</span>
+        {{else}}<a href="/part/{{.PartID}}/lots/{{.ID}}">{{.Number}}</a>{{end}}
+        <span class="text-muted">{{.PartNumber}}{{if .PartDescription}} &mdash; {{.PartDescription}}{{end}} (qty {{.Qty}})</span>
+    </li>
+    {{end}}
+</ul>
+{{else}}
+<div class="text-muted">Not consumed into anything yet.</div>
+{{end}}
+{{end}}
+
+{{define "popout_part_where_used"}}
+<div class="popout-title">Used in</div>
+{{if .}}
+<ul class="popout-list">
+    {{range .}}
+    <li>
+        <a href="/part/{{.ParentPartID}}">{{.PartNumber}}</a>
+        <span class="text-muted">{{if .Description}}{{.Description}} {{end}}(qty {{printf "%.5g" .Qty}})</span>
+    </li>
+    {{end}}
+</ul>
+{{else}}
+<div class="text-muted">Not used in any assemblies.</div>
+{{end}}
+{{end}}

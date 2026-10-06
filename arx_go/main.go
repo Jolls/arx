@@ -311,6 +311,8 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodPost, "/part/{id}/lots/{lotID}", withAuth, h.LotUpdate)
 	b.handle(http.MethodGet, "/api/part/{id}/lots/{lotID}/records/rows", withAuth, h.LotRecordsRows)
 	b.handle(http.MethodGet, "/api/part/{id}/lots/{lotID}/sources", withAuth, h.APILotSources)
+	b.handle(http.MethodGet, "/popout/part/{id}/where-used", withAuth, h.PopoutPartWhereUsed)
+	b.handle(http.MethodGet, "/popout/part/{id}/lots/{lotID}/consumers", withAuth, h.PopoutLotConsumers)
 	b.handle(http.MethodGet, "/part/{id}/units", withAuth, h.PartUnits)
 	b.handle(http.MethodGet, "/part/{id}/units/new", withAuth, h.UnitNew) // before {unitID}
 	b.handle(http.MethodPost, "/part/{id}/units", withAuth, h.UnitCreate)

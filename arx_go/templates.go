@@ -17,7 +17,8 @@ var corePrintPages = []string{"parts/part_bom_paste_preview.html", "pos/po_print
 
 // parseTemplates parses every page once. Keys: "layout:<dir>/<page>" (render),
 // "records:<page>" (renderRecords), "print:<dir>/<page>" (renderPrint),
-// "recordsprint:<page>" (renderPrintRecords), "login" (renderLogin).
+// "recordsprint:<page>" (renderPrintRecords), "login" (renderLogin),
+// "popouts" (renderPopout fragments).
 func parseTemplates(fsys fs.FS) (map[string]*template.Template, error) {
 	out := map[string]*template.Template{}
 	core, records := coreTemplateFuncs(), recordsTemplateFuncs()
@@ -46,6 +47,11 @@ func parseTemplates(fsys fs.FS) (map[string]*template.Template, error) {
 			rel := strings.TrimPrefix(page, "templates/")
 			switch rel {
 			case "shared/layout.html", "shared/partials.html":
+				continue
+			case "shared/popouts.html":
+				if err := add("popouts", core, page); err != nil {
+					return nil, err
+				}
 				continue
 			case "shared/login.html":
 				if err := add("login", nil, page); err != nil {

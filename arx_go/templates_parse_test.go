@@ -22,7 +22,7 @@ func TestParseTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"login", "recordsprint:record_print.html", "records:yield.html", "layout:shared/error.html", "layout:shared/not_found.html", "layout:shared/local_dir.html"}
+	want := []string{"login", "recordsprint:record_print.html", "records:yield.html", "layout:shared/error.html", "layout:shared/not_found.html", "layout:shared/local_dir.html", "popouts"}
 	for _, p := range corePrintPages {
 		want = append(want, "print:"+p)
 	}

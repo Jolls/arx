@@ -54,7 +54,7 @@
                         {{if .ChildHasBOM}}<button type="button" class="bom-expand-toggle" data-part-id="{{.ComponentPartID}}" data-item="{{.LineNumber}}" aria-expanded="false" onclick="toggleBOMRow(this)">&#9656;</button>{{end}}
                         {{.LineNumber}}
                     </td>
-                    <td data-col="col-pn"><a href="/part/{{.ComponentPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
+                    <td data-col="col-pn"><a href="/part/{{.ComponentPartID}}" class="part-number-link" data-popout-url="/popout/part/{{.ComponentPartID}}/where-used">{{.PartNumber}}</a></td>
                     <td data-col="col-title">{{.Description}}</td>
                     <td data-col="col-rev">{{.Revision}}</td>
                     <td data-col="col-cat">{{.Category}}</td>
