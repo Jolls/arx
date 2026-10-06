@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.69] - 2026-10-05
+### Added
+- Cross-part All Units (`/units`) and All Builds (`/builds`) list pages, linked from All Lots ([#362](https://github.com/Jolls/arx/issues/362))
+
 ## [0.8.68] - 2026-10-05
 ### Added
 - Part Lots list rows now have an expand arrow that lazily shows a lot's source lots (recursively down to raw vendor lots), plus Expand All / Collapse All and sortable headers

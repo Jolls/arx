@@ -447,6 +447,121 @@ func (q *Queries) ListActiveLots(ctx context.Context, partID int) ([]ListActiveL
 	return items, nil
 }
 
+const listAllBuilds = `-- name: ListAllBuilds :many
+SELECT b.id, b.part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       b.qty, b.build_date, b.output_lot_id, COALESCE(l.lot_number, '') AS lot_number, COALESCE(b.note, '') AS note
+FROM build b
+JOIN part p ON p.id = b.part_id
+LEFT JOIN lot l ON l.id = b.output_lot_id
+ORDER BY b.build_date DESC, b.id DESC
+`
+
+type ListAllBuildsRow struct {
+	ID              int
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	Qty             decimal.Decimal
+	BuildDate       time.Time
+	OutputLotID     *int
+	LotNumber       string
+	Note            string
+}
+
+// Cross-part list (#362), newest first; output lot is NULL for builds of non-lot-tracked parts.
+func (q *Queries) ListAllBuilds(ctx context.Context) ([]ListAllBuildsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllBuilds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllBuildsRow
+	for rows.Next() {
+		var i ListAllBuildsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartID,
+			&i.PartNumber,
+			&i.PartDescription,
+			&i.Qty,
+			&i.BuildDate,
+			&i.OutputLotID,
+			&i.LotNumber,
+			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllUnits = `-- name: ListAllUnits :many
+SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
+       COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
+       u.build_id, u.is_active, u.created_at, u.source
+FROM unit u
+JOIN part p ON p.id = u.part_id
+LEFT JOIN lot l ON l.id = u.lot_id
+ORDER BY u.created_at DESC, u.id DESC
+`
+
+type ListAllUnitsRow struct {
+	ID              int
+	SerialNumber    string
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	LotID           *int
+	LotNumber       string
+	BuildID         *int
+	IsActive        bool
+	CreatedAt       time.Time
+	Source          string
+}
+
+// Cross-part list (#362), newest first.
+func (q *Queries) ListAllUnits(ctx context.Context) ([]ListAllUnitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllUnits)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllUnitsRow
+	for rows.Next() {
+		var i ListAllUnitsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SerialNumber,
+			&i.PartID,
+			&i.PartNumber,
+			&i.PartDescription,
+			&i.LotID,
+			&i.LotNumber,
+			&i.BuildID,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.Source,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBuildComponents = `-- name: ListBuildComponents :many
 SELECT b.component_part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS description,
        COALESCE(p.category, '') AS category, b.qty, p.stock_on_hand, p.tracking_mode
