@@ -1,0 +1,52 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
+        <li class="breadcrumb-item active">All Units</li>
+    </ol>
+</nav>
+<div class="content">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <p class="text-muted small mb-0">
+            Every serialized unit across all parts, newest first. Open a unit to trace its
+            as-built genealogy.
+        </p>
+        <div class="d-flex gap-2 ms-3">
+            <a href="/lots" class="btn btn-sm btn-outline-secondary">All Lots</a>
+            <a href="/builds" class="btn btn-sm btn-outline-secondary">All Builds</a>
+        </div>
+    </div>
+
+    {{if .Units}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm">
+            <thead>
+                <tr class="table-dark">
+                    <th class="sortable" onclick="sortTable(this)">Serial #</th>
+                    <th class="sortable" onclick="sortTable(this)">Part Number</th>
+                    <th class="sortable" onclick="sortTable(this)">Description</th>
+                    <th class="sortable" onclick="sortTable(this)">Lot</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:120px;">Created</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:80px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Units}}
+                <tr>
+                    <td><a href="/part/{{.PartID}}/units/{{.ID}}">{{.SerialNumber}}</a></td>
+                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
+                    <td>{{if .PartDescription}}{{.PartDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{if .LotID}}<a href="/part/{{.PartID}}/lots/{{.LotIDVal}}">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{(localTime $.UserLoc .CreatedAt).Format "2006-01-02"}}</td>
+                    <td>{{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Scrapped</span>{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Units}} unit{{if ne (len .Units) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No units yet.</p>
+    {{end}}
+</div>
+{{end}}

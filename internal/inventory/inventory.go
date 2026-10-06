@@ -434,6 +434,19 @@ func (s *Service) ListRecentPartUnits(ctx context.Context, partID, n int) ([]Uni
 	return out, nil
 }
 
+// ListAllUnits returns every unit of every part, newest first.
+func (s *Service) ListAllUnits(ctx context.Context) ([]UnitRow, error) {
+	rows, err := s.q.ListAllUnits(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UnitRow, len(rows))
+	for i, r := range rows {
+		out[i] = UnitRow(r)
+	}
+	return out, nil
+}
+
 // GetUnit loads one unit; found is false (nil error) when it does not exist.
 func (s *Service) GetUnit(ctx context.Context, id int) (unit UnitRow, found bool, err error) {
 	r, err := s.q.GetUnit(ctx, id)
@@ -549,6 +562,42 @@ func (s *Service) ListBuildHistory(ctx context.Context, partID int) ([]BuildHist
 	out := make([]BuildHistoryRow, len(rows))
 	for i, r := range rows {
 		out[i] = BuildHistoryRow{r.ID, r.Qty, r.BuildDate, r.Username, r.Note, r.TestedCount}
+	}
+	return out, nil
+}
+
+// BuildListRow is one build joined to its output part and (nullable) output lot, for the
+// cross-part builds list; LotNumber is "" when OutputLotID is nil.
+type BuildListRow struct {
+	ID              int
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	Qty             decimal.Decimal
+	Date            time.Time
+	OutputLotID     *int
+	LotNumber       string
+	Note            string
+}
+
+// OutputLotIDVal returns the dereferenced lot id (0 when nil) for template links, which gate
+// on {{if .OutputLotID}} first.
+func (b BuildListRow) OutputLotIDVal() int {
+	if b.OutputLotID != nil {
+		return *b.OutputLotID
+	}
+	return 0
+}
+
+// ListAllBuilds returns every build of every part, newest first.
+func (s *Service) ListAllBuilds(ctx context.Context) ([]BuildListRow, error) {
+	rows, err := s.q.ListAllBuilds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BuildListRow, len(rows))
+	for i, r := range rows {
+		out[i] = BuildListRow{r.ID, r.PartID, r.PartNumber, r.PartDescription, r.Qty, r.BuildDate, r.OutputLotID, r.LotNumber, r.Note}
 	}
 	return out, nil
 }

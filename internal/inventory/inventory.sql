@@ -240,3 +240,22 @@ SELECT id FROM form_record WHERE id = sqlc.arg(id) FOR UPDATE;
 -- #191: one conditional write, so a lock landing mid-build is honored.
 UPDATE form_record SET lot_id = sqlc.narg(lot_id), build_id = sqlc.arg(build_id), updated_at = CURRENT_TIMESTAMP
 WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id) AND is_locked = FALSE;
+
+-- name: ListAllUnits :many
+-- Cross-part list (#362), newest first.
+SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
+       COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
+       u.build_id, u.is_active, u.created_at, u.source
+FROM unit u
+JOIN part p ON p.id = u.part_id
+LEFT JOIN lot l ON l.id = u.lot_id
+ORDER BY u.created_at DESC, u.id DESC;
+
+-- name: ListAllBuilds :many
+-- Cross-part list (#362), newest first; output lot is NULL for builds of non-lot-tracked parts.
+SELECT b.id, b.part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       b.qty, b.build_date, b.output_lot_id, COALESCE(l.lot_number, '') AS lot_number, COALESCE(b.note, '') AS note
+FROM build b
+JOIN part p ON p.id = b.part_id
+LEFT JOIN lot l ON l.id = b.output_lot_id
+ORDER BY b.build_date DESC, b.id DESC;

@@ -1,0 +1,54 @@
+{{define "content"}}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/parts">Parts</a></li>
+        <li class="breadcrumb-item active">All Builds</li>
+    </ol>
+</nav>
+<div class="content">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <p class="text-muted small mb-0">
+            Every build across all parts, newest first. A build links to its output lot's
+            trace, or to the part's Build tab when it produced no lot.
+        </p>
+        <div class="d-flex gap-2 ms-3">
+            <a href="/lots" class="btn btn-sm btn-outline-secondary">All Lots</a>
+            <a href="/units" class="btn btn-sm btn-outline-secondary">All Units</a>
+        </div>
+    </div>
+
+    {{if .Builds}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm">
+            <thead>
+                <tr class="table-dark">
+                    <th class="sortable" onclick="sortTable(this)" style="width:100px;">Build</th>
+                    <th class="sortable" onclick="sortTable(this)">Part Number</th>
+                    <th class="sortable" onclick="sortTable(this)">Description</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:80px;">Qty</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:120px;">Build Date</th>
+                    <th class="sortable" onclick="sortTable(this)">Output Lot</th>
+                    <th class="sortable" onclick="sortTable(this)">Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Builds}}
+                <tr>
+                    <td>{{if .OutputLotID}}<a href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}">#{{.ID}}</a>{{else}}<a href="/part/{{.PartID}}/build">#{{.ID}}</a>{{end}}</td>
+                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
+                    <td>{{if .PartDescription}}{{.PartDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{.Qty}}</td>
+                    <td>{{.Date.Format "2006-01-02"}}</td>
+                    <td>{{if .OutputLotID}}<a href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{template "note_cell" .Note}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="table-footer-note">{{len .Builds}} build{{if ne (len .Builds) 1}}s{{end}}</p>
+    {{else}}
+    <p class="no-results">No builds yet.</p>
+    {{end}}
+</div>
+{{end}}

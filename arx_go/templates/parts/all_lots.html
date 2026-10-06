@@ -6,10 +6,16 @@
     </ol>
 </nav>
 <div class="content">
-    <p class="text-muted small mb-3">
-        Every lot across all lot-controlled parts, newest first. Open a lot to trace its
-        genealogy back to raw vendor lots and forward to the assemblies it fed.
-    </p>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <p class="text-muted small mb-0">
+            Every lot across all lot-controlled parts, newest first. Open a lot to trace its
+            genealogy back to raw vendor lots and forward to the assemblies it fed.
+        </p>
+        <div class="d-flex gap-2 ms-3">
+            <a href="/units" class="btn btn-sm btn-outline-secondary">All Units</a>
+            <a href="/builds" class="btn btn-sm btn-outline-secondary">All Builds</a>
+        </div>
+    </div>
 
     {{if .Lots}}
     <div class="table-wrapper">

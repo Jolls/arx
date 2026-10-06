@@ -4560,6 +4560,32 @@ func TestIntegration_AllLots(t *testing.T) {
 	}
 }
 
+// Read-only — no cleanup. Covers AllUnits and AllBuilds (#362).
+func TestIntegration_AllUnitsAndBuilds(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	for _, tc := range []struct {
+		path    string
+		handler http.HandlerFunc
+		want    []string
+	}{
+		{"/units", h.AllUnits, []string{"SN-3013-001", "SN-3007-A1", "SN-3005-MANUAL-1"}},
+		{"/builds", h.AllBuilds, []string{"#8201", "#8202", "#8203", "ASM-1003"}},
+	} {
+		rec := httptest.NewRecorder()
+		tc.handler(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d, want 200", tc.path, rec.Code)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(rec.Body.String(), want) {
+				t.Errorf("%s: body missing %q", tc.path, want)
+			}
+		}
+	}
+}
+
 // Covers PartStockAdjust, reusing the lotBelongsToPart guard already proven above —
 // only asserts the handler wires it correctly, not the guard's own true/false logic.
 func TestIntegration_PartStockAdjust(t *testing.T) {

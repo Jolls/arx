@@ -295,3 +295,29 @@ func (h *Handler) AllLots(w http.ResponseWriter, r *http.Request) {
 		"Lots": lots, "ActiveTab": "parts", "TestMode": h.cfg().TestMode,
 	})
 }
+
+// ── All units / all builds (#362) ────────────────────────────────────────────
+
+// AllUnits — GET /units. Cross-part list of every serialized unit, newest first.
+func (h *Handler) AllUnits(w http.ResponseWriter, r *http.Request) {
+	units, err := h.inventory().ListAllUnits(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error retrieving units: "+err.Error())
+		return
+	}
+	h.render(w, r, "parts/all_units.html", map[string]any{
+		"Units": units, "ActiveTab": "parts", "TestMode": h.cfg().TestMode,
+	})
+}
+
+// AllBuilds — GET /builds. Cross-part list of every build, newest first.
+func (h *Handler) AllBuilds(w http.ResponseWriter, r *http.Request) {
+	builds, err := h.inventory().ListAllBuilds(r.Context())
+	if err != nil {
+		h.renderError(w, r, "Error retrieving builds: "+err.Error())
+		return
+	}
+	h.render(w, r, "parts/all_builds.html", map[string]any{
+		"Builds": builds, "ActiveTab": "parts", "TestMode": h.cfg().TestMode,
+	})
+}

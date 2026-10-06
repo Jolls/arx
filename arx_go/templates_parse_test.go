@@ -11,6 +11,8 @@ import (
 
 	"arx/arx_go/models"
 	"arx/internal/contacts"
+	"arx/internal/inventory"
+	"github.com/shopspring/decimal"
 )
 
 // TestParseTemplates checks parseTemplates succeeds and yields a template for
@@ -305,5 +307,47 @@ func TestAllLotsTemplateRenders_UserZone(t *testing.T) {
 	out := allLotsCreatedCell(t, la)
 	if !strings.Contains(out, "<td>2026-01-01</td>") || strings.Contains(out, "2026-01-02") {
 		t.Errorf("all_lots.html in America/Los_Angeles: want created date 2026-01-01, not 2026-01-02")
+	}
+}
+
+// renderPartsList renders a parts/<page> list template with data under the shared layout.
+func renderPartsList(t *testing.T, page string, data map[string]any) string {
+	t.Helper()
+	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS,
+		"templates/shared/layout.html",
+		"templates/shared/partials.html",
+		"templates/parts/"+page,
+	)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	data["UserLoc"] = time.UTC
+	data["ActiveTab"] = "parts"
+	return renderToString(t, tmpl, "layout", coreLayoutFakeData(data))
+}
+
+func TestAllUnitsTemplateRenders(t *testing.T) {
+	lot := 7
+	out := renderPartsList(t, "all_units.html", map[string]any{"Units": []UnitRow{
+		{ID: 1, PartID: 2, SerialNumber: "SN-362", PartNumber: "ASM-1", LotID: &lot, LotNumber: "L-7", IsActive: true},
+		{ID: 3, PartID: 2, SerialNumber: "SN-NOLOT", PartNumber: "ASM-1"},
+	}})
+	for _, want := range []string{`href="/part/2/units/1"`, `href="/part/2/lots/7"`, "SN-NOLOT", "Scrapped", `href="/builds"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("all_units.html: missing %q", want)
+		}
+	}
+}
+
+func TestAllBuildsTemplateRenders(t *testing.T) {
+	lot := 9
+	out := renderPartsList(t, "all_builds.html", map[string]any{"Builds": []inventory.BuildListRow{
+		{ID: 5, PartID: 2, PartNumber: "ASM-1", Qty: decimal.NewFromInt(3), Date: time.Date(2026, 5, 25, 0, 0, 0, 0, time.UTC), OutputLotID: &lot, LotNumber: "L-9"},
+		{ID: 6, PartID: 2, PartNumber: "ASM-1", Qty: decimal.NewFromInt(1), Date: time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)},
+	}})
+	for _, want := range []string{`href="/part/2/lots/9">#5<`, `href="/part/2/build">#6<`, "2026-05-25", `href="/units"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("all_builds.html: missing %q", want)
+		}
 	}
 }
