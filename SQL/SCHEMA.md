@@ -63,9 +63,12 @@ becomes a generation or compile error instead of a runtime one. Converted so far
 ## Reference test data
 
 `SQL/seed_test_data.sql` wipes all row data in `ArxDev` and loads a small, fixed, synthetic
-dataset (issue #545) — not a prod clone. Every reference record has a pinned ID so manual
-verification steps, `/verify`, and integration tests can refer to them directly instead of
-re-discovering suitable data each session. Re-run the script any time to reset ArxDev to this
+dataset (issue #545) — not a prod clone. It serves three audiences: the integration suite, a
+human clicking around to sanity-check a change, and future demos — so seed rows should stay
+realistic and self-explanatory (e.g. description suffixes like "(Lot-Controlled)" on parts
+whose tracking_mode isn't obvious from the name) rather than terse placeholders. Every reference
+record has a pinned ID so manual verification steps, `/verify`, and integration tests can refer
+to them directly instead of re-discovering suitable data each session. Re-run the script any time to reset ArxDev to this
 known state. For a disposable copy, `docker compose -f SQL/compose.yml up -d --wait db`
 starts a local seeded Postgres (`postgres://postgres:postgres@127.0.0.1:55432/ArxDev?sslmode=require`, data on
 tmpfs; `restart db` re-seeds, `down` removes it). Use it for the live integration suite and manual testing;

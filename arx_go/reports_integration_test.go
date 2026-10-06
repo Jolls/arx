@@ -18,7 +18,7 @@ import (
 
 // Characterization tests for the reports/utilities/misc handlers (#246, #248, #225): gaps the
 // older integration tests left, written against the pre-sqlc code. Read-only against the seed
-// rows (POs 5002–5009, forms 6001, records 7001–7014); everything written is removed on cleanup.
+// rows (POs 5002–5009, forms 6001, records 7001–7016); everything written is removed on cleanup.
 
 // repInsert runs an INSERT … RETURNING id and registers the cleanup statements (each takes the
 // new id as $1) with t.Cleanup, so children registered later are removed before their parents.
@@ -285,9 +285,9 @@ func TestIntegration_DashboardFailureModesAndYield(t *testing.T) {
 			yf = &forms[i]
 		}
 	}
-	// Seed: 13 active records on form 6001 (7004 is soft-deleted); 7005 and 7007 have a failing row.
-	if yf == nil || yf.PartNumber != "FORM-1001" || yf.Total != 13 || yf.Passed != 11 {
-		t.Errorf("form 6001 yield = %+v, want FORM-1001 13 total / 11 passed", yf)
+	// Seed: 14 active records on form 6001 (7004 is soft-deleted); 7005, 7007 and 7016 have a failing row.
+	if yf == nil || yf.PartNumber != "FORM-1001" || yf.Total != 14 || yf.Passed != 11 {
+		t.Errorf("form 6001 yield = %+v, want FORM-1001 14 total / 11 passed", yf)
 	}
 }
 

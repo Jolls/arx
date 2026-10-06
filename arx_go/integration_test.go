@@ -39,7 +39,7 @@ import (
 const (
 	arxDevSentinelPartID          = 3005
 	arxDevSentinelPartNum         = "ASM-1001"
-	arxDevSentinelPartDescription = "Skyrunner Standard Drone"
+	arxDevSentinelPartDescription = "Skyrunner Standard Drone (Serialized)"
 )
 
 // checkArxDevSentinel confirms h is connected to a database with Arx test seed
@@ -6525,8 +6525,8 @@ func TestIntegration_ReportsSpendByPartExportCSV(t *testing.T) {
 	if len(records) == 0 || !csvRowsContain(records[:1], []string{"Part Number", "Description", "Total Spend"}) {
 		t.Fatalf("header row = %v, want [Part Number Name Total Spend]", records)
 	}
-	if !csvRowsContain(records[1:], []string{"RAW-1002", "Stainless Steel Bar Stock", "205.00"}) {
-		t.Errorf("rows = %v, want to contain RAW-1002/Stainless Steel Bar Stock/205.00", records[1:])
+	if !csvRowsContain(records[1:], []string{"RAW-1002", "Stainless Steel Bar Stock (Lot-Controlled)", "205.00"}) {
+		t.Errorf("rows = %v, want to contain RAW-1002/Stainless Steel Bar Stock (Lot-Controlled)/205.00", records[1:])
 	}
 }
 
