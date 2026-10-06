@@ -246,23 +246,31 @@ func substituteRefs(s string, results map[int]*models.TestResult, steps map[int]
 
 // FormsList â€" GET /
 func (h *Handler) FormsList(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.records().ListForms(r.Context())
-	if err != nil {
-		serverError(w, "query error", err)
-		return
-	}
-
-	var forms []models.TestForm
-	for _, f := range rows {
-		forms = append(forms, models.TestForm{ID: f.ID, PartNumberID: f.PartNumberID, IsLocked: f.IsLocked,
-			Revision: f.Revision, PartNumber: f.PartNumber, Description: f.Description})
-	}
-
 	h.renderRecords(w, r, "index.html", map[string]any{
-		"Forms":     forms,
 		"ActiveTab": "records",
 		"TestMode":  h.cfg().TestMode,
 	})
+}
+
+// FormsRows — GET /api/forms/rows. JSON rows for the Test Forms list.
+func (h *Handler) FormsRows(w http.ResponseWriter, r *http.Request) {
+	forms, err := h.records().ListForms(r.Context())
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	type row struct {
+		ID     int    `json:"id"`
+		PN     string `json:"pn"`
+		Desc   string `json:"desc"`
+		Rev    int    `json:"rev"`
+		Locked bool   `json:"locked"`
+	}
+	out := make([]row, len(forms))
+	for i, f := range forms {
+		out[i] = row{ID: f.ID, PN: f.PartNumber, Desc: f.Description, Rev: f.Revision, Locked: f.IsLocked}
+	}
+	writeJSON(w, out)
 }
 
 // RecordsList â€" GET /forms/{id}/records

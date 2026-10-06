@@ -10,22 +10,29 @@
     </p>
 
     {{if .Lots}}
+    <div class="d-flex justify-content-end gap-2 mb-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="expandAllLots()">Expand All</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="collapseAllLots()">Collapse All</button>
+    </div>
     <div class="table-wrapper">
-        <table class="table table-bordered table-hover table-sm">
+        <table class="table table-bordered table-hover table-sm" id="lots-table" data-part-id="{{.Part.ID}}">
             <thead class="table-dark">
                 <tr>
-                    <th>Lot #</th>
-                    <th>Vendor Lot</th>
-                    <th style="width:140px;">Lot Description</th>
-                    <th>Notes</th>
-                    <th style="width:120px;">Created</th>
-                    <th style="width:80px;">Status</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:140px;">Lot #</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:160px;">Vendor Lot</th>
+                    <th class="sortable" onclick="sortTable(this)">Lot Description</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:25%;">Notes</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:120px;">Created</th>
+                    <th class="sortable" onclick="sortTable(this)" style="width:80px;">Status</th>
                 </tr>
             </thead>
             <tbody>
                 {{range .Lots}}
-                <tr>
-                    <td><a href="/part/{{$.Part.ID}}/lots/{{.ID}}">{{.LotNumber}}</a></td>
+                <tr data-path="{{.ID}}">
+                    <td>
+                        {{if index $.HasSources .ID}}<button type="button" class="bom-expand-toggle" data-lot-id="{{.ID}}" aria-expanded="false" aria-label="Show source lots" onclick="toggleLotRow(this)">&#9656;</button>{{end}}
+                        <a href="/part/{{$.Part.ID}}/lots/{{.ID}}">{{.LotNumber}}</a>
+                    </td>
                     <td>{{if .VendorLot}}{{.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{if .LotDescription}}{{.LotDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{template "note_cell" .Notes}}</td>

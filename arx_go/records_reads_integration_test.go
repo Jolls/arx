@@ -220,8 +220,8 @@ func TestIntegration_RecordsReads_FormsList(t *testing.T) {
 	f := recForm(t, h)
 	_, inactivePN := repPart(t, h, "FORM")
 
-	body := recGet(h.FormsList, "/records").Body.String()
-	if !strings.Contains(body, f.formPN) || !strings.Contains(body, "Rev 2") {
+	body := recGet(h.FormsRows, "/api/forms/rows").Body.String()
+	if !strings.Contains(body, f.formPN) || !strings.Contains(body, `"rev":2`) {
 		t.Errorf("form list missing %s / Rev 2", f.formPN)
 	}
 	if strings.Contains(body, inactivePN) {

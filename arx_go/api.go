@@ -138,6 +138,22 @@ func (h *Handler) APIPartBOMChildren(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, items)
 }
 
+// APILotSources returns a lot's immediate source lots/units as JSON, used to
+// lazily expand a row in the part's Lots list.
+func (h *Handler) APILotSources(w http.ResponseWriter, r *http.Request) {
+	lotID, err := strconv.Atoi(r.PathValue("lotID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	nodes, err := h.inventory().Sources(r.Context(), lotID)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	writeJSON(w, nodes)
+}
+
 // APIBrowseFolder opens a native Windows folder-picker dialog and returns
 // the selected path as JSON. Used by the Settings page browse buttons.
 func (h *Handler) APIBrowseFolder(w http.ResponseWriter, r *http.Request) {

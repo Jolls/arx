@@ -589,6 +589,35 @@ func (q *Queries) ListBuildLines(ctx context.Context, parentPartID int) ([]ListB
 	return items, nil
 }
 
+const listLotIDsWithSources = `-- name: ListLotIDsWithSources :many
+SELECT DISTINCT child_lot_id::int AS id FROM genealogy
+WHERE child_lot_id = ANY(string_to_array($1::text, ',')::int[])
+`
+
+// Which of the given lots (comma-separated ids) have at least one source (parent) edge.
+func (q *Queries) ListLotIDsWithSources(ctx context.Context, ids string) ([]int, error) {
+	rows, err := q.db.QueryContext(ctx, listLotIDsWithSources, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLots = `-- name: ListLots :many
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
        COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,

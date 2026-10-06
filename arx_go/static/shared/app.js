@@ -204,6 +204,13 @@ const ROW_BUILDERS = {
         <td>${escHtml(r.code)}</td>
     </tr>`,
 
+    '/api/forms/rows': r => `<tr>
+        <td><a href="/forms/${r.id}/records" class="fw-semibold">${escHtml(r.pn)}</a></td>
+        <td>${escHtml(r.desc)}</td>
+        <td class="text-center">${r.rev ? 'Rev ' + escHtml(r.rev) : 'Draft'}</td>
+        <td class="text-center">${r.locked ? '<span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Locked</span>' : '<span class="badge bg-success">Active</span>'}</td>
+    </tr>`,
+
     '/api/contacts/rows': r => `<tr>
         <td>${r.suid ? `<a href="/supplier/${r.suid}" class="part-number-link">${escHtml(r.supplier)}</a>` : escHtml(r.supplier)}</td>
         <td><a href="/contact/${r.id}" class="part-number-link">${escHtml(r.name)}</a></td>
@@ -238,6 +245,7 @@ const ROW_BUILDERS = {
 const CELL_TEXT = {
     '/api/parts/rows':     r => [r.pn, r.rev, r.description, r.detail, r.reqBy, r.date, r.cat, r.modified, String(r.attach), String(r.poLines)],
     '/api/suppliers/rows': r => [r.name, r.active ? 'active' : 'inactive', r.country, String(r.links), String(r.pos), r.contact, r.code],
+    '/api/forms/rows':     r => [r.pn, r.desc, r.rev ? 'Rev ' + r.rev : 'Draft', r.locked ? 'locked' : 'active'],
     '/api/contacts/rows':  r => [r.supplier, r.name, r.email, r.country, r.state, r.city, r.phone, r.web, r.modified, r.notes, r.active ? 'yes' : 'no'],
     '/api/pos/rows':       r => [r.num, r.status, r.supplier, r.ordered, r.closed, r.orderer, String(r.cost)],
 };
@@ -1101,6 +1109,99 @@ async function expandAllBOM() {
 
 function collapseAllBOM() {
     var table = document.getElementById('bom-table')
+    if (!table) return
+    table.querySelectorAll('.bom-sub-row').forEach(function (row) { row.remove() })
+    table.querySelectorAll('.bom-expand-toggle[aria-expanded="true"]').forEach(function (btn) {
+        btn.setAttribute('aria-expanded', 'false')
+        btn.innerHTML = '&#9656;'
+    })
+}
+
+// Lots list expand/collapse: lazily inserts a lot's immediate source lots/units as
+// sub-rows (same toggle look as the BOM view). Each row's data-path is the chain of
+// lot ids from the top-level row ("12/7/3"), used to collapse descendants and to
+// stop re-offering a lot already in its own chain.
+function buildLotSubRow(node, parentPath) {
+    var isUnit = node.NodeType === 'unit'
+    var path = parentPath + '/' + (isUnit ? 'u' : '') + node.ID
+    var depth = path.split('/').length - 1
+    var tr = document.createElement('tr')
+    tr.className = 'bom-sub-row'
+    tr.dataset.path = path
+    var cycle = !isUnit && ('/' + parentPath + '/').indexOf('/' + node.ID + '/') !== -1
+    var toggle = node.HasSources && !cycle
+        ? '<button type="button" class="bom-expand-toggle" data-lot-id="' + node.ID + '" aria-expanded="false" aria-label="Show source lots" onclick="toggleLotRow(this)">&#9656;</button> '
+        : ''
+    var href = '/part/' + node.PartID + (isUnit ? '/units/' : '/lots/') + node.ID
+    var badge = isUnit
+        ? ' <span class="badge bg-info text-dark" title="Serialized unit">unit</span>'
+        : (node.IsVendorLot ? ' <span class="badge bg-warning text-dark" title="Purchased raw/vendor lot">vendor</span>' : '')
+    var notes = node.Notes ? escHtml(node.Notes) : ''
+    tr.innerHTML =
+        '<td style="--bom-depth:' + depth + '">' + toggle + '<a href="' + href + '">' + escHtml(node.Number) + '</a>' + badge + '</td>' +
+        '<td>' + (node.VendorLot ? escHtml(node.VendorLot) : '<span class="text-muted">&mdash;</span>') + '</td>' +
+        '<td><a href="/part/' + node.PartID + '">' + escHtml(node.PartNumber) + '</a>' +
+            (node.PartDescription ? ' &mdash; ' + escHtml(node.PartDescription) : '') +
+            ' <span class="text-muted">(qty ' + escHtml(node.Qty) + ')</span></td>' +
+        '<td>' + notes + '</td>' +
+        '<td></td><td></td>'
+    return tr
+}
+
+// Resolves true on success, false on failure (never rejects), like expandBOMRow.
+function expandLotRow(btn) {
+    var tr = btn.closest('tr')
+    var table = tr.closest('table')
+    return fetch('/api/part/' + table.dataset.partId + '/lots/' + btn.dataset.lotId + '/sources')
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status)
+            return r.json()
+        })
+        .then(function (nodes) {
+            var insertAfter = tr
+            ;(nodes || []).forEach(function (node) {
+                var row = buildLotSubRow(node, tr.dataset.path)
+                insertAfter.insertAdjacentElement('afterend', row)
+                insertAfter = row
+            })
+            btn.setAttribute('aria-expanded', 'true')
+            btn.innerHTML = '&#9662;'
+            return true
+        })
+        .catch(function (err) {
+            console.error('Failed to load lot sources:', err)
+            return false
+        })
+}
+
+function collapseLotRow(btn) {
+    var tr = btn.closest('tr')
+    var prefix = tr.dataset.path + '/'
+    tr.closest('table').querySelectorAll('tbody tr[data-path]').forEach(function (row) {
+        if (row.dataset.path.indexOf(prefix) === 0) row.remove()
+    })
+    btn.setAttribute('aria-expanded', 'false')
+    btn.innerHTML = '&#9656;'
+}
+
+function toggleLotRow(btn) {
+    if (btn.getAttribute('aria-expanded') === 'true') collapseLotRow(btn)
+    else expandLotRow(btn)
+}
+
+async function expandAllLots() {
+    var table = document.getElementById('lots-table')
+    if (!table) return
+    var toggles
+    while ((toggles = Array.from(table.querySelectorAll('.bom-expand-toggle[aria-expanded="false"]'))).length) {
+        for (var i = 0; i < toggles.length; i++) {
+            if (!(await expandLotRow(toggles[i]))) return
+        }
+    }
+}
+
+function collapseAllLots() {
+    var table = document.getElementById('lots-table')
     if (!table) return
     table.querySelectorAll('.bom-sub-row').forEach(function (row) { row.remove() })
     table.querySelectorAll('.bom-expand-toggle[aria-expanded="true"]').forEach(function (btn) {
