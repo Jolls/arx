@@ -1138,7 +1138,7 @@ function buildLotSubRow(node, parentPath) {
         : (node.IsVendorLot ? ' <span class="badge bg-warning text-dark" title="Purchased raw/vendor lot">vendor</span>' : '')
     var notes = node.Notes ? escHtml(node.Notes) : ''
     tr.innerHTML =
-        '<td style="--bom-depth:' + depth + '">' + toggle + '<a href="' + href + '">' + escHtml(node.Number) + '</a>' + badge + '</td>' +
+        '<td style="--bom-depth:' + depth + '">' + toggle + '<a href="' + href + '" class="part-number-link">' + escHtml(node.Number) + '</a>' + badge + '</td>' +
         '<td>' + (node.VendorLot ? escHtml(node.VendorLot) : '<span class="text-muted">&mdash;</span>') + '</td>' +
         '<td><a href="/part/' + node.PartID + '">' + escHtml(node.PartNumber) + '</a>' +
             (node.PartDescription ? ' &mdash; ' + escHtml(node.PartDescription) : '') +
