@@ -111,6 +111,11 @@ WHERE g.child_lot_id = CASE WHEN sqlc.arg(near_type)::text = 'lot' THEN sqlc.arg
    OR g.child_unit_id = CASE WHEN sqlc.arg(near_type)::text = 'unit' THEN sqlc.arg(id)::int END
 ORDER BY 1, 2;
 
+-- name: ListLotIDsWithSources :many
+-- Which of the given lots (comma-separated ids) have at least one source (parent) edge.
+SELECT DISTINCT child_lot_id::int AS id FROM genealogy
+WHERE child_lot_id = ANY(string_to_array(sqlc.arg(ids)::text, ',')::int[]);
+
 -- name: ListTraceDescendants :many
 SELECT 'lot'::text AS node_type, l.id, l.lot_number AS number, COALESCE(l.vendor_lot_number, '') AS vendor_lot,
        COALESCE(l.notes, '') AS notes, (l.po_line_id IS NOT NULL)::boolean AS is_vendor_lot,

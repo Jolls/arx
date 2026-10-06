@@ -2,6 +2,7 @@
 // Headers wire up via onclick="sortTable(this)" (PM and TR templates).
 function sortTable(th) {
     if (typeof collapseAllBOM === 'function') collapseAllBOM();
+    if (typeof collapseAllLots === 'function') collapseAllLots();
     var tr = th.closest('tr');
     var table = th.closest('table');
     var tbody = table.querySelector('tbody');

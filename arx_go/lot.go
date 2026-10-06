@@ -129,8 +129,17 @@ func (h *Handler) PartLots(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving lots: "+err.Error())
 		return
 	}
+	lotIDs := make([]int, len(lots))
+	for i, l := range lots {
+		lotIDs[i] = l.ID
+	}
+	hasSources, err := h.inventory().LotsWithSources(r.Context(), lotIDs)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving lot sources: "+err.Error())
+		return
+	}
 	h.render(w, r, "parts/part_lots.html", map[string]any{
-		"Part": p, "Lots": lots,
+		"Part": p, "Lots": lots, "HasSources": hasSources,
 		"ActiveTab": "parts", "ActiveSubTab": "lots",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})

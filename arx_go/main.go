@@ -308,6 +308,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/part/{id}/lots/{lotID}/edit", withAuth, h.LotEdit)
 	b.handle(http.MethodPost, "/part/{id}/lots/{lotID}", withAuth, h.LotUpdate)
 	b.handle(http.MethodGet, "/api/part/{id}/lots/{lotID}/records/rows", withAuth, h.LotRecordsRows)
+	b.handle(http.MethodGet, "/api/part/{id}/lots/{lotID}/sources", withAuth, h.APILotSources)
 	b.handle(http.MethodGet, "/part/{id}/units", withAuth, h.PartUnits)
 	b.handle(http.MethodGet, "/part/{id}/units/new", withAuth, h.UnitNew) // before {unitID}
 	b.handle(http.MethodPost, "/part/{id}/units", withAuth, h.UnitCreate)
@@ -401,6 +402,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/api/part/{id}/bom-children", withAuth, h.APIPartBOMChildren)
 	b.handle(http.MethodGet, "/api/parts/rows", withAuth, h.PartsRows)
 	b.handle(http.MethodGet, "/api/suppliers/rows", withAuth, h.SuppliersRows)
+	b.handle(http.MethodGet, "/api/forms/rows", withAuth, h.FormsRows)
 	b.handle(http.MethodGet, "/api/contacts/rows", withAuth, h.ContactsRows)
 	b.handle(http.MethodGet, "/api/pos/rows", withAuth, h.PORows)
 

@@ -281,6 +281,56 @@ func (s *Service) neighbors(ctx context.Context, id int, nodeType string, ancest
 	return out, nil
 }
 
+// LotsWithSources returns the subset of lotIDs that have at least one source (parent) edge.
+func (s *Service) LotsWithSources(ctx context.Context, lotIDs []int) (map[int]bool, error) {
+	out := map[int]bool{}
+	if len(lotIDs) == 0 {
+		return out, nil
+	}
+	parts := make([]string, len(lotIDs))
+	for i, id := range lotIDs {
+		parts[i] = strconv.Itoa(id)
+	}
+	ids, err := s.q.ListLotIDsWithSources(ctx, strings.Join(parts, ","))
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
+}
+
+// SourceNode is one immediate source (parent) of a lot; HasSources says whether a lot source
+// has sources of its own, so the UI can offer a further expand.
+type SourceNode struct {
+	TraceNode
+	HasSources bool
+}
+
+// Sources returns the immediate source lots/units of one lot (one genealogy level).
+func (s *Service) Sources(ctx context.Context, lotID int) ([]SourceNode, error) {
+	nodes, err := s.neighbors(ctx, lotID, "lot", true)
+	if err != nil {
+		return nil, err
+	}
+	var lotIDs []int
+	for _, n := range nodes {
+		if !n.IsUnit() {
+			lotIDs = append(lotIDs, n.ID)
+		}
+	}
+	has, err := s.LotsWithSources(ctx, lotIDs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SourceNode, len(nodes))
+	for i, n := range nodes {
+		out[i] = SourceNode{n, !n.IsUnit() && has[n.ID]}
+	}
+	return out, nil
+}
+
 // Trace walks the genealogy from one or more roots and returns the reachable nodes flattened
 // depth-first (ancestors: parents down to raw vendor lots / root units; otherwise children).
 // One visited set, keyed by (NodeType, ID) since lot and unit ids are independent spaces, is

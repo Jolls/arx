@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.68] - 2026-10-05
+### Added
+- Part Lots list rows now have an expand arrow that lazily shows a lot's source lots (recursively down to raw vendor lots), plus Expand All / Collapse All and sortable headers
+### Changed
+- `/records` (Test Forms list) now uses the shared rows-API table, so it gets column resize/reorder, column filters and saved view state like the other primary tabs
+
 ## [0.8.67] - 2026-10-04
 ### Fixed
 - Replaced the systray/favicon icon (previously an unrelated gear placeholder) with a black rendering of the Arx brand mark on a transparent background, matching the app's header logo; also fixed `appIcon()` using premultiplied-alpha pixel values, which darkened anti-aliased edges ([#348](https://github.com/Jolls/arx/issues/348))

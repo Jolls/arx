@@ -1248,7 +1248,7 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		{"PO list", h.POList, "/pos", 0, `data-rows-url="/api/pos/rows"`},
 		{"PO detail", h.PODetail, "/po/{id}", seedPOID, "PO #5002"},
 		{"contacts list", h.ContactsList, "/contacts", 0, `data-rows-url="/api/contacts/rows"`},
-		{"records/forms list", h.FormsList, "/records", 0, "FORM-1001"},
+		{"records/forms list", h.FormsList, "/records", 0, `data-rows-url="/api/forms/rows"`},
 		{"records yield summary", h.RecordsYieldSummary, "/forms/{id}/yield", seedFormID, "FORM-1001"},
 		{"reports yield picker", h.ReportsYieldPicker, "/reports/yield", 0, "FORM-1001"},
 	}
