@@ -1,3 +1,24 @@
+Arx v0.8.71 — October 2026
+========================
+
+NEW FEATURES
+
+  Hover Popouts
+  Hover a lot number to see what it was consumed into, or a BOM part number to see where it is used.
+
+  All Units and All Builds
+  New lists show every unit and build across all parts.
+
+  Lot Source Expansion
+  Expand a lot in the part Lots list to see the source lots behind it.
+
+  Test Forms List
+  The Test Forms list now supports resizing, reordering, filtering, and saved columns like the other tabs.
+
+BUG FIXES
+
+  The system tray icon now shows the Arx logo.
+
 Arx v0.8.63 — October 2026
 ========================
 

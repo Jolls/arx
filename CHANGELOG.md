@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.71] - 2026-10-21
+### Changed
+- CI now runs on the latest Go 1.27.x (`go-version: '1.27'` with `check-latest`) instead of a pinned patch, so new stdlib advisories no longer break the `govulncheck` step until a pin is bumped
+- Updated dependencies: `pressly/goose/v3` 3.29.0, `golang.org/x/crypto` 0.58.0, `golang.org/x/image` 0.47.0, `klippa-app/go-pdfium` 1.21.3, `shopspring/decimal` 1.6.0
+### Security
+- Build with Go 1.27.3 or later: 1.27.0 carries 13 stdlib advisories (net/http, http2, crypto/tls, crypto/x509, mime/multipart, html/template)
+
 ## [0.8.70] - 2026-10-06
 ### Added
 - Reusable hover popout: any element with `data-popout-url` shows a lazily loaded, server-rendered fragment (`templates/shared/popouts.html`) with clickable links; first uses are a "Consumed into" popout on lot numbers in the part Lots list and a "Used in" (where-used) popout on BOM part numbers, including expanded sub-rows ([#365](https://github.com/Jolls/arx/issues/365))
