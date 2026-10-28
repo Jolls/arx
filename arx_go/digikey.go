@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -35,7 +39,48 @@ const (
 )
 
 var digikeyHTTPClient = &http.Client{Timeout: digikeyTimeout}
-var digikeyFileHTTPClient = &http.Client{Timeout: digikeyFileTimeout}
+
+// digikeyFileHTTPClient fetches a datasheet/photo URL taken from the posted
+// form, so it refuses non-public destinations (checked per dialed connection,
+// covering redirects and DNS that resolves to an internal address) — the
+// server would otherwise fetch internal-network URLs on a user's behalf and
+// save the response as a downloadable attachment.
+var digikeyFileHTTPClient = &http.Client{Timeout: digikeyFileTimeout, Transport: publicOnlyTransport()}
+
+func publicOnlyTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	// No proxy: through one, dialPublicOnly would only ever see the proxy's
+	// address, not the download target's.
+	t.Proxy = nil
+	t.DialContext = (&net.Dialer{Control: dialPublicOnly}).DialContext
+	return t
+}
+
+// nonPublicPrefixes covers the non-public ranges netip.Addr's Is* methods miss.
+var nonPublicPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),     // "this network"
+	netip.MustParsePrefix("100.64.0.0/10"), // CGNAT, incl. Tailscale
+	netip.MustParsePrefix("64:ff9b::/96"),  // NAT64, maps onto IPv4
+}
+
+// dialPublicOnly is a net.Dialer Control hook; address is the resolved "ip:port".
+func dialPublicOnly(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return err
+	}
+	ip = ip.Unmap()
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() ||
+		slices.ContainsFunc(nonPublicPrefixes, func(p netip.Prefix) bool { return p.Contains(ip) }) {
+		return fmt.Errorf("refusing to download from non-public address %s", ip)
+	}
+	return nil
+}
 
 // fetchDigiKeyFile downloads a DigiKey-hosted datasheet/photo URL for local
 // import (#62) so it can be copied into DOC_CONTROL_ROOT like every other

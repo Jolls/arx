@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 )
@@ -108,5 +111,40 @@ func TestMapDigiKeyProductEmpty(t *testing.T) {
 	}
 	if len(got.Prices) != 0 {
 		t.Errorf("Prices = %v, want none", got.Prices)
+	}
+}
+
+// The datasheet/photo URL comes from the posted form, so the download client
+// must not reach internal addresses.
+func TestDialPublicOnly(t *testing.T) {
+	for addr, wantOK := range map[string]bool{
+		"127.0.0.1:80":         false,
+		"[::1]:443":            false,
+		"10.1.2.3:80":          false,
+		"192.168.0.5:80":       false,
+		"172.16.0.1:80":        false,
+		"169.254.169.254:80":   false,
+		"0.0.0.0:80":           false,
+		"[::ffff:10.0.0.1]:80": false,
+		"[fe80::1]:80":         false,
+		"100.101.102.103:80":   false,
+		"0.1.2.3:80":           false,
+		"[64:ff9b::a00:1]:80":  false,
+		"8.8.8.8:443":          true,
+		"[2606:4700::1]:443":   true,
+	} {
+		if err := dialPublicOnly("tcp", addr, nil); (err == nil) != wantOK {
+			t.Errorf("dialPublicOnly(%s) err = %v, want allowed=%v", addr, err, wantOK)
+		}
+	}
+}
+
+func TestFetchDigiKeyFileRefusesLoopback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("internal"))
+	}))
+	defer srv.Close()
+	if _, err := fetchDigiKeyFile(context.Background(), srv.URL); err == nil {
+		t.Fatal("fetched from a loopback server, want error")
 	}
 }

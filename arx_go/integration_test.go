@@ -6034,6 +6034,10 @@ func TestIntegration_SupplierPartCreate_DigiKeyImport(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
+	// srv is on loopback, which the real download client refuses.
+	origFileClient := digikeyFileHTTPClient
+	digikeyFileHTTPClient = srv.Client()
+	defer func() { digikeyFileHTTPClient = origFileClient }()
 
 	docRoot := tempDocControlRoot(t, h)
 	partID, partNumber, cleanupPart := seedThrowawayPart(t, h, ctx, "62")
