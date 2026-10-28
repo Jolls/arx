@@ -1677,7 +1677,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	for _, o := range orders {
 		items = append(items, models.PurchaseOrderLine{PONumber: o.PONumber, SupplierName: o.SupplierName,
 			DateOrdered: o.DateOrdered, DateClosed: o.DateClosed, Status: o.Status, LineNumber: o.LineNumber,
-			Qty: o.Qty, UnitCost: o.UnitCost, Description: o.Description, VendorPN: o.VendorPN})
+			Qty: o.Qty, UnitCost: o.UnitCost, Description: o.Description, VendorPN: o.VendorPN, SupplierID: o.SupplierID})
 	}
 	h.render(w, r, "parts/part_orders.html", map[string]any{
 		"Part": p, "OrderItems": items,

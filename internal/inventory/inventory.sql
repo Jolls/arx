@@ -21,6 +21,22 @@ FROM inventory_transaction it
 LEFT JOIN lot l ON l.id = it.lot_id
 WHERE it.part_id = sqlc.arg(part_id) ORDER BY it.txn_date ASC, it.id ASC;
 
+-- name: ListPartLotStock :many
+-- Lots of a part with a non-zero ledger balance, newest first (stock popout, #386); inactive lots
+-- included so the list reconciles with the part's on-hand.
+SELECT l.id, l.lot_number, SUM(it.qty)::numeric AS qty
+FROM lot l
+JOIN inventory_transaction it ON it.lot_id = l.id
+WHERE l.part_id = sqlc.arg(part_id)::int
+GROUP BY l.id, l.lot_number, l.created_at
+HAVING SUM(it.qty) <> 0
+ORDER BY l.created_at DESC, l.id DESC;
+
+-- name: GetPartUnlottedQty :one
+-- Ledger balance not assigned to any lot.
+SELECT COALESCE(SUM(qty), 0)::numeric AS qty FROM inventory_transaction
+WHERE part_id = sqlc.arg(part_id)::int AND lot_id IS NULL;
+
 -- ── Lots ───────────────────────────────────────────────────────────────────────
 
 -- name: CreateLot :one

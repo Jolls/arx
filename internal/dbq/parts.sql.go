@@ -1424,8 +1424,70 @@ func (q *Queries) ListPartNumbers(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const listPartOpenPOLines = `-- name: ListPartOpenPOLines :many
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, COALESCE(po.status, '') AS status,
+       (pol.qty - pol.received_qty)::numeric AS remaining, po.date_ordered, po.date_requested, pol.lead_time_days,
+       SUM(pol.qty - pol.received_qty) OVER ()::numeric AS on_order_total
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = $1::int AND po.status IN ('open', 'sent', 'partially_received')
+  AND pol.received_qty < pol.qty
+ORDER BY COALESCE(po.date_requested, po.date_ordered + pol.lead_time_days) NULLS LAST, po.id, pol.line_number
+LIMIT $2::int
+`
+
+type ListPartOpenPOLinesParams struct {
+	PartID int
+	N      int
+}
+
+type ListPartOpenPOLinesRow struct {
+	Number        string
+	SupplierName  string
+	Status        string
+	Remaining     decimal.Decimal
+	DateOrdered   *time.Time
+	DateRequested *time.Time
+	LeadTimeDays  *int
+	OnOrderTotal  decimal.Decimal
+}
+
+// Open PO lines of a part with qty still to receive, soonest expected first (undated last); every
+// row carries the part's total on order (#386).
+func (q *Queries) ListPartOpenPOLines(ctx context.Context, arg ListPartOpenPOLinesParams) ([]ListPartOpenPOLinesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPartOpenPOLines, arg.PartID, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartOpenPOLinesRow
+	for rows.Next() {
+		var i ListPartOpenPOLinesRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.SupplierName,
+			&i.Status,
+			&i.Remaining,
+			&i.DateOrdered,
+			&i.DateRequested,
+			&i.LeadTimeDays,
+			&i.OnOrderTotal,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPartOrders = `-- name: ListPartOrders :many
-SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_ordered, po.date_closed,
+SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.supplier_id, po.date_ordered, po.date_closed,
        COALESCE(po.status, '') AS status, pol.line_number, pol.qty, pol.unit_cost,
        COALESCE(pol.description, '') AS description, COALESCE(pol.vendor_part_number, '') AS vendor_part_number
 FROM po_line pol
@@ -1443,6 +1505,7 @@ type ListPartOrdersParams struct {
 type ListPartOrdersRow struct {
 	Number           string
 	SupplierName     string
+	SupplierID       int
 	DateOrdered      *time.Time
 	DateClosed       *time.Time
 	Status           string
@@ -1466,6 +1529,7 @@ func (q *Queries) ListPartOrders(ctx context.Context, arg ListPartOrdersParams) 
 		if err := rows.Scan(
 			&i.Number,
 			&i.SupplierName,
+			&i.SupplierID,
 			&i.DateOrdered,
 			&i.DateClosed,
 			&i.Status,

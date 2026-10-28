@@ -153,7 +153,7 @@ func TestIntegration_PartDetail_Renders(t *testing.T) {
 	for id, wants := range map[int][]string{
 		full: {"<strong>Unit:</strong><span>mL</span>", "<strong>Detail:</strong><span>full detail</span>",
 			"<strong>Current Cost:</strong><span>$1.2500</span>", "<strong>Last Rollup:</strong><span>$3.5000</span>",
-			`<strong>Stock on hand:</strong><span>2.50 <span class="badge`, "2026-03-04", "full notes"},
+			fmt.Sprintf(`<strong>Stock on hand:</strong><span><span data-popout-url="/popout/part/%d/stock">2.50</span> <span class="badge`, full), "2026-03-04", "full notes"},
 		bare: {"<strong>Unit:</strong><span>—</span>"},
 	} {
 		rec := httptest.NewRecorder()

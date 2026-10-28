@@ -47,7 +47,7 @@
                             {{end}}
                         {{else}}—{{end}}
                     </td>
-                    <td>{{range $i, $n := .POLinks}}{{if $i}}, {{end}}<a href="/po/{{$n}}" class="part-number-link">{{$n}}</a>{{end}}</td>
+                    <td>{{range $i, $n := .POLinks}}{{if $i}}, {{end}}<a href="/po/{{$n}}" class="part-number-link" data-popout-url="/popout/po/{{$n}}">{{$n}}</a>{{end}}</td>
                 </tr>
                 {{end}}
             </tbody>

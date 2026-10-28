@@ -92,7 +92,7 @@
                         <tbody>
                         {{range .POs}}
                             <tr>
-                                <td><a href="/po/{{.Number}}" class="part-number-link">{{.Number}}</a></td>
+                                <td><a href="/po/{{.Number}}" class="part-number-link" data-popout-url="/popout/po/{{.Number}}">{{.Number}}</a></td>
                                 <td>{{template "po_status_badge" .Status}}</td>
                                 <td>{{.Role}}</td>
                                 <td>{{.Counterparty}}</td>

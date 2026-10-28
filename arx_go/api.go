@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg" // registers jpeg decoding for image.Decode (DigiKey photos, #62)
@@ -19,9 +20,12 @@ import (
 
 	"arx/arx_go/models"
 	"arx/internal/attachments"
+	"arx/internal/contacts"
 	"arx/internal/folderpick"
 	"arx/internal/records"
 	"arx/internal/urlutil"
+
+	"github.com/shopspring/decimal"
 )
 
 func (h *Handler) APISupplierSearch(w http.ResponseWriter, r *http.Request) {
@@ -204,6 +208,182 @@ func (h *Handler) PopoutPartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderPopout(w, "popout_part_where_used", map[string]any{"Thumb": p.ThumbnailURL, "Used": used})
+}
+
+// popoutRows caps the list rows shown in a popout; handlers fetch one extra to know whether to say "and more".
+const popoutRows = 5
+
+// capPopoutRows trims rows to popoutRows and reports whether any were dropped.
+func capPopoutRows[T any](rows []T) ([]T, bool) {
+	if len(rows) > popoutRows {
+		return rows[:popoutRows], true
+	}
+	return rows, false
+}
+
+// PopoutPartBelowMin renders the on-order qty and open PO lines behind a part's Below Min badge (#386).
+func (h *Handler) PopoutPartBelowMin(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	lines, onOrder, err := h.parts().ListOpenPOLines(r.Context(), id, popoutRows+1)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	lines, more := capPopoutRows(lines)
+	h.renderPopout(w, "popout_part_below_min", map[string]any{"OnOrder": onOrder, "Lines": lines, "More": more})
+}
+
+// PopoutPartStock renders a part's stock by lot (#386).
+func (h *Handler) PopoutPartStock(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	lots, unlotted, err := h.inventory().PartLotStock(r.Context(), id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	p, err := h.fetchPartBasic(r.Context(), r.PathValue("id"))
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	lots, more := capPopoutRows(lots)
+	h.renderPopout(w, "popout_part_stock", map[string]any{"PartID": id, "Total": p.StockOnHand, "Lots": lots, "Unlotted": unlotted, "More": more})
+}
+
+// PopoutPartBOMComponent renders "Used in" plus stock on hand and the preferred supplier/price for a BOM component (#386).
+func (h *Handler) PopoutPartBOMComponent(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	used, err := h.parts().ListWhereUsed(r.Context(), id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	p, err := h.fetchPartBasic(r.Context(), r.PathValue("id"))
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	var supplier string
+	var price *decimal.Decimal
+	ps, err := h.parts().GetPreferredSupplier(r.Context(), id)
+	switch {
+	case err == nil:
+		supplier = ps.SupplierName
+		if price, err = h.parts().PreferredSupplierPrice(r.Context(), id); err != nil {
+			serverError(w, "database error", err)
+			return
+		}
+	case !errors.Is(err, sql.ErrNoRows):
+		serverError(w, "database error", err)
+		return
+	}
+	h.renderPopout(w, "popout_part_bom_component", map[string]any{"Thumb": p.ThumbnailURL, "Used": used,
+		"Stock": p.StockOnHand, "Supplier": supplier, "Price": price})
+}
+
+// PopoutSupplier renders a supplier's primary contact, open PO tally and last order date (#386).
+func (h *Handler) PopoutSupplier(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	sup, err := h.purchasing().GetSupplier(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	} else if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	sum, err := h.purchasing().GetSupplierPOSummary(r.Context(), id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	h.renderPopout(w, "popout_supplier", map[string]any{"ID": id, "Name": sup.Name, "ContactName": sup.ContactName,
+		"ContactPhone": sup.ContactPhone, "ContactEmail": sup.ContactEmail,
+		"OpenCount": sum.OpenCount, "OpenValue": sum.OpenValue, "LastOrdered": sum.LastOrdered})
+}
+
+// PopoutPO renders a PO's status, total, receive progress and first lines (#386); the path id is the PO number.
+func (h *Handler) PopoutPO(w http.ResponseWriter, r *http.Request) {
+	number := r.PathValue("id")
+	po, err := h.purchasing().GetPO(r.Context(), number)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	} else if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	lines, err := h.purchasing().ListPOLines(r.Context(), number)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	received := 0
+	for _, l := range lines {
+		if l.ReceivedQty.GreaterThanOrEqual(l.Qty) {
+			received++
+		}
+	}
+	label, ok := poStatusLabels[po.Status]
+	if !ok {
+		label = po.Status
+	}
+	total := decimal.Zero
+	if po.TotalCost != nil {
+		total = *po.TotalCost
+	}
+	totalLines := len(lines)
+	lines, more := capPopoutRows(lines)
+	h.renderPopout(w, "popout_po", map[string]any{"Number": po.Number, "Label": label, "Total": total,
+		"ReceivedLines": received, "TotalLines": totalLines, "Lines": lines, "More": more})
+}
+
+// PopoutContact renders a contact's employer, phone/email and open POs (#386).
+func (h *Handler) PopoutContact(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	c, err := h.contacts().Get(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	} else if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	all, err := h.contacts().POs(r.Context(), id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	var open []contacts.PO
+	for _, po := range all {
+		switch po.Status {
+		case "open", "sent", "partially_received":
+			open = append(open, po)
+		}
+	}
+	open, more := capPopoutRows(open)
+	h.renderPopout(w, "popout_contact", map[string]any{"ID": id, "DisplayName": c.DisplayName, "Employer": c.SupplierName,
+		"CompanyID": c.CompanyID, "Phone": c.Phone1, "Email": c.Email, "OpenPOs": open, "More": more})
 }
 
 // APIBrowseFolder opens a native Windows folder-picker dialog and returns

@@ -134,7 +134,7 @@ func TestIntegration_PartOrders_Renders(t *testing.T) {
 		last = i
 	}
 	for _, want := range []string{
-		"<td>Sup A</td>", "<td>2026-01-10</td>", "<td>2026-01-20</td>", ">5.00</td>", ">$1.2500</td>", "<td>first</td>", "<td>VPN1</td>",
+		`data-popout-url="/popout/supplier/1002">Sup A</a></td>`, "<td>2026-01-10</td>", "<td>2026-01-20</td>", ">5.00</td>", ">$1.2500</td>", "<td>first</td>", "<td>VPN1</td>",
 		"<td></td>\n                    <td>2026-02-01</td>", "<td>N/A</td>", ">$1.1000</td>",
 		"3 order lines",
 	} {

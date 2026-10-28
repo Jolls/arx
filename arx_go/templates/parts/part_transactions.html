@@ -67,7 +67,7 @@
                     <td style="text-align:right;">{{printf "%+.2f" .Qty}}</td>
                     <td style="text-align:right;">{{printf "%.2f" .Balance}}</td>
                     <td>{{.Username}}</td>
-                    <td>{{if and (eq .Type "receipt") .Reference}}<a href="/po/{{.Reference}}" class="part-number-link">{{.Reference}}</a>{{else}}{{.Reference}}{{end}}</td>
+                    <td>{{if and (eq .Type "receipt") .Reference}}<a href="/po/{{.Reference}}" class="part-number-link" data-popout-url="/popout/po/{{.Reference}}">{{.Reference}}</a>{{else}}{{.Reference}}{{end}}</td>
                     <td>{{if .LotNumber}}<a href="/part/{{$.Part.ID}}/lots/{{.LotID}}" class="part-number-link">{{.LotNumber}}</a>{{end}}</td>
                     <td>{{.Note}}</td>
                 </tr>

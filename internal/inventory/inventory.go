@@ -83,6 +83,31 @@ func (s *Service) ListLedger(ctx context.Context, partID int) ([]LedgerRow, erro
 
 // ── Lots ───────────────────────────────────────────────────────────────────────
 
+// LotStock is one lot's ledger balance (stock popout, #386).
+type LotStock struct {
+	ID        int
+	LotNumber string
+	Qty       decimal.Decimal
+}
+
+// PartLotStock returns a part's lots with a non-zero balance (newest first) and the
+// balance not assigned to any lot.
+func (s *Service) PartLotStock(ctx context.Context, partID int) ([]LotStock, decimal.Decimal, error) {
+	rows, err := s.q.ListPartLotStock(ctx, partID)
+	if err != nil {
+		return nil, decimal.Zero, err
+	}
+	unlotted, err := s.q.GetPartUnlottedQty(ctx, partID)
+	if err != nil {
+		return nil, decimal.Zero, err
+	}
+	out := make([]LotStock, len(rows))
+	for i, r := range rows {
+		out[i] = LotStock{ID: r.ID, LotNumber: r.LotNumber, Qty: r.Qty}
+	}
+	return out, unlotted, nil
+}
+
 // LotOption is one active lot of a part, for a lot picker. Label is the lot number plus a
 // vendor-lot hint.
 type LotOption struct {

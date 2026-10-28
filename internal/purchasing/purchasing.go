@@ -203,6 +203,26 @@ func (s *Service) ListSupplierPOs(ctx context.Context, supplierID, limit int) ([
 	return out, nil
 }
 
+// SupplierPOSummary is a supplier's open-PO tally for its hover popout (#386). Open means
+// open, sent or partially received; LastOrdered is nil when no PO has an order date.
+type SupplierPOSummary struct {
+	OpenCount   int
+	OpenValue   decimal.Decimal
+	LastOrdered *time.Time
+}
+
+func (s *Service) GetSupplierPOSummary(ctx context.Context, supplierID int) (SupplierPOSummary, error) {
+	r, err := s.q.GetSupplierPOSummary(ctx, supplierID)
+	if err != nil {
+		return SupplierPOSummary{}, err
+	}
+	out := SupplierPOSummary{OpenCount: r.OpenCount, OpenValue: r.OpenValue}
+	if r.HasOrdered {
+		out.LastOrdered = &r.LastOrdered
+	}
+	return out, nil
+}
+
 // ListTopSupplierParts returns the first n parts linked to supplierID, by part number.
 func (s *Service) ListTopSupplierParts(ctx context.Context, supplierID, n int) ([]SupplierPartSummary, error) {
 	rows, err := s.q.ListTopSupplierParts(ctx, dbq.ListTopSupplierPartsParams{SupplierID: supplierID, N: n})

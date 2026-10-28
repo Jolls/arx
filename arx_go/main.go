@@ -314,6 +314,12 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/popout/part/{id}/where-used", withAuth, h.PopoutPartWhereUsed)
 	b.handle(http.MethodGet, "/popout/part/{id}/lots/{lotID}/consumers", withAuth, h.PopoutLotConsumers)
 	b.handle(http.MethodGet, "/popout/part/{id}/units/{unitID}/consumers", withAuth, h.PopoutUnitConsumers)
+	b.handle(http.MethodGet, "/popout/part/{id}/below-min", withAuth, h.PopoutPartBelowMin)
+	b.handle(http.MethodGet, "/popout/part/{id}/stock", withAuth, h.PopoutPartStock)
+	b.handle(http.MethodGet, "/popout/part/{id}/bom-component", withAuth, h.PopoutPartBOMComponent)
+	b.handle(http.MethodGet, "/popout/supplier/{id}", withAuth, h.PopoutSupplier)
+	b.handle(http.MethodGet, "/popout/po/{id}", withAuth, h.PopoutPO)
+	b.handle(http.MethodGet, "/popout/contact/{id}", withAuth, h.PopoutContact)
 	b.handle(http.MethodGet, "/part/{id}/units", withAuth, h.PartUnits)
 	b.handle(http.MethodGet, "/part/{id}/units/new", withAuth, h.UnitNew) // before {unitID}
 	b.handle(http.MethodPost, "/part/{id}/units", withAuth, h.UnitCreate)

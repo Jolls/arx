@@ -22,8 +22,8 @@
             <tbody>
                 {{range .OrderItems}}
                 <tr>
-                    <td><a href="/po/{{.PONumber}}" class="part-number-link">{{.PONumber}}</a></td>
-                    <td>{{.SupplierName}}</td>
+                    <td><a href="/po/{{.PONumber}}" class="part-number-link" data-popout-url="/popout/po/{{.PONumber}}">{{.PONumber}}</a></td>
+                    <td>{{if and .SupplierID .SupplierName}}<a href="/supplier/{{.SupplierID}}" data-popout-url="/popout/supplier/{{.SupplierID}}">{{.SupplierName}}</a>{{else}}{{.SupplierName}}{{end}}</td>
                     <td>{{formatDate .DateOrdered}}</td>
                     <td>{{formatDate .DateClosed}}</td>
                     <td>

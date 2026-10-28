@@ -23,7 +23,7 @@
                 {{range .Orders}}
                 <tr>
                     <td>{{if .DateOrdered}}{{formatDate .DateOrdered}}{{else}}—{{end}}</td>
-                    <td><a href="/po/{{.Number}}" class="part-number-link">{{.Number}}</a></td>
+                    <td><a href="/po/{{.Number}}" class="part-number-link" data-popout-url="/popout/po/{{.Number}}">{{.Number}}</a></td>
                     <td style="text-align:right;">${{printf "%.2f" .Total}}</td>
                     <td>{{template "po_status_badge" .Status}}</td>
                 </tr>
