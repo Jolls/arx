@@ -86,7 +86,7 @@
             <tbody>
                 {{range .Links}}
                 <tr>
-                    <td><a href="/supplier/{{.SupplierID}}">{{.SupplierName}}</a></td>
+                    <td><a href="/supplier/{{.SupplierID}}" data-popout-url="/popout/supplier/{{.SupplierID}}">{{.SupplierName}}</a></td>
                     <td class="font-monospace">{{.SupplierPN}}</td>
                     <td>{{.SupplierDesc}}</td>
                     <td>{{supplierPrefLabel .Preference}}</td>

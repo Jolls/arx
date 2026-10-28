@@ -105,7 +105,7 @@
                         <tbody>
                             {{range .PendingApprovalPOs}}
                             <tr>
-                                <td><a href="/po/{{.Number}}">PO {{.Number}}</a></td>
+                                <td><a href="/po/{{.Number}}" data-popout-url="/popout/po/{{.Number}}">PO {{.Number}}</a></td>
                                 <td class="text-end text-muted" style="white-space:nowrap;">{{.AgeDays}}d</td>
                             </tr>
                             {{end}}

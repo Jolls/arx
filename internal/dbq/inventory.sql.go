@@ -327,6 +327,19 @@ func (q *Queries) GetLot(ctx context.Context, id int) (GetLotRow, error) {
 	return i, err
 }
 
+const getPartUnlottedQty = `-- name: GetPartUnlottedQty :one
+SELECT COALESCE(SUM(qty), 0)::numeric AS qty FROM inventory_transaction
+WHERE part_id = $1::int AND lot_id IS NULL
+`
+
+// Ledger balance not assigned to any lot.
+func (q *Queries) GetPartUnlottedQty(ctx context.Context, partID int) (decimal.Decimal, error) {
+	row := q.db.QueryRowContext(ctx, getPartUnlottedQty, partID)
+	var qty decimal.Decimal
+	err := row.Scan(&qty)
+	return qty, err
+}
+
 const getUnit = `-- name: GetUnit :one
 SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
        COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
@@ -871,6 +884,47 @@ func (q *Queries) ListPartLedger(ctx context.Context, partID int) ([]ListPartLed
 			&i.LotID,
 			&i.LotNumber,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPartLotStock = `-- name: ListPartLotStock :many
+SELECT l.id, l.lot_number, SUM(it.qty)::numeric AS qty
+FROM lot l
+JOIN inventory_transaction it ON it.lot_id = l.id
+WHERE l.part_id = $1::int
+GROUP BY l.id, l.lot_number, l.created_at
+HAVING SUM(it.qty) <> 0
+ORDER BY l.created_at DESC, l.id DESC
+`
+
+type ListPartLotStockRow struct {
+	ID        int
+	LotNumber string
+	Qty       decimal.Decimal
+}
+
+// Lots of a part with a non-zero ledger balance, newest first (stock popout, #386); inactive lots
+// included so the list reconciles with the part's on-hand.
+func (q *Queries) ListPartLotStock(ctx context.Context, partID int) ([]ListPartLotStockRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPartLotStock, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartLotStockRow
+	for rows.Next() {
+		var i ListPartLotStockRow
+		if err := rows.Scan(&i.ID, &i.LotNumber, &i.Qty); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

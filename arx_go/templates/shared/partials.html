@@ -299,7 +299,7 @@
         {{if .Part.ShowInventory}}
         <div class="part-status-cell">
             <div class="part-status-label"><i class="bi bi-box-seam me-1"></i>Stock</div>
-            <div class="part-status-value">{{printf "%.2f" .Part.StockOnHand}}{{if .Part.UnitAbbr}} {{.Part.UnitAbbr}}{{end}}{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1">Below Min</span>{{end}}</div>
+            <div class="part-status-value"><span data-popout-url="/popout/part/{{.Part.ID}}/stock">{{printf "%.2f" .Part.StockOnHand}}{{if .Part.UnitAbbr}} {{.Part.UnitAbbr}}{{end}}</span>{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1" data-popout-url="/popout/part/{{.Part.ID}}/below-min">Below Min</span>{{end}}</div>
         </div>
         {{end}}
         <div class="part-status-cell part-status-cell--flex">

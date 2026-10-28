@@ -110,7 +110,7 @@
                     <a href="/part/{{.Part.ID}}/transactions" class="small">View all &rarr;</a>
                 </div>
                 <div class="card-body">
-                    <div class="detail-row"><strong>Stock on hand:</strong><span>{{printf "%.2f" .Part.StockOnHand}}{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1">Below Min</span>{{end}}</span></div>
+                    <div class="detail-row"><strong>Stock on hand:</strong><span><span data-popout-url="/popout/part/{{.Part.ID}}/stock">{{printf "%.2f" .Part.StockOnHand}}</span>{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1" data-popout-url="/popout/part/{{.Part.ID}}/below-min">Below Min</span>{{end}}</span></div>
                     {{if .Part.ReorderMin}}<div class="detail-row"><strong>Reorder minimum:</strong><span>{{printf "%g" (deref .Part.ReorderMin)}}</span></div>{{end}}
                     {{if .RecentTxns}}
                     <div class="table-responsive-sm">
@@ -163,7 +163,7 @@
                         {{range .RecentPOs}}
                             <tr>
                                 <td>{{if .DateOrdered}}{{formatDate .DateOrdered}}{{else}}—{{end}}</td>
-                                <td><a href="/po/{{.Number}}">{{.Number}}</a></td>
+                                <td><a href="/po/{{.Number}}" data-popout-url="/popout/po/{{.Number}}">{{.Number}}</a></td>
                                 <td class="text-truncate" style="max-width:10rem;">{{.SupplierName}}</td>
                                 <td class="text-end">{{printf "%.0f" .Qty}}</td>
                                 <td class="text-end">${{printf "%.2f" .UnitCost}}</td>

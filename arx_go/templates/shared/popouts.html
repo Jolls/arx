@@ -37,3 +37,88 @@
 <div class="text-muted">Not used in any assemblies.</div>
 {{end}}
 {{end}}
+
+{{define "popout_part_below_min"}}
+<div class="popout-title">On order: {{printf "%.5g" .OnOrder}}</div>
+{{if .Lines}}
+<ul class="popout-list">
+    {{range .Lines}}
+    <li>
+        <a href="/po/{{.PONumber}}">{{.PONumber}}</a>
+        <span class="text-muted">{{.SupplierName}} &mdash; {{printf "%.5g" .Remaining}} remaining, expected {{formatDate .Expected}}</span>
+    </li>
+    {{end}}
+</ul>
+{{if .More}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{else}}
+<div class="text-muted">Nothing on order.</div>
+{{end}}
+{{end}}
+
+{{define "popout_part_stock"}}
+<div class="popout-title">Stock on hand: {{printf "%.5g" .Total}}</div>
+{{if or .Lots (nonZero .Unlotted)}}
+<ul class="popout-list">
+    {{range .Lots}}
+    <li><a href="/part/{{$.PartID}}/lots/{{.ID}}">{{.LotNumber}}</a> <span class="text-muted">{{printf "%.5g" .Qty}}</span></li>
+    {{end}}
+    {{if nonZero .Unlotted}}<li><span class="text-muted">Not assigned to a lot: {{printf "%.5g" .Unlotted}}</span></li>{{end}}
+</ul>
+{{if .More}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{else}}
+<div class="text-muted">No stock recorded.</div>
+{{end}}
+{{end}}
+
+{{define "popout_part_bom_component"}}
+{{template "popout_part_where_used" .}}
+<div class="popout-title mt-2">Stock &amp; sourcing</div>
+<div>On hand: {{printf "%.5g" .Stock}}</div>
+{{if .Supplier}}<div>Preferred supplier: {{.Supplier}}{{if .Price}} at ${{printf "%.4f" (deref .Price)}}{{end}}</div>
+{{else}}<div class="text-muted">No preferred supplier</div>{{end}}
+{{end}}
+
+{{define "popout_supplier"}}
+<div class="popout-title"><a href="/supplier/{{.ID}}">{{.Name}}</a></div>
+{{if or .ContactName .ContactPhone .ContactEmail}}
+<div>{{.ContactName}}</div>
+{{if .ContactPhone}}<div class="text-muted">{{.ContactPhone}}</div>{{end}}
+{{if .ContactEmail}}<div><a href="mailto:{{.ContactEmail}}">{{.ContactEmail}}</a></div>{{end}}
+{{else}}
+<div class="text-muted">No primary contact</div>
+{{end}}
+<div class="mt-2">Open POs: {{.OpenCount}} (${{printf "%.2f" .OpenValue}})</div>
+<div class="text-muted">Last order: {{if .LastOrdered}}{{formatDate .LastOrdered}}{{else}}none{{end}}</div>
+{{end}}
+
+{{define "popout_po"}}
+<div class="popout-title">PO {{.Number}} &mdash; {{.Label}}</div>
+<div>Total: ${{printf "%.2f" .Total}}</div>
+<div class="text-muted">{{.ReceivedLines}} of {{.TotalLines}} lines received</div>
+{{if .Lines}}
+<ul class="popout-list">
+    {{range .Lines}}
+    <li>{{.LineNumber}}. {{if .PartID}}<a href="/part/{{derefInt .PartID}}">{{.PartNumberSnapshot}}</a>{{else}}{{.PartNumberSnapshot}}{{end}} <span class="text-muted">qty {{printf "%.5g" .Qty}}</span></li>
+    {{end}}
+</ul>
+{{if .More}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{end}}
+{{end}}
+
+{{define "popout_contact"}}
+<div class="popout-title"><a href="/contact/{{.ID}}">{{.DisplayName}}</a></div>
+{{if .Employer}}<div>{{if .CompanyID}}<a href="/supplier/{{derefInt .CompanyID}}">{{.Employer}}</a>{{else}}{{.Employer}}{{end}}</div>{{end}}
+{{if .Phone}}<div class="text-muted">{{.Phone}}</div>{{end}}
+{{if .Email}}<div><a href="mailto:{{.Email}}">{{.Email}}</a></div>{{end}}
+<div class="popout-title mt-2">Open POs</div>
+{{if .OpenPOs}}
+<ul class="popout-list">
+    {{range .OpenPOs}}
+    <li><a href="/po/{{.Number}}">{{.Number}}</a> <span class="text-muted">{{.Role}} &mdash; {{.Counterparty}}</span></li>
+    {{end}}
+</ul>
+{{if .More}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{else}}
+<div class="text-muted">No open POs.</div>
+{{end}}
+{{end}}

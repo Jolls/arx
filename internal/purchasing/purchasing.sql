@@ -69,6 +69,14 @@ WHERE supplier_id = sqlc.arg(supplier_id)::int
 ORDER BY date_ordered DESC, id DESC
 LIMIT sqlc.narg(n)::int;
 
+-- name: GetSupplierPOSummary :one
+-- Open PO count/value and last order date for the supplier popout (#386).
+SELECT (COUNT(*) FILTER (WHERE status IN ('open', 'sent', 'partially_received')))::int AS open_count,
+       COALESCE(SUM(total_cost) FILTER (WHERE status IN ('open', 'sent', 'partially_received')), 0)::numeric AS open_value,
+       (COUNT(date_ordered) > 0)::bool AS has_ordered, COALESCE(MAX(date_ordered), DATE '1970-01-01')::date AS last_ordered
+FROM purchase_order
+WHERE supplier_id = sqlc.arg(supplier_id)::int;
+
 -- name: ListTopSupplierParts :many
 SELECT pn.id, pn.part_number, COALESCE(pn.description, '') AS description
 FROM supplier_part sp

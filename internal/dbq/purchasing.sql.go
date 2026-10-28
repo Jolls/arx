@@ -666,6 +666,34 @@ func (q *Queries) GetSupplierName(ctx context.Context, id int) (string, error) {
 	return name, err
 }
 
+const getSupplierPOSummary = `-- name: GetSupplierPOSummary :one
+SELECT (COUNT(*) FILTER (WHERE status IN ('open', 'sent', 'partially_received')))::int AS open_count,
+       COALESCE(SUM(total_cost) FILTER (WHERE status IN ('open', 'sent', 'partially_received')), 0)::numeric AS open_value,
+       (COUNT(date_ordered) > 0)::bool AS has_ordered, COALESCE(MAX(date_ordered), DATE '1970-01-01')::date AS last_ordered
+FROM purchase_order
+WHERE supplier_id = $1::int
+`
+
+type GetSupplierPOSummaryRow struct {
+	OpenCount   int
+	OpenValue   decimal.Decimal
+	HasOrdered  bool
+	LastOrdered time.Time
+}
+
+// Open PO count/value and last order date for the supplier popout (#386).
+func (q *Queries) GetSupplierPOSummary(ctx context.Context, supplierID int) (GetSupplierPOSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getSupplierPOSummary, supplierID)
+	var i GetSupplierPOSummaryRow
+	err := row.Scan(
+		&i.OpenCount,
+		&i.OpenValue,
+		&i.HasOrdered,
+		&i.LastOrdered,
+	)
+	return i, err
+}
+
 const listOpenRFQLineIDs = `-- name: ListOpenRFQLineIDs :many
 SELECT pol.id FROM po_line pol JOIN purchase_order po ON pol.po_id = po.id
 WHERE po.rfq_group_id = $1::int AND po.status = 'rfq'

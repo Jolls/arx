@@ -180,7 +180,7 @@ function escHtml(s) {
 // One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
 const ROW_BUILDERS = {
     '/api/parts/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
-        <td data-col="col-pn"><a href="/part/${r.id}" class="part-number-link" data-popout-url="/popout/part/${r.id}/where-used">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum">Below Min</span>' : ''}</td>
+        <td data-col="col-pn"><a href="/part/${r.id}" class="part-number-link" data-popout-url="/popout/part/${r.id}/where-used">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum" data-popout-url="/popout/part/' + r.id + '/below-min">Below Min</span>' : ''}</td>
         <td data-col="col-rev">${escHtml(r.rev)}</td>
         <td data-col="col-title">${escHtml(r.description)}</td>
         <td data-col="col-detail">${escHtml(r.detail)}</td>
@@ -193,7 +193,7 @@ const ROW_BUILDERS = {
     </tr>`,
 
     '/api/suppliers/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
-        <td><a href="/supplier/${r.id}" class="part-number-link">${escHtml(r.name)}</a></td>
+        <td><a href="/supplier/${r.id}" class="part-number-link" data-popout-url="/popout/supplier/${r.id}">${escHtml(r.name)}</a></td>
         <td>${r.active ? 'Active' : 'Inactive'}</td>
         <td>${escHtml(r.country)}</td>
         <td>${r.links}</td>
@@ -211,7 +211,7 @@ const ROW_BUILDERS = {
 
     '/api/contacts/rows': r => `<tr>
         <td>${r.suid ? `<a href="/supplier/${r.suid}" class="part-number-link">${escHtml(r.supplier)}</a>` : escHtml(r.supplier)}</td>
-        <td><a href="/contact/${r.id}" class="part-number-link">${escHtml(r.name)}</a></td>
+        <td><a href="/contact/${r.id}" class="part-number-link" data-popout-url="/popout/contact/${r.id}">${escHtml(r.name)}</a></td>
         <td>${escHtml(r.email)}</td>
         <td>${escHtml(r.country)}</td>
         <td>${escHtml(r.state)}</td>
@@ -228,7 +228,7 @@ const ROW_BUILDERS = {
             ? `<a href="/supplier/${r.sid}" class="part-number-link">${escHtml(r.supplier)}</a>`
             : escHtml(r.supplier);
         return `<tr>
-            <td><a href="/po/${escHtml(r.num)}" class="part-number-link">${escHtml(r.num)}</a></td>
+            <td><a href="/po/${escHtml(r.num)}" class="part-number-link" data-popout-url="/popout/po/${encodeURIComponent(r.num)}">${escHtml(r.num)}</a></td>
             <td>${PO_STATUS_BADGES[r.status] || `<span class="badge bg-secondary">${escHtml(r.status)}</span>`}</td>
             <td>${vendor}</td>
             <td>${r.ordered || '—'}</td>
@@ -1049,7 +1049,7 @@ function buildBOMSubRow(item, num) {
         : ''
     tr.innerHTML =
         '<td data-col="col-item" style="--bom-depth:' + depth + '">' + toggle + num + '</td>' +
-        '<td data-col="col-pn"><a href="/part/' + item.ComponentPartID + '" class="part-number-link" data-popout-url="/popout/part/' + item.ComponentPartID + '/where-used">' + escHtml(item.PartNumber) + '</a></td>' +
+        '<td data-col="col-pn"><a href="/part/' + item.ComponentPartID + '" class="part-number-link" data-popout-url="/popout/part/' + item.ComponentPartID + '/bom-component">' + escHtml(item.PartNumber) + '</a></td>' +
         '<td data-col="col-title">' + escHtml(item.Description) + '</td>' +
         '<td data-col="col-rev">' + escHtml(item.Revision) + '</td>' +
         '<td data-col="col-cat">' + escHtml(item.Category) + '</td>' +
@@ -1273,12 +1273,12 @@ function collapseAllLots() {
 
 // Generic hover popout (#365). Put data-popout-url="<endpoint>" on any element; the
 // endpoint returns an HTML fragment (a template in templates/shared/popouts.html),
-// fetched on first hover and cached per URL. One shared position:fixed element on
+// fetched on hover and cached per URL for 45 s (stock/PO status go stale). One shared position:fixed element on
 // <body> (escapes table clipping), flipped above/below to fit. Stays open while the
 // pointer is over the trigger or the popout so links inside are clickable; also opens
 // on keyboard focus.
 ;(function () {
-    var SHOW_DELAY = 250, HIDE_DELAY = 150
+    var SHOW_DELAY = 250, HIDE_DELAY = 150, TTL_MS = 45000
     var pop, current, showTimer, hideTimer
     var cache = {}
     function ensurePop() {
@@ -1309,10 +1309,10 @@ function collapseAllLots() {
             var img = pop.querySelector('img')
             if (img && !img.complete) img.addEventListener('load', function () { if (current === el) place(el) })
         }
-        if (cache[url] !== undefined) { render(cache[url]); return }
+        if (cache[url] !== undefined && Date.now() - cache[url].at < TTL_MS) { render(cache[url].html); return }
         fetch(url)
             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text() })
-            .then(function (html) { cache[url] = html; render(html) })
+            .then(function (html) { cache[url] = { html: html, at: Date.now() }; render(html) })
             .catch(function (err) { console.error('Failed to load popout:', err) })
     }
     function hide() {

@@ -13,6 +13,7 @@ import (
 	"arx/internal/contacts"
 	"arx/internal/inventory"
 	"arx/internal/parts"
+	"arx/internal/purchasing"
 	"github.com/shopspring/decimal"
 )
 
@@ -382,6 +383,77 @@ func TestPopoutPartWhereUsedThumb(t *testing.T) {
 		}
 		if !strings.Contains(out, c.want) {
 			t.Errorf("%s: missing %q\n%s", c.name, c.want, out)
+		}
+	}
+}
+
+// TestPopoutFragmentsExecute checks the stock/PO/supplier/contact popouts (#386) render their key output.
+func TestPopoutFragmentsExecute(t *testing.T) {
+	m, err := parseTemplates(templatesFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp := time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC)
+	price := decimal.RequireFromString("0.03")
+	pid := 3002
+	co := 1002
+	cases := []struct {
+		name, tmpl string
+		data       map[string]any
+		want       []string
+		notWant    []string
+	}{
+		{"below min", "popout_part_below_min", map[string]any{"OnOrder": decimal.NewFromInt(30), "More": true,
+			"Lines": []parts.OpenPOLine{{PONumber: "5003", SupplierName: "Acme", Remaining: decimal.NewFromInt(30), Expected: &exp}}},
+			[]string{`href="/po/5003"`, "30 remaining", "2026-05-21", "and more"}, nil},
+		{"below min empty", "popout_part_below_min", map[string]any{"OnOrder": decimal.Zero, "Lines": []parts.OpenPOLine(nil)},
+			[]string{"Nothing on order."}, nil},
+		{"stock", "popout_part_stock", map[string]any{"PartID": 3007, "Total": decimal.NewFromInt(16), "Unlotted": decimal.NewFromInt(-4),
+			"Lots": []inventory.LotStock{{ID: 8301, LotNumber: "L-1", Qty: decimal.NewFromInt(20)}}},
+			[]string{`href="/part/3007/lots/8301"`, "Not assigned to a lot"}, nil},
+		{"stock no unlotted", "popout_part_stock", map[string]any{"PartID": 3007, "Total": decimal.NewFromInt(20), "Unlotted": decimal.Zero,
+			"Lots": []inventory.LotStock{{ID: 8301, LotNumber: "L-1", Qty: decimal.NewFromInt(20)}}},
+			[]string{"L-1"}, []string{"Not assigned to a lot"}},
+		{"stock empty", "popout_part_stock", map[string]any{"PartID": 1, "Total": decimal.Zero, "Unlotted": decimal.Zero, "Lots": []inventory.LotStock(nil)},
+			[]string{"No stock recorded."}, nil},
+		{"bom component", "popout_part_bom_component", map[string]any{"Thumb": "", "Used": []parts.WhereUsed{{ParentPartID: 7, PartNumber: "ASM-1", Qty: decimal.NewFromInt(2)}},
+			"Stock": decimal.NewFromInt(5), "Supplier": "Precision", "Price": &price},
+			[]string{"Used in", "On hand: 5", "Precision", "$0.0300"}, nil},
+		{"bom component no supplier", "popout_part_bom_component", map[string]any{"Thumb": "", "Used": []parts.WhereUsed(nil),
+			"Stock": decimal.Zero, "Supplier": "", "Price": (*decimal.Decimal)(nil)},
+			[]string{"No preferred supplier"}, nil},
+		{"supplier", "popout_supplier", map[string]any{"ID": 1002, "Name": "Precision", "ContactName": "Bob Lee", "ContactPhone": "555-0201",
+			"ContactEmail": "bob@x.test", "OpenCount": 1, "OpenValue": decimal.RequireFromString("72.8"), "LastOrdered": &exp},
+			[]string{`href="/supplier/1002"`, "mailto:bob@x.test", "Open POs: 1", "72.80", "2026-05-21"}, nil},
+		{"supplier no contact", "popout_supplier", map[string]any{"ID": 1, "Name": "X", "ContactName": "", "ContactPhone": "", "ContactEmail": "",
+			"OpenCount": 0, "OpenValue": decimal.Zero, "LastOrdered": (*time.Time)(nil)},
+			[]string{"No primary contact", "Last order: none"}, nil},
+		{"po", "popout_po", map[string]any{"Number": "5002", "Label": "Open", "Total": decimal.RequireFromString("72.8"), "ReceivedLines": 1, "TotalLines": 2, "More": true,
+			"Lines": []purchasing.POLine{{LineNumber: 1, PartNumberSnapshot: "RAW-1", PartID: &pid, Qty: decimal.NewFromInt(20)}}},
+			[]string{"PO 5002", "Open", "72.80", "1 of 2 lines received", `href="/part/3002"`, "and more"}, nil},
+		{"contact", "popout_contact", map[string]any{"ID": 2003, "DisplayName": "Bob Lee", "Employer": "Precision", "CompanyID": &co,
+			"Phone": "555-0201", "Email": "bob@x.test", "OpenPOs": []contacts.PO{{Number: "5002", Role: "Supplier", Counterparty: "Precision"}}},
+			[]string{`href="/supplier/1002"`, "mailto:bob@x.test", `href="/po/5002"`}, nil},
+		{"contact no pos", "popout_contact", map[string]any{"ID": 1, "DisplayName": "A", "Employer": "", "CompanyID": (*int)(nil),
+			"Phone": "", "Email": "", "OpenPOs": []contacts.PO(nil)},
+			[]string{"No open POs."}, nil},
+	}
+	for _, c := range cases {
+		var sb strings.Builder
+		if err := m["popouts"].ExecuteTemplate(&sb, c.tmpl, c.data); err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		out := sb.String()
+		for _, w := range c.want {
+			if !strings.Contains(out, w) {
+				t.Errorf("%s: missing %q\n%s", c.name, w, out)
+			}
+		}
+		for _, w := range c.notWant {
+			if strings.Contains(out, w) {
+				t.Errorf("%s: unexpected %q", c.name, w)
+			}
 		}
 	}
 }

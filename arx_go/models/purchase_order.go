@@ -71,6 +71,7 @@ type PurchaseOrderLine struct {
 	// joined fields
 	PONumber     string
 	SupplierName string
+	SupplierID   int
 	DateOrdered  *time.Time
 	DateClosed   *time.Time
 	Status       string

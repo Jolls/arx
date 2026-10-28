@@ -816,6 +816,7 @@ type PartOrder struct {
 	UnitCost     decimal.Decimal
 	Description  string
 	VendorPN     string
+	SupplierID   int
 }
 
 // ListPartOrders returns every PO line of a part, newest order first (undated first).
@@ -827,9 +828,37 @@ func (s *Service) ListPartOrders(ctx context.Context, partID int) ([]PartOrder, 
 	out := make([]PartOrder, len(rows))
 	for i, r := range rows {
 		out[i] = PartOrder{PONumber: r.Number, SupplierName: r.SupplierName, DateOrdered: r.DateOrdered, DateClosed: r.DateClosed,
-			Status: r.Status, LineNumber: r.LineNumber, Qty: r.Qty, UnitCost: r.UnitCost, Description: r.Description, VendorPN: r.VendorPartNumber}
+			Status: r.Status, LineNumber: r.LineNumber, Qty: r.Qty, UnitCost: r.UnitCost, Description: r.Description, VendorPN: r.VendorPartNumber, SupplierID: r.SupplierID}
 	}
 	return out, nil
+}
+
+// OpenPOLine is an open PO line of a part (Below Min popout, #386).
+type OpenPOLine struct {
+	PONumber     string
+	SupplierName string
+	Status       string
+	Remaining    decimal.Decimal
+	Expected     *time.Time // date_requested, else date_ordered + lead time; nil when neither
+}
+
+// ListOpenPOLines returns up to n open PO lines of a part, soonest expected first, and the total
+// qty on order across all of them.
+func (s *Service) ListOpenPOLines(ctx context.Context, partID, n int) ([]OpenPOLine, decimal.Decimal, error) {
+	rows, err := s.q.ListPartOpenPOLines(ctx, dbq.ListPartOpenPOLinesParams{PartID: partID, N: n})
+	if err != nil || len(rows) == 0 {
+		return nil, decimal.Zero, err
+	}
+	out := make([]OpenPOLine, len(rows))
+	for i, r := range rows {
+		exp := r.DateRequested
+		if exp == nil && r.DateOrdered != nil && r.LeadTimeDays != nil {
+			d := r.DateOrdered.AddDate(0, 0, *r.LeadTimeDays)
+			exp = &d
+		}
+		out[i] = OpenPOLine{PONumber: r.Number, SupplierName: r.SupplierName, Status: r.Status, Remaining: r.Remaining, Expected: exp}
+	}
+	return out, rows[0].OnOrderTotal, nil
 }
 
 // RecentPO is a PO line of a part for the part dashboard.
