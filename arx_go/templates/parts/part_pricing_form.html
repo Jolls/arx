@@ -14,7 +14,7 @@
 
         <div class="detail-section">
             <div class="detail-row">
-                <label for="supplier_name" class="form-label">Supplier *</label>
+                <label for="supplier_name" class="form-label">Supplier * {{template "search_help_btn"}}</label>
                 <div style="position:relative; flex:1;">
                     <input type="text" id="supplier_name" class="form-control"
                            value="{{.Price.SupplierName}}" placeholder="Required — type to search…" autocomplete="off">

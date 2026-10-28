@@ -72,7 +72,7 @@
                 </div>
                 {{end}}
                 <div class="detail-row">
-                    <label class="form-label">Supplier</label>
+                    <label class="form-label">Supplier {{template "search_help_btn"}}</label>
                     <div style="position:relative; flex:1;">
                         <input type="text" id="supplier_name" name="supplier_name" class="form-control"
                                value="{{.PO.SupplierName}}" placeholder="Required — type to search…" autocomplete="off">
@@ -133,7 +133,7 @@
             <div class="detail-section mb-0">
                 <h3>Ship To</h3>
                 <div class="detail-row">
-                    <label class="form-label">Receiver</label>
+                    <label class="form-label">Receiver {{template "search_help_btn"}}</label>
                     <div style="position:relative; flex:1;">
                         <input type="text" id="receiver_name" name="receiver_name" class="form-control"
                                value="{{.PO.ReceiverName}}" placeholder="Required — type to search…" autocomplete="off">
@@ -272,7 +272,7 @@
                     <thead class="table-dark">
                         <tr>
                             <th style="width:52px;">#</th>
-                            <th style="min-width:110px;">Part Number</th>
+                            <th style="min-width:110px;">Part Number {{template "search_help_btn"}}</th>
                             <th style="width:60px;">Rev</th>
                             <th style="min-width:180px;">Description</th>
                             <th style="min-width:110px;">Vendor PN</th>

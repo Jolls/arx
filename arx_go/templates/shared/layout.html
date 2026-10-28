@@ -60,6 +60,9 @@
         document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
             new bootstrap.Tooltip(el);
         });
+        document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function(el) {
+            new bootstrap.Popover(el);
+        });
     });
     (function() {
         var v = "{{.AppVersion}}";
@@ -77,3 +80,11 @@
 </body>
 </html>
 {{end}}
+
+{{define "filter_help_content"}}<ul class='mb-0 ps-3'><li>Plain text: case-insensitive substring, e.g. <code>abc</code></li><li><code>*</code> any run of characters, e.g. <code>65*-013</code></li><li><code>?</code> any single character, e.g. <code>AB?-01</code></li><li>With <code>*</code> or <code>?</code> the match is whole field, e.g. <code>65*-013*-*</code></li><li>Terms separated by <code>;</code> must all match (spaces around <code>;</code> ignored), e.g. <code>ABC*; *-01</code></li><li>A leading <code>!</code> excludes, e.g. <code>ABC*; !*-OBS</code></li><li>A leading <code>!</code> and a literal <code>;</code> cannot be searched</li><li>Date columns: pick a from/to range</li><li>Select columns: pick a value</li></ul>{{end}}
+
+{{define "search_help_content"}}<ul class='mb-0 ps-3'><li>Always a substring match</li><li><code>*</code> any run of characters, e.g. <code>motor*12</code></li><li><code>?</code>, <code>%</code> and <code>_</code> match themselves (literal)</li></ul>{{end}}
+
+{{define "filter_help_btn"}}<button type="button" onclick="event.stopPropagation()" class="btn btn-link p-0 text-reset flex-shrink-0" data-bs-toggle="popover" data-bs-html="true" data-bs-trigger="focus" data-bs-container="body" data-bs-placement="bottom" data-bs-title="Filter help" data-bs-content="{{template "filter_help_content"}}" aria-label="Filter help"><i class="bi bi-info-circle"></i></button>{{end}}
+
+{{define "search_help_btn"}}<button type="button" onclick="event.stopPropagation()" class="btn btn-link p-0 text-reset flex-shrink-0" data-bs-toggle="popover" data-bs-html="true" data-bs-trigger="focus" data-bs-container="body" data-bs-placement="bottom" data-bs-title="Search help" data-bs-content="{{template "search_help_content"}}" aria-label="Search help"><i class="bi bi-info-circle"></i></button>{{end}}

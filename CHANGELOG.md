@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.72] - 2026-10-28
+### Added
+- Column text filters accept `;`-separated terms (all must match) and a leading `!` to exclude matches, e.g. `ABC*; *-01; !*-OBS` ([#382](https://github.com/Jolls/arx/issues/382))
+- Help popover (i) in list-table column headers and on part/supplier search boxes describing filter and search wildcards ([#381](https://github.com/Jolls/arx/issues/381))
+- Settings shows a plain-language message, a lookup code and collapsed raw Details when a database connection fails; codes are documented in `docs/db-connection-errors.md` ([#380](https://github.com/Jolls/arx/issues/380))
+
 ## [0.8.71] - 2026-10-21
 ### Changed
 - CI now runs on the latest Go 1.27.x (`go-version: '1.27'` with `check-latest`) instead of a pinned patch, so new stdlib advisories no longer break the `govulncheck` step until a pin is bumped

@@ -20,6 +20,16 @@
     {{if .Error}}
     <div class="alert alert-danger" role="alert">
         <strong>Error:</strong> {{.Error}}
+        {{if .ConnErrCode}}
+        <div class="mt-2">
+            <span class="badge text-bg-secondary">{{.ConnErrCode}}</span>
+            <span class="small">See docs/db-connection-errors.md, section <code>{{.ConnErrCode}}</code></span>
+        </div>
+        <details class="mt-2">
+            <summary>Details</summary>
+            <pre class="mb-0 small">{{.ConnErrDetails}}</pre>
+        </details>
+        {{end}}
     </div>
     {{end}}
 
@@ -694,7 +704,7 @@
                 receiver and contact on new POs/RFQs. Leave a field blank to pick manually each time.
             </p>
             <div class="detail-row align-items-center" style="padding:6px 0;">
-                <strong style="min-width:160px;">Default Receiver</strong>
+                <strong style="min-width:160px;">Default Receiver {{template "search_help_btn"}}</strong>
                 {{if .POSuppliers}}
                 <div style="position:relative; min-width:260px;">
                     <input type="text" id="po_default_receiver_name" class="form-control"
