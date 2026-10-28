@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.74] - 2026-10-28
+### Changed
+- "Used in" / "Consumed into" hover popouts added to part numbers on `/parts`, supplier parts, Where Used, PO lines and `/lots`/`/units`/`/builds`, and to lot/unit numbers there; the part thumbnail now appears inside the "Used in" popout instead of a separate hover ([#385](https://github.com/Jolls/arx/issues/385))
+
 ## [0.8.73] - 2026-10-28
 ### Changed
 - Part header bar now shows Current Cost and Stock (with Below Min badge), has an icon on every cell, and also appears on the BOM subtab ([#379](https://github.com/Jolls/arx/issues/379))

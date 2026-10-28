@@ -18,7 +18,7 @@
             <tbody>
                 {{range .WhereUsedItems}}
                 <tr>
-                    <td><a href="/part/{{.ParentPartID}}" class="part-number-link">{{.PartNumber}}</a></td>
+                    <td><a href="/part/{{.ParentPartID}}" class="part-number-link" data-popout-url="/popout/part/{{.ParentPartID}}/where-used">{{.PartNumber}}</a></td>
                     <td>{{.Description}}</td>
                     <td>{{.Revision}}</td>
                     <td>{{.Category}}</td>

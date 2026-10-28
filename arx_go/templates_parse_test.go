@@ -12,6 +12,7 @@ import (
 	"arx/arx_go/models"
 	"arx/internal/contacts"
 	"arx/internal/inventory"
+	"arx/internal/parts"
 	"github.com/shopspring/decimal"
 )
 
@@ -348,6 +349,39 @@ func TestAllBuildsTemplateRenders(t *testing.T) {
 	for _, want := range []string{`href="/part/2/lots/9">#5<`, `href="/part/2/build">#6<`, "2026-05-25", `href="/units"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("all_builds.html: missing %q", want)
+		}
+	}
+}
+
+// TestPopoutPartWhereUsedThumb checks the "Used in" popout (#385) carries the part's
+// thumbnail when it has one and omits the <img> otherwise.
+func TestPopoutPartWhereUsedThumb(t *testing.T) {
+	m, err := parseTemplates(templatesFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	used := []parts.WhereUsed{{ParentPartID: 7, PartNumber: "ASM-1", Qty: decimal.NewFromInt(2)}}
+	cases := []struct {
+		name    string
+		data    map[string]any
+		wantImg bool
+		want    string
+	}{
+		{"with thumb", map[string]any{"Thumb": "/local/t.png", "Used": used}, true, `href="/part/7"`},
+		{"no thumb", map[string]any{"Thumb": "", "Used": used}, false, `href="/part/7"`},
+		{"empty", map[string]any{"Thumb": "", "Used": []parts.WhereUsed(nil)}, false, "Not used in any assemblies."},
+	}
+	for _, c := range cases {
+		var sb strings.Builder
+		if err := m["popouts"].ExecuteTemplate(&sb, "popout_part_where_used", c.data); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		out := sb.String()
+		if got := strings.Contains(out, `<img class="popout-thumb" src="/local/t.png"`); got != c.wantImg {
+			t.Errorf("%s: img present = %v, want %v\n%s", c.name, got, c.wantImg, out)
+		}
+		if !strings.Contains(out, c.want) {
+			t.Errorf("%s: missing %q\n%s", c.name, c.want, out)
 		}
 	}
 }

@@ -226,7 +226,7 @@
                     <tr data-bulk-pn="{{if eq $.BulkOrderPNSource "vendor"}}{{.VendorPN}}{{else}}{{.PartNumberSnapshot}}{{end}}" data-bulk-qty="{{.Qty}}">
                         <td>{{.LineNumber}}</td>
                         <td>
-                            {{if .PartID}}<a href="/part/{{derefInt .PartID}}" class="part-number-link">{{.PartNumberSnapshot}}</a>
+                            {{if .PartID}}<a href="/part/{{derefInt .PartID}}" class="part-number-link" data-popout-url="/popout/part/{{derefInt .PartID}}/where-used">{{.PartNumberSnapshot}}</a>
                             <button type="button" class="btn btn-sm btn-outline-secondary ms-1 py-0 px-1"
                                     onclick="openImportModal({{derefInt .PartID}}, '{{.PartNumberSnapshot}}')"
                                     title="Copy a file from this part into the PO folder"><i class="bi bi-paperclip"></i></button>
@@ -318,7 +318,7 @@
                     {{range .Receipts}}
                     <tr>
                         <td>{{.Date}}</td>
-                        <td>{{if .PartID}}<a href="/part/{{derefInt .PartID}}/transactions" class="part-number-link">{{.PartNumber}}</a>{{else}}{{.PartNumber}}{{end}}</td>
+                        <td>{{if .PartID}}<a href="/part/{{derefInt .PartID}}/transactions" class="part-number-link" data-popout-url="/popout/part/{{derefInt .PartID}}/where-used">{{.PartNumber}}</a>{{else}}{{.PartNumber}}{{end}}</td>
                         <td class="text-end">{{printf "%.2f" .Qty}}</td>
                         <td>{{.Username}}</td>
                     </tr>

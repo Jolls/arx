@@ -180,9 +180,7 @@ function escHtml(s) {
 // One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
 const ROW_BUILDERS = {
     '/api/parts/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
-        <td data-col="col-pn">${r.thumb
-            ? `<span class="pn-thumb" data-thumb="${escHtml(r.thumb)}"><a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a></span>`
-            : `<a href="/part/${r.id}" class="part-number-link">${escHtml(r.pn)}</a>`}${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum">Below Min</span>' : ''}</td>
+        <td data-col="col-pn"><a href="/part/${r.id}" class="part-number-link" data-popout-url="/popout/part/${r.id}/where-used">${escHtml(r.pn)}</a>${r.active === false ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : ''}${r.belowMin ? ' <span class="badge bg-warning text-dark ms-1" title="Stock on hand is below the reorder minimum">Below Min</span>' : ''}</td>
         <td data-col="col-rev">${escHtml(r.rev)}</td>
         <td data-col="col-title">${escHtml(r.description)}</td>
         <td data-col="col-detail">${escHtml(r.detail)}</td>
@@ -1163,7 +1161,7 @@ function buildLotSubRow(node, parentPath) {
         ? ' <span class="badge bg-info text-dark" title="Serialized unit">unit</span>'
         : (node.IsVendorLot ? ' <span class="badge bg-warning text-dark" title="Purchased raw/vendor lot">vendor</span>' : '')
     var notes = node.Notes ? escHtml(node.Notes) : ''
-    var popout = isUnit ? '' : ' data-popout-url="/popout/part/' + node.PartID + '/lots/' + node.ID + '/consumers"'
+    var popout = ' data-popout-url="/popout/part/' + node.PartID + (isUnit ? '/units/' : '/lots/') + node.ID + '/consumers"'
     tr.innerHTML =
         '<td style="--bom-depth:' + depth + '">' + toggle + '<a href="' + href + '" class="part-number-link"' + popout + '>' + escHtml(node.Number) + '</a>' + badge + '</td>' +
         '<td>' + (node.VendorLot ? escHtml(node.VendorLot) : '<span class="text-muted">&mdash;</span>') + '</td>' +
@@ -1307,6 +1305,9 @@ function collapseAllLots() {
             pop.innerHTML = html
             pop.classList.add('show')
             place(el)
+            // an image changes the popout's size once loaded; re-place so the above/below flip stays right
+            var img = pop.querySelector('img')
+            if (img && !img.complete) img.addEventListener('load', function () { if (current === el) place(el) })
         }
         if (cache[url] !== undefined) { render(cache[url]); return }
         fetch(url)
