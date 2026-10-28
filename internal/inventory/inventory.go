@@ -336,6 +336,11 @@ func (s *Service) Consumers(ctx context.Context, lotID int) ([]TraceNode, error)
 	return s.neighbors(ctx, lotID, "lot", false)
 }
 
+// UnitConsumers returns the immediate child lots/units one unit was consumed into (one level down).
+func (s *Service) UnitConsumers(ctx context.Context, unitID int) ([]TraceNode, error) {
+	return s.neighbors(ctx, unitID, "unit", false)
+}
+
 // Trace walks the genealogy from one or more roots and returns the reachable nodes flattened
 // depth-first (ancestors: parents down to raw vendor lots / root units; otherwise children).
 // One visited set, keyed by (NodeType, ID) since lot and unit ids are independent spaces, is

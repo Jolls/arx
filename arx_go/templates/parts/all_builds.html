@@ -35,11 +35,11 @@
                 {{range .Builds}}
                 <tr>
                     <td>{{if .OutputLotID}}<a href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}">#{{.ID}}</a>{{else}}<a href="/part/{{.PartID}}/build">#{{.ID}}</a>{{end}}</td>
-                    <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
+                    <td><a href="/part/{{.PartID}}" data-popout-url="/popout/part/{{.PartID}}/where-used">{{.PartNumber}}</a></td>
                     <td>{{if .PartDescription}}{{.PartDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{.Qty}}</td>
                     <td>{{.Date.Format "2006-01-02"}}</td>
-                    <td>{{if .OutputLotID}}<a href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    <td>{{if .OutputLotID}}<a href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}" data-popout-url="/popout/part/{{.PartID}}/lots/{{.OutputLotIDVal}}/consumers">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{template "note_cell" .Note}}</td>
                 </tr>
                 {{end}}

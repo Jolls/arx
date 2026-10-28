@@ -169,6 +169,21 @@ func (h *Handler) PopoutLotConsumers(w http.ResponseWriter, r *http.Request) {
 	h.renderPopout(w, "popout_lot_consumers", nodes)
 }
 
+// PopoutUnitConsumers renders the "Consumed into" hover-popout fragment for a unit.
+func (h *Handler) PopoutUnitConsumers(w http.ResponseWriter, r *http.Request) {
+	unitID, err := strconv.Atoi(r.PathValue("unitID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	nodes, err := h.inventory().UnitConsumers(r.Context(), unitID)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	h.renderPopout(w, "popout_lot_consumers", nodes)
+}
+
 // PopoutPartWhereUsed renders the "Used in" hover-popout fragment for a part.
 func (h *Handler) PopoutPartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
@@ -181,7 +196,14 @@ func (h *Handler) PopoutPartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "database error", err)
 		return
 	}
-	h.renderPopout(w, "popout_part_where_used", used)
+	// The thumbnail hover (#696) and this popout share the part-number trigger,
+	// so the popout carries the image rather than two boxes opening at once (#385).
+	p, err := h.fetchPartBasic(r.Context(), r.PathValue("id"))
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	h.renderPopout(w, "popout_part_where_used", map[string]any{"Thumb": p.ThumbnailURL, "Used": used})
 }
 
 // APIBrowseFolder opens a native Windows folder-picker dialog and returns

@@ -426,6 +426,7 @@ input.formula-overridden { background-color: var(--bs-warning-bg-subtle) !import
 }
 .hover-popout.show { display: block; }
 .hover-popout .popout-title { font-weight: 600; margin-bottom: 4px; }
+.hover-popout .popout-thumb { display: block; max-width: 250px; max-height: 250px; margin-bottom: 6px; }
 .hover-popout .popout-list { list-style: none; margin: 0; padding: 0; }
 .hover-popout .popout-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

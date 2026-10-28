@@ -22,10 +22,11 @@
 {{end}}
 
 {{define "popout_part_where_used"}}
+{{if .Thumb}}<img class="popout-thumb" src="{{.Thumb}}" alt="preview">{{end}}
 <div class="popout-title">Used in</div>
-{{if .}}
+{{if .Used}}
 <ul class="popout-list">
-    {{range .}}
+    {{range .Used}}
     <li>
         <a href="/part/{{.ParentPartID}}">{{.PartNumber}}</a>
         <span class="text-muted">{{if .Description}}{{.Description}} {{end}}(qty {{printf "%.5g" .Qty}})</span>

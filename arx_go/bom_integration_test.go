@@ -176,16 +176,16 @@ func TestIntegration_PartWhereUsed_Renders(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.PartWhereUsed(rec, withID(httptest.NewRequest(http.MethodGet, "/part/x/where-used", nil), f.L1))
 	body := rec.Body.String()
-	iP := strings.Index(body, fmt.Sprintf(`<a href="/part/%d" class="part-number-link">%s</a></td>
+	iP := strings.Index(body, fmt.Sprintf(`<a href="/part/%d" class="part-number-link" data-popout-url="/popout/part/%d/where-used">%s</a></td>
                     <td>parent desc</td>
                     <td>A</td>
                     <td>ASM</td>
-                    <td style="text-align:right;">2</td>`, f.P, f.PN[f.P]))
-	iS := strings.Index(body, fmt.Sprintf(`<a href="/part/%d" class="part-number-link">%s</a></td>
+                    <td style="text-align:right;">2</td>`, f.P, f.P, f.PN[f.P]))
+	iS := strings.Index(body, fmt.Sprintf(`<a href="/part/%d" class="part-number-link" data-popout-url="/popout/part/%d/where-used">%s</a></td>
                     <td>sub desc</td>
                     <td>A</td>
                     <td>ASM</td>
-                    <td style="text-align:right;">4</td>`, f.S, f.PN[f.S]))
+                    <td style="text-align:right;">4</td>`, f.S, f.S, f.PN[f.S]))
 	if iP < 0 || iS < 0 || iP > iS {
 		t.Errorf("PartWhereUsed: parent rows missing or out of order (P=%d S=%d)", iP, iS)
 	}

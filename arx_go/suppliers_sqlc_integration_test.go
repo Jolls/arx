@@ -259,8 +259,9 @@ func TestIntegration_SupplierSQLC_Parts(t *testing.T) {
 		pns = append(pns, ">"+p+"</a>")
 	}
 	assertInOrder(t, "parts tab", body, pns...)
-	if n := strings.Count(body, "data-thumb="); n != 1 {
-		t.Errorf("parts tab: %d thumbnails, want 1", n)
+	// the thumbnail now rides the "Used in" popout (#385), so each part number carries the trigger
+	if n := strings.Count(body, `data-popout-url="/popout/part/`); n != len(f.PN) {
+		t.Errorf("parts tab: %d popout triggers, want %d", n, len(f.PN))
 	}
 	for _, want := range []string{
 		"SPN-1", "sd", "3 wk", ">2.5<", "desc 1",
