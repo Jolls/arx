@@ -128,6 +128,7 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 	}
 
 	h := New(database, cfg, templatesFS, nil)
+	h.update(func(s *runtimeState) { s.conn = newDBConn(database, dsn) })
 	if err := h.loadTemplates(); err != nil {
 		database.Close()
 		t.Fatal(err)
@@ -141,7 +142,7 @@ func liveHandler(t *testing.T) (*Handler, func()) {
 	h.loadPartCategories(context.Background())
 
 	cleanup := func() {
-		database.Close()
+		h.CloseDB()
 	}
 	return h, cleanup
 }

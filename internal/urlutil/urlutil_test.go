@@ -225,3 +225,29 @@ func TestNormalizeLink(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalLinkEscapes(t *testing.T) {
+	cases := []struct {
+		val  string
+		want bool
+	}{
+		{"LOCAL:spec.pdf", false},
+		{"LOCAL:sub/spec.pdf", false},
+		{`LOCAL:sub\spec.pdf`, false},
+		{`LOCAL:sub\`, false},
+		{"LOCAL:..", true},
+		{"LOCAL:../x.pdf", true},
+		{`LOCAL:..\x.pdf`, true},
+		{`LOCAL:a\..\..\x.pdf`, true},
+		{"LOCAL:/etc/passwd", true},
+		{`LOCAL:\x.pdf`, true},
+		{"LOCAL:", true},
+		{"https://example.com/../x", false},
+		{`C:\docs\x.pdf`, false},
+	}
+	for _, c := range cases {
+		if got := LocalLinkEscapes(c.val); got != c.want {
+			t.Errorf("LocalLinkEscapes(%q) = %v, want %v", c.val, got, c.want)
+		}
+	}
+}

@@ -384,6 +384,10 @@ func (h *Handler) SupplierAttachmentCreate(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		filePath = urlutil.NormalizeLink(filePath)
+		if urlutil.LocalLinkEscapes(filePath) {
+			h.renderSupplierAttachments(w, r, id, map[string]any{"Error": errLocalLinkEscapes})
+			return
+		}
 	}
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	sortOrderStr := strings.TrimSpace(r.FormValue("sort_order"))
@@ -484,6 +488,10 @@ func (h *Handler) SupplierAttachmentUpdate(w http.ResponseWriter, r *http.Reques
 		imported = true
 	} else {
 		newFilePath = urlutil.NormalizeLink(strings.TrimSpace(r.FormValue("file_path")))
+		if urlutil.LocalLinkEscapes(newFilePath) {
+			h.renderSupplierAttachments(w, r, id, map[string]any{"Error": errLocalLinkEscapes})
+			return
+		}
 	}
 
 	sortOrderVal := intPtrOrNil(sortOrderStr)

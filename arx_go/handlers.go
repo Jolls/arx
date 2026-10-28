@@ -39,6 +39,33 @@ import (
 // a handle mid-close (#757).
 type dbConn struct {
 	db *sql.DB
+	// ro is a lazily-connecting read-only handle on the same server for
+	// admin-authored named queries (arxdb.OpenReadOnly); nil falls back to db.
+	ro *sql.DB
+}
+
+// close closes both handles; safe on nil.
+func (c *dbConn) close() {
+	if c == nil {
+		return
+	}
+	if c.db != nil {
+		c.db.Close()
+	}
+	if c.ro != nil {
+		c.ro.Close()
+	}
+}
+
+// newDBConn pairs db with a read-only handle derived from dsn. A dsn that
+// can't be parsed leaves ro nil (callers then use db). The error never
+// contains the DSN (arxdb.ReadOnlyDSN strips it).
+func newDBConn(db *sql.DB, dsn string) *dbConn {
+	ro, err := arxdb.OpenReadOnly(dsn)
+	if err != nil {
+		log.Printf("arx: read-only handle unavailable: %v", err)
+	}
+	return &dbConn{db: db, ro: ro}
 }
 
 // runtimeState is the immutable snapshot of everything SettingsSave and the
@@ -142,7 +169,11 @@ func New(db *sql.DB, cfg *arxbase.Config, tmplFS ioFS.FS, releaseNotes []byte) *
 		connectDB:     arxdb.Connect,
 	}
 	h.lookupUser = h.userByID
-	h.state.Store(&runtimeState{cfg: cfg, conn: &dbConn{db: db}})
+	conn := &dbConn{db: db}
+	if dsn := cfg.DSN(); db != nil && dsn != "" {
+		conn = newDBConn(db, dsn)
+	}
+	h.state.Store(&runtimeState{cfg: cfg, conn: conn})
 	return h
 }
 
@@ -209,6 +240,19 @@ func (h *Handler) queryRowContext(ctx context.Context, query string, args ...any
 	c := h.st().conn
 	h.logSQL(query, args...)
 	return timeQuery(ctx, query, func() *sql.Row { return c.db.QueryRowContext(ctx, query, args...) })
+}
+
+// queryReadOnlyContext is queryContext on the read-only handle (falls back to
+// the main one when none is configured). For admin-authored named queries (#290:
+// no extra round trip, unlike a ReadOnly transaction).
+func (h *Handler) queryReadOnlyContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	c := h.st().conn
+	db := c.db
+	if c.ro != nil {
+		db = c.ro
+	}
+	h.logSQL(query, args...)
+	return timeQueryErr(ctx, query, func() (*sql.Rows, error) { return db.QueryContext(ctx, query, args...) })
 }
 
 func (h *Handler) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
@@ -442,9 +486,7 @@ func (h *Handler) DB() *sql.DB { return h.database() }
 
 // CloseDB closes the underlying database connection if one is open.
 func (h *Handler) CloseDB() {
-	if db := h.database(); db != nil {
-		db.Close()
-	}
+	h.st().conn.close()
 }
 
 // RequireAuth redirects to /settings when no DB is connected or the connection
