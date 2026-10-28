@@ -83,8 +83,11 @@ func sanitizeFileNamePart(s string) string {
 
 // copyReaderIntoDocControl streams src into <root>/<name> without overwriting.
 // If the target already exists it returns (true, nil) and writes nothing.
-// A failure leaves no orphan target behind.
+// A failure leaves no orphan target behind. name must stay inside root.
 func copyReaderIntoDocControl(root, name string, src io.Reader) (existed bool, err error) {
+	if !filepath.IsLocal(name) {
+		return false, fmt.Errorf("invalid file name %q", name)
+	}
 	target := filepath.Join(root, name)
 	dst, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
@@ -222,7 +225,7 @@ func stagedUploadSource(path string) attachmentUploadSource {
 func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Request, partID, rev, category, comment, replaceName string, upload *attachmentUploadSource, allowLinkExisting bool) attachmentFileInput {
 	if allowLinkExisting && fv(r, "link_existing") == "1" {
 		name := sanitizeFileNamePart(filepath.Base(fv(r, "link_name")))
-		if name == "" {
+		if name == "" || !filepath.IsLocal(name) {
 			return attachmentFileInput{ErrMsg: "That file no longer exists in Doc Control."}
 		}
 		if _, err := os.Stat(filepath.Join(h.cfg().DocControlRoot, name)); err != nil {
@@ -524,8 +527,12 @@ func (h *Handler) attachmentTx(ctx context.Context, fn func(*attachments.Service
 // Handler.partFileInUse / companyFileInUse) reports another active row still has
 // fullFileName (e.g. via the "Link to existing file" import flow), in which case
 // the file is left in place for that row. A file that's already gone is treated
-// as success, not an error.
+// as success, not an error. strippedName comes from form input or a stored
+// file_name, so a name that would escape root is refused.
 func deleteAttachmentFileIfUnshared(ctx context.Context, inUse func(context.Context, string, int) (bool, error), excludeID int, fullFileName, root, strippedName string) error {
+	if !filepath.IsLocal(strippedName) {
+		return fmt.Errorf("invalid file name %q", strippedName)
+	}
 	used, err := inUse(ctx, fullFileName, excludeID)
 	if err != nil {
 		return err
