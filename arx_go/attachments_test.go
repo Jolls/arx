@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"mime/multipart"
 	"net/http/httptest"
@@ -88,6 +89,37 @@ func TestCopyReaderIntoDocControl(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "new.pdf")); !os.IsNotExist(statErr) {
 		t.Fatal("failing-reader copy left an orphan target file")
+	}
+}
+
+// Names reach these helpers from form fields and stored file_name values, so
+// one that resolves outside root must be refused before touching the disk.
+func TestDocControlRejectsEscapingNames(t *testing.T) {
+	outside := t.TempDir()
+	root := filepath.Join(outside, "root")
+	if err := os.Mkdir(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(outside, "victim.txt")
+	if err := os.WriteFile(victim, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	notInUse := func(context.Context, string, int) (bool, error) { return false, nil }
+
+	for _, name := range []string{"../victim.txt", "sub/../../victim.txt", victim} {
+		if err := deleteAttachmentFileIfUnshared(context.Background(), notInUse, 0, "LOCAL:"+name, root, name); err == nil {
+			t.Errorf("delete %q: want error, got nil", name)
+		}
+		if _, err := os.Stat(victim); err != nil {
+			t.Fatalf("delete %q removed a file outside root: %v", name, err)
+		}
+	}
+
+	if _, err := copyReaderIntoDocControl(root, "../new.txt", strings.NewReader("x")); err == nil {
+		t.Error("copy ../new.txt: want error, got nil")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "new.txt")); !os.IsNotExist(err) {
+		t.Fatal("copy wrote a file outside root")
 	}
 }
 
