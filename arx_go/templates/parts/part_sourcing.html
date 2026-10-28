@@ -154,7 +154,7 @@
         <form method="post" action="/part/{{.Part.ID}}/suppliers/{{.EditingLink.ID}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="detail-row">
-                <label for="edit_supplier_name" class="form-label">Supplier *</label>
+                <label for="edit_supplier_name" class="form-label">Supplier * {{template "search_help_btn"}}</label>
                 <div style="position:relative; flex:1;">
                     <input type="text" id="edit_supplier_name" name="supplier_name" class="form-control"
                            value="{{.EditingLink.SupplierName}}" placeholder="Required — type to search…" autocomplete="off">
@@ -230,7 +230,7 @@
             <form id="add-supplier-form" method="post" action="/part/{{.Part.ID}}/suppliers">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
-                    <label for="add_supplier_name" class="form-label">Supplier *</label>
+                    <label for="add_supplier_name" class="form-label">Supplier * {{template "search_help_btn"}}</label>
                     <div style="position:relative; flex:1;">
                         <input type="text" id="add_supplier_name" name="supplier_name" class="form-control"
                                value="{{if .AddDraft}}{{.AddDraft.SupplierName}}{{end}}" placeholder="Required — type to search…" autocomplete="off">

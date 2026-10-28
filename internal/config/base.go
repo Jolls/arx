@@ -55,6 +55,9 @@ func (b *Base) activeServer() string   { return b.testOverride(b.TestDBServer, b
 func (b *Base) activeUser() string     { return b.testOverride(b.TestDBUser, b.DBUser) }
 func (b *Base) activePassword() string { return b.testOverride(b.TestDBPassword, b.DBPassword) }
 
+// ActiveUser returns the DB login for the currently-selected profile.
+func (b *Base) ActiveUser() string { return b.activeUser() }
+
 // BuildDSN constructs a postgres:// connection string for the active profile
 // from the config fields + a password. sslmode=require forces TLS and refuses a
 // plaintext fallback (#757). (require encrypts but does not verify the server

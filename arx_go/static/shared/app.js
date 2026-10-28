@@ -354,6 +354,33 @@ function compileGlob(raw) {
     return new RegExp('^' + pattern + '$', 'i');
 }
 
+// One filter term -> matcher: a glob RegExp when it has `*`/`?`, else a
+// lowercase substring.
+function termMatcher(term) {
+    const regex = compileGlob(term);
+    return regex ? { regex } : { sub: term.toLowerCase() };
+}
+
+// Splits a text filter on `;`. A term with a leading `!` excludes; others
+// include. Empty terms are dropped. `plain` (select inputs) skips parsing and
+// treats the whole value as one include term (#382).
+function parseFilterTerms(raw, plain) {
+    const terms = { include: [], exclude: [] };
+    const parts = plain ? [raw || ''] : (raw || '').split(';');
+    for (const part of parts) {
+        let t = part.trim();
+        const exclude = !plain && t.startsWith('!');
+        if (exclude) t = t.slice(1).trim();
+        if (!t) continue;
+        (exclude ? terms.exclude : terms.include).push(termMatcher(t));
+    }
+    return terms;
+}
+
+function makeTextFilter(raw, plain) {
+    return { type: 'text', value: raw, terms: parseFilterTerms(raw, plain) };
+}
+
 function getFilterColumns() {
     return filterThs().map(th => {
         if (th.dataset.filterType === 'date') {
@@ -363,7 +390,7 @@ function getFilterColumns() {
         }
         const input = th.querySelector('input, select');
         const raw = input ? input.value : '';
-        return { type: 'text', value: raw, regex: compileGlob(raw) };
+        return makeTextFilter(raw, !!input && input.tagName === 'SELECT');
     });
 }
 
@@ -378,9 +405,8 @@ function matchesRow(row, cols) {
             if (c.to && d > c.to) return false;
             return true;
         }
-        if (c.regex) return c.regex.test(text);
-        const v = (c.value || '').toLowerCase().trim();
-        return !v || text.includes(v);
+        const hit = m => m.regex ? m.regex.test(text) : text.includes(m.sub);
+        return c.terms.include.every(hit) && !c.terms.exclude.some(hit);
     });
 }
 

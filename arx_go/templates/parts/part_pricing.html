@@ -90,7 +90,7 @@
             <form id="add-price-form" method="post" action="/part/{{.Part.ID}}/pricing">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="detail-row">
-                    <label for="add_price_supplier_name" class="form-label">Supplier *</label>
+                    <label for="add_price_supplier_name" class="form-label">Supplier * {{template "search_help_btn"}}</label>
                     <div style="position:relative; flex:1;">
                         <input type="text" id="add_price_supplier_name" class="form-control"
                                placeholder="Required — type to search…" autocomplete="off">

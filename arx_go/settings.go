@@ -16,6 +16,7 @@ import (
 
 	"arx/internal/auth"
 	arxbase "arx/internal/config"
+	arxdb "arx/internal/db"
 	"arx/internal/settings"
 )
 
@@ -527,13 +528,15 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	authenticated := h.currentUser(r) != nil
 	connectWith := selectConnectPassword(cfg.TestMode, authenticated, testPassword, cfg.TestDBPassword, password, cfg.DBPassword)
 
-	var connErr string
+	var connErr *arxdb.ConnectErrorInfo
 	dbSwapped := false
 	if connectWith != "" {
 		dsn := cfg.BuildDSN(connectWith)
 		newDB, err := h.connectDB(dsn)
 		if err != nil {
-			connErr = err.Error()
+			info := arxdb.ClassifyConnectError(err, cfg.ActiveUser(), connectWith, dsn)
+			connErr = &info
+			log.Printf("settings: database connection failed [%s]: %s", info.Code, info.Details)
 		} else {
 			var old *dbConn
 			if password != "" {
@@ -574,9 +577,11 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		log.Printf("warning: could not save secrets config: %v", err)
 	}
 
-	if connErr != "" {
+	if connErr != nil {
 		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
-			"Error": "Connection failed: " + connErr,
+			"Error":          connErr.Message,
+			"ConnErrCode":    connErr.Code,
+			"ConnErrDetails": connErr.Details,
 		}))
 		return
 	}

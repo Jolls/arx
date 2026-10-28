@@ -4,13 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
 	arxbase "arx/internal/config"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // isolatedSettingsHandler returns a Handler whose config/local.json and
@@ -62,8 +66,8 @@ func TestSettingsSave_ConnectFailure(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("SettingsSave(connect failure): status %d, want 200. body: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "Connection failed:") {
-		t.Errorf("SettingsSave(connect failure): body missing \"Connection failed:\", got: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "Could not connect to the database") {
+		t.Errorf("SettingsSave(connect failure): body missing \"Could not connect to the database\", got: %s", rec.Body.String())
 	}
 	if h.database() != nil {
 		t.Error("SettingsSave(connect failure): h.database() is non-nil, want still unconnected")
@@ -221,5 +225,67 @@ func TestSettingsSave_AuthenticatedReusesStoredPassword(t *testing.T) {
 	}
 	if !strings.Contains(dialed[0], "stored-secret") {
 		t.Errorf("DSN %q does not carry the stored password", dialed[0])
+	}
+}
+
+// saveWithConnectError runs a settings save whose connectDB fails with err, and returns
+// the recorder; the posted test password is pw.
+func saveWithConnectError(t *testing.T, err error, pw string) *httptest.ResponseRecorder {
+	t.Helper()
+	cfg := &arxbase.Config{}
+	cfg.TestMode = true
+	cfg.TestDBName = "ArxDev"
+	h := isolatedSettingsHandler(t, cfg)
+	h.connectDB = func(dsn string) (*sql.DB, error) { return nil, err }
+	rec := httptest.NewRecorder()
+	h.SettingsSave(rec, postSettings(url.Values{
+		"test_mode":        {"1"},
+		"test_db_server":   {"127.0.0.1:1"},
+		"test_db_name":     {"ArxDev"},
+		"test_db_user":     {"arx_test_user"},
+		"test_db_password": {pw},
+	}))
+	return rec
+}
+
+func TestSettingsSave_ConnectFailure_PasswordNotRendered(t *testing.T) {
+	rec := saveWithConnectError(t, errors.New("boom"), "s3cretPW")
+	if strings.Contains(rec.Body.String(), "s3cretPW") {
+		t.Error("posted password rendered in the response body")
+	}
+}
+
+func TestSettingsSave_ConnectFailure_FriendlyMessage(t *testing.T) {
+	err := fmt.Errorf("ping: %w", &pgconn.PgError{Code: "28P01", Message: "password authentication failed for user \"arx_test_user\""})
+	body := saveWithConnectError(t, err, "s3cretPW").Body.String()
+	for _, want := range []string{"The server rejected the password for user arx_test_user", "db_auth_failed", "<details", "password authentication failed"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+	if strings.Contains(body, "s3cretPW") {
+		t.Error("posted password rendered in the response body")
+	}
+}
+
+func TestSettingsSave_ConnectFailure_FallbackCode(t *testing.T) {
+	body := saveWithConnectError(t, errors.New("connection refused"), "s3cretPW").Body.String()
+	for _, want := range []string{"db_connect_failed", "Could not connect to the database"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}
+
+func TestSettingsSave_ConnectFailure_LogsCodeNotSecret(t *testing.T) {
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	saveWithConnectError(t, fmt.Errorf("ping: %w", &pgconn.PgError{Code: "28P01", Message: "bad"}), "s3cretPW")
+	if !strings.Contains(buf.String(), "db_auth_failed") {
+		t.Errorf("log missing code, got: %s", buf.String())
+	}
+	if strings.Contains(buf.String(), "s3cretPW") {
+		t.Error("password in log output")
 	}
 }

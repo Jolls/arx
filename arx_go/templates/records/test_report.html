@@ -22,7 +22,7 @@
   <table class="table table-bordered table-hover table-sm align-middle" id="report-table" data-rows-url="/api/forms/{{.Form.ID}}/tests/{{.Step.ID}}/report/rows">
     <thead>
       <tr class="table-dark">
-        <th data-col="col-sn">Serial Number</th>
+        <th data-col="col-sn">Serial Number {{template "filter_help_btn"}}</th>
         <th data-col="col-pn">Part Number</th>
         <th data-col="col-record-date">Record Date</th>
         <th data-col="col-result-date">Result Date</th>
