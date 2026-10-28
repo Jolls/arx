@@ -3,6 +3,8 @@
 <div class="content">
     {{template "part_tabs" .}}
 
+    {{template "part_status_bar" .}}
+
     {{if .BOMItems}}
     <div class="d-flex justify-content-end gap-2 mb-2" data-col-table="bom-table">
         <a href="/part/{{.Part.ID}}/create-rfqs" class="btn btn-sm btn-outline-secondary"><i class="bi bi-envelope-paper"></i> Create RFQs</a>

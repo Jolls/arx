@@ -267,3 +267,64 @@
     {{end}}
 </div>
 {{end}}
+
+{{/* Part header bar: status, category, rev, modified, cost, stock, primary attachment. Needs .Part and .PrimaryAtt. */}}
+{{define "part_status_bar"}}
+    <div class="part-status-bar">
+        <div class="part-status-cell">
+            <div class="part-status-label" data-bs-toggle="tooltip" title="Release status: Under Review, Active, or Deprecated"><i class="bi bi-flag me-1"></i>Status</div>
+            {{if eq .Part.ReleaseStatus "U"}}<span class="badge bg-info text-dark">Under Review</span>
+            {{else if eq .Part.ReleaseStatus "A"}}<span class="badge bg-success">Active</span>
+            {{else if eq .Part.ReleaseStatus "D"}}<span class="badge bg-danger">Deprecated</span>
+            {{else}}<span style="font-weight:600">—</span>{{end}}
+        </div>
+        <div class="part-status-cell">
+            <div class="part-status-label"><i class="bi bi-tag me-1"></i>Category</div>
+            <div class="part-status-value">{{if .Part.Category}}{{.Part.Category}}{{else}}—{{end}}</div>
+        </div>
+        <div class="part-status-cell">
+            <div class="part-status-label" data-bs-toggle="tooltip" title="Revision letter or number"><i class="bi bi-hash me-1"></i>Rev</div>
+            <div class="part-status-value">{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</div>
+        </div>
+        <div class="part-status-cell">
+            <div class="part-status-label"><i class="bi bi-clock me-1"></i>Last Modified</div>
+            <div class="part-status-value">{{formatDate .Part.ModifiedDate}}</div>
+        </div>
+        {{if .Part.ShowPricing}}
+        <div class="part-status-cell">
+            <div class="part-status-label"><i class="bi bi-currency-dollar me-1"></i>Current Cost</div>
+            <div class="part-status-value">${{printf "%.4f" .Part.CurrentCost}}</div>
+        </div>
+        {{end}}
+        {{if .Part.ShowInventory}}
+        <div class="part-status-cell">
+            <div class="part-status-label"><i class="bi bi-box-seam me-1"></i>Stock</div>
+            <div class="part-status-value">{{printf "%.2f" .Part.StockOnHand}}{{if .Part.UnitAbbr}} {{.Part.UnitAbbr}}{{end}}{{if .Part.BelowReorder}} <span class="badge bg-warning text-dark ms-1">Below Min</span>{{end}}</div>
+        </div>
+        {{end}}
+        <div class="part-status-cell part-status-cell--flex">
+            <div class="part-status-label"><i class="bi bi-paperclip me-1"></i>Primary Attachment</div>
+            {{if .PrimaryAtt}}
+                {{$f := .PrimaryAtt.FileName}}
+                {{$n := .PrimaryAtt.Category}}
+                {{if isHTTPURL $f}}
+                    <a href="{{$f}}" target="_blank" rel="noopener noreferrer" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
+                {{else if isLocalDir $f}}
+                    <a href="{{localDirURL $f}}" class="part-status-value d-block text-truncate">&#128193; {{attachLabel $f $n}}</a>
+                {{else if isLocalFile $f}}
+                    {{if isPDF $f}}
+                        <a href="{{localFileURL $f}}" target="_blank" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
+                    {{else}}
+                        <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
+                    {{end}}
+                {{else if isAbsPath $f}}
+                    <span class="part-status-value">{{template "abspath_link" $f}}</span>
+                {{else}}
+                    <span class="part-status-value">{{$f}}</span>
+                {{end}}
+            {{else}}
+                <span class="part-status-value">—</span>
+            {{end}}
+        </div>
+    </div>
+{{end}}

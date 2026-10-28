@@ -206,12 +206,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	attSvc := h.attachments()
-	var primaryAtt *models.Attachment
-	if p.PrimaryAttachmentID != nil {
-		if a, err := attSvc.GetPartAttachment(r.Context(), *p.PrimaryAttachmentID, p.ID); err == nil {
-			primaryAtt = &models.Attachment{ID: a.ID, FileName: a.FileName, Category: a.Category, PartRevision: a.PartRevision}
-		}
-	}
+	primaryAtt := h.partPrimaryAttachment(r.Context(), p)
 
 	var topAtts, photoAtts []models.Attachment
 	partAtts, err := attSvc.ListPartAttachments(r.Context(), p.ID)
@@ -639,6 +634,18 @@ func (h *Handler) fetchBOMItems(ctx context.Context, partID string) ([]models.BO
 	return items, bomTotal, nil
 }
 
+// partPrimaryAttachment resolves the part's primary attachment for the header bar; nil if unset or missing.
+func (h *Handler) partPrimaryAttachment(ctx context.Context, p models.Part) *models.Attachment {
+	if p.PrimaryAttachmentID == nil {
+		return nil
+	}
+	a, err := h.attachments().GetPartAttachment(ctx, *p.PrimaryAttachmentID, p.ID)
+	if err != nil {
+		return nil
+	}
+	return &models.Attachment{ID: a.ID, FileName: a.FileName, Category: a.Category, PartRevision: a.PartRevision}
+}
+
 func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
@@ -651,7 +658,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, r, "parts/part_bom.html", map[string]any{
-		"Part": p, "BOMItems": items, "BOMTotal": bomTotal,
+		"Part": p, "PrimaryAtt": h.partPrimaryAttachment(r.Context(), p), "BOMItems": items, "BOMTotal": bomTotal,
 		"ActiveTab": "parts", "ActiveSubTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
