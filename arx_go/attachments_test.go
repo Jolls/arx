@@ -268,3 +268,55 @@ func TestComputeAttachmentHash(t *testing.T) {
 		t.Errorf("file content hash should not equal the directory-link string hash by coincidence in this test")
 	}
 }
+
+// Names that resolve to the root itself or climb out of it are refused by the
+// replace helpers before anything is touched (a name ending in ".." passes the
+// ".tmp_replace" IsLocal check on the temp name).
+func TestReplaceHelpers_RejectEscapingNames(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"sub/..", "..", "../x.pdf", "."} {
+		if err := replaceLocalFileFrom(root, name, strings.NewReader("x")); err == nil {
+			t.Errorf("replaceLocalFileFrom(%q) = nil, want error", name)
+		}
+		if err := replaceDocControlData(root, name, []byte("x")); err == nil {
+			t.Errorf("replaceDocControlData(%q) = nil, want error", name)
+		}
+	}
+	if _, err := os.Stat(root); err != nil {
+		t.Errorf("root should be untouched: %v", err)
+	}
+}
+
+// A symlinked directory inside the root that points outside it must not be
+// written through or deleted through (#117).
+func TestDocControlHelpers_SymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	victim := filepath.Join(outside, "victim.txt")
+	if err := os.WriteFile(victim, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+
+	if _, err := copyReaderIntoDocControl(root, "link/new.txt", strings.NewReader("x")); err == nil {
+		t.Error("copyReaderIntoDocControl through symlink dir = nil, want error")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "new.txt")); err == nil {
+		t.Error("file was written outside the root")
+	}
+	if err := replaceLocalFileFrom(root, "link/victim.txt", strings.NewReader("x")); err == nil {
+		t.Error("replaceLocalFileFrom through symlink dir = nil, want error")
+	}
+	if err := replaceDocControlData(root, "link/victim.txt", []byte("x")); err == nil {
+		t.Error("replaceDocControlData through symlink dir = nil, want error")
+	}
+	inUse := func(context.Context, string, int) (bool, error) { return false, nil }
+	if err := deleteAttachmentFileIfUnshared(context.Background(), inUse, 0, "LOCAL:link/victim.txt", root, "link/victim.txt"); err == nil {
+		t.Error("deleteAttachmentFileIfUnshared through symlink dir = nil, want error")
+	}
+	if b, err := os.ReadFile(victim); err != nil || string(b) != "keep" {
+		t.Errorf("victim file changed: %q, %v", b, err)
+	}
+}

@@ -81,14 +81,35 @@ func sanitizeFileNamePart(s string) string {
 	}, s)
 }
 
+// errLocalLinkEscapes is the form error shown when a LOCAL: link would point
+// outside the Doc Control root (absolute path or "..").
+const errLocalLinkEscapes = "A LOCAL: link must be a relative path inside the Doc Control folder (no leading \\ or / and no \"..\")."
+
+// docControlTarget returns <root>/<name> after checking name is a plain relative
+// path that names something inside root: not empty, rooted, containing "..", or
+// resolving to root itself (e.g. "a/.."), and not reaching outside root through
+// a symlink (#117, via resolvedInside).
+func docControlTarget(root, name string) (string, error) {
+	if !filepath.IsLocal(name) || filepath.Clean(name) == "." {
+		return "", fmt.Errorf("invalid file name %q", name)
+	}
+	target := filepath.Join(root, name)
+	absRoot, err1 := filepath.Abs(root)
+	absTarget, err2 := filepath.Abs(target)
+	if err1 != nil || err2 != nil || !resolvedInside(absRoot, absTarget) {
+		return "", fmt.Errorf("invalid file name %q", name)
+	}
+	return target, nil
+}
+
 // copyReaderIntoDocControl streams src into <root>/<name> without overwriting.
 // If the target already exists it returns (true, nil) and writes nothing.
 // A failure leaves no orphan target behind. name must stay inside root.
 func copyReaderIntoDocControl(root, name string, src io.Reader) (existed bool, err error) {
-	if !filepath.IsLocal(name) {
-		return false, fmt.Errorf("invalid file name %q", name)
+	target, err := docControlTarget(root, name)
+	if err != nil {
+		return false, err
 	}
-	target := filepath.Join(root, name)
 	dst, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		if os.IsExist(err) {
@@ -235,7 +256,11 @@ func (h *Handler) resolveAttachmentFileInput(ctx context.Context, r *http.Reques
 	}
 
 	if upload == nil {
-		return attachmentFileInput{FileName: urlutil.NormalizeLink(fv(r, "FILFileName"))}
+		link := urlutil.NormalizeLink(fv(r, "FILFileName"))
+		if urlutil.LocalLinkEscapes(link) {
+			return attachmentFileInput{ErrMsg: errLocalLinkEscapes}
+		}
+		return attachmentFileInput{FileName: link}
 	}
 	if h.cfg().DocControlRoot == "" {
 		return attachmentFileInput{ErrMsg: "DOC_CONTROL_ROOT is not configured; cannot import files."}
@@ -460,6 +485,10 @@ func (h *Handler) importAttachmentBatch(w http.ResponseWriter, r *http.Request, 
 // removes the existing file and swaps the temp file into place once the copy
 // has fully succeeded, so a mid-copy failure never leaves name missing.
 func replaceLocalFileFrom(root, name string, src io.Reader) error {
+	target, err := docControlTarget(root, name)
+	if err != nil {
+		return err
+	}
 	tmpName := name + ".tmp_replace"
 	existed, err := copyReaderIntoDocControl(root, tmpName, src)
 	if err != nil {
@@ -469,7 +498,6 @@ func replaceLocalFileFrom(root, name string, src io.Reader) error {
 		return fmt.Errorf("a temporary file %q already exists; please try again", tmpName)
 	}
 	tmpPath := filepath.Join(root, tmpName)
-	target := filepath.Join(root, name)
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		os.Remove(tmpPath)
 		return err
@@ -486,6 +514,10 @@ func replaceLocalFileFrom(root, name string, src io.Reader) error {
 // write has fully succeeded. Mirrors replaceLocalFileFrom's copy-then-swap for
 // byte data instead of an io.Reader source.
 func replaceDocControlData(root, name string, data []byte) error {
+	target, err := docControlTarget(root, name)
+	if err != nil {
+		return err
+	}
 	tmpName := name + ".tmp_replace"
 	existed, err := writeIntoDocControl(root, tmpName, data)
 	if err != nil {
@@ -495,7 +527,6 @@ func replaceDocControlData(root, name string, data []byte) error {
 		return fmt.Errorf("a temporary file %q already exists; please try again", tmpName)
 	}
 	tmpPath := filepath.Join(root, tmpName)
-	target := filepath.Join(root, name)
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		os.Remove(tmpPath)
 		return err
@@ -530,8 +561,9 @@ func (h *Handler) attachmentTx(ctx context.Context, fn func(*attachments.Service
 // as success, not an error. strippedName comes from form input or a stored
 // file_name, so a name that would escape root is refused.
 func deleteAttachmentFileIfUnshared(ctx context.Context, inUse func(context.Context, string, int) (bool, error), excludeID int, fullFileName, root, strippedName string) error {
-	if !filepath.IsLocal(strippedName) {
-		return fmt.Errorf("invalid file name %q", strippedName)
+	target, err := docControlTarget(root, strippedName)
+	if err != nil {
+		return err
 	}
 	used, err := inUse(ctx, fullFileName, excludeID)
 	if err != nil {
@@ -540,7 +572,7 @@ func deleteAttachmentFileIfUnshared(ctx context.Context, inUse func(context.Cont
 	if used {
 		return nil
 	}
-	if err := os.Remove(filepath.Join(root, strippedName)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

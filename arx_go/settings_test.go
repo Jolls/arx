@@ -54,6 +54,7 @@ func TestLandingRoute(t *testing.T) {
 		{"root path loop guard", &User{DefaultRoute: "/"}, "/parts"},
 		{"root path with query loop guard", &User{DefaultRoute: "/?f=1"}, "/parts"},
 		{"protocol-relative defense in depth", &User{DefaultRoute: "//evil.com"}, "/parts"},
+		{"backslash host-relative", &User{DefaultRoute: `/\evil.com`}, "/parts"},
 		{"valid passthrough", &User{DefaultRoute: "/pos"}, "/pos"},
 	}
 	for _, tt := range tests {

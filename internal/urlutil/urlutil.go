@@ -68,6 +68,19 @@ func NormalizeLink(raw string) string {
 	return "LOCAL:" + v
 }
 
+// LocalLinkEscapes reports whether val is a LOCAL: link whose path is not a
+// plain relative path under the root (absolute, or containing ".." after
+// normalizing backslashes). Non-LOCAL values return false. A trailing / or \
+// (directory link) is ignored.
+func LocalLinkEscapes(val string) bool {
+	if !IsLocalFile(val) {
+		return false
+	}
+	rel := strings.ReplaceAll(val[6:], "\\", "/")
+	rel = strings.TrimRight(rel, "/")
+	return rel == "" || !filepath.IsLocal(filepath.FromSlash(rel))
+}
+
 // LocalFileURL converts a LOCAL:path value to a URL using the given prefix.
 //
 //	LocalFileURL("LOCAL:foo\\bar.pdf", "/local/") → "/local/foo/bar.pdf"

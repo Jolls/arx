@@ -29,11 +29,12 @@ var (
 // otherwise slip past a SELECT-prefixed query); WAITFOR blocks a trivial DoS.
 // OPENROWSET/OPENDATASOURCE/OPENQUERY/BULK block SQL Server's file-read and
 // remote-provider surface, which needs neither EXEC nor a semicolon; the PG_*
-// entries are the Postgres equivalents (file read, directory list, sleep DoS) —
+// entries are the Postgres equivalents (file read, directory list, sleep DoS;
+// SET_CONFIG could flip the read-only session default off for a pooled conn) —
 // SQL Server's entries are kept as harmless defense in depth (#146).
 // Word boundaries avoid false positives on column names that contain keyword
 // substrings (e.g. created_at, updated_at, alternate, bulk_order_delimiter).
-var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE|INTO|MERGE|GRANT|REVOKE|DENY|WAITFOR|DBCC|BACKUP|RESTORE|SHUTDOWN|OPENROWSET|OPENDATASOURCE|OPENQUERY|BULK|PG_READ_FILE|PG_LS_DIR|PG_SLEEP)\b|;`)
+var unsafeKeywordRE = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|DROP|EXEC(UTE)?|TRUNCATE|ALTER|CREATE|INTO|MERGE|GRANT|REVOKE|DENY|WAITFOR|DBCC|BACKUP|RESTORE|SHUTDOWN|OPENROWSET|OPENDATASOURCE|OPENQUERY|BULK|PG_READ_FILE|PG_LS_DIR|PG_SLEEP|SET_CONFIG)\b|;`)
 
 // isSafeQuery rejects anything that isn't a plain SELECT.
 // Defense-in-depth only — the real control is DB-level: the app DB user
@@ -162,7 +163,7 @@ func (h *Handler) execQuery(ctx context.Context, sqlText, resultType string, par
 	}
 	sqlText = arxdb.RewriteNamedParams(sqlText, names)
 
-	rows, err := h.queryContext(ctx, sqlText, args...)
+	rows, err := h.queryReadOnlyContext(ctx, sqlText, args...)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("execution: %w", err)
 	}
@@ -202,6 +203,11 @@ func (h *Handler) execQuery(ctx context.Context, sqlText, resultType string, par
 		if resultType == "single" {
 			break // first row only
 		}
+	}
+	// A pool closed mid-iteration (Settings reconnect) or a timeout ends Next()
+	// early; surface it rather than return a silently truncated result.
+	if err := rows.Err(); err != nil {
+		return QueryResult{}, fmt.Errorf("rows: %w", err)
 	}
 	return result, nil
 }

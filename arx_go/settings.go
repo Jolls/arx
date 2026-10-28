@@ -548,7 +548,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			h.update(func(s *runtimeState) {
 				old = s.conn
 				applyCfg(s.cfg)
-				s.conn = &dbConn{db: newDB}
+				s.conn = newDBConn(newDB, dsn)
 				if password != "" {
 					s.cfg.DBPassword = password
 				}
@@ -561,9 +561,7 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			h.loadCompanyLogo(r.Context())
 			h.loadPartCategories(r.Context())
 			h.loadDigiKeyCredentials(r.Context())
-			if old != nil && old.db != nil {
-				old.db.Close()
-			}
+			old.close()
 		}
 	}
 	if !dbSwapped {

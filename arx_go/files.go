@@ -58,16 +58,22 @@ func safePath(root, splat string) (string, bool) {
 	}
 	// The check above is lexical; a symlink inside root could still point
 	// outside it. Compare fully-resolved paths (#117).
-	realRoot, err1 := resolveExisting(absRoot)
-	realResult, err2 := resolveExisting(absResult)
-	if err1 != nil || err2 != nil {
-		return "", false
-	}
-	if realResult != realRoot &&
-		!strings.HasPrefix(realResult, realRoot+string(filepath.Separator)) {
+	if !resolvedInside(absRoot, absResult) {
 		return "", false
 	}
 	return result, true
+}
+
+// resolvedInside reports whether absPath, with symlinks resolved, is root or
+// inside root (also resolved). Both arguments must be absolute.
+func resolvedInside(absRoot, absPath string) bool {
+	realRoot, err1 := resolveExisting(absRoot)
+	realResult, err2 := resolveExisting(absPath)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return realResult == realRoot ||
+		strings.HasPrefix(realResult, realRoot+string(filepath.Separator))
 }
 
 // resolveExisting resolves symlinks in p. Missing trailing components (e.g. an

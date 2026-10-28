@@ -326,7 +326,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 func landingRoute(u *User) string {
 	if u != nil {
 		p := u.DefaultRoute
-		if strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") &&
+		if strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.HasPrefix(p, `/\`) &&
 			p != "/" && !strings.HasPrefix(p, "/?") {
 			return p
 		}

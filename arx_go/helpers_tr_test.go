@@ -35,6 +35,8 @@ func TestIsSafeQuery(t *testing.T) {
 		{"  select id from forms  ", true}, // lowercase + leading space
 		{"", false},
 		{"DELETE FROM PN", false},
+		{"SELECT set_config('default_transaction_read_only','off',false)", false}, // would defeat the read-only session
+		{"SELECT pg_catalog.set_config('statement_timeout','0',false)", false},
 		{"UPDATE PN SET x = 1", false},
 		{"INSERT INTO PN VALUES (1)", false},
 		{"SELECT 1; DROP TABLE PN", false},          // semicolon
