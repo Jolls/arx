@@ -8,51 +8,7 @@
     {{else}}
 
     {{/* ── Status bar ─────────────────────────────────────────── */}}
-    <div class="part-status-bar">
-        <div class="part-status-cell">
-            <div class="part-status-label" data-bs-toggle="tooltip" title="Release status: Under Review, Active, or Deprecated">Status</div>
-            {{if eq .Part.ReleaseStatus "U"}}<span class="badge bg-info text-dark">Under Review</span>
-            {{else if eq .Part.ReleaseStatus "A"}}<span class="badge bg-success">Active</span>
-            {{else if eq .Part.ReleaseStatus "D"}}<span class="badge bg-danger">Deprecated</span>
-            {{else}}<span style="font-weight:600">—</span>{{end}}
-        </div>
-        <div class="part-status-cell">
-            <div class="part-status-label">Category</div>
-            <div class="part-status-value">{{if .Part.Category}}{{.Part.Category}}{{else}}—{{end}}</div>
-        </div>
-        <div class="part-status-cell">
-            <div class="part-status-label" data-bs-toggle="tooltip" title="Revision letter or number">Rev</div>
-            <div class="part-status-value">{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</div>
-        </div>
-        <div class="part-status-cell">
-            <div class="part-status-label">Last Modified</div>
-            <div class="part-status-value">{{formatDate .Part.ModifiedDate}}</div>
-        </div>
-        <div class="part-status-cell part-status-cell--flex">
-            <div class="part-status-label">Primary Attachment</div>
-            {{if .PrimaryAtt}}
-                {{$f := .PrimaryAtt.FileName}}
-                {{$n := .PrimaryAtt.Category}}
-                {{if isHTTPURL $f}}
-                    <a href="{{$f}}" target="_blank" rel="noopener noreferrer" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
-                {{else if isLocalDir $f}}
-                    <a href="{{localDirURL $f}}" class="part-status-value d-block text-truncate">&#128193; {{attachLabel $f $n}}</a>
-                {{else if isLocalFile $f}}
-                    {{if isPDF $f}}
-                        <a href="{{localFileURL $f}}" target="_blank" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
-                    {{else}}
-                        <a href="{{localFileURL $f}}" download="{{fileBaseName $f}}" class="part-status-value d-block text-truncate">{{attachLabel $f $n}}</a>
-                    {{end}}
-                {{else if isAbsPath $f}}
-                    <span class="part-status-value">{{template "abspath_link" $f}}</span>
-                {{else}}
-                    <span class="part-status-value">{{$f}}</span>
-                {{end}}
-            {{else}}
-                <span class="part-status-value">—</span>
-            {{end}}
-        </div>
-    </div>
+    {{template "part_status_bar" .}}
 
     {{/* ── Dashboard grid (#521) ─────────────────────────────── */}}
     <div class="row row-cols-1 row-cols-xl-2 dash-grid g-3">
