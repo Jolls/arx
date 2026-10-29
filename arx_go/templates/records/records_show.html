@@ -128,7 +128,7 @@
       {{if and .Trace .Trace.LinkedBuild}}
       <tr>
         <th class="text-muted">Build</th>
-        <td>{{.Trace.LinkedBuild.Label}}</td>
+        <td><span data-popout-url="/popout/build/{{.Trace.LinkedBuild.ID}}">{{.Trace.LinkedBuild.Label}}</span></td>
       </tr>
       {{end}}
     </table>

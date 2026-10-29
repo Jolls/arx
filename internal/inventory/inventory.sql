@@ -275,3 +275,47 @@ FROM build b
 JOIN part p ON p.id = b.part_id
 LEFT JOIN lot l ON l.id = b.output_lot_id
 ORDER BY b.build_date DESC, b.id DESC;
+
+-- name: GetBuildDetail :one
+-- Popout (#387): one build with its part and (nullable) output lot.
+SELECT b.id, b.part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       b.qty, b.build_date, b.username, b.output_lot_id, COALESCE(l.lot_number, '') AS lot_number
+FROM build b
+JOIN part p ON p.id = b.part_id
+LEFT JOIN lot l ON l.id = b.output_lot_id
+WHERE b.id = sqlc.arg(id);
+
+-- name: ListBuildConsumed :many
+-- Popout (#387): the lots/units a build consumed, via genealogy edges into its output lot or
+-- into any unit it minted. Aggregated per node.
+SELECT c.node_type::text AS node_type, c.id::int AS id, c.number::text AS number, c.part_id::int AS part_id,
+       c.part_number::text AS part_number, SUM(c.qty)::numeric AS qty
+FROM (
+    SELECT 'lot'::text AS node_type, l.id, l.lot_number AS number, p.id AS part_id,
+           COALESCE(p.part_number, '') AS part_number, g.qty_consumed AS qty
+    FROM genealogy g
+    JOIN build b ON b.id = sqlc.arg(build_id)::int
+    JOIN lot l ON l.id = g.parent_lot_id
+    JOIN part p ON p.id = l.part_id
+    WHERE g.child_lot_id = b.output_lot_id
+       OR g.child_unit_id IN (SELECT u.id FROM unit u WHERE u.build_id = b.id)
+    UNION ALL
+    SELECT 'unit'::text, u2.id, u2.serial_number, p.id, COALESCE(p.part_number, ''), g.qty_consumed
+    FROM genealogy g
+    JOIN build b ON b.id = sqlc.arg(build_id)::int
+    JOIN unit u2 ON u2.id = g.parent_unit_id
+    JOIN part p ON p.id = u2.part_id
+    WHERE g.child_lot_id = b.output_lot_id
+       OR g.child_unit_id IN (SELECT u.id FROM unit u WHERE u.build_id = b.id)
+) c
+GROUP BY c.node_type, c.id, c.number, c.part_id, c.part_number
+ORDER BY c.node_type, c.id
+LIMIT sqlc.arg(n)::int;
+
+-- name: ListBuildUnits :many
+-- Popout (#387): the serialized units a build produced.
+SELECT u.id, u.serial_number, u.part_id, u.is_active
+FROM unit u
+WHERE u.build_id = sqlc.arg(build_id)::int
+ORDER BY u.id
+LIMIT sqlc.arg(n)::int;

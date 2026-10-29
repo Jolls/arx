@@ -267,9 +267,9 @@ func TestIntegration_DashboardFailureModesAndYield(t *testing.T) {
 			t.Errorf("failure modes not ranked descending: %+v", modes)
 		}
 	}
-	// Seed: results 7115 (record 7005) and 7123 (record 7007) fail the Current Draw step.
-	if found == nil || found.PartNumber != "FORM-1001" || found.FailureCount != 2 {
-		t.Errorf("Current Draw mode = %+v, want FORM-1001 x2 (modes=%+v)", found, modes)
+	// Seed: results 7115 (record 7005), 7123 (record 7007) and 7151 (record 7014) fail the Current Draw step.
+	if found == nil || found.PartNumber != "FORM-1001" || found.FailureCount != 3 {
+		t.Errorf("Current Draw mode = %+v, want FORM-1001 x3 (modes=%+v)", found, modes)
 	}
 	if limited, err := h.dashboardTopFailureModes(ctx, 1); err != nil || len(limited) != 1 {
 		t.Errorf("limit 1: %d rows, err %v", len(limited), err)
@@ -285,9 +285,9 @@ func TestIntegration_DashboardFailureModesAndYield(t *testing.T) {
 			yf = &forms[i]
 		}
 	}
-	// Seed: 14 active records on form 6001 (7004 is soft-deleted); 7005, 7007 and 7016 have a failing row.
-	if yf == nil || yf.PartNumber != "FORM-1001" || yf.Total != 14 || yf.Passed != 11 {
-		t.Errorf("form 6001 yield = %+v, want FORM-1001 14 total / 11 passed", yf)
+	// Seed: 14 active records on form 6001 (7004 is soft-deleted); 7005, 7007, 7014 and 7016 have a failing row.
+	if yf == nil || yf.PartNumber != "FORM-1001" || yf.Total != 14 || yf.Passed != 10 {
+		t.Errorf("form 6001 yield = %+v, want FORM-1001 14 total / 10 passed", yf)
 	}
 }
 

@@ -704,8 +704,8 @@ END $$;
         (7135, 7010, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
         (7136, 7010, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
         (7137, 7011, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
-        (7138, 7011, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
-        (7139, 7011, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7138, 7011, 6102, TRUE, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7139, 7011, 6103, TRUE, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
         (7140, 7011, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
         -- 7012 / 7013 (#737) are WIP with empty results, same unfilled pattern as 7010/7011.
         (7141, 7012, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
@@ -716,11 +716,11 @@ END $$;
         (7146, 7013, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
         (7147, 7013, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
         (7148, 7013, 6104, NULL, NULL,   'Insulation Resistance', '>100 Mohm',   'Mohm','100', NULL, NULL,  'range', 0, '2020-01-01T00:00:00'),
-        -- 7014 (#745) is the retest of unit 8501 — WIP with empty results; includes the
+        -- 7014 (#745) is the retest of unit 8501 — WIP (voltage passes, current draw fails, #387); includes the
         -- Re-Test-only step 6108 and skips archived 6104, matching a fresh Re-Test snapshot.
         (7149, 7014, 6101, NULL, NULL,   'Electrical Tests',      NULL,          NULL, NULL,  NULL,  NULL,  NULL,    1, '2020-01-01T00:00:00'),
-        (7150, 7014, 6102, NULL, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
-        (7151, 7014, 6103, NULL, NULL,   'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
+        (7150, 7014, 6102, TRUE, NULL,   'Output Voltage',        '5V +/-0.25V', 'V',  '4.75','5.00','5.25','range', 0, '2020-01-01T00:00:00'),
+        (7151, 7014, 6103, FALSE, NULL,  'Current Draw',          '<=200mA',     'mA', NULL,  NULL,  '200', 'range', 0, '2020-01-01T00:00:00'),
         (7152, 7014, 6108, NULL, NULL,   'Retest Voltage Check',  'Re-measure output', 'V', '4.75', NULL, '5.25','range', 0, '2020-01-01T00:00:00'),
         -- 7015 (form 6002): all three heading levels (type 1/2/3) plus a passing data row under each.
         (7153, 7015, 6109, NULL, NULL,   'Mechanical Tests',   NULL,                 NULL, NULL,  NULL, NULL,  NULL,    1, '2020-01-01T00:00:00'),

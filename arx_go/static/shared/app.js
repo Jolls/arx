@@ -1161,7 +1161,7 @@ function buildLotSubRow(node, parentPath) {
         ? ' <span class="badge bg-info text-dark" title="Serialized unit">unit</span>'
         : (node.IsVendorLot ? ' <span class="badge bg-warning text-dark" title="Purchased raw/vendor lot">vendor</span>' : '')
     var notes = node.Notes ? escHtml(node.Notes) : ''
-    var popout = ' data-popout-url="/popout/part/' + node.PartID + (isUnit ? '/units/' : '/lots/') + node.ID + '/consumers"'
+    var popout = ' data-popout-url="' + (isUnit ? '/popout/unit/' + node.ID : '/popout/part/' + node.PartID + '/lots/' + node.ID + '/consumers') + '"'
     tr.innerHTML =
         '<td style="--bom-depth:' + depth + '">' + toggle + '<a href="' + href + '" class="part-number-link"' + popout + '>' + escHtml(node.Number) + '</a>' + badge + '</td>' +
         '<td>' + (node.VendorLot ? escHtml(node.VendorLot) : '<span class="text-muted">&mdash;</span>') + '</td>' +
@@ -1234,42 +1234,6 @@ function collapseAllLots() {
         btn.innerHTML = '&#9656;'
     })
 }
-
-// Hover preview for the /parts part-number thumbnail (#696). The parts table cells
-// use overflow:hidden and the wrapper scrolls, which clip an in-cell tooltip — so
-// this uses a single position:fixed element appended to <body> that escapes the
-// clipping, positioned by JS relative to the hovered part number. Only activates
-// for .pn-thumb elements, so it's inert on pages without them.
-(function () {
-    var tip, tipImg
-    function ensureTip() {
-        if (tip) return
-        tip = document.createElement('div')
-        tip.className = 'pn-thumb-tip hover-preview-box'
-        tipImg = document.createElement('img')
-        tipImg.alt = 'preview'
-        tip.appendChild(tipImg)
-        document.body.appendChild(tip)
-    }
-    document.addEventListener('mouseover', function (e) {
-        var wrap = e.target.closest ? e.target.closest('.pn-thumb') : null
-        if (!wrap) return
-        ensureTip()
-        if (tipImg.getAttribute('src') !== wrap.dataset.thumb) { tipImg.setAttribute('src', wrap.dataset.thumb) }
-        var r = wrap.getBoundingClientRect()
-        var above = r.top > 260
-        tip.style.left = r.left + 'px'
-        tip.style.top = (above ? r.top - 8 : r.bottom + 8) + 'px'
-        tip.style.transform = above ? 'translateY(-100%)' : 'none'
-        tip.classList.add('show')
-    })
-    document.addEventListener('mouseout', function (e) {
-        var wrap = e.target.closest ? e.target.closest('.pn-thumb') : null
-        if (!wrap) return
-        if (e.relatedTarget && wrap.contains(e.relatedTarget)) return
-        if (tip) tip.classList.remove('show')
-    })
-})()
 
 // Generic hover popout (#365). Put data-popout-url="<endpoint>" on any element; the
 // endpoint returns an HTML fragment (a template in templates/shared/popouts.html),

@@ -152,3 +152,80 @@ func TestIntegration_PopoutTriggers(t *testing.T) {
 	expectContains(t, "part detail recent POs", render(h.PartDetail, 3007), `/popout/po/5003`)
 	expectContains(t, "transactions", render(h.PartTransactions, 3007), `/popout/po/`)
 }
+
+func TestIntegration_PopoutUnit(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	code, body := popoutBody(t, h.PopoutUnit, "8501")
+	if code != 200 {
+		t.Fatalf("8501: status %d", code)
+	}
+	expectContains(t, "unit 8501", body, "SN-3013-001", "ASM-1003", `href="/part/3013/lots/8306"`, "Build #8203",
+		"2 records: 0 pass, 1 fail", `href="/records/7014"`, `href="/records/7013"`, "Fail", "Not evaluated")
+	_, body = popoutBody(t, h.PopoutUnit, "8503")
+	expectContains(t, "unit 8503", body, "1 record: 1 pass, 0 fail", "Pass", "Consumed into", "SN-3013-001")
+	_, body = popoutBody(t, h.PopoutUnit, "8504")
+	expectContains(t, "unit 8504", body, "&mdash;", "No test records.")
+	for _, id := range []string{"999999", "abc"} {
+		if code, _ := popoutBody(t, h.PopoutUnit, id); code != 404 {
+			t.Errorf("unit %s: status %d, want 404", id, code)
+		}
+	}
+}
+
+func TestIntegration_PopoutBuild(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	code, body := popoutBody(t, h.PopoutBuild, "8203")
+	if code != 200 {
+		t.Fatalf("8203: status %d", code)
+	}
+	expectContains(t, "build 8203", body, "Build #8203", "ASM-1003", `href="/part/3012/lots/8302"`, `href="/part/3007/lots/8303"`,
+		`href="/part/3007/lots/8301"`, `href="/part/3005/units/8503"`, `href="/part/3013/units/8501"`, `href="/part/3013/lots/8306"`)
+	_, body = popoutBody(t, h.PopoutBuild, "8201")
+	expectContains(t, "build 8201", body, "No components recorded.", `href="/part/3005/units/8503"`)
+	_, body = popoutBody(t, h.PopoutBuild, "8202")
+	expectContains(t, "build 8202", body, `href="/part/3007/lots/8301"`, "No units produced.")
+	for _, id := range []string{"999999", "abc"} {
+		if code, _ := popoutBody(t, h.PopoutBuild, id); code != 404 {
+			t.Errorf("build %s: status %d, want 404", id, code)
+		}
+	}
+}
+
+func TestIntegration_PopoutPartThumb(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	for _, id := range []string{"999999", "abc"} {
+		if code, _ := popoutBody(t, h.PopoutPartThumb, id); code != 404 {
+			t.Errorf("thumb %s: status %d, want 404", id, code)
+		}
+	}
+	code, body := popoutBody(t, h.PopoutPartThumb, "3005")
+	if code != 200 || strings.Contains(body, "Used in") {
+		t.Errorf("thumb 3005: status %d body %q", code, body)
+	}
+}
+
+func TestIntegration_PopoutUnitBuildTriggers(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	get := func(fn http.HandlerFunc, target string, r func(*http.Request) *http.Request) string {
+		rec := httptest.NewRecorder()
+		fn(rec, r(httptest.NewRequest(http.MethodGet, target, nil)))
+		return rec.Body.String()
+	}
+	none := func(r *http.Request) *http.Request { return r }
+	units := get(h.AllUnits, "/units", none)
+	expectContains(t, "all units", units, `/popout/unit/8501`, `/popout/unit/8503`)
+	if strings.Contains(units, "/units/8501/consumers") {
+		t.Error("all units still uses the removed unit consumers popout")
+	}
+	expectContains(t, "all builds", get(h.AllBuilds, "/builds", none), `/popout/build/8203`)
+	expectContains(t, "part units", get(h.PartUnits, "/x", func(r *http.Request) *http.Request { return withID(r, 3013) }),
+		`/popout/unit/8501`, `/popout/build/8203`)
+	expectContains(t, "unit trace", get(h.PartUnitTrace, "/x", func(r *http.Request) *http.Request { return withIDAndUnitID(r, 3013, 8501) }),
+		`/popout/build/8203`, `/popout/unit/8503`)
+	expectContains(t, "part detail", get(h.PartDetail, "/x", func(r *http.Request) *http.Request { return withID(r, 3013) }), `/popout/unit/8501`)
+	expectContains(t, "record", get(h.RecordDetail, "/x", func(r *http.Request) *http.Request { return withID(r, 7013) }), `/popout/build/8203`)
+}

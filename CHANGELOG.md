@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.79] - 2026-10-28
+### Added
+- Hover popouts on unit serials (lot, build, test-record pass/fail, consumed into) and build numbers (consumed lots/units, produced units) ([#387](https://github.com/Jolls/arx/issues/387))
+
+### Changed
+- The part breadcrumb thumbnail hover now uses the shared popout component; the separate thumbnail hover mechanism is removed ([#387](https://github.com/Jolls/arx/issues/387))
+- Unit "Consumed into" popout moved from `/popout/part/{id}/units/{unitID}/consumers` into the new unit popout at `/popout/unit/{id}` ([#387](https://github.com/Jolls/arx/issues/387))
+
 ## [0.8.78] - 2026-10-28
 ### Security
 - Named queries now run on a read-only database session (and `set_config` is blocked) with a 30 s statement timeout, so the database itself refuses writes

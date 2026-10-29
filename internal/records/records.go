@@ -614,3 +614,37 @@ func (s *Service) ListYieldRecords(ctx context.Context, formID int, from, to tim
 func (s *Service) ListFailureModes(ctx context.Context, formID int, from, to time.Time) ([]FailureMode, error) {
 	return s.q.ListFailureModes(ctx, dbq.ListFailureModesParams{FormID: formID, FromDate: optTimestamp(from), ToDate: optDate(to)})
 }
+
+// UnitRecordSummary is one active test record of a unit with its data-row pass/fail tallies.
+type UnitRecordSummary struct {
+	ID     int
+	Date   *time.Time
+	Type   string
+	Passed int
+	Failed int
+}
+
+// State rolls the tallies up to one word: Fail if any data row failed, else Pass if any passed,
+// else Not evaluated.
+func (u UnitRecordSummary) State() string {
+	switch {
+	case u.Failed > 0:
+		return "Fail"
+	case u.Passed > 0:
+		return "Pass"
+	}
+	return "Not evaluated"
+}
+
+// UnitRecordSummary lists a unit's active test records, newest first.
+func (s *Service) UnitRecordSummary(ctx context.Context, unitID int) ([]UnitRecordSummary, error) {
+	rows, err := s.q.ListUnitRecordSummary(ctx, unitID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UnitRecordSummary, len(rows))
+	for i, r := range rows {
+		out[i] = UnitRecordSummary{r.ID, nullTime(r.RecordDate), r.RecordType, r.Passed, r.Failed}
+	}
+	return out, nil
+}
