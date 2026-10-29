@@ -115,7 +115,7 @@ Commit messages: no `Claude-Session:` trailer (links a private web session; #172
 ## Pre-commit sequence
 1. go build/vet/test pass.
 2. If SQL/handlers/integration-covered code touched, run live ArxDev integration tests, report pass/fail; if fails on stale seed data ask user to reseed (never do it yourself).
-3. Present multi-select question for review passes to run (recommend based on diff risk, mark "(Recommended)"), then run chosen ones in order, summarize findings:
+3. Present multi-select question for review passes to run (recommend based on diff risk, mark "(Recommended)"), then run chosen ones — `/simplify` first (if chosen), then `/code-review`, so the review sees the cleaned-up diff. After a code review, automatically fix high/critical findings; for medium and lower, evaluate each, implement your own recommendation (fix or skip with reason), then summarize what you did:
    - `/code-review low` — cheap high-confidence pass, no agent spawn. Default for small/low-risk diffs.
    - `/code-review medium` — broader pass. Default for normal feature branches. Spawn agents only if token-efficient to do so.
    - `/code-review high`/Opus-High single agent — deep review. Default for large/risky/cross-cutting (schema/auth/multi-package).
