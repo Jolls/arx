@@ -230,7 +230,7 @@ func TestIntegration_PartDetail_AttachmentsAndPrice(t *testing.T) {
 
 	get := func(id int) string {
 		rec := httptest.NewRecorder()
-		h.PartDetail(rec, withID(httptest.NewRequest(http.MethodGet, fmt.Sprintf("/part/%d/details", id), nil), id))
+		h.PartDetail(rec, withID(httptest.NewRequest(http.MethodGet, fmt.Sprintf("/part/%d/summary", id), nil), id))
 		assertStatus(t, "PartDetail", rec, http.StatusOK)
 		return rec.Body.String()
 	}

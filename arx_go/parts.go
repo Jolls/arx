@@ -185,7 +185,7 @@ func (h *Handler) PartsRows(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// ── PartDetail — GET /part/{id} and /part/{id}/details ──────────────────────
+// ── PartDetail — GET /part/{id} and /part/{id}/summary ──────────────────────
 
 func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -298,7 +298,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "parts/part_detail.html", map[string]any{
 		"Part": p, "PrimaryAtt": primaryAtt, "TopAtts": topAtts, "PhotoAtts": photoAtts,
-		"ActiveTab": "parts", "ActiveSubTab": "details",
+		"ActiveTab": "parts", "ActiveSubTab": "summary",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode":          h.cfg().TestMode,
 		"RollupDelta":       rollupDelta,
@@ -393,7 +393,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, fmt.Sprintf("/part/%d", newID), http.StatusFound)
+	http.Redirect(w, r, fmt.Sprintf("/part/%d/details", newID), http.StatusFound)
 }
 
 // dupContext re-adds the duplicate banner/hidden-field context to a render map
@@ -407,6 +407,28 @@ func dupContext(r *http.Request, m map[string]any) map[string]any {
 		m["SourceHasBOM"] = fv(r, "duplicate_has_bom") == "1"
 	}
 	return m
+}
+
+// ── PartDetails — GET /part/{id}/details ────────────────────────────────────
+
+// PartDetails lists every part column read-only; Edit and Duplicate live on its tab bar (#378).
+func (h *Handler) PartDetails(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "details")
+	if !ok {
+		return
+	}
+	full, err := h.fetchPartFull(r.Context(), id)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving part: "+err.Error())
+		return
+	}
+	h.applyCategoryTabs(r.Context(), &full)
+	full.ThumbnailURL = p.ThumbnailURL
+	h.render(w, r, "parts/part_details.html", map[string]any{
+		"Part": full, "ActiveTab": "parts", "ActiveSubTab": "details",
+		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
+	})
 }
 
 // ── PartEdit — GET /part/{id}/edit ──────────────────────────────────────────
@@ -480,7 +502,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/part/%s", id), http.StatusFound)
+	http.Redirect(w, r, fmt.Sprintf("/part/%s/details", id), http.StatusFound)
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -564,6 +586,8 @@ func (h *Handler) fetchPartFull(ctx context.Context, id string) (models.Part, er
 		PrimaryAttachmentID: p.PrimaryAttachmentID, CurrentCost: p.CurrentCost, LastRollupCost: p.LastRollupCost,
 		LastRollupAt: p.LastRollupAt, AttachmentCount: p.AttachmentCount, POLineCount: p.POLineCount,
 		UnitID: p.UnitID, UnitAbbr: p.UnitAbbr, StockOnHand: p.StockOnHand, ReorderMin: p.ReorderMin,
+		DefaultSupplierID: p.DefaultSupplierID, DefaultSupplierName: p.DefaultSupplierName, PriceID: p.PriceID,
+		PriceEa: p.PriceEa, PriceSupplierName: p.PriceSupplierName,
 		TrackingMode: p.TrackingMode, IsLotTracked: models.TracksLots(p.TrackingMode),
 		UserField1: p.UserField1, UserField2: p.UserField2, UserField3: p.UserField3, UserField4: p.UserField4,
 		UserField5: p.UserField5, UserField6: p.UserField6, UserField7: p.UserField7, UserField8: p.UserField8,

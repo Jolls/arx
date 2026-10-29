@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.80] - 2026-10-29
+### Added
+- Part Details tab listing every part field (dates, counts, supplier, price) read-only, with Edit and Duplicate buttons ([#378](https://github.com/Jolls/arx/issues/378))
+
+### Changed
+- The part dashboard tab is now Summary at `/part/{id}/summary` and is the default landing; saving or creating a part returns to Details ([#378](https://github.com/Jolls/arx/issues/378))
+
 ## [0.8.79] - 2026-10-28
 ### Added
 - Hover popouts on unit serials (lot, build, test-record pass/fail, consumed into) and build numbers (consumed lots/units, produced units) ([#387](https://github.com/Jolls/arx/issues/387))

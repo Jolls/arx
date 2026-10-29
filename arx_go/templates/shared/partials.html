@@ -213,6 +213,7 @@
 {{$part := .Part}}
 {{$hasBOM := $part.ShowBOM}}
 <div class="sub-tabs">
+    <a href="/part/{{$id}}/summary"     class="sub-tab{{if eq $sub "summary"}} active{{end}}">Summary</a>
     <a href="/part/{{$id}}/details"     class="sub-tab{{if eq $sub "details"}} active{{end}}">Details</a>
     {{if $hasBOM}}
     <a href="/part/{{$id}}/bom"         class="sub-tab{{if eq $sub "bom"}} active{{end}}">BOM</a>

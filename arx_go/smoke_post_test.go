@@ -56,7 +56,7 @@ func countRows(t *testing.T, h *Handler, ctx context.Context, table string) int 
 func locID(t *testing.T, rec *httptest.ResponseRecorder, prefix string) int {
 	t.Helper()
 	loc := rec.Header().Get("Location")
-	id, err := strconv.Atoi(strings.TrimPrefix(loc, prefix))
+	id, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(loc, prefix), "/details")) // part saves land on /part/{id}/details (#378)
 	if err != nil || id == 0 {
 		t.Fatalf("could not parse id from Location %q (prefix %q): %v", loc, prefix, err)
 	}

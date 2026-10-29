@@ -33,6 +33,10 @@ type Part struct {
 	ThumbnailURL        string // resolved URL of the active "Thumbnail"-category attachment, if any (#56); empty when none generated
 	POLineCount         int
 	DefaultSupplierID   *int // preferred supplier for cost rollup (#465); nil = none pinned
+	DefaultSupplierName string // company name of DefaultSupplierID, "" when none (#378)
+	PriceID             *int   // part.price_id, nil = none (#378)
+	PriceEa             decimal.Decimal // per-unit price of PriceID's row, 0 when none (#378)
+	PriceSupplierName   string // supplier of PriceID's row, "" when none (#378)
 	UserField1          string
 	UserField2          string
 	UserField3          string
@@ -49,7 +53,7 @@ type Part struct {
 }
 
 // CategoryTabs holds the optional-subtab visibility for a part category.
-// Universal tabs (Details, Where Used, Attachments, Edit) are always shown.
+// Universal tabs (Summary, Details, Where Used, Attachments, Edit) are always shown.
 // BOM = true means the category authors a BOM, so the tab stays enabled even
 // before any lines exist (see ShowBOM); the procurement flags gray their tabs
 // out when false.

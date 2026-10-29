@@ -319,9 +319,9 @@ func TestIntegration_PartLifecycle(t *testing.T) {
 	h.PartsCreate(rec, postForm("/parts", createVals))
 	assert302(t, "PartsCreate", rec)
 
-	// Parse the new PNID from the redirect Location: /part/{id}
+	// Parse the new PNID from the redirect Location: /part/{id}/details
 	loc := rec.Header().Get("Location")
-	pnIDStr := strings.TrimPrefix(loc, "/part/")
+	pnIDStr := strings.TrimSuffix(strings.TrimPrefix(loc, "/part/"), "/details")
 	pnID, err := strconv.Atoi(pnIDStr)
 	if err != nil || pnID == 0 {
 		t.Fatalf("PartsCreate: could not parse PNID from Location %q: %v", loc, err)
