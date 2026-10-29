@@ -33,7 +33,7 @@
             <tbody>
                 {{range .Units}}
                 <tr>
-                    <td><a href="/part/{{.PartID}}/units/{{.ID}}" data-popout-url="/popout/part/{{.PartID}}/units/{{.ID}}/consumers">{{.SerialNumber}}</a></td>
+                    <td><a href="/part/{{.PartID}}/units/{{.ID}}" data-popout-url="/popout/unit/{{.ID}}">{{.SerialNumber}}</a></td>
                     <td><a href="/part/{{.PartID}}" data-popout-url="/popout/part/{{.PartID}}/where-used">{{.PartNumber}}</a></td>
                     <td>{{if .PartDescription}}{{.PartDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{if .LotID}}<a href="/part/{{.PartID}}/lots/{{.LotIDVal}}" data-popout-url="/popout/part/{{.PartID}}/lots/{{.LotIDVal}}/consumers">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>

@@ -371,7 +371,7 @@ input.formula-computed { background-color: var(--bs-info-bg-subtle) !important; 
 input.formula-overridden { background-color: var(--bs-warning-bg-subtle) !important; color: var(--bs-warning-text-emphasis); }
 
 /* Shared visual box for hover-preview tooltips (background/border/shadow only —
-   positioning is per-mechanism, see .img-hover-preview and .pn-thumb-tip below). */
+   positioning is per-mechanism, see .img-hover-preview and .hover-popout below). */
 .hover-preview-box {
     background: var(--bs-body-bg);
     border: 1px solid var(--bs-border-color);
@@ -399,18 +399,6 @@ input.formula-overridden { background-color: var(--bs-warning-bg-subtle) !import
 }
 .img-hover-preview img { display: block; max-width: 480px; max-height: 480px; }
 .img-hover-wrap:hover .img-hover-preview { display: block; }
-
-/* /parts part-number thumbnail hover preview (#696). position:fixed so it escapes
-   the parts table's overflow:hidden cells / scrolling wrapper; positioned by JS.
-   Box appearance comes from .hover-preview-box (shared with .img-hover-preview
-   above), applied via JS since this element is created dynamically. */
-.pn-thumb-tip {
-    display: none;
-    position: fixed;
-    z-index: 1080;
-}
-.pn-thumb-tip.show { display: block; }
-.pn-thumb-tip img { display: block; max-width: 250px; max-height: 250px; }
 
 /* Generic hover popout (#365): any element with data-popout-url. One shared
    position:fixed element, filled with a server-rendered fragment. Unlike the image

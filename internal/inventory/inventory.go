@@ -637,6 +637,78 @@ func (s *Service) ListAllBuilds(ctx context.Context) ([]BuildListRow, error) {
 	return out, nil
 }
 
+// BuildDetail is one build with its part and (nullable) output lot, for the build popout.
+type BuildDetail struct {
+	ID              int
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	Qty             decimal.Decimal
+	Date            time.Time
+	Username        string
+	OutputLotID     *int
+	LotNumber       string
+}
+
+// GetBuildDetail loads one build; found is false (nil error) when it does not exist.
+func (s *Service) GetBuildDetail(ctx context.Context, id int) (b BuildDetail, found bool, err error) {
+	r, err := s.q.GetBuildDetail(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return BuildDetail{}, false, nil
+	}
+	if err != nil {
+		return BuildDetail{}, false, err
+	}
+	return BuildDetail{r.ID, r.PartID, r.PartNumber, r.PartDescription, r.Qty, r.BuildDate, r.Username, r.OutputLotID, r.LotNumber}, true, nil
+}
+
+// BuildConsumed is one lot or unit a build consumed, with the quantity summed over its edges.
+type BuildConsumed struct {
+	NodeType   string
+	ID         int
+	Number     string
+	PartID     int
+	PartNumber string
+	Qty        decimal.Decimal
+}
+
+// IsUnit reports whether this consumed node is a serialized unit (vs a lot).
+func (c BuildConsumed) IsUnit() bool { return c.NodeType == "unit" }
+
+// ListBuildConsumed returns up to n lots/units consumed by a build, lots then units.
+func (s *Service) ListBuildConsumed(ctx context.Context, buildID, n int) ([]BuildConsumed, error) {
+	rows, err := s.q.ListBuildConsumed(ctx, dbq.ListBuildConsumedParams{BuildID: buildID, N: n})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BuildConsumed, len(rows))
+	for i, r := range rows {
+		out[i] = BuildConsumed(r)
+	}
+	return out, nil
+}
+
+// BuildUnit is one serialized unit a build produced.
+type BuildUnit struct {
+	ID           int
+	SerialNumber string
+	PartID       int
+	IsActive     bool
+}
+
+// ListBuildUnits returns up to n units produced by a build.
+func (s *Service) ListBuildUnits(ctx context.Context, buildID, n int) ([]BuildUnit, error) {
+	rows, err := s.q.ListBuildUnits(ctx, dbq.ListBuildUnitsParams{BuildID: buildID, N: n})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BuildUnit, len(rows))
+	for i, r := range rows {
+		out[i] = BuildUnit(r)
+	}
+	return out, nil
+}
+
 // BuildComponent is one BOM line of an output part with the component's on-hand.
 type BuildComponent struct {
 	PartID       int

@@ -485,3 +485,14 @@ WHERE trec.form_id = sqlc.arg(form_id) AND trec.is_active = TRUE AND res.pass_fa
   AND (sqlc.narg(to_date)::date IS NULL OR trec.record_date < (sqlc.narg(to_date)::date + 1))
 GROUP BY res.form_row_id
 ORDER BY failure_count DESC, parameter ASC;
+
+-- name: ListUnitRecordSummary :many
+-- Popout (#387): a unit's active test records with data-row pass/fail tallies, newest first.
+SELECT r.id, r.record_date, COALESCE(r.record_type, '') AS record_type,
+       (COUNT(res.id) FILTER (WHERE res.pass_fail = TRUE))::int AS passed,
+       (COUNT(res.id) FILTER (WHERE res.pass_fail = FALSE))::int AS failed
+FROM form_record r
+LEFT JOIN result res ON res.form_record_id = r.id AND res.type = 0
+WHERE r.unit_id = sqlc.arg(unit_id)::int AND r.is_active = TRUE
+GROUP BY r.id
+ORDER BY r.record_date DESC NULLS LAST, r.id DESC;

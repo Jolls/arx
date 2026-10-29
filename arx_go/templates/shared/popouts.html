@@ -122,3 +122,77 @@
 <div class="text-muted">No open POs.</div>
 {{end}}
 {{end}}
+
+{{define "popout_unit"}}
+<div class="popout-title"><a href="/part/{{.PartID}}/units/{{.ID}}">{{.Serial}}</a>
+    {{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Scrapped</span>{{end}}</div>
+<div><a href="/part/{{.PartID}}">{{.PartNumber}}</a></div>
+<div class="text-muted">Lot: {{if .LotID}}<a href="/part/{{.PartID}}/lots/{{derefInt .LotID}}">{{.LotNumber}}</a>{{else}}&mdash;{{end}}</div>
+<div class="text-muted">Build: {{if .BuildLabel}}{{.BuildLabel}}{{else}}&mdash;{{end}}</div>
+<div class="popout-title mt-2">Test records</div>
+{{if .Records}}
+<div class="text-muted">{{.RecTotal}} record{{if ne .RecTotal 1}}s{{end}}: {{.RecPass}} pass, {{.RecFail}} fail</div>
+<ul class="popout-list">
+    {{range .Records}}
+    <li>
+        <a href="/records/{{.ID}}">#{{.ID}}</a>
+        <span class="text-muted">{{if .Type}}{{.Type}} {{end}}{{if .Date}}{{formatDate .Date}} {{end}}&mdash; {{.State}}</span>
+    </li>
+    {{end}}
+</ul>
+{{if .RecMore}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{else}}
+<div class="text-muted">No test records.</div>
+{{end}}
+<div class="popout-title mt-2">Consumed into</div>
+{{if .Consumers}}
+<ul class="popout-list">
+    {{range .Consumers}}
+    <li>
+        {{if .IsUnit}}<a href="/part/{{.PartID}}/units/{{.ID}}">{{.Number}}</a> <span class="badge bg-info text-dark">unit</span>
+        {{else}}<a href="/part/{{.PartID}}/lots/{{.ID}}">{{.Number}}</a>{{end}}
+        <span class="text-muted">{{.PartNumber}}{{if .PartDescription}} &mdash; {{.PartDescription}}{{end}} (qty {{.Qty}})</span>
+    </li>
+    {{end}}
+</ul>
+{{if .ConsMore}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{else}}
+<div class="text-muted">Not consumed into anything yet.</div>
+{{end}}
+{{end}}
+
+{{define "popout_build"}}
+<div class="popout-title">Build #{{.ID}}</div>
+<div><a href="/part/{{.PartID}}">{{.PartNumber}}</a> <span class="text-muted">qty {{printf "%.5g" .Qty}}, {{.Date.Format "2006-01-02"}}{{if .Username}}, {{.Username}}{{end}}</span></div>
+<div class="text-muted">{{if .OutputLotID}}Output lot: <a href="/part/{{.PartID}}/lots/{{derefInt .OutputLotID}}">{{.OutputLot}}</a>{{else}}No output lot{{end}}</div>
+<div class="popout-title mt-2">Consumed</div>
+{{if .Consumed}}
+<ul class="popout-list">
+    {{range .Consumed}}
+    <li>
+        {{if .IsUnit}}<a href="/part/{{.PartID}}/units/{{.ID}}">{{.Number}}</a> <span class="badge bg-info text-dark">unit</span>
+        {{else}}<a href="/part/{{.PartID}}/lots/{{.ID}}">{{.Number}}</a>{{end}}
+        <span class="text-muted">{{.PartNumber}} (qty {{printf "%.5g" .Qty}})</span>
+    </li>
+    {{end}}
+</ul>
+{{if .ConsMore}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{else}}
+<div class="text-muted">No components recorded.</div>
+{{end}}
+<div class="popout-title mt-2">Produced units</div>
+{{if .Units}}
+<ul class="popout-list">
+    {{range .Units}}
+    <li><a href="/part/{{.PartID}}/units/{{.ID}}">{{.SerialNumber}}</a>{{if not .IsActive}} <span class="badge bg-secondary">Scrapped</span>{{end}}</li>
+    {{end}}
+</ul>
+{{if .UnitsMore}}<div class="text-muted">and more&hellip;</div>{{end}}
+{{else}}
+<div class="text-muted">No units produced.</div>
+{{end}}
+{{end}}
+
+{{define "popout_part_thumb"}}
+{{if .Thumb}}<img class="popout-thumb" src="{{.Thumb}}" alt="preview">{{end}}
+{{end}}

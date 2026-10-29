@@ -288,6 +288,45 @@ func (q *Queries) GetBuild(ctx context.Context, id int) (GetBuildRow, error) {
 	return i, err
 }
 
+const getBuildDetail = `-- name: GetBuildDetail :one
+SELECT b.id, b.part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       b.qty, b.build_date, b.username, b.output_lot_id, COALESCE(l.lot_number, '') AS lot_number
+FROM build b
+JOIN part p ON p.id = b.part_id
+LEFT JOIN lot l ON l.id = b.output_lot_id
+WHERE b.id = $1
+`
+
+type GetBuildDetailRow struct {
+	ID              int
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	Qty             decimal.Decimal
+	BuildDate       time.Time
+	Username        string
+	OutputLotID     *int
+	LotNumber       string
+}
+
+// Popout (#387): one build with its part and (nullable) output lot.
+func (q *Queries) GetBuildDetail(ctx context.Context, id int) (GetBuildDetailRow, error) {
+	row := q.db.QueryRowContext(ctx, getBuildDetail, id)
+	var i GetBuildDetailRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.PartNumber,
+		&i.PartDescription,
+		&i.Qty,
+		&i.BuildDate,
+		&i.Username,
+		&i.OutputLotID,
+		&i.LotNumber,
+	)
+	return i, err
+}
+
 const getLot = `-- name: GetLot :one
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
        COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
@@ -624,6 +663,78 @@ func (q *Queries) ListBuildComponents(ctx context.Context, parentPartID int) ([]
 	return items, nil
 }
 
+const listBuildConsumed = `-- name: ListBuildConsumed :many
+SELECT c.node_type::text AS node_type, c.id::int AS id, c.number::text AS number, c.part_id::int AS part_id,
+       c.part_number::text AS part_number, SUM(c.qty)::numeric AS qty
+FROM (
+    SELECT 'lot'::text AS node_type, l.id, l.lot_number AS number, p.id AS part_id,
+           COALESCE(p.part_number, '') AS part_number, g.qty_consumed AS qty
+    FROM genealogy g
+    JOIN build b ON b.id = $1::int
+    JOIN lot l ON l.id = g.parent_lot_id
+    JOIN part p ON p.id = l.part_id
+    WHERE g.child_lot_id = b.output_lot_id
+       OR g.child_unit_id IN (SELECT u.id FROM unit u WHERE u.build_id = b.id)
+    UNION ALL
+    SELECT 'unit'::text, u2.id, u2.serial_number, p.id, COALESCE(p.part_number, ''), g.qty_consumed
+    FROM genealogy g
+    JOIN build b ON b.id = $1::int
+    JOIN unit u2 ON u2.id = g.parent_unit_id
+    JOIN part p ON p.id = u2.part_id
+    WHERE g.child_lot_id = b.output_lot_id
+       OR g.child_unit_id IN (SELECT u.id FROM unit u WHERE u.build_id = b.id)
+) c
+GROUP BY c.node_type, c.id, c.number, c.part_id, c.part_number
+ORDER BY c.node_type, c.id
+LIMIT $2::int
+`
+
+type ListBuildConsumedParams struct {
+	BuildID int
+	N       int
+}
+
+type ListBuildConsumedRow struct {
+	NodeType   string
+	ID         int
+	Number     string
+	PartID     int
+	PartNumber string
+	Qty        decimal.Decimal
+}
+
+// Popout (#387): the lots/units a build consumed, via genealogy edges into its output lot or
+// into any unit it minted. Aggregated per node.
+func (q *Queries) ListBuildConsumed(ctx context.Context, arg ListBuildConsumedParams) ([]ListBuildConsumedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBuildConsumed, arg.BuildID, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBuildConsumedRow
+	for rows.Next() {
+		var i ListBuildConsumedRow
+		if err := rows.Scan(
+			&i.NodeType,
+			&i.ID,
+			&i.Number,
+			&i.PartID,
+			&i.PartNumber,
+			&i.Qty,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBuildHistory = `-- name: ListBuildHistory :many
 SELECT b.id, b.qty, b.build_date, b.username, COALESCE(b.note, '') AS note,
        (SELECT COUNT(*) FROM unit u WHERE u.build_id = b.id AND u.source <> 'manual')::int AS tested_count
@@ -703,6 +814,55 @@ func (q *Queries) ListBuildLines(ctx context.Context, parentPartID int) ([]ListB
 			&i.Qty,
 			&i.Category,
 			&i.TrackingMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBuildUnits = `-- name: ListBuildUnits :many
+SELECT u.id, u.serial_number, u.part_id, u.is_active
+FROM unit u
+WHERE u.build_id = $1::int
+ORDER BY u.id
+LIMIT $2::int
+`
+
+type ListBuildUnitsParams struct {
+	BuildID int
+	N       int
+}
+
+type ListBuildUnitsRow struct {
+	ID           int
+	SerialNumber string
+	PartID       int
+	IsActive     bool
+}
+
+// Popout (#387): the serialized units a build produced.
+func (q *Queries) ListBuildUnits(ctx context.Context, arg ListBuildUnitsParams) ([]ListBuildUnitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBuildUnits, arg.BuildID, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBuildUnitsRow
+	for rows.Next() {
+		var i ListBuildUnitsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SerialNumber,
+			&i.PartID,
+			&i.IsActive,
 		); err != nil {
 			return nil, err
 		}

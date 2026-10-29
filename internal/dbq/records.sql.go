@@ -1626,6 +1626,55 @@ func (q *Queries) ListStepReportRows(ctx context.Context, arg ListStepReportRows
 	return items, nil
 }
 
+const listUnitRecordSummary = `-- name: ListUnitRecordSummary :many
+SELECT r.id, r.record_date, COALESCE(r.record_type, '') AS record_type,
+       (COUNT(res.id) FILTER (WHERE res.pass_fail = TRUE))::int AS passed,
+       (COUNT(res.id) FILTER (WHERE res.pass_fail = FALSE))::int AS failed
+FROM form_record r
+LEFT JOIN result res ON res.form_record_id = r.id AND res.type = 0
+WHERE r.unit_id = $1::int AND r.is_active = TRUE
+GROUP BY r.id
+ORDER BY r.record_date DESC NULLS LAST, r.id DESC
+`
+
+type ListUnitRecordSummaryRow struct {
+	ID         int
+	RecordDate sql.NullTime
+	RecordType string
+	Passed     int
+	Failed     int
+}
+
+// Popout (#387): a unit's active test records with data-row pass/fail tallies, newest first.
+func (q *Queries) ListUnitRecordSummary(ctx context.Context, unitID int) ([]ListUnitRecordSummaryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUnitRecordSummary, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnitRecordSummaryRow
+	for rows.Next() {
+		var i ListUnitRecordSummaryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RecordDate,
+			&i.RecordType,
+			&i.Passed,
+			&i.Failed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listYieldRecords = `-- name: ListYieldRecords :many
 
 SELECT trec.record_date, COALESCE(BOOL_OR(res.pass_fail = FALSE), FALSE)::bool AS any_fail

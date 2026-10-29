@@ -173,21 +173,6 @@ func (h *Handler) PopoutLotConsumers(w http.ResponseWriter, r *http.Request) {
 	h.renderPopout(w, "popout_lot_consumers", nodes)
 }
 
-// PopoutUnitConsumers renders the "Consumed into" hover-popout fragment for a unit.
-func (h *Handler) PopoutUnitConsumers(w http.ResponseWriter, r *http.Request) {
-	unitID, err := strconv.Atoi(r.PathValue("unitID"))
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	nodes, err := h.inventory().UnitConsumers(r.Context(), unitID)
-	if err != nil {
-		serverError(w, "database error", err)
-		return
-	}
-	h.renderPopout(w, "popout_lot_consumers", nodes)
-}
-
 // PopoutPartWhereUsed renders the "Used in" hover-popout fragment for a part.
 func (h *Handler) PopoutPartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
@@ -200,8 +185,8 @@ func (h *Handler) PopoutPartWhereUsed(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "database error", err)
 		return
 	}
-	// The thumbnail hover (#696) and this popout share the part-number trigger,
-	// so the popout carries the image rather than two boxes opening at once (#385).
+	// The thumbnail rides this popout rather than opening a second box on the
+	// same part-number trigger (#385).
 	p, err := h.fetchPartBasic(r.Context(), r.PathValue("id"))
 	if err != nil {
 		serverError(w, "database error", err)
@@ -920,4 +905,118 @@ func writeJSON(w http.ResponseWriter, v any) {
 		return
 	}
 	json.NewEncoder(w).Encode(v)
+}
+
+// PopoutUnit renders the unit hover-popout fragment (#387): lot, build, test-record pass/fail
+// summary and what the unit was consumed into.
+func (h *Handler) PopoutUnit(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ctx := r.Context()
+	u, found, err := h.inventory().GetUnit(ctx, id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	buildLabel := ""
+	if u.BuildID != nil {
+		b, err := h.fetchBuildOption(ctx, *u.BuildID)
+		if err != nil {
+			serverError(w, "database error", err)
+			return
+		}
+		if b != nil {
+			buildLabel = b.Label
+		}
+	}
+	recs, err := h.records().UnitRecordSummary(ctx, id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	var pass, fail int
+	for _, rec := range recs {
+		switch rec.State() {
+		case "Pass":
+			pass++
+		case "Fail":
+			fail++
+		}
+	}
+	total := len(recs)
+	recs, recMore := capPopoutRows(recs)
+	cons, err := h.inventory().UnitConsumers(ctx, id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	cons, consMore := capPopoutRows(cons)
+	h.renderPopout(w, "popout_unit", map[string]any{
+		"ID": u.ID, "Serial": u.SerialNumber, "PartID": u.PartID, "PartNumber": u.PartNumber, "IsActive": u.IsActive,
+		"LotID": u.LotID, "LotNumber": u.LotNumber, "BuildLabel": buildLabel,
+		"RecTotal": total, "RecPass": pass, "RecFail": fail, "Records": recs, "RecMore": recMore,
+		"Consumers": cons, "ConsMore": consMore,
+	})
+}
+
+// PopoutBuild renders the build hover-popout fragment (#387): what the build consumed and the
+// units it produced.
+func (h *Handler) PopoutBuild(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ctx := r.Context()
+	b, found, err := h.inventory().GetBuildDetail(ctx, id)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	cons, err := h.inventory().ListBuildConsumed(ctx, id, popoutRows+1)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	cons, consMore := capPopoutRows(cons)
+	units, err := h.inventory().ListBuildUnits(ctx, id, popoutRows+1)
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	units, unitsMore := capPopoutRows(units)
+	h.renderPopout(w, "popout_build", map[string]any{
+		"ID": b.ID, "PartID": b.PartID, "PartNumber": b.PartNumber, "Qty": b.Qty, "Date": b.Date, "Username": b.Username,
+		"OutputLotID": b.OutputLotID, "OutputLot": b.LotNumber,
+		"Consumed": cons, "ConsMore": consMore, "Units": units, "UnitsMore": unitsMore,
+	})
+}
+
+// PopoutPartThumb renders the part thumbnail hover-popout fragment shown from the breadcrumb (#387).
+func (h *Handler) PopoutPartThumb(w http.ResponseWriter, r *http.Request) {
+	if _, err := strconv.Atoi(r.PathValue("id")); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	p, err := h.fetchPartBasic(r.Context(), r.PathValue("id"))
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	h.renderPopout(w, "popout_part_thumb", map[string]any{"Thumb": p.ThumbnailURL})
 }

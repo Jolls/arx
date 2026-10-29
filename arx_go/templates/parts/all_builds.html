@@ -34,7 +34,7 @@
             <tbody>
                 {{range .Builds}}
                 <tr>
-                    <td>{{if .OutputLotID}}<a href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}">#{{.ID}}</a>{{else}}<a href="/part/{{.PartID}}/build">#{{.ID}}</a>{{end}}</td>
+                    <td>{{if .OutputLotID}}<a data-popout-url="/popout/build/{{.ID}}" href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}">#{{.ID}}</a>{{else}}<a data-popout-url="/popout/build/{{.ID}}" href="/part/{{.PartID}}/build">#{{.ID}}</a>{{end}}</td>
                     <td><a href="/part/{{.PartID}}" data-popout-url="/popout/part/{{.PartID}}/where-used">{{.PartNumber}}</a></td>
                     <td>{{if .PartDescription}}{{.PartDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                     <td>{{.Qty}}</td>
