@@ -48,6 +48,10 @@ Then in Settings, turn on Test Mode, set DB Server to `127.0.0.1:55432` (the fie
 
 Contributions are accepted under the project's AGPL-3.0 license.
 
+## Bootstrap CDN versions
+
+Bootstrap and Bootstrap Icons load from jsDelivr in `layout.html` and `login.html`. The root `package.json` only mirrors those versions so Dependabot opens update PRs. A Dependabot PR changes only `package.json`; before merging, update the version in every CDN URL and the `integrity` SRI hashes (copy them from the jsDelivr or getbootstrap.com snippet for that exact version) in both templates. `TestTemplateCDNVersionsMatchPackageJSON` fails until they match.
+
 ## Changelog
 
 Add one entry per PR under the top version in [`CHANGELOG.md`](CHANGELOG.md).
