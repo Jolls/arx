@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.83] - 2026-10-29
+### Fixed
+- The Settings link on the sign-in page now opens a connection-only Settings page when signed out, where the database password and Test Mode can be changed (the password must be typed); the server, database and user stay read-only ([#401](https://github.com/Jolls/arx/issues/401))
+
 ## [0.8.82] - 2026-10-29
 ### Changed
 - The "show archived" toggles on the form definition pages now use switch semantics for screen readers, matching the other toggles ([#397](https://github.com/Jolls/arx/issues/397))

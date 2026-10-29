@@ -409,6 +409,11 @@ var routeAllowlist = map[string]bool{
 	"POST /login":    true,
 	"POST /logout":   true,
 	"GET /whats-new": true,
+	// Signed-out users get a connection-only Settings page and may save connection
+	// fields (#401); the handlers narrow what they see/save. Covered by
+	// TestRequireConnectionEditor.
+	"GET /settings":  true,
+	"POST /settings": true,
 	// The bare-prefix 404 sibling of the public /static/{rest...} route
 	// (#319) — same no-auth tier as its wildcard counterpart.
 	"GET /static": true,

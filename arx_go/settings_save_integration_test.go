@@ -87,8 +87,12 @@ func TestIntegration_SettingsSave_TestModeSwap(t *testing.T) {
 		"test_db_name":     {database},
 		"test_db_password": {password},
 	}
+	// An admin on the request, as RequireConnectionEditor leaves it; a signed-out
+	// caller on a live connection gets the restricted save (#401).
+	req := postSettings(vals)
+	req = req.WithContext(context.WithValue(req.Context(), ctxUserKey, &User{ID: 7, Username: "admin", IsAdmin: true}))
 	rec := httptest.NewRecorder()
-	h.SettingsSave(rec, postSettings(vals))
+	h.SettingsSave(rec, req)
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("SettingsSave(test-mode swap): status %d, want %d. body: %s", rec.Code, http.StatusSeeOther, rec.Body.String())

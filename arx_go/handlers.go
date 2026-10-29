@@ -514,9 +514,10 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 
 // RequireAuthOnceConnected gates a route that must stay reachable during
 // first-run setup (no DB connected) but requires a logged-in user once a database
-// is connected. Used for POST /settings so an unauthenticated caller can't
-// rewrite the DB connection and exfiltrate the stored password after setup
-// (#748). It also bypasses auth when the connection itself is unusable
+// is connected. Used for /api/browse-folder (via RequireAdminOnceConnected); GET
+// and POST /settings use AllowSignedOutConnection / RequireConnectionEditor
+// instead (#401), with the handlers restricting a signed-out caller so they can't
+// exfiltrate the stored password (#748). It also bypasses auth when the connection itself is unusable
 // (h.dbConnError != "", #852) — login is impossible against a broken
 // connection, so the admin needs a way back to Settings without one. A plain
 // schema-version mismatch on an otherwise-working connection still requires
@@ -549,7 +550,7 @@ func (h *Handler) canEditConnection(r *http.Request) bool {
 	return h.dbUnusable() || h.isAdmin(r)
 }
 
-// RequireAdminOnceConnected gates POST /settings and the folder-picker it drives.
+// RequireAdminOnceConnected gates the folder-picker (/api/browse-folder).
 // It composes RequireAuthOnceConnected rather than repeating it, so the first-run
 // and broken-connection escape hatches have a single implementation: the wrapped
 // middleware either passes straight through (bypass, no user on context) or resolves
@@ -557,6 +558,41 @@ func (h *Handler) canEditConnection(r *http.Request) bool {
 func (h *Handler) RequireAdminOnceConnected(next http.Handler) http.Handler {
 	return h.RequireAuthOnceConnected(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !h.canEditConnection(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
+}
+
+// signedOutConnection reports whether r is a signed-out caller on a usable
+// connection — the case RequireAuthOnceConnected redirects to /login, and the one
+// #401 opens up to a connection-only Settings page so a user who can't sign in
+// (wrong credentials, wrong database) can still fix the connection.
+func (h *Handler) signedOutConnection(r *http.Request) bool {
+	return !h.dbUnusable() && h.currentUser(r) == nil
+}
+
+// AllowSignedOutConnection resolves the session user when there is one but, unlike
+// RequireAuthOnceConnected, lets a signed-out caller through (#401). Only for
+// GET/POST /settings: the handlers narrow what a signed-out caller sees and may
+// save (passwords and Test Mode only, with a typed password; the connection target
+// is pinned). Do not put it on /api/browse-folder.
+func (h *Handler) AllowSignedOutConnection(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.dbUnusable() {
+			r, _ = h.withUser(w, r)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireConnectionEditor gates POST /settings: a signed-out caller passes (the
+// handler restricts them, see AllowSignedOutConnection); a signed-in caller must
+// be an admin, as before (#106).
+func (h *Handler) RequireConnectionEditor(next http.Handler) http.Handler {
+	return h.AllowSignedOutConnection(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.currentUser(r) != nil && !h.canEditConnection(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

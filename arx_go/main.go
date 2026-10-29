@@ -149,7 +149,6 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	withAuth := chain(h.RequireAuth)
 	withAdmin := chain(h.RequireAuth, h.RequireAdmin)
 	withAdminJSON := chain(h.RequireAuth, h.RequireAdminJSON)
-	withAuthOnceConnected := chain(h.RequireAuthOnceConnected)
 	withAdminOnceConnected := chain(h.RequireAdminOnceConnected)
 
 	// Static assets under /static/<tab>/, plus /static/shared/ for cross-tab assets (icons, nav CSS/JS).
@@ -161,17 +160,18 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/login", nil, h.LoginGet)
 	b.handle(http.MethodPost, "/login", nil, h.LoginPost)
 	b.handle(http.MethodPost, "/logout", nil, h.Logout)
-	// GET/POST /settings must stay reachable during first-run setup (no DB connected) but
-	// require a logged-in user once a database is connected — GET renders db_server,
-	// db_user, and filesystem roots, which is a config-disclosure hole to an
-	// unauthenticated caller once connected (#781, read-side sibling of #748).
-	// GET stays open to any logged-in user — the page also hosts My Preferences.
-	// POST is admin-only once connected: it rewrites the DB connection (#106).
-	b.handle(http.MethodGet, "/settings", withAuthOnceConnected, h.Settings)
-	b.handle(http.MethodPost, "/settings", withAdminOnceConnected, h.SettingsSave)
+	// GET/POST /settings stay reachable during first-run setup (no DB connected) and
+	// while the connection is broken. Once connected, a logged-in user sees the full
+	// page (it also hosts My Preferences) and POST is admin-only: it rewrites the DB
+	// connection (#106). A signed-out caller on a connected instance (#401) gets a
+	// connection-only page: the target (server/name/user) is read-only and shown only
+	// so they can see what is configured, file paths are hidden, and saving needs a
+	// typed password. That narrows #781/#748 on purpose; see AllowSignedOutConnection.
+	b.handle(http.MethodGet, "/settings", chain(h.AllowSignedOutConnection), h.Settings)
+	b.handle(http.MethodPost, "/settings", chain(h.RequireConnectionEditor), h.SettingsSave)
 	b.handle(http.MethodGet, "/whats-new", nil, h.WhatsNew)
-	// Gated the same way as POST /settings: reachable unauthenticated only during
-	// first-run setup, since it spawns a native folder-picker dialog and an
+	// Reachable unauthenticated only during first-run setup or a broken connection
+	// (not for signed-out users on a live one, unlike /settings), since it spawns a native folder-picker dialog and an
 	// unauthenticated GET on a connected instance would be a local DoS/nuisance (#757).
 	// That means admin-only once connected too (#106) — its only callers are the
 	// File Paths pickers on the Connection tab, which is now admin-only, so leaving
