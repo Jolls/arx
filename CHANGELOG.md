@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.81] - 2026-10-29
+### Changed
+- Bootstrap CDN bundle updated from 5.3.3 to 5.3.8 ([#396](https://github.com/Jolls/arx/issues/396))
+
 ## [0.8.80] - 2026-10-29
 ### Added
 - Part Details tab listing every part field (dates, counts, supplier, price) read-only, with Edit and Duplicate buttons ([#378](https://github.com/Jolls/arx/issues/378))
