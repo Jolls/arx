@@ -1,0 +1,39 @@
+{{define "content"}}
+{{template "part_breadcrumb" .}}
+<div class="content">
+    {{template "part_tabs" .}}
+
+    <div class="card">
+        <div class="card-header">All fields</div>
+        <div class="card-body">
+            <div class="detail-row"><strong>ID:</strong><span>{{.Part.ID}}</span></div>
+            <div class="detail-row"><strong>Part Number:</strong><span>{{.Part.PartNumber}}</span></div>
+            <div class="detail-row"><strong>Category:</strong><span>{{if .Part.Category}}{{.Part.Category}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Revision:</strong><span>{{if .Part.Revision}}{{.Part.Revision}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Description:</strong><span>{{if .Part.Description}}{{.Part.Description}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Detail:</strong><span>{{if .Part.Detail}}{{.Part.Detail}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Release Status:</strong><span>{{if eq .Part.ReleaseStatus "A"}}Active{{else if eq .Part.ReleaseStatus "D"}}Deprecated{{else}}Under Review{{end}}</span></div>
+            <div class="detail-row"><strong>Active:</strong><span>{{if .Part.IsActive}}Yes{{else}}No{{end}}</span></div>
+            <div class="detail-row"><strong>Requested By:</strong><span>{{if .Part.RequestedBy}}{{.Part.RequestedBy}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Notes:</strong><span>{{if .Part.Notes}}{{.Part.Notes}}{{else}}—{{end}}</span></div>
+            {{range .Part.UserFieldsForEdit}}
+            <div class="detail-row"><strong>{{.Label}}:</strong><span>{{if .Value}}{{.Value}}{{else}}—{{end}}</span></div>
+            {{end}}
+            <div class="detail-row"><strong>Unit:</strong><span>{{if .Part.UnitID}}{{.Part.UnitAbbr}} (ID {{derefInt .Part.UnitID}}){{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Tracking Mode:</strong><span>{{.Part.TrackingMode}}</span></div>
+            <div class="detail-row"><strong>Stock On Hand:</strong><span>{{printf "%.2f" .Part.StockOnHand}}</span></div>
+            <div class="detail-row"><strong>Reorder Min:</strong><span>{{if .Part.ReorderMin}}{{printf "%g" (deref .Part.ReorderMin)}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Current Cost:</strong><span>${{printf "%.4f" .Part.CurrentCost}}</span></div>
+            <div class="detail-row"><strong>Last Rollup Cost:</strong><span>${{printf "%.4f" .Part.LastRollupCost}}</span></div>
+            <div class="detail-row"><strong>Last Rollup At:</strong><span>{{if .Part.LastRollupAt}}{{formatDate .Part.LastRollupAt}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Created Date:</strong><span>{{if .Part.CreatedDate}}{{formatDate .Part.CreatedDate}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Modified Date:</strong><span>{{if .Part.ModifiedDate}}{{formatDate .Part.ModifiedDate}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Attachment Count:</strong><span>{{.Part.AttachmentCount}}</span></div>
+            <div class="detail-row"><strong>PO Line Count:</strong><span>{{.Part.POLineCount}}</span></div>
+            <div class="detail-row"><strong>Primary Attachment ID:</strong><span>{{if .Part.PrimaryAttachmentID}}{{derefInt .Part.PrimaryAttachmentID}}{{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Default Supplier:</strong><span>{{if .Part.DefaultSupplierID}}{{.Part.DefaultSupplierName}} (ID {{derefInt .Part.DefaultSupplierID}}){{else}}—{{end}}</span></div>
+            <div class="detail-row"><strong>Price:</strong><span>{{if .Part.PriceID}}{{.Part.PriceSupplierName}} - ${{printf "%.4f" .Part.PriceEa}} (ID {{derefInt .Part.PriceID}}){{else}}—{{end}}</span></div>
+        </div>
+    </div>
+</div>
+{{end}}

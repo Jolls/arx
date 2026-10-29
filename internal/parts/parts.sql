@@ -182,12 +182,17 @@ SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision, COALESCE(p.des
        p.last_rollup_at, COALESCE(p.attachment_count, 0) AS attachment_count,
        COALESCE(p.po_line_count, 0) AS po_line_count,
        p.uom_id, COALESCE(u.abbreviation, '') AS unit_abbr, p.stock_on_hand, p.reorder_min, p.tracking_mode,
+       p.default_supplier_id, COALESCE(dc.name, '') AS default_supplier_name,
+       p.price_id, COALESCE(pr.price_ea, 0) AS price_ea, COALESCE(pc.name, '') AS price_supplier_name,
        COALESCE(p.user_field_1, '') AS user_field_1, COALESCE(p.user_field_2, '') AS user_field_2,
        COALESCE(p.user_field_3, '') AS user_field_3, COALESCE(p.user_field_4, '') AS user_field_4,
        COALESCE(p.user_field_5, '') AS user_field_5, COALESCE(p.user_field_6, '') AS user_field_6,
        COALESCE(p.user_field_7, '') AS user_field_7, COALESCE(p.user_field_8, '') AS user_field_8,
        COALESCE(p.user_field_9, '') AS user_field_9, COALESCE(p.user_field_10, '') AS user_field_10
 FROM part p LEFT JOIN uom u ON u.uom_id = p.uom_id
+LEFT JOIN company dc ON dc.id = p.default_supplier_id
+LEFT JOIN price pr ON pr.id = p.price_id
+LEFT JOIN company pc ON pc.id = pr.supplier_id
 WHERE p.id = $1;
 
 -- name: GetPartRevision :one

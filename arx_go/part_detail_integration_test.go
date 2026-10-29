@@ -157,7 +157,7 @@ func TestIntegration_PartDetail_Renders(t *testing.T) {
 		bare: {"<strong>Unit:</strong><span>—</span>"},
 	} {
 		rec := httptest.NewRecorder()
-		h.PartDetail(rec, withID(httptest.NewRequest(http.MethodGet, fmt.Sprintf("/part/%d/details", id), nil), id))
+		h.PartDetail(rec, withID(httptest.NewRequest(http.MethodGet, fmt.Sprintf("/part/%d/summary", id), nil), id))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("PartDetail %d: status %d", id, rec.Code)
 		}

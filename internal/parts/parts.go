@@ -170,6 +170,11 @@ type Part struct {
 	StockOnHand         decimal.Decimal
 	ReorderMin          *decimal.Decimal
 	TrackingMode        string
+	DefaultSupplierID   *int
+	DefaultSupplierName string
+	PriceID             *int
+	PriceEa             decimal.Decimal
+	PriceSupplierName   string
 	UserField1          string
 	UserField2          string
 	UserField3          string
@@ -580,6 +585,8 @@ func (s *Service) GetPart(ctx context.Context, id int) (Part, error) {
 		LastRollupCost: r.LastRollupCost, LastRollupAt: r.LastRollupAt, AttachmentCount: r.AttachmentCount,
 		POLineCount: r.PoLineCount, UnitID: r.UomID, UnitAbbr: r.UnitAbbr, StockOnHand: r.StockOnHand,
 		ReorderMin: r.ReorderMin, TrackingMode: r.TrackingMode,
+		DefaultSupplierID: r.DefaultSupplierID, DefaultSupplierName: r.DefaultSupplierName, PriceID: r.PriceID,
+		PriceEa: r.PriceEa, PriceSupplierName: r.PriceSupplierName,
 		UserField1: r.UserField1, UserField2: r.UserField2, UserField3: r.UserField3, UserField4: r.UserField4,
 		UserField5: r.UserField5, UserField6: r.UserField6, UserField7: r.UserField7, UserField8: r.UserField8,
 		UserField9: r.UserField9, UserField10: r.UserField10}, nil

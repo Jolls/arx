@@ -125,7 +125,7 @@
             <button type="submit" class="btn btn-primary">
                 {{if .IsNew}}Create Part{{else}}Save Changes{{end}}
             </button>
-            <a href="{{if .IsNew}}/{{else}}/part/{{.Part.ID}}{{end}}" class="btn btn-secondary">Cancel</a>
+            <a href="{{if .IsNew}}/{{else}}/part/{{.Part.ID}}/details{{end}}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
