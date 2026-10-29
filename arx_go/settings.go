@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"arx/arx_go/models"
 	"arx/internal/auth"
 	arxbase "arx/internal/config"
 	arxdb "arx/internal/db"
@@ -83,6 +84,18 @@ func selectConnectPassword(testMode, allowStored bool, testPosted, storedTest, p
 	return firstNonEmpty(posted, storedDB)
 }
 
+// connectionTargetChanged reports whether the posted prod/test server, name and
+// user differ from cur. Blank prod fields and a blank test name mean "keep" in
+// SettingsSave; test server/user are written verbatim.
+func connectionTargetChanged(cur *arxbase.Config, dbServer, dbName, dbUser, testServer, testName, testUser string) bool {
+	return (dbServer != "" && dbServer != cur.DBServer) ||
+		(dbName != "" && dbName != cur.DBName) ||
+		(dbUser != "" && dbUser != cur.DBUser) ||
+		testServer != cur.TestDBServer ||
+		(testName != "" && testName != cur.TestDBName) ||
+		testUser != cur.TestDBUser
+}
+
 // firstNonEmpty returns the first non-empty string in vals, or "" if all are empty.
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
@@ -127,10 +140,18 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 	var poSuppliers []supplierOption
 	var poReceiverName string
 	var poContactID, poReceiverID int
+	var attachmentCategories string
+	partNumbering := models.DefaultBaseNumberConfig()
+	// Signed out on a live connection (#401): the page renders only the connection
+	// form, so skip the DB reads that feed the other tabs (they also cost round
+	// trips and may error against a wrong database).
+	connectionOnly := h.signedOutConnection(r)
 	accentColor := "blue"
 	landingRoutePref := "/"
 	timezonePref := defaultTimezone
-	if h.database() != nil {
+	if h.database() != nil && !connectionOnly {
+		attachmentCategories = strings.Join(h.loadAttachmentCategories(r.Context()), ",")
+		partNumbering = h.loadBaseNumberConfig(r.Context())
 		if u := h.currentUser(r); u != nil {
 			poContactID = u.DefaultPOContactID
 			poReceiverID = u.DefaultPOReceiverID
@@ -168,11 +189,16 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		// PasswordOptional: true when a blank db_password field will reuse the
 		// stored password (an authenticated caller, or a working connection
 		// with no dbConnError). An unauthenticated caller during a #852
-		// connection-error bypass must type the password (see SettingsSave).
-		"PasswordOptional":      connected && (h.st().dbConnError == "" || h.currentUser(r) != nil),
-		// Same predicate RequireAdminOnceConnected gates POST /settings with, so the
-		// Connection tab is only offered to someone who can actually save it (#106).
-		"CanEditConnection":      h.canEditConnection(r),
+		// connection-error bypass, or a signed-out one (#401), must type the password
+		// (see SettingsSave).
+		"PasswordOptional":      connected && !connectionOnly && (h.st().dbConnError == "" || h.currentUser(r) != nil),
+		// Same rule RequireConnectionEditor gates POST /settings with (admin, broken
+		// connection, or signed out #401), so the Connection tab is only offered to
+		// someone who can actually save it (#106).
+		"CanEditConnection":      h.canEditConnection(r) || connectionOnly,
+		// ConnectionOnly: signed-out on a live connection (#401). The template shows
+		// just the connection fields — no file paths, debug toggle or release notes.
+		"ConnectionOnly":        connectionOnly,
 		"DBConnError":           h.st().dbConnError,
 		"DBServer":              h.cfg().DBServer,
 		"DBName":                h.cfg().DBName,
@@ -193,7 +219,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"PODefaultReceiverName": poReceiverName,
 		"POContacts":            poContacts,
 		"POSuppliers":           poSuppliers,
-		"AttachmentCategories":  strings.Join(h.loadAttachmentCategories(r.Context()), ","),
+		"AttachmentCategories":  attachmentCategories,
 		"DigiKeyClientID":       h.cfg().DigiKeyClientID,
 		"DigiKeyClientSecretSet": h.cfg().DigiKeyClientSecret != "",
 		"CompanyLogo":           h.companyLogoURL(),
@@ -205,7 +231,7 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"Timezone":              timezonePref,
 		"Timezones":             commonTimezones,
 		"PartCategories":        h.st().partCategories,
-		"PartNumbering":         h.loadBaseNumberConfig(r.Context()),
+		"PartNumbering":         partNumbering,
 		"PartNumberingPreview":  partNumberingPreview,
 		"NamedQueries":          namedQueries,
 		"NamedQueriesError":     namedQueriesError,
@@ -215,6 +241,9 @@ func (h *Handler) settingsData(w http.ResponseWriter, r *http.Request, extra map
 		"ReleaseNotes":          h.releaseNotes,
 		"ActiveTab":             "settings",
 		"CsrfToken":             h.csrfToken(w, r),
+	}
+	if connectionOnly {
+		data["ReleaseNotes"] = ""
 	}
 	maps.Copy(data, extra)
 	return data
@@ -428,6 +457,11 @@ func (h *Handler) SettingsCompanyLogoRemove(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
+	// Signed out on a live connection (#401): only the passwords and Test Mode can
+	// change. The connection target (server/name/user), file paths and debug mode are
+	// left as they are, and nothing is persisted or applied unless the connect
+	// succeeds. Repointing the app stays an admin / broken-connection action.
+	restricted := h.signedOutConnection(r)
 
 	dbServer := strings.TrimSpace(r.FormValue("db_server"))
 	dbName := strings.TrimSpace(r.FormValue("db_name"))
@@ -443,6 +477,22 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	poRoot := strings.TrimSpace(r.FormValue("po_folder_root"))
 	supplierFilesRoot := strings.TrimSpace(r.FormValue("supplier_files_root"))
 	imageRoot := strings.TrimSpace(r.FormValue("image_root"))
+
+	if restricted {
+		// The form shows the target read-only, so a mismatch means a stale or forged
+		// post (e.g. an admin whose session expired). Say so instead of silently
+		// discarding their edits and reporting success.
+		if connectionTargetChanged(h.cfg(), dbServer, dbName, dbUser, testDBServer, testDBName, testDBUser) {
+			h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
+				"Error": "Nothing was saved: sign in as an admin to change the server, database or user.",
+			}))
+			return
+		}
+		// Blank prod fields and a blank test name mean "keep"; the test server/user
+		// are written verbatim, so pin them to the current values.
+		dbServer, dbName, dbUser, testDBName = "", "", "", ""
+		testDBServer, testDBUser = h.cfg().TestDBServer, h.cfg().TestDBUser
+	}
 
 	local, _ := arxbase.LoadLocal()
 	if local == nil {
@@ -474,16 +524,21 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	debugMode := r.FormValue("debug_mode") == "1"
+	if restricted {
+		debugMode = h.cfg().DebugMode
+	}
 	testMode := r.FormValue("test_mode") == "1"
 	testModeChanged := testMode != h.cfg().TestMode
-	// Tokenize a leading %USERPROFILE% before persisting so a shared
-	// config/local.json stays portable across users (#731); the live config keeps
-	// the expanded, absolute path the handlers already expect.
-	local.DocControlRoot = arxbase.TokenizeUserPath(docRoot)
-	local.POFolderRoot = arxbase.TokenizeUserPath(poRoot)
-	local.SupplierFilesRoot = arxbase.TokenizeUserPath(supplierFilesRoot)
-	local.ImageRoot = arxbase.TokenizeUserPath(imageRoot)
-	local.DebugMode = debugMode
+	if !restricted {
+		// Tokenize a leading %USERPROFILE% before persisting so a shared
+		// config/local.json stays portable across users (#731); the live config keeps
+		// the expanded, absolute path the handlers already expect.
+		local.DocControlRoot = arxbase.TokenizeUserPath(docRoot)
+		local.POFolderRoot = arxbase.TokenizeUserPath(poRoot)
+		local.SupplierFilesRoot = arxbase.TokenizeUserPath(supplierFilesRoot)
+		local.ImageRoot = arxbase.TokenizeUserPath(imageRoot)
+		local.DebugMode = debugMode
+	}
 	local.TestMode = &testMode
 	applyCfg := func(c *arxbase.Config) {
 		if dbServer != "" {
@@ -500,10 +555,12 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		if testDBName != "" {
 			c.TestDBName = testDBName
 		}
-		c.DocControlRoot = docRoot
-		c.POFolderRoot = poRoot
-		c.SupplierFilesRoot = supplierFilesRoot
-		c.ImageRoot = imageRoot
+		if !restricted {
+			c.DocControlRoot = docRoot
+			c.POFolderRoot = poRoot
+			c.SupplierFilesRoot = supplierFilesRoot
+			c.ImageRoot = imageRoot
+		}
 		c.DebugMode = debugMode
 		c.TestMode = testMode
 	}
@@ -517,16 +574,30 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	// without re-entering credentials. In test mode the test password wins and
 	// falls back to the prod password when unset (mirrors Base.activePassword).
 	//
-	// An unauthenticated caller can only reach this handler because the DB is
-	// unusable — no connection at all, or h.dbConnError set (#852) — so
-	// RequireAuthOnceConnected let the request through without a login. Such a
+	// An unauthenticated caller reaches this handler when the DB is unusable — no
+	// connection at all, or h.dbConnError set (#852) — or, since #401, when signed
+	// out on a live connection (RequireConnectionEditor). Such a
 	// caller must not be able to point db_server at an arbitrary host and have
 	// the app dial it with the *stored* password: that hands the secret to the
 	// attacker's endpoint, which is exactly what #748 blocked. So the
 	// blank-means-reuse-stored-password convenience is limited to a logged-in
 	// admin; anonymous callers must type the password to trigger any connect.
+	//
+	//
+	// Signed out on a live connection (#401) must type the password too: a blank
+	// one would let anyone with local access reconnect or flip Test Mode — swapping
+	// the database under every signed-in session — using the stored secret.
 	authenticated := h.currentUser(r) != nil
 	connectWith := selectConnectPassword(cfg.TestMode, authenticated, testPassword, cfg.TestDBPassword, password, cfg.DBPassword)
+	if restricted {
+		// Persist only the password that belongs to the profile this connect used, so
+		// the unchecked one for the inactive profile can't be overwritten.
+		if cfg.TestMode {
+			password = ""
+		} else {
+			testPassword = ""
+		}
+	}
 
 	var connErr *arxdb.ConnectErrorInfo
 	dbSwapped := false
@@ -564,15 +635,17 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 			old.close()
 		}
 	}
-	if !dbSwapped {
+	if !dbSwapped && !restricted {
 		h.update(func(s *runtimeState) { applyCfg(s.cfg) })
 	}
 
-	if err := arxbase.SaveLocal(local); err != nil {
-		log.Printf("warning: could not save local config: %v", err)
-	}
-	if err := arxbase.SaveSecrets(secrets); err != nil {
-		log.Printf("warning: could not save secrets config: %v", err)
+	if dbSwapped || !restricted {
+		if err := arxbase.SaveLocal(local); err != nil {
+			log.Printf("warning: could not save local config: %v", err)
+		}
+		if err := arxbase.SaveSecrets(secrets); err != nil {
+			log.Printf("warning: could not save secrets config: %v", err)
+		}
 	}
 
 	if connErr != nil {
@@ -587,9 +660,20 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 	if !authenticated && connectWith == "" {
 		// No connect was attempted: the other fields are saved, but an
 		// anonymous caller has to supply the password (see above).
-		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{
-			"Error": "Settings saved, but not connected: enter your database password to connect.",
-		}))
+		msg := "Settings saved, but not connected: enter your database password to connect."
+		if restricted {
+			msg = "Nothing was saved: enter your database password to change the connection."
+		}
+		h.render(w, r, "settings/settings.html", h.settingsData(w, r, map[string]any{"Error": msg}))
+		return
+	}
+
+	if restricted {
+		msg := "Connection settings saved."
+		if testModeChanged {
+			msg = "Connection settings saved. Active database is now " + h.cfg().ActiveDBName() + "."
+		}
+		http.Redirect(w, r, "/login?notice="+url.QueryEscape(msg), http.StatusSeeOther)
 		return
 	}
 
@@ -607,8 +691,8 @@ func (h *Handler) SettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reaching here means authenticated == true (the unauthenticated,
-	// not-yet-connected case already returned above), which is only possible
+	// Reaching here means authenticated == true (the unauthenticated cases
+	// already returned above), which is only possible
 	// when h.database() != nil (RequireAuthOnceConnected only stashes a user
 	// once the connection is usable) — so this is always a redirect home.
 	http.Redirect(w, r, "/", http.StatusSeeOther)

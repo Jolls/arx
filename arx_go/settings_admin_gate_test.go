@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	arxbase "arx/internal/config"
 )
 
 // sessionFor builds a request carrying a signed session cookie for u, with u
@@ -210,6 +212,79 @@ func TestRequireAdminMiddlewares(t *testing.T) {
 					t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
 				}
 			})
+		}
+	}
+}
+
+// A signed-out caller on a live connection reaches Settings so they can fix a
+// connection they can't sign in over (#401); a signed-in non-admin still can't
+// repoint it.
+func TestRequireConnectionEditor(t *testing.T) {
+	t.Run("connected, signed out: allowed", func(t *testing.T) {
+		h := testHandlerWithDB()
+		var reached bool
+		rec := httptest.NewRecorder()
+		h.RequireConnectionEditor(sentinel(&reached)).ServeHTTP(
+			rec, httptest.NewRequest(http.MethodPost, "/settings", nil))
+		if !reached {
+			t.Errorf("signed-out POST /settings did not reach the handler (status %d)", rec.Code)
+		}
+	})
+
+	t.Run("connected, non-admin: refused", func(t *testing.T) {
+		h := testHandlerWithDB()
+		req := sessionFor(t, h, http.MethodPost, "/settings", &User{ID: 7, Username: "tester"})
+		var reached bool
+		rec := httptest.NewRecorder()
+		h.RequireConnectionEditor(sentinel(&reached)).ServeHTTP(rec, req)
+		if reached || rec.Code != http.StatusForbidden {
+			t.Errorf("reached=%v status=%d, want refused with 403", reached, rec.Code)
+		}
+	})
+
+	t.Run("connected, admin: allowed", func(t *testing.T) {
+		h := testHandlerWithDB()
+		req := sessionFor(t, h, http.MethodPost, "/settings", &User{ID: 8, Username: "admin", IsAdmin: true})
+		var reached bool
+		h.RequireConnectionEditor(sentinel(&reached)).ServeHTTP(httptest.NewRecorder(), req)
+		if !reached {
+			t.Error("admin did not reach POST /settings")
+		}
+	})
+}
+
+func TestAllowSignedOutConnection_GET(t *testing.T) {
+	h := testHandlerWithDB()
+	var reached bool
+	rec := httptest.NewRecorder()
+	h.AllowSignedOutConnection(sentinel(&reached)).ServeHTTP(
+		rec, httptest.NewRequest(http.MethodGet, "/settings", nil))
+	if !reached || rec.Code == http.StatusSeeOther {
+		t.Errorf("signed-out GET /settings reached=%v status=%d, want reached with no redirect", reached, rec.Code)
+	}
+}
+
+// A signed-out save must not be able to change the connection target (#401): the
+// form shows it read-only, so any difference is a stale or forged post.
+func TestConnectionTargetChanged(t *testing.T) {
+	cur := &arxbase.Config{DBServer: "db1", DBName: "ArxProd", DBUser: "u", TestDBServer: "", TestDBName: "ArxDev", TestDBUser: ""}
+	cases := []struct {
+		name                                             string
+		server, db, user, testServer, testName, testUser string
+		want                                             bool
+	}{
+		{"all same", "db1", "ArxProd", "u", "", "ArxDev", "", false},
+		{"prod blanks keep", "", "", "", "", "", "", false},
+		{"prod server changed", "evil", "ArxProd", "u", "", "ArxDev", "", true},
+		{"prod name changed", "db1", "Other", "u", "", "ArxDev", "", true},
+		{"prod user changed", "db1", "ArxProd", "x", "", "ArxDev", "", true},
+		{"test server set", "db1", "ArxProd", "u", "evil", "ArxDev", "", true},
+		{"test name changed", "db1", "ArxProd", "u", "", "Other", "", true},
+		{"test user set", "db1", "ArxProd", "u", "", "ArxDev", "x", true},
+	}
+	for _, c := range cases {
+		if got := connectionTargetChanged(cur, c.server, c.db, c.user, c.testServer, c.testName, c.testUser); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
 }

@@ -84,6 +84,7 @@
             </div>
         </div>
 
+        {{if not .ConnectionOnly}}
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Debug Mode</strong>
             <div class="form-check form-switch">
@@ -93,22 +94,28 @@
                 </label>
             </div>
         </div>
+        {{end}}
 
+        {{if .ConnectionOnly}}
+        <p class="text-muted" style="font-size:0.85em;">
+            Signed out: you can change the password and Test Mode, and you must type the password to save. Sign in as an admin to change the server, database or user.
+        </p>
+        {{end}}
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">DB Server</strong>
-            <input type="text" name="db_server" value="{{.DBServer}}"
+            <input type="text" name="db_server" {{if .ConnectionOnly}}readonly {{end}}value="{{.DBServer}}"
                    placeholder="yourserver.database.windows.net"
                    class="form-control font-monospace" style="width:360px;">
         </div>
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Prod DB Name</strong>
-            <input type="text" name="db_name" value="{{.DBName}}"
+            <input type="text" name="db_name" {{if .ConnectionOnly}}readonly {{end}}value="{{.DBName}}"
                    placeholder="ArxProd"
                    class="form-control font-monospace" style="width:240px;">
         </div>
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Username</strong>
-            <input type="text" name="db_user" value="{{.DBUser}}"
+            <input type="text" name="db_user" {{if .ConnectionOnly}}readonly {{end}}value="{{.DBUser}}"
                    placeholder="dbuser"
                    autocomplete="username"
                    class="form-control font-monospace" style="width:240px;">
@@ -137,19 +144,19 @@
         </p>
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Server</strong>
-            <input type="text" name="test_db_server" value="{{.TestDBServer}}"
+            <input type="text" name="test_db_server" {{if .ConnectionOnly}}readonly {{end}}value="{{.TestDBServer}}"
                    placeholder="(inherit prod server)"
                    class="form-control font-monospace" style="width:360px;">
         </div>
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Test DB Name</strong>
-            <input type="text" name="test_db_name" value="{{.TestDBName}}"
+            <input type="text" name="test_db_name" {{if .ConnectionOnly}}readonly {{end}}value="{{.TestDBName}}"
                    placeholder="ArxDev"
                    class="form-control font-monospace" style="width:240px;">
         </div>
         <div class="detail-row align-items-center" style="padding:6px 0;">
             <strong style="min-width:160px;">Username</strong>
-            <input type="text" name="test_db_user" value="{{.TestDBUser}}"
+            <input type="text" name="test_db_user" {{if .ConnectionOnly}}readonly {{end}}value="{{.TestDBUser}}"
                    placeholder="(inherit prod user)"
                    autocomplete="off"
                    class="form-control font-monospace" style="width:240px;">
@@ -172,6 +179,7 @@
     </div>
 
     <!-- ── File Paths ────────────────────────────────────────────────── -->
+    {{if not .ConnectionOnly}}
     <div class="detail-section mt-4">
         <h3>File Paths</h3>
         <p class="text-muted" style="font-size:0.85em; margin:4px 0 14px;">
@@ -230,13 +238,16 @@
             </div>
         </div>
     </div>
+    {{end}}
 
     <!-- ── Save button ───────────────────────────────────────────────── -->
     <div class="mt-4 d-flex align-items-center gap-3">
         <button type="submit" class="btn btn-primary" style="padding:10px 32px; font-size:0.95em;">
             Save Settings
         </button>
-        {{if .Connected}}
+        {{if .ConnectionOnly}}
+        <a href="/login" class="text-muted text-decoration-none" style="font-size:0.9em;">&#8592; Back to sign in</a>
+        {{else if .Connected}}
         <a href="/" class="text-muted text-decoration-none" style="font-size:0.9em;">&#8592; Back to app</a>
         {{end}}
     </div>
