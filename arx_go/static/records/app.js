@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!tbody) return
     var rows = dataRows(tbody)
     var controls = (table.closest('.table-responsive-sm') || table).nextElementSibling
-    var hasControls = controls && controls.classList.contains('pagination-controls')
+    var hasControls = controls && controls.matches('nav[aria-label="Pagination"]')
 
     var rc = document.querySelector('.record-count')
     if (rc) rc.textContent = rows.length
@@ -89,8 +89,14 @@ document.addEventListener('DOMContentLoaded', function () {
       var next = controls.querySelector('.page-nav.next')
       if (info) info.textContent = 'Showing ' + (start + 1) + '–' + Math.min(end, rows.length) +
         ' of ' + rows.length + ' (Page ' + currentPage + ' of ' + totalPages + ')'
-      if (prev) prev.disabled = currentPage === 1
-      if (next) next.disabled = currentPage >= totalPages
+      if (prev) {
+        prev.disabled = currentPage === 1
+        prev.parentElement.classList.toggle('disabled', prev.disabled)
+      }
+      if (next) {
+        next.disabled = currentPage >= totalPages
+        next.parentElement.classList.toggle('disabled', next.disabled)
+      }
     }
   }
 
@@ -98,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var table = document.querySelector('table[data-paginate]')
     if (!table) return
     var controls = (table.closest('.table-responsive-sm') || table).nextElementSibling
-    if (controls && controls.classList.contains('pagination-controls')) {
+    if (controls && controls.matches('nav[aria-label="Pagination"]')) {
       var prev = controls.querySelector('.page-nav.prev')
       var next = controls.querySelector('.page-nav.next')
       if (prev) prev.addEventListener('click', function () {

@@ -58,6 +58,10 @@ body.theme-indigo .text-primary,
 body.theme-teal .text-primary,
 body.theme-green .text-primary,
 body.theme-slate .text-primary { color: var(--accent-text) !important; }
+.pagination {
+    --bs-pagination-color: var(--accent-text); --bs-pagination-hover-color: var(--accent-text-hover);
+    --bs-pagination-focus-color: var(--accent-text-hover);
+}
 
 /* Settings swatches (#537): standalone, not scoped to a themed <body>, so
    they can preview every preset regardless of the currently active theme. */
@@ -222,17 +226,6 @@ table[data-rows-url="/api/contacts/rows"] col:nth-child(11) { width:  5%; } /* A
 /* --- Date-range column filter (engine-rendered, any table) --- */
 .filter-row .date-filter { display: flex; justify-content: center; }
 .filter-row .date-filter-btn { padding: 4px 8px; }
-
-/* --- Pagination ---------------------------------------------- */
-.pagination-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--bs-border-color); }
-.pagination-info     { color: var(--bs-secondary-color); font-size: 0.95em; }
-.pagination-buttons  { display: flex; gap: 10px; }
-.page-nav {
-    padding: 8px 16px; background: var(--bs-tertiary-bg); color: var(--bs-body-color); border: 1px solid var(--bs-border-color);
-    border-radius: 3px; cursor: pointer; font-size: 0.9em; transition: background 0.2s;
-}
-.page-nav:hover:not(:disabled):not(.disabled) { background: var(--bs-secondary-bg); }
-.page-nav:disabled, .page-nav.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
 /* --- Soft-deleted (inactive) rows ---------------------------- */
 .row-inactive { color: var(--bs-secondary-color); }
