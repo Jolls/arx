@@ -274,7 +274,6 @@ type PORow struct {
 	Number       string
 	Status       string
 	SupplierID   int
-	RFQGroupID   *int
 	SupplierName string
 	DateOrdered  *time.Time
 	DateClosed   *time.Time
@@ -420,7 +419,32 @@ type RFQGroupLine struct {
 	LeadTimeDays *int
 }
 
-// ListPORows returns every PO, number descending.
+// RFQQuoteRow is one quote (a PO in an RFQ group) on the /rfqs page.
+type RFQQuoteRow struct {
+	Number        string
+	Status        string
+	SupplierID    int
+	RFQGroupID    int
+	SupplierName  string
+	DateRequested *time.Time
+	Total         decimal.Decimal
+}
+
+// ListRFQQuotes returns every RFQ quote, newest group first then by number.
+func (s *Service) ListRFQQuotes(ctx context.Context) ([]RFQQuoteRow, error) {
+	rows, err := s.q.ListRFQQuotes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RFQQuoteRow, len(rows))
+	for i, r := range rows {
+		out[i] = RFQQuoteRow{Number: r.Number, Status: r.Status, SupplierID: r.SupplierID, RFQGroupID: *r.RfqGroupID,
+			SupplierName: r.SupplierName, DateRequested: r.DateRequested, Total: r.TotalCost}
+	}
+	return out, nil
+}
+
+// ListPORows returns every PO that is not an RFQ quote, number descending.
 func (s *Service) ListPORows(ctx context.Context) ([]PORow, error) {
 	rows, err := s.q.ListPORows(ctx)
 	if err != nil {
@@ -428,7 +452,7 @@ func (s *Service) ListPORows(ctx context.Context) ([]PORow, error) {
 	}
 	out := make([]PORow, len(rows))
 	for i, r := range rows {
-		out[i] = PORow{Number: r.Number, Status: r.Status, SupplierID: r.SupplierID, RFQGroupID: r.RfqGroupID,
+		out[i] = PORow{Number: r.Number, Status: r.Status, SupplierID: r.SupplierID,
 			SupplierName: r.SupplierName, DateOrdered: r.DateOrdered, DateClosed: r.DateClosed,
 			Orderer: r.Orderer, Total: r.TotalCost}
 	}

@@ -28,8 +28,8 @@ func filterRowTemplates(t *testing.T) []string {
 
 func TestFilterHelp_EveryFilterRowHasHelpButton(t *testing.T) {
 	files := filterRowTemplates(t)
-	if len(files) != 10 {
-		t.Errorf("filter-row templates = %d, want 10 (add the help button to any new one, then update this count): %v", len(files), files)
+	if len(files) != 11 {
+		t.Errorf("filter-row templates = %d, want 11 (add the help button to any new one, then update this count): %v", len(files), files)
 	}
 	for _, f := range files {
 		if !strings.Contains(readTemplate(t, f), `{{template "filter_help_btn"}}`) {

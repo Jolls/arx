@@ -1,0 +1,57 @@
+{{define "content"}}
+<div class="content">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="expandAllRFQs()">Expand All</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="collapseAllRFQs()">Collapse All</button>
+        </div>
+        <a href="/rfqs/new" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle"></i> New RFQ</a>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm" id="rfqs-table" data-rows-url="/api/rfqs/rows">
+            <colgroup>
+                <col><col><col><col><col><col>
+            </colgroup>
+            <thead>
+                <tr class="table-dark">
+                    <th data-col="col-num">RFQ Number {{template "filter_help_btn"}}</th>
+                    <th data-col="col-status">Status</th>
+                    <th data-col="col-quotes"># Quotes</th>
+                    <th data-col="col-vendors">Vendors</th>
+                    <th data-col="col-requested">Date Requested</th>
+                    <th data-col="col-cost" style="text-align:right;">Quoted Cost</th>
+                </tr>
+                <tr class="filter-row">
+                    <th data-col="col-num"><input type="text" placeholder=""></th>
+                    <th data-col="col-status">
+                        <select class="form-select form-select-sm">
+                            <option value="">All</option>
+                            <option value="open">Open</option>
+                            <option value="awarded">Awarded</option>
+                            <option value="declined">Declined</option>
+                        </select>
+                    </th>
+                    <th data-col="col-quotes"><input type="text" placeholder=""></th>
+                    <th data-col="col-vendors"><input type="text" placeholder=""></th>
+                    <th data-col="col-requested" data-filter-type="date"></th>
+                    <th data-col="col-cost"><input type="text" placeholder=""></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="6" class="no-results">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <nav aria-label="Pagination" class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+        <span class="pagination-info text-body-secondary"></span>
+        <ul class="pagination mb-0">
+            <li class="page-item"><button type="button" class="page-link page-nav prev" onclick="prevPage()">&#8592; Previous</button></li>
+            <li class="page-item"><button type="button" class="page-link page-nav next" onclick="nextPage()">Next &#8594;</button></li>
+        </ul>
+    </nav>
+    <p class="text-body-secondary" style="margin-top:15px; text-align:right;">
+        Total matching: <strong><span class="record-count">0</span></strong>
+    </p>
+</div>
+{{end}}

@@ -5,14 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.8.87] - 2026-10-30
-### Changed
-- Contacts moved under the Vendors tab, and Lots, Units and Builds under the Records tab, as sub-tabs that pop down when the main tab is hovered; the main tab then shows the selected sub-tab's name and icon, and remembers it from other sections. Touch devices keep the current section's sub-tabs visible ([#363](https://github.com/Jolls/arx/issues/363))
-
 ### Added
-- Lots, Units and Builds tab icons ([#363](https://github.com/Jolls/arx/issues/363))
+- RFQs section tab under POs: one row per RFQ with its vendor quotes as expandable rows, replacing the "Show RFQs" toggle on the PO list; the PO list now shows only POs ([#363](https://github.com/Jolls/arx/issues/363))
+- Lots, Units, Builds and RFQs tab icons ([#363](https://github.com/Jolls/arx/issues/363))
+
+### Changed
+- Section tabs: Contacts moved under Vendors, Lots, Units and Builds under Records, and RFQs under POs, as a row that pops down when the main tab is hovered; the main tab then shows the selected section tab's name and icon, and remembers it from other sections. Touch devices keep the current section's tabs visible ([#363](https://github.com/Jolls/arx/issues/363))
 
 ### Removed
-- Contacts main tab and the "Parts / All Lots|Units|Builds" breadcrumbs on those list pages ([#363](https://github.com/Jolls/arx/issues/363))
+- Contacts main tab, the "Parts / All Lots|Units|Builds" breadcrumbs on those list pages, and the "All Lots" button on the Parts list ([#363](https://github.com/Jolls/arx/issues/363))
 
 ## [0.8.86] - 2026-10-29
 ### Changed

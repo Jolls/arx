@@ -20,6 +20,10 @@ var sectionBars = map[string]sectionBar{
 		{"vendors", "/suppliers", "Vendors", "vendors"},
 		{"contacts", "/contacts", "Contacts", "contacts"},
 	}},
+	"pos": {Index: 2, Tabs: []sectionTab{
+		{"pos", "/pos", "POs", "pos"},
+		{"rfqs", "/rfqs", "RFQs", "rfqs"},
+	}},
 	"records": {Index: 3, Tabs: []sectionTab{
 		{"records", "/records", "Records", "records"},
 		{"lots", "/lots", "Lots", "lots"},

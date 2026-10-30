@@ -873,7 +873,7 @@ func (h *Handler) RequireCsrfOnPost(next http.Handler) http.Handler {
 // --- Nav context (breadcrumb back-link) ------------------------------------
 
 var listPaths = map[string]bool{
-	"/": true, "/pos": true, "/suppliers": true, "/contacts": true,
+	"/": true, "/pos": true, "/rfqs": true, "/suppliers": true, "/contacts": true,
 }
 
 func resourceBase(path string) string {

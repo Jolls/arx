@@ -382,6 +382,8 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/pos/export.csv", withAuth, h.POsExportCSV)
 	b.handle(http.MethodPost, "/pos", withAuth, h.POCreate)
 	// RFQ (issue #270) — an RFQ is a purchase_order with status 'rfq'
+	b.handle(http.MethodGet, "/rfqs", withAuth, h.RFQList)
+	b.handle(http.MethodGet, "/api/rfqs/rows", withAuth, h.RFQRows)
 	b.handle(http.MethodGet, "/rfqs/new", withAuth, h.RFQNew)
 	b.handle(http.MethodGet, "/rfq/{id}/add-supplier", withAuth, h.RFQAddSupplier)
 	b.handle(http.MethodGet, "/rfq/{group}/compare", withAuth, h.RFQCompare)
