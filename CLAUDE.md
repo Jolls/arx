@@ -98,6 +98,7 @@ See `docs/conventions.md`: FILFileName URL format (http, LOCAL:, LOCAL:dir/), PO
 
 ## Frontend — Bootstrap 5.3
 Prefer Bootstrap classes over custom CSS/inline styles. Buttons always pair base+variant (`btn btn-primary`, never `btn-primary` alone). Use Bootstrap components for alerts/badges/tables/forms before custom styles; utilities (mb-3, d-flex, gap-2, px-4) before inline margin/padding/display. Inline styles last resort only (no Bootstrap equivalent, or exact pixel value needed). When writing template HTML ask: does Bootstrap have a class for this?
+Tab terms: **main tabs** (top nav, `ActiveTab`), **section tabs** (pop-down row under a main tab, e.g. Vendors|Contacts; `section_tabs.go`, `SectionTab`), **detail tabs** (row on a record's page; legacy code names: `.sub-tab`, `ActiveSubTab`, rename tracked in #410). Say "section tab"/"detail tab" in new code, comments and changelog; "sub-tab" is ambiguous.
 
 ## Auth/middleware
 `RequireAuth` redirects all app routes to /settings when h.db==nil. Settings + /static/* always accessible. CSRF tokens in gorilla session cookie `arx-session`.

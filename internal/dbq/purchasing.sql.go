@@ -1026,9 +1026,10 @@ func (q *Queries) ListPOReceipts(ctx context.Context, poID int) ([]ListPOReceipt
 }
 
 const listPORows = `-- name: ListPORows :many
-SELECT number, COALESCE(status, '') AS status, supplier_id, rfq_group_id, COALESCE(supplier_name, '') AS supplier_name,
+SELECT number, COALESCE(status, '') AS status, supplier_id, COALESCE(supplier_name, '') AS supplier_name,
        date_ordered, date_closed, COALESCE(orderer, '') AS orderer, COALESCE(total_cost, 0) AS total_cost
 FROM purchase_order
+WHERE rfq_group_id IS NULL
 ORDER BY number DESC
 `
 
@@ -1036,7 +1037,6 @@ type ListPORowsRow struct {
 	Number       string
 	Status       string
 	SupplierID   int
-	RfqGroupID   *int
 	SupplierName string
 	DateOrdered  *time.Time
 	DateClosed   *time.Time
@@ -1044,7 +1044,7 @@ type ListPORowsRow struct {
 	TotalCost    decimal.Decimal
 }
 
-// The /pos grid, number descending.
+// The /pos grid, number descending. RFQ quotes (rfq_group_id set) live on /rfqs (ListRFQQuotes).
 func (q *Queries) ListPORows(ctx context.Context) ([]ListPORowsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listPORows)
 	if err != nil {
@@ -1058,7 +1058,6 @@ func (q *Queries) ListPORows(ctx context.Context) ([]ListPORowsRow, error) {
 			&i.Number,
 			&i.Status,
 			&i.SupplierID,
-			&i.RfqGroupID,
 			&i.SupplierName,
 			&i.DateOrdered,
 			&i.DateClosed,
@@ -1129,6 +1128,57 @@ func (q *Queries) ListRFQGroupLines(ctx context.Context, groupID int) ([]ListRFQ
 			&i.Qty,
 			&i.UnitCost,
 			&i.LeadTimeDays,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRFQQuotes = `-- name: ListRFQQuotes :many
+SELECT number, COALESCE(status, '') AS status, supplier_id, rfq_group_id, COALESCE(supplier_name, '') AS supplier_name,
+       date_requested, COALESCE(total_cost, 0) AS total_cost
+FROM purchase_order
+WHERE rfq_group_id IS NOT NULL
+ORDER BY rfq_group_id DESC, id
+`
+
+type ListRFQQuotesRow struct {
+	Number        string
+	Status        string
+	SupplierID    int
+	RfqGroupID    *int
+	SupplierName  string
+	DateRequested *time.Time
+	TotalCost     decimal.Decimal
+}
+
+// Every RFQ quote (a PO row in an RFQ group), newest group first, quotes in creation (R1, R2... R10) order;
+// the /rfqs page groups them.
+func (q *Queries) ListRFQQuotes(ctx context.Context) ([]ListRFQQuotesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRFQQuotes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRFQQuotesRow
+	for rows.Next() {
+		var i ListRFQQuotesRow
+		if err := rows.Scan(
+			&i.Number,
+			&i.Status,
+			&i.SupplierID,
+			&i.RfqGroupID,
+			&i.SupplierName,
+			&i.DateRequested,
+			&i.TotalCost,
 		); err != nil {
 			return nil, err
 		}

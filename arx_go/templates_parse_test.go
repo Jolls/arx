@@ -147,6 +147,7 @@ func coreLayoutFakeData(extra map[string]any) map[string]any {
 		"FaviconType":      "",
 	}
 	maps.Copy(data, extra)
+	applySectionBar(data) // the nav comes from MainTabs, which render() adds the same way
 	return data
 }
 
@@ -166,12 +167,20 @@ func TestContactDetailTemplateRenders(t *testing.T) {
 	}
 	data := coreLayoutFakeData(map[string]any{
 		"Contact":   contact,
-		"ActiveTab": "contacts",
-		"TestMode":  false,
+		"ActiveTab":  "suppliers",
+		"SectionTab": "contacts",
+		"TestMode":   false,
 	})
 	out := renderToString(t, tmpl, "layout", data)
 	if !strings.Contains(out, "Acme Test Contact") {
 		t.Errorf("contact_detail.html output missing bound contact name; got:\n%s", out)
+	}
+	// The nav comes from mainTabs: the Vendors tab is active and reads as the selected
+	// section tab, and the section bars are laid out against the number of main tabs.
+	for _, want := range []string{`--main-tabs:5`, `data-section="suppliers"`, `class="tab active"`, `>Contacts</a>`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("layout nav missing %q", want)
+		}
 	}
 }
 

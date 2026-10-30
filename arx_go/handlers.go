@@ -733,7 +733,6 @@ var pmTabFavicons = map[string]string{
 	"parts":     "/static/shared/icons/parts.svg",
 	"suppliers": "/static/shared/icons/vendors.svg",
 	"pos":       "/static/shared/icons/pos.svg",
-	"contacts":  "/static/shared/icons/contacts.svg",
 	"records":   "/static/shared/icons/records.svg",
 	"reports":   "/static/shared/icons/reports.svg",
 }
@@ -754,6 +753,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, da
 		m["Title"] = "Arx Parts Master"
 		m["Favicon"] = "/static/shared/favicon.png"
 		m["FaviconType"] = "image/png"
+		applySectionBar(m)
 		if tab, _ := m["ActiveTab"].(string); tab != "" {
 			if icon, ok := pmTabFavicons[tab]; ok {
 				m["Favicon"] = icon
@@ -873,7 +873,8 @@ func (h *Handler) RequireCsrfOnPost(next http.Handler) http.Handler {
 // --- Nav context (breadcrumb back-link) ------------------------------------
 
 var listPaths = map[string]bool{
-	"/": true, "/pos": true, "/suppliers": true, "/contacts": true,
+	"/": true, "/pos": true, "/rfqs": true, "/suppliers": true, "/contacts": true,
+	"/lots": true, "/units": true, "/builds": true,
 }
 
 func resourceBase(path string) string {

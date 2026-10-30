@@ -106,7 +106,7 @@ body {
 .header-theme-toggle:hover { opacity: 1; }
 
 /* --- Navigation tabs ----------------------------------------- */
-.tabs { display: flex; border-bottom: 1px solid var(--bs-border-color); background: var(--bs-tertiary-bg); margin-bottom: 1.5rem; }
+.tabs { display: flex; border-bottom: 1px solid var(--bs-border-color); background: var(--bs-tertiary-bg); }
 .tab {
     flex: 1; text-align: center; padding: 12px 0;
     text-decoration: none; color: var(--bs-body-color); font-weight: 600;
@@ -115,6 +115,42 @@ body {
 .tab:last-child { border-right: none; }
 .tab:hover  { background: var(--bs-secondary-bg); text-decoration: none; color: var(--bs-body-color); }
 .tab.active { background: var(--accent-1); color: #fff; }
+/* Section tabs (shared by every section, see section_tabs.go). */
+.section-bars { position: relative; margin-bottom: 1.5rem; }
+/* They pop down over the page when their main tab is hovered (pointer devices; see the
+   .section-popdown handler in shared/app.js). Touch devices have no hover, so the page's
+   own section stays in flow there. */
+.section-popdown {
+    display: none; position: absolute; top: 0; left: 0; z-index: 1025; /* above Bootstrap sticky (1020), below fixed (1030) */
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
+}
+.section-popdown.open { display: flex; }
+@media (hover: none) {
+    .section-popdown.section-current { display: flex; position: static; box-shadow: none; }
+}
+/* Flush under the parent main tab and centered on it: at least one main tab wide (100% /
+   --main-tabs equal tabs), grows to fit --tab-count items of --tab-min each, and is clamped
+   to stay inside the viewport. --tab-index is the parent's 0-based position. */
+.section-tabs {
+    --tab-min: 5.5rem;
+    --main-tab-w: calc(100% / var(--main-tabs, 5));
+    --w: max(var(--main-tab-w), calc(var(--tab-count, 2) * var(--tab-min)));
+    width: var(--w); max-width: 100%;
+    margin-left: clamp(0%, calc(var(--main-tab-w) * (var(--tab-index, 0) + 0.5) - var(--w) / 2), calc(100% - var(--w)));
+}
+.section-tabs .tab { padding: 8px 0; font-size: 0.95em; white-space: nowrap; }
+.section-tabs .tab-icon { width: 28px; height: 28px; vertical-align: -8px; margin-right: 4px; }
+/* Narrow bars: stack icon over label, then icon only. */
+@media (max-width: 991.98px) {
+    .section-tabs { --tab-min: 4.5rem; }
+    .section-tabs .tab { display: flex; flex-direction: column; align-items: center; padding: 6px 0; font-size: 0.75rem; }
+    .section-tabs .tab-icon { width: 24px; height: 24px; margin: 0 0 2px; vertical-align: baseline; }
+}
+@media (max-width: 575.98px) {
+    .section-tabs { --tab-min: 3rem; }
+    .section-tabs .tab-label { display: none; }
+    .section-tabs .tab-icon { margin: 0; }
+}
 .tab-icon { width: 40px; height: 40px; vertical-align: -12px; margin-right: 6px; }
 .tab-icon-active { display: none; }
 .tab.active .tab-icon-default { display: none; }

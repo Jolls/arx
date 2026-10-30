@@ -26,6 +26,13 @@ const PO_STATUS_BADGES = {
     cancelled:          '<span class="badge bg-danger">Cancelled</span>',
 };
 
+// An RFQ group's overall status on the /rfqs list (see rfqGroupStatus in pos.go).
+const RFQ_STATUS_BADGES = {
+    open:     '<span class="badge bg-info text-dark">Open</span>',
+    awarded:  '<span class="badge bg-success">Awarded</span>',
+    declined: '<span class="badge bg-secondary">Declined</span>',
+};
+
 const BOM_SOURCE_BADGES = {
     rollup: '<span class="badge bg-info text-dark">Rollup</span>',
     price: '<span class="badge bg-success">Price</span>',
@@ -44,13 +51,11 @@ function _filterStorageKey() {
 function saveFilterState() {
     if (!document.querySelector('tr.filter-row')) return;
     const filters = getFilterColumns();
-    const rfqs     = document.getElementById('show-rfqs');
     const inactive = document.getElementById('show-inactive');
     try {
         sessionStorage.setItem(_filterStorageKey(), JSON.stringify({
             filters,
             sort: { col: sortCol, dir: sortDir },
-            showRFQs:     rfqs     ? rfqs.checked     : null,
             showInactive: inactive ? inactive.checked : null,
             page: currentPage
         }));
@@ -89,9 +94,7 @@ function _applyState(st) {
         sortCol = st.sort.col;
         sortDir = st.sort.dir || 'asc';
     }
-    const rfqs     = document.getElementById('show-rfqs');
     const inactive = document.getElementById('show-inactive');
-    if (rfqs     && st.showRFQs     !== null) rfqs.checked     = st.showRFQs;
     if (inactive && st.showInactive !== null) inactive.checked = st.showInactive;
     if (st.page) currentPage = st.page;
 }
@@ -102,8 +105,8 @@ function _applyState(st) {
 //
 // Column filters are keyed by the column's data-col name (#101), so a link stays
 // correct when users have reordered columns differently: f.{key} for text/select,
-// df.{key}/dt.{key} for a date column's from/to. Sort is sort={key}.{dir}; toggles
-// rfqs/inactive are emitted only when on; page only when past 1. Column types are
+// df.{key}/dt.{key} for a date column's from/to. Sort is sort={key}.{dir}; the
+// inactive toggle is emitted only when on; page only when past 1. Column types are
 // read back from the DOM, so they never need to live in the URL. Pre-#101
 // index-based params (f0, sort=2.asc) are ignored.
 function saveFilterStateToURL() {
@@ -119,9 +122,7 @@ function saveFilterStateToURL() {
         }
     });
     if (sortCol !== null) p.set('sort', colKeyAt(sortCol) + '.' + sortDir);
-    const rfqs     = document.getElementById('show-rfqs');
     const inactive = document.getElementById('show-inactive');
-    if (rfqs     && rfqs.checked)     p.set('rfqs', '1');
     if (inactive && inactive.checked) p.set('inactive', '1');
     if (currentPage > 1) p.set('page', String(currentPage));
     const qs = p.toString();
@@ -149,9 +150,8 @@ function restoreFilterStateFromURL() {
     });
     const sortRaw     = p.get('sort');
     const pageRaw     = p.get('page');
-    const rfqsRaw     = p.get('rfqs');
     const inactiveRaw = p.get('inactive');
-    if (!had && sortRaw === null && pageRaw === null && rfqsRaw === null && inactiveRaw === null) {
+    if (!had && sortRaw === null && pageRaw === null && inactiveRaw === null) {
         return false;
     }
     let sort = { col: null, dir: 'asc' };
@@ -165,7 +165,6 @@ function restoreFilterStateFromURL() {
     _applyState({
         filters,
         sort,
-        showRFQs:     rfqsRaw     !== null,
         showInactive: inactiveRaw !== null,
         page: pageRaw ? (parseInt(pageRaw, 10) || 1) : 1,
     });
@@ -237,6 +236,16 @@ const ROW_BUILDERS = {
             <td style="text-align:right;">$${r.cost.toFixed(2)}</td>
         </tr>`;
     },
+
+    // One row per RFQ; its vendor quotes are the expandable child rows (buildRFQQuoteRow).
+    '/api/rfqs/rows': r => `<tr data-gid="${r.gid}">
+            <td><button type="button" class="bom-expand-toggle" data-gid="${r.gid}" aria-expanded="false" aria-label="Show quotes" onclick="toggleRFQRow(this)">&#9656;</button> <a href="/rfq/${r.gid}/compare" class="part-number-link">${escHtml(r.num)}</a></td>
+            <td>${RFQ_STATUS_BADGES[r.status] || escHtml(r.status)}</td>
+            <td>${r.quotes.length}</td>
+            <td>${escHtml(r.vendors)}</td>
+            <td>${r.requested || '—'}</td>
+            <td style="text-align:right;">${escHtml(r.cost)}</td>
+        </tr>`,
 };
 
 // Per-column text for filter matching — column order must match the thead.
@@ -246,6 +255,7 @@ const CELL_TEXT = {
     '/api/forms/rows':     r => [r.pn, r.desc, r.rev ? 'Rev ' + r.rev : 'Draft', r.locked ? 'locked' : 'active'],
     '/api/contacts/rows':  r => [r.supplier, r.name, r.email, r.country, r.state, r.city, r.phone, r.web, r.modified, r.notes, r.active ? 'yes' : 'no'],
     '/api/pos/rows':       r => [r.num, r.status, r.supplier, r.ordered, r.closed, r.orderer, String(r.cost)],
+    '/api/rfqs/rows':      r => [r.num, r.status, String(r.quotes.length), r.vendors, r.requested, r.cost],
 };
 
 // Status badge markup shared by the TR records row builder (mirrors the badges
@@ -486,12 +496,6 @@ function applyFilters(resetPage = true) {
     if (!document.querySelector('tr.filter-row')) return;
     if (resetPage) currentPage = 1;
     let rows = allRows.filter(r => matchesRow(r, getFilterColumns()));
-    // PO list only: hide RFQ quotes (any row in an RFQ group) unless the
-    // "Show RFQs" switch is on. Converted POs have no group id and always show.
-    const showRFQs = document.getElementById('show-rfqs');
-    if (showRFQs && !showRFQs.checked) {
-        rows = rows.filter(r => r.gid == null);
-    }
     // Parts/Vendors lists: hide soft-deleted (inactive) rows unless the
     // "Show inactive" switch is on. Endpoints without an active flag are kept.
     const showInactive = document.getElementById('show-inactive');
@@ -616,8 +620,6 @@ function exportCSV() {
     let rows = allRows.filter(r => matchesRow(r, getFilterColumns()));
     const showInactive = document.getElementById('show-inactive');
     if (showInactive && !showInactive.checked) rows = rows.filter(r => r.active !== false);
-    const showRFQs = document.getElementById('show-rfqs');
-    if (showRFQs && !showRFQs.checked) rows = rows.filter(r => r.gid == null);
 
     const configs = {
         '/api/parts/rows': {
@@ -674,7 +676,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // swallows the first click (#525).
             i.addEventListener('input', () => applyFilters(true));
         });
-    document.getElementById('show-rfqs')?.addEventListener('change', () => applyFilters(true));
     document.getElementById('show-inactive')?.addEventListener('change', () => applyFilters(true));
 });
 
@@ -1371,3 +1372,132 @@ document.addEventListener('DOMContentLoaded', () => {
         if (table) observer.observe(table);
     });
 });
+
+// Section tab popdowns (see section_tabs.go): hovering a main tab that has
+// section tabs shows them over the page; it closes on mouse-leave, outside click or Esc.
+// Keyboard: Down arrow on a main tab opens its section tabs and focuses the first; Left/Right
+// move between them, Esc closes and returns to the main tab.
+// Touch devices (no hover) skip this; they tap the main tab to enter the section.
+if (window.matchMedia('(hover: hover)').matches) {
+    const popdowns = document.querySelectorAll('.section-popdown');
+    let closeTimer;
+    const closeAll = () => popdowns.forEach(p => p.classList.remove('open'));
+    const closeSoon = () => { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 150); };
+    const popFor = tab => document.querySelector('.section-popdown[data-section="' + tab.dataset.section + '"]');
+    // After a click the popdown stays shut until the pointer leaves the tab, so it
+    // doesn't reopen over the page while the next one loads.
+    let suppressed = false;
+    document.querySelectorAll('.tabs .tab[data-section]').forEach(tab => {
+        tab.addEventListener('mouseenter', () => {
+            if (suppressed) return;
+            clearTimeout(closeTimer);
+            closeAll();
+            const pop = popFor(tab);
+            if (pop) pop.classList.add('open');
+        });
+        tab.addEventListener('mouseleave', () => { suppressed = false; closeSoon(); });
+        tab.addEventListener('keydown', e => {
+            const pop = e.key === 'ArrowDown' && popFor(tab);
+            if (!pop) return;
+            e.preventDefault();
+            closeAll();
+            pop.classList.add('open');
+            pop.querySelector('a').focus();
+        });
+    });
+    popdowns.forEach(p => {
+        p.addEventListener('mouseenter', () => clearTimeout(closeTimer));
+        p.addEventListener('mouseleave', () => { suppressed = false; closeSoon(); });
+        p.addEventListener('keydown', e => {
+            const links = Array.from(p.querySelectorAll('a'));
+            const i = links.indexOf(document.activeElement);
+            if (e.key === 'ArrowRight') links[(i + 1) % links.length].focus();
+            else if (e.key === 'ArrowLeft') links[(i - 1 + links.length) % links.length].focus();
+            else if (e.key === 'Escape') document.querySelector('.tabs .tab[data-section="' + p.dataset.section + '"]').focus();
+            else return;
+            e.preventDefault();
+        });
+        p.addEventListener('focusout', e => { if (!p.contains(e.relatedTarget)) closeSoon(); });
+    });
+    document.addEventListener('click', e => {
+        const plain = e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey; // not "open in new tab"
+        if (plain && e.target.closest('.section-popdown a, .tab[data-section]')) suppressed = true;
+        closeAll();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+}
+
+// Remember each section's last-selected section tab so its main tab keeps showing it (and
+// linking to it) from other sections: hover Records > Units, go to Parts, and the main
+// tab still reads "Units". Per browser, in localStorage. The server renders the label
+// only for the page's own section, so this swaps it in for the others.
+(function () {
+    const key = k => 'arx.section.' + k;
+    const cur = document.querySelector('.section-current');
+    const active = cur && cur.querySelector('.tab.active');
+    try {
+        if (active) localStorage.setItem(key(cur.dataset.section), active.getAttribute('href'));
+        document.querySelectorAll('.tabs .tab[data-section]').forEach(tab => {
+            const section = tab.dataset.section;
+            if (cur && cur.dataset.section === section) return;
+            const href = localStorage.getItem(key(section));
+            const link = href && document.querySelector(
+                '.section-popdown[data-section="' + section + '"] a[href="' + CSS.escape(href) + '"]');
+            if (!link) return;
+            const label = Array.from(tab.childNodes).reverse().find(n => n.nodeType === 3 && n.textContent.trim());
+            if (label) label.textContent = link.getAttribute('aria-label');
+            tab.querySelectorAll('img').forEach((img, i) => { img.src = link.querySelectorAll('img')[i].src; });
+            tab.setAttribute('href', href);
+        });
+    } catch (e) { /* storage blocked: tabs just show their default names */ }
+})();
+
+// --- RFQs list expand/collapse ---
+// One row per RFQ; expanding inserts its vendor quotes as sub-rows (same toggle look as the BOM
+// and lots lists). The quotes arrive with the group in /api/rfqs/rows, so no extra fetch.
+function buildRFQQuoteRow(q, gid) {
+    const tr = document.createElement('tr');
+    tr.className = 'bom-sub-row';
+    tr.dataset.gid = gid;
+    tr.innerHTML =
+        '<td style="--bom-depth:1"><a href="/po/' + encodeURIComponent(q.num) + '" class="part-number-link" data-popout-url="/popout/po/' + encodeURIComponent(q.num) + '">' + escHtml(q.num) + '</a></td>' +
+        '<td>' + (PO_STATUS_BADGES[q.status] || '<span class="badge bg-secondary">' + escHtml(q.status) + '</span>') + '</td>' +
+        '<td></td>' +
+        '<td><a href="/supplier/' + q.sid + '" class="part-number-link">' + escHtml(q.supplier) + '</a></td>' +
+        '<td></td>' +
+        '<td style="text-align:right;">$' + q.cost.toFixed(2) + '</td>';
+    return tr;
+}
+
+function expandRFQRow(btn) {
+    const tr = btn.closest('tr');
+    const group = allRows.find(g => String(g.gid) === btn.dataset.gid);
+    if (!group) return;
+    let insertAfter = tr;
+    group.quotes.forEach(q => {
+        const row = buildRFQQuoteRow(q, btn.dataset.gid);
+        insertAfter.insertAdjacentElement('afterend', row);
+        insertAfter = row;
+    });
+    btn.setAttribute('aria-expanded', 'true');
+    btn.innerHTML = '&#9662;';
+}
+
+function collapseRFQRow(btn) {
+    btn.closest('table').querySelectorAll('tbody tr.bom-sub-row[data-gid="' + btn.dataset.gid + '"]').forEach(r => r.remove());
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = '&#9656;';
+}
+
+function toggleRFQRow(btn) {
+    if (btn.getAttribute('aria-expanded') === 'true') collapseRFQRow(btn);
+    else expandRFQRow(btn);
+}
+
+function expandAllRFQs() {
+    document.querySelectorAll('#rfqs-table .bom-expand-toggle[aria-expanded="false"]').forEach(expandRFQRow);
+}
+
+function collapseAllRFQs() {
+    document.querySelectorAll('#rfqs-table .bom-expand-toggle[aria-expanded="true"]').forEach(collapseRFQRow);
+}

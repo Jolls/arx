@@ -114,11 +114,21 @@ WHERE po.supplier_id = sqlc.arg(supplier_id)::int AND po.rfq_group_id IS NULL
 ORDER BY po.number DESC;
 
 -- name: ListPORows :many
--- The /pos grid, number descending.
-SELECT number, COALESCE(status, '') AS status, supplier_id, rfq_group_id, COALESCE(supplier_name, '') AS supplier_name,
+-- The /pos grid, number descending. RFQ quotes (rfq_group_id set) live on /rfqs (ListRFQQuotes).
+SELECT number, COALESCE(status, '') AS status, supplier_id, COALESCE(supplier_name, '') AS supplier_name,
        date_ordered, date_closed, COALESCE(orderer, '') AS orderer, COALESCE(total_cost, 0) AS total_cost
 FROM purchase_order
+WHERE rfq_group_id IS NULL
 ORDER BY number DESC;
+
+-- name: ListRFQQuotes :many
+-- Every RFQ quote (a PO row in an RFQ group), newest group first, quotes in creation (R1, R2... R10) order;
+-- the /rfqs page groups them.
+SELECT number, COALESCE(status, '') AS status, supplier_id, rfq_group_id, COALESCE(supplier_name, '') AS supplier_name,
+       date_requested, COALESCE(total_cost, 0) AS total_cost
+FROM purchase_order
+WHERE rfq_group_id IS NOT NULL
+ORDER BY rfq_group_id DESC, id;
 
 -- name: ListPOExportRows :many
 -- One row per PO line (a PO without lines once, line columns NULL), for the CSV export.

@@ -242,7 +242,7 @@ func isoDate(t *time.Time) string {
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "pos/pos.html", map[string]any{
-		"ActiveTab": "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab": "pos", "SectionTab": "pos", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -252,7 +252,6 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 		Num      string  `json:"num"`
 		Status   string  `json:"status"`
 		SID      *int    `json:"sid"`
-		GID      *int    `json:"gid"` // rfq_group_id — set when this row is an RFQ quote
 		Supplier string  `json:"supplier"`
 		Ordered  string  `json:"ordered"`
 		Closed   string  `json:"closed"`
@@ -266,11 +265,124 @@ func (h *Handler) PORows(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]row, len(pos))
 	for i, p := range pos {
-		out[i] = row{Num: p.Number, Status: p.Status, SID: &p.SupplierID, GID: p.RFQGroupID, Supplier: p.SupplierName,
+		out[i] = row{Num: p.Number, Status: p.Status, SID: &p.SupplierID, Supplier: p.SupplierName,
 			Ordered: isoDate(p.DateOrdered), Closed: isoDate(p.DateClosed), Orderer: p.Orderer, Cost: p.Total}
 	}
 	log.Printf("[rows] pos: %d rows in %v", len(out), time.Since(start))
 	writeJSON(w, out)
+}
+
+// ── RFQList — GET /rfqs ──────────────────────────────────────────────────────
+
+func (h *Handler) RFQList(w http.ResponseWriter, r *http.Request) {
+	h.render(w, r, "pos/rfqs.html", map[string]any{
+		"ActiveTab": "pos", "SectionTab": "rfqs", "TestMode": h.cfg().TestMode,
+	})
+}
+
+type rfqQuoteJSON struct {
+	Num      string          `json:"num"`
+	Status   string          `json:"status"`
+	SID      int             `json:"sid"`
+	Supplier string          `json:"supplier"`
+	Cost     decimal.Decimal `json:"cost"`
+}
+
+// rfqGroupJSON is one RFQ (all its vendor quotes) on /rfqs; Quotes are the
+// expandable child rows.
+type rfqGroupJSON struct {
+	Group     int            `json:"gid"`
+	Num       string         `json:"num"` // the group's bare PO number, e.g. 1050 for quotes 1050R1, 1050R2
+	Status    string         `json:"status"`
+	Vendors   string         `json:"vendors"`
+	Requested string         `json:"requested"`
+	Cost      string         `json:"cost"` // "$a" or "$a – $b" across the quotes
+	Quotes    []rfqQuoteJSON `json:"quotes"`
+}
+
+// rfqCostRange formats the lowest and highest priced quote totals as "$a" or "$a – $b",
+// "—" when no vendor has priced a quote yet (an unanswered quote totals 0, not a $0 bid).
+func rfqCostRange(quotes []rfqQuoteJSON) string {
+	var low, high decimal.Decimal
+	priced := false
+	for _, q := range quotes {
+		if !q.Cost.IsPositive() {
+			continue
+		}
+		if !priced {
+			low, high, priced = q.Cost, q.Cost, true
+			continue
+		}
+		low, high = decimal.Min(low, q.Cost), decimal.Max(high, q.Cost)
+	}
+	if !priced {
+		return "—"
+	}
+	s := "$" + low.StringFixed(2)
+	if !low.Equal(high) {
+		s += " – $" + high.StringFixed(2)
+	}
+	return s
+}
+
+// rfqGroupStatus: "open" while any quote is still awaiting a decision, "awarded"
+// once one was converted (that quote is closed, RFQConvert), else "declined".
+func rfqGroupStatus(quotes []rfqQuoteJSON) string {
+	status := "declined"
+	for _, q := range quotes {
+		switch q.Status {
+		case "rfq":
+			return "open"
+		case "closed":
+			status = "awarded"
+		}
+	}
+	return status
+}
+
+// groupRFQQuotes folds quotes (ordered by group, as ListRFQQuotes returns them) into one entry per RFQ.
+func groupRFQQuotes(rows []purchasing.RFQQuoteRow) []rfqGroupJSON {
+	var out []rfqGroupJSON
+	for _, q := range rows {
+		if len(out) == 0 || out[len(out)-1].Group != q.RFQGroupID {
+			out = append(out, rfqGroupJSON{Group: q.RFQGroupID, Num: rfqBaseNumber(q.Number)})
+		}
+		g := &out[len(out)-1]
+		g.Quotes = append(g.Quotes, rfqQuoteJSON{Num: q.Number, Status: q.Status, SID: q.SupplierID, Supplier: q.SupplierName, Cost: q.Total})
+		if g.Vendors != "" {
+			g.Vendors += ", "
+		}
+		g.Vendors += q.SupplierName
+		if d := isoDate(q.DateRequested); d != "" && (g.Requested == "" || d < g.Requested) {
+			g.Requested = d
+		}
+	}
+	for i := range out {
+		g := &out[i]
+		g.Status = rfqGroupStatus(g.Quotes)
+		g.Cost = rfqCostRange(g.Quotes)
+	}
+	return out
+}
+
+func (h *Handler) RFQRows(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	quotes, err := h.purchasing().ListRFQQuotes(r.Context())
+	if err != nil {
+		serverError(w, "database error", err)
+		return
+	}
+	out := groupRFQQuotes(quotes)
+	log.Printf("[rows] rfqs: %d groups (%d quotes) in %v", len(out), len(quotes), time.Since(start))
+	writeJSON(w, out)
+}
+
+// poSectionTab picks the POs-section tab a PO page belongs to: RFQ quotes live under RFQs.
+func poSectionTab(po models.PurchaseOrder) string {
+	if po.RFQGroupID != nil {
+		return "rfqs"
+	}
+	return "pos"
 }
 
 // ── PODetail — GET /po/{id} ──────────────────────────────────────────────────
@@ -300,7 +412,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	bulkOrderDelimiter, bulkOrderPNSource := h.fetchSupplierBulkOrderOptions(r, po.SupplierID)
 	tplData := map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
-		"ActiveTab": "pos", "ActiveSubTab": "details",
+		"ActiveTab": "pos", "SectionTab": poSectionTab(po), "ActiveSubTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode":           h.cfg().TestMode,
 		"StatusActions":      poStatusActions(po.Status),
@@ -407,7 +519,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": nil, "IsNew": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
 		"NoDefaultReceiver": noDefaultReceiver,
-		"ActiveTab": "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab": "pos", "SectionTab": "pos", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -575,7 +687,7 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": items, "IsNew": false,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab":        "pos", "ActiveSubTab": "edit",
+		"ActiveTab":        "pos", "SectionTab": poSectionTab(po), "ActiveSubTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode": h.cfg().TestMode, "CSRFToken": h.csrfToken(w, r),
 	})
@@ -802,7 +914,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 		"IsNew": true, "IsDuplicate": true, "DuplicateFrom": num,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab":        "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab":        "pos", "SectionTab": "pos", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -849,7 +961,7 @@ func (h *Handler) POStartRFQ(w http.ResponseWriter, r *http.Request) {
 		"IsNew": true, "IsRFQ": true, "StartRFQFrom": num,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab":        "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab":        "pos", "SectionTab": "rfqs", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -866,7 +978,7 @@ func (h *Handler) PONote(w http.ResponseWriter, r *http.Request) {
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "pos/po_note.html", map[string]any{
-		"PO": po, "ActiveTab": "pos", "ActiveSubTab": "note",
+		"PO": po, "ActiveTab": "pos", "SectionTab": poSectionTab(po), "ActiveSubTab": "note",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -1021,7 +1133,7 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 		DirName:       dirName,
 		ParentURL:     parentURL,
 		PO:            &po,
-		ActiveTab:     "pos", ActiveSubTab: "folder",
+		ActiveTab:     "pos", SectionTab: poSectionTab(po), ActiveSubTab: "folder",
 		NavBackURL: backURL, NavBackLabel: backLabel,
 		UploadURLPrefix: fmt.Sprintf("/po/%s/folder-upload", po.Number),
 	})
@@ -1785,7 +1897,7 @@ func (h *Handler) RFQNew(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": nil, "IsNew": true, "IsRFQ": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
 		"NoDefaultReceiver": noDefaultReceiver,
-		"ActiveTab": "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab": "pos", "SectionTab": "rfqs", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -1835,7 +1947,7 @@ func (h *Handler) RFQAddSupplier(w http.ResponseWriter, r *http.Request) {
 		"PO": source, "POItems": nil, "DuplicateItems": items,
 		"IsNew": true, "IsRFQ": true, "RFQGroupID": group, "RFQAddFrom": num,
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab":        "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab":        "pos", "SectionTab": "rfqs", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -1988,7 +2100,7 @@ func (h *Handler) RFQCompare(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "pos/rfq_compare.html", map[string]any{
 		"Group": group, "Suppliers": suppliers, "Rows": orderedRows,
-		"ActiveTab": "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab": "pos", "SectionTab": "rfqs", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }

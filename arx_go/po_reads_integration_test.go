@@ -353,7 +353,8 @@ func TestIntegration_POReads_Suggestions(t *testing.T) {
 	}
 }
 
-// PORows: the fixture's rows in number DESC order, NULL fields empty, RFQ group id set.
+// PORows: the fixture's non-RFQ rows in number DESC order, NULL fields empty; RFQ quotes
+// (rfq_group_id set) live on /rfqs.
 func TestIntegration_POReads_Rows(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()
@@ -367,7 +368,6 @@ func TestIntegration_POReads_Rows(t *testing.T) {
 		Num      string  `json:"num"`
 		Status   string  `json:"status"`
 		SID      *int    `json:"sid"`
-		GID      *int    `json:"gid"`
 		Supplier string  `json:"supplier"`
 		Ordered  string  `json:"ordered"`
 		Closed   string  `json:"closed"`
@@ -385,16 +385,45 @@ func TestIntegration_POReads_Rows(t *testing.T) {
 			got = append(got, r)
 		}
 	}
-	co, g := f.Co, f.Group
+	co := f.Co
 	want := []row{
-		{Num: f.Q2, Status: "rfq", SID: &co, GID: &g},
-		{Num: f.Q1, Status: "rfq", SID: &co, GID: &g, Supplier: f.CoName, Cost: 30},
 		{Num: f.Full, Status: "partially_received", SID: &co, Supplier: f.CoName, Ordered: "2026-01-15",
 			Closed: "2026-03-01", Orderer: "Olive Orderer", Cost: 123.456},
 		{Num: f.Bare, SID: &co},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("rows =\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// RFQRows: the fixture's quotes folded into one open group, quotes by number, cost from the one priced quote.
+func TestIntegration_RFQRows(t *testing.T) {
+	h, done := liveHandler(t)
+	defer done()
+	f, cleanup := seedPOFixture(t, h)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	h.RFQRows(rec, getReq("/api/rfqs/rows"))
+	assertStatus(t, "RFQRows", rec, http.StatusOK)
+	var groups []rfqGroupJSON
+	if err := json.Unmarshal(rec.Body.Bytes(), &groups); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var mine *rfqGroupJSON
+	for i := range groups {
+		if groups[i].Group == f.Group {
+			mine = &groups[i]
+		}
+	}
+	if mine == nil {
+		t.Fatalf("group %d not in rows", f.Group)
+	}
+	if mine.Num != rfqBaseNumber(f.Q1) || mine.Status != "open" || len(mine.Quotes) != 2 || mine.Cost != "$30.00" {
+		t.Errorf("group = %+v", *mine)
+	}
+	if mine.Quotes[0].Num != f.Q1 || mine.Quotes[1].Num != f.Q2 {
+		t.Errorf("quotes = %+v, want %s then %s", mine.Quotes, f.Q1, f.Q2)
 	}
 }
 
