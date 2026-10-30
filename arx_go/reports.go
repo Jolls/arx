@@ -63,7 +63,7 @@ func ageDays(t time.Time) int {
 
 // ReportsDashboard is the Reports tab landing page (issue #282, RPT-1).
 func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "dashboard"}
+	data := map[string]any{"ActiveTab": "reports", "ActiveDetailTab": "dashboard"}
 	if h.database() == nil {
 		h.render(w, r, "reports/dashboard.html", data)
 		return
@@ -334,7 +334,7 @@ func (h *Handler) querySpendByPart(ctx context.Context, rng reportDateRange) ([]
 // ReportsSpend is the Spend Analysis report page — GET /reports/spend.
 func (h *Handler) ReportsSpend(w http.ResponseWriter, r *http.Request) {
 	rng := resolveSpendDateRange(r.URL.Query(), h.userNow(r))
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "spend", "Range": rng, "DateRangeAction": "/reports/spend"}
+	data := map[string]any{"ActiveTab": "reports", "ActiveDetailTab": "spend", "Range": rng, "DateRangeAction": "/reports/spend"}
 	if h.database() == nil {
 		h.render(w, r, "reports/spend.html", data)
 		return
@@ -373,7 +373,7 @@ func (h *Handler) queryOnTimeDelivery(ctx context.Context, rng reportDateRange) 
 // ReportsOnTime is the Supplier On-Time Delivery report page — GET /reports/on-time.
 func (h *Handler) ReportsOnTime(w http.ResponseWriter, r *http.Request) {
 	rng := resolveSpendDateRange(r.URL.Query(), h.userNow(r))
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "on-time", "Range": rng, "DateRangeAction": "/reports/on-time"}
+	data := map[string]any{"ActiveTab": "reports", "ActiveDetailTab": "on-time", "Range": rng, "DateRangeAction": "/reports/on-time"}
 	if h.database() == nil {
 		h.render(w, r, "reports/on_time.html", data)
 		return
@@ -434,7 +434,7 @@ func (h *Handler) queryPOCycleTime(ctx context.Context, rng reportDateRange) ([]
 // ReportsCycleTime is the PO Cycle Time report page — GET /reports/cycle-time.
 func (h *Handler) ReportsCycleTime(w http.ResponseWriter, r *http.Request) {
 	rng := resolveSpendDateRange(r.URL.Query(), time.Now().In(h.userLocation(r)))
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "cycle-time", "Range": rng, "DateRangeAction": "/reports/cycle-time"}
+	data := map[string]any{"ActiveTab": "reports", "ActiveDetailTab": "cycle-time", "Range": rng, "DateRangeAction": "/reports/cycle-time"}
 	if h.database() == nil {
 		h.render(w, r, "reports/cycle_time.html", data)
 		return
@@ -499,7 +499,7 @@ func (h *Handler) queryPartsStaleRollup(ctx context.Context) ([]dataQualityPartR
 // ReportsDataQuality is the Attachment / Data Quality Gaps report page — GET
 // /reports/data-quality. Point-in-time snapshot; no date range.
 func (h *Handler) ReportsDataQuality(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "data-quality"}
+	data := map[string]any{"ActiveTab": "reports", "ActiveDetailTab": "data-quality"}
 	if h.database() == nil {
 		h.render(w, r, "reports/data_quality.html", data)
 		return
@@ -582,7 +582,7 @@ func (h *Handler) loadActiveFormOptions(ctx context.Context) ([]formOption, erro
 // summary (arx_go/records_yield.go RecordsYieldSummary) — lists forms to pick
 // from, since the yield page itself is scoped to one form (issue #244).
 func (h *Handler) ReportsYieldPicker(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "yield"}
+	data := map[string]any{"ActiveTab": "reports", "ActiveDetailTab": "yield"}
 	if h.database() == nil {
 		h.render(w, r, "reports/yield_picker.html", data)
 		return
@@ -603,7 +603,7 @@ func (h *Handler) ReportsYieldPicker(w http.ResponseWriter, r *http.Request) {
 // RecordsFailureModes) — lists forms to pick from, since the report itself is
 // scoped to one form (issue #245).
 func (h *Handler) ReportsFailureModesPicker(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"ActiveTab": "reports", "ActiveSubTab": "failure-modes"}
+	data := map[string]any{"ActiveTab": "reports", "ActiveDetailTab": "failure-modes"}
 	if h.database() == nil {
 		h.render(w, r, "reports/failure_modes_picker.html", data)
 		return

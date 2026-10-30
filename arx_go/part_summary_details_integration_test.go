@@ -85,7 +85,7 @@ func TestIntegration_PartTabs_Characterization_CategoryGating(t *testing.T) {
 
 	rec := partPage(h.PartDetail, 3006, "/part/3006/details")
 	assertStatus(t, "PartDetail 3006", rec, http.StatusOK)
-	wantBody(t, "OPS tab bar", rec.Body.String(), `<span class="sub-tab disabled" title="Order history does not apply`)
+	wantBody(t, "OPS tab bar", rec.Body.String(), `<span class="detail-tab disabled" title="Order history does not apply`)
 	wantNoBody(t, "OPS tab bar", rec.Body.String(), `href="/part/3006/pricing"`)
 }
 
@@ -99,7 +99,7 @@ func TestIntegration_PartSummary_Route(t *testing.T) {
 	rec := partPage(h.PartDetail, bare, fmt.Sprintf("/part/%d/summary", bare))
 	assertStatus(t, "PartDetail /summary", rec, http.StatusOK)
 	body := rec.Body.String()
-	wantBody(t, "summary", body, `class="sub-tab active">Summary</a>`, fmt.Sprintf(`href="/part/%d/details"`, bare))
+	wantBody(t, "summary", body, `class="detail-tab active">Summary</a>`, fmt.Sprintf(`href="/part/%d/details"`, bare))
 	wantNoBody(t, "summary", body, fmt.Sprintf(`href="/part/%d/edit"`, bare), fmt.Sprintf(`href="/part/%d/duplicate"`, bare))
 }
 
@@ -111,7 +111,7 @@ func TestIntegration_PartSummary_NoRedirectForBOMPart(t *testing.T) {
 
 	rec := partPage(h.PartDetail, full, fmt.Sprintf("/part/%d/summary", full))
 	assertStatus(t, "PartDetail /summary", rec, http.StatusOK)
-	wantBody(t, "summary", rec.Body.String(), `<div class="card-header">Reference</div>`, `class="sub-tab active">Summary</a>`)
+	wantBody(t, "summary", rec.Body.String(), `<div class="card-header">Reference</div>`, `class="detail-tab active">Summary</a>`)
 }
 
 func TestIntegration_PartDefaultLanding_IsSummary(t *testing.T) {
@@ -121,7 +121,7 @@ func TestIntegration_PartDefaultLanding_IsSummary(t *testing.T) {
 	defer cleanup()
 
 	rec := partPage(h.PartDetail, bare, fmt.Sprintf("/part/%d", bare))
-	wantBody(t, "landing", rec.Body.String(), `class="sub-tab active">Summary</a>`)
+	wantBody(t, "landing", rec.Body.String(), `class="detail-tab active">Summary</a>`)
 }
 
 func TestIntegration_PartDetails_ListsEveryColumn(t *testing.T) {
@@ -133,7 +133,7 @@ func TestIntegration_PartDetails_ListsEveryColumn(t *testing.T) {
 	rec := partPage(h.PartDetails, full, fmt.Sprintf("/part/%d/details", full))
 	assertStatus(t, "PartDetails", rec, http.StatusOK)
 	body := rec.Body.String()
-	wantBody(t, "details", body, `class="sub-tab active">Details</a>`,
+	wantBody(t, "details", body, `class="detail-tab active">Details</a>`,
 		fmt.Sprintf(`href="/part/%d/edit"`, full), fmt.Sprintf(`href="/part/%d/duplicate"`, full),
 		"full desc", "full detail", "full notes", "JJ", "2026-01-02", "2026-03-04", "lot", "2.50", "1.25", "3.5", "mL",
 		"u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10",
@@ -235,7 +235,7 @@ func TestIntegration_PartDetails_CategoryTabsStillGated(t *testing.T) {
 	rec := partPage(h.PartDetails, 3006, "/part/3006/details")
 	assertStatus(t, "PartDetails 3006", rec, http.StatusOK)
 	body := rec.Body.String()
-	wantBody(t, "details OPS", body, `<span class="sub-tab disabled" title="Order history does not apply`, "<strong>Created Date:</strong>")
+	wantBody(t, "details OPS", body, `<span class="detail-tab disabled" title="Order history does not apply`, "<strong>Created Date:</strong>")
 	wantNoBody(t, "details OPS", body, `href="/part/3006/pricing"`)
 }
 

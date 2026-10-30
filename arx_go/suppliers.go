@@ -103,7 +103,7 @@ func (h *Handler) SupplierDetail(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers/supplier_detail.html", map[string]any{
 		"Supplier": s, "PrimaryAtt": primaryAtt,
 		"RecentPOs": recentPOs, "TopParts": topParts, "OtherContacts": otherContacts,
-		"ActiveTab": "suppliers", "ActiveSubTab": "details",
+		"ActiveTab": "suppliers", "ActiveDetailTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -113,7 +113,7 @@ func (h *Handler) purchasing() *purchasing.Service { return purchasing.New(handl
 func (h *Handler) SuppliersNew(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 		"Supplier": models.Supplier{}, "IsNew": true, "Contacts": nil,
-		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+		"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
@@ -123,7 +123,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": "Supplier name is required",
-			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
@@ -131,7 +131,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 	if err := validateFolderStub(fv(r, "supplier_code")); err != nil {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Error": err.Error(),
-			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
@@ -141,7 +141,7 @@ func (h *Handler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": true, "Contacts": nil,
 			"Error":     "Error creating supplier: " + err.Error(),
-			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
@@ -161,7 +161,7 @@ func (h *Handler) SupplierEdit(w http.ResponseWriter, r *http.Request) {
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 		"Supplier": s, "IsNew": false, "Contacts": contacts,
-		"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+		"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -179,7 +179,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     "Supplier name is required",
-			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
@@ -188,7 +188,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     err.Error(),
-			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
@@ -197,7 +197,7 @@ func (h *Handler) SupplierUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "suppliers/supplier_edit.html", map[string]any{
 			"Supplier": supplierFromForm(r), "IsNew": false, "Contacts": contacts,
 			"Error":     "Error saving supplier: " + err.Error(),
-			"ActiveTab": "suppliers", "ActiveSubTab": "edit",
+			"ActiveTab": "suppliers", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		})
 		return
@@ -242,7 +242,7 @@ func (h *Handler) SupplierParts(w http.ResponseWriter, r *http.Request) {
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "suppliers/supplier_parts.html", map[string]any{
 		"Supplier": s, "Links": links,
-		"ActiveTab": "suppliers", "ActiveSubTab": "parts",
+		"ActiveTab": "suppliers", "ActiveDetailTab": "parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -261,7 +261,7 @@ func (h *Handler) SupplierPOs(w http.ResponseWriter, r *http.Request) {
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "suppliers/supplier_pos.html", map[string]any{
 		"Supplier": s, "Orders": orders,
-		"ActiveTab": "suppliers", "ActiveSubTab": "pos",
+		"ActiveTab": "suppliers", "ActiveDetailTab": "pos",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -316,7 +316,7 @@ func (h *Handler) renderSupplierAttachments(w http.ResponseWriter, r *http.Reque
 		"Supplier":    s,
 		"Attachments": atts,
 		"EditingAtt":  editingAtt,
-		"ActiveTab":   "suppliers", "ActiveSubTab": "attachments",
+		"ActiveTab":   "suppliers", "ActiveDetailTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		"NextOrderID":              nextOrderID,
@@ -629,7 +629,7 @@ func (h *Handler) renderSupplierFolder(w http.ResponseWriter, r *http.Request, s
 		DirName:       dirName,
 		ParentURL:     parentURL,
 		Supplier:      &s,
-		ActiveTab:     "suppliers", ActiveSubTab: "folder",
+		ActiveTab:     "suppliers", ActiveDetailTab: "folder",
 		NavBackURL: backURL, NavBackLabel: backLabel,
 		UploadURLPrefix: fmt.Sprintf("/supplier/%d/folder-upload", s.ID),
 	})

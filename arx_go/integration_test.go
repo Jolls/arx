@@ -1139,7 +1139,7 @@ func TestIntegration_PartRollupCostHandlerCycleDoesNotWrite(t *testing.T) {
 // this part has zero BOM lines) returns zero consolidated lines rather than
 // erroring — and that the handler renders the same "No BOM data found" message
 // the BOM tab uses for the same case. (#675's category-tab gating blocks the BOM
-// subtab for BUY parts, so the part used here must be in a category where the
+// detail tab for BUY parts, so the part used here must be in a category where the
 // BOM tab is always visible — see #689.)
 func TestIntegration_BuildCostNonAssemblyPart(t *testing.T) {
 	h, cleanup := liveHandler(t)

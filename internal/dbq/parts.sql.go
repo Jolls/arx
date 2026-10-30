@@ -558,7 +558,7 @@ type GetPartBasicRow struct {
 	ThumbFile           string
 }
 
-// The part header behind every part sub-tab page; thumb_file as in ListParts.
+// The part header behind every part detail-tab page; thumb_file as in ListParts.
 func (q *Queries) GetPartBasic(ctx context.Context, arg GetPartBasicParams) (GetPartBasicRow, error) {
 	row := q.db.QueryRowContext(ctx, getPartBasic, arg.ThumbCategory, arg.ID)
 	var i GetPartBasicRow

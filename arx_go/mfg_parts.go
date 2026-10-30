@@ -36,7 +36,7 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 		"MfgParts":          mfgParts,
 		"Manufacturers":     manufacturers,
 		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, mfgScopeCol),
-		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
+		"ActiveTab":         "parts", "ActiveDetailTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -114,7 +114,7 @@ func (h *Handler) MfgPartEdit(w http.ResponseWriter, r *http.Request) {
 		"EditingMfgPart":    &mp,
 		"Manufacturers":     manufacturers,
 		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, mfgScopeCol),
-		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
+		"ActiveTab":         "parts", "ActiveDetailTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -204,7 +204,7 @@ func (h *Handler) renderMfgPartsWithError(w http.ResponseWriter, r *http.Request
 		"Manufacturers":     manufacturers,
 		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, partID, mfgScopeCol),
 		"Error":             errMsg,
-		"ActiveTab":         "parts", "ActiveSubTab": "mfg-parts",
+		"ActiveTab":         "parts", "ActiveDetailTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})

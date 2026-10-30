@@ -56,13 +56,13 @@ func (h *Handler) recordGenealogy(ctx context.Context, tx *txLogger, parentLotID
 
 // ── Lots view (#676) ─────────────────────────────────────────────────────────
 
-// LotRow is one lot in the Lots subtab list and the header of a genealogy trace.
+// LotRow is one lot in the Lots detail tab list and the header of a genealogy trace.
 // LotDescription is the human-readable provenance stored at creation (#687): "PO
 // <number>" for a purchased lot, "Build #<id>" for a manufactured one, "Manual
 // entry" for one created directly on the inventory adjustment tab.
 type LotRow = inventory.LotRow
 
-// lotsForPart returns every lot of a part, newest first, for the Lots subtab list.
+// lotsForPart returns every lot of a part, newest first, for the Lots detail tab list.
 func (h *Handler) lotsForPart(ctx context.Context, partID int) ([]LotRow, error) {
 	return h.inventory().ListPartLots(ctx, partID)
 }
@@ -140,7 +140,7 @@ func (h *Handler) PartLots(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_lots.html", map[string]any{
 		"Part": p, "Lots": lots, "HasSources": hasSources,
-		"ActiveTab": "parts", "ActiveSubTab": "lots",
+		"ActiveTab": "parts", "ActiveDetailTab": "lots",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -185,7 +185,7 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_lot_trace.html", map[string]any{
 		"Part": p, "Lot": lot, "Ancestors": ancestors, "Descendants": descendants,
 		"TypeOptions": typeOptions,
-		"ActiveTab":   "parts", "ActiveSubTab": "lots",
+		"ActiveTab":   "parts", "ActiveDetailTab": "lots",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -231,7 +231,7 @@ func (h *Handler) LotEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_lot_edit.html", map[string]any{
 		"Part": p, "Lot": lot,
-		"ActiveTab": "parts", "ActiveSubTab": "lots",
+		"ActiveTab": "parts", "ActiveDetailTab": "lots",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})

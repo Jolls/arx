@@ -46,7 +46,7 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 		"Units":             units,
 		"Manufacturers":     manufacturers,
 		"DigiKeyEnabled":    digiKeyEnabled,
-		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
+		"ActiveTab":         "parts", "ActiveDetailTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -336,7 +336,7 @@ func (h *Handler) SupplierPartEdit(w http.ResponseWriter, r *http.Request) {
 		"Units":             units,
 		"Manufacturers":     manufacturers,
 		"DigiKeyEnabled":    digiKeyEnabled,
-		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
+		"ActiveTab":         "parts", "ActiveDetailTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -479,7 +479,7 @@ func (h *Handler) renderSourcingWithError(w http.ResponseWriter, r *http.Request
 		"Manufacturers":     manufacturers,
 		"DigiKeyEnabled":    digiKeyEnabled,
 		"Error":             errMsg,
-		"ActiveTab":         "parts", "ActiveSubTab": "suppliers",
+		"ActiveTab":         "parts", "ActiveDetailTab": "suppliers",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})

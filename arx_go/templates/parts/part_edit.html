@@ -7,7 +7,7 @@
 </nav>
 <div class="content">
     {{if not .IsNew}}
-    {{template "part_tabs" .}}
+    {{template "part_detail_tabs" .}}
     {{end}}
 
     {{if .Error}}<div class="alert alert-danger"><strong>Error:</strong> {{.Error}}</div>{{end}}

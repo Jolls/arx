@@ -88,7 +88,7 @@ func (h *Handler) savePartCategories(ctx context.Context, cats []models.Category
 }
 
 // applyCategoryTabs resolves p.Category against the configured categories and
-// sets p.Tabs, which the part_tabs partial uses to show/hide subtabs.
+// sets p.Tabs, which the part_detail_tabs partial uses to show/hide detail tabs.
 func (h *Handler) applyCategoryTabs(ctx context.Context, p *models.Part) {
 	p.Tabs = models.TabsForCategory(h.st().partCategories, p.Category)
 }

@@ -184,7 +184,7 @@ type dirListingParams struct {
 	Supplier      *models.Supplier      // set only for supplier-folder listings
 	ActiveTab     string
 	SectionTab    string
-	ActiveSubTab  string
+	ActiveDetailTab  string
 	NavBackURL    string
 	NavBackLabel  string
 	UploadURLPrefix string // no trailing slash; empty disables the upload form (#36)
@@ -265,7 +265,7 @@ func (h *Handler) renderDirListing(w http.ResponseWriter, r *http.Request, p dir
 		"NumFiles":         numFiles,
 		"ActiveTab":        p.ActiveTab,
 		"SectionTab":       p.SectionTab,
-		"ActiveSubTab":     p.ActiveSubTab,
+		"ActiveDetailTab":     p.ActiveDetailTab,
 		"NavBackURL":       p.NavBackURL,
 		"NavBackLabel":     p.NavBackLabel,
 		"TestMode":         h.cfg().TestMode,

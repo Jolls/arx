@@ -86,47 +86,47 @@
 </form>
 {{end}}
 
-{{define "reports_tabs"}}
-{{/* No "Back to" link here (unlike supplier_tabs/po_tabs) — Reports has no parent list page. */}}
-<div class="sub-tabs">
-    <a href="/reports"       class="sub-tab{{if eq .ActiveSubTab "dashboard"}} active{{end}}">Dashboard</a>
-    <a href="/reports/spend" class="sub-tab{{if eq .ActiveSubTab "spend"}} active{{end}}">Spend Analysis</a>
-    <a href="/reports/yield" class="sub-tab{{if eq .ActiveSubTab "yield"}} active{{end}}">Yield Summary</a>
-    <a href="/reports/failure-modes" class="sub-tab{{if eq .ActiveSubTab "failure-modes"}} active{{end}}">Failure Modes</a>
-    <a href="/reports/on-time" class="sub-tab{{if eq .ActiveSubTab "on-time"}} active{{end}}">On-Time Delivery</a>
-    <a href="/reports/cycle-time" class="sub-tab{{if eq .ActiveSubTab "cycle-time"}} active{{end}}">PO Cycle Time</a>
-    <a href="/reports/data-quality" class="sub-tab{{if eq .ActiveSubTab "data-quality"}} active{{end}}">Data Quality Gaps</a>
+{{define "reports_detail_tabs"}}
+{{/* No "Back to" link here (unlike supplier_detail_tabs/po_detail_tabs) — Reports has no parent list page. */}}
+<div class="detail-tabs">
+    <a href="/reports"       class="detail-tab{{if eq .ActiveDetailTab "dashboard"}} active{{end}}">Dashboard</a>
+    <a href="/reports/spend" class="detail-tab{{if eq .ActiveDetailTab "spend"}} active{{end}}">Spend Analysis</a>
+    <a href="/reports/yield" class="detail-tab{{if eq .ActiveDetailTab "yield"}} active{{end}}">Yield Summary</a>
+    <a href="/reports/failure-modes" class="detail-tab{{if eq .ActiveDetailTab "failure-modes"}} active{{end}}">Failure Modes</a>
+    <a href="/reports/on-time" class="detail-tab{{if eq .ActiveDetailTab "on-time"}} active{{end}}">On-Time Delivery</a>
+    <a href="/reports/cycle-time" class="detail-tab{{if eq .ActiveDetailTab "cycle-time"}} active{{end}}">PO Cycle Time</a>
+    <a href="/reports/data-quality" class="detail-tab{{if eq .ActiveDetailTab "data-quality"}} active{{end}}">Data Quality Gaps</a>
 </div>
 {{end}}
 
-{{define "supplier_tabs"}}
+{{define "supplier_detail_tabs"}}
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>
 {{else}}
 <a href="/suppliers" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to Vendors List</a>
 {{end}}
-<div class="sub-tabs">
-    <a href="/supplier/{{.Supplier.ID}}"       class="sub-tab{{if eq .ActiveSubTab "details"}} active{{end}}">Details</a>
-    <a href="/supplier/{{.Supplier.ID}}/parts"       class="sub-tab{{if eq .ActiveSubTab "parts"}} active{{end}}">Linked Parts</a>
-    <a href="/supplier/{{.Supplier.ID}}/pos"         class="sub-tab{{if eq .ActiveSubTab "pos"}} active{{end}}">Order History</a>
-    <a href="/supplier/{{.Supplier.ID}}/attachments" class="sub-tab{{if eq .ActiveSubTab "attachments"}} active{{end}}">Attachments</a>
-    <a href="/supplier/{{.Supplier.ID}}/folder"      class="sub-tab{{if eq .ActiveSubTab "folder"}} active{{end}}">Folder</a>
-    <a href="/supplier/{{.Supplier.ID}}/edit"        class="sub-tab sub-tab-edit{{if eq .ActiveSubTab "edit"}} active{{end}}">Edit</a>
+<div class="detail-tabs">
+    <a href="/supplier/{{.Supplier.ID}}"       class="detail-tab{{if eq .ActiveDetailTab "details"}} active{{end}}">Details</a>
+    <a href="/supplier/{{.Supplier.ID}}/parts"       class="detail-tab{{if eq .ActiveDetailTab "parts"}} active{{end}}">Linked Parts</a>
+    <a href="/supplier/{{.Supplier.ID}}/pos"         class="detail-tab{{if eq .ActiveDetailTab "pos"}} active{{end}}">Order History</a>
+    <a href="/supplier/{{.Supplier.ID}}/attachments" class="detail-tab{{if eq .ActiveDetailTab "attachments"}} active{{end}}">Attachments</a>
+    <a href="/supplier/{{.Supplier.ID}}/folder"      class="detail-tab{{if eq .ActiveDetailTab "folder"}} active{{end}}">Folder</a>
+    <a href="/supplier/{{.Supplier.ID}}/edit"        class="detail-tab detail-tab-edit{{if eq .ActiveDetailTab "edit"}} active{{end}}">Edit</a>
 </div>
 {{end}}
 
-{{define "po_tabs"}}
+{{define "po_detail_tabs"}}
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>
 {{else}}
 <a href="/pos" class="btn btn-sm btn-secondary mb-2"><i class="bi bi-arrow-left"></i> Back to POs List</a>
 {{end}}
 <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-bottom:16px;">
-    <div class="sub-tabs" style="margin-bottom:0;">
-        <a href="/po/{{.PO.Number}}"        class="sub-tab{{if eq .ActiveSubTab "details"}} active{{end}}">Details</a>
-        <a href="/po/{{.PO.Number}}/edit"   class="sub-tab{{if eq .ActiveSubTab "edit"}} active{{end}}">Edit</a>
-        <a href="/po/{{.PO.Number}}/print"  class="sub-tab{{if eq .ActiveSubTab "print"}} active{{end}}">Print / PDF</a>
-        <a href="/po/{{.PO.Number}}/folder" class="sub-tab{{if eq .ActiveSubTab "folder"}} active{{end}}">Folder</a>
+    <div class="detail-tabs" style="margin-bottom:0;">
+        <a href="/po/{{.PO.Number}}"        class="detail-tab{{if eq .ActiveDetailTab "details"}} active{{end}}">Details</a>
+        <a href="/po/{{.PO.Number}}/edit"   class="detail-tab{{if eq .ActiveDetailTab "edit"}} active{{end}}">Edit</a>
+        <a href="/po/{{.PO.Number}}/print"  class="detail-tab{{if eq .ActiveDetailTab "print"}} active{{end}}">Print / PDF</a>
+        <a href="/po/{{.PO.Number}}/folder" class="detail-tab{{if eq .ActiveDetailTab "folder"}} active{{end}}">Folder</a>
     </div>
     {{if eq .PO.Status "rfq"}}
     <div class="d-flex gap-2">
@@ -199,7 +199,7 @@
 </nav>
 {{end}}
 
-{{define "part_tabs"}}
+{{define "part_detail_tabs"}}
 <div class="d-flex justify-content-between align-items-center mb-2">
 {{if .NavBackURL}}
 <a href="{{.NavBackURL}}" class="btn btn-sm btn-secondary"><i class="bi bi-arrow-left"></i> Back to {{.NavBackLabel}}</a>
@@ -209,62 +209,62 @@
 </div>
 
 {{$id := .Part.ID}}
-{{$sub := .ActiveSubTab}}
+{{$sub := .ActiveDetailTab}}
 {{$part := .Part}}
 {{$hasBOM := $part.ShowBOM}}
-<div class="sub-tabs">
-    <a href="/part/{{$id}}/summary"     class="sub-tab{{if eq $sub "summary"}} active{{end}}">Summary</a>
-    <a href="/part/{{$id}}/details"     class="sub-tab{{if eq $sub "details"}} active{{end}}">Details</a>
+<div class="detail-tabs">
+    <a href="/part/{{$id}}/summary"     class="detail-tab{{if eq $sub "summary"}} active{{end}}">Summary</a>
+    <a href="/part/{{$id}}/details"     class="detail-tab{{if eq $sub "details"}} active{{end}}">Details</a>
     {{if $hasBOM}}
-    <a href="/part/{{$id}}/bom"         class="sub-tab{{if eq $sub "bom"}} active{{end}}">BOM</a>
+    <a href="/part/{{$id}}/bom"         class="detail-tab{{if eq $sub "bom"}} active{{end}}">BOM</a>
     {{else}}
-    <span class="sub-tab disabled" title="This part does not have a BOM">BOM</span>
+    <span class="detail-tab disabled" title="This part does not have a BOM">BOM</span>
     {{end}}
     {{if $part.ShowBuild}}
-    <a href="/part/{{$id}}/build"       class="sub-tab{{if eq $sub "build"}} active{{end}}">Build</a>
+    <a href="/part/{{$id}}/build"       class="detail-tab{{if eq $sub "build"}} active{{end}}">Build</a>
     {{else}}
-    <span class="sub-tab disabled" title="Add BOM lines before this part can be built">Build</span>
+    <span class="detail-tab disabled" title="Add BOM lines before this part can be built">Build</span>
     {{end}}
-    <a href="/part/{{$id}}/where-used"  class="sub-tab{{if eq $sub "where-used"}} active{{end}}">Where Used</a>
+    <a href="/part/{{$id}}/where-used"  class="detail-tab{{if eq $sub "where-used"}} active{{end}}">Where Used</a>
     {{if $part.ShowOrders}}
-    <a href="/part/{{$id}}/orders"      class="sub-tab{{if eq $sub "orders"}} active{{end}}">Order History</a>
+    <a href="/part/{{$id}}/orders"      class="detail-tab{{if eq $sub "orders"}} active{{end}}">Order History</a>
     {{else}}
-    <span class="sub-tab disabled" title="Order history does not apply to {{$part.Category}} parts">Order History</span>
+    <span class="detail-tab disabled" title="Order history does not apply to {{$part.Category}} parts">Order History</span>
     {{end}}
     {{if $part.ShowInventory}}
-    <a href="/part/{{$id}}/transactions" class="sub-tab{{if eq $sub "transactions"}} active{{end}}">Transactions</a>
+    <a href="/part/{{$id}}/transactions" class="detail-tab{{if eq $sub "transactions"}} active{{end}}">Transactions</a>
     {{else}}
-    <span class="sub-tab disabled" title="Inventory does not apply to {{$part.Category}} parts">Transactions</span>
+    <span class="detail-tab disabled" title="Inventory does not apply to {{$part.Category}} parts">Transactions</span>
     {{end}}
     {{if $part.ShowLots}}
-    <a href="/part/{{$id}}/lots" class="sub-tab{{if eq $sub "lots"}} active{{end}}">Lots</a>
+    <a href="/part/{{$id}}/lots" class="detail-tab{{if eq $sub "lots"}} active{{end}}">Lots</a>
     {{end}}
     {{if $part.ShowUnits}}
-    <a href="/part/{{$id}}/units" class="sub-tab{{if eq $sub "units"}} active{{end}}">Units</a>
+    <a href="/part/{{$id}}/units" class="detail-tab{{if eq $sub "units"}} active{{end}}">Units</a>
     {{end}}
-    <a href="/part/{{$id}}/attachments" class="sub-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
-    <a href="/part/{{$id}}/records" class="sub-tab{{if eq $sub "records"}} active{{end}}">Records</a>
+    <a href="/part/{{$id}}/attachments" class="detail-tab{{if eq $sub "attachments"}} active{{end}}">Attachments</a>
+    <a href="/part/{{$id}}/records" class="detail-tab{{if eq $sub "records"}} active{{end}}">Records</a>
     {{if $part.ShowPricing}}
-    <a href="/part/{{$id}}/pricing"     class="sub-tab{{if eq $sub "pricing"}} active{{end}}">Pricing</a>
-    <a href="/part/{{$id}}/price-history" class="sub-tab{{if eq $sub "price-history"}} active{{end}}">Price History</a>
+    <a href="/part/{{$id}}/pricing"     class="detail-tab{{if eq $sub "pricing"}} active{{end}}">Pricing</a>
+    <a href="/part/{{$id}}/price-history" class="detail-tab{{if eq $sub "price-history"}} active{{end}}">Price History</a>
     {{else}}
-    <span class="sub-tab disabled" title="Pricing does not apply to {{$part.Category}} parts">Pricing</span>
+    <span class="detail-tab disabled" title="Pricing does not apply to {{$part.Category}} parts">Pricing</span>
     {{end}}
     {{if $part.ShowMfgParts}}
-    <a href="/part/{{$id}}/mfg-parts"   class="sub-tab{{if eq $sub "mfg-parts"}} active{{end}}">Mfg Parts</a>
+    <a href="/part/{{$id}}/mfg-parts"   class="detail-tab{{if eq $sub "mfg-parts"}} active{{end}}">Mfg Parts</a>
     {{else}}
-    <span class="sub-tab disabled" title="Mfg parts do not apply to {{$part.Category}} parts">Mfg Parts</span>
+    <span class="detail-tab disabled" title="Mfg parts do not apply to {{$part.Category}} parts">Mfg Parts</span>
     {{end}}
     {{if $part.ShowSuppliers}}
-    <a href="/part/{{$id}}/suppliers"   class="sub-tab{{if eq $sub "suppliers"}} active{{end}}">Suppliers</a>
+    <a href="/part/{{$id}}/suppliers"   class="detail-tab{{if eq $sub "suppliers"}} active{{end}}">Suppliers</a>
     {{else}}
-    <span class="sub-tab disabled" title="Suppliers do not apply to {{$part.Category}} parts">Suppliers</span>
+    <span class="detail-tab disabled" title="Suppliers do not apply to {{$part.Category}} parts">Suppliers</span>
     {{end}}
     {{if eq $sub "details"}}
-    <a href="/part/{{$id}}/duplicate" class="sub-tab sub-tab-edit">Duplicate</a>
-    <a href="/part/{{$id}}/edit" class="sub-tab">Edit</a>
+    <a href="/part/{{$id}}/duplicate" class="detail-tab detail-tab-edit">Duplicate</a>
+    <a href="/part/{{$id}}/edit" class="detail-tab">Edit</a>
     {{else if and $hasBOM (eq $sub "bom")}}
-    <a href="/part/{{$id}}/bom/edit" class="sub-tab sub-tab-edit">Edit BOM</a>
+    <a href="/part/{{$id}}/bom/edit" class="detail-tab detail-tab-edit">Edit BOM</a>
     {{end}}
 </div>
 {{end}}

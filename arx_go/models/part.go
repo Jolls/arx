@@ -49,10 +49,10 @@ type Part struct {
 	UserField10         string
 	UnitID              *int
 	UnitAbbr            string       // joined from uom table; abbreviation of uom_id
-	Tabs                CategoryTabs // resolved subtab visibility for Category; set by applyCategoryTabs
+	Tabs                CategoryTabs // resolved detail tab visibility for Category; set by applyCategoryTabs
 }
 
-// CategoryTabs holds the optional-subtab visibility for a part category.
+// CategoryTabs holds the optional-detail tab visibility for a part category.
 // Universal tabs (Summary, Details, Where Used, Attachments, Edit) are always shown.
 // BOM = true means the category authors a BOM, so the tab stays enabled even
 // before any lines exist (see ShowBOM); the procurement flags gray their tabs
@@ -67,7 +67,7 @@ type CategoryTabs struct {
 }
 
 // Category is a configurable part category: a code, a display label, and the
-// subtabs it exposes. Stored in the part_category table (#194); DefaultCategories
+// detail tabs it exposes. Stored in the part_category table (#194); DefaultCategories
 // is the fallback when no DB is connected.
 type Category struct {
 	Code  string `json:"code"`
@@ -135,13 +135,13 @@ func DefaultBaseNumberConfig() BaseNumberConfig {
 	return BaseNumberConfig{Separator: "-", SegmentIndex: 1, Width: 5, Mode: "max_plus_one"}
 }
 
-// ShowBOM reports whether the BOM subtab applies: the part already has a BOM
+// ShowBOM reports whether the BOM detail tab applies: the part already has a BOM
 // (data), OR its category authors BOMs and should allow entry even when empty
 // (e.g. ASM). The OR keeps the tab live for an assembly before any lines exist.
 func (p Part) ShowBOM() bool { return p.HasBOM || p.Tabs.BOM }
 
 // ShowOrders, ShowPricing, ShowMfgParts, ShowSuppliers report whether the part's
-// category makes each procurement subtab applicable. Tabs is resolved by the
+// category makes each procurement detail tab applicable. Tabs is resolved by the
 // handler (applyCategoryTabs) from the configured categories.
 func (p Part) ShowOrders() bool    { return p.Tabs.Orders }
 func (p Part) ShowPricing() bool   { return p.Tabs.Pricing }
@@ -149,17 +149,17 @@ func (p Part) ShowMfgParts() bool  { return p.Tabs.MfgParts }
 func (p Part) ShowSuppliers() bool { return p.Tabs.Suppliers }
 func (p Part) ShowInventory() bool { return p.Tabs.Inventory }
 
-// ShowBuild reports whether the Build subtab applies: the part has actual BOM
+// ShowBuild reports whether the Build detail tab applies: the part has actual BOM
 // lines to consume (#675) AND its category is inventory-tracked (building
 // produces stock). This excludes FORM parts, whose BOM row is only the
 // record-picker convention and whose category is not stocked.
 func (p Part) ShowBuild() bool { return p.HasBOM && p.ShowInventory() }
 
-// ShowLots reports whether the Lots subtab applies: the part is lot/batch
+// ShowLots reports whether the Lots detail tab applies: the part is lot/batch
 // controlled (#676), so it has (or will have) lot rows to list and trace.
 func (p Part) ShowLots() bool { return p.IsLotTracked }
 
-// ShowUnits reports whether the Units subtab applies: the part is serial-tracked
+// ShowUnits reports whether the Units detail tab applies: the part is serial-tracked
 // (#736 slice 9), so it has (or will have) serialized unit rows to list and trace.
 func (p Part) ShowUnits() bool { return TracksSerials(p.TrackingMode) }
 

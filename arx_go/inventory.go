@@ -89,7 +89,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "parts/part_transactions.html", map[string]any{
 		"Part": p, "Txns": txns, "Lots": lots, "Today": h.userNow(r).Format("2006-01-02"),
-		"ActiveTab": "parts", "ActiveSubTab": "transactions",
+		"ActiveTab": "parts", "ActiveDetailTab": "transactions",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
