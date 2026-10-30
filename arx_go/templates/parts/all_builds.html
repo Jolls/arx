@@ -11,38 +11,37 @@
         </div>
     </div>
 
-    {{if .Builds}}
     <div class="table-wrapper">
-        <table class="table table-bordered table-hover table-sm">
+        <table class="table table-bordered table-hover table-sm" data-rows-url="/api/builds/rows">
+            <colgroup>
+                <col><col><col><col><col><col><col>
+            </colgroup>
             <thead>
                 <tr class="table-dark">
-                    <th class="sortable" onclick="sortTable(this)" style="width:100px;">Build</th>
-                    <th class="sortable" onclick="sortTable(this)">Part Number</th>
-                    <th class="sortable" onclick="sortTable(this)">Description</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:80px;">Qty</th>
-                    <th class="sortable" onclick="sortTable(this)" style="width:120px;">Build Date</th>
-                    <th class="sortable" onclick="sortTable(this)">Output Lot</th>
-                    <th class="sortable" onclick="sortTable(this)">Note</th>
+                    <th data-col="col-build">Build {{template "filter_help_btn"}}</th>
+                    <th data-col="col-pn">Part Number</th>
+                    <th data-col="col-partdesc">Description</th>
+                    <th data-col="col-qty">Qty</th>
+                    <th data-col="col-date">Build Date</th>
+                    <th data-col="col-lot">Output Lot</th>
+                    <th data-col="col-note">Note</th>
                 </tr>
+                {{template "filter_row" (filterRow "builds")}}
             </thead>
             <tbody>
-                {{range .Builds}}
-                <tr>
-                    <td>{{if .OutputLotID}}<a data-popout-url="/popout/build/{{.ID}}" href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}">#{{.ID}}</a>{{else}}<a data-popout-url="/popout/build/{{.ID}}" href="/part/{{.PartID}}/build">#{{.ID}}</a>{{end}}</td>
-                    <td><a href="/part/{{.PartID}}" data-popout-url="/popout/part/{{.PartID}}/where-used">{{.PartNumber}}</a></td>
-                    <td>{{if .PartDescription}}{{.PartDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
-                    <td>{{.Qty}}</td>
-                    <td>{{.Date.Format "2006-01-02"}}</td>
-                    <td>{{if .OutputLotID}}<a href="/part/{{.PartID}}/lots/{{.OutputLotIDVal}}" data-popout-url="/popout/part/{{.PartID}}/lots/{{.OutputLotIDVal}}/consumers">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
-                    <td>{{template "note_cell" .Note}}</td>
-                </tr>
-                {{end}}
+                <tr><td colspan="7" class="no-results">Loading&hellip;</td></tr>
             </tbody>
         </table>
     </div>
-    <p class="table-footer-note">{{len .Builds}} build{{if ne (len .Builds) 1}}s{{end}}</p>
-    {{else}}
-    <p class="no-results">No builds yet.</p>
-    {{end}}
+    <nav aria-label="Pagination" class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+        <span class="pagination-info text-body-secondary"></span>
+        <ul class="pagination mb-0">
+            <li class="page-item"><button type="button" class="page-link page-nav prev" onclick="prevPage()">&#8592; Previous</button></li>
+            <li class="page-item"><button type="button" class="page-link page-nav next" onclick="nextPage()">Next &#8594;</button></li>
+        </ul>
+    </nav>
+    <p class="text-body-secondary" style="margin-top:15px; text-align:right;">
+        Total matching: <strong><span class="record-count">0</span></strong>
+    </p>
 </div>
 {{end}}

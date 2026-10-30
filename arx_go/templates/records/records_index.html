@@ -71,26 +71,7 @@
       <th data-col="col-status" class="text-center" data-bs-toggle="tooltip" title="WIP = unlocked and editable; Locked = finalized">Status</th>
       <th data-col="col-form-rev" class="text-center">Form Rev</th>
     </tr>
-    <tr class="filter-row">
-      <th data-col="col-select"></th>
-      <th data-col="col-sn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter serial number"></th>
-      <th data-col="col-pn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter part number"></th>
-      <th data-col="col-desc"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter description"></th>
-      <th data-col="col-date" data-filter-type="date"></th>
-      <th data-col="col-type">
-        <input type="text" list="type-options" class="form-control form-control-sm" placeholder="All" autocomplete="off" aria-label="Type filter">
-        <datalist id="type-options">{{range .TypeOptions}}<option value="{{.}}"></option>{{end}}</datalist>
-      </th>
-      <th data-col="col-status">
-        <select id="status-filter" class="form-select form-select-sm" aria-label="Status filter">
-          <option value="wip" selected>WIP</option>
-          <option value="complete">Complete</option>
-          <option value="approved">Approved</option>
-          <option value="">All</option>
-        </select>
-      </th>
-      <th data-col="col-form-rev"></th>
-    </tr>
+    {{template "filter_row" (filterRow "records_index" .TypeOptions)}}
   </thead>
   <tbody>
     <tr><td colspan="8" class="no-results">Loading&hellip;</td></tr>

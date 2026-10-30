@@ -140,18 +140,11 @@ func TestBreadcrumbThumbUsesPopout(t *testing.T) {
 	}
 }
 
+// The All Units/Builds rows are built client-side (#411), so the triggers are checked in app.js.
 func TestUnitAndBuildCellTriggers(t *testing.T) {
-	lot := 9
-	units := renderPartsList(t, "all_units.html", map[string]any{"Units": []UnitRow{
-		{ID: 1, PartID: 2, SerialNumber: "SN-362", PartNumber: "ASM-1", IsActive: true},
-	}})
-	requireAll(t, "all_units", units, []string{`data-popout-url="/popout/unit/1"`}, []string{"/consumers"})
-	builds := renderPartsList(t, "all_builds.html", map[string]any{"Builds": []inventory.BuildListRow{
-		{ID: 5, PartID: 2, PartNumber: "ASM-1", Qty: decimal.NewFromInt(3), Date: time.Date(2026, 5, 25, 0, 0, 0, 0, time.UTC), OutputLotID: &lot, LotNumber: "L-9"},
-		{ID: 6, PartID: 2, PartNumber: "ASM-1", Qty: decimal.NewFromInt(1), Date: time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)},
-	}})
-	requireAll(t, "all_builds", builds, []string{
-		`data-popout-url="/popout/build/5" href="/part/2/lots/9">#5<`,
-		`data-popout-url="/popout/build/6" href="/part/2/build">#6<`,
+	src := readAppJS(t)
+	requireAll(t, "app.js", src, []string{
+		"data-popout-url=\"/popout/unit/${r.id}\"",
+		"data-popout-url=\"/popout/build/${r.id}\" href=\"/part/${r.partId}/${r.outLotId ? 'lots/' + r.outLotId : 'build'}\">${r.id}<",
 	}, nil)
 }

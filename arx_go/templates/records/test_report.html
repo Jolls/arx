@@ -30,15 +30,7 @@
         <th data-col="col-pf" class="text-center">P/F</th>
         <th data-col="col-comment">Comment</th>
       </tr>
-      <tr class="filter-row">
-        <th data-col="col-sn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter serial number"></th>
-        <th data-col="col-pn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter part number"></th>
-        <th data-col="col-record-date" data-filter-type="date"></th>
-        <th data-col="col-result-date" data-filter-type="date"></th>
-        <th data-col="col-result"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter result"></th>
-        <th data-col="col-pf"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter pass/fail"></th>
-        <th data-col="col-comment"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter comment"></th>
-      </tr>
+      {{template "filter_row" (filterRow "test_report")}}
     </thead>
     <tbody>
       <tr><td colspan="7" class="no-results">Loading&hellip;</td></tr>

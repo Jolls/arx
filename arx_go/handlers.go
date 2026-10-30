@@ -952,6 +952,7 @@ func coreTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"localTime":    localTime,
 		"localTimePtr": localTimePtr,
+		"filterRow":    filterRow,
 		// dict builds a map from alternating string-key/value pairs so a
 		// {{template}} call can pass more than one value to a named template
 		// (a Go html/template block only ever receives a single ".").

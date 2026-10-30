@@ -286,38 +286,120 @@ func (h *Handler) appendLotNote(ctx context.Context, tx *txLogger, lotID int, te
 // AllLots — GET /lots. Cross-part list of every lot, newest first, for
 // browsing without drilling into a specific part first.
 func (h *Handler) AllLots(w http.ResponseWriter, r *http.Request) {
+	h.render(w, r, "parts/all_lots.html", map[string]any{
+		"ActiveTab": "records", "SectionTab": "lots", "TestMode": h.cfg().TestMode,
+	})
+}
+
+// AllLotsRows — GET /api/lots/rows. JSON rows for the All Lots table (#411).
+func (h *Handler) AllLotsRows(w http.ResponseWriter, r *http.Request) {
 	lots, err := h.inventory().ListAllLots(r.Context())
 	if err != nil {
-		h.renderError(w, r, "Error retrieving lots: "+err.Error())
+		serverError(w, "database error", err)
 		return
 	}
-	h.render(w, r, "parts/all_lots.html", map[string]any{
-		"Lots": lots, "ActiveTab": "records", "SectionTab": "lots", "TestMode": h.cfg().TestMode,
-	})
+	writeJSON(w, lotListRows(lots, h.userLocation(r)))
+}
+
+// lotListRow is one row of /api/lots/rows (#411); dates arrive pre-formatted in the user's zone.
+type lotListRow struct {
+	ID       int    `json:"id"`
+	PartID   int    `json:"partId"`
+	Lot      string `json:"lot"`
+	Vendor   string `json:"vendorLot"`
+	LotDesc  string `json:"lotDesc"`
+	PN       string `json:"pn"`
+	PartDesc string `json:"partDesc"`
+	Notes    string `json:"notes"`
+	Created  string `json:"created"`
+	Active   bool   `json:"active"`
+}
+
+func lotListRows(lots []LotRow, loc *time.Location) []lotListRow {
+	out := make([]lotListRow, len(lots))
+	for i, l := range lots {
+		out[i] = lotListRow{ID: l.ID, PartID: l.PartID, Lot: l.LotNumber, Vendor: l.VendorLot, LotDesc: l.LotDescription,
+			PN: l.PartNumber, PartDesc: l.PartDescription, Notes: l.Notes, Created: localTime(loc, l.CreatedAt).Format("2006-01-02"), Active: l.IsActive}
+	}
+	return out
+}
+
+// unitListRow is one row of /api/units/rows (#411); LotID is 0 when the unit has no lot.
+type unitListRow struct {
+	ID       int    `json:"id"`
+	PartID   int    `json:"partId"`
+	SN       string `json:"sn"`
+	PN       string `json:"pn"`
+	PartDesc string `json:"partDesc"`
+	LotID    int    `json:"lotId"`
+	Lot      string `json:"lot"`
+	Created  string `json:"created"`
+	Active   bool   `json:"active"`
+}
+
+func unitListRows(units []UnitRow, loc *time.Location) []unitListRow {
+	out := make([]unitListRow, len(units))
+	for i, u := range units {
+		out[i] = unitListRow{ID: u.ID, PartID: u.PartID, SN: u.SerialNumber, PN: u.PartNumber, PartDesc: u.PartDescription,
+			LotID: u.LotIDVal(), Lot: u.LotNumber, Created: localTime(loc, u.CreatedAt).Format("2006-01-02"), Active: u.IsActive}
+	}
+	return out
+}
+
+// buildListRow is one row of /api/builds/rows (#411); OutLotID is 0 when the build made no lot.
+type buildListRow struct {
+	ID       int    `json:"id"`
+	PartID   int    `json:"partId"`
+	PN       string `json:"pn"`
+	PartDesc string `json:"partDesc"`
+	Qty      string `json:"qty"`
+	Date     string `json:"date"`
+	OutLotID int    `json:"outLotId"`
+	Lot      string `json:"lot"`
+	Note     string `json:"note"`
+}
+
+func buildListRows(builds []inventory.BuildListRow) []buildListRow {
+	out := make([]buildListRow, len(builds))
+	for i, b := range builds {
+		out[i] = buildListRow{ID: b.ID, PartID: b.PartID, PN: b.PartNumber, PartDesc: b.PartDescription, Qty: b.Qty.String(),
+			Date: b.Date.Format("2006-01-02"), OutLotID: b.OutputLotIDVal(), Lot: b.LotNumber, Note: b.Note}
+	}
+	return out
 }
 
 // ── All units / all builds (#362) ────────────────────────────────────────────
 
 // AllUnits — GET /units. Cross-part list of every serialized unit, newest first.
 func (h *Handler) AllUnits(w http.ResponseWriter, r *http.Request) {
+	h.render(w, r, "parts/all_units.html", map[string]any{
+		"ActiveTab": "records", "SectionTab": "units", "TestMode": h.cfg().TestMode,
+	})
+}
+
+// AllUnitsRows — GET /api/units/rows. JSON rows for the All Units table (#411).
+func (h *Handler) AllUnitsRows(w http.ResponseWriter, r *http.Request) {
 	units, err := h.inventory().ListAllUnits(r.Context())
 	if err != nil {
-		h.renderError(w, r, "Error retrieving units: "+err.Error())
+		serverError(w, "database error", err)
 		return
 	}
-	h.render(w, r, "parts/all_units.html", map[string]any{
-		"Units": units, "ActiveTab": "records", "SectionTab": "units", "TestMode": h.cfg().TestMode,
-	})
+	writeJSON(w, unitListRows(units, h.userLocation(r)))
 }
 
 // AllBuilds — GET /builds. Cross-part list of every build, newest first.
 func (h *Handler) AllBuilds(w http.ResponseWriter, r *http.Request) {
+	h.render(w, r, "parts/all_builds.html", map[string]any{
+		"ActiveTab": "records", "SectionTab": "builds", "TestMode": h.cfg().TestMode,
+	})
+}
+
+// AllBuildsRows — GET /api/builds/rows. JSON rows for the All Builds table (#411).
+func (h *Handler) AllBuildsRows(w http.ResponseWriter, r *http.Request) {
 	builds, err := h.inventory().ListAllBuilds(r.Context())
 	if err != nil {
-		h.renderError(w, r, "Error retrieving builds: "+err.Error())
+		serverError(w, "database error", err)
 		return
 	}
-	h.render(w, r, "parts/all_builds.html", map[string]any{
-		"Builds": builds, "ActiveTab": "records", "SectionTab": "builds", "TestMode": h.cfg().TestMode,
-	})
+	writeJSON(w, buildListRows(builds))
 }

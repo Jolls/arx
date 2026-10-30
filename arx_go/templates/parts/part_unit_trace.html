@@ -119,26 +119,7 @@
                     <th data-col="col-form-rev" class="text-center">Form Rev</th>
                     <th data-col="col-form">Form</th>
                 </tr>
-                <tr class="filter-row">
-                    <th data-col="col-sn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter serial number"></th>
-                    <th data-col="col-pn"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter part number"></th>
-                    <th data-col="col-desc"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter description"></th>
-                    <th data-col="col-date" data-filter-type="date"></th>
-                    <th data-col="col-type">
-                        <input type="text" list="unit-type-options" class="form-control form-control-sm" placeholder="All" autocomplete="off" aria-label="Type filter">
-                        <datalist id="unit-type-options">{{range .TypeOptions}}<option value="{{.}}"></option>{{end}}</datalist>
-                    </th>
-                    <th data-col="col-status">
-                        <select class="form-select form-select-sm" aria-label="Status filter">
-                            <option value="">All</option>
-                            <option value="wip">WIP</option>
-                            <option value="complete">Complete</option>
-                            <option value="approved">Approved</option>
-                        </select>
-                    </th>
-                    <th data-col="col-form-rev"></th>
-                    <th data-col="col-form"><input type="text" class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="Filter form"></th>
-                </tr>
+                {{template "filter_row" (filterRow "part_unit_trace" .TypeOptions)}}
             </thead>
             <tbody>
                 <tr><td colspan="8" class="no-results">Loading&hellip;</td></tr>

@@ -91,4 +91,15 @@
 
 {{define "filter_help_btn"}}<button type="button" onclick="event.stopPropagation()" class="btn btn-link p-0 text-reset flex-shrink-0" data-bs-toggle="popover" data-bs-html="true" data-bs-trigger="focus" data-bs-container="body" data-bs-placement="bottom" data-bs-title="Filter help" data-bs-content="{{template "filter_help_content"}}" aria-label="Filter help"><i class="bi bi-info-circle"></i></button>{{end}}
 
+{{/* filter_row — the <tr class="filter-row"> of a list table. Argument: (filterRow "name" [dyn]); columns are defined in filter_cols.go. */}}
+{{define "filter_row"}}<tr class="filter-row">
+{{- range .Cols}}
+<th data-col="{{.Key}}"{{if eq .Kind "date"}} data-filter-type="date"{{end}}>
+{{- if eq .Kind "text"}}<input type="text"{{if .Aria}} class="form-control form-control-sm" placeholder="Filter" autocomplete="off" aria-label="{{.Aria}}"{{else}} placeholder=""{{end}}>
+{{- else if eq .Kind "datalist"}}<input type="text" list="{{.ListID}}" class="form-control form-control-sm" placeholder="All" autocomplete="off" aria-label="{{.Aria}}"><datalist id="{{.ListID}}">{{range $.Dyn}}<option value="{{.}}"></option>{{end}}</datalist>
+{{- else if eq .Kind "select"}}<select{{if .ID}} id="{{.ID}}"{{end}} class="form-select form-select-sm"{{if .Aria}} aria-label="{{.Aria}}"{{end}}>{{range .Options}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+{{- else if eq .Kind "dynselect"}}<select class="form-select form-select-sm"><option value="">All</option>{{range $.Dyn}}<option value="{{.Code}}">{{.Code}} — {{.Label}}</option>{{end}}</select>
+{{- end}}</th>
+{{- end}}</tr>{{end}}
+
 {{define "search_help_btn"}}<button type="button" onclick="event.stopPropagation()" class="btn btn-link p-0 text-reset flex-shrink-0" data-bs-toggle="popover" data-bs-html="true" data-bs-trigger="focus" data-bs-container="body" data-bs-placement="bottom" data-bs-title="Search help" data-bs-content="{{template "search_help_content"}}" aria-label="Search help"><i class="bi bi-info-circle"></i></button>{{end}}
