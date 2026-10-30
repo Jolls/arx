@@ -176,6 +176,13 @@ function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+const DASH = '<span class="text-muted">&mdash;</span>';
+const dashIfEmpty = s => s ? escHtml(s) : DASH;
+// Mirrors the note_cell template partial.
+const noteCell = s => s
+    ? `<span class="text-truncate d-inline-block" style="max-width:280px;" title="${escHtml(s)}">${escHtml(s)}</span>`
+    : DASH;
+
 // One row HTML builder per endpoint. Dates arrive pre-formatted "YYYY-MM-DD" or "".
 const ROW_BUILDERS = {
     '/api/parts/rows': r => `<tr${r.active === false ? ' class="row-inactive"' : ''}>
@@ -199,6 +206,36 @@ const ROW_BUILDERS = {
         <td>${r.pos}</td>
         <td>${escHtml(r.contact)}</td>
         <td>${escHtml(r.code)}</td>
+    </tr>`,
+
+    '/api/lots/rows': r => `<tr>
+        <td><a href="/part/${r.partId}/lots/${r.id}" data-popout-url="/popout/part/${r.partId}/lots/${r.id}/consumers">${escHtml(r.lot)}</a></td>
+        <td>${dashIfEmpty(r.vendorLot)}</td>
+        <td>${dashIfEmpty(r.lotDesc)}</td>
+        <td><a href="/part/${r.partId}" data-popout-url="/popout/part/${r.partId}/where-used">${escHtml(r.pn)}</a></td>
+        <td>${dashIfEmpty(r.partDesc)}</td>
+        <td>${noteCell(r.notes)}</td>
+        <td>${r.created}</td>
+        <td>${r.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+    </tr>`,
+
+    '/api/units/rows': r => `<tr>
+        <td><a href="/part/${r.partId}/units/${r.id}" data-popout-url="/popout/unit/${r.id}">${escHtml(r.sn)}</a></td>
+        <td><a href="/part/${r.partId}" data-popout-url="/popout/part/${r.partId}/where-used">${escHtml(r.pn)}</a></td>
+        <td>${dashIfEmpty(r.partDesc)}</td>
+        <td>${r.lotId ? `<a href="/part/${r.partId}/lots/${r.lotId}" data-popout-url="/popout/part/${r.partId}/lots/${r.lotId}/consumers">${escHtml(r.lot)}</a>` : DASH}</td>
+        <td>${r.created}</td>
+        <td>${r.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Scrapped</span>'}</td>
+    </tr>`,
+
+    '/api/builds/rows': r => `<tr>
+        <td><a data-popout-url="/popout/build/${r.id}" href="/part/${r.partId}/${r.outLotId ? 'lots/' + r.outLotId : 'build'}">${r.id}</a></td>
+        <td><a href="/part/${r.partId}" data-popout-url="/popout/part/${r.partId}/where-used">${escHtml(r.pn)}</a></td>
+        <td>${dashIfEmpty(r.partDesc)}</td>
+        <td>${escHtml(r.qty)}</td>
+        <td>${r.date}</td>
+        <td>${r.outLotId ? `<a href="/part/${r.partId}/lots/${r.outLotId}" data-popout-url="/popout/part/${r.partId}/lots/${r.outLotId}/consumers">${escHtml(r.lot)}</a>` : DASH}</td>
+        <td>${noteCell(r.note)}</td>
     </tr>`,
 
     '/api/forms/rows': r => `<tr>
@@ -252,6 +289,9 @@ const ROW_BUILDERS = {
 const CELL_TEXT = {
     '/api/parts/rows':     r => [r.pn, r.rev, r.description, r.detail, r.reqBy, r.date, r.cat, r.modified, String(r.attach), String(r.poLines)],
     '/api/suppliers/rows': r => [r.name, r.active ? 'active' : 'inactive', r.country, String(r.links), String(r.pos), r.contact, r.code],
+    '/api/lots/rows':      r => [r.lot, r.vendorLot, r.lotDesc, r.pn, r.partDesc, r.notes, r.created, r.active ? 'active' : 'inactive'],
+    '/api/units/rows':     r => [r.sn, r.pn, r.partDesc, r.lot, r.created, r.active ? 'active' : 'scrapped'],
+    '/api/builds/rows':    r => [String(r.id), r.pn, r.partDesc, r.qty, r.date, r.lot, r.note],
     '/api/forms/rows':     r => [r.pn, r.desc, r.rev ? 'Rev ' + r.rev : 'Draft', r.locked ? 'locked' : 'active'],
     '/api/contacts/rows':  r => [r.supplier, r.name, r.email, r.country, r.state, r.city, r.phone, r.web, r.modified, r.notes, r.active ? 'yes' : 'no'],
     '/api/pos/rows':       r => [r.num, r.status, r.supplier, r.ordered, r.closed, r.orderer, String(r.cost)],

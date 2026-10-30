@@ -4543,25 +4543,30 @@ func TestIntegration_LotEditAndUpdate(t *testing.T) {
 	}
 }
 
-// Read-only — no cleanup. Covers AllLots.
+// Read-only — no cleanup. Covers AllLots (page shell) and AllLotsRows (#411).
 func TestIntegration_AllLots(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 
 	rec := httptest.NewRecorder()
 	h.AllLots(rec, httptest.NewRequest(http.MethodGet, "/lots", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `data-rows-url="/api/lots/rows"`) {
+		t.Fatalf("AllLots: status %d, want 200 with the rows table", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.AllLotsRows(rec, httptest.NewRequest(http.MethodGet, "/api/lots/rows", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("AllLots: status %d, want 200", rec.Code)
+		t.Fatalf("AllLotsRows: status %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"8301", "8302", "8303", "8306", "RAW-1002", "ASM-1003"} {
+	for _, want := range []string{`"id":8301`, `"id":8302`, `"id":8303`, `"id":8306`, "RAW-1002", "ASM-1003"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("AllLots: body missing %q", want)
+			t.Errorf("AllLotsRows: body missing %q", want)
 		}
 	}
 }
 
-// Read-only — no cleanup. Covers AllUnits and AllBuilds (#362).
+// Read-only — no cleanup. Covers AllUnitsRows and AllBuildsRows (#362, #411).
 func TestIntegration_AllUnitsAndBuilds(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
@@ -4571,8 +4576,8 @@ func TestIntegration_AllUnitsAndBuilds(t *testing.T) {
 		handler http.HandlerFunc
 		want    []string
 	}{
-		{"/units", h.AllUnits, []string{"SN-3013-001", "SN-3007-A1", "SN-3005-MANUAL-1"}},
-		{"/builds", h.AllBuilds, []string{"#8201", "#8202", "#8203", "ASM-1003"}},
+		{"/api/units/rows", h.AllUnitsRows, []string{"SN-3013-001", "SN-3007-A1", "SN-3005-MANUAL-1"}},
+		{"/api/builds/rows", h.AllBuildsRows, []string{`"id":8201`, `"id":8202`, `"id":8203`, "ASM-1003"}},
 	} {
 		rec := httptest.NewRecorder()
 		tc.handler(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))

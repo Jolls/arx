@@ -22,21 +22,7 @@
                     <th data-col="col-requested">Date Requested</th>
                     <th data-col="col-cost" style="text-align:right;">Quoted Cost</th>
                 </tr>
-                <tr class="filter-row">
-                    <th data-col="col-num"><input type="text" placeholder=""></th>
-                    <th data-col="col-status">
-                        <select class="form-select form-select-sm">
-                            <option value="">All</option>
-                            <option value="open">Open</option>
-                            <option value="awarded">Awarded</option>
-                            <option value="declined">Declined</option>
-                        </select>
-                    </th>
-                    <th data-col="col-quotes"><input type="text" placeholder=""></th>
-                    <th data-col="col-vendors"><input type="text" placeholder=""></th>
-                    <th data-col="col-requested" data-filter-type="date"></th>
-                    <th data-col="col-cost"><input type="text" placeholder=""></th>
-                </tr>
+                {{template "filter_row" (filterRow "rfqs")}}
             </thead>
             <tbody>
                 <tr><td colspan="6" class="no-results">Loading&hellip;</td></tr>

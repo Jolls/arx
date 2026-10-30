@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.88] - 2026-10-30
+### Added
+- Column filters, sorting and pagination on the Lots, Units and Builds list pages, loaded from new `/api/{lots,units,builds}/rows` endpoints like the Parts list ([#411](https://github.com/Jolls/arx/issues/411))
+
+### Changed
+- All 11 existing filtered tables now render their filter row from one shared `filter_row` partial, with column definitions in `filter_cols.go`; no visible change ([#411](https://github.com/Jolls/arx/issues/411))
+- Builds list shows the plain build number without a `#` ([#411](https://github.com/Jolls/arx/issues/411))
+
 ## [0.8.87] - 2026-10-30
 ### Added
 - RFQs section tab under POs: one row per RFQ with its vendor quotes as expandable rows, replacing the "Show RFQs" toggle on the PO list; the PO list now shows only POs ([#363](https://github.com/Jolls/arx/issues/363))

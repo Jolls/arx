@@ -216,12 +216,9 @@ func TestIntegration_PopoutUnitBuildTriggers(t *testing.T) {
 		return rec.Body.String()
 	}
 	none := func(r *http.Request) *http.Request { return r }
-	units := get(h.AllUnits, "/units", none)
-	expectContains(t, "all units", units, `/popout/unit/8501`, `/popout/unit/8503`)
-	if strings.Contains(units, "/units/8501/consumers") {
-		t.Error("all units still uses the removed unit consumers popout")
-	}
-	expectContains(t, "all builds", get(h.AllBuilds, "/builds", none), `/popout/build/8203`)
+	// All Units/Builds rows are built client-side (#411); their triggers are checked in app.js.
+	expectContains(t, "all units rows", get(h.AllUnitsRows, "/api/units/rows", none), `"id":8501`, `"id":8503`)
+	expectContains(t, "all builds rows", get(h.AllBuildsRows, "/api/builds/rows", none), `"id":8203`)
 	expectContains(t, "part units", get(h.PartUnits, "/x", func(r *http.Request) *http.Request { return withID(r, 3013) }),
 		`/popout/unit/8501`, `/popout/build/8203`)
 	expectContains(t, "unit trace", get(h.PartUnitTrace, "/x", func(r *http.Request) *http.Request { return withIDAndUnitID(r, 3013, 8501) }),

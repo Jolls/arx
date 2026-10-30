@@ -282,45 +282,6 @@ func TestSharedStandaloneTemplatesParse(t *testing.T) {
 	}
 }
 
-// allLotsCreatedCell renders parts/all_lots.html with one lot created at
-// 2026-01-02 03:00 UTC, viewed in loc (#192).
-func allLotsCreatedCell(t *testing.T, loc *time.Location) string {
-	t.Helper()
-	tmpl, err := template.New("").Funcs(coreTemplateFuncs()).ParseFS(templatesFS,
-		"templates/shared/layout.html",
-		"templates/shared/partials.html",
-		"templates/parts/all_lots.html",
-	)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	data := coreLayoutFakeData(map[string]any{
-		"Lots":      []LotRow{{ID: 1, PartID: 1, LotNumber: "L-192", CreatedAt: time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC), IsActive: true}},
-		"UserLoc":   loc,
-		"ActiveTab": "parts",
-	})
-	return renderToString(t, tmpl, "layout", data)
-}
-
-func TestAllLotsTemplateRenders_UTCLocation(t *testing.T) {
-	if out := allLotsCreatedCell(t, time.UTC); !strings.Contains(out, "<td>2026-01-02</td>") {
-		t.Errorf("all_lots.html in UTC: missing <td>2026-01-02</td>")
-	}
-}
-
-// TestAllLotsTemplateRenders_UserZone: audit timestamps display in the viewing
-// user's zone (#192) — 03:00 UTC on Jan 2 is still Jan 1 in Los Angeles.
-func TestAllLotsTemplateRenders_UserZone(t *testing.T) {
-	la, err := time.LoadLocation("America/Los_Angeles")
-	if err != nil {
-		t.Skipf("no tzdata: %v", err)
-	}
-	out := allLotsCreatedCell(t, la)
-	if !strings.Contains(out, "<td>2026-01-01</td>") || strings.Contains(out, "2026-01-02") {
-		t.Errorf("all_lots.html in America/Los_Angeles: want created date 2026-01-01, not 2026-01-02")
-	}
-}
-
 // renderPartsList renders a parts/<page> list template with data under the shared layout.
 func renderPartsList(t *testing.T, page string, data map[string]any) string {
 	t.Helper()
@@ -337,28 +298,19 @@ func renderPartsList(t *testing.T, page string, data map[string]any) string {
 	return renderToString(t, tmpl, "layout", coreLayoutFakeData(data))
 }
 
-func TestAllUnitsTemplateRenders(t *testing.T) {
-	lot := 7
-	out := renderPartsList(t, "all_units.html", map[string]any{"Units": []UnitRow{
-		{ID: 1, PartID: 2, SerialNumber: "SN-362", PartNumber: "ASM-1", LotID: &lot, LotNumber: "L-7", IsActive: true},
-		{ID: 3, PartID: 2, SerialNumber: "SN-NOLOT", PartNumber: "ASM-1"},
-	}})
-	for _, want := range []string{`href="/part/2/units/1"`, `href="/part/2/lots/7"`, "SN-NOLOT", "Scrapped", `href="/builds"`} {
-		if !strings.Contains(out, want) {
-			t.Errorf("all_units.html: missing %q", want)
-		}
-	}
-}
-
-func TestAllBuildsTemplateRenders(t *testing.T) {
-	lot := 9
-	out := renderPartsList(t, "all_builds.html", map[string]any{"Builds": []inventory.BuildListRow{
-		{ID: 5, PartID: 2, PartNumber: "ASM-1", Qty: decimal.NewFromInt(3), Date: time.Date(2026, 5, 25, 0, 0, 0, 0, time.UTC), OutputLotID: &lot, LotNumber: "L-9"},
-		{ID: 6, PartID: 2, PartNumber: "ASM-1", Qty: decimal.NewFromInt(1), Date: time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)},
-	}})
-	for _, want := range []string{`href="/part/2/lots/9">#5<`, `href="/part/2/build">#6<`, "2026-05-25", `href="/units"`} {
-		if !strings.Contains(out, want) {
-			t.Errorf("all_builds.html: missing %q", want)
+// The All Lots/Units/Builds pages render their rows client-side from /api/*/rows;
+// the row mapping is covered by TestLotListRows_UserZone, TestUnitListRows and
+// TestBuildListRows, and the cross-links by TestFilterTable_NewPagesHaveFilterRow.
+func TestAllListPagesLinkEachOther(t *testing.T) {
+	for page, want := range map[string][]string{
+		"all_units.html":  {`href="/lots"`, `href="/builds"`},
+		"all_builds.html": {`href="/lots"`, `href="/units"`},
+	} {
+		out := renderPartsList(t, page, map[string]any{})
+		for _, w := range want {
+			if !strings.Contains(out, w) {
+				t.Errorf("%s: missing %q", page, w)
+			}
 		}
 	}
 }

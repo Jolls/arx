@@ -22,25 +22,7 @@
                     <th data-col="col-orderer"><span data-bs-toggle="tooltip" title="Person who placed this purchase order">Orderer</span></th>
                     <th data-col="col-cost" style="text-align:right;">Total Cost</th>
                 </tr>
-                <tr class="filter-row">
-                    <th data-col="col-num"><input type="text" placeholder=""></th>
-                    <th data-col="col-status">
-                        <select class="form-select form-select-sm">
-                            <option value="">All</option>
-                            <option value="draft">Draft</option>
-                            <option value="open">Open</option>
-                            <option value="sent">Sent</option>
-                            <option value="partially_received">Partially Received</option>
-                            <option value="closed">Closed</option>
-                            <option value="cancelled">Cancelled</option>
-                        </select>
-                    </th>
-                    <th data-col="col-vendor"><input type="text" placeholder=""></th>
-                    <th data-col="col-ordered" data-filter-type="date"></th>
-                    <th data-col="col-closed" data-filter-type="date"></th>
-                    <th data-col="col-orderer"><input type="text" placeholder=""></th>
-                    <th data-col="col-cost"><input type="text" placeholder=""></th>
-                </tr>
+                {{template "filter_row" (filterRow "pos")}}
             </thead>
             <tbody>
                 <tr><td colspan="7" class="no-results">Loading&hellip;</td></tr>

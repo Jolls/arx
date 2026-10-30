@@ -27,19 +27,7 @@
                     <th data-col="col-notes">Notes</th>
                     <th data-col="col-active">Active</th>
                 </tr>
-                <tr class="filter-row">
-                    <th data-col="col-supplier"><input type="text" placeholder=""></th>
-                    <th data-col="col-name"><input type="text" placeholder=""></th>
-                    <th data-col="col-email"><input type="text" placeholder=""></th>
-                    <th data-col="col-country"><input type="text" placeholder=""></th>
-                    <th data-col="col-state"><input type="text" placeholder=""></th>
-                    <th data-col="col-city"><input type="text" placeholder=""></th>
-                    <th data-col="col-phone"><input type="text" placeholder=""></th>
-                    <th data-col="col-web"><input type="text" placeholder=""></th>
-                    <th data-col="col-modified" data-filter-type="date"></th>
-                    <th data-col="col-notes"><input type="text" placeholder=""></th>
-                    <th data-col="col-active"><input type="text" placeholder=""></th>
-                </tr>
+                {{template "filter_row" (filterRow "contacts")}}
             </thead>
             <tbody>
                 <tr><td colspan="11" class="no-results">Loading&hellip;</td></tr>
