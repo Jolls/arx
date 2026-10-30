@@ -183,6 +183,7 @@ type dirListingParams struct {
 	PO            *models.PurchaseOrder // set only for PO-folder listings
 	Supplier      *models.Supplier      // set only for supplier-folder listings
 	ActiveTab     string
+	SectionTab    string
 	ActiveSubTab  string
 	NavBackURL    string
 	NavBackLabel  string
@@ -263,6 +264,7 @@ func (h *Handler) renderDirListing(w http.ResponseWriter, r *http.Request, p dir
 		"NumDirs":          numDirs,
 		"NumFiles":         numFiles,
 		"ActiveTab":        p.ActiveTab,
+		"SectionTab":       p.SectionTab,
 		"ActiveSubTab":     p.ActiveSubTab,
 		"NavBackURL":       p.NavBackURL,
 		"NavBackLabel":     p.NavBackLabel,

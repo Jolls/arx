@@ -1,7 +1,7 @@
 {{define "content"}}
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="/pos">POs</a></li>
+        {{if eq .SectionTab "rfqs"}}<li class="breadcrumb-item"><a href="/rfqs">RFQs</a></li>{{else}}<li class="breadcrumb-item"><a href="/pos">POs</a></li>{{end}}
         {{if .RFQAddFrom}}
         <li class="breadcrumb-item"><a href="/po/{{.RFQAddFrom}}">RFQ #{{.RFQAddFrom}}</a></li>
         <li class="breadcrumb-item active">Add Supplier Quote</li>

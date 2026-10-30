@@ -1373,14 +1373,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Section sub-nav popdowns (see section_tabs.go): hovering a main tab that has a
-// sub-nav shows it over the page; it closes on mouse-leave, outside click or Esc.
+// Section tab popdowns (see section_tabs.go): hovering a main tab that has
+// section tabs shows them over the page; it closes on mouse-leave, outside click or Esc.
+// Keyboard: Down arrow on a main tab opens its section tabs and focuses the first; Left/Right
+// move between them, Esc closes and returns to the main tab.
 // Touch devices (no hover) skip this; they tap the main tab to enter the section.
 if (window.matchMedia('(hover: hover)').matches) {
     const popdowns = document.querySelectorAll('.section-popdown');
     let closeTimer;
     const closeAll = () => popdowns.forEach(p => p.classList.remove('open'));
     const closeSoon = () => { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 150); };
+    const popFor = tab => document.querySelector('.section-popdown[data-section="' + tab.dataset.section + '"]');
     // After a click the popdown stays shut until the pointer leaves the tab, so it
     // doesn't reopen over the page while the next one loads.
     let suppressed = false;
@@ -1389,14 +1392,32 @@ if (window.matchMedia('(hover: hover)').matches) {
             if (suppressed) return;
             clearTimeout(closeTimer);
             closeAll();
-            const pop = document.querySelector('.section-popdown[data-section="' + tab.dataset.section + '"]');
+            const pop = popFor(tab);
             if (pop) pop.classList.add('open');
         });
         tab.addEventListener('mouseleave', () => { suppressed = false; closeSoon(); });
+        tab.addEventListener('keydown', e => {
+            const pop = e.key === 'ArrowDown' && popFor(tab);
+            if (!pop) return;
+            e.preventDefault();
+            closeAll();
+            pop.classList.add('open');
+            pop.querySelector('a').focus();
+        });
     });
     popdowns.forEach(p => {
         p.addEventListener('mouseenter', () => clearTimeout(closeTimer));
         p.addEventListener('mouseleave', () => { suppressed = false; closeSoon(); });
+        p.addEventListener('keydown', e => {
+            const links = Array.from(p.querySelectorAll('a'));
+            const i = links.indexOf(document.activeElement);
+            if (e.key === 'ArrowRight') links[(i + 1) % links.length].focus();
+            else if (e.key === 'ArrowLeft') links[(i - 1 + links.length) % links.length].focus();
+            else if (e.key === 'Escape') document.querySelector('.tabs .tab[data-section="' + p.dataset.section + '"]').focus();
+            else return;
+            e.preventDefault();
+        });
+        p.addEventListener('focusout', e => { if (!p.contains(e.relatedTarget)) closeSoon(); });
     });
     document.addEventListener('click', e => {
         const plain = e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey; // not "open in new tab"
@@ -1406,7 +1427,7 @@ if (window.matchMedia('(hover: hover)').matches) {
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
 }
 
-// Remember each section's last-selected sub-tab so its main tab keeps showing it (and
+// Remember each section's last-selected section tab so its main tab keeps showing it (and
 // linking to it) from other sections: hover Records > Units, go to Parts, and the main
 // tab still reads "Units". Per browser, in localStorage. The server renders the label
 // only for the page's own section, so this swaps it in for the others.

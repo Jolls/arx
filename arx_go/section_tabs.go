@@ -2,8 +2,8 @@ package main
 
 import "sort"
 
-// Section sub-nav bars: a row of tabs that pops down under a main nav tab on hover.
-// Keyed by the page's ActiveTab (the main tab). A page picks its sub-tab with
+// Section tab bars: a row of tabs that pops down under a main nav tab on hover.
+// Keyed by the page's ActiveTab (the main tab). A page picks its section tab with
 // "SectionTab"; without it the section's first entry is active.
 
 type sectionTab struct {
@@ -40,13 +40,13 @@ type sectionTabView struct {
 type sectionBarView struct {
 	Key     string
 	Index   int
-	Current bool // the page's own section: highlights its active sub-tab, and stays visible on touch devices
+	Current bool // the page's own section: highlights its active section tab, and stays visible on touch devices
 	Tabs    []sectionTabView
 }
 
 // applySectionBar adds SectionBars (every section, ordered by main-tab position)
 // to the render data. The bar for the page's own main tab is Current and
-// highlights its active sub-tab; the others are popdowns.
+// highlights its active section tab; the others are popdowns.
 func applySectionBar(m map[string]any) {
 	tab, _ := m["ActiveTab"].(string)
 	active, _ := m["SectionTab"].(string)
@@ -61,7 +61,7 @@ func applySectionBar(m map[string]any) {
 			isActive := current && t.Key == active
 			views[i] = sectionTabView{Href: t.Href, Label: t.Label, Icon: t.Icon, Active: isActive}
 			if isActive {
-				// the main tab shows the selected sub-tab's name and icon
+				// the main tab shows the selected section tab's name and icon
 				m["SectionLabel"], m["SectionIcon"] = t.Label, t.Icon
 			}
 		}

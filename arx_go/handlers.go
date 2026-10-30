@@ -874,6 +874,7 @@ func (h *Handler) RequireCsrfOnPost(next http.Handler) http.Handler {
 
 var listPaths = map[string]bool{
 	"/": true, "/pos": true, "/rfqs": true, "/suppliers": true, "/contacts": true,
+	"/lots": true, "/units": true, "/builds": true,
 }
 
 func resourceBase(path string) string {

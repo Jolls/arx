@@ -242,7 +242,7 @@ func isoDate(t *time.Time) string {
 
 func (h *Handler) POList(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "pos/pos.html", map[string]any{
-		"ActiveTab": "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab": "pos", "SectionTab": "pos", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -300,11 +300,23 @@ type rfqGroupJSON struct {
 	Quotes    []rfqQuoteJSON `json:"quotes"`
 }
 
-// rfqCostRange formats the lowest and highest quote totals as "$a" or "$a – $b".
+// rfqCostRange formats the lowest and highest priced quote totals as "$a" or "$a – $b",
+// "—" when no vendor has priced a quote yet (an unanswered quote totals 0, not a $0 bid).
 func rfqCostRange(quotes []rfqQuoteJSON) string {
-	low, high := quotes[0].Cost, quotes[0].Cost
-	for _, q := range quotes[1:] {
+	var low, high decimal.Decimal
+	priced := false
+	for _, q := range quotes {
+		if !q.Cost.IsPositive() {
+			continue
+		}
+		if !priced {
+			low, high, priced = q.Cost, q.Cost, true
+			continue
+		}
 		low, high = decimal.Min(low, q.Cost), decimal.Max(high, q.Cost)
+	}
+	if !priced {
+		return "—"
 	}
 	s := "$" + low.StringFixed(2)
 	if !low.Equal(high) {
@@ -507,7 +519,7 @@ func (h *Handler) PONew(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": nil, "IsNew": true,
 		"SupplierContacts": supplierContacts, "ReceiverContacts": receiverContacts,
 		"NoDefaultReceiver": noDefaultReceiver,
-		"ActiveTab": "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab": "pos", "SectionTab": "pos", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -902,7 +914,7 @@ func (h *Handler) PODuplicate(w http.ResponseWriter, r *http.Request) {
 		"IsNew": true, "IsDuplicate": true, "DuplicateFrom": num,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab":        "pos", "TestMode": h.cfg().TestMode,
+		"ActiveTab":        "pos", "SectionTab": "pos", "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	})
 }
@@ -1121,7 +1133,7 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 		DirName:       dirName,
 		ParentURL:     parentURL,
 		PO:            &po,
-		ActiveTab:     "pos", ActiveSubTab: "folder",
+		ActiveTab:     "pos", SectionTab: poSectionTab(po), ActiveSubTab: "folder",
 		NavBackURL: backURL, NavBackLabel: backLabel,
 		UploadURLPrefix: fmt.Sprintf("/po/%s/folder-upload", po.Number),
 	})

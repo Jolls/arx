@@ -47,7 +47,7 @@ func TestApplySectionBar_DefaultsToFirstTab(t *testing.T) {
 	}
 }
 
-func TestApplySectionBar_SectionTabSelectsSubTab(t *testing.T) {
+func TestApplySectionBar_SectionTabSelectsActiveTab(t *testing.T) {
 	m := map[string]any{"ActiveTab": "suppliers", "SectionTab": "contacts"}
 	applySectionBar(m)
 	b := findBar(t, barsOf(t, m), "suppliers")
@@ -56,7 +56,7 @@ func TestApplySectionBar_SectionTabSelectsSubTab(t *testing.T) {
 	}
 }
 
-// The main tab is relabelled with the selected sub-tab, only inside a section.
+// The main tab is relabelled with the selected section tab, only inside a section.
 func TestApplySectionBar_SectionLabel(t *testing.T) {
 	m := map[string]any{"ActiveTab": "records", "SectionTab": "units"}
 	applySectionBar(m)
@@ -70,7 +70,7 @@ func TestApplySectionBar_SectionLabel(t *testing.T) {
 	}
 }
 
-// Other sections still render (as hover popdowns) but never show an active sub-tab,
+// Other sections still render (as hover popdowns) but never show an active section tab,
 // even when SectionTab names a key that exists in them.
 func TestApplySectionBar_OtherSectionsArePopdowns(t *testing.T) {
 	m := map[string]any{"ActiveTab": "parts", "SectionTab": "contacts"}

@@ -46,6 +46,30 @@ func TestGroupRFQQuotes(t *testing.T) {
 	}
 }
 
+// A quote with no pricing yet totals 0; it must not drag the low end of the range to $0.
+func TestRFQCostRange_IgnoresUnpricedQuotes(t *testing.T) {
+	q := func(totals ...string) []rfqQuoteJSON {
+		out := make([]rfqQuoteJSON, len(totals))
+		for i, s := range totals {
+			out[i].Cost = decimal.RequireFromString(s)
+		}
+		return out
+	}
+	cases := []struct {
+		quotes []rfqQuoteJSON
+		want   string
+	}{
+		{q("0", "500"), "$500.00"},
+		{q("0", "80.5", "100"), "$80.50 – $100.00"},
+		{q("0", "0"), "—"},
+	}
+	for _, c := range cases {
+		if got := rfqCostRange(c.quotes); got != c.want {
+			t.Errorf("rfqCostRange(%v) = %q, want %q", c.quotes, got, c.want)
+		}
+	}
+}
+
 func TestRFQGroupStatus(t *testing.T) {
 	q := func(statuses ...string) []rfqQuoteJSON {
 		out := make([]rfqQuoteJSON, len(statuses))

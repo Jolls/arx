@@ -396,7 +396,7 @@ func TestIntegration_POReads_Rows(t *testing.T) {
 	}
 }
 
-// RFQRows: the fixture's quotes folded into one open group, quotes by number, cost spanning both.
+// RFQRows: the fixture's quotes folded into one open group, quotes by number, cost from the one priced quote.
 func TestIntegration_RFQRows(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()
@@ -419,7 +419,7 @@ func TestIntegration_RFQRows(t *testing.T) {
 	if mine == nil {
 		t.Fatalf("group %d not in rows", f.Group)
 	}
-	if mine.Num != rfqBaseNumber(f.Q1) || mine.Status != "open" || len(mine.Quotes) != 2 || mine.Cost != "$0.00 – $30.00" {
+	if mine.Num != rfqBaseNumber(f.Q1) || mine.Status != "open" || len(mine.Quotes) != 2 || mine.Cost != "$30.00" {
 		t.Errorf("group = %+v", *mine)
 	}
 	if mine.Quotes[0].Num != f.Q1 || mine.Quotes[1].Num != f.Q2 {

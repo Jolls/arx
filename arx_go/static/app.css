@@ -115,7 +115,7 @@ body {
 .tab:last-child { border-right: none; }
 .tab:hover  { background: var(--bs-secondary-bg); text-decoration: none; color: var(--bs-body-color); }
 .tab.active { background: var(--accent-1); color: #fff; }
-/* Section sub-navs (shared by every section, see section_tabs.go). */
+/* Section tabs (shared by every section, see section_tabs.go). */
 .section-bars { position: relative; margin-bottom: 1.5rem; }
 /* They pop down over the page when their main tab is hovered (pointer devices; see the
    .section-popdown handler in shared/app.js). Touch devices have no hover, so the page's
