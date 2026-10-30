@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.85] - 2026-10-29
+### Changed
+- Bump Bootstrap Icons from 1.11.3 to 1.13.2 ([#407](https://github.com/Jolls/arx/pull/407))
+
 ## [0.8.84] - 2026-10-29
 ### Added
 - Dependabot now tracks Bootstrap and Bootstrap Icons versions via a tracking-only root package.json, with a test that fails if the template CDN versions drift from it ([#405](https://github.com/Jolls/arx/issues/405))
