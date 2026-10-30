@@ -1358,13 +1358,13 @@ function collapseAllLots() {
     })
 })()
 
-// Phone layout (#16): the sub-tab row scrolls sideways below 576px. Center the
+// Phone layout (#16): the detail-tab row scrolls sideways below 576px. Center the
 // active tab on load so it's visible. Only scrollLeft changes, so the page
 // never jumps; no-op when the row doesn't overflow (desktop).
 document.addEventListener('DOMContentLoaded', () => {
-    const active = document.querySelector('.sub-tabs .sub-tab.active');
+    const active = document.querySelector('.detail-tabs .detail-tab.active');
     if (!active) return;
-    const bar = active.closest('.sub-tabs');
+    const bar = active.closest('.detail-tabs');
     const a = active.getBoundingClientRect();
     const b = bar.getBoundingClientRect();
     bar.scrollLeft += a.left - b.left - (b.width - a.width) / 2;

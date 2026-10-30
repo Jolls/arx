@@ -412,7 +412,7 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	bulkOrderDelimiter, bulkOrderPNSource := h.fetchSupplierBulkOrderOptions(r, po.SupplierID)
 	tplData := map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
-		"ActiveTab": "pos", "SectionTab": poSectionTab(po), "ActiveSubTab": "details",
+		"ActiveTab": "pos", "SectionTab": poSectionTab(po), "ActiveDetailTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode":           h.cfg().TestMode,
 		"StatusActions":      poStatusActions(po.Status),
@@ -687,7 +687,7 @@ func (h *Handler) POEdit(w http.ResponseWriter, r *http.Request) {
 		"PO": po, "POItems": items, "IsNew": false,
 		"SupplierContacts": h.contactsForSupplier(r, supID),
 		"ReceiverContacts": h.contactsForSupplier(r, recID),
-		"ActiveTab":        "pos", "SectionTab": poSectionTab(po), "ActiveSubTab": "edit",
+		"ActiveTab":        "pos", "SectionTab": poSectionTab(po), "ActiveDetailTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode": h.cfg().TestMode, "CSRFToken": h.csrfToken(w, r),
 	})
@@ -978,7 +978,7 @@ func (h *Handler) PONote(w http.ResponseWriter, r *http.Request) {
 	sess := h.session(r)
 	backURL, backLabel := navBack(sess)
 	h.render(w, r, "pos/po_note.html", map[string]any{
-		"PO": po, "ActiveTab": "pos", "SectionTab": poSectionTab(po), "ActiveSubTab": "note",
+		"PO": po, "ActiveTab": "pos", "SectionTab": poSectionTab(po), "ActiveDetailTab": "note",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -1133,7 +1133,7 @@ func (h *Handler) renderPOFolder(w http.ResponseWriter, r *http.Request, po mode
 		DirName:       dirName,
 		ParentURL:     parentURL,
 		PO:            &po,
-		ActiveTab:     "pos", SectionTab: poSectionTab(po), ActiveSubTab: "folder",
+		ActiveTab:     "pos", SectionTab: poSectionTab(po), ActiveDetailTab: "folder",
 		NavBackURL: backURL, NavBackLabel: backLabel,
 		UploadURLPrefix: fmt.Sprintf("/po/%s/folder-upload", po.Number),
 	})

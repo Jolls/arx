@@ -163,7 +163,7 @@ SELECT p.id, p.part_number, COALESCE(p.revision, '') AS revision,
 FROM part p ORDER BY p.part_number;
 
 -- name: GetPartBasic :one
--- The part header behind every part sub-tab page; thumb_file as in ListParts.
+-- The part header behind every part detail-tab page; thumb_file as in ListParts.
 SELECT p.id, p.part_number, COALESCE(p.description, '') AS description, COALESCE(p.category, '') AS category,
        EXISTS(SELECT 1 FROM bom c WHERE c.parent_part_id = p.id) AS has_bom,
        p.primary_attachment_id, p.stock_on_hand, p.tracking_mode,

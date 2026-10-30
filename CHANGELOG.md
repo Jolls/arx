@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.89] - 2026-10-30
+### Changed
+- Renamed legacy "sub-tab" identifiers to "detail tab" (`.detail-tab` CSS, `ActiveDetailTab`, `*_detail_tabs` partials); no visible change ([#410](https://github.com/Jolls/arx/issues/410))
+
 ## [0.8.88] - 2026-10-30
 ### Added
 - Column filters, sorting and pagination on the Lots, Units and Builds list pages, loaded from new `/api/{lots,units,builds}/rows` endpoints like the Parts list ([#411](https://github.com/Jolls/arx/issues/411))

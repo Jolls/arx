@@ -33,7 +33,7 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 		return models.Part{}, err
 	}
 	// the thumbnail subquery rides this one query (rather than a separate
-	// round-trip) since fetchPartBasic backs every part sub-tab page (#56).
+	// round-trip) since fetchPartBasic backs every part detail-tab page (#56).
 	b, err := h.parts().GetPartBasic(ctx, pid, thumbnailCategory)
 	if err != nil {
 		return models.Part{}, err
@@ -47,14 +47,14 @@ func (h *Handler) fetchPartBasic(ctx context.Context, id string) (models.Part, e
 	return p, nil
 }
 
-func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTab string) (models.Part, string, string, bool) {
+func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, detailTab string) (models.Part, string, string, bool) {
 	p, ok := h.partForMutation(w, r, id)
 	if !ok {
 		return models.Part{}, "", "", false
 	}
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.ID), p.PartNumber)
-	if !tabVisible(p, subTab) {
-		h.renderError(w, r, "The "+subTab+" section does not apply to "+p.Category+" parts.")
+	if !tabVisible(p, detailTab) {
+		h.renderError(w, r, "The "+detailTab+" section does not apply to "+p.Category+" parts.")
 		return models.Part{}, "", "", false
 	}
 	sess := h.session(r)
@@ -62,14 +62,14 @@ func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, subTa
 	return p, backURL, backLabel, true
 }
 
-// tabVisible reports whether a part subtab applies to p's category. It is the
-// single source of truth for subtab gating: partPageBase calls it to guard every
+// tabVisible reports whether a part detail tab applies to p's category. It is the
+// single source of truth for detail tab gating: partPageBase calls it to guard every
 // GET view, and the POST mutation handlers call it (via the same Show* methods)
-// to guard writes — the subtabs are hidden in the UI for categories that don't
+// to guard writes — the detail tabs are hidden in the UI for categories that don't
 // apply, but the routes stay reachable by direct URL. Sections not listed here
 // (details, edit, where-used, attachments) apply to every category.
-func tabVisible(p models.Part, subTab string) bool {
-	switch subTab {
+func tabVisible(p models.Part, detailTab string) bool {
+	switch detailTab {
 	case "bom":
 		return p.ShowBOM()
 	case "build":
@@ -112,16 +112,16 @@ func (h *Handler) partForMutation(w http.ResponseWriter, r *http.Request, id str
 }
 
 // requireTab loads a part for a POST mutation handler and rejects the request
-// (rendering an error, ok=false) when the given subtab does not apply to the
+// (rendering an error, ok=false) when the given detail tab does not apply to the
 // part's category — the write-side counterpart to partPageBase's GET gate, using
 // the same tabVisible mapping.
-func (h *Handler) requireTab(w http.ResponseWriter, r *http.Request, id, subTab string) (models.Part, bool) {
+func (h *Handler) requireTab(w http.ResponseWriter, r *http.Request, id, detailTab string) (models.Part, bool) {
 	p, ok := h.partForMutation(w, r, id)
 	if !ok {
 		return p, false
 	}
-	if !tabVisible(p, subTab) {
-		h.renderError(w, r, "The "+subTab+" section does not apply to "+p.Category+" parts.")
+	if !tabVisible(p, detailTab) {
+		h.renderError(w, r, "The "+detailTab+" section does not apply to "+p.Category+" parts.")
 		return p, false
 	}
 	return p, true
@@ -298,7 +298,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "parts/part_detail.html", map[string]any{
 		"Part": p, "PrimaryAtt": primaryAtt, "TopAtts": topAtts, "PhotoAtts": photoAtts,
-		"ActiveTab": "parts", "ActiveSubTab": "summary",
+		"ActiveTab": "parts", "ActiveDetailTab": "summary",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode":          h.cfg().TestMode,
 		"RollupDelta":       rollupDelta,
@@ -330,7 +330,7 @@ func (h *Handler) PartsNew(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": p, "IsNew": true,
 		"Units": units, "Categories": h.st().partCategories,
-		"ActiveTab": "parts", "ActiveSubTab": "edit",
+		"ActiveTab": "parts", "ActiveDetailTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
@@ -356,7 +356,7 @@ func (h *Handler) PartDuplicate(w http.ResponseWriter, r *http.Request) {
 		"Part": src, "IsNew": true, "IsDuplicate": true,
 		"DuplicateFrom": sourcePN, "DuplicateBOMFrom": src.ID, "SourceHasBOM": src.HasBOM,
 		"Units": units, "Categories": h.st().partCategories,
-		"ActiveTab": "parts", "ActiveSubTab": "edit",
+		"ActiveTab": "parts", "ActiveDetailTab": "edit",
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
 }
@@ -370,7 +370,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Part Number is required",
 			"Units": units, "Categories": h.st().partCategories,
-			"ActiveTab": "parts", "ActiveSubTab": "edit",
+			"ActiveTab": "parts", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		}))
 		return
@@ -381,7 +381,7 @@ func (h *Handler) PartsCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "parts/part_edit.html", dupContext(r, map[string]any{
 			"Part": partFromForm(r), "IsNew": true, "Error": "Error creating part: " + err.Error(),
 			"Units": units, "Categories": h.st().partCategories,
-			"ActiveTab": "parts", "ActiveSubTab": "edit",
+			"ActiveTab": "parts", "ActiveDetailTab": "edit",
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		}))
 		return
@@ -426,7 +426,7 @@ func (h *Handler) PartDetails(w http.ResponseWriter, r *http.Request) {
 	h.applyCategoryTabs(r.Context(), &full)
 	full.ThumbnailURL = p.ThumbnailURL
 	h.render(w, r, "parts/part_details.html", map[string]any{
-		"Part": full, "ActiveTab": "parts", "ActiveSubTab": "details",
+		"Part": full, "ActiveTab": "parts", "ActiveDetailTab": "details",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -445,7 +445,7 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving part: "+err.Error())
 		return
 	}
-	h.applyCategoryTabs(r.Context(), &full) // resolve tabs for the part_tabs partial
+	h.applyCategoryTabs(r.Context(), &full) // resolve tabs for the part_detail_tabs partial
 	// fetchPartFull doesn't select this (#56); carry it over from the
 	// fetchPartBasic-backed p above rather than a third query.
 	full.ThumbnailURL = p.ThumbnailURL
@@ -453,7 +453,7 @@ func (h *Handler) PartEdit(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_edit.html", map[string]any{
 		"Part": full, "IsNew": false,
 		"Units": units, "Categories": h.st().partCategories,
-		"ActiveTab": "parts", "ActiveSubTab": "edit",
+		"ActiveTab": "parts", "ActiveDetailTab": "edit",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 		// keep p.ID available even though full has it too
@@ -474,7 +474,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Part Number is required",
 			"Categories": h.st().partCategories,
-			"ActiveTab":  "parts", "ActiveSubTab": "edit",
+			"ActiveTab":  "parts", "ActiveDetailTab": "edit",
 			"NavBackURL": backURL, "NavBackLabel": backLabel,
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 			"PartBasic": p,
@@ -495,7 +495,7 @@ func (h *Handler) PartUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, "parts/part_edit.html", map[string]any{
 			"Part": pf, "IsNew": false, "Error": "Error saving part: " + err.Error(),
 			"Units": units, "Categories": h.st().partCategories,
-			"ActiveTab": "parts", "ActiveSubTab": "edit",
+			"ActiveTab": "parts", "ActiveDetailTab": "edit",
 			"NavBackURL": backURL, "NavBackLabel": backLabel,
 			"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 			"PartBasic": p,
@@ -605,7 +605,7 @@ func partInput(p models.Part) parts.Part {
 		UserField9: p.UserField9, UserField10: p.UserField10}
 }
 
-// ── Sub-tab handlers ────────────────────────────────────────────────────────
+// ── Detail-tab handlers ────────────────────────────────────────────────────────
 
 // bomLeafCost picks the per-line unit cost and CostSource label for a BOM row,
 // shared by the read-only BOM view (PartBOM) and CSV export (BOMExportCSV).
@@ -683,7 +683,7 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_bom.html", map[string]any{
 		"Part": p, "PrimaryAtt": h.partPrimaryAttachment(r.Context(), p), "BOMItems": items, "BOMTotal": bomTotal,
-		"ActiveTab": "parts", "ActiveSubTab": "bom",
+		"ActiveTab": "parts", "ActiveDetailTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -706,7 +706,7 @@ func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_where_used.html", map[string]any{
 		"Part": p, "WhereUsedItems": items,
-		"ActiveTab": "parts", "ActiveSubTab": "where-used",
+		"ActiveTab": "parts", "ActiveDetailTab": "where-used",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -774,7 +774,7 @@ func (h *Handler) PartBOMEdit(w http.ResponseWriter, r *http.Request) {
 	p.LastRollupCost, p.LastRollupAt, _ = h.parts().GetPartRollup(r.Context(), p.ID)
 	h.render(w, r, "parts/part_bom_edit.html", map[string]any{
 		"Part": p, "BOMItems": items,
-		"ActiveTab": "parts", "ActiveSubTab": "bom",
+		"ActiveTab": "parts", "ActiveDetailTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"TestMode": h.cfg().TestMode, "CSRFToken": h.csrfToken(w, r),
 	})
@@ -1295,7 +1295,7 @@ func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_build_cost.html", map[string]any{
 		"Part": p, "BuildQty": qty, "Lines": res.Lines, "Total": res.Total,
-		"ActiveTab": "parts", "ActiveSubTab": "bom",
+		"ActiveTab": "parts", "ActiveDetailTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -1368,7 +1368,7 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 	}
 	data := map[string]any{
 		"Part": p, "Attachments": atts, "EditingAtt": editingAtt,
-		"ActiveTab": "parts", "ActiveSubTab": "attachments",
+		"ActiveTab": "parts", "ActiveDetailTab": "attachments",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken":                h.csrfToken(w, r),
 		"AttachmentCategories":     cats,
@@ -1705,7 +1705,7 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_orders.html", map[string]any{
 		"Part": p, "OrderItems": items,
-		"ActiveTab": "parts", "ActiveSubTab": "orders",
+		"ActiveTab": "parts", "ActiveDetailTab": "orders",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -1725,7 +1725,7 @@ func (h *Handler) PartRecords(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_records.html", map[string]any{
 		"Part": p, "TypeOptions": typeOptions,
-		"ActiveTab": "parts", "ActiveSubTab": "records",
+		"ActiveTab": "parts", "ActiveDetailTab": "records",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -1847,7 +1847,7 @@ func (h *Handler) PartPriceHistory(w http.ResponseWriter, r *http.Request) {
 	data, _ := json.Marshal(points)
 	h.render(w, r, "parts/part_price_history.html", map[string]any{
 		"Part": p, "PriceDataJSON": template.JS(data), "HasData": len(points) > 0,
-		"ActiveTab": "parts", "ActiveSubTab": "price-history",
+		"ActiveTab": "parts", "ActiveDetailTab": "price-history",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -1896,7 +1896,7 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_pricing.html", map[string]any{
 		"Part": p, "PriceGroups": groups,
-		"ActiveTab": "parts", "ActiveSubTab": "pricing",
+		"ActiveTab": "parts", "ActiveDetailTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -1926,7 +1926,7 @@ func (h *Handler) PriceNew(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_pricing_form.html", map[string]any{
 		"Part": p, "Price": models.Price{}, "IsNew": true,
-		"ActiveTab": "parts", "ActiveSubTab": "pricing",
+		"ActiveTab": "parts", "ActiveDetailTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -2009,7 +2009,7 @@ func (h *Handler) PriceEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_pricing_form.html", map[string]any{
 		"Part": p, "Price": modelPrice(pp), "IsNew": false,
-		"ActiveTab": "parts", "ActiveSubTab": "pricing",
+		"ActiveTab": "parts", "ActiveDetailTab": "pricing",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})

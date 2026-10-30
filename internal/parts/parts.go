@@ -25,7 +25,7 @@ import (
 )
 
 // Category is a part_category row: a code, a display label, the Purchased
-// flag, and the optional subtabs it shows.
+// flag, and the optional detail tabs it shows.
 type Category struct {
 	Code      string
 	Label     string
@@ -129,7 +129,7 @@ type ListedPart struct {
 	ThumbFile       string
 }
 
-// PartBasic is the part header behind every part sub-tab page.
+// PartBasic is the part header behind every part detail-tab page.
 type PartBasic struct {
 	ID                  int
 	PartNumber          string

@@ -139,7 +139,7 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		"Today":        h.userNow(r).Format("2006-01-02"),
 		"BuiltQty":     r.URL.Query().Get("built"),
 		"ReturnRecord": r.URL.Query().Get("return_record"), // #677: link build back to the test record that launched it
-		"ActiveTab":    "parts", "ActiveSubTab": "build",
+		"ActiveTab":    "parts", "ActiveDetailTab": "build",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }

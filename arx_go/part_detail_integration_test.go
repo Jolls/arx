@@ -116,7 +116,7 @@ func TestIntegration_FetchPartFull_Fields(t *testing.T) {
 	}
 }
 
-// TestIntegration_FetchPartBasic_Fields pins the sub-tab header part.
+// TestIntegration_FetchPartBasic_Fields pins the detail-tab header part.
 func TestIntegration_FetchPartBasic_Fields(t *testing.T) {
 	h, done := liveHandler(t)
 	defer done()

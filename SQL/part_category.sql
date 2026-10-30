@@ -9,7 +9,7 @@ CREATE TABLE part_category (
   code                 VARCHAR(10)  NOT NULL PRIMARY KEY,   -- = part.category (FK_part_category)
   label                VARCHAR(255) NOT NULL DEFAULT '',
   is_purchased         BOOLEAN      NOT NULL DEFAULT FALSE,  -- bought, not built: "Create RFQs" orders it (#99)
-  is_bom_visible       BOOLEAN      NOT NULL DEFAULT FALSE,  -- the flags below show/hide part subtabs
+  is_bom_visible       BOOLEAN      NOT NULL DEFAULT FALSE,  -- the flags below show/hide part detail tabs
   is_orders_visible    BOOLEAN      NOT NULL DEFAULT FALSE,
   is_pricing_visible   BOOLEAN      NOT NULL DEFAULT FALSE,
   is_mfg_parts_visible BOOLEAN      NOT NULL DEFAULT FALSE,

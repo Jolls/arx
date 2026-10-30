@@ -14,14 +14,14 @@ import (
 )
 
 // Unit — Tier-3 serialized instance of a part (#740, traceability epic #736). A unit
-// is created lazily at test time (#745, Q5); this file adds the read-only Units subtab
+// is created lazily at test time (#745, Q5); this file adds the read-only Units detail tab
 // list and the per-serial genealogy trace — the "birth certificate" (#746 slice 9).
 
-// UnitRow is one serialized unit for the Units subtab list and the header of a unit's
+// UnitRow is one serialized unit for the Units detail tab list and the header of a unit's
 // genealogy trace. LotNumber is joined for display and is "" when LotID is nil.
 type UnitRow = inventory.UnitRow
 
-// unitsForPart returns every unit of a part, newest first, for the Units subtab list.
+// unitsForPart returns every unit of a part, newest first, for the Units detail tab list.
 func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, error) {
 	return h.inventory().ListPartUnits(ctx, partID)
 }
@@ -59,7 +59,7 @@ func (h *Handler) PartUnits(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_units.html", map[string]any{
 		"Part": p, "Units": units,
-		"ActiveTab": "parts", "ActiveSubTab": "units",
+		"ActiveTab": "parts", "ActiveDetailTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -121,7 +121,7 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "parts/part_unit_trace.html", map[string]any{
 		"Part": p, "Unit": unit, "Build": build, "Ancestors": ancestors, "Descendants": descendants,
 		"TypeOptions": typeOptions,
-		"ActiveTab": "parts", "ActiveSubTab": "units",
+		"ActiveTab": "parts", "ActiveDetailTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
 }
@@ -174,7 +174,7 @@ func (h *Handler) UnitNew(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_unit_form.html", map[string]any{
 		"Part": p, "Unit": UnitRow{}, "IsNew": true, "Lots": lots, "Builds": builds,
-		"ActiveTab": "parts", "ActiveSubTab": "units",
+		"ActiveTab": "parts", "ActiveDetailTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})
@@ -251,7 +251,7 @@ func (h *Handler) UnitEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_unit_form.html", map[string]any{
 		"Part": p, "Unit": unit, "IsNew": false, "SerialLocked": locked,
-		"ActiveTab": "parts", "ActiveSubTab": "units",
+		"ActiveTab": "parts", "ActiveDetailTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,
 	})

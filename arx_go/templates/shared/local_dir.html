@@ -14,10 +14,10 @@
 
 <div class="content">
     {{if .PO}}
-    {{template "po_tabs" .}}
+    {{template "po_detail_tabs" .}}
     {{end}}
     {{if .Supplier}}
-    {{template "supplier_tabs" .}}
+    {{template "supplier_detail_tabs" .}}
     {{end}}
     {{if .ParentURL}}
     <a href="{{.ParentURL}}" class="btn btn-sm btn-secondary"><i class="bi bi-arrow-left"></i> Up one level</a>

@@ -208,7 +208,7 @@ func (h *Handler) PartCreateRFQs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{
-		"Part": p, "ActiveTab": "parts", "ActiveSubTab": "bom",
+		"Part": p, "ActiveTab": "parts", "ActiveDetailTab": "bom",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 		"CSRFToken": h.csrfToken(w, r),
 	}
@@ -303,7 +303,7 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 	committed = true
 
 	h.render(w, r, "parts/part_create_rfqs.html", map[string]any{
-		"Part": p, "ActiveTab": "parts", "ActiveSubTab": "bom", "TestMode": h.cfg().TestMode,
+		"Part": p, "ActiveTab": "parts", "ActiveDetailTab": "bom", "TestMode": h.cfg().TestMode,
 		"Created": made, "Unsupplied": plan.Unsupplied,
 	})
 }
