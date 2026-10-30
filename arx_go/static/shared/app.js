@@ -542,8 +542,14 @@ function renderRows(rowsToShow) {
 
     const prev = document.querySelector('.page-nav.prev');
     const next = document.querySelector('.page-nav.next');
-    if (prev) prev.disabled = currentPage === 1;
-    if (next) next.disabled = currentPage >= totalPages;
+    if (prev) {
+        prev.disabled = currentPage === 1;
+        prev.parentElement.classList.toggle('disabled', prev.disabled);
+    }
+    if (next) {
+        next.disabled = currentPage >= totalPages;
+        next.parentElement.classList.toggle('disabled', next.disabled);
+    }
 
     if (window.onRowsRendered) window.onRowsRendered();
 }
