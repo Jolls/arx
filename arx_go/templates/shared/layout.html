@@ -27,16 +27,10 @@
         </div>
     </div>
     <nav class="tabs">
-        <a href="/parts"     class="tab{{if or (eq .ActiveTab "parts") (eq .ActiveTab "")}} active{{end}}"><img src="/static/shared/icons/parts.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/parts-inv.svg" alt="" class="tab-icon tab-icon-active">Parts</a>
-        {{$icon := "vendors"}}{{if and (eq .ActiveTab "suppliers") .SectionIcon}}{{$icon = .SectionIcon}}{{end}}
-        <a href="/suppliers" data-section="suppliers" aria-haspopup="true" class="tab{{if eq .ActiveTab "suppliers"}} active{{end}}"><img src="/static/shared/icons/{{$icon}}.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/{{$icon}}-inv.svg" alt="" class="tab-icon tab-icon-active">{{if and (eq .ActiveTab "suppliers") .SectionLabel}}{{.SectionLabel}}{{else}}Vendors{{end}}</a>
-        {{$icon = "pos"}}{{if and (eq .ActiveTab "pos") .SectionIcon}}{{$icon = .SectionIcon}}{{end}}
-        <a href="/pos"       data-section="pos" aria-haspopup="true" class="tab{{if eq .ActiveTab "pos"}} active{{end}}"><img src="/static/shared/icons/{{$icon}}.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/{{$icon}}-inv.svg" alt="" class="tab-icon tab-icon-active">{{if and (eq .ActiveTab "pos") .SectionLabel}}{{.SectionLabel}}{{else}}POs{{end}}</a>
-        {{$icon = "records"}}{{if and (eq .ActiveTab "records") .SectionIcon}}{{$icon = .SectionIcon}}{{end}}
-        <a href="/records"   data-section="records" aria-haspopup="true" class="tab{{if eq .ActiveTab "records"}} active{{end}}"><img src="/static/shared/icons/{{$icon}}.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/{{$icon}}-inv.svg" alt="" class="tab-icon tab-icon-active">{{if and (eq .ActiveTab "records") .SectionLabel}}{{.SectionLabel}}{{else}}Records{{end}}</a>
-        <a href="/reports"   class="tab{{if eq .ActiveTab "reports"}} active{{end}}"><img src="/static/shared/icons/reports.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/reports-inv.svg" alt="" class="tab-icon tab-icon-active">Reports</a>
+        {{range .MainTabs}}<a href="{{.Href}}"{{if .HasSection}} data-section="{{.Key}}" aria-haspopup="true"{{end}} class="tab{{if .Active}} active{{end}}"><img src="/static/shared/icons/{{.Icon}}.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/{{.Icon}}-inv.svg" alt="" class="tab-icon tab-icon-active">{{.Label}}</a>
+        {{end}}
     </nav>
-    <div class="section-bars">
+    <div class="section-bars" style="--main-tabs:{{len .MainTabs}}">
         {{range .SectionBars}}
         <nav class="tabs section-tabs section-popdown{{if .Current}} section-current{{end}}" data-section="{{.Key}}" style="--tab-index:{{.Index}};--tab-count:{{len .Tabs}}">
             {{range .Tabs}}<a href="{{.Href}}" class="tab{{if .Active}} active{{end}}" title="{{.Label}}" aria-label="{{.Label}}"><img src="/static/shared/icons/{{.Icon}}.svg" alt="" class="tab-icon tab-icon-default"><img src="/static/shared/icons/{{.Icon}}-inv.svg" alt="" class="tab-icon tab-icon-active"><span class="tab-label">{{.Label}}</span></a>

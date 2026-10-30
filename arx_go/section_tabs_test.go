@@ -42,7 +42,7 @@ func TestApplySectionBar_DefaultsToFirstTab(t *testing.T) {
 	if got := activeLabels(b); len(got) != 1 || got[0] != "Records" {
 		t.Errorf("active = %v, want [Records]", got)
 	}
-	if b.Index != 3 {
+	if b.Index != 3 { // Parts, Vendors, POs, Records
 		t.Errorf("Index = %d, want 3", b.Index)
 	}
 }
@@ -56,17 +56,48 @@ func TestApplySectionBar_SectionTabSelectsActiveTab(t *testing.T) {
 	}
 }
 
-// The main tab is relabelled with the selected section tab, only inside a section.
-func TestApplySectionBar_SectionLabel(t *testing.T) {
+func mainTabByKey(t *testing.T, m map[string]any, key string) mainTabView {
+	t.Helper()
+	views, ok := m["MainTabs"].([]mainTabView)
+	if !ok {
+		t.Fatalf("MainTabs not set: %v", m)
+	}
+	for _, v := range views {
+		if v.Key == key {
+			return v
+		}
+	}
+	t.Fatalf("no main tab %q", key)
+	return mainTabView{}
+}
+
+// The page's own main tab is relabelled with the selected section tab; others keep their names.
+func TestApplySectionBar_MainTabShowsSelectedSectionTab(t *testing.T) {
 	m := map[string]any{"ActiveTab": "records", "SectionTab": "units"}
 	applySectionBar(m)
-	if m["SectionLabel"] != "Units" || m["SectionIcon"] != "units" {
-		t.Errorf("SectionLabel/Icon = %v/%v, want Units/units", m["SectionLabel"], m["SectionIcon"])
+	if v := mainTabByKey(t, m, "records"); v.Label != "Units" || v.Icon != "units" || !v.Active {
+		t.Errorf("records tab = %+v, want active Units/units", v)
 	}
-	m = map[string]any{"ActiveTab": "parts"}
+	if v := mainTabByKey(t, m, "pos"); v.Label != "POs" || v.Icon != "pos" || v.Active {
+		t.Errorf("pos tab = %+v, want inactive POs/pos", v)
+	}
+}
+
+func TestApplySectionBar_MainTabs(t *testing.T) {
+	m := map[string]any{"ActiveTab": ""}
 	applySectionBar(m)
-	if _, ok := m["SectionLabel"]; ok {
-		t.Error("SectionLabel set outside a section")
+	if v := mainTabByKey(t, m, "parts"); !v.Active || v.HasSection {
+		t.Errorf("parts tab = %+v, want active (empty ActiveTab) with no section", v)
+	}
+	if v := mainTabByKey(t, m, "suppliers"); v.Active || !v.HasSection {
+		t.Errorf("suppliers tab = %+v, want inactive with a section", v)
+	}
+	m = map[string]any{"ActiveTab": "settings"}
+	applySectionBar(m)
+	for _, v := range m["MainTabs"].([]mainTabView) {
+		if v.Active {
+			t.Errorf("%s active on a page outside the main tabs", v.Key)
+		}
 	}
 }
 
@@ -100,13 +131,18 @@ func TestApplySectionBar_OrderedByMainTabPosition(t *testing.T) {
 	}
 }
 
+// A section bar's key must be a main tab, or its bar is built but never reachable.
 func TestSectionBars_MainTabsKnown(t *testing.T) {
-	for tab, bar := range sectionBars {
-		if len(bar.Tabs) == 0 {
-			t.Errorf("%s: empty section bar", tab)
+	keys := map[string]bool{}
+	for _, mt := range mainTabs {
+		keys[mt.Key] = true
+	}
+	for tab, tabs := range sectionBars {
+		if !keys[tab] {
+			t.Errorf("section bar %q has no main tab", tab)
 		}
-		if bar.Index < 0 || bar.Index > 4 {
-			t.Errorf("%s: Index %d outside the 5 main tabs", tab, bar.Index)
+		if len(tabs) == 0 {
+			t.Errorf("%s: empty section bar", tab)
 		}
 	}
 }

@@ -128,14 +128,15 @@ body {
 @media (hover: none) {
     .section-popdown.section-current { display: flex; position: static; box-shadow: none; }
 }
-/* Flush under the parent main tab and centered on it: at least one main tab wide (20% of 5
-   equal tabs), grows to fit --tab-count items of --tab-min each, and is clamped to stay
-   inside the viewport. --tab-index is the parent's 0-based position. */
+/* Flush under the parent main tab and centered on it: at least one main tab wide (100% /
+   --main-tabs equal tabs), grows to fit --tab-count items of --tab-min each, and is clamped
+   to stay inside the viewport. --tab-index is the parent's 0-based position. */
 .section-tabs {
     --tab-min: 5.5rem;
-    --w: max(20%, calc(var(--tab-count, 2) * var(--tab-min)));
+    --main-tab-w: calc(100% / var(--main-tabs, 5));
+    --w: max(var(--main-tab-w), calc(var(--tab-count, 2) * var(--tab-min)));
     width: var(--w); max-width: 100%;
-    margin-left: clamp(0%, calc(20% * (var(--tab-index, 0) + 0.5) - var(--w) / 2), calc(100% - var(--w)));
+    margin-left: clamp(0%, calc(var(--main-tab-w) * (var(--tab-index, 0) + 0.5) - var(--w) / 2), calc(100% - var(--w)));
 }
 .section-tabs .tab { padding: 8px 0; font-size: 0.95em; white-space: nowrap; }
 .section-tabs .tab-icon { width: 28px; height: 28px; vertical-align: -8px; margin-right: 4px; }
