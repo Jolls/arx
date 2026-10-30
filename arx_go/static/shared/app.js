@@ -1371,3 +1371,61 @@ document.addEventListener('DOMContentLoaded', () => {
         if (table) observer.observe(table);
     });
 });
+
+// Section sub-nav popdowns (see section_tabs.go): hovering a main tab that has a
+// sub-nav shows it over the page; it closes on mouse-leave, outside click or Esc.
+// Touch devices (no hover) skip this; they tap the main tab to enter the section.
+if (window.matchMedia('(hover: hover)').matches) {
+    const popdowns = document.querySelectorAll('.section-popdown');
+    let closeTimer;
+    const closeAll = () => popdowns.forEach(p => p.classList.remove('open'));
+    const closeSoon = () => { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 150); };
+    // After a click the popdown stays shut until the pointer leaves the tab, so it
+    // doesn't reopen over the page while the next one loads.
+    let suppressed = false;
+    document.querySelectorAll('.tabs .tab[data-section]').forEach(tab => {
+        tab.addEventListener('mouseenter', () => {
+            if (suppressed) return;
+            clearTimeout(closeTimer);
+            closeAll();
+            const pop = document.querySelector('.section-popdown[data-section="' + tab.dataset.section + '"]');
+            if (pop) pop.classList.add('open');
+        });
+        tab.addEventListener('mouseleave', () => { suppressed = false; closeSoon(); });
+    });
+    popdowns.forEach(p => {
+        p.addEventListener('mouseenter', () => clearTimeout(closeTimer));
+        p.addEventListener('mouseleave', () => { suppressed = false; closeSoon(); });
+    });
+    document.addEventListener('click', e => {
+        const plain = e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey; // not "open in new tab"
+        if (plain && e.target.closest('.section-popdown a, .tab[data-section]')) suppressed = true;
+        closeAll();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+}
+
+// Remember each section's last-selected sub-tab so its main tab keeps showing it (and
+// linking to it) from other sections: hover Records > Units, go to Parts, and the main
+// tab still reads "Units". Per browser, in localStorage. The server renders the label
+// only for the page's own section, so this swaps it in for the others.
+(function () {
+    const key = k => 'arx.section.' + k;
+    const cur = document.querySelector('.section-current');
+    const active = cur && cur.querySelector('.tab.active');
+    try {
+        if (active) localStorage.setItem(key(cur.dataset.section), active.getAttribute('href'));
+        document.querySelectorAll('.tabs .tab[data-section]').forEach(tab => {
+            const section = tab.dataset.section;
+            if (cur && cur.dataset.section === section) return;
+            const href = localStorage.getItem(key(section));
+            const link = href && document.querySelector(
+                '.section-popdown[data-section="' + section + '"] a[href="' + CSS.escape(href) + '"]');
+            if (!link) return;
+            const label = Array.from(tab.childNodes).reverse().find(n => n.nodeType === 3 && n.textContent.trim());
+            if (label) label.textContent = link.getAttribute('aria-label');
+            tab.querySelectorAll('img').forEach((img, i) => { img.src = link.querySelectorAll('img')[i].src; });
+            tab.setAttribute('href', href);
+        });
+    } catch (e) { /* storage blocked: tabs just show their default names */ }
+})();

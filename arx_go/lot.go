@@ -292,7 +292,7 @@ func (h *Handler) AllLots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, r, "parts/all_lots.html", map[string]any{
-		"Lots": lots, "ActiveTab": "parts", "TestMode": h.cfg().TestMode,
+		"Lots": lots, "ActiveTab": "records", "SectionTab": "lots", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -306,7 +306,7 @@ func (h *Handler) AllUnits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, r, "parts/all_units.html", map[string]any{
-		"Units": units, "ActiveTab": "parts", "TestMode": h.cfg().TestMode,
+		"Units": units, "ActiveTab": "records", "SectionTab": "units", "TestMode": h.cfg().TestMode,
 	})
 }
 
@@ -318,6 +318,6 @@ func (h *Handler) AllBuilds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, r, "parts/all_builds.html", map[string]any{
-		"Builds": builds, "ActiveTab": "parts", "TestMode": h.cfg().TestMode,
+		"Builds": builds, "ActiveTab": "records", "SectionTab": "builds", "TestMode": h.cfg().TestMode,
 	})
 }

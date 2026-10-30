@@ -30,6 +30,7 @@ func (h *Handler) renderRecords(w http.ResponseWriter, r *http.Request, page str
 		m["Favicon"] = "/static/shared/icons/records.svg"
 		m["FaviconType"] = "image/svg+xml"
 		m["ExtraScript"] = "/static/records/app.js"
+		applySectionBar(m)
 	}
 	tmpl := h.tmpl(w, "records:"+page)
 	if tmpl == nil {
