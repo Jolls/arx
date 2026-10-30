@@ -4,6 +4,6 @@
   "description": "Tracking-only manifest so Dependabot sees the CDN-loaded frontend libraries. A Dependabot PR bumping this file must be followed by hand-updating the CDN URLs and SRI hashes in arx_go/templates/shared/layout.html and login.html.",
   "dependencies": {
     "bootstrap": "5.3.8",
-    "bootstrap-icons": "1.11.3"
+    "bootstrap-icons": "1.13.2"
   }
 }
