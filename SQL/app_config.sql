@@ -9,4 +9,4 @@ CREATE TABLE app_config (
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-INSERT INTO app_config (setting_key, setting_value) VALUES ('schema_version', '12');
+INSERT INTO app_config (setting_key, setting_value) VALUES ('schema_version', '13');

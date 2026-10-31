@@ -341,6 +341,11 @@ func setDeferred(ctx context.Context, tx pgx.Tx, tables []*Table) error {
 }
 
 // resetSequences moves every identity sequence and po_number_seq past the loaded data.
+//
+// STALE since #420: lot.id, unit.id and build.id are no longer identity columns (they share
+// trace_id_seq), so they are skipped here and the loaded 0.7 ids overlap across the three
+// tables. Only load into a pre-#420 schema and then run the #420 migration, which renumbers
+// them. The tool is not updated; it was a one-time go-live load.
 func resetSequences(ctx context.Context, tx pgx.Tx, s *Schema, out io.Writer) error {
 	for _, id := range s.Identity {
 		if skipTables[id.table] || derivedTables[id.table] {

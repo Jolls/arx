@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"arx/internal/inventory"
+	"github.com/shopspring/decimal"
 )
 
 // Characterization tests for the inventory domain (#222): gaps the older integration tests
@@ -597,5 +598,44 @@ func TestIntegration_InventoryUpsertTestUnit_ConcurrentProvenanceKept(t *testing
 	}
 	if build.Int64 != 8201 || source != "test" {
 		t.Errorf("unit build %v source %q; want 8201, test", build, source)
+	}
+}
+
+// lot, unit and build share trace_id_seq (#420): a number names exactly one record.
+func TestIntegration_TraceIDsSharedAcrossLotUnitBuild(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+
+	tx := invTx(t, h)
+	inv := inventory.New(tx)
+	buildID, err := inv.CreateBuild(ctx, 3005, decimal.NewFromInt(1), time.Now(), "itest", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lotID, err := inv.CreateLot(ctx, 3007, inventory.LotCreate{Description: "itest shared id"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unitID, err := inv.CreateManualUnit(ctx, 3005, smokeUniq("U"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buildID == lotID || buildID == unitID || lotID == unitID {
+		t.Errorf("ids not distinct: build %d, lot %d, unit %d", buildID, lotID, unitID)
+	}
+	if !(buildID < lotID && lotID < unitID) {
+		t.Errorf("ids not drawn in creation order from one sequence: build %d, lot %d, unit %d", buildID, lotID, unitID)
+	}
+
+	// No id is shared across the three tables, seed and new rows alike.
+	var rows, distinct int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT count(*), count(DISTINCT id)
+		FROM (SELECT id FROM lot UNION ALL SELECT id FROM unit UNION ALL SELECT id FROM build) a`).Scan(&rows, &distinct); err != nil {
+		t.Fatal(err)
+	}
+	if rows != distinct {
+		t.Errorf("%d lot/unit/build rows but %d distinct ids", rows, distinct)
 	}
 }
