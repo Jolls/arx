@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.93] - 2026-10-31
+### Changed
+- The route round-trip integration test now covers 54 pages (row feeds, section-tab landing pages, reports, detail tabs) with a per-page round-trip budget and an estimated Azure latency; audit findings and follow-up in [#426](https://github.com/Jolls/arx/issues/426) ([#361](https://github.com/Jolls/arx/issues/361))
+
 ## [0.8.92] - 2026-10-31
 ### Added
 - Find box in the header and `/find?q=` look up a lot, unit or build by id, lot number or serial: one match opens it, several list a pick list ([#416](https://github.com/Jolls/arx/issues/416))
