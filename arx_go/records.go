@@ -1520,10 +1520,11 @@ func containsLotOption(lots []LotOption, lotID int) bool {
 // Each returned id is the chosen one, or nil to clear the link when the field is
 // blank. A non-blank id that doesn't belong to the part yields an error (surfaced as a
 // 400). Unlike the build's component-lot check, a lot need not be active here — a record
-// may legitimately reference a since-retired lot.
-func (h *Handler) recordLinkageArgs(r *http.Request, partID int) (lotArg, buildArg *int, err error) {
+// may legitimately reference a since-retired lot. inv is caller-supplied (#432) so a
+// caller already holding a transaction can pass a tx-backed service instead of reading
+// through the pool mid-transaction.
+func (h *Handler) recordLinkageArgs(r *http.Request, inv *inventory.Service, partID int) (lotArg, buildArg *int, err error) {
 	ctx := r.Context()
-	inv := h.inventory()
 	belongs := func(owns func(context.Context, int, int) (bool, error), v string) (*int, error) {
 		id, convErr := strconv.Atoi(v)
 		if convErr != nil || id <= 0 {
@@ -2065,7 +2066,10 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	notes := strings.TrimSpace(r.FormValue("notes")) // #870: record-level session remark
 
 	// #677: lot/build linkage saves with the record's other metadata (blank clears it).
-	lotArg, buildArg, linkErr := h.recordLinkageArgs(r, record.PartNumberID)
+	// invSvc is tx-backed (#432) so these reads don't need a second pool connection
+	// while this handler's own save transaction is open.
+	invSvc := inventory.New(tx)
+	lotArg, buildArg, linkErr := h.recordLinkageArgs(r, invSvc, record.PartNumberID)
 	if linkErr != nil {
 		log.Printf("invalid lot/build selection: %v", linkErr)
 		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)
@@ -2126,7 +2130,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			qty = parsedQty
 		}
 		outputLotTracked := models.TracksLots(trackingMode)
-		lines, lerr := h.loadBuildLines(r.Context(), record.PartNumberID)
+		lines, lerr := h.loadBuildLines(r.Context(), invSvc, record.PartNumberID)
 		if lerr != nil {
 			serverError(w, "could not load BOM", lerr)
 			return

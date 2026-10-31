@@ -900,7 +900,7 @@ func (h *Handler) PartBOMSave(w http.ResponseWriter, r *http.Request) {
 			pnid, _ = strconv.Atoi(row.PNID)
 		}
 		if pnid == 0 && row.PartPN != "" {
-			ref, _ := h.parts().GetPartByNumber(r.Context(), row.PartPN)
+			ref, _ := svc.GetPartByNumber(r.Context(), row.PartPN)
 			pnid = ref.ID
 		}
 		return parts.BOMLine{LineNumber: item, Qty: qty, ComponentPartID: pnid}

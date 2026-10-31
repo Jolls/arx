@@ -258,6 +258,16 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/reports/data-quality/export-missing-supplier.csv", withAuth, h.ReportsDataQualityMissingSupplierExportCSV)
 	b.handle(http.MethodGet, "/reports/data-quality/export-stale-rollup.csv", withAuth, h.ReportsDataQualityStaleRollupExportCSV)
 
+	// Reports dashboard lazy-loaded cards (issue #435).
+	b.handle(http.MethodGet, "/api/reports/dashboard/top-failures", withAuth, h.ReportsDashboardTopFailures)
+	b.handle(http.MethodGet, "/api/reports/dashboard/lowest-yield", withAuth, h.ReportsDashboardLowestYield)
+	b.handle(http.MethodGet, "/api/reports/dashboard/stale-wip", withAuth, h.ReportsDashboardStaleWIP)
+	b.handle(http.MethodGet, "/api/reports/dashboard/pending-approval", withAuth, h.ReportsDashboardPendingApproval)
+	b.handle(http.MethodGet, "/api/reports/dashboard/below-reorder", withAuth, h.ReportsDashboardBelowReorder)
+	b.handle(http.MethodGet, "/api/reports/dashboard/recent-lots", withAuth, h.ReportsDashboardRecentLots)
+	b.handle(http.MethodGet, "/api/reports/dashboard/recent-builds", withAuth, h.ReportsDashboardRecentBuilds)
+	b.handle(http.MethodGet, "/api/reports/dashboard/recent-activity", withAuth, h.ReportsDashboardRecentActivity)
+
 	// App root: redirect to each user's configured landing page (issue #282).
 	// "/{$}" matches only the exact root path — unlike a bare "/" pattern, it
 	// is not a subtree wildcard, so it doesn't swallow unmatched paths that

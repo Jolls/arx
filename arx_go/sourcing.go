@@ -28,19 +28,35 @@ func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 	var pricesBySupplier map[int][]parts.Price
 	var attsByLink map[int][]models.Attachment
 	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "suppliers", func(ctx context.Context) (err error) {
-		rc := r.WithContext(ctx)
-		if links, err = h.fetchSupplierLinks(rc, id); err != nil {
-			return pageErr("Error retrieving supplier links", err)
-		}
-		units, _ = h.fetchUnits(ctx)
-		if digiKeyEnabled {
-			// Only fetched for the DigiKey manufacturer picker — skip the query
-			// entirely on every other Sourcing tab render.
-			manufacturers, _ = h.fetchManufacturers(rc)
-		}
-		pricesBySupplier = h.fetchActivePricesBySupplier(rc, id)
-		attsByLink = h.fetchAttachmentsByVendor(rc, id, supplierScopeCol)
-		return nil
+		return parallel(ctx,
+			func(ctx context.Context) error {
+				var err error
+				if links, err = h.fetchSupplierLinks(r.WithContext(ctx), id); err != nil {
+					return pageErr("Error retrieving supplier links", err)
+				}
+				return nil
+			},
+			func(ctx context.Context) error {
+				units, _ = h.fetchUnits(ctx)
+				return nil
+			},
+			func(ctx context.Context) error {
+				if digiKeyEnabled {
+					// Only fetched for the DigiKey manufacturer picker — skip the query
+					// entirely on every other Sourcing tab render.
+					manufacturers, _ = h.fetchManufacturers(r.WithContext(ctx))
+				}
+				return nil
+			},
+			func(ctx context.Context) error {
+				pricesBySupplier = h.fetchActivePricesBySupplier(r.WithContext(ctx), id)
+				return nil
+			},
+			func(ctx context.Context) error {
+				attsByLink = h.fetchAttachmentsByVendor(r.WithContext(ctx), id, supplierScopeCol)
+				return nil
+			},
+		)
 	})
 	if !ok {
 		return
@@ -98,18 +114,29 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
 		return
 	}
-	defer tx.Rollback()
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+	// fail rolls back before rendering (#432) — renderSourcingWithError's own pool
+	// reads would otherwise need a second connection while this one is still held.
+	fail := func(msg string, draft *parts.SupplierPart) {
+		tx.Rollback()
+		h.renderSourcingWithError(w, r, id, msg, nil, draft)
+	}
 
 	sp := supplierPartFromForm(r)
 	sp.PartID = p.ID
 	if err := parts.New(tx).CreateSupplierPart(r.Context(), *sp); err != nil {
-		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, sp)
+		fail("Error adding supplier link: "+err.Error(), sp)
 		return
 	}
 
 	pricesInserted, photoForThumbnail, err := h.applyDigiKeyImportExtras(r, tx, p.ID, supplierID, preparedFiles)
 	if err != nil {
-		h.renderSourcingWithError(w, r, id, err.Error(), nil, supplierPartFromForm(r))
+		fail(err.Error(), supplierPartFromForm(r))
 		return
 	}
 
@@ -117,6 +144,7 @@ func (h *Handler) SupplierPartCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderSourcingWithError(w, r, id, "Error adding supplier link: "+err.Error(), nil, supplierPartFromForm(r))
 		return
 	}
+	committed = true
 	// Matches the trigger PriceCreate/PriceEdit use: fire only when a price
 	// row actually landed, not merely when the user checked "import prices".
 	if pricesInserted {
@@ -358,7 +386,18 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spIDInt, spIDErr := strconv.Atoi(r.PathValue("spID"))
+	var tx *txLogger
+	committed := false
+	defer func() {
+		if tx != nil && !committed {
+			tx.Rollback()
+		}
+	}()
+	// fail rolls back (when a tx is open) before rendering (#432) — see SupplierPartCreate.
 	fail := func(msg string) {
+		if tx != nil {
+			tx.Rollback()
+		}
 		draft := supplierPartFromForm(r)
 		draft.ID = spIDInt
 		h.renderSourcingWithError(w, r, id, msg, draft, nil)
@@ -386,12 +425,11 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := h.beginTx(r.Context())
+	tx, err = h.beginTx(r.Context())
 	if err != nil {
 		fail("Error updating supplier link: " + err.Error())
 		return
 	}
-	defer tx.Rollback()
 
 	sp := supplierPartFromForm(r)
 	sp.ID, sp.PartID = spIDInt, p.ID
@@ -410,6 +448,7 @@ func (h *Handler) SupplierPartUpdate(w http.ResponseWriter, r *http.Request) {
 		fail("Error updating supplier link: " + err.Error())
 		return
 	}
+	committed = true
 	if pricesInserted {
 		h.ensureDefaultSupplier(r.Context(), p.ID, supplierID)
 	}

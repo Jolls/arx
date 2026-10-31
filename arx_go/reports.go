@@ -70,28 +70,10 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		openPOs, receivedThisMonth int
-		activity                   []dashboardActivityItem
-		topFailureModes            []dashboardFailureModeItem
-		lowestYieldForms           []dashboardYieldItem
-		staleWIPRecords            []dashboardStaleWIPItem
-		pendingApprovalPOs         []dashboardPendingApprovalItem
-		belowReorderParts          []dashboardBelowReorderItem
-		recentLots                 []dashboardRecentLotItem
-		recentBuilds               []inventory.BuildListRow
-	)
+	var openPOs, receivedThisMonth int
 	err := parallel(r.Context(),
 		func(ctx context.Context) (err error) { openPOs, err = h.dashboardOpenPOCount(ctx); return },
 		func(ctx context.Context) (err error) { receivedThisMonth, err = h.dashboardPOsReceivedThisMonth(ctx); return },
-		func(ctx context.Context) (err error) { activity, err = h.dashboardRecentActivity(ctx, 10); return },
-		func(ctx context.Context) (err error) { topFailureModes, err = h.dashboardTopFailureModes(ctx, 5); return },
-		func(ctx context.Context) (err error) { lowestYieldForms, err = h.dashboardLowestYieldForms(ctx, 5); return },
-		func(ctx context.Context) (err error) { staleWIPRecords, err = h.dashboardStaleWIPRecords(ctx, 5); return },
-		func(ctx context.Context) (err error) { pendingApprovalPOs, err = h.dashboardPendingApprovalPOs(ctx, 5); return },
-		func(ctx context.Context) (err error) { belowReorderParts, err = h.dashboardBelowReorderParts(ctx, 5); return },
-		func(ctx context.Context) (err error) { recentLots, err = h.dashboardRecentLots(ctx, 5); return },
-		func(ctx context.Context) (err error) { recentBuilds, err = h.dashboardRecentBuilds(ctx, 5); return },
 	)
 	if err != nil {
 		h.renderError(w, r, "Error loading dashboard: "+err.Error())
@@ -100,15 +82,146 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 
 	data["OpenPOCount"] = openPOs
 	data["POsReceivedThisMonth"] = receivedThisMonth
-	data["RecentActivity"] = activity
-	data["TopFailureModes"] = topFailureModes
-	data["LowestYieldForms"] = lowestYieldForms
-	data["StaleWIPRecords"] = staleWIPRecords
-	data["PendingApprovalPOs"] = pendingApprovalPOs
-	data["BelowReorderParts"] = belowReorderParts
-	data["RecentLots"] = recentLots
-	data["RecentBuilds"] = recentBuilds
 	h.render(w, r, "reports/dashboard.html", data)
+}
+
+// renderDashboardCard executes one named card fragment from
+// templates/reports/dashboard.html (no layout), for the dashboard's lazy-loaded cards (#435).
+func (h *Handler) renderDashboardCard(w http.ResponseWriter, name string, data any) {
+	tmpl := h.tmpl(w, "layout:reports/dashboard.html")
+	if tmpl == nil {
+		return
+	}
+	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
+		serverError(w, "template execute error", err)
+	}
+}
+
+// renderDashboardCardError renders the shared card-failure fragment with a 500 status, so the
+// client's fetch sees a non-OK response and shows its own failure state (#435).
+func (h *Handler) renderDashboardCardError(w http.ResponseWriter, err error) {
+	w.WriteHeader(http.StatusInternalServerError)
+	h.renderDashboardCard(w, "dashboard_card_error", map[string]any{"Error": err.Error()})
+}
+
+// ReportsDashboardTopFailures renders the Top Failing Steps card fragment — GET
+// /api/reports/dashboard/top-failures (issue #435).
+func (h *Handler) ReportsDashboardTopFailures(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_top_failures", map[string]any{})
+		return
+	}
+	items, err := h.dashboardTopFailureModes(r.Context(), 5)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_top_failures", map[string]any{"TopFailureModes": items})
+}
+
+// ReportsDashboardLowestYield renders the Lowest Yield Forms card fragment — GET
+// /api/reports/dashboard/lowest-yield (issue #435).
+func (h *Handler) ReportsDashboardLowestYield(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_lowest_yield", map[string]any{})
+		return
+	}
+	items, err := h.dashboardLowestYieldForms(r.Context(), 5)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_lowest_yield", map[string]any{"LowestYieldForms": items})
+}
+
+// ReportsDashboardStaleWIP renders the Stale WIP Records card fragment — GET
+// /api/reports/dashboard/stale-wip (issue #435).
+func (h *Handler) ReportsDashboardStaleWIP(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_stale_wip", map[string]any{})
+		return
+	}
+	items, err := h.dashboardStaleWIPRecords(r.Context(), 5)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_stale_wip", map[string]any{"StaleWIPRecords": items})
+}
+
+// ReportsDashboardPendingApproval renders the POs Pending Approval card fragment — GET
+// /api/reports/dashboard/pending-approval (issue #435).
+func (h *Handler) ReportsDashboardPendingApproval(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_pending_approval", map[string]any{})
+		return
+	}
+	items, err := h.dashboardPendingApprovalPOs(r.Context(), 5)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_pending_approval", map[string]any{"PendingApprovalPOs": items})
+}
+
+// ReportsDashboardBelowReorder renders the Below Reorder Point card fragment — GET
+// /api/reports/dashboard/below-reorder (issue #435).
+func (h *Handler) ReportsDashboardBelowReorder(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_below_reorder", map[string]any{})
+		return
+	}
+	items, err := h.dashboardBelowReorderParts(r.Context(), 5)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_below_reorder", map[string]any{"BelowReorderParts": items})
+}
+
+// ReportsDashboardRecentLots renders the Recent Lots card fragment — GET
+// /api/reports/dashboard/recent-lots (issue #435).
+func (h *Handler) ReportsDashboardRecentLots(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_recent_lots", map[string]any{})
+		return
+	}
+	items, err := h.dashboardRecentLots(r.Context(), 5)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_recent_lots", map[string]any{"RecentLots": items})
+}
+
+// ReportsDashboardRecentBuilds renders the Recent Builds card fragment — GET
+// /api/reports/dashboard/recent-builds (issue #435).
+func (h *Handler) ReportsDashboardRecentBuilds(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_recent_builds", map[string]any{})
+		return
+	}
+	items, err := h.dashboardRecentBuilds(r.Context(), 5)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_recent_builds", map[string]any{"RecentBuilds": items})
+}
+
+// ReportsDashboardRecentActivity renders the Recent Activity card fragment — GET
+// /api/reports/dashboard/recent-activity (issue #435).
+func (h *Handler) ReportsDashboardRecentActivity(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_recent_activity", map[string]any{})
+		return
+	}
+	items, err := h.dashboardRecentActivity(r.Context(), 10)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	h.renderDashboardCard(w, "dashboard_card_recent_activity", map[string]any{"RecentActivity": items})
 }
 
 // dashboardOpenPOCount counts POs in the 'open' lifecycle status (#271),

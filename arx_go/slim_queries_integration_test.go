@@ -83,7 +83,7 @@ func TestIntegration_SlimQueries_ResolvePolRev(t *testing.T) {
 	defer done()
 	f, cleanup := seedPOFixture(t, h)
 	defer cleanup()
-	stmts := captureSQL(t, h, func() { h.resolvePolRev(getReq("/po/x"), "", strconv.Itoa(f.P1)) })
+	stmts := captureSQL(t, h, func() { h.resolvePolRev(getReq("/po/x"), h.parts(), "", strconv.Itoa(f.P1)) })
 	if len(stmts) != 1 {
 		t.Fatalf("resolvePolRev ran %d statements, want 1", len(stmts))
 	}

@@ -1373,6 +1373,22 @@ function collapseAllLots() {
     })
 })()
 
+// Reports dashboard lazy cards (#435): each [data-dashboard-card] placeholder's .card-body
+// contents are swapped for its fragment once loaded. The card-header is never touched, so a
+// failure still shows the card's title, and does not affect sibling cards.
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-dashboard-card]').forEach(function (card) {
+        var name = card.dataset.dashboardCard
+        var body = card.querySelector('.card-body')
+        fetch('/api/reports/dashboard/' + name)
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text() })
+            .then(function (html) { body.innerHTML = html })
+            .catch(function () {
+                body.innerHTML = '<div class="alert alert-danger mb-0" role="alert">Failed to load.</div>'
+            })
+    })
+})
+
 // Phone layout (#16): the detail-tab row scrolls sideways below 576px. Center the
 // active tab on load so it's visible. Only scrollLeft changes, so the page
 // never jumps; no-op when the row doesn't overflow (desktop).

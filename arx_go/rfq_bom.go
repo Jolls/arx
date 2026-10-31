@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"arx/arx_go/models"
+	"arx/internal/contacts"
 	"arx/internal/purchasing"
 
 	"github.com/shopspring/decimal"
@@ -260,6 +261,14 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// #432: read before beginTx — nothing this transaction writes affects the current
+	// user's PO defaults or the receiver company's contacts.
+	po := models.PurchaseOrder{}
+	if u := h.currentUser(r); u != nil {
+		po.Orderer = u.DisplayName
+	}
+	h.applyPODefaults(r, &po)
+
 	type created struct{ Number, SupplierName string }
 	var made []created
 	tx, err := h.beginTx(r.Context())
@@ -273,11 +282,6 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 			tx.Rollback()
 		}
 	}()
-	po := models.PurchaseOrder{}
-	if u := h.currentUser(r); u != nil {
-		po.Orderer = u.DisplayName
-	}
-	h.applyPODefaults(r, &po)
 	for _, g := range plan.Groups {
 		var lines []rfqLine
 		for _, l := range g.Lines {
@@ -312,16 +316,20 @@ func (h *Handler) PartCreateRFQsConfirm(w http.ResponseWriter, r *http.Request) 
 // itself) for supplier group g, with its lines and status-history row.
 func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup, lines []rfqLine, root models.Part, po models.PurchaseOrder) (string, error) {
 	ctx := r.Context()
-	base, err := h.purchasing().NextPONumber(ctx)
+	// #432: pur/contactsSvc are tx-backed so these reads don't need a second pool
+	// connection while this handler's own save transaction is open.
+	pur := purchasing.New(tx)
+	contactsSvc := contacts.New(tx)
+	base, err := pur.NextPONumber(ctx)
 	if err != nil {
 		return "", err
 	}
 	number := base + "R1"
 
-	_, defaultContact, _ := h.purchasing().GetSupplierContactDefault(ctx, g.SupplierID)
+	_, defaultContact, _ := pur.GetSupplierContactDefault(ctx, g.SupplierID)
 	var sc ContactSummary
 	if defaultContact != nil {
-		for _, c := range h.contactsForSupplier(r, g.SupplierID) {
+		for _, c := range contactSummariesForSupplier(ctx, contactsSvc, g.SupplierID) {
 			if c.ID == *defaultContact {
 				sc = c
 				break
@@ -344,7 +352,6 @@ func (h *Handler) insertBOMRFQ(r *http.Request, tx *txLogger, g rfqSupplierGroup
 	if sc.ID > 0 {
 		rfq.SupplierContactID = &sc.ID
 	}
-	pur := purchasing.New(tx)
 	poID, err := pur.CreatePO(ctx, rfq)
 	if err != nil {
 		return "", err

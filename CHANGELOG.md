@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.96] - 2026-10-31
+### Changed
+- POST handlers that save a BOM, PO, test record, RFQ or supplier link no longer read through the connection pool while their own save transaction is open, removing a second-connection requirement that could stall under a busier pool ([#432](https://github.com/Jolls/arx/issues/432))
+- `PartSourcing`'s supplier-link/unit/manufacturer/price/attachment reads run concurrently instead of sequentially, saving three round trips on the Sourcing tab ([#437](https://github.com/Jolls/arx/issues/437))
+- The Reports dashboard renders its shell immediately and fills its eight slower cards (Top Failing Steps, Lowest Yield Forms, Stale WIP Records, POs Pending Approval, Below Reorder Point, Recent Lots, Recent Builds, Recent Activity) in the background, each with its own loading and failure state so one slow or failed card no longer blocks the rest of the page ([#435](https://github.com/Jolls/arx/issues/435))
+
 ## [0.8.95] - 2026-10-31
 ### Changed
 - Part detail tabs (BOM, Orders, Where Used, Records, Transactions, Units, Lots, Pricing, Mfg Parts, Suppliers, Attachments, Build) look up the part concurrently with their own queries, saving up to one database round trip per tab ([#431](https://github.com/Jolls/arx/issues/431))

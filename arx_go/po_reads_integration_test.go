@@ -533,7 +533,7 @@ func TestIntegration_POReads_ResolvePolRev(t *testing.T) {
 		{"", "2147483000", ""},
 		{"", "abc", ""},
 	} {
-		if got := h.resolvePolRev(req, c.form, c.pnid); got != c.want {
+		if got := h.resolvePolRev(req, h.parts(), c.form, c.pnid); got != c.want {
 			t.Errorf("resolvePolRev(%q, %q) = %q, want %q", c.form, c.pnid, got, c.want)
 		}
 	}
