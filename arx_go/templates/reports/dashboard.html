@@ -23,49 +23,26 @@
 
     <div class="row row-cols-1 row-cols-md-2 g-3 mb-3">
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-top-failures" data-dashboard-card="top-failures">
                 <div class="card-header">Top Failing Steps</div>
                 <div class="card-body">
-                    {{if .TopFailureModes}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <tbody>
-                            {{range .TopFailureModes}}
-                            <tr>
-                                <td><a href="/forms/{{.FormID}}/failure-modes">{{.PartNumber}}</a></td>
-                                <td>{{.Parameter}}</td>
-                                <td class="text-end text-danger" style="white-space:nowrap;">{{.FailureCount}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No failures recorded.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-lowest-yield" data-dashboard-card="lowest-yield">
                 <div class="card-header">Lowest Yield Forms</div>
                 <div class="card-body">
-                    {{if .LowestYieldForms}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <tbody>
-                            {{range .LowestYieldForms}}
-                            <tr>
-                                <td><a href="/forms/{{.FormID}}/yield">{{.PartNumber}}</a></td>
-                                <td class="text-end" style="white-space:nowrap;">{{printf "%.1f" .FPYPct}}%</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No records yet.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
@@ -73,48 +50,26 @@
 
     <div class="row row-cols-1 row-cols-md-2 g-3 mb-3">
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-stale-wip" data-dashboard-card="stale-wip">
                 <div class="card-header">Stale WIP Records</div>
                 <div class="card-body">
-                    {{if .StaleWIPRecords}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <tbody>
-                            {{range .StaleWIPRecords}}
-                            <tr>
-                                <td><a href="/records/{{.RecordID}}">{{.PartNumber}}</a></td>
-                                <td class="text-end text-muted" style="white-space:nowrap;">{{.AgeDays}}d</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No stale WIP records.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-pending-approval" data-dashboard-card="pending-approval">
                 <div class="card-header">POs Pending Approval</div>
                 <div class="card-body">
-                    {{if .PendingApprovalPOs}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <tbody>
-                            {{range .PendingApprovalPOs}}
-                            <tr>
-                                <td><a href="/po/{{.Number}}" data-popout-url="/popout/po/{{.Number}}">PO {{.Number}}</a></td>
-                                <td class="text-end text-muted" style="white-space:nowrap;">{{.AgeDays}}d</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No POs pending approval.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
@@ -122,27 +77,14 @@
 
     <div class="row row-cols-1 g-3 mb-3">
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-below-reorder" data-dashboard-card="below-reorder">
                 <div class="card-header">Below Reorder Point</div>
                 <div class="card-body">
-                    {{if .BelowReorderParts}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>Part</th><th class="text-end">On hand</th><th class="text-end">Min</th></tr></thead>
-                        <tbody>
-                            {{range .BelowReorderParts}}
-                            <tr>
-                                <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
-                                <td class="text-end text-danger" style="white-space:nowrap;">{{printf "%g" .StockOnHand}}</td>
-                                <td class="text-end text-muted" style="white-space:nowrap;">{{printf "%g" .ReorderMin}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No parts below reorder point.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
@@ -150,52 +92,26 @@
 
     <div class="row row-cols-1 row-cols-md-2 g-3 mb-3">
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-recent-lots" data-dashboard-card="recent-lots">
                 <div class="card-header">Recent Lots</div>
                 <div class="card-body">
-                    {{if .RecentLots}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>Lot</th><th>Part</th><th class="text-end">Created</th></tr></thead>
-                        <tbody>
-                            {{range .RecentLots}}
-                            <tr>
-                                <td><a href="/part/{{.PartID}}/lots/{{.ID}}" data-popout-url="/popout/part/{{.PartID}}/lots/{{.ID}}/consumers">{{.LotNumber}}</a></td>
-                                <td>{{.PartNumber}}</td>
-                                <td class="text-end text-muted" style="white-space:nowrap;">{{.Created}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No lots yet.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-recent-builds" data-dashboard-card="recent-builds">
                 <div class="card-header">Recent Builds</div>
                 <div class="card-body">
-                    {{if .RecentBuilds}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>Build</th><th>Part</th><th class="text-end">Build date</th></tr></thead>
-                        <tbody>
-                            {{range .RecentBuilds}}
-                            <tr>
-                                <td><a href="/part/{{.PartID}}/{{if .OutputLotID}}lots/{{.OutputLotIDVal}}{{else}}build{{end}}" data-popout-url="/popout/build/{{.ID}}">Build #{{.ID}}</a></td>
-                                <td>{{.PartNumber}}</td>
-                                <td class="text-end text-muted" style="white-space:nowrap;">{{.Date.Format "2006-01-02"}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No builds yet.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
@@ -203,29 +119,186 @@
 
     <div class="row row-cols-1 g-3">
         <div class="col">
-            <div class="card h-100">
+            <div class="card h-100" id="dashboard-card-recent-activity" data-dashboard-card="recent-activity">
                 <div class="card-header">Recent Activity</div>
                 <div class="card-body">
-                    {{if .RecentActivity}}
-                    <div class="table-responsive-sm">
-                    <table class="table table-sm table-hover mb-0">
-                        <tbody>
-                            {{range .RecentActivity}}
-                            <tr>
-                                <td class="text-muted" style="white-space:nowrap; width:100px;">{{.When}}</td>
-                                <td><a href="{{.URL}}">{{.Label}}</a></td>
-                                <td class="text-muted">{{.Detail}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
                     </div>
-                    {{else}}
-                    <p class="text-muted mb-0">No recent activity.</p>
-                    {{end}}
                 </div>
             </div>
         </div>
     </div>
 </div>
+{{end}}
+
+{{/* Lazy-loaded dashboard card fragments (#435). Each holds only the contents that go
+     inside its placeholder's .card-body — no card-header, no card-body wrapper — so the
+     client (arx_go/static/shared/app.js) can swap just that inner HTML, success or
+     failure, while the placeholder's header and wrapper stay in the DOM throughout. */}}
+
+{{define "dashboard_card_top_failures"}}
+{{if .TopFailureModes}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <tbody>
+        {{range .TopFailureModes}}
+        <tr>
+            <td><a href="/forms/{{.FormID}}/failure-modes">{{.PartNumber}}</a></td>
+            <td>{{.Parameter}}</td>
+            <td class="text-end text-danger" style="white-space:nowrap;">{{.FailureCount}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No failures recorded.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_lowest_yield"}}
+{{if .LowestYieldForms}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <tbody>
+        {{range .LowestYieldForms}}
+        <tr>
+            <td><a href="/forms/{{.FormID}}/yield">{{.PartNumber}}</a></td>
+            <td class="text-end" style="white-space:nowrap;">{{printf "%.1f" .FPYPct}}%</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No records yet.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_stale_wip"}}
+{{if .StaleWIPRecords}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <tbody>
+        {{range .StaleWIPRecords}}
+        <tr>
+            <td><a href="/records/{{.RecordID}}">{{.PartNumber}}</a></td>
+            <td class="text-end text-muted" style="white-space:nowrap;">{{.AgeDays}}d</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No stale WIP records.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_pending_approval"}}
+{{if .PendingApprovalPOs}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <tbody>
+        {{range .PendingApprovalPOs}}
+        <tr>
+            <td><a href="/po/{{.Number}}" data-popout-url="/popout/po/{{.Number}}">PO {{.Number}}</a></td>
+            <td class="text-end text-muted" style="white-space:nowrap;">{{.AgeDays}}d</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No POs pending approval.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_below_reorder"}}
+{{if .BelowReorderParts}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <thead><tr><th>Part</th><th class="text-end">On hand</th><th class="text-end">Min</th></tr></thead>
+    <tbody>
+        {{range .BelowReorderParts}}
+        <tr>
+            <td><a href="/part/{{.PartID}}">{{.PartNumber}}</a></td>
+            <td class="text-end text-danger" style="white-space:nowrap;">{{printf "%g" .StockOnHand}}</td>
+            <td class="text-end text-muted" style="white-space:nowrap;">{{printf "%g" .ReorderMin}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No parts below reorder point.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_recent_lots"}}
+{{if .RecentLots}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <thead><tr><th>Lot</th><th>Part</th><th class="text-end">Created</th></tr></thead>
+    <tbody>
+        {{range .RecentLots}}
+        <tr>
+            <td><a href="/part/{{.PartID}}/lots/{{.ID}}" data-popout-url="/popout/part/{{.PartID}}/lots/{{.ID}}/consumers">{{.LotNumber}}</a></td>
+            <td>{{.PartNumber}}</td>
+            <td class="text-end text-muted" style="white-space:nowrap;">{{.Created}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No lots yet.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_recent_builds"}}
+{{if .RecentBuilds}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <thead><tr><th>Build</th><th>Part</th><th class="text-end">Build date</th></tr></thead>
+    <tbody>
+        {{range .RecentBuilds}}
+        <tr>
+            <td><a href="/part/{{.PartID}}/{{if .OutputLotID}}lots/{{.OutputLotIDVal}}{{else}}build{{end}}" data-popout-url="/popout/build/{{.ID}}">Build #{{.ID}}</a></td>
+            <td>{{.PartNumber}}</td>
+            <td class="text-end text-muted" style="white-space:nowrap;">{{.Date.Format "2006-01-02"}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No builds yet.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_recent_activity"}}
+{{if .RecentActivity}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <tbody>
+        {{range .RecentActivity}}
+        <tr>
+            <td class="text-muted" style="white-space:nowrap; width:100px;">{{.When}}</td>
+            <td><a href="{{.URL}}">{{.Label}}</a></td>
+            <td class="text-muted">{{.Detail}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">No recent activity.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_error"}}
+<div class="alert alert-danger mb-0" role="alert">Failed to load.</div>
 {{end}}

@@ -440,7 +440,7 @@ func TestIntegration_InventoryRecordLinkage(t *testing.T) {
 		if err := r.ParseForm(); err != nil {
 			t.Fatal(err)
 		}
-		return h.recordLinkageArgs(r, part)
+		return h.recordLinkageArgs(r, h.inventory(), part)
 	}
 	// A retired lot of the part is still accepted; blank fields stay nil.
 	lot, build, err := args(3007, url.Values{"lot_id": {fmt.Sprint(retired)}})

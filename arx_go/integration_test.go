@@ -1436,6 +1436,10 @@ func TestIntegration_DashboardBelowReorderParts(t *testing.T) {
 // cards and renders the template — which no test previously invoked, even
 // though 3 of its underlying card queries are individually integration-tested
 // (#816).
+// TestIntegration_ReportsDashboard_RendersAllCards checks the shell (#435): every card's
+// header (and the two inline counts' own header) renders on /reports itself. The eight
+// slower cards' data now comes from their own fragment endpoints instead — see
+// TestIntegration_ReportsDashboard_CardFragments.
 func TestIntegration_ReportsDashboard_RendersAllCards(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
@@ -1456,11 +1460,33 @@ func TestIntegration_ReportsDashboard_RendersAllCards(t *testing.T) {
 		"Below Reorder Point",
 		"Recent Lots",
 		"Recent Builds",
-		"/part/3013/lots/8306",
-		"/popout/build/8203",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("ReportsDashboard: body missing %q", want)
+		}
+	}
+}
+
+// TestIntegration_ReportsDashboard_CardFragments checks the eight lazy-loaded card
+// endpoints (#435) each render their own data, which TestIntegration_ReportsDashboard_RendersAllCards
+// no longer sees on /reports itself now that these cards are deferred.
+func TestIntegration_ReportsDashboard_CardFragments(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	for _, c := range []struct {
+		name string
+		fn   func(http.ResponseWriter, *http.Request)
+		want string
+	}{
+		{"recent-lots", h.ReportsDashboardRecentLots, "/part/3013/lots/8306"},
+		{"recent-builds", h.ReportsDashboardRecentBuilds, "/popout/build/8203"},
+	} {
+		rec := httptest.NewRecorder()
+		c.fn(rec, httptest.NewRequest(http.MethodGet, "/api/reports/dashboard/"+c.name, nil))
+		assertStatus(t, "ReportsDashboard "+c.name, rec, http.StatusOK)
+		if body := rec.Body.String(); !strings.Contains(body, c.want) {
+			t.Errorf("ReportsDashboard %s: body missing %q", c.name, c.want)
 		}
 	}
 }

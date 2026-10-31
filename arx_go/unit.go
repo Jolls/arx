@@ -196,7 +196,7 @@ func (h *Handler) UnitCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Serial # is required.")
 		return
 	}
-	lotArg, buildArg, err := h.recordLinkageArgs(r, p.ID)
+	lotArg, buildArg, err := h.recordLinkageArgs(r, h.inventory(), p.ID)
 	if err != nil {
 		log.Printf("invalid lot/build selection: %v", err)
 		http.Error(w, "invalid lot or build selection", http.StatusBadRequest)

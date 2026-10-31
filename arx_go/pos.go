@@ -22,6 +22,8 @@ import (
 	"github.com/shopspring/decimal"
 
 	"arx/arx_go/models"
+	"arx/internal/contacts"
+	"arx/internal/parts"
 	"arx/internal/purchasing"
 	"arx/internal/urlutil"
 )
@@ -42,16 +44,22 @@ type ContactSummary struct {
 }
 
 func (h *Handler) contactsForSupplier(r *http.Request, supplierID int) []ContactSummary {
+	return contactSummariesForSupplier(r.Context(), h.contacts(), supplierID)
+}
+
+// contactSummariesForSupplier loads and maps a supplier's active contacts via svc — pool-backed
+// from contactsForSupplier, or tx-backed from a caller already holding a transaction (#432).
+func contactSummariesForSupplier(ctx context.Context, svc *contacts.Service, supplierID int) []ContactSummary {
 	if supplierID <= 0 {
 		return nil
 	}
-	contacts, err := h.contacts().ListActiveForCompany(r.Context(), supplierID)
+	cs, err := svc.ListActiveForCompany(ctx, supplierID)
 	if err != nil {
-		log.Printf("contactsForSupplier: %v", err)
+		log.Printf("contactSummariesForSupplier: %v", err)
 		return nil
 	}
-	out := make([]ContactSummary, len(contacts))
-	for i, c := range contacts {
+	out := make([]ContactSummary, len(cs))
+	for i, c := range cs {
 		out[i] = ContactSummary{ID: c.ID, DisplayName: c.DisplayName, Address: c.Address, City: c.City,
 			State: c.State, Zipcode: c.Zipcode, Country: c.Country, Phone: c.Phone1, Fax: c.Fax, Email: c.Email}
 	}
@@ -608,6 +616,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		newStatus = "rfq"
 	}
 	pur := purchasing.New(tx)
+	partsSvc := parts.New(tx)
 	po := poFromForm(r)
 	po.Number, po.Status, po.IsActive = newNumber, newStatus, statusIsActive(newStatus)
 	newID, err := pur.CreatePO(r.Context(), po)
@@ -641,7 +650,7 @@ func (h *Handler) POCreate(w http.ResponseWriter, r *http.Request) {
 		if row.isBlank() {
 			continue
 		}
-		l := polLine(row, h.resolvePolRev(r, row.Rev, row.PNID))
+		l := polLine(row, h.resolvePolRev(r, partsSvc, row.Rev, row.PNID))
 		if err := pur.CreatePOLine(r.Context(), newID, l); err != nil {
 			h.renderError(w, r, "Error adding PO line: "+err.Error())
 			return
@@ -731,6 +740,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 	// Editing a PO that was already approved (or awaiting approval) invalidates
 	// that decision (#267) — capture the current state so we can reset it below.
 	pur := purchasing.New(tx)
+	partsSvc := parts.New(tx)
 	state, err := pur.LockPOState(r.Context(), num) // #261: lock so the approval read can't go stale
 	if err != nil {
 		h.renderError(w, r, "Error loading PO: "+err.Error())
@@ -760,7 +770,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 		if deleteSet[polID] {
 			continue
 		}
-		l := polLine(row, h.resolvePolRev(r, row.Rev, row.PNID))
+		l := polLine(row, h.resolvePolRev(r, partsSvc, row.Rev, row.PNID))
 		id, err := strconv.Atoi(polID)
 		if err == nil {
 			l.ID = id
@@ -779,7 +789,7 @@ func (h *Handler) POUpdate(w http.ResponseWriter, r *http.Request) {
 			if row.isBlank() {
 				continue
 			}
-			if err := pur.CreatePOLine(r.Context(), poID, polLine(row, h.resolvePolRev(r, row.Rev, row.PNID))); err != nil {
+			if err := pur.CreatePOLine(r.Context(), poID, polLine(row, h.resolvePolRev(r, partsSvc, row.Rev, row.PNID))); err != nil {
 				h.renderError(w, r, "Error adding PO line: "+err.Error())
 				return
 			}
@@ -1852,7 +1862,9 @@ func (h *Handler) fetchPOReceipts(r *http.Request, poID int) []POReceiptView {
 // resolvePolRev returns the revision to store on a POL row. It prefers the
 // value submitted from the form; if blank and a PNID is known, it looks up
 // PN.revision as a fallback so server-side saves always capture the snapshot.
-func (h *Handler) resolvePolRev(r *http.Request, formRev, pnidStr string) string {
+// svc is caller-supplied (#432) so a caller already holding a transaction can
+// pass a tx-backed service instead of reading through the pool mid-transaction.
+func (h *Handler) resolvePolRev(r *http.Request, svc *parts.Service, formRev, pnidStr string) string {
 	if formRev != "" {
 		return formRev
 	}
@@ -1863,7 +1875,7 @@ func (h *Handler) resolvePolRev(r *http.Request, formRev, pnidStr string) string
 	if err != nil {
 		return ""
 	}
-	rev, _ := h.parts().GetPartRevision(r.Context(), id) // unknown part → ""
+	rev, _ := svc.GetPartRevision(r.Context(), id) // unknown part → ""
 	return rev
 }
 

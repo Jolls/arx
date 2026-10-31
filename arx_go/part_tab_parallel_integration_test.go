@@ -42,7 +42,7 @@ var partTabs = []partTab{
 	{"lots", func(h *Handler) http.HandlerFunc { return h.PartLots }, "lots", 3012, "ListLots", "Error retrieving lots", true, 2, 3},
 	{"pricing", func(h *Handler) http.HandlerFunc { return h.PartPricing }, "pricing", 3002, "ListPartPrices", "Error retrieving pricing", true, 2, 3},
 	{"mfg-parts", func(h *Handler) http.HandlerFunc { return h.PartMfgParts }, "mfg-parts", 3002, "ListMfgParts", "Error retrieving manufacturer parts", true, 3, 4},
-	{"suppliers", func(h *Handler) http.HandlerFunc { return h.PartSourcing }, "suppliers", 3002, "ListSupplierParts", "Error retrieving supplier links", true, 4, 5},
+	{"suppliers", func(h *Handler) http.HandlerFunc { return h.PartSourcing }, "suppliers", 3002, "ListSupplierParts", "Error retrieving supplier links", true, 1, 5},
 	{"attachments", func(h *Handler) http.HandlerFunc { return h.PartAttachments }, "attachments", 3005, "ListPartAttachments", "Error retrieving attachments", false, 4, 5},
 	{"build", func(h *Handler) http.HandlerFunc { return h.PartBuild }, "build", 3005, "ListBuildHistory", "Error retrieving builds", true, 3, 4},
 }

@@ -160,9 +160,11 @@ type bomLine struct {
 }
 
 // loadBuildLines returns the output part's BOM component lines for a build (#747
-// extraction). Empty result (nil error) when the part has no BOM.
-func (h *Handler) loadBuildLines(ctx context.Context, partID int) ([]bomLine, error) {
-	rows, err := h.inventory().ListBuildLines(ctx, partID)
+// extraction). Empty result (nil error) when the part has no BOM. inv is
+// caller-supplied (#432) so a caller already holding a transaction can pass a
+// tx-backed service instead of reading through the pool mid-transaction.
+func (h *Handler) loadBuildLines(ctx context.Context, inv *inventory.Service, partID int) ([]bomLine, error) {
+	rows, err := inv.ListBuildLines(ctx, partID)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +313,7 @@ func (h *Handler) PartBuildCreate(w http.ResponseWriter, r *http.Request) {
 		buildDate = &now
 	}
 
-	lines, err := h.loadBuildLines(r.Context(), partID)
+	lines, err := h.loadBuildLines(r.Context(), h.inventory(), partID)
 	if err != nil {
 		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return

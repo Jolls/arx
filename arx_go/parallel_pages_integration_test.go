@@ -130,10 +130,30 @@ func TestIntegration_ParallelPages_ErrorBehaviour(t *testing.T) {
 		rows = append(rows, row{p, failOn, 200, append([]string{p.marker}, want...), []string{"injected fault"}})
 	}
 
-	for _, q := range []string{"CountOpenPOs", "CountPOsReceivedThisMonth", "ListRecentModifiedParts", "ListRecentPOEvents",
-		"ListTopFailureModes", "ListRecordFailFlags", "ListStaleWIPRecords", "ListPendingApprovalPOs",
-		"ListBelowReorderParts", "ListLots", "ListRecentBuilds"} {
+	// ReportsDashboard itself only still runs the two inline counts (#435) — a fault in
+	// either one fails the shell. The other nine queries moved to their own lazy-loaded
+	// card endpoints, each rendering the shared error fragment (HTTP 500) on failure
+	// instead of aborting the shell.
+	for _, q := range []string{"CountOpenPOs", "CountPOsReceivedThisMonth"} {
 		rows = append(rows, row{pageDashboard, q, 200, []string{"Error loading dashboard: injected fault"}, []string{"Recent Activity"}})
+	}
+	for _, c := range []struct {
+		name string
+		fn   func(*Handler) http.HandlerFunc
+		q    string
+	}{
+		{"recent-activity", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardRecentActivity }, "ListRecentModifiedParts"},
+		{"recent-activity", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardRecentActivity }, "ListRecentPOEvents"},
+		{"top-failures", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardTopFailures }, "ListTopFailureModes"},
+		{"lowest-yield", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardLowestYield }, "ListRecordFailFlags"},
+		{"stale-wip", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardStaleWIP }, "ListStaleWIPRecords"},
+		{"pending-approval", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardPendingApproval }, "ListPendingApprovalPOs"},
+		{"below-reorder", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardBelowReorder }, "ListBelowReorderParts"},
+		{"recent-lots", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardRecentLots }, "ListLots"},
+		{"recent-builds", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardRecentBuilds }, "ListRecentBuilds"},
+	} {
+		p := parallelPage{"reports dashboard card " + c.name, c.fn, "/api/reports/dashboard/" + c.name, nil, "Failed to load"}
+		rows = append(rows, row{p, c.q, 500, []string{"Failed to load"}, nil})
 	}
 
 	fatal(pagePart3005, "GetPart", "Error retrieving part: injected fault")
@@ -253,7 +273,7 @@ func TestIntegration_ParallelPages_Stats(t *testing.T) {
 		page           parallelPage
 		count, queries int
 	}{
-		{pageDashboard, 2, 11},
+		{pageDashboard, 1, 2}, // #435: the other eight queries moved to lazy-loaded card endpoints
 		{pagePart3005, 2, 9},
 		{pageRecord, 2, 8},
 		{pageLotTrace, 4, 8},
