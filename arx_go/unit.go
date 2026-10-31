@@ -27,15 +27,9 @@ func (h *Handler) unitsForPart(ctx context.Context, partID int) ([]UnitRow, erro
 }
 
 // recentPartUnits returns the most recent units for a part, newest first, capped
-// at limit, for the Part dashboard "Units" card (#798).
-func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([]UnitRow, error) {
+// at limit, and the part's total unit count, for the Part dashboard "Units" card (#798).
+func (h *Handler) recentPartUnits(ctx context.Context, partID int, limit int) ([]UnitRow, int, error) {
 	return h.inventory().ListRecentPartUnits(ctx, partID, limit)
-}
-
-// unitCountForPart returns the total number of units for a part, for the Part
-// dashboard "Units" card (#798).
-func (h *Handler) unitCountForPart(ctx context.Context, partID int) (int, error) {
-	return h.inventory().CountPartUnits(ctx, partID)
 }
 
 // fetchUnitRow loads a single unit for the trace header. ok=false (nil error) when
@@ -87,14 +81,6 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Unit not found for this part")
 		return
 	}
-	var build *BuildOption
-	if unit.BuildID != nil {
-		build, err = h.fetchBuildOption(r.Context(), *unit.BuildID)
-		if err != nil {
-			h.renderError(w, r, "Error retrieving build: "+err.Error())
-			return
-		}
-	}
 	// A lot_serial unit belongs to its lot, and its as-built components ARE that lot's
 	// (#746, finding 1). Seed the walk from both the unit (direct unit-endpoint edges)
 	// and its lot (which carries the consumed-component genealogy written at build time),
@@ -103,19 +89,31 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 	if unit.LotID != nil {
 		roots = append(roots, traceRoot{*unit.LotID, "lot"})
 	}
-	ancestors, err := h.genealogyTraceRoots(r.Context(), roots, true)
-	if err != nil {
-		h.renderError(w, r, "Error tracing unit ancestry: "+err.Error())
-		return
-	}
-	descendants, err := h.genealogyTraceRoots(r.Context(), roots, false)
-	if err != nil {
-		h.renderError(w, r, "Error tracing unit descendants: "+err.Error())
-		return
-	}
-	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), records.ScopeUnit, unitID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving record types: "+err.Error())
+	var build *BuildOption
+	var ancestors, descendants []TraceNode
+	var typeOptions []string
+	if err := parallel(r.Context(),
+		func(ctx context.Context) (err error) {
+			if unit.BuildID == nil {
+				return nil
+			}
+			build, err = h.fetchBuildOption(ctx, *unit.BuildID)
+			return pageErr("Error retrieving build", err)
+		},
+		func(ctx context.Context) (err error) {
+			ancestors, err = h.genealogyTraceRoots(ctx, roots, true)
+			return pageErr("Error tracing unit ancestry", err)
+		},
+		func(ctx context.Context) (err error) {
+			descendants, err = h.genealogyTraceRoots(ctx, roots, false)
+			return pageErr("Error tracing unit descendants", err)
+		},
+		func(ctx context.Context) (err error) {
+			typeOptions, err = h.scopedRecordTypeOptions(ctx, records.ScopeUnit, unitID)
+			return pageErr("Error retrieving record types", err)
+		},
+	); err != nil {
+		h.renderError(w, r, err.Error())
 		return
 	}
 	h.render(w, r, "parts/part_unit_trace.html", map[string]any{

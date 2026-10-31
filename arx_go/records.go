@@ -963,7 +963,12 @@ func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord,
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	rows, refSteps := frozenRows(results, liveSteps, record, form, includeHidden)
+	return rows, results, refSteps, nil
+}
 
+// frozenRows is loadFrozenRows' assembly over already-loaded results and live steps.
+func frozenRows(results map[int]*models.TestResult, liveSteps map[int]*models.TestStep, record *models.TestRecord, form *models.TestForm, includeHidden bool) ([]models.ResultRow, map[int]*models.TestStep) {
 	// Synthetic step map for {id} spec_nom fallback: prefer the frozen snapshot nominal.
 	refSteps := map[int]*models.TestStep{}
 	maps.Copy(refSteps, liveSteps)
@@ -1005,7 +1010,7 @@ func (h *Handler) loadFrozenRows(ctx context.Context, record *models.TestRecord,
 		bakeStepTokens(step, record, form)
 		rows = append(rows, models.ResultRow{Step: step, Result: nil, Level: step.Type, Hidden: hidden})
 	}
-	return rows, results, refSteps, nil
+	return rows, refSteps
 }
 
 // RecordDetail â€" GET /records/{id}
@@ -1027,7 +1032,41 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	record := testRecord(rec)
 
-	hdr, err := h.records().GetFormHeader(r.Context(), record.FormID)
+	// Independent reads (#426); record is read-only until parallel returns. Prev/next IDs are
+	// 0 when the record isn't an active record of the form, same ordering as the records list.
+	var (
+		hdr            records.FormHeader
+		results        map[int]*models.TestResult
+		liveSteps      map[int]*models.TestStep
+		prevID, nextID int
+		eventRows      []records.Event
+		snapshots      map[int][]models.SnapshotDiffRow
+		trace          *RecordTrace
+	)
+	err = parallel(r.Context(),
+		func(ctx context.Context) (err error) { hdr, err = h.records().GetFormHeader(ctx, record.FormID); return },
+		func(ctx context.Context) (err error) { results, err = h.loadRecordResults(ctx, record.ID); return },
+		func(ctx context.Context) (err error) { liveSteps, err = h.loadSteps(ctx, h.records(), record.FormID); return },
+		func(ctx context.Context) error {
+			prevID, nextID, _ = h.records().Neighbors(ctx, record.FormID, recordID)
+			return nil
+		},
+		func(ctx context.Context) (err error) {
+			// Lifecycle audit trail (#250) — complete/approve/unlock events, oldest first.
+			if eventRows, err = h.records().ListEvents(ctx, recordID); err != nil {
+				log.Printf("RecordDetail: audit trail query error: %v", err)
+			}
+			return nil
+		},
+		func(ctx context.Context) (err error) {
+			// Per-lock result snapshots (#251), keyed by event_id and diffed against the prior snapshot.
+			if snapshots, err = h.loadEventSnapshots(ctx, recordID); err != nil {
+				log.Printf("RecordDetail: event snapshots error: %v", err)
+			}
+			return nil
+		},
+		func(ctx context.Context) (err error) { trace, err = h.loadRecordTrace(ctx, &record, false); return },
+	)
 	if err != nil {
 		serverError(w, "query error", err)
 		return
@@ -1035,11 +1074,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	form := testForm(hdr)
 
 	// Build the frozen rows from the materialized snapshot (live def is only a legacy fallback).
-	resultRows, results, refSteps, err := h.loadFrozenRows(r.Context(), &record, &form, false)
-	if err != nil {
-		serverError(w, "query error", err)
-		return
-	}
+	resultRows, refSteps := frozenRows(results, liveSteps, &record, &form, false)
 
 	// Resolve {id} cross-step tokens against the record's own results (frozen). The read-only view
 	// shows only what was recorded: drop the frozen default and present an unfilled row as untouched.
@@ -1055,10 +1090,6 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Prev/next record IDs within this form, same ordering as the records list (0 when the
-	// record isn't an active record of it).
-	prevID, nextID, _ := h.records().Neighbors(r.Context(), record.FormID, recordID)
-
 	var imageRows []models.ResultRow
 	for _, row := range resultRows {
 		if row.Level == 0 && isImageRow(row) {
@@ -1066,32 +1097,15 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Lifecycle audit trail (#250) — complete/approve/unlock events, oldest first.
 	var events []models.RecordEvent
-	eventRows, err := h.records().ListEvents(r.Context(), recordID)
-	if err != nil {
-		log.Printf("RecordDetail: audit trail query error: %v", err)
-	}
 	for _, e := range eventRows {
 		events = append(events, models.RecordEvent{ID: e.ID, TestRecordID: e.FormRecordID, EventType: e.EventType,
 			Username: e.Username, EventDate: &e.EventDate, Comments: e.Comments})
 	}
 
-	// Per-lock result snapshots (#251), keyed by event_id and diffed against the prior snapshot.
-	snapshots, err := h.loadEventSnapshots(r.Context(), recordID)
-	if err != nil {
-		log.Printf("RecordDetail: event snapshots error: %v", err)
-	}
-
 	canApproveRecords := false
 	if u := h.currentUser(r); u != nil {
 		canApproveRecords = u.CanApproveRecords
-	}
-
-	trace, err := h.loadRecordTrace(r.Context(), &record, false)
-	if err != nil {
-		serverError(w, "query error", err)
-		return
 	}
 
 	h.renderRecords(w, r, "records_show.html", map[string]any{

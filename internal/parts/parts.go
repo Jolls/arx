@@ -956,48 +956,24 @@ func (s *Service) DeactivatePrices(ctx context.Context, partID, supplierID int, 
 	return s.q.DeactivatePrices(ctx, dbq.DeactivatePricesParams{PartID: partID, SupplierID: supplierID, PackSize: packSize})
 }
 
-// POPricePoint is a dated PO line's unit cost.
-type POPricePoint struct {
-	PONumber     string
-	SupplierName string
-	DateOrdered  time.Time
-	UnitCost     decimal.Decimal
+// PricePoint is one dated unit-cost sample. Source is "po" or "price"; PONumber is "" on a
+// price row, PackSize nil on a PO row.
+type PricePoint struct {
+	Source, PONumber, SupplierName string
+	Date                           time.Time
+	Cost                           decimal.Decimal
+	PackSize                       *decimal.Decimal
 }
 
-// ListPOPricePoints returns a part's dated PO lines, oldest first.
-func (s *Service) ListPOPricePoints(ctx context.Context, partID int) ([]POPricePoint, error) {
-	rows, err := s.q.ListPOPricePoints(ctx, partID)
+// ListPricePoints returns a part's dated PO lines then its dated active prices, each oldest first.
+func (s *Service) ListPricePoints(ctx context.Context, partID int) ([]PricePoint, error) {
+	rows, err := s.q.ListPartPricePoints(ctx, partID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]POPricePoint, len(rows))
+	out := make([]PricePoint, len(rows))
 	for i, r := range rows {
-		out[i] = POPricePoint{PONumber: r.Number, SupplierName: r.SupplierName, DateOrdered: *r.DateOrdered, UnitCost: r.UnitCost}
-	}
-	return out, nil
-}
-
-// PriceListPoint is a dated active price's per-unit price and pack size.
-type PriceListPoint struct {
-	SupplierName  string
-	EffectiveDate time.Time
-	PriceEA       decimal.Decimal
-	PackSize      *decimal.Decimal
-}
-
-// ListPriceListPoints returns a part's dated active prices, oldest first,
-// skipping any without a per-unit price.
-func (s *Service) ListPriceListPoints(ctx context.Context, partID int) ([]PriceListPoint, error) {
-	rows, err := s.q.ListPriceListPoints(ctx, partID)
-	if err != nil {
-		return nil, err
-	}
-	var out []PriceListPoint
-	for _, r := range rows {
-		if r.PriceEa == nil {
-			continue
-		}
-		out = append(out, PriceListPoint{SupplierName: r.SupplierName, EffectiveDate: *r.EffectiveDate, PriceEA: *r.PriceEa, PackSize: r.PackSize})
+		out[i] = PricePoint{Source: r.Source, PONumber: r.PoNumber, SupplierName: r.SupplierName, Date: *r.PointDate, Cost: r.Cost, PackSize: r.PackSize}
 	}
 	return out, nil
 }

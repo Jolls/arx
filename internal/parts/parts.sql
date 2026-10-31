@@ -396,19 +396,19 @@ LEFT JOIN supplier_part sp ON sp.part_id = p.id AND sp.supplier_id = c.id
 WHERE p.id = $1
 ORDER BY sp.preference, sp.id LIMIT 1;
 
--- name: ListPOPricePoints :many
-SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_ordered, pol.unit_cost
+-- name: ListPartPricePoints :many
+-- PO lines, then active priced price-list rows, each oldest first ('po' sorts before 'price').
+SELECT 'po'::text AS source, po.number AS po_number, COALESCE(po.supplier_name, '') AS supplier_name,
+       po.date_ordered AS point_date, pol.unit_cost AS cost, NULL::numeric AS pack_size
 FROM po_line pol
 JOIN purchase_order po ON pol.po_id = po.id
 WHERE pol.part_id = sqlc.arg(part_id)::int AND po.date_ordered IS NOT NULL
-ORDER BY po.date_ordered;
-
--- name: ListPriceListPoints :many
-SELECT COALESCE(c.name, '') AS supplier_name, p.effective_date, p.price_ea, p.pack_size
+UNION ALL
+SELECT 'price'::text, ''::text, COALESCE(c.name, ''), p.effective_date, p.price_ea, p.pack_size
 FROM price p
 LEFT JOIN company c ON p.supplier_id = c.id
-WHERE p.part_id = $1 AND p.is_active = TRUE AND p.effective_date IS NOT NULL
-ORDER BY p.effective_date;
+WHERE p.part_id = sqlc.arg(part_id)::int AND p.is_active = TRUE AND p.effective_date IS NOT NULL AND p.price_ea IS NOT NULL
+ORDER BY source, point_date;
 
 -- name: PreferredSupplierMinPrice :one
 -- The preferred supplier's cheapest active price (NULL prices sort last); no row when there is none.

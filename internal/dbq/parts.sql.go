@@ -1290,49 +1290,6 @@ func (q *Queries) ListMfgParts(ctx context.Context, partID int) ([]ListMfgPartsR
 	return items, nil
 }
 
-const listPOPricePoints = `-- name: ListPOPricePoints :many
-SELECT po.number, COALESCE(po.supplier_name, '') AS supplier_name, po.date_ordered, pol.unit_cost
-FROM po_line pol
-JOIN purchase_order po ON pol.po_id = po.id
-WHERE pol.part_id = $1::int AND po.date_ordered IS NOT NULL
-ORDER BY po.date_ordered
-`
-
-type ListPOPricePointsRow struct {
-	Number       string
-	SupplierName string
-	DateOrdered  *time.Time
-	UnitCost     decimal.Decimal
-}
-
-func (q *Queries) ListPOPricePoints(ctx context.Context, partID int) ([]ListPOPricePointsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listPOPricePoints, partID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPOPricePointsRow
-	for rows.Next() {
-		var i ListPOPricePointsRow
-		if err := rows.Scan(
-			&i.Number,
-			&i.SupplierName,
-			&i.DateOrdered,
-			&i.UnitCost,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPartCategories = `-- name: ListPartCategories :many
 SELECT code, label, is_purchased, is_bom_visible, is_orders_visible, is_pricing_visible,
        is_mfg_parts_visible, is_suppliers_visible, is_inventory_visible
@@ -1567,6 +1524,60 @@ func (q *Queries) ListPartOrders(ctx context.Context, arg ListPartOrdersParams) 
 	return items, nil
 }
 
+const listPartPricePoints = `-- name: ListPartPricePoints :many
+SELECT 'po'::text AS source, po.number AS po_number, COALESCE(po.supplier_name, '') AS supplier_name,
+       po.date_ordered AS point_date, pol.unit_cost AS cost, NULL::numeric AS pack_size
+FROM po_line pol
+JOIN purchase_order po ON pol.po_id = po.id
+WHERE pol.part_id = $1::int AND po.date_ordered IS NOT NULL
+UNION ALL
+SELECT 'price'::text, ''::text, COALESCE(c.name, ''), p.effective_date, p.price_ea, p.pack_size
+FROM price p
+LEFT JOIN company c ON p.supplier_id = c.id
+WHERE p.part_id = $1::int AND p.is_active = TRUE AND p.effective_date IS NOT NULL AND p.price_ea IS NOT NULL
+ORDER BY source, point_date
+`
+
+type ListPartPricePointsRow struct {
+	Source       string
+	PoNumber     string
+	SupplierName string
+	PointDate    *time.Time
+	Cost         decimal.Decimal
+	PackSize     *decimal.Decimal
+}
+
+// PO lines, then active priced price-list rows, each oldest first ('po' sorts before 'price').
+func (q *Queries) ListPartPricePoints(ctx context.Context, partID int) ([]ListPartPricePointsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPartPricePoints, partID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartPricePointsRow
+	for rows.Next() {
+		var i ListPartPricePointsRow
+		if err := rows.Scan(
+			&i.Source,
+			&i.PoNumber,
+			&i.SupplierName,
+			&i.PointDate,
+			&i.Cost,
+			&i.PackSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPartPrices = `-- name: ListPartPrices :many
 SELECT p.id, p.price_ea, p.price_pack, p.pack_size, COALESCE(p.is_active, FALSE) AS is_active,
        p.effective_date, p.supplier_id, COALESCE(s.name, '') AS supplier_name
@@ -1735,49 +1746,6 @@ func (q *Queries) ListPartsExport(ctx context.Context) ([]ListPartsExportRow, er
 			&i.Category,
 			&i.ModifiedDate,
 			&i.IsActive,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listPriceListPoints = `-- name: ListPriceListPoints :many
-SELECT COALESCE(c.name, '') AS supplier_name, p.effective_date, p.price_ea, p.pack_size
-FROM price p
-LEFT JOIN company c ON p.supplier_id = c.id
-WHERE p.part_id = $1 AND p.is_active = TRUE AND p.effective_date IS NOT NULL
-ORDER BY p.effective_date
-`
-
-type ListPriceListPointsRow struct {
-	SupplierName  string
-	EffectiveDate *time.Time
-	PriceEa       *decimal.Decimal
-	PackSize      *decimal.Decimal
-}
-
-func (q *Queries) ListPriceListPoints(ctx context.Context, partID int) ([]ListPriceListPointsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listPriceListPoints, partID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPriceListPointsRow
-	for rows.Next() {
-		var i ListPriceListPointsRow
-		if err := rows.Scan(
-			&i.SupplierName,
-			&i.EffectiveDate,
-			&i.PriceEa,
-			&i.PackSize,
 		); err != nil {
 			return nil, err
 		}

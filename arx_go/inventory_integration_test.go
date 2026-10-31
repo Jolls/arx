@@ -263,14 +263,23 @@ func TestIntegration_InventoryPartCards(t *testing.T) {
 	t.Cleanup(done)
 	ctx := context.Background()
 
-	lots, err := h.recentPartLots(ctx, 3007, 1)
+	lots, n, err := h.recentPartLots(ctx, 3007, 1)
 	if err != nil || len(lots) != 1 || lots[0].ID != 8303 || lots[0].PartNumber == "" || lots[0].LotDescription != "Cycle count - unlabeled found lot" || lots[0].VendorLot != "" {
 		t.Errorf("recentPartLots(3007,1) = %+v, %v; want just lot 8303 with part fields", lots, err)
 	}
-	if n, err := h.lotCountForPart(ctx, 3007); err != nil || n != 2 {
-		t.Errorf("lotCountForPart(3007) = %d, %v; want 2", n, err)
+	if n != 2 { // total ignores the limit
+		t.Errorf("recentPartLots(3007,1) total = %d; want 2", n)
 	}
-	units, err := h.recentPartUnits(ctx, 3005, 5)
+	if lots, n, err := h.recentPartLots(ctx, 3005, 5); err != nil || len(lots) != 0 || n != 0 {
+		t.Errorf("recentPartLots(3005,5) = %+v, %d, %v; want empty, 0", lots, n, err)
+	}
+	if units, n, err := h.recentPartUnits(ctx, 3005, 1); err != nil || len(units) != 1 || n != 2 {
+		t.Errorf("recentPartUnits(3005,1) = %+v, %d, %v; want one row, total 2", units, n, err)
+	}
+	if units, n, err := h.recentPartUnits(ctx, 3002, 5); err != nil || len(units) != 0 || n != 0 {
+		t.Errorf("recentPartUnits(3002,5) = %+v, %d, %v; want empty, 0", units, n, err)
+	}
+	units, _, err := h.recentPartUnits(ctx, 3005, 5)
 	if err != nil || len(units) != 2 || units[0].ID != 8504 || units[1].ID != 8503 {
 		t.Fatalf("recentPartUnits(3005,5) = %+v, %v; want [8504 8503]", units, err)
 	}
@@ -279,9 +288,6 @@ func TestIntegration_InventoryPartCards(t *testing.T) {
 	}
 	if u := units[1]; u.IsManual() || u.LotID != nil || u.BuildID == nil || *u.BuildID != 8201 {
 		t.Errorf("test unit 8503 = %+v", u)
-	}
-	if n, err := h.unitCountForPart(ctx, 3005); err != nil || n != 2 {
-		t.Errorf("unitCountForPart(3005) = %d, %v; want 2", n, err)
 	}
 	u, found, err := h.fetchUnitRow(ctx, 8501)
 	if err != nil || !found || u.LotID == nil || *u.LotID != 8306 || u.LotNumber != "8306" || u.PartNumber == "" {

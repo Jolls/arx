@@ -212,9 +212,21 @@ func (s *Service) ListPartLots(ctx context.Context, partID int) ([]LotRow, error
 	return s.listLots(ctx, &partID, nil)
 }
 
-// ListRecentPartLots returns a part's n newest lots.
-func (s *Service) ListRecentPartLots(ctx context.Context, partID, n int) ([]LotRow, error) {
-	return s.listLots(ctx, &partID, &n)
+// ListRecentPartLots returns a part's n newest lots and its total lot count.
+func (s *Service) ListRecentPartLots(ctx context.Context, partID, n int) ([]LotRow, int, error) {
+	rows, err := s.q.ListRecentPartLots(ctx, dbq.ListRecentPartLotsParams{PartID: partID, N: n})
+	if err != nil {
+		return nil, 0, err
+	}
+	total := 0
+	out := make([]LotRow, len(rows))
+	for i, r := range rows {
+		total = r.TotalCount
+		out[i] = LotRow{ID: r.ID, LotNumber: r.LotNumber, VendorLot: r.VendorLot, PartID: r.PartID, PartNumber: r.PartNumber,
+			PartDescription: r.PartDescription, LotDescription: r.LotDescription, Notes: r.Notes, CreatedAt: r.CreatedAt,
+			IsActive: r.IsActive, PoNumber: r.PoNumber}
+	}
+	return out, total, nil
 }
 
 // ListAllLots returns every lot of every part, newest first.
@@ -237,12 +249,6 @@ func (s *Service) GetLot(ctx context.Context, id int) (lot LotRow, found bool, e
 		return LotRow{}, false, err
 	}
 	return LotRow(r), true, nil
-}
-
-// CountPartLots returns the number of lots of a part.
-func (s *Service) CountPartLots(ctx context.Context, partID int) (int, error) {
-	n, err := s.q.CountPartLots(ctx, partID)
-	return int(n), err
 }
 
 // UpdateLot saves a lot's description, vendor lot and notes (blank vendor lot / notes → NULL).
@@ -476,17 +482,21 @@ func (s *Service) ListLotUnits(ctx context.Context, lotID int) ([]UnitRow, error
 	return out, nil
 }
 
-// ListRecentPartUnits returns a part's n newest units.
-func (s *Service) ListRecentPartUnits(ctx context.Context, partID, n int) ([]UnitRow, error) {
+// ListRecentPartUnits returns a part's n newest units and its total unit count.
+func (s *Service) ListRecentPartUnits(ctx context.Context, partID, n int) ([]UnitRow, int, error) {
 	rows, err := s.q.ListRecentPartUnits(ctx, dbq.ListRecentPartUnitsParams{PartID: partID, N: n})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	total := 0
 	out := make([]UnitRow, len(rows))
 	for i, r := range rows {
-		out[i] = UnitRow(r)
+		total = r.TotalCount
+		out[i] = UnitRow{ID: r.ID, SerialNumber: r.SerialNumber, PartID: r.PartID, PartNumber: r.PartNumber,
+			PartDescription: r.PartDescription, LotID: r.LotID, LotNumber: r.LotNumber, BuildID: r.BuildID,
+			IsActive: r.IsActive, CreatedAt: r.CreatedAt, Source: r.Source}
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // ListAllUnits returns every unit of every part, newest first.
@@ -512,12 +522,6 @@ func (s *Service) GetUnit(ctx context.Context, id int) (unit UnitRow, found bool
 		return UnitRow{}, false, err
 	}
 	return UnitRow(r), true, nil
-}
-
-// CountPartUnits returns the number of units of a part.
-func (s *Service) CountPartUnits(ctx context.Context, partID int) (int, error) {
-	n, err := s.q.CountPartUnits(ctx, partID)
-	return int(n), err
 }
 
 // CountPartBuilds returns the total number of builds of a part.

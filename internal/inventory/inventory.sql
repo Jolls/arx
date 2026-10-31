@@ -93,8 +93,19 @@ LEFT JOIN po_line pol ON pol.id = l.po_line_id
 LEFT JOIN purchase_order po ON po.id = pol.po_id
 WHERE l.id = sqlc.arg(id);
 
--- name: CountPartLots :one
-SELECT COUNT(*) FROM lot WHERE part_id = sqlc.arg(part_id);
+-- name: ListRecentPartLots :many
+-- Part dashboard Lots card: the n newest lots plus the part's total lot count. The window runs
+-- before LIMIT, so total_count ignores n; a part with no lots returns no rows (total 0).
+SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
+       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active,
+       COALESCE(po.number, '') AS po_number, (COUNT(*) OVER ())::int AS total_count
+FROM lot l JOIN part p ON p.id = l.part_id
+LEFT JOIN po_line pol ON pol.id = l.po_line_id
+LEFT JOIN purchase_order po ON po.id = pol.po_id
+WHERE l.part_id = sqlc.arg(part_id)
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT sqlc.arg(n)::int;
 
 -- name: UpdateLot :exec
 UPDATE lot SET lot_description = sqlc.arg(lot_description), vendor_lot_number = sqlc.narg(vendor_lot_number)::text,
@@ -170,9 +181,10 @@ LEFT JOIN lot l ON l.id = u.lot_id
 WHERE u.part_id = sqlc.arg(part_id) ORDER BY u.created_at DESC, u.id DESC;
 
 -- name: ListRecentPartUnits :many
+-- Part dashboard Units card: the n newest units plus the part's total unit count; see ListRecentPartLots.
 SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
        COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
-       u.build_id, u.is_active, u.created_at, u.source
+       u.build_id, u.is_active, u.created_at, u.source, (COUNT(*) OVER ())::int AS total_count
 FROM unit u
 JOIN part p ON p.id = u.part_id
 LEFT JOIN lot l ON l.id = u.lot_id
@@ -195,9 +207,6 @@ FROM unit u
 JOIN part p ON p.id = u.part_id
 LEFT JOIN lot l ON l.id = u.lot_id
 WHERE u.id = sqlc.arg(id);
-
--- name: CountPartUnits :one
-SELECT COUNT(*) FROM unit WHERE part_id = sqlc.arg(part_id);
 
 -- name: CountPartBuilds :one
 SELECT COUNT(*) FROM build WHERE part_id = sqlc.arg(part_id);
