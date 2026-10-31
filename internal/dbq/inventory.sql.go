@@ -92,6 +92,17 @@ func (q *Queries) CountPartBuild(ctx context.Context, arg CountPartBuildParams) 
 	return count, err
 }
 
+const countPartBuilds = `-- name: CountPartBuilds :one
+SELECT COUNT(*) FROM build WHERE part_id = $1
+`
+
+func (q *Queries) CountPartBuilds(ctx context.Context, partID int) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPartBuilds, partID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPartLot = `-- name: CountPartLot :one
 SELECT COUNT(*) FROM lot WHERE id = $1 AND part_id = $2
 `
@@ -330,8 +341,11 @@ func (q *Queries) GetBuildDetail(ctx context.Context, id int) (GetBuildDetailRow
 const getLot = `-- name: GetLot :one
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
        COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
+       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active,
+       COALESCE(po.number, '') AS po_number
 FROM lot l JOIN part p ON p.id = l.part_id
+LEFT JOIN po_line pol ON pol.id = l.po_line_id
+LEFT JOIN purchase_order po ON po.id = pol.po_id
 WHERE l.id = $1
 `
 
@@ -346,6 +360,7 @@ type GetLotRow struct {
 	Notes           string
 	CreatedAt       time.Time
 	IsActive        bool
+	PoNumber        string
 }
 
 func (q *Queries) GetLot(ctx context.Context, id int) (GetLotRow, error) {
@@ -362,6 +377,7 @@ func (q *Queries) GetLot(ctx context.Context, id int) (GetLotRow, error) {
 		&i.Notes,
 		&i.CreatedAt,
 		&i.IsActive,
+		&i.PoNumber,
 	)
 	return i, err
 }
@@ -906,11 +922,73 @@ func (q *Queries) ListLotIDsWithSources(ctx context.Context, ids string) ([]int,
 	return items, nil
 }
 
+const listLotUnits = `-- name: ListLotUnits :many
+SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
+       COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
+       u.build_id, u.is_active, u.created_at, u.source
+FROM unit u
+JOIN part p ON p.id = u.part_id
+LEFT JOIN lot l ON l.id = u.lot_id
+WHERE u.lot_id = $1 ORDER BY u.created_at DESC, u.id DESC
+`
+
+type ListLotUnitsRow struct {
+	ID              int
+	SerialNumber    string
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	LotID           *int
+	LotNumber       string
+	BuildID         *int
+	IsActive        bool
+	CreatedAt       time.Time
+	Source          string
+}
+
+func (q *Queries) ListLotUnits(ctx context.Context, lotID *int) ([]ListLotUnitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLotUnits, lotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLotUnitsRow
+	for rows.Next() {
+		var i ListLotUnitsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SerialNumber,
+			&i.PartID,
+			&i.PartNumber,
+			&i.PartDescription,
+			&i.LotID,
+			&i.LotNumber,
+			&i.BuildID,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.Source,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLots = `-- name: ListLots :many
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
        COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
+       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active,
+       COALESCE(po.number, '') AS po_number
 FROM lot l JOIN part p ON p.id = l.part_id
+LEFT JOIN po_line pol ON pol.id = l.po_line_id
+LEFT JOIN purchase_order po ON po.id = pol.po_id
 WHERE ($1::int IS NULL OR l.part_id = $1::int)
 ORDER BY l.created_at DESC, l.id DESC
 LIMIT $2::int
@@ -932,6 +1010,7 @@ type ListLotsRow struct {
 	Notes           string
 	CreatedAt       time.Time
 	IsActive        bool
+	PoNumber        string
 }
 
 // Newest first. A NULL part_id lists every part's lots; a NULL n means no limit.
@@ -955,6 +1034,7 @@ func (q *Queries) ListLots(ctx context.Context, arg ListLotsParams) ([]ListLotsR
 			&i.Notes,
 			&i.CreatedAt,
 			&i.IsActive,
+			&i.PoNumber,
 		); err != nil {
 			return nil, err
 		}
@@ -1145,6 +1225,62 @@ func (q *Queries) ListPartUnits(ctx context.Context, partID int) ([]ListPartUnit
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.Source,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentBuilds = `-- name: ListRecentBuilds :many
+SELECT b.id, b.part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       b.qty, b.build_date, b.output_lot_id, COALESCE(l.lot_number, '') AS lot_number, COALESCE(b.note, '') AS note
+FROM build b
+JOIN part p ON p.id = b.part_id
+LEFT JOIN lot l ON l.id = b.output_lot_id
+ORDER BY b.build_date DESC, b.id DESC
+LIMIT $1::int
+`
+
+type ListRecentBuildsRow struct {
+	ID              int
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	Qty             decimal.Decimal
+	BuildDate       time.Time
+	OutputLotID     *int
+	LotNumber       string
+	Note            string
+}
+
+// Dashboard Recent Builds card (#414): the n newest, same shape and ordering as ListAllBuilds.
+func (q *Queries) ListRecentBuilds(ctx context.Context, rowLimit int) ([]ListRecentBuildsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentBuilds, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentBuildsRow
+	for rows.Next() {
+		var i ListRecentBuildsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PartID,
+			&i.PartNumber,
+			&i.PartDescription,
+			&i.Qty,
+			&i.BuildDate,
+			&i.OutputLotID,
+			&i.LotNumber,
+			&i.Note,
 		); err != nil {
 			return nil, err
 		}

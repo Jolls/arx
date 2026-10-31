@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.90] - 2026-10-30
+### Added
+- Export CSV button on the Lots, Units and Builds lists; exports every row matching the current column filters ([#418](https://github.com/Jolls/arx/issues/418))
+- Part Summary Traceability card with lot/unit/build counts that link to the filtered lists ([#417](https://github.com/Jolls/arx/issues/417))
+- Recent Lots and Recent Builds cards on the Reports dashboard ([#414](https://github.com/Jolls/arx/issues/414))
+- Cross-links: test records link to their unit; PO receipts link to the lot they created; lot pages show their purchase order, the units in the lot and a link to the part's transactions; a record's lot card shows its PO ([#415](https://github.com/Jolls/arx/issues/415))
+
 ## [0.8.89] - 2026-10-30
 ### Changed
 - Renamed legacy "sub-tab" identifiers to "detail tab" (`.detail-tab` CSS, `ActiveDetailTab`, `*_detail_tabs` partials); no visible change ([#410](https://github.com/Jolls/arx/issues/410))

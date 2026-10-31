@@ -311,6 +311,7 @@
                         <th style="width:120px;">Date</th>
                         <th>Part Number</th>
                         <th class="text-end" style="width:100px;">Qty</th>
+                        <th>Lot</th>
                         <th style="width:160px;">By</th>
                     </tr>
                 </thead>
@@ -320,6 +321,7 @@
                         <td>{{.Date}}</td>
                         <td>{{if .PartID}}<a href="/part/{{derefInt .PartID}}/transactions" class="part-number-link" data-popout-url="/popout/part/{{derefInt .PartID}}/where-used">{{.PartNumber}}</a>{{else}}{{.PartNumber}}{{end}}</td>
                         <td class="text-end">{{printf "%.2f" .Qty}}</td>
+                        <td>{{if and .LotID .PartID}}<a href="/part/{{derefInt .PartID}}/lots/{{derefInt .LotID}}">{{.LotNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                         <td>{{.Username}}</td>
                     </tr>
                     {{end}}

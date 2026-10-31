@@ -31,7 +31,7 @@
   <div>
     <h4>
       {{if .Record.PartNumberID}}<a href="/part/{{.Record.PartNumberID}}">{{.Record.SerialNumberPN}}</a>{{else}}{{.Record.SerialNumberPN}}{{end}}
-      &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
+      &mdash; SN: {{if and .Record.UnitID .Record.PartNumberID}}<a href="/part/{{.Record.PartNumberID}}/units/{{.Record.UnitID}}" class="font-mono">{{.Record.SerialNumber}}</a>{{else}}<span class="font-mono">{{.Record.SerialNumber}}</span>{{end}}
       {{if .Record.IsApproved}}<span class="badge bg-success ms-2"><i class="bi bi-patch-check-fill"></i> Approved</span>
       {{else if .Record.IsLocked}}<span class="badge bg-secondary ms-2"><i class="bi bi-check2-circle"></i> Complete</span>
       {{else}}<span class="badge bg-info text-dark ms-2">WIP</span>{{end}}
@@ -149,6 +149,9 @@
       </div>
       {{if .Trace.LinkedLot.VendorLot}}
       <div class="small text-muted mb-1">Vendor lot {{.Trace.LinkedLot.VendorLot}}</div>
+      {{end}}
+      {{if .Trace.LinkedLot.PoNumber}}
+      <div class="small text-muted mb-1">PO <a href="/po/{{.Trace.LinkedLot.PoNumber}}" data-popout-url="/popout/po/{{.Trace.LinkedLot.PoNumber}}">{{.Trace.LinkedLot.PoNumber}}</a></div>
       {{end}}
       {{if .Trace.LinkedLot.Notes}}
       <p class="small mb-0" style="white-space:pre-wrap; word-break:break-word; max-height:9rem; overflow-y:auto;">{{.Trace.LinkedLot.Notes}}</p>

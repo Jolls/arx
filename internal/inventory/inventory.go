@@ -191,6 +191,7 @@ type LotRow struct {
 	Notes           string
 	CreatedAt       time.Time
 	IsActive        bool
+	PoNumber        string // "" for lots not received against a PO line
 }
 
 func (s *Service) listLots(ctx context.Context, partID, n *int) ([]LotRow, error) {
@@ -218,6 +219,11 @@ func (s *Service) ListRecentPartLots(ctx context.Context, partID, n int) ([]LotR
 // ListAllLots returns every lot of every part, newest first.
 func (s *Service) ListAllLots(ctx context.Context) ([]LotRow, error) {
 	return s.listLots(ctx, nil, nil)
+}
+
+// ListRecentLots returns the n newest lots of every part.
+func (s *Service) ListRecentLots(ctx context.Context, n int) ([]LotRow, error) {
+	return s.listLots(ctx, nil, &n)
 }
 
 // GetLot loads one lot; found is false (nil error) when it does not exist.
@@ -456,6 +462,19 @@ func (s *Service) ListPartUnits(ctx context.Context, partID int) ([]UnitRow, err
 	return out, nil
 }
 
+// ListLotUnits returns the units that live in a lot, newest first.
+func (s *Service) ListLotUnits(ctx context.Context, lotID int) ([]UnitRow, error) {
+	rows, err := s.q.ListLotUnits(ctx, &lotID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UnitRow, len(rows))
+	for i, r := range rows {
+		out[i] = UnitRow(r)
+	}
+	return out, nil
+}
+
 // ListRecentPartUnits returns a part's n newest units.
 func (s *Service) ListRecentPartUnits(ctx context.Context, partID, n int) ([]UnitRow, error) {
 	rows, err := s.q.ListRecentPartUnits(ctx, dbq.ListRecentPartUnitsParams{PartID: partID, N: n})
@@ -497,6 +516,12 @@ func (s *Service) GetUnit(ctx context.Context, id int) (unit UnitRow, found bool
 // CountPartUnits returns the number of units of a part.
 func (s *Service) CountPartUnits(ctx context.Context, partID int) (int, error) {
 	n, err := s.q.CountPartUnits(ctx, partID)
+	return int(n), err
+}
+
+// CountPartBuilds returns the total number of builds of a part.
+func (s *Service) CountPartBuilds(ctx context.Context, partID int) (int, error) {
+	n, err := s.q.CountPartBuilds(ctx, partID)
 	return int(n), err
 }
 
@@ -627,6 +652,19 @@ func (b BuildListRow) OutputLotIDVal() int {
 // ListAllBuilds returns every build of every part, newest first.
 func (s *Service) ListAllBuilds(ctx context.Context) ([]BuildListRow, error) {
 	rows, err := s.q.ListAllBuilds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BuildListRow, len(rows))
+	for i, r := range rows {
+		out[i] = BuildListRow{r.ID, r.PartID, r.PartNumber, r.PartDescription, r.Qty, r.BuildDate, r.OutputLotID, r.LotNumber, r.Note}
+	}
+	return out, nil
+}
+
+// ListRecentBuilds returns the n newest builds of every part.
+func (s *Service) ListRecentBuilds(ctx context.Context, n int) ([]BuildListRow, error) {
+	rows, err := s.q.ListRecentBuilds(ctx, n)
 	if err != nil {
 		return nil, err
 	}

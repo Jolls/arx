@@ -79,6 +79,10 @@ func (h *Handler) lotCountForPart(ctx context.Context, partID int) (int, error) 
 	return h.inventory().CountPartLots(ctx, partID)
 }
 
+func (h *Handler) buildCountForPart(ctx context.Context, partID int) (int, error) {
+	return h.inventory().CountPartBuilds(ctx, partID)
+}
+
 // fetchLotRow loads a single lot for the genealogy trace header. ok=false (nil
 // error) when the lot does not exist.
 func (h *Handler) fetchLotRow(ctx context.Context, lotID int) (LotRow, bool, error) {
@@ -182,8 +186,13 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error retrieving record types: "+err.Error())
 		return
 	}
+	units, err := h.inventory().ListLotUnits(r.Context(), lotID)
+	if err != nil {
+		h.renderError(w, r, "Error retrieving lot units: "+err.Error())
+		return
+	}
 	h.render(w, r, "parts/part_lot_trace.html", map[string]any{
-		"Part": p, "Lot": lot, "Ancestors": ancestors, "Descendants": descendants,
+		"Part": p, "Lot": lot, "Ancestors": ancestors, "Descendants": descendants, "Units": units,
 		"TypeOptions": typeOptions,
 		"ActiveTab":   "parts", "ActiveDetailTab": "lots",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
