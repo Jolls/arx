@@ -1220,121 +1220,39 @@ func TestIntegration_BuildCostUIWiring(t *testing.T) {
 // a production-like wall-clock estimate.
 const simulatedRTT = 80 * time.Millisecond
 
-// TestIntegration_RouteRoundTrips profiles representative GET pages (main-tab landing
-// pages, their row-feed endpoints, and record detail pages/tabs) against ArxDev. It logs
-// SQL round-trip count, local timing and a simulated Azure latency (count x 80 ms) per
-// route (#613, #361), and fails when a page exceeds its round-trip budget. Budgets are
-// the measured count: raising one is a deliberate decision, lowering one locks in a win.
-// "Round trips" means the critical path on a page that fans out (#426); the total queries
-// are logged alongside.
-// Calls handlers directly (bypassing buildRouter/RequireAuth/CSRF), so it seeds the
-// sqlStats counter into the request context itself rather than relying on profileRequest.
+// TestIntegration_RouteRoundTrips profiles every GET route in routeBudgets (route_budget_test.go)
+// against ArxDev. It logs SQL round-trip count, local timing and a simulated Azure latency
+// (count x 80 ms) per route (#613, #361), and fails when a page exceeds its round-trip budget.
+// Budgets are the measured count: raising one is a deliberate decision, lowering one locks in
+// a win. "Round trips" means the critical path on a page that fans out (#426); the total
+// queries are logged alongside, as is "hidden": connection opens, statement preparations and
+// idle pings, which cost real round trips but are not queries, so they are logged, not
+// budgeted (#430). TestRouteBudgetsCoverAllGETRoutes fails the build when a GET route has
+// neither a row nor a documented exemption.
+// Calls handlers directly with the seeded admin on the context (bypassing RequireAuth and CSRF),
+// through a one-pattern mux so path values are set exactly as buildRouter sets them.
 func TestIntegration_RouteRoundTrips(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 
-	// Seed IDs from SQL/seed_test_data.sql: 3005 Widget Assembly (has BOM/orders),
-	// 3002 M3x8 SHCS (has price history), company 1001 Acme Fasteners, PO 5002,
-	// form 6001 (has test records spanning multiple months), contact 2001, lot 8302
-	// (part 3012) and unit 8503 (part 3005), both with genealogy, record 7001.
-	const seedPartID, seedPriceHistoryPartID, seedSupplierID, seedPOID, seedFormID = 3005, 3002, 1001, 5002, 6001
-	const seedContactID, seedLotPartID, seedLotID, seedUnitID, seedRecordID = 2001, 3012, 8302, 8503, 7001
-
-	cases := []struct {
-		name     string
-		fn       http.HandlerFunc
-		target   string
-		id       int               // 0 = no {id} route param
-		extra    map[string]string // additional path values (lotID, unitID, ...)
-		wantBody string            // substring rec.Body must contain for a correct render
-		budget   int               // max SQL round trips
-	}{
-		{"parts list", h.PartsList, "/parts", 0, nil, `id="parts-table"`, 0},
-		// "part detail" passes the literal chi pattern "/part/{id}" as the request URL,
-		// so r.URL.Path never equals "/part/3005" and PartDetail's BOM-redirect guard
-		// is intentionally skipped. This profiles the full non-BOM render path — a real
-		// request for 3005 (which has a BOM) would redirect after 2 queries instead.
-		{"part detail", h.PartDetail, "/part/{id}", seedPartID, nil, "ASM-1001", 2},
-		{"part BOM", h.PartBOM, "/part/{id}/bom", seedPartID, nil, "ASM-1001", 2},
-		{"part build-cost", h.PartBuildCost, "/part/{id}/build-cost?qty=1", seedPartID, nil, "ASM-1001", 4},
-		{"part price-history", h.PartPriceHistory, "/part/{id}/price-history", seedPriceHistoryPartID, nil, "BUY-1001", 2},
-		{"part orders", h.PartOrders, "/part/{id}/orders", seedPartID, nil, "ASM-1001", 2},
-		{"suppliers list", h.SuppliersList, "/suppliers", 0, nil, `data-rows-url="/api/suppliers/rows"`, 0},
-		{"supplier detail", h.SupplierDetail, "/supplier/{id}", seedSupplierID, nil, "Acme Fasteners", 4},
-		{"PO list", h.POList, "/pos", 0, nil, `data-rows-url="/api/pos/rows"`, 0},
-		{"PO detail", h.PODetail, "/po/{id}", seedPOID, nil, "PO #5002", 2},
-		{"contacts list", h.ContactsList, "/contacts", 0, nil, `data-rows-url="/api/contacts/rows"`, 0},
-		{"records/forms list", h.FormsList, "/records", 0, nil, `data-rows-url="/api/forms/rows"`, 0},
-		{"records yield summary", h.RecordsYieldSummary, "/forms/{id}/yield", seedFormID, nil, "FORM-1001", 2},
-		{"reports yield picker", h.ReportsYieldPicker, "/reports/yield", 0, nil, "FORM-1001", 1},
-
-		// Row feeds: the list pages above render an empty shell and the table fills from
-		// these fetches, so each is a second request on every tab switch.
-		{"parts rows", h.PartsRows, "/api/parts/rows", 0, nil, "ASM-1001", 1},
-		{"suppliers rows", h.SuppliersRows, "/api/suppliers/rows", 0, nil, "Acme Fasteners", 1},
-		{"PO rows", h.PORows, "/api/pos/rows", 0, nil, "5002", 1},
-		{"contacts rows", h.ContactsRows, "/api/contacts/rows", 0, nil, "John Doe", 1},
-		{"forms rows", h.FormsRows, "/api/forms/rows", 0, nil, "FORM-1001", 1},
-		{"lots rows", h.AllLotsRows, "/api/lots/rows", 0, nil, "8301", 1},
-		{"units rows", h.AllUnitsRows, "/api/units/rows", 0, nil, "SN-3005-001", 1},
-		{"builds rows", h.AllBuildsRows, "/api/builds/rows", 0, nil, "8201", 1},
-		{"form records rows", h.RecordsRows, "/api/forms/{id}/records/rows", seedFormID, nil, "7001", 1},
-
-		// Other landing / section-tab pages.
-		{"lots list", h.AllLots, "/lots", 0, nil, "", 0},
-		{"units list", h.AllUnits, "/units", 0, nil, "", 0},
-		{"builds list", h.AllBuilds, "/builds", 0, nil, "", 0},
-		{"RFQ list", h.RFQList, "/rfqs", 0, nil, "", 0},
-		{"reports dashboard", h.ReportsDashboard, "/reports", 0, nil, "", 2},
-		{"reports spend", h.ReportsSpend, "/reports/spend", 0, nil, "", 2},
-		{"reports on-time", h.ReportsOnTime, "/reports/on-time", 0, nil, "", 1},
-		{"reports cycle-time", h.ReportsCycleTime, "/reports/cycle-time", 0, nil, "", 1},
-		{"reports data-quality", h.ReportsDataQuality, "/reports/data-quality", 0, nil, "", 3},
-		{"reports failure-modes picker", h.ReportsFailureModesPicker, "/reports/failure-modes", 0, nil, "FORM-1001", 1},
-
-		// Detail pages and detail tabs.
-		{"part details", h.PartDetails, "/part/{id}/details", seedPartID, nil, "ASM-1001", 2},
-		{"part where-used", h.PartWhereUsed, "/part/{id}/where-used", seedPriceHistoryPartID, nil, "BUY-1001", 2},
-		{"part attachments", h.PartAttachments, "/part/{id}/attachments", seedPartID, nil, "ASM-1001", 5},
-		{"part records", h.PartRecords, "/part/{id}/records", seedPartID, nil, "ASM-1001", 2},
-		{"part transactions", h.PartTransactions, "/part/{id}/transactions", seedPartID, nil, "ASM-1001", 2},
-		{"part build", h.PartBuild, "/part/{id}/build", seedPartID, nil, "ASM-1001", 4},
-		{"part lots", h.PartLots, "/part/{id}/lots", seedLotPartID, nil, "", 3},
-		{"part lot trace", h.PartLotTrace, "/part/{id}/lots/{lotID}", seedLotPartID, map[string]string{"lotID": strconv.Itoa(seedLotID)}, "", 4},
-		{"part units", h.PartUnits, "/part/{id}/units", seedPartID, nil, "", 2},
-		{"part unit trace", h.PartUnitTrace, "/part/{id}/units/{unitID}", seedPartID, map[string]string{"unitID": strconv.Itoa(seedUnitID)}, "", 4},
-		{"part pricing", h.PartPricing, "/part/{id}/pricing", seedPriceHistoryPartID, nil, "", 3},
-		{"part mfg-parts", h.PartMfgParts, "/part/{id}/mfg-parts", seedPriceHistoryPartID, nil, "", 4},
-		{"part sourcing", h.PartSourcing, "/part/{id}/suppliers", seedPriceHistoryPartID, nil, "", 5},
-		{"supplier parts", h.SupplierParts, "/supplier/{id}/parts", seedSupplierID, nil, "Acme Fasteners", 3},
-		{"supplier POs", h.SupplierPOs, "/supplier/{id}/pos", seedSupplierID, nil, "Acme Fasteners", 2},
-		{"supplier attachments", h.SupplierAttachments, "/supplier/{id}/attachments", seedSupplierID, nil, "Acme Fasteners", 2},
-		{"contact detail", h.ContactDetail, "/contact/{id}", seedContactID, nil, "John Doe", 3},
-		{"form records list", h.RecordsList, "/forms/{id}/records", seedFormID, nil, "FORM-1001", 2},
-		{"form failure-modes", h.RecordsFailureModes, "/forms/{id}/failure-modes", seedFormID, nil, "FORM-1001", 2},
-		{"form def", h.FormDef, "/forms/{id}/def", seedFormID, nil, "FORM-1001", 3},
-		{"record detail", h.RecordDetail, "/records/{id}", seedRecordID, nil, "", 2},
+	admin, err := h.userByID(context.Background(), seedAdminUserID)
+	if err != nil {
+		t.Fatalf("load seeded admin: %v", err)
 	}
 
-	for _, c := range cases {
-		st := &sqlStats{}
-		req := httptest.NewRequest(http.MethodGet, c.target, nil)
-		if c.id != 0 {
-			req = withID(req, c.id)
-		}
-		for k, v := range c.extra {
-			req.SetPathValue(k, v)
-		}
-		req = req.WithContext(context.WithValue(req.Context(), ctxSQLStatsKey, st))
-		rec := httptest.NewRecorder()
+	for _, c := range routeBudgets(h) {
 		start := time.Now()
-		c.fn(rec, req)
-		t.Logf("[PROFILE] %-28s %-36s %3d round trips (%d queries, budget %3d)  local %8s  est. Azure %8s  (status %d)",
-			c.name, c.target, st.count, st.queries, c.budget, time.Since(start).Round(time.Millisecond),
+		rec, st := getThroughMux(c.pattern, c.fn, c.target, admin)
+		t.Logf("[PROFILE] %-28s %-44s %3d round trips (%d queries, budget %3d; hidden: %s)  local %8s  est. Azure %8s  (status %d)",
+			c.name, c.target, st.count, st.queries, c.budget, st.hiddenSummary(), time.Since(start).Round(time.Millisecond),
 			(time.Duration(st.count) * simulatedRTT).Round(time.Millisecond), rec.Code)
 
-		if rec.Code != http.StatusOK {
-			t.Errorf("%s: got status %d, want 200. body: %s", c.name, rec.Code, rec.Body.String())
+		wantStatus := c.status
+		if wantStatus == 0 {
+			wantStatus = http.StatusOK
+		}
+		if rec.Code != wantStatus {
+			t.Errorf("%s: got status %d, want %d. body: %s", c.name, rec.Code, wantStatus, rec.Body.String())
 		}
 		if !strings.Contains(rec.Body.String(), c.wantBody) {
 			t.Errorf("%s: body missing expected marker %q", c.name, c.wantBody)

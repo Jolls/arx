@@ -194,12 +194,41 @@ const userCacheTTL = 60 * time.Second
 
 // sqlStats accumulates per-request SQL stats. count is round trips on the critical path
 // (what the user waits for), queries is every query issued, total is cumulative DB time
-// across branches (can exceed wall-clock). A goroutine owns its sqlStats; parallel gives
-// each branch a child and folds it in after Wait, so no lock.
+// across branches (can exceed wall-clock). opens, prepares and pings are connection opens,
+// statement preparations and idle pings (#430), summed across branches and not part of
+// count. A goroutine owns its sqlStats; parallel gives each branch a child and folds it in
+// after Wait, so no lock.
 type sqlStats struct {
-	count   int
-	queries int
-	total   time.Duration
+	count    int
+	queries  int
+	total    time.Duration
+	opens    int
+	prepares int
+	pings    int
+}
+
+// recordHiddenEvent attributes a pool event (connection open, statement prepare, idle ping)
+// to the request's sqlStats, if one is in ctx. Registered with arxdb.SetObserver.
+func recordHiddenEvent(ctx context.Context, e arxdb.Event) {
+	st, ok := ctx.Value(ctxSQLStatsKey).(*sqlStats)
+	if !ok {
+		return
+	}
+	switch e {
+	case arxdb.EventConnect:
+		st.opens++
+	case arxdb.EventPrepare:
+		st.prepares++
+	case arxdb.EventPing:
+		st.pings++
+	}
+}
+
+func init() { arxdb.SetObserver(recordHiddenEvent) }
+
+// hiddenSummary formats the pool events for the [PROFILE] log line.
+func (s *sqlStats) hiddenSummary() string {
+	return fmt.Sprintf("%d opens, %d prepares, %d pings", s.opens, s.prepares, s.pings)
 }
 
 // recordRoundTrip attributes one DB round trip to the request's sqlStats (if the
@@ -273,6 +302,9 @@ func parallel(ctx context.Context, branches ...func(context.Context) error) erro
 			longest = max(longest, c.count)
 			parent.queries += c.queries
 			parent.total += c.total
+			parent.opens += c.opens
+			parent.prepares += c.prepares
+			parent.pings += c.pings
 		}
 		parent.count += longest
 	}

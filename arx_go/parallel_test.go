@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	arxdb "arx/internal/db"
 )
 
 // statsQueries simulates n queries, each 1 ms, against ctx's sqlStats.
@@ -166,4 +168,54 @@ func TestParallel_RepanicsOnCaller(t *testing.T) {
 		},
 	)
 	t.Error("parallel returned instead of panicking")
+}
+
+func TestRecordHiddenEvent_CountsByKind(t *testing.T) {
+	st := &sqlStats{}
+	ctx := context.WithValue(context.Background(), ctxSQLStatsKey, st)
+	recordHiddenEvent(ctx, arxdb.EventConnect)
+	for range 2 {
+		recordHiddenEvent(ctx, arxdb.EventPrepare)
+	}
+	for range 3 {
+		recordHiddenEvent(ctx, arxdb.EventPing)
+	}
+	if st.opens != 1 || st.prepares != 2 || st.pings != 3 || st.count != 0 || st.queries != 0 {
+		t.Errorf("opens=%d prepares=%d pings=%d count=%d queries=%d, want 1, 2, 3, 0, 0",
+			st.opens, st.prepares, st.pings, st.count, st.queries)
+	}
+	recordHiddenEvent(context.Background(), arxdb.EventPing) // no stats in ctx: must not panic
+}
+
+func TestParallel_FoldsHiddenEvents(t *testing.T) {
+	st := &sqlStats{}
+	ctx := context.WithValue(context.Background(), ctxSQLStatsKey, st)
+	err := parallel(ctx,
+		func(ctx context.Context) error {
+			statsQueries(ctx, 1)
+			recordHiddenEvent(ctx, arxdb.EventConnect)
+			return nil
+		},
+		func(ctx context.Context) error {
+			statsQueries(ctx, 3)
+			recordHiddenEvent(ctx, arxdb.EventPrepare)
+			recordHiddenEvent(ctx, arxdb.EventPrepare)
+			recordHiddenEvent(ctx, arxdb.EventPing)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.count != 3 || st.queries != 4 || st.opens != 1 || st.prepares != 2 || st.pings != 1 {
+		t.Errorf("count=%d queries=%d opens=%d prepares=%d pings=%d, want 3, 4, 1, 2, 1",
+			st.count, st.queries, st.opens, st.prepares, st.pings)
+	}
+}
+
+func TestSQLStats_HiddenSummary(t *testing.T) {
+	st := sqlStats{opens: 1, prepares: 2, pings: 3}
+	if got, want := st.hiddenSummary(), "1 opens, 2 prepares, 3 pings"; got != want {
+		t.Errorf("hiddenSummary() = %q, want %q", got, want)
+	}
 }

@@ -52,13 +52,49 @@ func (h *Handler) partPageBase(w http.ResponseWriter, r *http.Request, id, detai
 	if !ok {
 		return models.Part{}, "", "", false
 	}
+	backURL, backLabel, ok := h.partTabGate(w, r, p, detailTab)
+	if !ok {
+		return models.Part{}, "", "", false
+	}
+	return p, backURL, backLabel, true
+}
+
+// partTabGate sets the nav context, applies the tabVisible gate and resolves the back link.
+func (h *Handler) partTabGate(w http.ResponseWriter, r *http.Request, p models.Part, detailTab string) (backURL, backLabel string, ok bool) {
 	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.ID), p.PartNumber)
 	if !tabVisible(p, detailTab) {
 		h.renderError(w, r, "The "+detailTab+" section does not apply to "+p.Category+" parts.")
+		return "", "", false
+	}
+	backURL, backLabel = navBack(h.session(r))
+	return backURL, backLabel, true
+}
+
+// partTabPage is partPageBase for GET display tabs: it runs fetchPartBasic concurrently with the
+// tab's own queries (#431), then applies the same not-found / tab-gate rendering. fetch must use
+// the ctx it is given, write only variables the caller's closure owns, and return errors already
+// prefixed for display (pageErr). If the part is missing or the tab does not apply, fetch's
+// results and error are discarded; if the gate passes and fetch failed, its error is rendered.
+func (h *Handler) partTabPage(w http.ResponseWriter, r *http.Request, id, detailTab string,
+	fetch func(ctx context.Context) error) (models.Part, string, string, bool) {
+	var p models.Part
+	var pErr, tabErr error
+	_ = parallel(r.Context(),
+		func(ctx context.Context) error { p, pErr = h.fetchPartBasic(ctx, id); return nil },
+		func(ctx context.Context) error { tabErr = fetch(ctx); return nil },
+	)
+	p, ok := h.finishPartLoad(w, r, p, pErr)
+	if !ok {
 		return models.Part{}, "", "", false
 	}
-	sess := h.session(r)
-	backURL, backLabel := navBack(sess)
+	backURL, backLabel, ok := h.partTabGate(w, r, p, detailTab)
+	if !ok {
+		return models.Part{}, "", "", false
+	}
+	if tabErr != nil {
+		h.renderError(w, r, tabErr.Error())
+		return models.Part{}, "", "", false
+	}
 	return p, backURL, backLabel, true
 }
 
@@ -99,6 +135,12 @@ func tabVisible(p models.Part, detailTab string) bool {
 // requireTab layers the write-side tab gate on top of it for POST handlers.
 func (h *Handler) partForMutation(w http.ResponseWriter, r *http.Request, id string) (models.Part, bool) {
 	p, err := h.fetchPartBasic(r.Context(), id)
+	return h.finishPartLoad(w, r, p, err)
+}
+
+// finishPartLoad renders the not-found / load-error pages for a fetchPartBasic result and
+// resolves the part's category tabs.
+func (h *Handler) finishPartLoad(w http.ResponseWriter, r *http.Request, p models.Part, err error) (models.Part, bool) {
 	if err == sql.ErrNoRows {
 		h.renderError(w, r, "Part not found")
 		return models.Part{}, false
@@ -711,13 +753,13 @@ func (h *Handler) partPrimaryAttachment(ctx context.Context, p models.Part) *mod
 
 func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "bom")
+	var items []models.BOMItem
+	var bomTotal decimal.Decimal
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "bom", func(ctx context.Context) (err error) {
+		items, bomTotal, err = h.fetchBOMItems(ctx, id)
+		return pageErr("Error retrieving BOM", err)
+	})
 	if !ok {
-		return
-	}
-	items, bomTotal, err := h.fetchBOMItems(r.Context(), id)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
 		return
 	}
 	h.render(w, r, "parts/part_bom.html", map[string]any{
@@ -729,13 +771,16 @@ func (h *Handler) PartBOM(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PartWhereUsed(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "where-used")
+	var used []parts.WhereUsed
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "where-used", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		used, err = h.parts().ListWhereUsed(ctx, pid)
+		return pageErr("Error retrieving where-used", err)
+	})
 	if !ok {
-		return
-	}
-	used, err := h.parts().ListWhereUsed(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving where-used: "+err.Error())
 		return
 	}
 	var items []models.BOMItem
@@ -1340,7 +1385,20 @@ func (h *Handler) PartBuildCost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PartAttachments(w http.ResponseWriter, r *http.Request) {
-	h.renderPartAttachments(w, r, r.PathValue("id"), nil)
+	id := r.PathValue("id")
+	var rows []attachments.PartAttachment
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "attachments", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		rows, err = h.attachments().ListPartAttachments(ctx, pid)
+		return pageErr("Error retrieving attachments", err)
+	})
+	if !ok {
+		return
+	}
+	h.renderPartAttachmentsPage(w, r, id, p, backURL, backLabel, rows, nil)
 }
 
 // renderPartAttachments loads a part's attachments and renders the attachments
@@ -1356,6 +1414,13 @@ func (h *Handler) renderPartAttachments(w http.ResponseWriter, r *http.Request, 
 		h.renderError(w, r, "Error retrieving attachments: "+err.Error())
 		return
 	}
+	h.renderPartAttachmentsPage(w, r, id, p, backURL, backLabel, rows, extra)
+}
+
+// renderPartAttachmentsPage renders the attachments page for an already-loaded part and its
+// attachment rows; shared by the GET tab and the POST re-render path.
+func (h *Handler) renderPartAttachmentsPage(w http.ResponseWriter, r *http.Request, id string, p models.Part,
+	backURL, backLabel string, rows []attachments.PartAttachment, extra map[string]any) {
 	var atts []models.Attachment
 	nextOrderID := 1
 	for _, a := range rows {
@@ -1727,13 +1792,16 @@ func (h *Handler) APIPartLocalAttachments(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "orders")
+	var orders []parts.PartOrder
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "orders", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		orders, err = h.parts().ListPartOrders(ctx, pid)
+		return pageErr("Error retrieving orders", err)
+	})
 	if !ok {
-		return
-	}
-	orders, err := h.parts().ListPartOrders(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving orders: "+err.Error())
 		return
 	}
 	var items []models.PurchaseOrderLine
@@ -1753,13 +1821,16 @@ func (h *Handler) PartOrders(w http.ResponseWriter, r *http.Request) {
 // every form where subject part_id = this part (#875).
 func (h *Handler) PartRecords(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "records")
+	var typeOptions []string
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "records", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		typeOptions, err = h.scopedRecordTypeOptions(ctx, records.ScopePart, pid)
+		return pageErr("Error retrieving record types", err)
+	})
 	if !ok {
-		return
-	}
-	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), records.ScopePart, p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving record types: "+err.Error())
 		return
 	}
 	h.render(w, r, "parts/part_records.html", map[string]any{
@@ -1892,13 +1963,20 @@ type SupplierPriceGroup struct {
 
 func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "pricing")
+	var prices []parts.PartPrice
+	var defSup *int
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "pricing", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		if prices, err = h.parts().ListPartPrices(ctx, pid); err != nil {
+			return pageErr("Error retrieving pricing", err)
+		}
+		defSup, _ = h.parts().GetDefaultSupplier(ctx, pid)
+		return nil
+	})
 	if !ok {
-		return
-	}
-	prices, err := h.parts().ListPartPrices(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving pricing: "+err.Error())
 		return
 	}
 	seen := map[int]int{}
@@ -1912,7 +1990,6 @@ func (h *Handler) PartPricing(w http.ResponseWriter, r *http.Request) {
 			groups = append(groups, SupplierPriceGroup{SupplierID: pp.SupplierID, SupplierName: pp.SupplierName, Rows: []models.Price{row}})
 		}
 	}
-	defSup, _ := h.parts().GetDefaultSupplier(r.Context(), p.ID)
 	for i := range groups {
 		allInactive := true
 		for _, r := range groups[i].Rows {
