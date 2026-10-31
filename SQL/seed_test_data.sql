@@ -554,13 +554,16 @@ END $$;
     --   8504 (#799): manually back-filled serial of part 3005 — lot_id AND build_id both
     --         NULL, source = 'manual'. Proves a provenance-less unit is legal and that
     --         PartBuild's TestedCount completeness numerator ignores manual units.
+    --   8505 (#416): manual unit of lot-tracked part 3012 whose serial '8301' equals lot 8301's
+    --         id and lot_number — the ambiguous value the /find pick-list test searches for.
     -- serial_number is a string, UNIQUE per part_id (UQ_unit_serial). source (#799) defaults
-    -- to 'test' — every unit here except 8504 was minted from a test record.
+    -- to 'test' — every unit here except 8504 and 8505 was minted from a test record.
     INSERT INTO unit (id, part_id, lot_id, build_id, serial_number, created_at, is_active, source) VALUES
         (8501, 3013, 8306, 8203, 'SN-3013-001', '2026-05-30T00:00:00', TRUE, 'test'),
         (8502, 3007, 8301, NULL, 'SN-3007-A1',  '2026-05-15T00:00:00', TRUE, 'test'),
         (8503, 3005, NULL, 8201, 'SN-3005-001', '2026-05-25T00:00:00', TRUE, 'test'),
-        (8504, 3005, NULL, NULL, 'SN-3005-MANUAL-1', '2026-07-20T00:00:00', TRUE, 'manual');
+        (8504, 3005, NULL, NULL, 'SN-3005-MANUAL-1', '2026-07-20T00:00:00', TRUE, 'manual'),
+        (8505, 3012, NULL, NULL, '8301', '2026-07-21T00:00:00', TRUE, 'manual');
 
     -- 8404/8405 (#746): unit-endpoint genealogy edges — inserted here (not with the lot->lot
     -- edges above) because their FKs reference unit, which is created just above. They give

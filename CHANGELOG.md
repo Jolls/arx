@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.92] - 2026-10-31
+### Added
+- Find box in the header and `/find?q=` look up a lot, unit or build by id, lot number or serial: one match opens it, several list a pick list ([#416](https://github.com/Jolls/arx/issues/416))
+### Changed
+- The Source of a test-created unit shows as a grey `test record` badge on the part Units tab and unit trace page ([#423](https://github.com/Jolls/arx/issues/423))
+### Fixed
+- Saving a test record now links to an existing unit for its serial even when no lot or build is picked, and fills a unit's blank lot/build from the pick without overwriting existing ones; a manual unit filled this way becomes a `test` unit ([#422](https://github.com/Jolls/arx/issues/422))
+
 ## [0.8.91] - 2026-10-30
 ### Changed
 - Lots, units and builds now share one id sequence so a number identifies exactly one of them; migration `20261030221102_420_shared_id_sequence.sql` renumbers existing rows and their references and bumps `schema_version` to 13; the app login needs `GRANT USAGE ON SEQUENCE trace_id_seq` ([#420](https://github.com/Jolls/arx/issues/420))

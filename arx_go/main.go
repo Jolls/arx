@@ -271,6 +271,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/lots", withAuth, h.AllLots)
 	b.handle(http.MethodGet, "/units", withAuth, h.AllUnits)
 	b.handle(http.MethodGet, "/builds", withAuth, h.AllBuilds)
+	b.handle(http.MethodGet, "/find", withAuth, h.Find)
 	b.handle(http.MethodPost, "/parts", withAuth, h.PartsCreate)
 	b.handle(http.MethodGet, "/part/{id}", withAuth, h.PartDetail)
 	b.handle(http.MethodGet, "/part/{id}/summary", withAuth, h.PartDetail)

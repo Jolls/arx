@@ -219,11 +219,18 @@ UPDATE unit SET is_active = sqlc.arg(is_active), serial_number = sqlc.arg(serial
 WHERE id = sqlc.arg(id) AND part_id = sqlc.arg(part_id);
 
 -- name: UpsertTestUnit :one
--- The no-op DO UPDATE makes RETURNING yield the existing id; provenance is set only on insert.
+-- The DO UPDATE makes RETURNING yield the existing id. On an existing unit it fills a NULL lot/build from
+-- the supplied pick (COALESCE keeps existing provenance) and marks it 'test' (#422).
 INSERT INTO unit (part_id, serial_number, build_id, lot_id, source)
 VALUES (sqlc.arg(part_id), sqlc.arg(serial_number), sqlc.narg(build_id), sqlc.narg(lot_id), 'test')
-ON CONFLICT (part_id, serial_number) DO UPDATE SET serial_number = EXCLUDED.serial_number
+ON CONFLICT (part_id, serial_number) DO UPDATE SET
+    lot_id = COALESCE(unit.lot_id, EXCLUDED.lot_id),
+    build_id = COALESCE(unit.build_id, EXCLUDED.build_id),
+    source = 'test'
 RETURNING id;
+
+-- name: FindUnitIDBySerial :one
+SELECT id FROM unit WHERE part_id = sqlc.arg(part_id) AND serial_number = sqlc.arg(serial_number);
 
 -- name: GetUnitProvenance :one
 SELECT lot_id, build_id FROM unit WHERE id = sqlc.arg(id);
@@ -347,3 +354,28 @@ FROM unit u
 WHERE u.build_id = sqlc.arg(build_id)::int
 ORDER BY u.id
 LIMIT sqlc.arg(n)::int;
+
+-- name: FindTraceRecords :many
+-- Lookup (#416): lots, units and builds whose id, lot_number or serial_number exactly equals the
+-- query. id is NULL when the query isn't a usable int. The flags say which field matched.
+SELECT r.kind, r.id, r.part_id, r.part_number, r.part_description, r.output_lot_id, r.name, r.matched_id, r.matched_name
+FROM (
+    SELECT 'lot'::text AS kind, l.id, l.part_id, COALESCE(p.part_number, '')::text AS part_number,
+           COALESCE(p.description, '')::text AS part_description, NULL::int AS output_lot_id, l.lot_number::text AS name,
+           COALESCE(l.id = sqlc.narg(id)::int, FALSE)::bool AS matched_id,
+           (l.lot_number = sqlc.arg(q)::text)::bool AS matched_name
+    FROM lot l JOIN part p ON p.id = l.part_id
+    WHERE l.id = sqlc.narg(id)::int OR l.lot_number = sqlc.arg(q)::text
+    UNION ALL
+    SELECT 'unit'::text, u.id, u.part_id, COALESCE(p.part_number, '')::text, COALESCE(p.description, '')::text,
+           NULL::int, u.serial_number::text, COALESCE(u.id = sqlc.narg(id)::int, FALSE)::bool,
+           (u.serial_number = sqlc.arg(q)::text)::bool
+    FROM unit u JOIN part p ON p.id = u.part_id
+    WHERE u.id = sqlc.narg(id)::int OR u.serial_number = sqlc.arg(q)::text
+    UNION ALL
+    SELECT 'build'::text, b.id, b.part_id, COALESCE(p.part_number, '')::text, COALESCE(p.description, '')::text,
+           b.output_lot_id, ''::text, TRUE, FALSE
+    FROM build b JOIN part p ON p.id = b.part_id
+    WHERE b.id = sqlc.narg(id)::int
+) r
+ORDER BY CASE r.kind WHEN 'lot' THEN 1 WHEN 'unit' THEN 2 ELSE 3 END, r.id;

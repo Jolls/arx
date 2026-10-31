@@ -16,7 +16,10 @@
         <a href="/" class="app-header-home" title="Home"><img src="/static/shared/icons/arx-brand.svg" alt="" class="app-header-icon">Arx</a>{{if .TestMode}} &mdash; TEST MODE{{end}}
         <div class="header-actions">
             {{if .CompanyLogo}}<img src="{{.CompanyLogo}}" alt="" class="company-logo d-none d-sm-inline">{{end}}
-            {{if .CurrentUser}}<a href="/settings#preferences" class="header-muted d-none d-sm-inline" style="font-size:0.8em; margin-right:4px; text-decoration:none;" title="My Preferences">{{.CurrentUser.DisplayName}}</a>
+            {{if .CurrentUser}}<form method="get" action="/find" role="search" class="d-none d-sm-flex m-0">
+                <input type="search" name="q" class="form-control form-control-sm" style="width:10rem;" placeholder="Find lot / unit / build" aria-label="Find lot, unit or build" autocomplete="off">
+            </form>
+            <a href="/settings#preferences" class="header-muted d-none d-sm-inline" style="font-size:0.8em; margin-right:4px; text-decoration:none;" title="My Preferences">{{.CurrentUser.DisplayName}}</a>
             <form method="post" action="/logout" style="display:inline; margin:0;">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <button type="submit" class="header-muted" style="background:none; border:none;

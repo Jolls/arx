@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="content">
+    <h4 class="mb-3">Find lot, unit or build</h4>
+    {{if .NotFound}}
+    <div class="alert alert-warning" role="alert">No record found for <strong>{{.Q}}</strong></div>
+    {{else if .Results}}
+    <p class="text-muted small">More than one record matches <strong>{{.Q}}</strong>.</p>
+    <div class="table-wrapper">
+        <table class="table table-bordered table-hover table-sm">
+            <thead class="table-dark">
+                <tr><th>Matched</th><th>Lot / Serial Number</th><th>Type</th><th>Record</th><th>Part Number</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                {{range .Results}}
+                <tr>
+                    <td>{{.Matched}}</td>
+                    <td>{{.Number}}</td>
+                    <td>{{.Kind}}</td>
+                    <td><a href="{{.URL}}">{{.Label}}</a></td>
+                    <td>{{.PartNumber}}</td>
+                    <td>{{.PartDescription}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
+{{end}}
