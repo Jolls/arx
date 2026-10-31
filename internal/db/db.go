@@ -2,13 +2,16 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 // ReadOnlyStatementTimeoutMS bounds any statement run on a ReadOnly handle.
@@ -51,11 +54,37 @@ func OpenReadOnly(dsn string) (*sql.DB, error) {
 	return database, nil
 }
 
-// Connect opens and verifies a Postgres connection for dsn.
-func Connect(dsn string) (*sql.DB, error) {
-	database, err := sql.Open("pgx", dsn)
+const (
+	maxPoolConns      = 12 // covers the widest page fan-out (#426)
+	connMaxIdleTime   = 15 * time.Minute
+	pingIdleThreshold = 30 * time.Second
+)
+
+// shouldPing replaces pgx's default of pinging any connection idle over 1 s, which
+// costs a round trip on nearly every page (#426). A connection that dies inside the
+// threshold is noticed on its first query instead.
+func shouldPing(_ context.Context, p stdlib.ShouldPingParams) bool {
+	return p.IdleDuration > pingIdleThreshold
+}
+
+// openPool builds the main pool for dsn without connecting.
+func openPool(dsn string) (*sql.DB, error) {
+	cfg, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
+	}
+	database := stdlib.OpenDB(*cfg, stdlib.OptionShouldPing(shouldPing))
+	database.SetMaxOpenConns(maxPoolConns)
+	database.SetMaxIdleConns(maxPoolConns)
+	database.SetConnMaxIdleTime(connMaxIdleTime)
+	return database, nil
+}
+
+// Connect opens and verifies a Postgres connection for dsn.
+func Connect(dsn string) (*sql.DB, error) {
+	database, err := openPool(dsn)
+	if err != nil {
+		return nil, err
 	}
 	if err := database.Ping(); err != nil {
 		database.Close()

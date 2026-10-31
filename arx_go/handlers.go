@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/gorilla/sessions"
 	"github.com/shopspring/decimal"
+	"golang.org/x/sync/errgroup"
 
 	"arx/arx_go/models"
 	"arx/internal/appconfig"
@@ -190,11 +192,14 @@ const slowQueryThreshold = 100 * time.Millisecond
 // explicit invalidation call (e.g. a direct DB edit outside the toggle handlers).
 const userCacheTTL = 60 * time.Second
 
-// sqlStats accumulates per-request SQL round-trip count and total DB time.
-// One goroutine handles a request and its queries run sequentially, so no lock.
+// sqlStats accumulates per-request SQL stats. count is round trips on the critical path
+// (what the user waits for), queries is every query issued, total is cumulative DB time
+// across branches (can exceed wall-clock). A goroutine owns its sqlStats; parallel gives
+// each branch a child and folds it in after Wait, so no lock.
 type sqlStats struct {
-	count int
-	total time.Duration
+	count   int
+	queries int
+	total   time.Duration
 }
 
 // recordRoundTrip attributes one DB round trip to the request's sqlStats (if the
@@ -206,6 +211,7 @@ func recordRoundTrip(ctx context.Context, query string, elapsed time.Duration) {
 		return
 	}
 	st.count++
+	st.queries++
 	st.total += elapsed
 	if elapsed >= slowQueryThreshold {
 		log.Printf("[SLOW SQL] %s | %s", elapsed.Round(time.Millisecond),
@@ -228,6 +234,57 @@ func timeQueryErr[T any](ctx context.Context, query string, call func() (T, erro
 	result, err := call()
 	recordRoundTrip(ctx, query, time.Since(start))
 	return result, err
+}
+
+// parallel runs independent read-only branches concurrently and waits for all of them
+// (#426). It returns the first error in time; a failure does not cancel siblings. Each
+// branch must use the ctx it is given, write only its own variables, and never run inside
+// a transaction; assemble results after parallel returns. Nestable.
+func parallel(ctx context.Context, branches ...func(context.Context) error) error {
+	parent, _ := ctx.Value(ctxSQLStatsKey).(*sqlStats)
+	children := make([]*sqlStats, len(branches))
+	panics := make([]any, len(branches))
+	var g errgroup.Group
+	for i, branch := range branches {
+		branchCtx := ctx
+		if parent != nil {
+			children[i] = &sqlStats{}
+			branchCtx = context.WithValue(ctx, ctxSQLStatsKey, children[i])
+		}
+		g.Go(func() error {
+			defer func() {
+				if p := recover(); p != nil {
+					log.Printf("parallel branch panic: %v\n%s", p, debug.Stack())
+					panics[i] = p
+				}
+			}()
+			return branch(branchCtx)
+		})
+	}
+	err := g.Wait()
+	for _, p := range panics {
+		if p != nil {
+			panic(p) // back on the handler goroutine, where net/http recovers it
+		}
+	}
+	if parent != nil {
+		longest := 0
+		for _, c := range children {
+			longest = max(longest, c.count)
+			parent.queries += c.queries
+			parent.total += c.total
+		}
+		parent.count += longest
+	}
+	return err
+}
+
+// pageErr prefixes a branch error with its user-facing message; nil stays nil.
+func pageErr(prefix string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", prefix, err)
 }
 
 func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
@@ -650,9 +707,10 @@ func isFileServingPath(path string) bool {
 // one logical page view (the page load plus the background fetch/XHR calls it
 // fires). path is the top-level navigation that started it.
 type routeAccumulator struct {
-	path  string
-	count int
-	total time.Duration
+	path    string
+	count   int
+	queries int
+	total   time.Duration
 }
 
 // logRouteSummary folds one request's stats into the calling session's current
@@ -665,7 +723,7 @@ type routeAccumulator struct {
 // from a page and that page's own background fetch both carry the same
 // Referer, so matching on it alone never resets and the total grows forever.
 // Skipped for sessions with no logged-in user yet.
-func (h *Handler) logRouteSummary(r *http.Request, count int, total time.Duration) {
+func (h *Handler) logRouteSummary(r *http.Request, count, queries int, total time.Duration) {
 	sess := h.session(r)
 	uid, ok := sess.Values["user_id"].(int)
 	if !ok {
@@ -680,9 +738,10 @@ func (h *Handler) logRouteSummary(r *http.Request, count int, total time.Duratio
 		h.routeStats[uid] = acc
 	}
 	acc.count += count
+	acc.queries += queries
 	acc.total += total
-	log.Printf("[PERF SUMMARY] %s | %d round trips | %s total",
-		acc.path, acc.count, acc.total.Round(time.Millisecond))
+	log.Printf("[PERF SUMMARY] %s | %d round trips (%d queries) | %s total",
+		acc.path, acc.count, acc.queries, acc.total.Round(time.Millisecond))
 }
 
 // profileRequest logs per-request SQL round-trip count and DB/total timing when
@@ -697,9 +756,9 @@ func (h *Handler) profileRequest(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxSQLStatsKey, st)))
 		elapsed := time.Since(start)
-		log.Printf("[PERF] %s %s | %d round trips | %s in DB | %s total",
-			r.Method, r.URL.Path, st.count, st.total.Round(time.Millisecond), elapsed.Round(time.Millisecond))
-		h.logRouteSummary(r, st.count, elapsed)
+		log.Printf("[PERF] %s %s | %d round trips (%d queries) | %s in DB | %s total",
+			r.Method, r.URL.Path, st.count, st.queries, st.total.Round(time.Millisecond), elapsed.Round(time.Millisecond))
+		h.logRouteSummary(r, st.count, st.queries, elapsed)
 	})
 }
 

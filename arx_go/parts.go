@@ -205,14 +205,87 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	attSvc := h.attachments()
-	primaryAtt := h.partPrimaryAttachment(r.Context(), p)
+	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.ID), p.PartNumber)
+	h.applyCategoryTabs(r.Context(), &p)
+	sess := h.session(r)
+	backURL, backLabel := navBack(sess)
+
+	// Independent reads (#426); p is read-only until parallel returns. Failures leave a card
+	// empty rather than failing the page, so every branch returns nil.
+	var (
+		primaryAtt   *models.Attachment
+		partAtts     []attachments.PartAttachment
+		prefPrice    *decimal.Decimal
+		recentPOs    []parts.RecentPO
+		recentTxns   []partTxnSummary
+		recentLots   []LotRow
+		lotCount     int
+		recentUnits  []UnitRow
+		unitCount    int
+		buildCount   int
+		prefSupplier *preferredSupplierSummary
+		pts          []pricePoint
+	)
+	_ = parallel(r.Context(),
+		func(ctx context.Context) error {
+			primaryAtt = h.partPrimaryAttachment(ctx, p)
+			return nil
+		},
+		func(ctx context.Context) (err error) {
+			if partAtts, err = h.attachments().ListPartAttachments(ctx, p.ID); err != nil {
+				log.Printf("[part] attachments for part %d: %v", p.ID, err)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			prefPrice, _ = h.parts().PreferredSupplierPrice(ctx, p.ID)
+			return nil
+		},
+		func(ctx context.Context) error {
+			if p.ShowOrders() {
+				recentPOs, _ = h.parts().ListRecentPOs(ctx, p.ID, 5)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if p.ShowInventory() {
+				recentTxns = h.recentPartTxns(ctx, p.ID, 5)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if p.ShowLots() {
+				recentLots, lotCount, _ = h.recentPartLots(ctx, p.ID, 5)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if p.ShowUnits() {
+				recentUnits, unitCount, _ = h.recentPartUnits(ctx, p.ID, 5)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if p.ShowBuild() {
+				buildCount, _ = h.buildCountForPart(ctx, p.ID)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if p.ShowSuppliers() {
+				prefSupplier = h.preferredSupplier(ctx, p.ID)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if p.ShowPricing() {
+				pts = h.partPricePoints(ctx, p.ID)
+			}
+			return nil
+		},
+	)
 
 	var topAtts, photoAtts []models.Attachment
-	partAtts, err := attSvc.ListPartAttachments(r.Context(), p.ID)
-	if err != nil {
-		log.Printf("[part] attachments for part %d: %v", p.ID, err)
-	}
 	for _, a := range partAtts {
 		att := models.Attachment{ID: a.ID, FileName: a.FileName, Category: a.Category, PartRevision: a.PartRevision, OrderID: a.SortOrder}
 		if (p.PrimaryAttachmentID == nil || att.ID != *p.PrimaryAttachmentID) && len(topAtts) < 5 {
@@ -233,16 +306,10 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.setNavContext(w, r, fmt.Sprintf("/part/%d", p.ID), p.PartNumber)
-	h.applyCategoryTabs(r.Context(), &p)
-	sess := h.session(r)
-	backURL, backLabel := navBack(sess)
-
 	// Phase 2 (#465): the delta compares the rollup against the part's purchase
 	// price — the cheapest active price from its preferred supplier, falling back
 	// to current_cost when no preferred-supplier price exists.
 	purchasePrice := p.CurrentCost
-	prefPrice, _ := h.parts().PreferredSupplierPrice(r.Context(), p.ID)
 	if prefPrice != nil && prefPrice.IsPositive() {
 		purchasePrice = *prefPrice
 	}
@@ -255,49 +322,16 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		rollupSignificant = rollupDeltaPct.Abs().GreaterThanOrEqual(decimal.NewFromInt(5))
 	}
 
-	var recentPOs []parts.RecentPO
-	var recentTxns []partTxnSummary
-	if p.ShowOrders() {
-		recentPOs, _ = h.parts().ListRecentPOs(r.Context(), p.ID, 5)
-	}
-	if p.ShowInventory() {
-		recentTxns = h.recentPartTxns(r.Context(), p.ID, 5)
-	}
-
-	var recentLots []LotRow
-	var lotCount int
-	if p.ShowLots() {
-		recentLots, _ = h.recentPartLots(r.Context(), p.ID, 5)
-		lotCount, _ = h.lotCountForPart(r.Context(), p.ID)
-	}
-	var recentUnits []UnitRow
-	var unitCount int
-	if p.ShowUnits() {
-		recentUnits, _ = h.recentPartUnits(r.Context(), p.ID, 5)
-		unitCount, _ = h.unitCountForPart(r.Context(), p.ID)
-	}
-	var buildCount int
-	if p.ShowBuild() {
-		buildCount, _ = h.buildCountForPart(r.Context(), p.ID)
-	}
-
-	var prefSupplier *preferredSupplierSummary
-	if p.ShowSuppliers() {
-		prefSupplier = h.preferredSupplier(r.Context(), p.ID)
-		if prefSupplier != nil {
-			prefSupplier.Price = prefPrice
-		}
+	if prefSupplier != nil {
+		prefSupplier.Price = prefPrice
 	}
 
 	var priceJSON template.JS
 	var hasPriceData bool
-	if p.ShowPricing() {
-		pts := h.partPricePoints(r.Context(), p.ID)
-		if len(pts) > 0 {
-			data, _ := json.Marshal(pts)
-			priceJSON = template.JS(data)
-			hasPriceData = true
-		}
+	if len(pts) > 0 {
+		data, _ := json.Marshal(pts)
+		priceJSON = template.JS(data)
+		hasPriceData = true
 	}
 
 	h.render(w, r, "parts/part_detail.html", map[string]any{
@@ -1813,25 +1847,16 @@ type pricePoint struct {
 // PO lines and active price-list entries, chronological within each source.
 // Shared by PartPriceHistory and PartDetail (#521).
 func (h *Handler) partPricePoints(ctx context.Context, partID int) []pricePoint {
-	var points []pricePoint
-	svc := h.parts()
-
-	if rows, err := svc.ListPOPricePoints(ctx, partID); err == nil {
-		for _, r := range rows {
-			points = append(points, pricePoint{
-				Date: r.DateOrdered.Format("2006-01-02"), Cost: r.UnitCost,
-				PO: r.PONumber, Supplier: r.SupplierName, Source: "po",
-			})
-		}
+	rows, err := h.parts().ListPricePoints(ctx, partID)
+	if err != nil {
+		return nil
 	}
-
-	if rows, err := svc.ListPriceListPoints(ctx, partID); err == nil {
-		for _, r := range rows {
-			points = append(points, pricePoint{
-				Date: r.EffectiveDate.Format("2006-01-02"), Cost: r.PriceEA,
-				Supplier: r.SupplierName, Source: "price", PackSize: r.PackSize,
-			})
-		}
+	var points []pricePoint
+	for _, r := range rows {
+		points = append(points, pricePoint{
+			Date: r.Date.Format("2006-01-02"), Cost: r.Cost,
+			PO: r.PONumber, Supplier: r.SupplierName, Source: r.Source, PackSize: r.PackSize,
+		})
 	}
 	return points
 }

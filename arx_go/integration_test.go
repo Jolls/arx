@@ -1225,6 +1225,8 @@ const simulatedRTT = 80 * time.Millisecond
 // SQL round-trip count, local timing and a simulated Azure latency (count x 80 ms) per
 // route (#613, #361), and fails when a page exceeds its round-trip budget. Budgets are
 // the measured count: raising one is a deliberate decision, lowering one locks in a win.
+// "Round trips" means the critical path on a page that fans out (#426); the total queries
+// are logged alongside.
 // Calls handlers directly (bypassing buildRouter/RequireAuth/CSRF), so it seeds the
 // sqlStats counter into the request context itself rather than relying on profileRequest.
 func TestIntegration_RouteRoundTrips(t *testing.T) {
@@ -1252,15 +1254,15 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		// so r.URL.Path never equals "/part/3005" and PartDetail's BOM-redirect guard
 		// is intentionally skipped. This profiles the full non-BOM render path — a real
 		// request for 3005 (which has a BOM) would redirect after 2 queries instead.
-		{"part detail", h.PartDetail, "/part/{id}", seedPartID, nil, "ASM-1001", 11},
+		{"part detail", h.PartDetail, "/part/{id}", seedPartID, nil, "ASM-1001", 2},
 		{"part BOM", h.PartBOM, "/part/{id}/bom", seedPartID, nil, "ASM-1001", 2},
 		{"part build-cost", h.PartBuildCost, "/part/{id}/build-cost?qty=1", seedPartID, nil, "ASM-1001", 4},
-		{"part price-history", h.PartPriceHistory, "/part/{id}/price-history", seedPriceHistoryPartID, nil, "BUY-1001", 3},
+		{"part price-history", h.PartPriceHistory, "/part/{id}/price-history", seedPriceHistoryPartID, nil, "BUY-1001", 2},
 		{"part orders", h.PartOrders, "/part/{id}/orders", seedPartID, nil, "ASM-1001", 2},
 		{"suppliers list", h.SuppliersList, "/suppliers", 0, nil, `data-rows-url="/api/suppliers/rows"`, 0},
 		{"supplier detail", h.SupplierDetail, "/supplier/{id}", seedSupplierID, nil, "Acme Fasteners", 4},
 		{"PO list", h.POList, "/pos", 0, nil, `data-rows-url="/api/pos/rows"`, 0},
-		{"PO detail", h.PODetail, "/po/{id}", seedPOID, nil, "PO #5002", 5},
+		{"PO detail", h.PODetail, "/po/{id}", seedPOID, nil, "PO #5002", 2},
 		{"contacts list", h.ContactsList, "/contacts", 0, nil, `data-rows-url="/api/contacts/rows"`, 0},
 		{"records/forms list", h.FormsList, "/records", 0, nil, `data-rows-url="/api/forms/rows"`, 0},
 		{"records yield summary", h.RecordsYieldSummary, "/forms/{id}/yield", seedFormID, nil, "FORM-1001", 2},
@@ -1283,7 +1285,7 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		{"units list", h.AllUnits, "/units", 0, nil, "", 0},
 		{"builds list", h.AllBuilds, "/builds", 0, nil, "", 0},
 		{"RFQ list", h.RFQList, "/rfqs", 0, nil, "", 0},
-		{"reports dashboard", h.ReportsDashboard, "/reports", 0, nil, "", 11},
+		{"reports dashboard", h.ReportsDashboard, "/reports", 0, nil, "", 2},
 		{"reports spend", h.ReportsSpend, "/reports/spend", 0, nil, "", 2},
 		{"reports on-time", h.ReportsOnTime, "/reports/on-time", 0, nil, "", 1},
 		{"reports cycle-time", h.ReportsCycleTime, "/reports/cycle-time", 0, nil, "", 1},
@@ -1298,9 +1300,9 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		{"part transactions", h.PartTransactions, "/part/{id}/transactions", seedPartID, nil, "ASM-1001", 2},
 		{"part build", h.PartBuild, "/part/{id}/build", seedPartID, nil, "ASM-1001", 4},
 		{"part lots", h.PartLots, "/part/{id}/lots", seedLotPartID, nil, "", 3},
-		{"part lot trace", h.PartLotTrace, "/part/{id}/lots/{lotID}", seedLotPartID, map[string]string{"lotID": strconv.Itoa(seedLotID)}, "", 8},
+		{"part lot trace", h.PartLotTrace, "/part/{id}/lots/{lotID}", seedLotPartID, map[string]string{"lotID": strconv.Itoa(seedLotID)}, "", 4},
 		{"part units", h.PartUnits, "/part/{id}/units", seedPartID, nil, "", 2},
-		{"part unit trace", h.PartUnitTrace, "/part/{id}/units/{unitID}", seedPartID, map[string]string{"unitID": strconv.Itoa(seedUnitID)}, "", 7},
+		{"part unit trace", h.PartUnitTrace, "/part/{id}/units/{unitID}", seedPartID, map[string]string{"unitID": strconv.Itoa(seedUnitID)}, "", 4},
 		{"part pricing", h.PartPricing, "/part/{id}/pricing", seedPriceHistoryPartID, nil, "", 3},
 		{"part mfg-parts", h.PartMfgParts, "/part/{id}/mfg-parts", seedPriceHistoryPartID, nil, "", 4},
 		{"part sourcing", h.PartSourcing, "/part/{id}/suppliers", seedPriceHistoryPartID, nil, "", 5},
@@ -1311,7 +1313,7 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		{"form records list", h.RecordsList, "/forms/{id}/records", seedFormID, nil, "FORM-1001", 2},
 		{"form failure-modes", h.RecordsFailureModes, "/forms/{id}/failure-modes", seedFormID, nil, "FORM-1001", 2},
 		{"form def", h.FormDef, "/forms/{id}/def", seedFormID, nil, "FORM-1001", 3},
-		{"record detail", h.RecordDetail, "/records/{id}", seedRecordID, nil, "", 8},
+		{"record detail", h.RecordDetail, "/records/{id}", seedRecordID, nil, "", 2},
 	}
 
 	for _, c := range cases {
@@ -1327,8 +1329,8 @@ func TestIntegration_RouteRoundTrips(t *testing.T) {
 		rec := httptest.NewRecorder()
 		start := time.Now()
 		c.fn(rec, req)
-		t.Logf("[PROFILE] %-28s %-36s %3d round trips (budget %3d)  local %8s  est. Azure %8s  (status %d)",
-			c.name, c.target, st.count, c.budget, time.Since(start).Round(time.Millisecond),
+		t.Logf("[PROFILE] %-28s %-36s %3d round trips (%d queries, budget %3d)  local %8s  est. Azure %8s  (status %d)",
+			c.name, c.target, st.count, st.queries, c.budget, time.Since(start).Round(time.Millisecond),
 			(time.Duration(st.count) * simulatedRTT).Round(time.Millisecond), rec.Code)
 
 		if rec.Code != http.StatusOK {

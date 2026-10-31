@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"errors"
@@ -393,7 +394,21 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := h.fetchPOItems(r, num)
+	// Independent reads (#426). The fetch helpers read the request's context, so each branch
+	// passes its own to keep sqlStats per branch.
+	var items []models.PurchaseOrderLine
+	var bulkOrderDelimiter, bulkOrderPNSource string
+	var history []POHistoryEvent
+	var receipts []POReceiptView
+	err := parallel(r.Context(),
+		func(ctx context.Context) (err error) { items, err = h.fetchPOItems(r.WithContext(ctx), num); return },
+		func(ctx context.Context) error {
+			bulkOrderDelimiter, bulkOrderPNSource = h.fetchSupplierBulkOrderOptions(r.WithContext(ctx), po.SupplierID)
+			return nil
+		},
+		func(ctx context.Context) error { history = h.fetchPOHistory(r.WithContext(ctx), po.ID); return nil },
+		func(ctx context.Context) error { receipts = h.fetchPOReceipts(r.WithContext(ctx), po.ID); return nil },
+	)
 	if err != nil {
 		h.renderError(w, r, "Error loading PO items: "+err.Error())
 		return
@@ -409,7 +424,6 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 	if u := h.currentUser(r); u != nil {
 		canApprove = u.CanApprovePO
 	}
-	bulkOrderDelimiter, bulkOrderPNSource := h.fetchSupplierBulkOrderOptions(r, po.SupplierID)
 	tplData := map[string]any{
 		"PO": po, "POItems": items, "LineTotal": lineTotal,
 		"ActiveTab": "pos", "SectionTab": poSectionTab(po), "ActiveDetailTab": "details",
@@ -418,8 +432,8 @@ func (h *Handler) PODetail(w http.ResponseWriter, r *http.Request) {
 		"StatusActions":      poStatusActions(po.Status),
 		"ApprovalLabel":      poApprovalLabels[po.ApprovalStatus],
 		"ApprovalActions":    poApprovalActions(po.ApprovalStatus, canApprove),
-		"History":            h.fetchPOHistory(r, po.ID),
-		"Receipts":           h.fetchPOReceipts(r, po.ID),
+		"History":            history,
+		"Receipts":           receipts,
 		"Today":              h.userNow(r).Format("2006-01-02"),
 		"CanSend":            poApprovalAllowsSend(po.ApprovalStatus),
 		"CSRFToken":          h.csrfToken(w, r),

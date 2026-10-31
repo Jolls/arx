@@ -70,52 +70,29 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	openPOs, err := h.dashboardOpenPOCount(r.Context())
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	receivedThisMonth, err := h.dashboardPOsReceivedThisMonth(r.Context())
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	activity, err := h.dashboardRecentActivity(r.Context(), 10)
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	topFailureModes, err := h.dashboardTopFailureModes(r.Context(), 5)
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	lowestYieldForms, err := h.dashboardLowestYieldForms(r.Context(), 5)
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	staleWIPRecords, err := h.dashboardStaleWIPRecords(r.Context(), 5)
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	pendingApprovalPOs, err := h.dashboardPendingApprovalPOs(r.Context(), 5)
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	belowReorderParts, err := h.dashboardBelowReorderParts(r.Context(), 5)
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	recentLots, err := h.dashboardRecentLots(r.Context(), 5)
-	if err != nil {
-		h.renderError(w, r, "Error loading dashboard: "+err.Error())
-		return
-	}
-	recentBuilds, err := h.dashboardRecentBuilds(r.Context(), 5)
+	var (
+		openPOs, receivedThisMonth int
+		activity                   []dashboardActivityItem
+		topFailureModes            []dashboardFailureModeItem
+		lowestYieldForms           []dashboardYieldItem
+		staleWIPRecords            []dashboardStaleWIPItem
+		pendingApprovalPOs         []dashboardPendingApprovalItem
+		belowReorderParts          []dashboardBelowReorderItem
+		recentLots                 []dashboardRecentLotItem
+		recentBuilds               []inventory.BuildListRow
+	)
+	err := parallel(r.Context(),
+		func(ctx context.Context) (err error) { openPOs, err = h.dashboardOpenPOCount(ctx); return },
+		func(ctx context.Context) (err error) { receivedThisMonth, err = h.dashboardPOsReceivedThisMonth(ctx); return },
+		func(ctx context.Context) (err error) { activity, err = h.dashboardRecentActivity(ctx, 10); return },
+		func(ctx context.Context) (err error) { topFailureModes, err = h.dashboardTopFailureModes(ctx, 5); return },
+		func(ctx context.Context) (err error) { lowestYieldForms, err = h.dashboardLowestYieldForms(ctx, 5); return },
+		func(ctx context.Context) (err error) { staleWIPRecords, err = h.dashboardStaleWIPRecords(ctx, 5); return },
+		func(ctx context.Context) (err error) { pendingApprovalPOs, err = h.dashboardPendingApprovalPOs(ctx, 5); return },
+		func(ctx context.Context) (err error) { belowReorderParts, err = h.dashboardBelowReorderParts(ctx, 5); return },
+		func(ctx context.Context) (err error) { recentLots, err = h.dashboardRecentLots(ctx, 5); return },
+		func(ctx context.Context) (err error) { recentBuilds, err = h.dashboardRecentBuilds(ctx, 5); return },
+	)
 	if err != nil {
 		h.renderError(w, r, "Error loading dashboard: "+err.Error())
 		return

@@ -120,28 +120,6 @@ func (q *Queries) CountPartLot(ctx context.Context, arg CountPartLotParams) (int
 	return count, err
 }
 
-const countPartLots = `-- name: CountPartLots :one
-SELECT COUNT(*) FROM lot WHERE part_id = $1
-`
-
-func (q *Queries) CountPartLots(ctx context.Context, partID int) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countPartLots, partID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countPartUnits = `-- name: CountPartUnits :one
-SELECT COUNT(*) FROM unit WHERE part_id = $1
-`
-
-func (q *Queries) CountPartUnits(ctx context.Context, partID int) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countPartUnits, partID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createBuild = `-- name: CreateBuild :one
 INSERT INTO build (part_id, qty, build_date, username, note)
 VALUES ($1, $2, $3, $4, $5::text)
@@ -1387,10 +1365,81 @@ func (q *Queries) ListRecentBuilds(ctx context.Context, rowLimit int) ([]ListRec
 	return items, nil
 }
 
+const listRecentPartLots = `-- name: ListRecentPartLots :many
+SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
+       COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active,
+       COALESCE(po.number, '') AS po_number, (COUNT(*) OVER ())::int AS total_count
+FROM lot l JOIN part p ON p.id = l.part_id
+LEFT JOIN po_line pol ON pol.id = l.po_line_id
+LEFT JOIN purchase_order po ON po.id = pol.po_id
+WHERE l.part_id = $1
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT $2::int
+`
+
+type ListRecentPartLotsParams struct {
+	PartID int
+	N      int
+}
+
+type ListRecentPartLotsRow struct {
+	ID              int
+	LotNumber       string
+	VendorLot       string
+	PartID          int
+	PartNumber      string
+	PartDescription string
+	LotDescription  string
+	Notes           string
+	CreatedAt       time.Time
+	IsActive        bool
+	PoNumber        string
+	TotalCount      int
+}
+
+// Part dashboard Lots card: the n newest lots plus the part's total lot count. The window runs
+// before LIMIT, so total_count ignores n; a part with no lots returns no rows (total 0).
+func (q *Queries) ListRecentPartLots(ctx context.Context, arg ListRecentPartLotsParams) ([]ListRecentPartLotsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentPartLots, arg.PartID, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentPartLotsRow
+	for rows.Next() {
+		var i ListRecentPartLotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LotNumber,
+			&i.VendorLot,
+			&i.PartID,
+			&i.PartNumber,
+			&i.PartDescription,
+			&i.LotDescription,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.IsActive,
+			&i.PoNumber,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentPartUnits = `-- name: ListRecentPartUnits :many
 SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
        COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
-       u.build_id, u.is_active, u.created_at, u.source
+       u.build_id, u.is_active, u.created_at, u.source, (COUNT(*) OVER ())::int AS total_count
 FROM unit u
 JOIN part p ON p.id = u.part_id
 LEFT JOIN lot l ON l.id = u.lot_id
@@ -1414,8 +1463,10 @@ type ListRecentPartUnitsRow struct {
 	IsActive        bool
 	CreatedAt       time.Time
 	Source          string
+	TotalCount      int
 }
 
+// Part dashboard Units card: the n newest units plus the part's total unit count; see ListRecentPartLots.
 func (q *Queries) ListRecentPartUnits(ctx context.Context, arg ListRecentPartUnitsParams) ([]ListRecentPartUnitsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRecentPartUnits, arg.PartID, arg.N)
 	if err != nil {
@@ -1437,6 +1488,7 @@ func (q *Queries) ListRecentPartUnits(ctx context.Context, arg ListRecentPartUni
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.Source,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

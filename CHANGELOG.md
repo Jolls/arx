@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.94] - 2026-10-31
+### Changed
+- Pages with many independent queries load faster: the Reports dashboard, part Summary, record detail, lot trace, unit trace and PO detail now run them concurrently over an explicitly sized connection pool (12 connections, 15-minute idle expiry, 30 s idle ping threshold); round-trip budgets lowered to match, and debug logging shows round trips (critical path) next to total queries ([#426](https://github.com/Jolls/arx/issues/426))
+
 ## [0.8.93] - 2026-10-31
 ### Changed
 - The route round-trip integration test now covers 54 pages (row feeds, section-tab landing pages, reports, detail tabs) with a per-page round-trip budget and an estimated Azure latency; audit findings and follow-up in [#426](https://github.com/Jolls/arx/issues/426) ([#361](https://github.com/Jolls/arx/issues/361))

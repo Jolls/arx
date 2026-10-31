@@ -68,15 +68,9 @@ func (h *Handler) lotsForPart(ctx context.Context, partID int) ([]LotRow, error)
 }
 
 // recentPartLots returns the most recent lots for a part, newest first, capped
-// at limit, for the Part dashboard "Lots" card (#798).
-func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]LotRow, error) {
+// at limit, and the part's total lot count, for the Part dashboard "Lots" card (#798).
+func (h *Handler) recentPartLots(ctx context.Context, partID int, limit int) ([]LotRow, int, error) {
 	return h.inventory().ListRecentPartLots(ctx, partID, limit)
-}
-
-// lotCountForPart returns the total number of lots for a part, for the Part
-// dashboard "Lots" card (#798).
-func (h *Handler) lotCountForPart(ctx context.Context, partID int) (int, error) {
-	return h.inventory().CountPartLots(ctx, partID)
 }
 
 func (h *Handler) buildCountForPart(ctx context.Context, partID int) (int, error) {
@@ -171,24 +165,28 @@ func (h *Handler) PartLotTrace(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Lot not found for this part")
 		return
 	}
-	ancestors, err := h.genealogyTrace(r.Context(), lotID, "lot", true)
-	if err != nil {
-		h.renderError(w, r, "Error tracing lot ancestry: "+err.Error())
-		return
-	}
-	descendants, err := h.genealogyTrace(r.Context(), lotID, "lot", false)
-	if err != nil {
-		h.renderError(w, r, "Error tracing lot descendants: "+err.Error())
-		return
-	}
-	typeOptions, err := h.scopedRecordTypeOptions(r.Context(), records.ScopeLot, lotID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving record types: "+err.Error())
-		return
-	}
-	units, err := h.inventory().ListLotUnits(r.Context(), lotID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving lot units: "+err.Error())
+	var ancestors, descendants []TraceNode
+	var typeOptions []string
+	var units []UnitRow
+	if err := parallel(r.Context(),
+		func(ctx context.Context) (err error) {
+			ancestors, err = h.genealogyTrace(ctx, lotID, "lot", true)
+			return pageErr("Error tracing lot ancestry", err)
+		},
+		func(ctx context.Context) (err error) {
+			descendants, err = h.genealogyTrace(ctx, lotID, "lot", false)
+			return pageErr("Error tracing lot descendants", err)
+		},
+		func(ctx context.Context) (err error) {
+			typeOptions, err = h.scopedRecordTypeOptions(ctx, records.ScopeLot, lotID)
+			return pageErr("Error retrieving record types", err)
+		},
+		func(ctx context.Context) (err error) {
+			units, err = h.inventory().ListLotUnits(ctx, lotID)
+			return pageErr("Error retrieving lot units", err)
+		},
+	); err != nil {
+		h.renderError(w, r, err.Error())
 		return
 	}
 	h.render(w, r, "parts/part_lot_trace.html", map[string]any{
