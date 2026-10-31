@@ -639,3 +639,100 @@ func TestIntegration_TraceIDsSharedAcrossLotUnitBuild(t *testing.T) {
 		t.Errorf("%d lot/unit/build rows but %d distinct ids", rows, distinct)
 	}
 }
+
+// An existing unit keeps the provenance it was created with (#422): a later upsert never overwrites it.
+func TestIntegration_InventoryUpsertTestUnit_KeepsExistingProvenance(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	serial := smokeUniq("SN-422K")
+	b1, b2 := 8201, 8202
+	id, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, serial, &b1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, serial, &b2, nil); err != nil || again != id {
+		t.Fatalf("second upsert = %d, %v; want %d", again, err, id)
+	}
+	var build sql.NullInt64
+	var source string
+	if err := tx.QueryRowContext(ctx, `SELECT build_id, source FROM unit WHERE id=$1`, id).Scan(&build, &source); err != nil {
+		t.Fatal(err)
+	}
+	if build.Int64 != 8201 || source != "test" {
+		t.Errorf("unit build %v source %q; want 8201, test", build, source)
+	}
+}
+
+// A hand-added unit with no provenance is enriched by a test record's pick and becomes a test unit (#422).
+func TestIntegration_InventoryUpsertTestUnit_FillsNullProvenanceOnManualUnit(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	serial := smokeUniq("SN-422F")
+	manual, err := inventory.New(tx).CreateManualUnit(ctx, 3005, serial, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := 8201
+	id, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, serial, &b, nil)
+	if err != nil || id != manual {
+		t.Fatalf("upsert = %d, %v; want %d", id, err, manual)
+	}
+	var build sql.NullInt64
+	var source string
+	if err := tx.QueryRowContext(ctx, `SELECT build_id, source FROM unit WHERE id=$1`, id).Scan(&build, &source); err != nil {
+		t.Fatal(err)
+	}
+	if build.Int64 != 8201 || source != "test" {
+		t.Errorf("unit build %v source %q; want 8201, test", build, source)
+	}
+}
+
+// Only the NULL side is filled: an existing build stays while a missing lot is supplied (#422).
+func TestIntegration_InventoryUpsertTestUnit_FillsOnlyNullSide(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	serial := smokeUniq("SN-422N")
+	b1, b2, lot := 8201, 8202, 8301
+	id, err := inventory.New(tx).CreateManualUnit(ctx, 3005, serial, nil, &b1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := inventory.New(tx).UpsertTestUnit(ctx, 3005, serial, &b2, &lot); err != nil || got != id {
+		t.Fatalf("upsert = %d, %v; want %d", got, err, id)
+	}
+	var gotLot, gotBuild sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT lot_id, build_id FROM unit WHERE id=$1`, id).Scan(&gotLot, &gotBuild); err != nil {
+		t.Fatal(err)
+	}
+	if gotBuild.Int64 != 8201 || gotLot.Int64 != 8301 {
+		t.Errorf("unit lot %v build %v; want lot 8301, build 8201", gotLot, gotBuild)
+	}
+}
+
+// FindUnitIDBySerial resolves the existing unit for (part, serial) only (#422).
+func TestIntegration_InventoryFindUnitIDBySerial(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	inv := inventory.New(tx)
+	if id, err := inv.FindUnitIDBySerial(ctx, 3005, "SN-3005-001"); err != nil || id == nil || *id != 8503 {
+		t.Errorf("seed serial = %v, %v; want 8503", id, err)
+	}
+	if id, err := inv.FindUnitIDBySerial(ctx, 3005, smokeUniq("SN-NONE")); err != nil || id != nil {
+		t.Errorf("unknown serial = %v, %v; want nil", id, err)
+	}
+	if id, err := inv.FindUnitIDBySerial(ctx, 3012, "SN-3005-001"); err != nil || id != nil {
+		t.Errorf("same serial on another part = %v, %v; want nil", id, err)
+	}
+}

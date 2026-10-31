@@ -2168,17 +2168,27 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		// the original (#876). There is no UI to change a record's serial_number after
 		// creation, so the record<->unit link, once set, is authoritative.
 		unitArg = record.UnitID
-	} else if models.TracksSerials(trackingMode) && record.SerialNumber != "" && (buildArg != nil || lotArg != nil) {
-		// Find or lazily create the unit for (part, serial) (#745, Q5): a retest re-links the existing
-		// unit, and provenance is set only on creation. A test-minted unit should carry at least one of
-		// build/lot, so the upsert is skipped when both are nil (an app rule, not a DB CHECK: #799 dropped
-		// CK_unit_provenance since a manual unit legitimately has neither).
-		uid, uerr := inventory.New(tx).UpsertTestUnit(r.Context(), record.PartNumberID, record.SerialNumber, buildArg, lotArg)
-		if uerr != nil {
-			serverError(w, "could not record unit", uerr)
-			return
+	} else if models.TracksSerials(trackingMode) && record.SerialNumber != "" {
+		// With a picked build/lot, find or lazily create the unit for (part, serial) (#745, Q5): a
+		// retest re-links the existing unit, filling only a NULL lot/build (#422). With neither, link to
+		// an existing unit only — a test-minted unit should carry at least one of build/lot (an app rule,
+		// not a DB CHECK: #799 dropped CK_unit_provenance since a manual unit legitimately has neither).
+		inv := inventory.New(tx)
+		if buildArg != nil || lotArg != nil {
+			uid, uerr := inv.UpsertTestUnit(r.Context(), record.PartNumberID, record.SerialNumber, buildArg, lotArg)
+			if uerr != nil {
+				serverError(w, "could not record unit", uerr)
+				return
+			}
+			unitArg = &uid
+		} else {
+			uid, uerr := inv.FindUnitIDBySerial(r.Context(), record.PartNumberID, record.SerialNumber)
+			if uerr != nil {
+				serverError(w, "could not look up unit", uerr)
+				return
+			}
+			unitArg = uid
 		}
-		unitArg = &uid
 	}
 	if unitArg != nil {
 		lotArg, buildArg = nil, nil // Q8: provenance lives on the unit, not the record

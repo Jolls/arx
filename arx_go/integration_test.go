@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/bcrypt"
 
 	arxbase "arx/internal/config"
@@ -2078,6 +2079,138 @@ func TestIntegration_SerialUnitCreationAndRetest(t *testing.T) {
 	}
 	if unitCount != 1 {
 		t.Errorf("unit count for (part,serial) = %d, want 1 (retest must not duplicate)", unitCount)
+	}
+}
+
+// cleanupSerialRecords removes the records and unit that a saveSerialRecord test left for serial.
+func cleanupSerialRecords(h *Handler, serial string) {
+	ctx := context.Background()
+	smokeExec(ctx, h, `DELETE FROM form_record WHERE part_id = 3013 AND serial_number = $1`, serial)
+	smokeExec(ctx, h, `DELETE FROM unit WHERE part_id = 3013 AND serial_number = $1`, serial)
+}
+
+// saveSerialRecord inserts an unlinked record of 3013 (lot_serial) for serial, saves it with
+// form, and returns the record id (#422). Callers defer cleanupSerialRecords(h, serial) after
+// liveHandler's defer, so it runs while the DB is still open.
+func saveSerialRecord(t *testing.T, h *Handler, serial string, form url.Values) int {
+	t.Helper()
+	ctx := context.Background()
+	var recID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description, record_type, test_order, is_locked, is_active) VALUES (6001, 3013, $1, 'ASM-1003', 'Widget Deluxe Assembly', '', '', FALSE, TRUE) RETURNING id`,
+		serial).Scan(&recID); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	h.SaveResults(rr, withID(postForm(fmt.Sprintf("/records/%d/edit", recID), form), recID))
+	assertStatus(t, "SaveResults(serial)", rr, http.StatusSeeOther)
+	return recID
+}
+
+// A hand-added unit with no provenance is enriched by the record's pick and becomes a test unit (#422).
+func TestIntegration_SaveResults_FillsManualUnitProvenance(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	serial := smokeUniq("SN-422A")
+	defer cleanupSerialRecords(h, serial)
+	var unitID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO unit (part_id, serial_number, source) VALUES (3013, $1, 'manual') RETURNING id`, serial).Scan(&unitID); err != nil {
+		t.Fatalf("seed unit: %v", err)
+	}
+	recID := saveSerialRecord(t, h, serial, url.Values{"build_id": {"8203"}})
+
+	var recUnit, recLot, recBuild, uBuild sql.NullInt64
+	var source string
+	if err := h.queryRowContext(ctx, `SELECT unit_id, lot_id, build_id FROM form_record WHERE id = $1`, recID).Scan(&recUnit, &recLot, &recBuild); err != nil {
+		t.Fatal(err)
+	}
+	if int(recUnit.Int64) != unitID || recLot.Valid || recBuild.Valid {
+		t.Errorf("record unit/lot/build = %v/%v/%v; want %d/NULL/NULL", recUnit, recLot, recBuild, unitID)
+	}
+	if err := h.queryRowContext(ctx, `SELECT build_id, source FROM unit WHERE id = $1`, unitID).Scan(&uBuild, &source); err != nil {
+		t.Fatal(err)
+	}
+	if uBuild.Int64 != 8203 || source != "test" {
+		t.Errorf("unit build %v source %q; want 8203, test", uBuild, source)
+	}
+}
+
+// A later save never overwrites a unit's existing build (#422).
+func TestIntegration_SaveResults_KeepsExistingUnitProvenance(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	serial := smokeUniq("SN-422B")
+	defer cleanupSerialRecords(h, serial)
+	if _, err := h.inventory().CreateManualUnit(ctx, 3013, serial, nil, intPtr(8203)); err != nil {
+		t.Fatalf("seed unit: %v", err)
+	}
+	otherBuild, err := h.inventory().CreateBuild(ctx, 3013, decimal.NewFromInt(1), time.Now(), "itest", "")
+	if err != nil {
+		t.Fatalf("seed second build: %v", err)
+	}
+	defer smokeExec(ctx, h, `DELETE FROM build WHERE id = $1`, otherBuild)
+	saveSerialRecord(t, h, serial, url.Values{"build_id": {strconv.Itoa(otherBuild)}})
+
+	var build sql.NullInt64
+	if err := h.queryRowContext(ctx, `SELECT build_id FROM unit WHERE part_id = 3013 AND serial_number = $1`, serial).Scan(&build); err != nil {
+		t.Fatal(err)
+	}
+	if build.Int64 != 8203 {
+		t.Errorf("unit build = %v; want 8203 (unchanged)", build)
+	}
+}
+
+// A record whose serial matches an existing unit links to it even with no lot/build picked (#422).
+func TestIntegration_SaveResults_LinksExistingUnitWithoutPick(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	serial := smokeUniq("SN-422C")
+	defer cleanupSerialRecords(h, serial)
+	unitID, err := h.inventory().CreateManualUnit(ctx, 3013, serial, nil, intPtr(8203))
+	if err != nil {
+		t.Fatalf("seed unit: %v", err)
+	}
+	recID := saveSerialRecord(t, h, serial, url.Values{})
+
+	var recUnit sql.NullInt64
+	if err := h.queryRowContext(ctx, `SELECT unit_id FROM form_record WHERE id = $1`, recID).Scan(&recUnit); err != nil {
+		t.Fatal(err)
+	}
+	if int(recUnit.Int64) != unitID {
+		t.Errorf("record unit_id = %v; want %d", recUnit, unitID)
+	}
+	var source string
+	if err := h.queryRowContext(ctx, `SELECT source FROM unit WHERE id = $1`, unitID).Scan(&source); err != nil {
+		t.Fatal(err)
+	}
+	if source != "manual" {
+		t.Errorf("source = %q; a no-pick link must leave it manual", source)
+	}
+}
+
+// No existing unit and nothing picked still mints no unit (Q5 rule, #422).
+func TestIntegration_SaveResults_NoUnitWithoutProvenance(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	serial := smokeUniq("SN-422D")
+	defer cleanupSerialRecords(h, serial)
+	recID := saveSerialRecord(t, h, serial, url.Values{})
+
+	var recUnit sql.NullInt64
+	var n int
+	if err := h.queryRowContext(ctx, `SELECT unit_id FROM form_record WHERE id = $1`, recID).Scan(&recUnit); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.queryRowContext(ctx, `SELECT COUNT(*) FROM unit WHERE part_id = 3013 AND serial_number = $1`, serial).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if recUnit.Valid || n != 0 {
+		t.Errorf("record unit_id %v, units %d; want NULL, 0", recUnit, n)
 	}
 }
 

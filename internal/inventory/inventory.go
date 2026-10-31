@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -549,10 +550,22 @@ func (s *Service) UpdateUnit(ctx context.Context, unitID, partID int, serial str
 }
 
 // UpsertTestUnit finds or creates the unit for (partID, serial) in one statement, so
-// concurrent saves of a new serial converge on one unit. Provenance is set only on
-// creation, so a retest re-links the existing unit unchanged.
+// concurrent saves of a new serial converge on one unit. On an existing unit only a NULL
+// lot/build is filled, so a retest never overwrites provenance; the unit becomes source 'test'.
 func (s *Service) UpsertTestUnit(ctx context.Context, partID int, serial string, buildID, lotID *int) (int, error) {
 	return s.q.UpsertTestUnit(ctx, dbq.UpsertTestUnitParams{PartID: partID, SerialNumber: serial, BuildID: buildID, LotID: lotID})
+}
+
+// FindUnitIDBySerial returns the id of the existing unit for (partID, serial), or nil when there is none.
+func (s *Service) FindUnitIDBySerial(ctx context.Context, partID int, serial string) (*int, error) {
+	id, err := s.q.FindUnitIDBySerial(ctx, dbq.FindUnitIDBySerialParams{PartID: partID, SerialNumber: serial})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
 }
 
 // UnitProvenance returns a unit's lot and build; both nil when the unit doesn't exist.
@@ -818,4 +831,39 @@ func (s *Service) LockRecord(ctx context.Context, recordID int) error {
 func (s *Service) LinkRecordToBuild(ctx context.Context, recordID, partID int, lotID *int, buildID int) (linked bool, err error) {
 	n, err := s.q.LinkRecordToBuild(ctx, dbq.LinkRecordToBuildParams{LotID: lotID, BuildID: &buildID, ID: recordID, PartID: &partID})
 	return n > 0, err
+}
+
+// FindResult is one lot, unit or build matched by FindRecords (#416). OutputLotID is 0 when a build
+// produced no lot (and for lots and units).
+type FindResult struct {
+	Kind            string // "lot" | "unit" | "build"
+	ID, PartID      int
+	PartNumber      string
+	PartDescription string
+	Name            string // lot_number for a lot, serial_number for a unit, "" for a build
+	OutputLotID     int
+	MatchedID       bool
+	MatchedName     bool // lot_number for a lot, serial_number for a unit
+}
+
+// FindRecords returns every lot, unit and build whose id, lot number or serial exactly equals q
+// (lots first, then units, then builds). q must be non-empty; the caller trims it.
+func (s *Service) FindRecords(ctx context.Context, q string) ([]FindResult, error) {
+	var id *int
+	if n, err := strconv.Atoi(q); err == nil && q[0] != '+' && n > 0 && n <= math.MaxInt32 {
+		id = &n
+	}
+	rows, err := s.q.FindTraceRecords(ctx, dbq.FindTraceRecordsParams{ID: id, Q: q})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FindResult, len(rows))
+	for i, r := range rows {
+		out[i] = FindResult{Kind: r.Kind, ID: r.ID, PartID: r.PartID, PartNumber: r.PartNumber,
+			PartDescription: r.PartDescription, Name: r.Name, MatchedID: r.MatchedID, MatchedName: r.MatchedName}
+		if r.OutputLotID != nil {
+			out[i].OutputLotID = *r.OutputLotID
+		}
+	}
+	return out, nil
 }
