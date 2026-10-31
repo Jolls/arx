@@ -148,6 +148,59 @@
         </div>
     </div>
 
+    <div class="row row-cols-1 row-cols-md-2 g-3 mb-3">
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Recent Lots</div>
+                <div class="card-body">
+                    {{if .RecentLots}}
+                    <div class="table-responsive-sm">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Lot</th><th>Part</th><th class="text-end">Created</th></tr></thead>
+                        <tbody>
+                            {{range .RecentLots}}
+                            <tr>
+                                <td><a href="/part/{{.PartID}}/lots/{{.ID}}" data-popout-url="/popout/part/{{.PartID}}/lots/{{.ID}}/consumers">{{.LotNumber}}</a></td>
+                                <td>{{.PartNumber}}</td>
+                                <td class="text-end text-muted" style="white-space:nowrap;">{{.Created}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                    </div>
+                    {{else}}
+                    <p class="text-muted mb-0">No lots yet.</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header">Recent Builds</div>
+                <div class="card-body">
+                    {{if .RecentBuilds}}
+                    <div class="table-responsive-sm">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Build</th><th>Part</th><th class="text-end">Build date</th></tr></thead>
+                        <tbody>
+                            {{range .RecentBuilds}}
+                            <tr>
+                                <td><a href="/part/{{.PartID}}/{{if .OutputLotID}}lots/{{.OutputLotIDVal}}{{else}}build{{end}}" data-popout-url="/popout/build/{{.ID}}">Build #{{.ID}}</a></td>
+                                <td>{{.PartNumber}}</td>
+                                <td class="text-end text-muted" style="white-space:nowrap;">{{.Date.Format "2006-01-02"}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                    </div>
+                    {{else}}
+                    <p class="text-muted mb-0">No builds yet.</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row row-cols-1 g-3">
         <div class="col">
             <div class="card h-100">

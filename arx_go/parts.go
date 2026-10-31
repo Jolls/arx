@@ -276,6 +276,10 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		recentUnits, _ = h.recentPartUnits(r.Context(), p.ID, 5)
 		unitCount, _ = h.unitCountForPart(r.Context(), p.ID)
 	}
+	var buildCount int
+	if p.ShowBuild() {
+		buildCount, _ = h.buildCountForPart(r.Context(), p.ID)
+	}
 
 	var prefSupplier *preferredSupplierSummary
 	if p.ShowSuppliers() {
@@ -310,6 +314,7 @@ func (h *Handler) PartDetail(w http.ResponseWriter, r *http.Request) {
 		"LotCount":          lotCount,
 		"RecentUnits":       recentUnits,
 		"UnitCount":         unitCount,
+		"BuildCount":        buildCount,
 		"PreferredSupplier": prefSupplier,
 		"PriceDataJSON":     priceJSON,
 		"HasPriceData":      hasPriceData,

@@ -1816,6 +1816,8 @@ type POReceiptView struct {
 	PartNumber string
 	Qty        decimal.Decimal
 	Username   string
+	LotID      *int // the lot the receipt created, nil for non-lot-tracked parts
+	LotNumber  string
 }
 
 // fetchPOReceipts returns the receipt ledger rows recorded against a PO, newest first.
@@ -1828,7 +1830,7 @@ func (h *Handler) fetchPOReceipts(r *http.Request, poID int) []POReceiptView {
 	out := make([]POReceiptView, len(receipts))
 	for i, rc := range receipts {
 		out[i] = POReceiptView{Date: rc.TxnDate.Format("2006-01-02"), PartID: rc.PartID, PartNumber: rc.PartNumber,
-			Qty: rc.Qty, Username: rc.Username}
+			Qty: rc.Qty, Username: rc.Username, LotID: rc.LotID, LotNumber: rc.LotNumber}
 	}
 	return out
 }

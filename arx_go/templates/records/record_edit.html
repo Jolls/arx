@@ -15,7 +15,7 @@
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
   <h4>
     {{if .Record.PartNumberID}}<a href="/part/{{.Record.PartNumberID}}">{{.Record.SerialNumberPN}}</a>{{else}}{{.Record.SerialNumberPN}}{{end}}
-    &mdash; SN: <span class="font-mono">{{.Record.SerialNumber}}</span>
+    &mdash; SN: {{if and .Record.UnitID .Record.PartNumberID}}{{/* New tab: this page holds an in-progress test session. */}}<a href="/part/{{.Record.PartNumberID}}/units/{{.Record.UnitID}}" target="_blank" class="font-mono">{{.Record.SerialNumber}}</a>{{else}}<span class="font-mono">{{.Record.SerialNumber}}</span>{{end}}
   </h4>
   <div class="d-flex flex-wrap gap-2">
     <a href="/records/{{.Record.ID}}" class="btn btn-sm btn-outline-secondary">Cancel</a>

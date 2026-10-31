@@ -24,12 +24,16 @@
                 <dd class="col-sm-10"><a href="/part/{{.Lot.PartID}}">{{.Lot.PartNumber}}</a>{{if .Lot.PartDescription}} &mdash; {{.Lot.PartDescription}}{{end}}</dd>
                 <dt class="col-sm-2">Vendor Lot</dt>
                 <dd class="col-sm-10">{{if .Lot.VendorLot}}{{.Lot.VendorLot}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
+                <dt class="col-sm-2">Purchase Order</dt>
+                <dd class="col-sm-10">{{if .Lot.PoNumber}}<a href="/po/{{.Lot.PoNumber}}" data-popout-url="/popout/po/{{.Lot.PoNumber}}">{{.Lot.PoNumber}}</a>{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
                 <dt class="col-sm-2">Lot Description</dt>
                 <dd class="col-sm-10">{{if .Lot.LotDescription}}{{.Lot.LotDescription}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
                 <dt class="col-sm-2">Created</dt>
                 <dd class="col-sm-10">{{(localTime $.UserLoc .Lot.CreatedAt).Format "2006-01-02"}}</dd>
                 <dt class="col-sm-2">Notes</dt>
                 <dd class="col-sm-10">{{if .Lot.Notes}}<span style="white-space:pre-wrap; word-break:break-word;">{{.Lot.Notes}}</span>{{else}}<span class="text-muted">&mdash;</span>{{end}}</dd>
+                <dt class="col-sm-2">Transactions</dt>
+                <dd class="col-sm-10"><a href="/part/{{.Lot.PartID}}/transactions">View transactions</a></dd>
             </dl>
         </div>
     </div>
@@ -109,6 +113,33 @@
     </div>
     {{else}}
     <p class="no-results">This lot has not been consumed into any assembly yet.</p>
+    {{end}}
+
+    {{/* ── Units in this lot ──────────────────────────────────── */}}
+    <h6 class="mt-4">Units <span class="text-muted small fw-normal">(serialized units that live in this lot)</span></h6>
+    {{if .Units}}
+    <div class="table-wrapper">
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Serial Number</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Units}}
+                <tr>
+                    <td><a href="/part/{{.PartID}}/units/{{.ID}}" data-popout-url="/popout/unit/{{.ID}}">{{.SerialNumber}}</a></td>
+                    <td>{{(localTime $.UserLoc .CreatedAt).Format "2006-01-02"}}</td>
+                    <td>{{if .IsActive}}<span class="badge bg-success">Active</span>{{else}}<span class="badge bg-secondary">Scrapped</span>{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="no-results">No units in this lot.</p>
     {{end}}
 
     {{/* ── Test records ────────────────────────────────────────── */}}

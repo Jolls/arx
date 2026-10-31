@@ -374,6 +374,8 @@ type POReceipt struct {
 	PartNumber string
 	Qty        decimal.Decimal
 	Username   string
+	LotID      *int // the lot the receipt created, nil for non-lot-tracked parts
+	LotNumber  string
 }
 
 // POEvent is one purchase_order_history row.

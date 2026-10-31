@@ -980,9 +980,11 @@ func (q *Queries) ListPOLines(ctx context.Context, number string) ([]ListPOLines
 }
 
 const listPOReceipts = `-- name: ListPOReceipts :many
-SELECT it.txn_date, pol.part_id, COALESCE(pol.part_number_snapshot, '') AS part_number, it.qty, it.username
+SELECT it.txn_date, pol.part_id, COALESCE(pol.part_number_snapshot, '') AS part_number, it.qty, it.username,
+       it.lot_id, COALESCE(l.lot_number, '') AS lot_number
 FROM inventory_transaction it
 JOIN po_line pol ON it.po_line_id = pol.id
+LEFT JOIN lot l ON l.id = it.lot_id
 WHERE pol.po_id = $1 AND it.txn_type = 'receipt'
 ORDER BY it.txn_date DESC, it.id DESC
 `
@@ -993,6 +995,8 @@ type ListPOReceiptsRow struct {
 	PartNumber string
 	Qty        decimal.Decimal
 	Username   string
+	LotID      *int
+	LotNumber  string
 }
 
 // The receipt ledger rows recorded against a PO's lines, newest first.
@@ -1011,6 +1015,8 @@ func (q *Queries) ListPOReceipts(ctx context.Context, poID int) ([]ListPOReceipt
 			&i.PartNumber,
 			&i.Qty,
 			&i.Username,
+			&i.LotID,
+			&i.LotNumber,
 		); err != nil {
 			return nil, err
 		}

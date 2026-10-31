@@ -1466,6 +1466,10 @@ func TestIntegration_ReportsDashboard_RendersAllCards(t *testing.T) {
 		"Stale WIP Records",
 		"POs Pending Approval",
 		"Below Reorder Point",
+		"Recent Lots",
+		"Recent Builds",
+		"/part/3013/lots/8306",
+		"/popout/build/8203",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("ReportsDashboard: body missing %q", want)

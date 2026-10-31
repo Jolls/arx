@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"arx/internal/inventory"
 	"arx/internal/reports"
 )
 
@@ -109,6 +110,16 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, "Error loading dashboard: "+err.Error())
 		return
 	}
+	recentLots, err := h.dashboardRecentLots(r.Context(), 5)
+	if err != nil {
+		h.renderError(w, r, "Error loading dashboard: "+err.Error())
+		return
+	}
+	recentBuilds, err := h.dashboardRecentBuilds(r.Context(), 5)
+	if err != nil {
+		h.renderError(w, r, "Error loading dashboard: "+err.Error())
+		return
+	}
 
 	data["OpenPOCount"] = openPOs
 	data["POsReceivedThisMonth"] = receivedThisMonth
@@ -118,6 +129,8 @@ func (h *Handler) ReportsDashboard(w http.ResponseWriter, r *http.Request) {
 	data["StaleWIPRecords"] = staleWIPRecords
 	data["PendingApprovalPOs"] = pendingApprovalPOs
 	data["BelowReorderParts"] = belowReorderParts
+	data["RecentLots"] = recentLots
+	data["RecentBuilds"] = recentBuilds
 	h.render(w, r, "reports/dashboard.html", data)
 }
 
@@ -194,6 +207,35 @@ func (h *Handler) dashboardPendingApprovalPOs(ctx context.Context, limit int) ([
 // reorder point set (reorder_min IS NULL) are excluded.
 func (h *Handler) dashboardBelowReorderParts(ctx context.Context, limit int) ([]dashboardBelowReorderItem, error) {
 	return h.reports().BelowReorderParts(ctx, limit)
+}
+
+// dashboardRecentLotItem is one row in the Reports dashboard's Recent Lots card (#414).
+type dashboardRecentLotItem struct {
+	ID         int
+	PartID     int
+	LotNumber  string
+	PartNumber string
+	Created    string
+}
+
+// dashboardRecentLots lists the newest lots across all parts, dates in the user's zone.
+func (h *Handler) dashboardRecentLots(ctx context.Context, limit int) ([]dashboardRecentLotItem, error) {
+	lots, err := h.inventory().ListRecentLots(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	loc := h.userLocationCtx(ctx)
+	items := make([]dashboardRecentLotItem, len(lots))
+	for i, l := range lots {
+		items[i] = dashboardRecentLotItem{ID: l.ID, PartID: l.PartID, LotNumber: l.LotNumber, PartNumber: l.PartNumber,
+			Created: localTime(loc, l.CreatedAt).Format("2006-01-02")}
+	}
+	return items, nil
+}
+
+// dashboardRecentBuilds lists the newest builds across all parts.
+func (h *Handler) dashboardRecentBuilds(ctx context.Context, limit int) ([]inventory.BuildListRow, error) {
+	return h.inventory().ListRecentBuilds(ctx, limit)
 }
 
 // dashboardRecentActivity merges the most recently modified parts with the

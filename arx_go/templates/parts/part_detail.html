@@ -129,6 +129,20 @@
         </div>
         {{end}}
 
+        {{/* Traceability — lot/unit/build counts linking to the filtered lists (#417) */}}
+        {{if or .Part.ShowLots .Part.ShowUnits .Part.ShowBuild}}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-header"><span>Traceability</span></div>
+                <div class="card-body">
+                    {{if .Part.ShowLots}}<div class="detail-row"><strong>Lots:</strong><span><a href="/lots?f.col-pn={{.Part.PartNumber}}">{{.LotCount}}</a></span></div>{{end}}
+                    {{if .Part.ShowUnits}}<div class="detail-row"><strong>Units:</strong><span><a href="/units?f.col-pn={{.Part.PartNumber}}">{{.UnitCount}}</a></span></div>{{end}}
+                    {{if .Part.ShowBuild}}<div class="detail-row"><strong>Builds:</strong><span><a href="/builds?f.col-pn={{.Part.PartNumber}}">{{.BuildCount}}</a></span></div>{{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+
         {{/* Price trend — reuses window.renderPriceHistory */}}
         {{if .Part.ShowPricing}}
         <div class="col">

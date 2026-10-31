@@ -74,8 +74,11 @@ VALUES (sqlc.arg(parent_lot_id), sqlc.arg(child_lot_id), sqlc.arg(qty_consumed))
 -- Newest first. A NULL part_id lists every part's lots; a NULL n means no limit.
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
        COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
+       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active,
+       COALESCE(po.number, '') AS po_number
 FROM lot l JOIN part p ON p.id = l.part_id
+LEFT JOIN po_line pol ON pol.id = l.po_line_id
+LEFT JOIN purchase_order po ON po.id = pol.po_id
 WHERE (sqlc.narg(part_id)::int IS NULL OR l.part_id = sqlc.narg(part_id)::int)
 ORDER BY l.created_at DESC, l.id DESC
 LIMIT sqlc.narg(n)::int;
@@ -83,8 +86,11 @@ LIMIT sqlc.narg(n)::int;
 -- name: GetLot :one
 SELECT l.id, l.lot_number, COALESCE(l.vendor_lot_number, '') AS vendor_lot, l.part_id,
        COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
-       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active
+       l.lot_description, COALESCE(l.notes, '') AS notes, l.created_at, l.is_active,
+       COALESCE(po.number, '') AS po_number
 FROM lot l JOIN part p ON p.id = l.part_id
+LEFT JOIN po_line pol ON pol.id = l.po_line_id
+LEFT JOIN purchase_order po ON po.id = pol.po_id
 WHERE l.id = sqlc.arg(id);
 
 -- name: CountPartLots :one
@@ -172,6 +178,15 @@ JOIN part p ON p.id = u.part_id
 LEFT JOIN lot l ON l.id = u.lot_id
 WHERE u.part_id = sqlc.arg(part_id) ORDER BY u.created_at DESC, u.id DESC LIMIT sqlc.arg(n)::int;
 
+-- name: ListLotUnits :many
+SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
+       COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
+       u.build_id, u.is_active, u.created_at, u.source
+FROM unit u
+JOIN part p ON p.id = u.part_id
+LEFT JOIN lot l ON l.id = u.lot_id
+WHERE u.lot_id = sqlc.arg(lot_id) ORDER BY u.created_at DESC, u.id DESC;
+
 -- name: GetUnit :one
 SELECT u.id, u.serial_number, u.part_id, COALESCE(p.part_number, '') AS part_number,
        COALESCE(p.description, '') AS part_description, u.lot_id, COALESCE(l.lot_number, '') AS lot_number,
@@ -183,6 +198,9 @@ WHERE u.id = sqlc.arg(id);
 
 -- name: CountPartUnits :one
 SELECT COUNT(*) FROM unit WHERE part_id = sqlc.arg(part_id);
+
+-- name: CountPartBuilds :one
+SELECT COUNT(*) FROM build WHERE part_id = sqlc.arg(part_id);
 
 -- name: CountLockedUnitRecords :one
 -- A unit's serial is frozen once any locked form_record points at it.
@@ -275,6 +293,16 @@ FROM build b
 JOIN part p ON p.id = b.part_id
 LEFT JOIN lot l ON l.id = b.output_lot_id
 ORDER BY b.build_date DESC, b.id DESC;
+
+-- name: ListRecentBuilds :many
+-- Dashboard Recent Builds card (#414): the n newest, same shape and ordering as ListAllBuilds.
+SELECT b.id, b.part_id, COALESCE(p.part_number, '') AS part_number, COALESCE(p.description, '') AS part_description,
+       b.qty, b.build_date, b.output_lot_id, COALESCE(l.lot_number, '') AS lot_number, COALESCE(b.note, '') AS note
+FROM build b
+JOIN part p ON p.id = b.part_id
+LEFT JOIN lot l ON l.id = b.output_lot_id
+ORDER BY b.build_date DESC, b.id DESC
+LIMIT sqlc.arg(row_limit)::int;
 
 -- name: GetBuildDetail :one
 -- Popout (#387): one build with its part and (nullable) output lot.

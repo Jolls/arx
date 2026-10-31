@@ -672,6 +672,21 @@ function exportCSV() {
             headers: ['PO Number','Status','Supplier','Date Ordered','Date Closed','Orderer','Total Cost'],
             row: r => [r.num, r.status, r.supplier, r.ordered || '', r.closed || '', r.orderer, r.cost.toFixed(2)],
         },
+        '/api/lots/rows': {
+            filename: 'lots.csv',
+            headers: ['Lot Number','Vendor Lot','Lot Description','Part Number','Part Description','Notes','Created','Status'],
+            row: r => [r.lot, r.vendorLot, r.lotDesc, r.pn, r.partDesc, r.notes, r.created, r.active ? 'Active' : 'Inactive'],
+        },
+        '/api/units/rows': {
+            filename: 'units.csv',
+            headers: ['Serial #','Part Number','Description','Lot','Created','Status'],
+            row: r => [r.sn, r.pn, r.partDesc, r.lot, r.created, r.active ? 'Active' : 'Scrapped'],
+        },
+        '/api/builds/rows': {
+            filename: 'builds.csv',
+            headers: ['Build','Part Number','Description','Qty','Build Date','Output Lot','Note'],
+            row: r => [r.id, r.pn, r.partDesc, r.qty, r.date, r.lot, r.note],
+        },
     };
 
     const cfg = configs[url];
