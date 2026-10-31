@@ -23,6 +23,9 @@
 --   8501-8599  unit                    1-99       named_queries
 --   (natural key) app_config
 --
+-- build (8201-), lot (8301-) and unit (8501-) share one id space (trace_id_seq, #420), so their
+-- fixed ids must stay disjoint from each other; a new seed row in any of the three picks an unused id.
+--
 -- part_attachment (8101-8199) is seeded with URL-only attachments (no real files needed) —
 -- one with a comment, one without. company_attachment is NOT seeded (would require real
 -- files/URLs on companies too) and is cleared and left empty.
@@ -129,7 +132,7 @@ END $$;
     -- company_logo is intentionally NOT seeded here (it's a large base64 data URI that would
     -- swamp this file's diff) — run SQL/seed_company_logo.sql separately, after this script.
     INSERT INTO app_config (setting_key, setting_value, updated_at) VALUES
-        ('schema_version', '12', '2020-01-01T00:00:00');
+        ('schema_version', '13', '2020-01-01T00:00:00');
     -- named_queries drive spec_nom auto-fill (query:name(@param=…) tokens). This is app
     -- config, not throwaway test data; a text change here also needs a migration that
     -- patches existing databases (see migrations/20260926120000_28_named_queries_postgres_text.sql).
@@ -790,7 +793,7 @@ END $$;
     SELECT setval(pg_get_serial_sequence('po_line', 'id'), 5599);
     SELECT setval(pg_get_serial_sequence('purchase_order_history', 'id'), 5899);
     SELECT setval(pg_get_serial_sequence('inventory_transaction', 'id'), 5999);
-    SELECT setval(pg_get_serial_sequence('build', 'id'), 8299);
+    SELECT setval('trace_id_seq', 8599);               -- shared by lot, unit and build (#420); their fixed ids (8201-8503) are disjoint
     SELECT setval(pg_get_serial_sequence('form', 'id'), 6099);
     SELECT setval(pg_get_serial_sequence('form_events', 'id'), 6299);
     SELECT setval(pg_get_serial_sequence('form_row', 'id'), 6199);

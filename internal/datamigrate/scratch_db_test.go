@@ -84,7 +84,7 @@ func TestLoadFixtureIntoScratchDB(t *testing.T) {
 		{"one company, no leftovers", "SELECT count(*)::text FROM company", "1"},
 		{"two parts", "SELECT count(*)::text FROM part", "2"},
 		{"secret config not carried", "SELECT count(*)::text FROM app_config WHERE setting_key LIKE 'secret_%'", "0"},
-		{"schema_version stays the target's", "SELECT setting_value FROM app_config WHERE setting_key = 'schema_version'", "12"},
+		{"schema_version stays the target's", "SELECT setting_value FROM app_config WHERE setting_key = 'schema_version'", "13"},
 		{"part categories imported from app_config", "SELECT string_agg(code, ',') FROM part_category", "BUY"},
 		{"part '' category became NULL", "SELECT (category IS NULL)::text FROM part WHERE id = 2", "true"},
 		{"deferred FK set", "SELECT price_id::text || '/' || primary_attachment_id::text FROM part WHERE id = 1", "1/1"},
