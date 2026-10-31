@@ -42,13 +42,16 @@ func (h *Handler) fetchUnitRow(ctx context.Context, unitID int) (UnitRow, bool, 
 // each linking to its genealogy trace (#746).
 func (h *Handler) PartUnits(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "units")
+	var units []UnitRow
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "units", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		units, err = h.unitsForPart(ctx, pid)
+		return pageErr("Error retrieving units", err)
+	})
 	if !ok {
-		return
-	}
-	units, err := h.unitsForPart(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving units: "+err.Error())
 		return
 	}
 	h.render(w, r, "parts/part_units.html", map[string]any{

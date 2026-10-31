@@ -118,22 +118,24 @@ func (h *Handler) genealogyTraceRoots(ctx context.Context, roots []traceRoot, an
 // to its genealogy trace.
 func (h *Handler) PartLots(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "lots")
+	var lots []LotRow
+	var hasSources map[int]bool
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "lots", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		if lots, err = h.lotsForPart(ctx, pid); err != nil {
+			return pageErr("Error retrieving lots", err)
+		}
+		lotIDs := make([]int, len(lots))
+		for i, l := range lots {
+			lotIDs[i] = l.ID
+		}
+		hasSources, err = h.inventory().LotsWithSources(ctx, lotIDs)
+		return pageErr("Error retrieving lot sources", err)
+	})
 	if !ok {
-		return
-	}
-	lots, err := h.lotsForPart(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving lots: "+err.Error())
-		return
-	}
-	lotIDs := make([]int, len(lots))
-	for i, l := range lots {
-		lotIDs[i] = l.ID
-	}
-	hasSources, err := h.inventory().LotsWithSources(r.Context(), lotIDs)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving lot sources: "+err.Error())
 		return
 	}
 	h.render(w, r, "parts/part_lots.html", map[string]any{

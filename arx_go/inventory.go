@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -60,13 +61,16 @@ func ledgerWithBalances(asc []InventoryTxnView) []InventoryTxnView {
 
 func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "transactions")
+	var rows []inventory.LedgerRow
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "transactions", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		rows, err = h.inventory().ListLedger(ctx, pid)
+		return pageErr("Error retrieving transactions", err)
+	})
 	if !ok {
-		return
-	}
-	rows, err := h.inventory().ListLedger(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving transactions: "+err.Error())
 		return
 	}
 	asc := make([]InventoryTxnView, len(rows))
@@ -80,6 +84,7 @@ func (h *Handler) PartTransactions(w http.ResponseWriter, r *http.Request) {
 
 	var lots []LotOption
 	if p.IsLotTracked {
+		var err error
 		lots, err = h.activeLotsForPart(r.Context(), p.ID)
 		if err != nil {
 			h.renderError(w, r, "Error retrieving lots: "+err.Error())

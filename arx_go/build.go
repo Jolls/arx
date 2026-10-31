@@ -97,16 +97,26 @@ func (h *Handler) loadBuildComponents(ctx context.Context, outputPartID int) ([]
 
 func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "build")
-	if !ok {
-		return
-	}
 	// tested_count is the # of serialized units created for each build so far —
 	// the Q6 completeness numerator (#745); the denominator is the build qty. Manual
 	// units (#799: back-filled, no test record) are excluded — they were never tested.
-	history, err := h.inventory().ListBuildHistory(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving builds: "+err.Error())
+	//
+	// The BOM lines this build will consume, with current on-hand and a lot picker per
+	// lot-tracked component, load in the same closure.
+	var history []inventory.BuildHistoryRow
+	var comps []buildComponent
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "build", func(ctx context.Context) error {
+		pid, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
+		if history, err = h.inventory().ListBuildHistory(ctx, pid); err != nil {
+			return pageErr("Error retrieving builds", err)
+		}
+		comps, err = h.loadBuildComponents(ctx, pid)
+		return pageErr("Error retrieving BOM", err)
+	})
+	if !ok {
 		return
 	}
 	var builds []BuildView
@@ -117,15 +127,8 @@ func (h *Handler) PartBuild(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// The BOM lines this build will consume, with current on-hand and a lot picker per
-	// lot-tracked component. The lot column shows whenever any consumed component is
-	// lot-tracked (independent of whether the output part is), since those components
-	// are always drawn from a specific lot.
-	comps, err := h.loadBuildComponents(r.Context(), p.ID)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving BOM: "+err.Error())
-		return
-	}
+	// The lot column shows whenever any consumed component is lot-tracked (independent of
+	// whether the output part is), since those components are always drawn from a specific lot.
 	showLotColumn := false
 	for _, c := range comps {
 		if c.IsLotTracked {

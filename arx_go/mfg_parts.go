@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"arx/arx_go/models"
 	"arx/internal/parts"
 )
 
@@ -14,20 +16,21 @@ import (
 
 func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "mfg-parts")
+	var mfgParts []parts.MfgPart
+	var manufacturers []parts.Manufacturer
+	var attsByLink map[int][]models.Attachment
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "mfg-parts", func(ctx context.Context) (err error) {
+		rc := r.WithContext(ctx)
+		if mfgParts, err = h.fetchMfgParts(rc, id); err != nil {
+			return pageErr("Error retrieving manufacturer parts", err)
+		}
+		if manufacturers, err = h.fetchManufacturers(rc); err != nil {
+			return pageErr("Error retrieving manufacturers", err)
+		}
+		attsByLink = h.fetchAttachmentsByVendor(rc, id, mfgScopeCol)
+		return nil
+	})
 	if !ok {
-		return
-	}
-
-	mfgParts, err := h.fetchMfgParts(r, id)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving manufacturer parts: "+err.Error())
-		return
-	}
-
-	manufacturers, err := h.fetchManufacturers(r)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving manufacturers: "+err.Error())
 		return
 	}
 
@@ -35,7 +38,7 @@ func (h *Handler) PartMfgParts(w http.ResponseWriter, r *http.Request) {
 		"Part":              p,
 		"MfgParts":          mfgParts,
 		"Manufacturers":     manufacturers,
-		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, mfgScopeCol),
+		"AttachmentsByLink": attsByLink,
 		"ActiveTab":         "parts", "ActiveDetailTab": "mfg-parts",
 		"NavBackURL": backURL, "NavBackLabel": backLabel,
 		"CSRFToken": h.csrfToken(w, r), "TestMode": h.cfg().TestMode,

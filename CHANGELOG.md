@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.95] - 2026-10-31
+### Changed
+- Part detail tabs (BOM, Orders, Where Used, Records, Transactions, Units, Lots, Pricing, Mfg Parts, Suppliers, Attachments, Build) look up the part concurrently with their own queries, saving up to one database round trip per tab ([#431](https://github.com/Jolls/arx/issues/431))
+- The route round-trip budget test now covers every GET route (Settings, popouts, `/find`, edit forms and the remaining `/api/*` endpoints run as a seeded admin), a build-time guard fails when a new GET route has neither a budget nor a documented exemption, `[PROFILE]` lines also count connection opens, statement preparations and idle pings, and a scaling test checks that list and detail pages issue the same number of round trips however many child rows they show ([#430](https://github.com/Jolls/arx/issues/430))
+
 ## [0.8.94] - 2026-10-31
 ### Changed
 - Pages with many independent queries load faster: the Reports dashboard, part Summary, record detail, lot trace, unit trace and PO detail now run them concurrently over an explicitly sized connection pool (12 connections, 15-minute idle expiry, 30 s idle ping threshold); round-trip budgets lowered to match, and debug logging shows round trips (critical path) next to total queries ([#426](https://github.com/Jolls/arx/issues/426))

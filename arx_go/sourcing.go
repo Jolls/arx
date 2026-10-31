@@ -21,28 +21,35 @@ import (
 
 func (h *Handler) PartSourcing(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	p, backURL, backLabel, ok := h.partPageBase(w, r, id, "suppliers")
+	digiKeyEnabled := h.cfg().DigiKeyEnabled()
+	var links []parts.SupplierPart
+	var units []UnitOption
+	var manufacturers []parts.Manufacturer
+	var pricesBySupplier map[int][]parts.Price
+	var attsByLink map[int][]models.Attachment
+	p, backURL, backLabel, ok := h.partTabPage(w, r, id, "suppliers", func(ctx context.Context) (err error) {
+		rc := r.WithContext(ctx)
+		if links, err = h.fetchSupplierLinks(rc, id); err != nil {
+			return pageErr("Error retrieving supplier links", err)
+		}
+		units, _ = h.fetchUnits(ctx)
+		if digiKeyEnabled {
+			// Only fetched for the DigiKey manufacturer picker — skip the query
+			// entirely on every other Sourcing tab render.
+			manufacturers, _ = h.fetchManufacturers(rc)
+		}
+		pricesBySupplier = h.fetchActivePricesBySupplier(rc, id)
+		attsByLink = h.fetchAttachmentsByVendor(rc, id, supplierScopeCol)
+		return nil
+	})
 	if !ok {
 		return
-	}
-	links, err := h.fetchSupplierLinks(r, id)
-	if err != nil {
-		h.renderError(w, r, "Error retrieving supplier links: "+err.Error())
-		return
-	}
-	units, _ := h.fetchUnits(r.Context())
-	digiKeyEnabled := h.cfg().DigiKeyEnabled()
-	var manufacturers []parts.Manufacturer
-	if digiKeyEnabled {
-		// Only fetched for the DigiKey manufacturer picker — skip the query
-		// entirely on every other Sourcing tab render.
-		manufacturers, _ = h.fetchManufacturers(r)
 	}
 	h.render(w, r, "parts/part_sourcing.html", map[string]any{
 		"Part":              p,
 		"Links":             links,
-		"PricesBySupplier":  h.fetchActivePricesBySupplier(r, id),
-		"AttachmentsByLink": h.fetchAttachmentsByVendor(r, id, supplierScopeCol),
+		"PricesBySupplier":  pricesBySupplier,
+		"AttachmentsByLink": attsByLink,
 		"Units":             units,
 		"Manufacturers":     manufacturers,
 		"DigiKeyEnabled":    digiKeyEnabled,
