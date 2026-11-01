@@ -1,3 +1,42 @@
+Arx v0.8.96 — October 2026
+========================
+
+NEW FEATURES
+
+  Smarter List Filters
+  Column filters accept multiple terms separated by semicolons, and a
+  leading ! excludes matches; a help icon in column headers explains it.
+
+  More Hover Popouts
+  Hover part, lot, unit, build, supplier, PO and contact references
+  almost anywhere to see stock, cost, used-in/consumed-into, and more.
+
+  Part Details Tab
+  See every field for a part, read-only, with Edit and Duplicate buttons.
+
+  RFQs Tab
+  RFQs now live under POs with their vendor quotes as expandable rows,
+  replacing the old "Show RFQs" toggle.
+
+  Lots, Units and Builds Upgrades
+  Filter, sort, paginate and export to CSV; the Part Summary page shows
+  traceability counts and links, and Reports shows recent lots/builds.
+
+  Find Box
+  Look up a lot, unit or build by id, lot number or serial number right
+  from the header.
+
+BUG FIXES
+
+  Signed-out users can now fix a bad database password or toggle Test
+  Mode from the Settings link on the sign-in page.
+  Saving a test record now links to an existing unit by serial even when
+  no lot or build is picked.
+  Many pages — Reports dashboard, part Summary, record/lot/unit detail,
+  and purchase orders — load noticeably faster.
+  Attachment files and downloaded datasheets/photos are now locked to
+  their proper folder and can no longer be redirected elsewhere.
+
 Arx v0.8.71 — October 2026
 ========================
 
