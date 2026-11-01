@@ -225,13 +225,19 @@ func TestIntegration_DashboardPOCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// dashboardPOsReceivedThisMonth buckets by the user's local day (#265), not the DB
+	// session's day, so the seeded dates must use the same clock or this flakes at a
+	// month boundary where the two disagree (e.g. UTC already next month, user's zone not yet).
+	today := time.Now().In(h.userLocationCtx(ctx))
+	lastMonth := today.AddDate(0, 0, -today.Day())
+
 	openPO, _ := repPO(t, h, co, strp("open"), boolp(true), nil)
 	repPO(t, h, co, strp("draft"), boolp(true), nil) // not open: must not count
 	repExec(t, h, `INSERT INTO po_line (po_id, line_number, qty, unit_cost, date_received) VALUES
-		($1,1,1,1,CURRENT_DATE), ($1,2,1,1,CURRENT_DATE)`, openPO) // two lines, one PO
+		($1,1,1,1,$2), ($1,2,1,1,$2)`, openPO, today.Format("2006-01-02")) // two lines, one PO
 	lastMonthPO, _ := repPO(t, h, co, strp("open"), boolp(true), nil)
 	repExec(t, h, `INSERT INTO po_line (po_id, line_number, qty, unit_cost, date_received)
-		VALUES ($1,1,1,1,date_trunc('month', CURRENT_DATE)::date - 1)`, lastMonthPO) // last month: not counted
+		VALUES ($1,1,1,1,$2)`, lastMonthPO, lastMonth.Format("2006-01-02")) // last month: not counted
 
 	openAfter, err := h.dashboardOpenPOCount(ctx)
 	if err != nil {
