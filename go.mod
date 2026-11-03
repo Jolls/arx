@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	fyne.io/systray v1.12.2
 	github.com/gorilla/sessions v1.4.0
-	github.com/jackc/pgx/v5 v5.11.0
+	github.com/jackc/pgx/v5 v5.12.0
 	github.com/joho/godotenv v1.5.1
 	github.com/klippa-app/go-pdfium v1.21.4
 	github.com/pressly/goose/v3 v3.29.0
