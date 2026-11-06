@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"arx/internal/inventory"
@@ -13,14 +14,27 @@ type findRow struct {
 	Kind, Label, Number, PartNumber, PartDescription, Matched, URL string
 }
 
-// findURL is the page a find result opens: the lot or unit trace, or for a build its output lot's
-// trace (else the part's Build tab, as the build links in the lists do).
+// findURL is the page a find result opens: the lot or unit trace, the part, PO, company or
+// contact detail page, the owning part's Sourcing tab for an MPN or supplier PN match, or for a
+// build its output lot's trace (else the part's Build tab, as the build links in the lists do).
 func findURL(r inventory.FindResult) string {
 	switch {
 	case r.Kind == "unit":
 		return fmt.Sprintf("/part/%d/units/%d", r.PartID, r.ID)
 	case r.Kind == "lot":
 		return fmt.Sprintf("/part/%d/lots/%d", r.PartID, r.ID)
+	case r.Kind == "part":
+		return fmt.Sprintf("/part/%d", r.ID)
+	case r.Kind == "po":
+		// po.id isn't user-facing (the /po/{id} route keys on po.number, which is free text, not
+		// guaranteed to be URL-safe).
+		return "/po/" + url.PathEscape(r.Name)
+	case r.Kind == "company":
+		return fmt.Sprintf("/supplier/%d", r.ID)
+	case r.Kind == "contact":
+		return fmt.Sprintf("/contact/%d", r.ID)
+	case r.Kind == "mfg_part" || r.Kind == "supplier_part":
+		return fmt.Sprintf("/part/%d/suppliers", r.PartID)
 	case r.OutputLotID != 0:
 		return fmt.Sprintf("/part/%d/lots/%d", r.PartID, r.OutputLotID)
 	}
@@ -34,17 +48,32 @@ func matchedLabel(r inventory.FindResult) string {
 		fields = append(fields, "ID")
 	}
 	if r.MatchedName {
-		if r.Kind == "unit" {
+		switch r.Kind {
+		case "unit":
 			fields = append(fields, "Serial number")
-		} else {
+		case "part":
+			fields = append(fields, "Part number")
+		case "po":
+			fields = append(fields, "PO number")
+		case "company":
+			fields = append(fields, "Company name")
+		case "contact":
+			fields = append(fields, "Contact name")
+		case "mfg_part":
+			fields = append(fields, "Manufacturer part number")
+		case "supplier_part":
+			fields = append(fields, "Supplier part number")
+		default:
 			fields = append(fields, "Lot number")
 		}
 	}
 	return strings.Join(fields, ", ")
 }
 
-// Find — GET /find?q=. Exact lookup of a lot, unit or build by id, lot number or serial (#416):
-// one match redirects to it, several list a pick list, none shows a message.
+// Find — GET /find?q=. Exact lookup of a lot, unit, build, part, PO, company, contact, MPN or
+// supplier PN by id, lot number, serial, part number, PO number, company name, contact name,
+// MPN or supplier PN (#416, #2): one match redirects to it, several list a pick list, none
+// shows a message.
 func (h *Handler) Find(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	data := map[string]any{"ActiveTab": "records", "TestMode": h.cfg().TestMode, "Q": q}
@@ -64,7 +93,22 @@ func (h *Handler) Find(w http.ResponseWriter, r *http.Request) {
 			rows := make([]findRow, len(res))
 			for i, x := range res {
 				kind := strings.ToUpper(x.Kind[:1]) + x.Kind[1:]
-				rows[i] = findRow{Kind: kind, Label: fmt.Sprintf("%s %d", kind, x.ID), Number: x.Name,
+				label := fmt.Sprintf("%s %d", kind, x.ID)
+				switch x.Kind {
+				case "po":
+					// po.id isn't user-facing (the /po/{id} route keys on po.number); label with
+					// the number the user actually searched for instead.
+					kind = "PO"
+					label = kind + " " + x.Name
+				case "mfg_part":
+					// Matches land on the owning part's Sourcing tab, not a page of their own.
+					kind = "MPN"
+					label = fmt.Sprintf("Part %d", x.ID)
+				case "supplier_part":
+					kind = "Supplier PN"
+					label = fmt.Sprintf("Part %d", x.ID)
+				}
+				rows[i] = findRow{Kind: kind, Label: label, Number: x.Name,
 					PartNumber: x.PartNumber, PartDescription: x.PartDescription, Matched: matchedLabel(x), URL: findURL(x)}
 			}
 			data["Results"] = rows
