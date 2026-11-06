@@ -1591,6 +1591,12 @@ func (h *Handler) PartAttachmentCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderPartAttachments(w, r, id, map[string]any{"ImportCollision": in.Collision})
 		return
 	}
+	if in.FileName == "" {
+		// Cancel from a duplicate-hash warning on a manually-linked (non-imported)
+		// file/URL (#71) posts back with no FILFileName at all; nothing to add.
+		http.Redirect(w, r, fmt.Sprintf("/part/%s/attachments", id), http.StatusFound)
+		return
+	}
 
 	hash := computeAttachmentHash(h.cfg().DocControlRoot, in.FileName)
 	if h.partAttachmentDuplicateWarning(w, r, id, "", hash, 0, upload, in.FileName, category, rev, comment) {

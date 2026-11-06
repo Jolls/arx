@@ -5343,6 +5343,41 @@ func TestIntegration_AttachmentDuplicateHash(t *testing.T) {
 	}
 }
 
+// TestIntegration_AttachmentCreateEmptyFileNameNoop exercises (#442): canceling
+// a duplicate-hash warning on a manually-linked (non-imported) file/URL posts
+// back with no FILFileName (the Cancel form has no discard_import field for
+// that case), and PartAttachmentCreate must treat that as a no-op rather than
+// inserting a blank attachment row.
+func TestIntegration_AttachmentCreateEmptyFileNameNoop(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, _, cleanupPart := seedThrowawayPart(t, h, ctx, "442")
+	defer cleanupPart()
+
+	var countBefore int
+	if err := h.queryRowContext(ctx,
+		`SELECT COUNT(*) FROM part_attachment WHERE part_id=$1`, partID,
+	).Scan(&countBefore); err != nil {
+		t.Fatalf("count before: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.PartAttachmentCreate(rec, withID(postForm(fmt.Sprintf("/part/%d/attachments", partID), url.Values{}), partID))
+	assert302(t, "PartAttachmentCreate (empty FILFileName, cancel no-op)", rec)
+
+	var countAfter int
+	if err := h.queryRowContext(ctx,
+		`SELECT COUNT(*) FROM part_attachment WHERE part_id=$1`, partID,
+	).Scan(&countAfter); err != nil {
+		t.Fatalf("count after: %v", err)
+	}
+	if countAfter != countBefore {
+		t.Errorf("part_attachment count after empty-FILFileName post = %d, want %d (no row inserted)", countAfter, countBefore)
+	}
+}
+
 // TestIntegration_DeleteAttachmentFileIfUnshared exercises the shared-attachment
 // consolidation-on-delete check for both the part_attachment and company_attachment
 // tables (#809) — in particular the orphan-risk case: a file still referenced by
