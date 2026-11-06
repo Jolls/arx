@@ -837,21 +837,29 @@ func (s *Service) LinkRecordToBuild(ctx context.Context, recordID, partID int, l
 	return n > 0, err
 }
 
-// FindResult is one lot, unit or build matched by FindRecords (#416). OutputLotID is 0 when a build
-// produced no lot (and for lots and units).
+// FindResult is one lot, unit, build, part, PO, company, contact, manufacturer part number or
+// supplier part number matched by FindRecords (#416, #2). OutputLotID is 0 except for a build
+// that produced a lot. For a part, mfg_part or supplier_part, ID/PartID are both the owning
+// part's id (a mfg_part/supplier_part match lands on that part's Sourcing tab, not a page of its
+// own). PartID is 0 for a PO, company or contact (none is scoped to one part); PartDescription
+// instead carries the PO's supplier name or the contact's company name. A "company" match isn't
+// restricted to is_supplier rows, since /supplier/{id} shows any company.
 type FindResult struct {
-	Kind            string // "lot" | "unit" | "build"
+	Kind            string // "lot" | "unit" | "build" | "part" | "po" | "company" | "contact" | "mfg_part" | "supplier_part"
 	ID, PartID      int
 	PartNumber      string
 	PartDescription string
-	Name            string // lot_number for a lot, serial_number for a unit, "" for a build
+	Name            string // lot/serial/part number, po.number, company.name, contact.display_name, mfg_part_number or supplier_pn; "" for a build
 	OutputLotID     int
 	MatchedID       bool
-	MatchedName     bool // lot_number for a lot, serial_number for a unit
+	MatchedName     bool
 }
 
-// FindRecords returns every lot, unit and build whose id, lot number or serial exactly equals q
-// (lots first, then units, then builds). q must be non-empty; the caller trims it.
+// FindRecords returns every lot, unit, build, part, PO, company, contact, manufacturer part
+// number and supplier part number whose id, lot number, serial, part number, PO number, company
+// name, contact name, MPN or supplier PN exactly equals q (lots first, then units, builds,
+// parts, POs, companies, contacts, MPNs, then supplier PNs). q must be non-empty; the caller
+// trims it.
 func (s *Service) FindRecords(ctx context.Context, q string) ([]FindResult, error) {
 	var id *int
 	if n, err := strconv.Atoi(q); err == nil && q[0] != '+' && n > 0 && n <= math.MaxInt32 {

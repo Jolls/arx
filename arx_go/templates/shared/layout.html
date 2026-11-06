@@ -17,7 +17,7 @@
         <div class="header-actions">
             {{if .CompanyLogo}}<img src="{{.CompanyLogo}}" alt="" class="company-logo d-none d-sm-inline">{{end}}
             {{if .CurrentUser}}<form method="get" action="/find" role="search" class="d-none d-sm-flex m-0">
-                <input type="search" name="q" class="form-control form-control-sm" style="width:10rem;" placeholder="Find lot / unit / build" aria-label="Find lot, unit or build" autocomplete="off">
+                <input type="search" name="q" class="form-control form-control-sm" style="width:10rem;" placeholder="Find..." aria-label="Find lot, unit, build, part, PO, company, contact, MPN or supplier PN" autocomplete="off">
             </form>
             <a href="/settings#preferences" class="header-muted d-none d-sm-inline" style="font-size:0.8em; margin-right:4px; text-decoration:none;" title="My Preferences">{{.CurrentUser.DisplayName}}</a>
             <form method="post" action="/logout" style="display:inline; margin:0;">

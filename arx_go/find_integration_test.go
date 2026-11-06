@@ -21,13 +21,19 @@ func TestIntegration_Find_ResolvesLotUnitBuild(t *testing.T) {
 	h, done := liveHandler(t)
 	t.Cleanup(done)
 	for q, want := range map[string]string{
-		"8302":        "/part/3012/lots/8302", // lot matched on id AND lot_number: one result
-		"8303":        "/part/3007/lots/8303",
-		"SN-3013-001": "/part/3013/units/8501",
-		"8501":        "/part/3013/units/8501",
-		"8203":        "/part/3013/lots/8306", // build with an output lot
-		"8201":        "/part/3005/build",     // build with no output lot
-		"  8302 ":     "/part/3012/lots/8302", // surrounding whitespace is trimmed
+		"8302":           "/part/3012/lots/8302", // lot matched on id AND lot_number: one result
+		"8303":           "/part/3007/lots/8303",
+		"SN-3013-001":    "/part/3013/units/8501",
+		"8501":           "/part/3013/units/8501",
+		"8203":           "/part/3013/lots/8306", // build with an output lot
+		"8201":           "/part/3005/build",     // build with no output lot
+		"  8302 ":        "/part/3012/lots/8302", // surrounding whitespace is trimmed
+		"ASM-1001":       "/part/3005",           // part number (#2)
+		"5001":           "/po/5001",             // PO number (#2)
+		"Acme Fasteners": "/supplier/1001",       // company name (#2)
+		"John Doe":       "/contact/2001",        // contact name (#2)
+		"CX-4471":        "/part/3002/suppliers", // manufacturer part number (#2)
+		"ACME-AL6061":    "/part/3001/suppliers", // supplier part number (#2)
 	} {
 		rec := findReq(t, h, q)
 		if rec.Code != http.StatusFound || rec.Header().Get("Location") != want {
@@ -54,7 +60,7 @@ func TestIntegration_Find_AmbiguousListsAll(t *testing.T) {
 func TestIntegration_Find_NoMatch(t *testing.T) {
 	h, done := liveHandler(t)
 	t.Cleanup(done)
-	for _, q := range []string{"NO-SUCH-VALUE", "99999999999", "0"} {
+	for _, q := range []string{"NO-SUCH-VALUE", "99999999999", "0", "CX-9999-OBSOLETE"} {
 		rec := findReq(t, h, q)
 		if rec.Code != http.StatusOK || rec.Header().Get("Location") != "" || !strings.Contains(rec.Body.String(), "No record found for") {
 			t.Errorf("q=%q: %d Location %q; want 200 with no-match message", q, rec.Code, rec.Header().Get("Location"))
@@ -76,7 +82,7 @@ func TestIntegration_Find_BlankQ(t *testing.T) {
 func TestIntegration_Find_ExactOnly(t *testing.T) {
 	h, done := liveHandler(t)
 	t.Cleanup(done)
-	for _, q := range []string{"SN-3013", "sn-3013-001"} {
+	for _, q := range []string{"SN-3013", "sn-3013-001", "asm-1001"} {
 		if body := findReq(t, h, q).Body.String(); !strings.Contains(body, "No record found for") {
 			t.Errorf("q=%q matched; lookup must be exact and case-sensitive", q)
 		}

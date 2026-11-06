@@ -280,8 +280,40 @@ FROM (
            b.output_lot_id, ''::text, TRUE, FALSE
     FROM build b JOIN part p ON p.id = b.part_id
     WHERE b.id = $1::int
+    UNION ALL
+    SELECT 'part'::text, p2.id, p2.id, p2.part_number::text, COALESCE(p2.description, '')::text,
+           NULL::int, p2.part_number::text, FALSE, TRUE
+    FROM part p2
+    WHERE p2.part_number = $2::text
+    UNION ALL
+    SELECT 'po'::text, po.id, 0, ''::text, COALESCE(po.supplier_name, '')::text,
+           NULL::int, po.number::text, FALSE, TRUE
+    FROM purchase_order po
+    WHERE po.number = $2::text
+    UNION ALL
+    SELECT 'company'::text, c.id, 0, ''::text, ''::text,
+           NULL::int, c.name::text, FALSE, TRUE
+    FROM company c
+    WHERE c.name = $2::text
+    UNION ALL
+    SELECT 'contact'::text, ct.id, 0, ''::text, COALESCE(cc.name, '')::text,
+           NULL::int, ct.display_name::text, FALSE, TRUE
+    FROM contact ct LEFT JOIN company cc ON cc.id = ct.company_id
+    WHERE ct.display_name = $2::text
+    UNION ALL
+    SELECT 'mfg_part'::text, mp.part_id, mp.part_id, COALESCE(p.part_number, '')::text,
+           COALESCE(p.description, '')::text, NULL::int, mp.mfg_part_number::text, FALSE, TRUE
+    FROM mfg_part mp JOIN part p ON p.id = mp.part_id
+    WHERE mp.mfg_part_number = $2::text AND mp.is_active
+    UNION ALL
+    SELECT 'supplier_part'::text, sp.part_id, sp.part_id, COALESCE(p.part_number, '')::text,
+           COALESCE(p.description, '')::text, NULL::int, sp.supplier_pn::text, FALSE, TRUE
+    FROM supplier_part sp JOIN part p ON p.id = sp.part_id
+    WHERE sp.supplier_pn = $2::text
 ) r
-ORDER BY CASE r.kind WHEN 'lot' THEN 1 WHEN 'unit' THEN 2 ELSE 3 END, r.id
+ORDER BY CASE r.kind WHEN 'lot' THEN 1 WHEN 'unit' THEN 2 WHEN 'build' THEN 3 WHEN 'part' THEN 4
+    WHEN 'po' THEN 5 WHEN 'company' THEN 6 WHEN 'contact' THEN 7 WHEN 'mfg_part' THEN 8
+    ELSE 9 END, r.id
 `
 
 type FindTraceRecordsParams struct {
@@ -301,8 +333,16 @@ type FindTraceRecordsRow struct {
 	MatchedName     bool
 }
 
-// Lookup (#416): lots, units and builds whose id, lot_number or serial_number exactly equals the
-// query. id is NULL when the query isn't a usable int. The flags say which field matched.
+// Lookup (#416, #2): lots/units/builds whose id, lot_number or serial_number exactly equals the
+// query, plus parts, POs, companies (suppliers, manufacturers or other; matched on name
+// regardless of is_supplier, since /supplier/{id} shows any company), contacts, manufacturer
+// part numbers (mfg_part, active only - inactive is a soft-delete) and supplier part numbers
+// (supplier_part) whose part_number / po.number / company.name / contact.display_name /
+// mfg_part_number / supplier_pn exactly equals it (human identifier only; part.id, po.id,
+// company.id, contact.id, mfg_part.id and supplier_part.id aren't matched since none is a value
+// a user would type or scan). id is NULL when the query isn't a usable int. mfg_part and
+// supplier_part land on the owning part's Sourcing tab, so their id/part_id are both that part's
+// id. The flags say which field matched.
 func (q *Queries) FindTraceRecords(ctx context.Context, arg FindTraceRecordsParams) ([]FindTraceRecordsRow, error) {
 	rows, err := q.db.QueryContext(ctx, findTraceRecords, arg.ID, arg.Q)
 	if err != nil {
