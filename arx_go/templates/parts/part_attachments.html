@@ -315,7 +315,7 @@ function updateBrowsePreview(mode) {
         if (note) { note.style.display = 'none'; }
         if (multiList) { multiList.style.display = 'none'; multiList.textContent = ''; }
         if (clearLink) { clearLink.style.display = 'none'; }
-        if (f) { f.value = ''; f.readOnly = false; }
+        if (f && f.readOnly) { f.value = ''; f.readOnly = false; }
         return;
     }
     if (clearLink) { clearLink.style.display = ''; }

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.97] - 2026-11-06
+### Fixed
+- Typing in a part attachment's Rev or Category field no longer clears a manually pasted File/URL value ([#442](https://github.com/Jolls/arx/issues/442))
+- Cancelling a duplicate-link warning for a manually-linked (non-imported) attachment no longer leaves a blank attachment row ([#442](https://github.com/Jolls/arx/issues/442))
+
 ## [0.8.96] - 2026-10-31
 ### Changed
 - POST handlers that save a BOM, PO, test record, RFQ or supplier link no longer read through the connection pool while their own save transaction is open, removing a second-connection requirement that could stall under a busier pool ([#432](https://github.com/Jolls/arx/issues/432))
