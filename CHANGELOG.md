@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.101] - 2026-11-12
+### Fixed
+- A serial-tracked part with no BOM (or any serial/lot_serial save with no build/lot picked) now mints its unit automatically instead of leaving the record unlinked with no unit ever created ([#452](https://github.com/Jolls/arx/issues/452))
+- An attach-step image/PDF result now renders as a clickable thumbnail/link in the main results table even when the record's serial number contains a character outside letters/digits/hyphens, matching the Screenshots/Attachments sections below ([#453](https://github.com/Jolls/arx/issues/453))
+
 ## [0.8.100] - 2026-11-12
 ### Fixed
 - The form definition editor's spec_nom lint no longer rejects a valid zero-param named query (`query:name` with no parentheses) ([#449](https://github.com/Jolls/arx/issues/449))

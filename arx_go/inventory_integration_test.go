@@ -513,6 +513,57 @@ func TestIntegration_InventoryUpsertTestUnit_ExistingSeedSerial(t *testing.T) {
 	}
 }
 
+// FindOrCreateTestUnit mints a source='test' unit with lot_id/build_id both NULL when none
+// exists yet (#452).
+func TestIntegration_InventoryFindOrCreateTestUnit_CreatesWhenAbsent(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	serial := smokeUniq("SN-452-FOC")
+	id, err := inventory.New(tx).FindOrCreateTestUnit(ctx, 3005, serial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lot, build sql.NullInt64
+	var source string
+	if err := tx.QueryRowContext(ctx, `SELECT lot_id, build_id, source FROM unit WHERE id=$1`, id).Scan(&lot, &build, &source); err != nil {
+		t.Fatal(err)
+	}
+	if lot.Valid || build.Valid || source != "test" {
+		t.Errorf("new unit lot=%v build=%v source=%q, want NULL/NULL/\"test\"", lot, build, source)
+	}
+}
+
+// Unlike UpsertTestUnit, FindOrCreateTestUnit leaves an EXISTING unit's source/provenance
+// completely untouched — a plain no-pick save must not flip a 'manual' unit (#799) to 'test'
+// (#422), nor fill its NULL lot/build from nothing.
+func TestIntegration_InventoryFindOrCreateTestUnit_PreservesExistingUnit(t *testing.T) {
+	h, done := liveHandler(t)
+	t.Cleanup(done)
+	ctx := context.Background()
+	tx := invTx(t, h)
+
+	serial := smokeUniq("SN-452-FOC2")
+	manualID, err := inventory.New(tx).CreateManualUnit(ctx, 3005, serial, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := inventory.New(tx).FindOrCreateTestUnit(ctx, 3005, serial)
+	if err != nil || id != manualID {
+		t.Fatalf("FindOrCreateTestUnit = %d, %v; want %d", id, err, manualID)
+	}
+	var lot, build sql.NullInt64
+	var source string
+	if err := tx.QueryRowContext(ctx, `SELECT lot_id, build_id, source FROM unit WHERE id=$1`, id).Scan(&lot, &build, &source); err != nil {
+		t.Fatal(err)
+	}
+	if lot.Valid || build.Valid || source != "manual" {
+		t.Errorf("existing unit lot=%v build=%v source=%q, want unchanged NULL/NULL/\"manual\"", lot, build, source)
+	}
+}
+
 // The same serial on two parts is two units (#263).
 func TestIntegration_InventoryUpsertTestUnit_SamePartSerialDifferentPart(t *testing.T) {
 	h, done := liveHandler(t)
