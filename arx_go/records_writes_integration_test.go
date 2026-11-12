@@ -316,6 +316,164 @@ func TestIntegration_RecordsWrites_SaveResultsNullColumns(t *testing.T) {
 	}
 }
 
+// ── SaveResults unit minting for no-BOM serial-tracked parts (#452) ─────────
+
+// noBOMSerialPart creates a throwaway ASM part with tracking_mode='serial' and no BOM lines
+// (repPart never inserts bom rows for the part it creates).
+func noBOMSerialPart(t *testing.T, h *Handler) (int, string) {
+	t.Helper()
+	partID, pn := repPart(t, h, "ASM")
+	repExec(t, h, `UPDATE part SET tracking_mode='serial' WHERE id=$1`, partID)
+	return partID, pn
+}
+
+// wCleanupUnit nulls each record's unit_id then deletes the (part,serial)'s unit row.
+// Registered after the fixtures so it runs first under t.Cleanup's LIFO order, clearing the
+// FK before the records themselves are deleted.
+func wCleanupUnit(t *testing.T, h *Handler, partID int, serial string, recordIDs ...int) {
+	t.Cleanup(func() {
+		ctx := context.Background()
+		for _, id := range recordIDs {
+			smokeExec(ctx, h, `UPDATE form_record SET unit_id=NULL WHERE id=$1`, id)
+		}
+		smokeExec(ctx, h, `DELETE FROM unit WHERE part_id=$1 AND serial_number=$2`, partID, serial)
+	})
+}
+
+// TestIntegration_RecordsWrites_SaveResults_RetestReusesLinkedUnit_Characterization pins that a
+// record already linked to a unit (record.UnitID set) keeps reusing it untouched when resaved
+// with no provenance picked — the branch above the one #452 touches, unaffected by the fix.
+func TestIntegration_RecordsWrites_SaveResults_RetestReusesLinkedUnit_Characterization(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	partID, _ := noBOMSerialPart(t, h)
+	serial := smokeUniq("SN-452-RETEST")
+	unitID := repInsert(t, h, `INSERT INTO unit (part_id, serial_number, source) VALUES ($1,$2,'test') RETURNING id`,
+		[]any{partID, serial}, `DELETE FROM unit WHERE id=$1`)
+	r := recRecord(t, h, f, partID, serial, "2026-07-01 10:00", "New Release", false, true, 2)
+	repExec(t, h, `UPDATE form_record SET unit_id=$1 WHERE id=$2`, unitID, r)
+
+	assertStatus(t, "SaveResults retest",
+		wPost(h.SaveResults, "/records/x/edit", url.Values{"record_type": {"X"}}, r), http.StatusSeeOther)
+
+	var gotUnit int
+	wScan(t, h, `SELECT COALESCE(unit_id,0) FROM form_record WHERE id=$1`, []any{r}, &gotUnit)
+	if gotUnit != unitID {
+		t.Errorf("record unit_id = %d, want unchanged %d", gotUnit, unitID)
+	}
+	var n int
+	wScan(t, h, `SELECT COUNT(*) FROM unit WHERE part_id=$1 AND serial_number=$2`, []any{partID, serial}, &n)
+	if n != 1 {
+		t.Errorf("unit count = %d, want 1 (no duplicate minted)", n)
+	}
+}
+
+// TestIntegration_RecordsWrites_SaveResults_LotTrackedProvenanceUnaffected_Characterization pins
+// that a serial-tracked part WITH a BOM, saved with a real lot pick, still mints/links the unit
+// via UpsertTestUnit exactly as before — #452 only changes the no-provenance branch.
+func TestIntegration_RecordsWrites_SaveResults_LotTrackedProvenanceUnaffected_Characterization(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	asmID, _ := repPart(t, h, "ASM")
+	repExec(t, h, `UPDATE part SET tracking_mode='lot_serial' WHERE id=$1`, asmID)
+	compID, _ := repPart(t, h, "BUY")
+	repInsert(t, h, `INSERT INTO bom (parent_part_id, component_part_id) VALUES ($1,$2) RETURNING id`,
+		[]any{asmID, compID}, `DELETE FROM bom WHERE id=$1`)
+	lotID := repInsert(t, h, `INSERT INTO lot (part_id, lot_number, lot_description) VALUES ($1,$2,'char lot') RETURNING id`,
+		[]any{asmID, smokeUniq("LOT-452")}, `UPDATE form_record SET lot_id=NULL WHERE lot_id=$1`, `DELETE FROM lot WHERE id=$1`)
+	serial := smokeUniq("SN-452-LOT")
+	r := recRecord(t, h, f, asmID, serial, "2026-07-01 10:00", "New Release", false, true, 2)
+	wCleanupUnit(t, h, asmID, serial, r)
+
+	assertStatus(t, "SaveResults with lot pick",
+		wPost(h.SaveResults, "/records/x/edit", url.Values{"lot_id": {strconv.Itoa(lotID)}}, r), http.StatusSeeOther)
+
+	var unitID int
+	var recLotNull, recBuildNull bool
+	wScan(t, h, `SELECT COALESCE(unit_id,0), lot_id IS NULL, build_id IS NULL FROM form_record WHERE id=$1`,
+		[]any{r}, &unitID, &recLotNull, &recBuildNull)
+	if unitID == 0 || !recLotNull || !recBuildNull {
+		t.Errorf("record unit=%d lot NULL=%v build NULL=%v, want set/true/true", unitID, recLotNull, recBuildNull)
+	}
+	var uLot int
+	var uBuildNull bool
+	var source string
+	wScan(t, h, `SELECT lot_id, build_id IS NULL, source FROM unit WHERE id=$1`, []any{unitID}, &uLot, &uBuildNull, &source)
+	if uLot != lotID || !uBuildNull || source != "test" {
+		t.Errorf("unit lot=%d build NULL=%v source=%q, want %d/true/\"test\"", uLot, uBuildNull, source, lotID)
+	}
+}
+
+// TestIntegration_RecordsWrites_SaveResults_NoBOMSerialAutoMints is #452's core acceptance
+// criterion: a no-BOM serial-tracked part, saved with no build/lot picked and no existing unit,
+// mints one (source='test', lot_id/build_id both NULL) instead of leaving the record unlinked.
+// Fails today: the branch calls FindUnitIDBySerial (nil for a brand-new serial) instead of
+// find-or-creating.
+func TestIntegration_RecordsWrites_SaveResults_NoBOMSerialAutoMints(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	partID, _ := noBOMSerialPart(t, h)
+	serial := smokeUniq("SN-452-MINT")
+	r := recRecord(t, h, f, partID, serial, "2026-07-01 10:00", "New Release", false, true, 2)
+	wCleanupUnit(t, h, partID, serial, r)
+
+	assertStatus(t, "SaveResults no-BOM serial auto-mint",
+		wPost(h.SaveResults, "/records/x/edit", url.Values{"record_type": {"X"}}, r), http.StatusSeeOther)
+
+	var unitID int
+	wScan(t, h, `SELECT COALESCE(unit_id,0) FROM form_record WHERE id=$1`, []any{r}, &unitID)
+	if unitID == 0 {
+		t.Fatal("record unit_id not set after no-BOM serial save")
+	}
+	var lotNull, buildNull bool
+	var source string
+	wScan(t, h, `SELECT lot_id IS NULL, build_id IS NULL, source FROM unit WHERE id=$1`, []any{unitID}, &lotNull, &buildNull, &source)
+	if !lotNull || !buildNull || source != "test" {
+		t.Errorf("unit lot NULL=%v build NULL=%v source=%q, want true/true/\"test\"", lotNull, buildNull, source)
+	}
+	var n int
+	wScan(t, h, `SELECT COUNT(*) FROM unit WHERE part_id=$1 AND serial_number=$2`, []any{partID, serial}, &n)
+	if n != 1 {
+		t.Errorf("unit count = %d, want 1", n)
+	}
+}
+
+// TestIntegration_RecordsWrites_SaveResults_NoBOMSerialRetestFindsExistingUnit covers the
+// find-or-create half of #452's acceptance criteria: two separate records sharing one serial
+// (neither starts with unit_id set) resolve to the SAME minted unit, not two. Fails today for
+// the same reason as the mint test above (record A never mints a unit, so there's nothing for B
+// to find either).
+func TestIntegration_RecordsWrites_SaveResults_NoBOMSerialRetestFindsExistingUnit(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	partID, _ := noBOMSerialPart(t, h)
+	serial := smokeUniq("SN-452-TWORECS")
+	rA := recRecord(t, h, f, partID, serial, "2026-07-01 10:00", "New Release", false, true, 2)
+	rB := recRecord(t, h, f, partID, serial, "2026-07-02 10:00", "Re-Test", false, true, 2)
+	wCleanupUnit(t, h, partID, serial, rA, rB)
+
+	assertStatus(t, "SaveResults record A",
+		wPost(h.SaveResults, "/records/x/edit", url.Values{"record_type": {"X"}}, rA), http.StatusSeeOther)
+	assertStatus(t, "SaveResults record B",
+		wPost(h.SaveResults, "/records/x/edit", url.Values{"record_type": {"X"}}, rB), http.StatusSeeOther)
+
+	var unitA, unitB int
+	wScan(t, h, `SELECT COALESCE(unit_id,0) FROM form_record WHERE id=$1`, []any{rA}, &unitA)
+	wScan(t, h, `SELECT COALESCE(unit_id,0) FROM form_record WHERE id=$1`, []any{rB}, &unitB)
+	if unitA == 0 || unitA != unitB {
+		t.Errorf("unit A=%d B=%d, want equal and non-zero", unitA, unitB)
+	}
+	var n int
+	wScan(t, h, `SELECT COUNT(*) FROM unit WHERE part_id=$1 AND serial_number=$2`, []any{partID, serial}, &n)
+	if n != 1 {
+		t.Errorf("unit count = %d, want 1 (both records share one unit)", n)
+	}
+}
+
 // ── ResyncRecord ────────────────────────────────────────────────────────────
 
 func TestIntegration_RecordsWrites_ResyncRecord(t *testing.T) {

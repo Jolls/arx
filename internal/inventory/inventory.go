@@ -560,6 +560,13 @@ func (s *Service) UpsertTestUnit(ctx context.Context, partID int, serial string,
 	return s.q.UpsertTestUnit(ctx, dbq.UpsertTestUnitParams{PartID: partID, SerialNumber: serial, BuildID: buildID, LotID: lotID})
 }
 
+// FindOrCreateTestUnit finds the unit for (partID, serial), or mints it as source='test' with
+// lot_id/build_id both NULL when none exists (#452) — unlike UpsertTestUnit, it never modifies an
+// existing unit's source or provenance, since this is the no-pick path.
+func (s *Service) FindOrCreateTestUnit(ctx context.Context, partID int, serial string) (int, error) {
+	return s.q.FindOrCreateTestUnit(ctx, dbq.FindOrCreateTestUnitParams{PartID: partID, SerialNumber: serial})
+}
+
 // FindUnitIDBySerial returns the id of the existing unit for (partID, serial), or nil when there is none.
 func (s *Service) FindUnitIDBySerial(ctx context.Context, partID int, serial string) (*int, error) {
 	id, err := s.q.FindUnitIDBySerial(ctx, dbq.FindUnitIDBySerialParams{PartID: partID, SerialNumber: serial})
