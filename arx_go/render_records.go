@@ -85,6 +85,8 @@ func recordsTemplateFuncs() template.FuncMap {
 		"fileIcon":     urlutil.FileIcon,
 		"isPDF":        urlutil.IsPDF,
 		"imageResult":  imageResult,
+		"isImageRow":   isImageRow,
+		"isFileRow":    isFileRow,
 		"imageURL": func(partNumber, val string) string {
 			// sanitizeFileNamePart must match the folder name APIRecordPasteResultImage
 			// writes to, or the link 404s for any part number with an illegal filename char.
