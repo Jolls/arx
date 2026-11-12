@@ -94,7 +94,7 @@
       <tr>
         <td>{{.EffectiveParameter}}</td>
         <td>{{.EffectiveSpec}}</td>
-        <td>{{if imageResult $val}}[see gallery]{{else if isLocalFile $val}}[file: {{fileBaseName $val}}]{{else}}{{applyFormat $val .Step.Format}}{{end}}</td>
+        <td>{{if imageResult $val}}{{if isPDF $val}}[see attachments]{{else}}[see gallery]{{end}}{{else if isLocalFile $val}}[file: {{fileBaseName $val}}]{{else}}{{applyFormat $val .Step.Format}}{{end}}</td>
         <td style="text-align:center;">{{pfBadge .}}</td>
         <td style="word-break:break-word">{{if .Result}}{{.Result.Comment}}{{end}}</td>
       </tr>
@@ -115,6 +115,17 @@
       </div>
       {{end}}
     </div>
+  </div>
+  {{end}}
+
+  {{if .FileRows}}
+  <div style="margin-top:16px;">
+    <div style="font-weight:700; font-size:10pt; border-bottom:2px solid #000; padding-bottom:4px; margin-bottom:10px;">Attachments</div>
+    <ul style="list-style:none; padding:0; margin:0;">
+      {{range .FileRows}}
+      <li style="padding:3px 0; font-size:9pt;">{{.EffectiveParameter}}: {{.EffectiveValue}}</li>
+      {{end}}
+    </ul>
   </div>
   {{end}}
 </div>

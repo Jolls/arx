@@ -213,6 +213,12 @@
       <td data-col="col-spec">{{.EffectiveSpec}}</td>
       <td data-col="col-result" class="text-center font-mono">
         {{if imageResult $val}}
+          {{if isPDF $val}}
+          {{$fileURL := imageURL $.Form.PartNumber $val}}
+          <a href="{{$fileURL}}" target="_blank">
+            <i class="bi bi-file-pdf text-danger"></i> {{$val}}
+          </a>
+          {{else}}
           {{$imgURL := imageURL $.Form.PartNumber $val}}
           <span class="img-hover-wrap" data-src="{{$imgURL}}">
             <a href="{{$imgURL}}" target="_blank">
@@ -220,6 +226,7 @@
             </a>
             <span class="img-hover-preview"><img alt="preview"></span>
           </span>
+          {{end}}
         {{else if isLocalFile $val}}
           {{$fname := fileBaseName $val}}
           {{$url   := localFileURL $val}}
@@ -297,6 +304,19 @@
   </div>
   {{end}}
 </div>
+{{end}}
+
+{{if .FileRows}}
+<h5 class="mt-4 mb-3"><i class="bi bi-paperclip"></i> Attachments</h5>
+<ul class="list-group mb-4">
+  {{range .FileRows}}
+  {{$fileURL := imageURL $.Form.PartNumber .EffectiveValue}}
+  <li class="list-group-item d-flex justify-content-between align-items-center">
+    <a href="{{$fileURL}}" target="_blank"><i class="bi bi-file-pdf text-danger"></i> {{.EffectiveValue}}</a>
+    <span class="text-muted small">{{.EffectiveParameter}}</span>
+  </li>
+  {{end}}
+</ul>
 {{end}}
 
 {{if .Record.IsLocked}}

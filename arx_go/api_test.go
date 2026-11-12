@@ -7,6 +7,33 @@ import (
 	"time"
 )
 
+// Red (#446): attachResultExts/decodeDataURL must accept a PDF data: URL for
+// test-record attach steps, while decodePastedImage's four-type map (used by
+// the part-Photo/company-logo clipboard-paste paths) stays PDF-free. Fails
+// today — attachResultExts and decodeDataURL don't exist yet.
+func TestDecodeDataURL_AttachResultExtsAcceptsPDF(t *testing.T) {
+	payload := []byte("%PDF-1.4")
+	b64 := base64.StdEncoding.EncodeToString(payload)
+	dataURL := "data:application/pdf;base64," + b64
+
+	ext, data, err := decodeDataURL(dataURL, attachResultExts)
+	if err != nil {
+		t.Fatalf("decodeDataURL with attachResultExts: unexpected error: %v", err)
+	}
+	if ext != ".pdf" {
+		t.Errorf("ext = %q, want %q", ext, ".pdf")
+	}
+	if string(data) != string(payload) {
+		t.Errorf("data = %q, want %q", data, payload)
+	}
+
+	_, _, err = decodePastedImage(dataURL)
+	const wantErrSub = "Unsupported image type: application/pdf"
+	if err == nil || !strings.Contains(err.Error(), wantErrSub) {
+		t.Fatalf("decodePastedImage(pdf data url) err = %v, want containing %q", err, wantErrSub)
+	}
+}
+
 func TestDecodePastedImage(t *testing.T) {
 	payload := []byte("hello world")
 	b64 := base64.StdEncoding.EncodeToString(payload)

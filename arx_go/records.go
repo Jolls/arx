@@ -1090,12 +1090,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var imageRows []models.ResultRow
-	for _, row := range resultRows {
-		if row.Level == 0 && isImageRow(row) {
-			imageRows = append(imageRows, row)
-		}
-	}
+	imageRows, fileRows := splitAttachRows(resultRows)
 
 	var events []models.RecordEvent
 	for _, e := range eventRows {
@@ -1113,6 +1108,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		"Record":            record,
 		"Rows":              resultRows,
 		"ImageRows":         imageRows,
+		"FileRows":          fileRows,
 		"Events":            events,
 		"Snapshots":         snapshots,
 		"Trace":             trace,
@@ -1173,18 +1169,14 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var imageRows []models.ResultRow
-	for _, row := range resultRows {
-		if row.Level == 0 && isImageRow(row) {
-			imageRows = append(imageRows, row)
-		}
-	}
+	imageRows, fileRows := splitAttachRows(resultRows)
 
 	h.renderPrintRecords(w, "record_print.html", map[string]any{
 		"Form":      form,
 		"Record":    record,
 		"Rows":      resultRows,
 		"ImageRows": imageRows,
+		"FileRows":  fileRows,
 		"ActiveTab": "records",
 		"TestMode":  h.cfg().TestMode,
 	})

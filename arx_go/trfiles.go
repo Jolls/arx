@@ -3,8 +3,27 @@ package main
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
+
+// attachContentTypeByExt maps a non-image attach-step file extension to its
+// Content-Type for ServeImage, derived from the non-image entries of
+// attachResultExts (api.go) — currently just PDF — so the two can't drift
+// apart and a future non-image attach type needs no further ServeImage
+// change. Deliberately excludes attachResultExts' image/* entries: every
+// image extension (including .jpg/.webp/.gif, which aren't actually PNG)
+// keeps ServeImage's original blanket image/png Content-Type, since that
+// predates #446 and isn't this issue's to fix.
+var attachContentTypeByExt = func() map[string]string {
+	m := map[string]string{}
+	for mimeType, ext := range attachResultExts {
+		if !strings.HasPrefix(mimeType, "image/") {
+			m[strings.ToLower(ext)] = mimeType
+		}
+	}
+	return m
+}()
 
 // ServeImage — GET /images/*
 // Serves image files from IMAGE_ROOT. Auto-appends .PNG if the exact path is missing.
@@ -32,7 +51,11 @@ func (h *Handler) ServeImage(w http.ResponseWriter, r *http.Request) {
 		}
 		fullPath = pngPath
 	}
-	w.Header().Set("Content-Type", "image/png")
+	contentType := "image/png"
+	if ct, ok := attachContentTypeByExt[strings.ToLower(filepath.Ext(fullPath))]; ok {
+		contentType = ct
+	}
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", "inline")
 	http.ServeFile(w, r, fullPath)
 }

@@ -23,28 +23,37 @@ function readImageFromClipboard(onBlob, onError) {
     });
 }
 
+// postRequestJSON sends a fetch request (JSON body, multipart form, etc. —
+// whatever init describes) and calls onSuccess(responseData) or
+// onError(message), treating a non-ok response's parsed body as carrying the
+// server's error message. Shared by postImageDataURL (JSON body) and the
+// file-browse upload path in paste_result_image.js (multipart body).
+function postRequestJSON(url, init, onSuccess, onError) {
+    fetch(url, init)
+        .then(function (r) {
+            return r.json()
+                .catch(function () { return {}; })
+                .then(function (data) { return { ok: r.ok, data: data }; });
+        })
+        .then(function (result) {
+            if (!result.ok) { throw new Error(result.data.error || 'Upload failed'); }
+            onSuccess(result.data);
+        })
+        .catch(function (err) {
+            onError(err.message);
+        });
+}
+
 // postImageDataURL reads blob as a data: URL, POSTs JSON.stringify(buildBody(dataURL))
 // to url, and calls onSuccess(responseData) or onError(message).
 function postImageDataURL(url, blob, buildBody, onSuccess, onError) {
     var reader = new FileReader();
     reader.onload = function () {
-        fetch(url, {
+        postRequestJSON(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildBody(reader.result))
-        })
-            .then(function (r) {
-                return r.json()
-                    .catch(function () { return {}; })
-                    .then(function (data) { return { ok: r.ok, data: data }; });
-            })
-            .then(function (result) {
-                if (!result.ok) { throw new Error(result.data.error || 'Upload failed'); }
-                onSuccess(result.data);
-            })
-            .catch(function (err) {
-                onError(err.message);
-            });
+        }, onSuccess, onError);
     };
     reader.readAsDataURL(blob);
 }
