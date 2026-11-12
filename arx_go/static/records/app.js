@@ -739,7 +739,11 @@ document.addEventListener('DOMContentLoaded', function () {
 })
 
 // spec_nom syntax lint for the form definition editor.
-// Validates query:name(@param=value) syntax on blur; clears on focus.
+// Validates query:name or query:name(@param=value) syntax on blur; clears on
+// focus. The parameter list is optional (#449) — a zero-param named query's
+// spec_nom is just "query:name", which parseQuerySpec (named_query.go) and
+// the "Build spec_nom" button (Settings → Named Queries) both already treat
+// as valid.
 document.addEventListener('DOMContentLoaded', function () {
   var table = document.getElementById('steps-table')
   if (!table) return
@@ -749,13 +753,11 @@ document.addEventListener('DOMContentLoaded', function () {
     var msg = ''
 
     if (val.startsWith('query:')) {
-      var m = val.match(/^query:(\w*)\(([^)]*)\)$/)
+      var m = val.match(/^query:(\w*)(?:\(([^)]*)\))?$/)
       if (!m) {
-        msg = val.indexOf('(') === -1
-          ? 'Expected format: query:name(@param=value, …)'
-          : 'Missing closing )'
+        msg = 'Missing closing )'
       } else {
-        var name = m[1], paramsStr = m[2].trim()
+        var name = m[1], paramsStr = (m[2] || '').trim()
         if (!name) {
           msg = 'Missing query name after query:'
         } else if (paramsStr) {
