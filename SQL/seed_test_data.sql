@@ -169,7 +169,10 @@ END $$;
          'pn', 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
         (10, 'revision_for_pn', 'Current revision of a part, by part number',
          'SELECT revision FROM part WHERE part_number = @pn AND is_active = TRUE',
-         'pn', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00');
+         'pn', 'single', CURRENT_TIMESTAMP, '2020-01-01T00:00:00'),
+        (11, 'production_personnel', 'Example personnel roster for a dropdown (e.g. an internal-contact step on a calibration record) — shows a named query can be a literal list, not just a lookup against a real table.',
+         'SELECT name FROM (VALUES (''Alex Rivera''), (''Jamie Chen''), (''Morgan Patel'')) AS t(name)',
+         NULL, 'list', CURRENT_TIMESTAMP, '2020-01-01T00:00:00');
 
     -- ============================================================
     -- 3. Users

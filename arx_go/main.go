@@ -457,6 +457,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/records/{id}/edit", withAuth, h.EditRecord)
 	b.handle(http.MethodPost, "/records/{id}/edit", withAuth, h.SaveResults)
 	b.handle(http.MethodPost, "/api/record/{id}/step/{tid}/paste-image", withAuth, h.APIRecordPasteResultImage)
+	b.handle(http.MethodPost, "/api/record/{id}/step/{tid}/upload-result-file", withAuth, h.APIRecordUploadResultFile)
 	b.handle(http.MethodPost, "/records/{id}/resync", withAuth, h.ResyncRecord)
 	b.handle(http.MethodPost, "/records/{id}/lock", withAuth, h.LockRecord)
 	b.handle(http.MethodPost, "/records/{id}/approve", withAuth, h.ApproveRecord)

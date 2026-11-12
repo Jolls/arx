@@ -110,7 +110,7 @@ because the value is a large base64 data URI that would swamp `seed_test_data.sq
 | 8501-8599 | `unit` | Tier-3 serialized instances (#740): 8501 = final-tested serial of top assembly 3013 with BOTH lot 8306 and build 8203 set (`source = 'test'`, locked record 7013 points at it); 8502 = serial of raw 3007 received inside purchased lot 8301 (lot only, `source = 'test'`); 8503 = serial of assembly 3005 from non-lot-tracked build 8201 (build only, `source = 'test'`); 8504 (#799) = manually back-filled serial of part 3005, both `lot_id`/`build_id` NULL, `source = 'manual'` — supersedes the old "three rows cover every branch of `CK_unit_provenance`" claim now that the CHECK is dropped, proving a provenance-less unit is legal and that `TestedCount` ignores it |
 | 1-17 | `uom` | Reference list of units of measure |
 | — | `part_category`, `attachment_category` | Natural keys; defaults mirroring `models.DefaultCategories()` and the former `app_config` attachment list (#194) |
-| 1-99 | `named_queries` | The `spec_nom` auto-fill query library (app config, not throwaway test data): 10 rows at ids 1-10, looked up by `name` |
+| 1-99 | `named_queries` | The `spec_nom` auto-fill query library (app config, not throwaway test data): 11 rows at ids 1-11, looked up by `name`; 11 (`production_personnel`) is a literal-list example (no backing table, no params) rather than a lookup against real data |
 | — | `app_config` | Natural key (`setting_key`): schema version. Keys prefixed `secret_` are shop-wide credentials and are excluded from the Settings backup (#119) |
 | — | `schema_migrations` | Not seeded — it is the applied-migration ledger (#48); a reseed must not overwrite real history |
 

@@ -171,20 +171,56 @@ func imageResult(val string) bool {
 	return imageResultRe.MatchString(val)
 }
 
-// isImageRow returns true for a Level-0 result row that holds a pasted
-// image: either a pf_type="attach" step with a recorded value (the
-// authoritative signal on the edit page), or a value matching the legacy/new
-// image filename shape via imageResult (for rows whose form_row
-// predates the #587 migration to pf_type="attach"). Checking both keeps the
-// Screenshots gallery (records.go's ImageRows) consistent with what
-// record_edit.html shows as an image step.
-func isImageRow(row models.ResultRow) bool {
+// attachRowKind classifies a Level-0 result row for the record view's
+// attachment sections: "image" (thumbnail gallery), "file" (plain-link
+// list, currently PDF only, #446), or "" (not an attachment — a plain data
+// value, or a legacy pre-#587 row whose value doesn't match the image
+// filename shape). Computes the row's value/PDF-ness once rather than
+// re-deriving them per candidate kind.
+func attachRowKind(row models.ResultRow) string {
 	val := row.EffectiveValue()
 	if val == "" {
-		return false
+		return ""
 	}
-	if row.Step != nil && row.Step.PFType == "attach" {
-		return true
+	isAttach := row.Step != nil && row.Step.PFType == "attach"
+	if !isAttach && !imageResult(val) {
+		return ""
 	}
-	return imageResult(val)
+	if urlutil.IsPDF(val) {
+		return "file"
+	}
+	return "image"
+}
+
+// isImageRow returns true for a Level-0 result row that holds a pasted
+// image (not a PDF): either a pf_type="attach" step with a recorded
+// non-PDF value, or a value matching the legacy/new image filename shape
+// (for rows whose form_row predates the #587 migration to pf_type="attach").
+func isImageRow(row models.ResultRow) bool {
+	return attachRowKind(row) == "image"
+}
+
+// isFileRow returns true for a Level-0 attach-step result that holds a
+// non-image attachment (currently only PDF) rather than a pasted image
+// (#446) — rendered as a plain link/file-list entry instead of a thumbnail.
+func isFileRow(row models.ResultRow) bool {
+	return attachRowKind(row) == "file"
+}
+
+// splitAttachRows partitions a record's Level-0 result rows into the image
+// gallery and file-list rows shown on the record detail/print pages (#446).
+// Shared by RecordDetail and RecordPrint.
+func splitAttachRows(resultRows []models.ResultRow) (imageRows, fileRows []models.ResultRow) {
+	for _, row := range resultRows {
+		if row.Level != 0 {
+			continue
+		}
+		switch attachRowKind(row) {
+		case "image":
+			imageRows = append(imageRows, row)
+		case "file":
+			fileRows = append(fileRows, row)
+		}
+	}
+	return imageRows, fileRows
 }

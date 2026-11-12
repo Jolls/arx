@@ -229,20 +229,28 @@
           {{if eq .Step.PFType "attach"}}
           <input type="hidden" name="result_{{$sid}}" value="{{$cur}}"
                  data-pf-type="{{.Step.PFType}}" data-pf-target="pf-{{$sid}}">
-          <div class="d-flex align-items-center gap-2" data-attach-cell
+          <div class="d-flex align-items-center gap-2 flex-wrap" data-attach-cell
                data-record-id="{{$.Record.ID}}" data-test-id="{{$sid}}"
                data-result-input="result_{{$sid}}" data-part-number="{{sanitizedPartNumber $.Form.PartNumber}}">
+            <input type="file" class="form-control form-control-sm" style="max-width:220px;" data-attach-file-input
+                   accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
+                   {{if not $.ImageRootConfigured}}disabled title="IMAGE_ROOT is not configured"{{end}}>
             <button type="button" class="btn btn-sm btn-secondary" data-attach-btn
                     {{if not $.ImageRootConfigured}}disabled title="IMAGE_ROOT is not configured"{{end}}>
               <i class="bi bi-clipboard-plus"></i> Grab from clipboard
             </button>
             <span class="small text-danger d-none" data-attach-error></span>
-            <span class="img-hover-wrap{{if not $cur}} d-none{{end}}" data-attach-preview
+            <span class="img-hover-wrap{{if or (not $cur) (isPDF $cur)}} d-none{{end}}" data-attach-preview
                   data-src="{{if $cur}}{{imageURL $.Form.PartNumber $cur}}{{end}}">
               <a href="{{if $cur}}{{imageURL $.Form.PartNumber $cur}}{{end}}" target="_blank" data-attach-link>
                 <i class="bi bi-image"></i> View
               </a>
               <span class="img-hover-preview"><img alt="preview"></span>
+            </span>
+            <span class="{{if or (not $cur) (not (isPDF $cur))}}d-none{{end}}" data-attach-pdf-link>
+              <a href="{{if $cur}}{{imageURL $.Form.PartNumber $cur}}{{end}}" target="_blank" data-attach-pdf-href>
+                <i class="bi bi-file-pdf text-danger"></i> View PDF
+              </a>
             </span>
           </div>
           {{else if $opts}}

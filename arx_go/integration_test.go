@@ -6466,6 +6466,212 @@ func TestIntegration_PasteResultImageWrite(t *testing.T) {
 	})
 }
 
+// TestIntegration_RecordEdit_AttachCellHasFileInput is a red test for #446:
+// the record-edit page's attach-step cell must offer a file-browse input
+// alongside "Grab from clipboard." Fails today — no such input exists in
+// record_edit.html.
+func TestIntegration_RecordEdit_AttachCellHasFileInput(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	partID, _, partCleanup := seedThrowawayPart(t, h, ctx, "446")
+	defer partCleanup()
+
+	var formID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form (part_number_id, test_order, is_locked, is_active) VALUES ($1, '', FALSE, TRUE) RETURNING id`, partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.execContext(ctx, `DELETE FROM form_record WHERE form_id=$1`, formID)
+		_, _ = h.execContext(ctx, `DELETE FROM form_row WHERE form_id=$1`, formID)
+		_, _ = h.execContext(ctx, `DELETE FROM form WHERE id=$1`, formID)
+	}()
+
+	var testID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form_row (form_id, type, parameter, pf_type) VALUES ($1, 0, 'Calibration Certificate', 'attach') RETURNING id`,
+		formID,
+	).Scan(&testID); err != nil {
+		t.Fatalf("seed form_row: %v", err)
+	}
+	if _, err := h.execContext(ctx, `UPDATE form SET test_order=$1 WHERE id=$2`, strconv.Itoa(testID), formID); err != nil {
+		t.Fatalf("set form test_order: %v", err)
+	}
+
+	var recordID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form_record (form_id, serial_number, subject_part_number, subject_pn_description, test_order, record_type, is_locked, is_active) VALUES ($1, 'ITEST-446-EDIT', '', '', $2, '', FALSE, TRUE) RETURNING id`,
+		formID, strconv.Itoa(testID),
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed form_record: %v", err)
+	}
+
+	rec := recGet(h.EditRecord, "/x", recordID)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit: status %d, body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "data-attach-file-input") {
+		t.Errorf("edit page for attach step missing data-attach-file-input")
+	}
+}
+
+// TestIntegration_UploadResultFile_PDF is a red test for #446: posting a PDF
+// via multipart to the new browse-upload endpoint must succeed and write the
+// file to disk under the same naming scheme as the clipboard-paste path.
+// Fails today — APIRecordUploadResultFile is a stub returning 404.
+func TestIntegration_UploadResultFile_PDF(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	h.cfg().ImageRoot = t.TempDir()
+
+	partID, partNumber, partCleanup := seedThrowawayPart(t, h, ctx, "446")
+	defer partCleanup()
+
+	var formID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form (part_number_id, test_order, is_locked, is_active) VALUES ($1, '', FALSE, TRUE) RETURNING id`, partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.execContext(ctx, `DELETE FROM form_record WHERE form_id=$1`, formID)
+		_, _ = h.execContext(ctx, `DELETE FROM form WHERE id=$1`, formID)
+	}()
+
+	const serial = "ITEST-446-UNLOCKED"
+	var recordID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form_record (form_id, serial_number, subject_part_number, subject_pn_description, is_locked, is_active) VALUES ($1, $2, '', '', FALSE, TRUE) RETURNING id`, formID, serial,
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed unlocked form_record: %v", err)
+	}
+
+	pdfBytes := []byte("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF")
+	req := postMultipart(t, fmt.Sprintf("/api/record/%d/step/1/upload-result-file", recordID), url.Values{}, "file", "cert.pdf", pdfBytes)
+	req.SetPathValue("id", strconv.Itoa(recordID))
+	req.SetPathValue("tid", "1")
+	rec := httptest.NewRecorder()
+	h.APIRecordUploadResultFile(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		OK       bool   `json:"ok"`
+		Filename string `json:"filename"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || !resp.OK {
+		t.Fatalf("response = %s, want ok:true", rec.Body.String())
+	}
+	re := regexp.MustCompile(fmt.Sprintf(`^SN%s_rID%d_tID1_\d{8}_\d{6}\.pdf$`, serial, recordID))
+	if !re.MatchString(resp.Filename) {
+		t.Errorf("filename = %q, want to match %s", resp.Filename, re.String())
+	}
+	gotBytes, err := os.ReadFile(filepath.Join(h.cfg().ImageRoot, sanitizeFileNamePart(partNumber), resp.Filename))
+	if err != nil {
+		t.Fatalf("read written file: %v", err)
+	}
+	if string(gotBytes) != string(pdfBytes) {
+		t.Errorf("written file bytes mismatch")
+	}
+}
+
+// TestIntegration_UploadResultFile_PNGViaBrowse is a red test for #446:
+// confirms the four existing image types still work through the new browse
+// endpoint, not just the clipboard-paste endpoint. Fails today —
+// APIRecordUploadResultFile is a stub returning 404.
+func TestIntegration_UploadResultFile_PNGViaBrowse(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	h.cfg().ImageRoot = t.TempDir()
+
+	partID, _, partCleanup := seedThrowawayPart(t, h, ctx, "446")
+	defer partCleanup()
+
+	var formID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form (part_number_id, test_order, is_locked, is_active) VALUES ($1, '', FALSE, TRUE) RETURNING id`, partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.execContext(ctx, `DELETE FROM form_record WHERE form_id=$1`, formID)
+		_, _ = h.execContext(ctx, `DELETE FROM form WHERE id=$1`, formID)
+	}()
+
+	var recordID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form_record (form_id, serial_number, subject_part_number, subject_pn_description, is_locked, is_active) VALUES ($1, 'ITEST-446-PNG', '', '', FALSE, TRUE) RETURNING id`, formID,
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed unlocked form_record: %v", err)
+	}
+
+	tinyPNG, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	req := postMultipart(t, fmt.Sprintf("/api/record/%d/step/1/upload-result-file", recordID), url.Values{}, "file", "shot.png", tinyPNG)
+	req.SetPathValue("id", strconv.Itoa(recordID))
+	req.SetPathValue("tid", "1")
+	rec := httptest.NewRecorder()
+	h.APIRecordUploadResultFile(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		OK       bool   `json:"ok"`
+		Filename string `json:"filename"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || !resp.OK {
+		t.Fatalf("response = %s, want ok:true", rec.Body.String())
+	}
+	if !strings.HasSuffix(resp.Filename, ".png") {
+		t.Errorf("filename = %q, want .png suffix", resp.Filename)
+	}
+}
+
+// TestIntegration_UploadResultFile_RejectsUnsupportedType is a red test for
+// #446: a file whose sniffed content isn't one of the allowed types must be
+// rejected with 400. Fails today — APIRecordUploadResultFile is a stub
+// returning 404, not the intended 400.
+func TestIntegration_UploadResultFile_RejectsUnsupportedType(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	h.cfg().ImageRoot = t.TempDir()
+
+	partID, _, partCleanup := seedThrowawayPart(t, h, ctx, "446")
+	defer partCleanup()
+
+	var formID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form (part_number_id, test_order, is_locked, is_active) VALUES ($1, '', FALSE, TRUE) RETURNING id`, partID,
+	).Scan(&formID); err != nil {
+		t.Fatalf("seed form: %v", err)
+	}
+	defer func() {
+		_, _ = h.execContext(ctx, `DELETE FROM form_record WHERE form_id=$1`, formID)
+		_, _ = h.execContext(ctx, `DELETE FROM form WHERE id=$1`, formID)
+	}()
+
+	var recordID int
+	if err := h.queryRowContext(ctx,
+		`INSERT INTO form_record (form_id, serial_number, subject_part_number, subject_pn_description, is_locked, is_active) VALUES ($1, 'ITEST-446-BADTYPE', '', '', FALSE, TRUE) RETURNING id`, formID,
+	).Scan(&recordID); err != nil {
+		t.Fatalf("seed unlocked form_record: %v", err)
+	}
+
+	req := postMultipart(t, fmt.Sprintf("/api/record/%d/step/1/upload-result-file", recordID), url.Values{}, "file", "notes.txt", []byte("plain text, not an allowed type"))
+	req.SetPathValue("id", strconv.Itoa(recordID))
+	req.SetPathValue("tid", "1")
+	rec := httptest.NewRecorder()
+	h.APIRecordUploadResultFile(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400. body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // csvRowsContain reports whether rows contains a row exactly equal to want.
 func csvRowsContain(rows [][]string, want []string) bool {
 	for _, row := range rows {

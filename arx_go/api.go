@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"image"
 	_ "image/jpeg" // registers jpeg decoding for image.Decode (DigiKey photos, #62)
+	"io"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -384,17 +386,28 @@ var pasteImageExts = map[string]string{
 	"image/gif":  ".gif",
 }
 
-// decodePastedImage parses a "data:<mime>;base64,<data>" URL (as produced by
-// FileReader.readAsDataURL in the clipboard-paste JS) into a file extension
-// and the raw decoded bytes.
-func decodePastedImage(dataURL string) (ext string, data []byte, err error) {
+// attachResultExts extends pasteImageExts with application/pdf for
+// test-record attach-step results only (#446) — kept separate (cloned, not
+// aliased) so the part-Photo clipboard-paste endpoints and the company-logo
+// upload (which both reuse pasteImageExts) do not start accepting PDFs, while
+// still deriving the four shared entries from pasteImageExts so they can't
+// drift out of sync if an image type is ever added or removed there.
+var attachResultExts = func() map[string]string {
+	m := maps.Clone(pasteImageExts)
+	m["application/pdf"] = ".pdf"
+	return m
+}()
+
+// decodeDataURL parses a "data:<mime>;base64,<data>" URL into a file
+// extension (looked up in exts) and the raw decoded bytes.
+func decodeDataURL(dataURL string, exts map[string]string) (ext string, data []byte, err error) {
 	commaIdx := strings.Index(dataURL, ",")
 	if commaIdx < 0 || !strings.HasPrefix(dataURL, "data:") {
 		return "", nil, fmt.Errorf("image_data must be a data: URL")
 	}
 	header := dataURL[len("data:"):commaIdx]
 	mime := strings.TrimSuffix(header, ";base64")
-	ext, ok := pasteImageExts[mime]
+	ext, ok := exts[mime]
 	if !ok {
 		return "", nil, fmt.Errorf("Unsupported image type: %s", mime)
 	}
@@ -403,6 +416,12 @@ func decodePastedImage(dataURL string) (ext string, data []byte, err error) {
 		return "", nil, fmt.Errorf("Invalid base64 image data: %w", err)
 	}
 	return ext, data, nil
+}
+
+// decodePastedImage decodes a data: URL restricted to the four pasteable
+// image types. Used by the part-Photo / company-logo clipboard-paste paths.
+func decodePastedImage(dataURL string) (ext string, data []byte, err error) {
+	return decodeDataURL(dataURL, pasteImageExts)
 }
 
 // decodeJSONBody applies the paste-image size cap and decodes the JSON
@@ -778,6 +797,126 @@ func (h *Handler) generateThumbnailFromPhoto(ctx context.Context, partID string,
 	}
 }
 
+// parseRecordStepPath parses the {id}/{tid} path values shared by every
+// attach-step endpoint, writing a 400 response and returning ok=false on
+// failure.
+func parseRecordStepPath(w http.ResponseWriter, r *http.Request) (recordID, testID int, ok bool) {
+	recordID, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid record id")
+		return 0, 0, false
+	}
+	testID, err = strconv.Atoi(r.PathValue("tid"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid test id")
+		return 0, 0, false
+	}
+	return recordID, testID, true
+}
+
+// loadAttachStepRecord validates a test-record step is a writable attach
+// target (record exists, not locked) and returns its serial/part number.
+// Shared by APIRecordPasteResultImage and APIRecordUploadResultFile.
+func (h *Handler) loadAttachStepRecord(ctx context.Context, recordID int) (serial, partNumber string, status int, msg string) {
+	rec, err := records.New(handlerDB{h}).GetHeader(ctx, recordID)
+	if err == sql.ErrNoRows {
+		return "", "", http.StatusNotFound, "Record not found"
+	}
+	if err != nil {
+		return "", "", http.StatusInternalServerError, "Error loading record: " + err.Error()
+	}
+	if rec.Locked {
+		return "", "", http.StatusConflict, "Record is locked"
+	}
+	return rec.Serial, rec.PartNumber, 0, ""
+}
+
+// saveAttachResultFile writes the decoded attach-step bytes to IMAGE_ROOT
+// under the same filename scheme every attach-step write uses, returning the
+// filename or an error status/message. saveNoun customizes the save-failure
+// message ("image" for the paste path, "file" for the browse path). Shared
+// by APIRecordPasteResultImage and APIRecordUploadResultFile.
+func (h *Handler) saveAttachResultFile(partNumber, serial string, recordID, testID int, ext string, data []byte, saveNoun string) (filename string, status int, msg string) {
+	// sanitizeFileNamePart here must match the folder name the "imageURL" and
+	// "sanitizedPartNumber" template funcs build for display (render_tr.go), so
+	// both sides of the write/read path use the same folder.
+	dir := filepath.Join(h.cfg().ImageRoot, sanitizeFileNamePart(partNumber))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", http.StatusInternalServerError, "Error creating image folder: " + err.Error()
+	}
+
+	name := buildResultImageName(serial, recordID, testID, ext)
+	existed, err := writeIntoDocControl(dir, name, data)
+	if err != nil {
+		return "", http.StatusInternalServerError, "Error saving " + saveNoun + ": " + err.Error()
+	}
+	if existed {
+		// buildResultImageName's uniqueness comes from a 1-second-resolution
+		// timestamp; on the rare collision (e.g. a double-click), fail loudly
+		// instead of silently keeping the old file but reporting success.
+		return "", http.StatusConflict, "A file with this name was just created; please try again."
+	}
+	return name, 0, ""
+}
+
+// APIRecordUploadResultFile saves a file browsed from disk to the same
+// location/naming scheme as APIRecordPasteResultImage, for a test-record
+// result step (pf_type = "attach"), accepting the same four image types plus
+// PDF (#446). POST /api/record/{id}/step/{tid}/upload-result-file,
+// multipart/form-data, field "file".
+func (h *Handler) APIRecordUploadResultFile(w http.ResponseWriter, r *http.Request) {
+	recordID, testID, ok := parseRecordStepPath(w, r)
+	if !ok {
+		return
+	}
+	if h.cfg().ImageRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "IMAGE_ROOT is not configured; cannot save uploaded files.")
+		return
+	}
+
+	serial, partNumber, status, msg := h.loadAttachStepRecord(r.Context(), recordID)
+	if status != 0 {
+		writeJSONError(w, status, msg)
+		return
+	}
+
+	// RequireCsrfOnPost has already called r.ParseMultipartForm for every POST
+	// (see attachmentUploads's doc comment) — do not call it again here.
+	ups := attachmentUploads(r, "file")
+	if len(ups) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "No file was uploaded.")
+		return
+	}
+	f, err := ups[0].Open()
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Error reading upload: "+err.Error())
+		return
+	}
+	data, err := io.ReadAll(f)
+	f.Close()
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Error reading upload: "+err.Error())
+		return
+	}
+
+	// Validated by sniffing content (http.DetectContentType), the same
+	// approach SettingsCompanyLogoSave uses — not by trusting the browsed
+	// file's name/extension, so a renamed/disguised file is still rejected.
+	mime := http.DetectContentType(data)
+	ext, ok := attachResultExts[mime]
+	if !ok {
+		writeJSONError(w, http.StatusBadRequest, "Unsupported file type: "+mime)
+		return
+	}
+
+	name, status, msg := h.saveAttachResultFile(partNumber, serial, recordID, testID, ext, data, "file")
+	if status != 0 {
+		writeJSONError(w, status, msg)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "filename": name})
+}
+
 // APIRecordPasteResultImage saves a clipboard-pasted image to disk for a
 // test-record result step (pf_type = "attach") and returns its filename.
 // It does not touch result — the caller drops the returned filename into
@@ -785,14 +924,8 @@ func (h *Handler) generateThumbnailFromPhoto(ctx context.Context, partID string,
 // along with the rest of the record's edits.
 // POST /api/record/{id}/step/{tid}/paste-image.
 func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Request) {
-	recordID, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid record id")
-		return
-	}
-	testID, err := strconv.Atoi(r.PathValue("tid"))
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid test id")
+	recordID, testID, ok := parseRecordStepPath(w, r)
+	if !ok {
 		return
 	}
 	if h.cfg().ImageRoot == "" {
@@ -802,18 +935,9 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 
 	// Check the record before doing any decode work, so a locked/missing record
 	// is rejected cheaply rather than after paying for the base64 decode.
-	rec, err := records.New(handlerDB{h}).GetHeader(r.Context(), recordID)
-	serial, partNumber, locked := rec.Serial, rec.PartNumber, rec.Locked
-	if err == sql.ErrNoRows {
-		writeJSONError(w, http.StatusNotFound, "Record not found")
-		return
-	}
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Error loading record: "+err.Error())
-		return
-	}
-	if locked {
-		writeJSONError(w, http.StatusConflict, "Record is locked")
+	serial, partNumber, status, msg := h.loadAttachStepRecord(r.Context(), recordID)
+	if status != 0 {
+		writeJSONError(w, status, msg)
 		return
 	}
 
@@ -824,32 +948,19 @@ func (h *Handler) APIRecordPasteResultImage(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ext, data, err := decodePastedImage(body.ImageData)
+	// attachResultExts (not pasteImageExts) so a PDF pasted via the raw Ctrl+V
+	// listener (paste_result_image.js) is accepted here too (#446) — the
+	// "Grab from clipboard" button itself stays image-only, since
+	// navigator.clipboard.read() only ever yields image types.
+	ext, data, err := decodeDataURL(body.ImageData, attachResultExts)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// sanitizeFileNamePart here must match the folder name the "imageURL" and
-	// "sanitizedPartNumber" template funcs build for display (render_tr.go), so
-	// both sides of the write/read path use the same folder.
-	dir := filepath.Join(h.cfg().ImageRoot, sanitizeFileNamePart(partNumber))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Error creating image folder: "+err.Error())
-		return
-	}
-
-	name := buildResultImageName(serial, recordID, testID, ext)
-	existed, err := writeIntoDocControl(dir, name, data)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Error saving image: "+err.Error())
-		return
-	}
-	if existed {
-		// buildResultImageName's uniqueness comes from a 1-second-resolution
-		// timestamp; on the rare collision (e.g. a double-click), fail loudly
-		// instead of silently keeping the old file but reporting success.
-		writeJSONError(w, http.StatusConflict, "A file with this name was just created; please try again.")
+	name, status, msg := h.saveAttachResultFile(partNumber, serial, recordID, testID, ext, data, "image")
+	if status != 0 {
+		writeJSONError(w, status, msg)
 		return
 	}
 
