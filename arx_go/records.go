@@ -43,6 +43,7 @@ func testForm(f records.FormHeader) models.TestForm {
 		ID: f.ID, PartNumberID: f.PartNumberID, IsLocked: f.IsLocked, TestOrder: f.TestOrder,
 		PartNumber: f.PartNumber, Description: f.Description, RecordTypes: f.RecordTypes,
 		InstrumentTypes: f.InstrumentTypes, Revision: f.Revision, SerialPrefix: f.SerialPrefix, SerialPad: f.SerialPad,
+		RecurrenceDays: f.RecurrenceDays,
 	}
 }
 
@@ -54,7 +55,18 @@ func testRecord(r records.Record) models.TestRecord {
 		RecordType: r.RecordType, Notes: r.Notes, InstrumentType: r.InstrumentType, IsLocked: r.IsLocked,
 		IsApproved: r.IsApproved, IsActive: r.IsActive, TestOrder: r.TestOrder,
 		LotID: r.LotID, BuildID: r.BuildID, UnitID: r.UnitID,
+		NextDueDate: r.NextDueDate, NextDueSuperseded: r.NextDueSuperseded,
 	}
+}
+
+// recordDueStatus is the badge status of a record's own next-due date (#447): "" unless it is a
+// locked unit record still current for its form and unit (a newer locked record supersedes it);
+// records without a unit aren't tracked, matching the dashboard and unit page.
+func recordDueStatus(rec models.TestRecord) string {
+	if rec.NextDueDate == nil || rec.UnitID == nil || !rec.IsLocked || rec.NextDueSuperseded {
+		return ""
+	}
+	return records.DueStatus(*rec.NextDueDate, records.Today())
 }
 
 // recordStatus is the records-table status label of a listed record.
@@ -907,6 +919,24 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Update the form's default recurrence interval if changed (#447); blank = not recurring.
+	newRecurrenceStr := strings.TrimSpace(r.FormValue("recurrence_days"))
+	var newRecurrence *int
+	if newRecurrenceStr != "" {
+		n, convErr := strconv.Atoi(newRecurrenceStr)
+		if convErr != nil || n < 1 {
+			http.Error(w, "recurrence must be a whole number of days, 1 or more", http.StatusBadRequest)
+			return
+		}
+		newRecurrence = &n
+	}
+	if newRecurrenceStr != r.FormValue("original_recurrence_days") {
+		if err := svc.SetFormRecurrence(r.Context(), formID, newRecurrence); err != nil {
+			serverError(w, "could not save recurrence", err)
+			return
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		serverError(w, "could not save steps", err)
 		return
@@ -1122,6 +1152,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 	h.renderRecords(w, r, "records_show.html", map[string]any{
 		"Form":              form,
 		"Record":            record,
+		"DueStatus":         recordDueStatus(record),
 		"Rows":              resultRows,
 		"ImageRows":         imageRows,
 		"FileRows":          fileRows,
@@ -2141,6 +2172,17 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// #447: next due date saves with the record; blank clears it.
+	var nextDue *time.Time
+	if ndStr := strings.TrimSpace(r.FormValue("next_due_date")); ndStr != "" {
+		t, e := time.Parse("2006-01-02", ndStr)
+		if e != nil {
+			http.Error(w, "invalid next due date", http.StatusBadRequest)
+			return
+		}
+		nextDue = &t
+	}
+
 	// #747: build-at-test-time. When the inline build panel was submitted, build this
 	// part in the same transaction and use the new build (and its output lot) as the
 	// record's provenance below. Both build workflows converge on the same end state:
@@ -2274,7 +2316,7 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := svc.UpdateRecordAfterSave(r.Context(), recordID, records.RecordSave{
 		RecordDate: rd, RecordType: recordType, Notes: notes, InstrumentType: instrumentType,
-		LotID: lotArg, BuildID: buildArg, UnitID: unitArg,
+		LotID: lotArg, BuildID: buildArg, UnitID: unitArg, NextDueDate: nextDue,
 	}); err != nil {
 		serverError(w, "could not save record", err)
 		return

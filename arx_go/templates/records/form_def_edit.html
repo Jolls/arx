@@ -141,6 +141,13 @@
              name="serial_pad" value="{{.Form.SerialPad}}" min="0" max="20">
       <div class="form-text">Minimum digits, zero-padded (4 &rarr; SK-0042). 0 = none.</div>
     </div>
+    <div class="col">
+      <label class="form-label fw-semibold" for="recurrence_days">Recurrence (days)</label>
+      <input type="hidden" name="original_recurrence_days" value="{{if .Form.RecurrenceDays}}{{.Form.RecurrenceDays}}{{end}}">
+      <input type="number" class="form-control form-control-sm" id="recurrence_days"
+             name="recurrence_days" value="{{if .Form.RecurrenceDays}}{{.Form.RecurrenceDays}}{{end}}" min="1">
+      <div class="form-text">Default interval until the next record is due (365 = yearly). Blank = not recurring.</div>
+    </div>
   </div>
 
   <div class="table-responsive">

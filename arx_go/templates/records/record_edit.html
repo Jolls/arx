@@ -42,6 +42,11 @@
              placeholder="e.g. New Release, Re-Test">
     </div>
     <div class="col-auto">
+      <label class="form-label fw-semibold mb-1 small">Next Due</label>
+      <input type="date" class="form-control form-control-sm"
+             name="next_due_date" value="{{if .Record.NextDueDate}}{{.Record.NextDueDate.Format "2006-01-02"}}{{end}}">
+    </div>
+    <div class="col-auto">
       <label class="form-label fw-semibold mb-1 small">Instrument Type</label>
       {{$itypes := .Form.InstrumentTypeList}}
       {{if $itypes}}
@@ -344,7 +349,7 @@ function draftData() {
   ).forEach(el => { data[el.name] = el.value; });
   // notes = the record-level note (#870); lot_note = the pending append to the lot's
   // batch note (#872), which is only written on save, so an unsaved one is draft state.
-  ['record_date', 'record_type', 'instrument_type', 'notes', 'lot_note'].forEach(n => {
+  ['record_date', 'record_type', 'instrument_type', 'next_due_date', 'notes', 'lot_note'].forEach(n => {
     const el = document.querySelector('#edit-form [name="' + n + '"]');
     if (el) data[n] = el.value;
   });

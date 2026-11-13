@@ -25,7 +25,7 @@ ORDER BY pn.part_number ASC;
 SELECT f.id, f.part_number_id, f.is_locked, COALESCE(f.test_order, '') AS test_order, f.revision,
        pn.part_number, COALESCE(pn.description, '') AS description,
        COALESCE(f.record_types, '') AS record_types, COALESCE(f.instrument_types, '') AS instrument_types,
-       f.serial_prefix, f.serial_pad
+       f.serial_prefix, f.serial_pad, f.recurrence_days
 FROM form f
 JOIN part pn ON f.part_number_id = pn.id
 WHERE f.id = sqlc.arg(id);
@@ -114,9 +114,15 @@ SELECT id, form_id, COALESCE(part_id, 0)::int AS part_id, COALESCE(serial_number
        COALESCE(subject_pn_description, '') AS subject_pn_description,
        record_date, COALESCE(record_type, '') AS record_type, COALESCE(notes, '') AS notes,
        COALESCE(instrument_type, '') AS instrument_type, is_locked, is_approved, is_active,
-       COALESCE(test_order, '') AS test_order, lot_id, build_id, unit_id
-FROM form_record
-WHERE id = sqlc.arg(id);
+       COALESCE(test_order, '') AS test_order, lot_id, build_id, unit_id, next_due_date,
+       -- A newer locked record of the same form and unit exists, so this record's due date no longer counts (#447).
+       (r.next_due_date IS NOT NULL AND r.unit_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM form_record n
+               WHERE n.form_id = r.form_id AND n.unit_id = r.unit_id AND n.is_locked AND n.is_active AND n.id <> r.id
+                 AND (COALESCE(n.record_date, '-infinity'::timestamp), n.id)
+                   > (COALESCE(r.record_date, '-infinity'::timestamp), r.id)))::bool AS next_due_superseded
+FROM form_record r
+WHERE r.id = sqlc.arg(id);
 
 -- name: ListFormRecords :many
 -- Active records of a form for the records table: numeric serials descending (a non-numeric
@@ -260,22 +266,26 @@ WHERE id = sqlc.arg(id);
 -- name: InsertRecord :one
 INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
                          record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
-                         form_revision)
-VALUES (sqlc.arg(form_id), sqlc.narg(part_id), sqlc.arg(serial_number)::text, sqlc.arg(subject_part_number)::text,
-        sqlc.arg(subject_pn_description)::text, sqlc.arg(record_type)::text, sqlc.arg(instrument_type)::text,
-        sqlc.arg(test_order)::text, sqlc.arg(record_date)::timestamp, CURRENT_TIMESTAMP, TRUE, FALSE,
-        sqlc.arg(form_revision)::int)
+                         form_revision, next_due_date)
+-- next_due_date = record date + the form's recurrence interval (#447); NULL when the form has none.
+SELECT sqlc.arg(form_id)::int, sqlc.narg(part_id)::int, sqlc.arg(serial_number)::text, sqlc.arg(subject_part_number)::text,
+       sqlc.arg(subject_pn_description)::text, sqlc.arg(record_type)::text, sqlc.arg(instrument_type)::text,
+       sqlc.arg(test_order)::text, sqlc.arg(record_date)::timestamp, CURRENT_TIMESTAMP, TRUE, FALSE,
+       sqlc.arg(form_revision)::int, sqlc.arg(record_date)::timestamp::date + f.recurrence_days
+FROM form f
+WHERE f.id = sqlc.arg(form_id)
 RETURNING id;
 
 -- name: DuplicateRecord :one
 -- A fresh WIP re-test of a record: same form, part, serial, subject, type, instrument and step order, dated now,
--- stamped with the form's current revision (#260), unit carried over (#745). No row = no such record.
+-- stamped with the form's current revision (#260), unit carried over (#745), next due date recomputed from
+-- the form's recurrence interval (#447). No row = no such record.
 INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
                          record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
-                         is_approved, form_revision, unit_id)
+                         is_approved, form_revision, unit_id, next_due_date)
 SELECT s.form_id, s.part_id, s.serial_number, s.subject_part_number, s.subject_pn_description,
        s.record_type, COALESCE(s.instrument_type, ''), s.test_order, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, FALSE,
-       FALSE, f.revision, s.unit_id
+       FALSE, f.revision, s.unit_id, CURRENT_DATE + f.recurrence_days
 FROM form_record s
 JOIN form f ON f.id = s.form_id
 WHERE s.id = sqlc.arg(id)
@@ -327,7 +337,7 @@ UPDATE form_record
 SET record_date = COALESCE(sqlc.narg(record_date)::timestamp, record_date), record_type = sqlc.arg(record_type)::text,
     notes = sqlc.narg(notes)::text, instrument_type = sqlc.arg(instrument_type)::text,
     lot_id = sqlc.narg(lot_id)::int, build_id = sqlc.narg(build_id)::int, unit_id = sqlc.narg(unit_id)::int,
-    updated_at = CURRENT_TIMESTAMP
+    next_due_date = sqlc.narg(next_due_date)::date, updated_at = CURRENT_TIMESTAMP
 WHERE id = sqlc.arg(id);
 
 -- name: ResyncRecordHeader :exec
@@ -428,6 +438,10 @@ WHERE id = sqlc.arg(id);
 UPDATE form SET serial_prefix = sqlc.arg(serial_prefix)::text, serial_pad = sqlc.arg(serial_pad)::int
 WHERE id = sqlc.arg(id);
 
+-- name: SetFormRecurrence :exec
+-- NULL = not a recurring form (#447).
+UPDATE form SET recurrence_days = sqlc.narg(recurrence_days)::int WHERE id = sqlc.arg(id);
+
 -- name: IsFormPart :one
 -- Whether a part may own a new form: an active FORM-category part.
 SELECT EXISTS (SELECT 1 FROM part WHERE id = sqlc.arg(id) AND category = 'FORM' AND is_active = TRUE)::bool;
@@ -513,3 +527,40 @@ LEFT JOIN result res ON res.form_record_id = r.id AND res.type = 0
 WHERE r.unit_id = sqlc.arg(unit_id)::int AND r.is_active = TRUE
 GROUP BY r.id
 ORDER BY r.record_date DESC NULLS LAST, r.id DESC;
+
+-- name: ListDueUnits :many
+-- Units whose latest locked record of an active form (#447) is overdue or due within soon_days of today,
+-- soonest first. today comes from the caller (the user's local date), not CURRENT_DATE (the server's), so
+-- the list and its badges agree. A latest record with no due date means untracked, so it never lists.
+WITH latest AS (
+  SELECT DISTINCT ON (r.form_id, r.unit_id) r.id, r.form_id, r.unit_id, r.next_due_date
+  FROM form_record r
+  JOIN unit u ON u.id = r.unit_id
+  WHERE r.is_locked AND r.is_active AND u.is_active
+  ORDER BY r.form_id, r.unit_id, r.record_date DESC NULLS LAST, r.id DESC
+)
+SELECT l.id AS record_id, l.unit_id::int AS unit_id, u.part_id, u.serial_number, p.part_number, l.form_id,
+       fp.part_number AS form_part_number, l.next_due_date::date AS next_due_date
+FROM latest l
+JOIN unit u ON u.id = l.unit_id
+JOIN part p ON p.id = u.part_id
+JOIN form f ON f.id = l.form_id AND f.is_active
+JOIN part fp ON fp.id = f.part_number_id
+WHERE l.next_due_date IS NOT NULL AND l.next_due_date <= sqlc.arg(today)::date + sqlc.arg(soon_days)::int
+ORDER BY l.next_due_date ASC, l.id ASC
+LIMIT sqlc.arg(row_limit)::int;
+
+-- name: ListUnitDue :many
+-- One unit's tracked due dates (#447), one per active form whose latest locked record carries one.
+WITH latest AS (
+  SELECT DISTINCT ON (r.form_id) r.id, r.form_id, r.next_due_date
+  FROM form_record r
+  WHERE r.unit_id = sqlc.arg(unit_id)::int AND r.is_locked AND r.is_active
+  ORDER BY r.form_id, r.record_date DESC NULLS LAST, r.id DESC
+)
+SELECT l.id AS record_id, l.form_id, fp.part_number AS form_part_number, l.next_due_date::date AS next_due_date
+FROM latest l
+JOIN form f ON f.id = l.form_id AND f.is_active
+JOIN part fp ON fp.id = f.part_number_id
+WHERE l.next_due_date IS NOT NULL
+ORDER BY l.next_due_date ASC, l.id ASC;

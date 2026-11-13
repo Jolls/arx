@@ -77,6 +77,21 @@
 
     <div class="row row-cols-1 g-3 mb-3">
         <div class="col">
+            <div class="card h-100" id="dashboard-card-due-overdue" data-dashboard-card="due-overdue">
+                <div class="card-header">Due / Overdue</div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 g-3 mb-3">
+        <div class="col">
             <div class="card h-100" id="dashboard-card-below-reorder" data-dashboard-card="below-reorder">
                 <div class="card-header">Below Reorder Point</div>
                 <div class="card-body">
@@ -194,6 +209,29 @@
 </div>
 {{else}}
 <p class="text-muted mb-0">No stale WIP records.</p>
+{{end}}
+{{end}}
+
+{{define "dashboard_card_due_overdue"}}
+{{if .DueItems}}
+<div class="table-responsive-sm">
+<table class="table table-sm table-hover mb-0">
+    <tbody>
+        {{range .DueItems}}
+        <tr>
+            <td><a href="/part/{{.PartID}}/units/{{.UnitID}}">{{.PartNumber}} {{.Serial}}</a></td>
+            <td class="text-muted">{{.FormPartNumber}}</td>
+            <td class="text-end" style="white-space:nowrap;">{{.Due.Format "2006-01-02"}}
+                {{if eq .Status "overdue"}}<span class="badge text-bg-danger">{{.Days}}d overdue</span>
+                {{else}}<span class="badge text-bg-warning">{{if eq .Days 0}}due today{{else}}in {{.Days}}d{{end}}</span>{{end}}
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-muted mb-0">Nothing overdue or due in the next 30 days.</p>
 {{end}}
 {{end}}
 

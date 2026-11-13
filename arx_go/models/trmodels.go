@@ -21,6 +21,7 @@ type TestForm struct {
 	Revision        int    // number of times this form has been released (locked); 0 = never released ("Draft"). Bumped on unlock->lock, never on save (#260).
 	SerialPrefix    string // prefix of the suggested serial number (#450); empty = bare integer
 	SerialPad       int    // minimum zero-padded width of the suggested serial's sequence (#450); 0 = none
+	RecurrenceDays  *int   // default recurrence interval in days (#447); nil = not a recurring form
 }
 
 // OrderedTestIDs parses TestOrder into a slice of integer step IDs.
@@ -79,6 +80,8 @@ type TestRecord struct {
 	BuildID          *int   // build that produced the tested unit (#677); nil when not built or unlinked
 	UnitID           *int   // the one serialized unit under test (#742, Q8); nil for whole-lot/batch records
 	UnitSerial       string // joined from unit.serial_number when UnitID is set; display only
+	NextDueDate       *time.Time // when the next record of this form is due for the unit (#447); nil = untracked
+	NextDueSuperseded bool       // a newer locked record of the same form and unit exists, so NextDueDate no longer counts
 }
 
 // IsUnitLevel reports whether this record covers one specific serialized unit

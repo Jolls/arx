@@ -68,6 +68,7 @@ func routeBudgets(h *Handler) []routeBudget {
 		row("reports dashboard: top failures", "/api/reports/dashboard/top-failures", h.ReportsDashboardTopFailures, "/api/reports/dashboard/top-failures", "", 1),
 		row("reports dashboard: lowest yield", "/api/reports/dashboard/lowest-yield", h.ReportsDashboardLowestYield, "/api/reports/dashboard/lowest-yield", "", 1),
 		row("reports dashboard: stale WIP", "/api/reports/dashboard/stale-wip", h.ReportsDashboardStaleWIP, "/api/reports/dashboard/stale-wip", "", 1),
+		row("reports dashboard: due overdue", "/api/reports/dashboard/due-overdue", h.ReportsDashboardDueOverdue, "/api/reports/dashboard/due-overdue", "TW-001", 1),
 		row("reports dashboard: pending approval", "/api/reports/dashboard/pending-approval", h.ReportsDashboardPendingApproval, "/api/reports/dashboard/pending-approval", "", 1),
 		row("reports dashboard: below reorder", "/api/reports/dashboard/below-reorder", h.ReportsDashboardBelowReorder, "/api/reports/dashboard/below-reorder", "", 1),
 		row("reports dashboard: recent lots", "/api/reports/dashboard/recent-lots", h.ReportsDashboardRecentLots, "/api/reports/dashboard/recent-lots", "", 1),

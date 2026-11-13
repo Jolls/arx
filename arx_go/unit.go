@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"arx/arx_go/models"
 	"arx/internal/inventory"
@@ -95,7 +96,15 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 	var build *BuildOption
 	var ancestors, descendants []TraceNode
 	var typeOptions []string
+	var dueRows []records.UnitDue
 	if err := parallel(r.Context(),
+		func(ctx context.Context) (err error) {
+			if !unit.IsActive {
+				return nil
+			}
+			dueRows, err = h.records().ListUnitDue(ctx, unitID)
+			return pageErr("Error retrieving due dates", err)
+		},
 		func(ctx context.Context) (err error) {
 			if unit.BuildID == nil {
 				return nil
@@ -121,10 +130,28 @@ func (h *Handler) PartUnitTrace(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "parts/part_unit_trace.html", map[string]any{
 		"Part": p, "Unit": unit, "Build": build, "Ancestors": ancestors, "Descendants": descendants,
-		"TypeOptions": typeOptions,
+		"TypeOptions": typeOptions, "Due": unitDueViews(dueRows),
 		"ActiveTab": "parts", "ActiveDetailTab": "units",
 		"NavBackURL": backURL, "NavBackLabel": backLabel, "TestMode": h.cfg().TestMode,
 	})
+}
+
+// unitDueView is one tracked due date on the unit page (#447): the recurring form, its due date
+// and the badge status ("overdue", "soon" or "").
+type unitDueView struct {
+	FormID         int
+	FormPartNumber string
+	Due            time.Time
+	Status         string
+}
+
+func unitDueViews(rows []records.UnitDue) []unitDueView {
+	today := records.Today()
+	out := make([]unitDueView, len(rows))
+	for i, d := range rows {
+		out[i] = unitDueView{d.FormID, d.FormPartNumber, d.NextDueDate, records.DueStatus(d.NextDueDate, today)}
+	}
+	return out
 }
 
 // UnitRecordsRows — GET /api/part/{id}/units/{unitID}/records/rows. JSON rows

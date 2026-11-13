@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.104] - 2026-11-12
+### Added
+- Recurring records (e.g. calibration/PM): a form can set a default recurrence interval in days, which prefills a per-record "Next due" date (editable until the record locks); a unit's current due date comes from its latest locked record. A Due / Overdue card on the Reports dashboard lists overdue units and those due within 30 days, and the unit and record views show an overdue / due-soon badge. Needs migration `20261112192814_447_recurring_due_dates.sql` ([#447](https://github.com/Jolls/arx/issues/447))
+
 ## [0.8.103] - 2026-11-12
 ### Fixed
 - Narrows the 0.8.101 auto-mint: saving a record for a serial-tracked part that has a BOM, with no build or lot picked, no longer mints a provenance-less unit (only a no-BOM part does); it links an existing unit as before ([#452](https://github.com/Jolls/arx/issues/452))
