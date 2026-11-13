@@ -2121,8 +2121,8 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// #745: a serial/lot_serial part mints (or, on retest, re-links) the serialized
-	// unit this record refers to, with or without a picked build/lot as provenance (#452 —
-	// a no-BOM part has neither to offer, so the unit mints with both left NULL). The
+	// unit this record refers to, with a picked build/lot as provenance — or, for a part with
+	// no BOM (#452), without one (the unit mints with both left NULL). The
 	// record then points at the unit via unit_id and leaves lot_id/build_id NULL — lot/build
 	// are read through the unit (Q8 FK-consistency invariant).
 	pt, e := svc.GetPartTracking(r.Context(), record.PartNumberID)
@@ -2233,13 +2233,11 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 		unitArg = record.UnitID
 	} else if models.TracksSerials(trackingMode) && record.SerialNumber != "" {
 		// Find or lazily create the unit for (part, serial) (#745, Q5): a retest re-links the
-		// existing unit, filling only a NULL lot/build (#422). With a picked build/lot, the unit
-		// is minted/filled as source='test' via UpsertTestUnit. With neither (#452 — a no-BOM
-		// part can never offer provenance), it's still find-or-create: a brand-new serial mints
-		// a source='test' unit with lot_id/build_id both NULL (a provenance-less test-minted
-		// unit is legitimate, same reasoning as #799 dropping CK_unit_provenance for manual
-		// units), but an existing unit's source/provenance is left untouched — a plain no-pick
-		// save must not flip a 'manual' unit (#799) to 'test' (#422).
+		// existing unit, filling only a NULL lot/build (#422). With a picked build/lot the unit
+		// is minted/filled via UpsertTestUnit. With neither, only a part with no BOM (#452 — it
+		// can never offer provenance) mints a provenance-less source='test' unit; a part that
+		// has a BOM keeps the lookup-only behavior, so a forgotten build/lot pick stays visible
+		// instead of silently minting an untraceable unit.
 		inv := inventory.New(tx)
 		if buildArg != nil || lotArg != nil {
 			uid, uerr := inv.UpsertTestUnit(r.Context(), record.PartNumberID, record.SerialNumber, buildArg, lotArg)
@@ -2249,12 +2247,26 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 			}
 			unitArg = &uid
 		} else {
-			uid, uerr := inv.FindOrCreateTestUnit(r.Context(), record.PartNumberID, record.SerialNumber)
-			if uerr != nil {
-				serverError(w, "could not record unit", uerr)
+			bomLines, berr := inv.ListBuildLines(r.Context(), record.PartNumberID)
+			if berr != nil {
+				serverError(w, "could not load BOM", berr)
 				return
 			}
-			unitArg = &uid
+			if len(bomLines) == 0 {
+				uid, uerr := inv.FindOrCreateTestUnit(r.Context(), record.PartNumberID, record.SerialNumber)
+				if uerr != nil {
+					serverError(w, "could not record unit", uerr)
+					return
+				}
+				unitArg = &uid
+			} else {
+				uid, uerr := inv.FindUnitIDBySerial(r.Context(), record.PartNumberID, record.SerialNumber)
+				if uerr != nil {
+					serverError(w, "could not look up unit", uerr)
+					return
+				}
+				unitArg = uid
+			}
 		}
 	}
 	if unitArg != nil {

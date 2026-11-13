@@ -212,7 +212,7 @@
       </td>
       <td data-col="col-spec">{{.EffectiveSpec}}</td>
       <td data-col="col-result" class="text-center font-mono">
-        {{if or (isImageRow .) (isFileRow .)}}
+        {{if isAttachRow .}}
           {{if isPDF $val}}
           {{$fileURL := imageURL $.Form.PartNumber $val}}
           <a href="{{$fileURL}}" target="_blank">

@@ -85,8 +85,7 @@ func recordsTemplateFuncs() template.FuncMap {
 		"fileIcon":     urlutil.FileIcon,
 		"isPDF":        urlutil.IsPDF,
 		"imageResult":  imageResult,
-		"isImageRow":   isImageRow,
-		"isFileRow":    isFileRow,
+		"isAttachRow":  isAttachRow,
 		"imageURL": func(partNumber, val string) string {
 			// sanitizeFileNamePart must match the folder name APIRecordPasteResultImage
 			// writes to, or the link 404s for any part number with an illegal filename char.
@@ -200,6 +199,12 @@ func attachRowKind(row models.ResultRow) string {
 // (for rows whose form_row predates the #587 migration to pf_type="attach").
 func isImageRow(row models.ResultRow) bool {
 	return attachRowKind(row) == "image"
+}
+
+// isAttachRow returns true for any row isImageRow or isFileRow accepts — the gate
+// for the main results table's thumbnail/link cell.
+func isAttachRow(row models.ResultRow) bool {
+	return attachRowKind(row) != ""
 }
 
 // isFileRow returns true for a Level-0 attach-step result that holds a
