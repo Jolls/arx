@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.105] - 2026-11-13
+### Removed
+- One-time Azure SQL → Postgres data-migration tooling and docs (`arx_go/cmd/migrate_data`, `internal/datamigrate`, `docs/216-data-migration/`); the timestamp-provenance limitation in `SQL/SCHEMA.md` stays documented ([#345](https://github.com/Jolls/arx/issues/345))
+
 ## [0.8.104] - 2026-11-12
 ### Added
 - Recurring records (e.g. calibration/PM): a form can set a default recurrence interval in days, which prefills a per-record "Next due" date (editable until the record locks); a unit's current due date comes from its latest locked record. A Due / Overdue card on the Reports dashboard lists overdue units and those due within 30 days, and the unit and record views show an overdue / due-soon badge. Needs migration `20261112192814_447_recurring_due_dates.sql` ([#447](https://github.com/Jolls/arx/issues/447))
