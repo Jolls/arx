@@ -157,7 +157,8 @@ func (q *Queries) GetActiveNamedQuery(ctx context.Context, name string) (GetActi
 const getFormHeader = `-- name: GetFormHeader :one
 SELECT f.id, f.part_number_id, f.is_locked, COALESCE(f.test_order, '') AS test_order, f.revision,
        pn.part_number, COALESCE(pn.description, '') AS description,
-       COALESCE(f.record_types, '') AS record_types, COALESCE(f.instrument_types, '') AS instrument_types
+       COALESCE(f.record_types, '') AS record_types, COALESCE(f.instrument_types, '') AS instrument_types,
+       f.serial_prefix, f.serial_pad
 FROM form f
 JOIN part pn ON f.part_number_id = pn.id
 WHERE f.id = $1
@@ -173,6 +174,8 @@ type GetFormHeaderRow struct {
 	Description     string
 	RecordTypes     string
 	InstrumentTypes string
+	SerialPrefix    string
+	SerialPad       int
 }
 
 // A form with its part's number/description; every page that shows a form header reads this.
@@ -189,6 +192,8 @@ func (q *Queries) GetFormHeader(ctx context.Context, id int) (GetFormHeaderRow, 
 		&i.Description,
 		&i.RecordTypes,
 		&i.InstrumentTypes,
+		&i.SerialPrefix,
+		&i.SerialPad,
 	)
 	return i, err
 }
@@ -428,10 +433,12 @@ func (q *Queries) InsertEventResult(ctx context.Context, arg InsertEventResultPa
 }
 
 const insertForm = `-- name: InsertForm :one
-INSERT INTO form (part_number_id, is_active, is_locked, test_order, record_types, instrument_types)
+INSERT INTO form (part_number_id, is_active, is_locked, test_order, record_types, instrument_types, serial_prefix, serial_pad)
 VALUES ($1, TRUE, FALSE, '',
         (SELECT s.record_types FROM form s WHERE s.id = $2),
-        (SELECT s.instrument_types FROM form s WHERE s.id = $2))
+        (SELECT s.instrument_types FROM form s WHERE s.id = $2),
+        COALESCE((SELECT s.serial_prefix FROM form s WHERE s.id = $2), ''),
+        COALESCE((SELECT s.serial_pad FROM form s WHERE s.id = $2), 0))
 RETURNING id
 `
 
@@ -440,8 +447,8 @@ type InsertFormParams struct {
 	SourceID     int
 }
 
-// A new active, unlocked form with an empty step order. Record / instrument types come from the source form
-// (NULL when there is none).
+// A new active, unlocked form with an empty step order. Record / instrument types and the serial format
+// come from the source form (NULL / the column defaults when there is none).
 func (q *Queries) InsertForm(ctx context.Context, arg InsertFormParams) (int, error) {
 	row := q.db.QueryRowContext(ctx, insertForm, arg.PartNumberID, arg.SourceID)
 	var id int
@@ -1754,14 +1761,30 @@ func (q *Queries) LockSerialAllocation(ctx context.Context, arg LockSerialAlloca
 }
 
 const nextFormSerial = `-- name: NextFormSerial :one
-SELECT COALESCE(MAX(CASE WHEN serial_number ~ '^[0-9]+$' THEN CAST(serial_number AS INTEGER) END) + 1, 1)::int AS next_serial
-FROM form_record
-WHERE form_id = $1
+WITH serials AS (
+  SELECT serial_number FROM form_record WHERE form_id = $2
+  UNION ALL
+  SELECT serial_number FROM unit WHERE part_id = $3::int
+)
+SELECT COALESCE(MAX(CASE WHEN left(serial_number, length($1::text)) = $1::text
+                          AND substr(serial_number, length($1::text) + 1) ~ '^[0-9]{1,9}$'
+                         THEN CAST(substr(serial_number, length($1::text) + 1) AS INTEGER) END) + 1, 1)::int AS next_serial
+FROM serials
 `
 
-// Suggested next serial: the largest all-digit serial of the form (any state) + 1, or 1.
-func (q *Queries) NextFormSerial(ctx context.Context, formID int) (int, error) {
-	row := q.db.QueryRowContext(ctx, nextFormSerial, formID)
+type NextFormSerialParams struct {
+	Prefix string
+	FormID int
+	PartID *int
+}
+
+// Suggested next serial number (#450): the largest sequence number + 1, or 1. A serial counts when it is
+// sqlc.arg(prefix) followed by 1-9 digits (an empty prefix = all-digit serials, as before; longer digit
+// runs would overflow the INTEGER cast and are ignored). Counted:
+// the form's records (any state), and - when part_id is given - that part's units, so an accepted
+// default never lands on an existing unit's serial.
+func (q *Queries) NextFormSerial(ctx context.Context, arg NextFormSerialParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, nextFormSerial, arg.Prefix, arg.FormID, arg.PartID)
 	var next_serial int
 	err := row.Scan(&next_serial)
 	return next_serial, err
@@ -1839,6 +1862,22 @@ SELECT set_config('arx.username', $1::text, true)
 // Transaction-local acting username that trg_form_row_history reads via current_setting('arx.username').
 func (q *Queries) SetAuditUser(ctx context.Context, username string) error {
 	_, err := q.db.ExecContext(ctx, setAuditUser, username)
+	return err
+}
+
+const setFormSerialFormat = `-- name: SetFormSerialFormat :exec
+UPDATE form SET serial_prefix = $1::text, serial_pad = $2::int
+WHERE id = $3
+`
+
+type SetFormSerialFormatParams struct {
+	SerialPrefix string
+	SerialPad    int
+	ID           int
+}
+
+func (q *Queries) SetFormSerialFormat(ctx context.Context, arg SetFormSerialFormatParams) error {
+	_, err := q.db.ExecContext(ctx, setFormSerialFormat, arg.SerialPrefix, arg.SerialPad, arg.ID)
 	return err
 }
 

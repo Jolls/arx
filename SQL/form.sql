@@ -14,7 +14,9 @@ CREATE TABLE form (
                                  CONSTRAINT CK_form_type CHECK (form_type IN ('inspection', 'test', 'calibration', 'checklist', 'batch record')),
   record_types      VARCHAR(500),                    -- Comma-separated allowed record types. NULL = free-text. Orthogonal to form_type.
   instrument_types  VARCHAR(500),                    -- Comma-separated instrument types. NULL = free-text.
-  revision          INTEGER      NOT NULL DEFAULT 0  -- Number of releases (#260). 0 = never released.
+  revision          INTEGER      NOT NULL DEFAULT 0, -- Number of releases (#260). 0 = never released.
+  serial_prefix     VARCHAR(50)  NOT NULL DEFAULT '', -- Prefix of the suggested serial on a new record (#450), e.g. 'SK-'. '' = bare integer.
+  serial_pad        INTEGER      NOT NULL DEFAULT 0 CONSTRAINT CK_form_serial_pad CHECK (serial_pad BETWEEN 0 AND 20) -- Minimum digit width of the suggested serial's sequence (#450), zero-padded. 0 = no padding.
 );
 
 ALTER TABLE form ADD CONSTRAINT FK_form_part FOREIGN KEY (part_number_id) REFERENCES part (id); -- #744: was a logical reference.

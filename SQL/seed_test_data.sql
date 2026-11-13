@@ -322,9 +322,11 @@ END $$;
         (3910, 3013, 3012, 1, 1),   -- 3013's own BOM: 1x sub-assembly 3012 (#737)
         (3911, 3013, 3007, 2, 1),   -- + 1x raw stainless bar stock, direct (not via 3012)
         (3912, 3010, 3013, 3, 1),   -- FORM part's BOM also covers 3013, for its Final Test record
-        (3913, 3010, 3012, 4, 1);   -- FORM part's BOM also covers 3012 (#867/#868) — its own BOM (3905/3906)
+        (3913, 3010, 3012, 4, 1),   -- FORM part's BOM also covers 3012 (#867/#868) — its own BOM (3905/3906)
                                     -- + tracking_mode='lot' (not lot_serial) makes it a NewRecord-selectable,
                                     -- buildable whole-lot/batch part for testing the qty-at-test-time field
+        (3914, 3011, 3005, 1, 1);   -- FORM-1002 (the FT- serial-format form, #450) can test 3005, a serial-tracked
+                                    -- part with existing units → exercises the NewRecord serial picker (#451)
 
     -- ============================================================
     -- 8. supplier_part / mfg_part / price
@@ -590,9 +592,11 @@ END $$;
     -- 6002 hangs off the spare FORM part 3011 — exists purely to carry a level-2 and
     -- level-3 heading (6001 only ever exercises level-1), so a real record shows all
     -- three .row-heading-N shades at once.
-    INSERT INTO form (id, part_number_id, test_order, is_locked, is_active, form_type, record_types, instrument_types, revision) VALUES
-        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108,6115', TRUE, TRUE, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1),
-        (6002, 3011, '6109,6110,6111,6112,6113,6114', TRUE, TRUE, 'test', 'New Release', NULL, 1);
+    -- serial_prefix/serial_pad (#450): 6002 has a serial format (FT-0001...); 6001 keeps the bare-integer default.
+    -- 6002's only record (7015) has a bare '7015' serial, which doesn't match the format, so a new record suggests FT-0001.
+    INSERT INTO form (id, part_number_id, test_order, is_locked, is_active, form_type, record_types, instrument_types, revision, serial_prefix, serial_pad) VALUES
+        (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108,6115', TRUE, TRUE, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1, '', 0),
+        (6002, 3011, '6109,6110,6111,6112,6113,6114', TRUE, TRUE, 'test', 'New Release', NULL, 1, 'FT-', 4);
 
     -- 6104 is an archived (retired) step: hidden from new records and the live definition view
     -- (revealed by the "Show archived" toggle), but still rendered on historical records that

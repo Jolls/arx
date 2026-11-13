@@ -176,6 +176,7 @@ func routeBudgets(h *Handler) []routeBudget {
 		row("API supplier-part", "/api/supplier-part", h.APISupplierPN, "/api/supplier-part?part_id=3002&supplier_id=1002", "PMC-M3X8", 1),
 		row("named query", "/api/named-query", h.APINamedQuery, "/api/named-query?spec=query%3Aparts_matching%28%40pattern%3DRAW-%25%29", "RAW-1001", 2),
 		row("form new record", "/forms/{id}/records/new", h.NewRecord, "/forms/6001/records/new", "FORM-1001", 3),
+		row("form new record units", "/forms/{id}/records/new/units", h.NewRecordUnits, "/forms/6001/records/new/units?bom_pnid=3005", "SN-3005-001", 3),
 		row("form def edit", "/forms/{id}/def/edit", h.EditFormDef, "/forms/6001/def/edit", "", 3),
 		row("form duplicate", "/forms/{id}/duplicate", h.DuplicateForm, "/forms/6001/duplicate", "", 3),
 		row("form new", "/forms/new", h.NewForm, "/forms/new", "", 2),
