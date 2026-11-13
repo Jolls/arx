@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"arx/internal/inventory"
+	"arx/internal/records"
 	"arx/internal/reports"
 )
 
@@ -40,6 +41,20 @@ type dashboardStaleWIPItem struct {
 	PartNumber string
 	AgeDays    int
 }
+
+// dashboardDueItem is one row in the Reports dashboard's Due / Overdue card — a unit
+// whose latest locked record of a recurring form is overdue or due soon (#447).
+// Days is how far the due date is from today (always >= 0; Status says which side).
+type dashboardDueItem struct {
+	UnitID, PartID                     int
+	Serial, PartNumber, FormPartNumber string
+	Due                                time.Time
+	Status                             string
+	Days                               int
+}
+
+// dashboardDueLimit caps the Due / Overdue card's rows.
+const dashboardDueLimit = 10
 
 // dashboardPendingApprovalItem is one row in the Reports dashboard's POs
 // Pending Approval summary (issue #658, RPT-7).
@@ -147,6 +162,34 @@ func (h *Handler) ReportsDashboardStaleWIP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.renderDashboardCard(w, "dashboard_card_stale_wip", map[string]any{"StaleWIPRecords": items})
+}
+
+// ReportsDashboardDueOverdue renders the Due / Overdue card fragment — GET
+// /api/reports/dashboard/due-overdue (#447).
+func (h *Handler) ReportsDashboardDueOverdue(w http.ResponseWriter, r *http.Request) {
+	if h.database() == nil {
+		h.renderDashboardCard(w, "dashboard_card_due_overdue", map[string]any{})
+		return
+	}
+	rows, err := h.records().ListDueUnits(r.Context(), dashboardDueLimit)
+	if err != nil {
+		h.renderDashboardCardError(w, err)
+		return
+	}
+	today := records.Today()
+	var items []dashboardDueItem
+	for _, d := range rows {
+		days := int(d.NextDueDate.Sub(today).Hours() / 24)
+		if days < 0 {
+			days = -days
+		}
+		items = append(items, dashboardDueItem{
+			UnitID: d.UnitID, PartID: d.PartID, Serial: d.SerialNumber, PartNumber: d.PartNumber,
+			FormPartNumber: d.FormPartNumber, Due: d.NextDueDate,
+			Status: records.DueStatus(d.NextDueDate, today), Days: days,
+		})
+	}
+	h.renderDashboardCard(w, "dashboard_card_due_overdue", map[string]any{"DueItems": items})
 }
 
 // ReportsDashboardPendingApproval renders the POs Pending Approval card fragment — GET

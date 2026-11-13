@@ -24,7 +24,8 @@ CREATE TABLE form_record (
   form_revision          INTEGER,                            -- Snapshot of form.revision (#260). NULL pre-#260.
   lot_id                 INTEGER,                            -- FK to lot.id (#677, nullable). Lot the tested unit belongs to.
   build_id               INTEGER,                            -- FK to build.id (#677, nullable). Build that produced the tested unit.
-  unit_id                INTEGER                             -- FK to unit.id (#742, Q8, nullable). Serialized unit under test; NULL for batch records.
+  unit_id                INTEGER,                            -- FK to unit.id (#742, Q8, nullable). Serialized unit under test; NULL for batch records.
+  next_due_date          DATE                                -- When the next record of this form is due for the unit (#447). Prefilled from form.recurrence_days; editable until locked. NULL = untracked.
 );
 
 -- FK deferred (mirrors SQL Server set):

@@ -262,6 +262,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/api/reports/dashboard/top-failures", withAuth, h.ReportsDashboardTopFailures)
 	b.handle(http.MethodGet, "/api/reports/dashboard/lowest-yield", withAuth, h.ReportsDashboardLowestYield)
 	b.handle(http.MethodGet, "/api/reports/dashboard/stale-wip", withAuth, h.ReportsDashboardStaleWIP)
+	b.handle(http.MethodGet, "/api/reports/dashboard/due-overdue", withAuth, h.ReportsDashboardDueOverdue)
 	b.handle(http.MethodGet, "/api/reports/dashboard/pending-approval", withAuth, h.ReportsDashboardPendingApproval)
 	b.handle(http.MethodGet, "/api/reports/dashboard/below-reorder", withAuth, h.ReportsDashboardBelowReorder)
 	b.handle(http.MethodGet, "/api/reports/dashboard/recent-lots", withAuth, h.ReportsDashboardRecentLots)

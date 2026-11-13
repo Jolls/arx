@@ -107,6 +107,15 @@
         <th class="text-muted">Type</th>
         <td>{{.Record.RecordType}}</td>
       </tr>
+      {{if .Record.NextDueDate}}
+      <tr>
+        <th class="text-muted">Next Due</th>
+        <td>{{.Record.NextDueDate.Format "2006-01-02"}}
+          {{if eq .DueStatus "overdue"}}<span class="badge text-bg-danger">Overdue</span>
+          {{else if eq .DueStatus "soon"}}<span class="badge text-bg-warning">Due soon</span>{{end}}
+        </td>
+      </tr>
+      {{end}}
       {{/* #870 — session-level note, frozen with the record. The linked LOT's note (#872)
            is batch-level and keeps changing after this record freezes, so it lives in its
            own card to the right rather than inline here. */}}

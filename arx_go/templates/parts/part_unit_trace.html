@@ -27,6 +27,13 @@
                 <dd class="col-sm-10">{{if .Unit.IsManual}}<span class="badge bg-secondary">manual</span> — added directly, no test record{{else}}<span class="badge bg-secondary">test record</span> — created by saving a test record{{end}}</dd>
                 <dt class="col-sm-2">Created</dt>
                 <dd class="col-sm-10">{{(localTime $.UserLoc .Unit.CreatedAt).Format "2006-01-02"}}</dd>
+                {{range .Due}}
+                <dt class="col-sm-2">Next due</dt>
+                <dd class="col-sm-10">{{.Due.Format "2006-01-02"}} <span class="text-muted">({{.FormPartNumber}})</span>
+                    {{if eq .Status "overdue"}}<span class="badge text-bg-danger">Overdue</span>
+                    {{else if eq .Status "soon"}}<span class="badge text-bg-warning">Due soon</span>{{end}}
+                </dd>
+                {{end}}
             </dl>
         </div>
     </div>

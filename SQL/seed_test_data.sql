@@ -279,7 +279,11 @@ END $$;
         -- chain (8301→8302→8306, plus 8303→8306) — a PRE-state tree for the future
         -- traceability view (epic #736 slice 9) and completes the
         -- receipt→incoming-inspection→build→build→final-test flow (§0 of the plan).
-        (3013, 'ASM-1003', 'ASM', 'A', 'Skyrunner Deluxe Drone (Lot+Serial)',     'A', TRUE, 1,  0,      NULL, NULL, NULL);
+        (3013, 'ASM-1003', 'ASM', 'A', 'Skyrunner Deluxe Drone (Lot+Serial)',     'A', TRUE, 1,  0,      NULL, NULL, NULL),
+        -- Recurring-calibration fixture (#447): a serialized instrument (3015) and the yearly
+        -- calibration form (3014 -> form 6003) its units are recorded against.
+        (3014, 'FORM-1003','FORM', 'A', 'Torque Wrench Calibration Form', 'A', TRUE, 1,  0,      NULL, NULL, NULL),
+        (3015, 'MFG-1002', 'MFG', 'A', 'Torque Wrench 10-100 Nm (Serialized)',    'A', TRUE, 1,  0,      NULL, NULL, NULL);
 
     -- Fully populated part so the detail card and edit round-trip show detail/notes/user fields.
     UPDATE part SET
@@ -500,7 +504,7 @@ END $$;
     -- and a build), 3005 → serial (its unit 8503 is build-only). TracksLots('serial') is false,
     -- so 3005 stays un-lot-tracked and the #675 app build test is unaffected.
     UPDATE part SET tracking_mode = 'lot_serial' WHERE id = 3013;
-    UPDATE part SET tracking_mode = 'serial'     WHERE id = 3005;
+    UPDATE part SET tracking_mode = 'serial'     WHERE id IN (3005, 3015);
 
     -- 8301: purchased lot of 3007, received against po_line 5504 (PO 5003); lot_number
     --       defaults to the lot's own id (#687), vendor_lot_number is the supplier's
@@ -568,7 +572,14 @@ END $$;
         (8502, 3007, 8301, NULL, 'SN-3007-A1',  '2026-05-15T00:00:00', TRUE, 'test'),
         (8503, 3005, NULL, 8201, 'SN-3005-001', '2026-05-25T00:00:00', TRUE, 'test'),
         (8504, 3005, NULL, NULL, 'SN-3005-MANUAL-1', '2026-07-20T00:00:00', TRUE, 'manual'),
-        (8505, 3012, NULL, NULL, '8301', '2026-07-21T00:00:00', TRUE, 'manual');
+        (8505, 3012, NULL, NULL, '8301', '2026-07-21T00:00:00', TRUE, 'manual'),
+        -- 8506-8509 (#447): torque wrenches (part 3015) in the four due states of calibration form
+        -- 6003 (see the form_record block): overdue, due soon, in date, and one whose old overdue
+        -- record is superseded by a newer one. Relative to CURRENT_DATE so the states never rot.
+        (8506, 3015, NULL, NULL, 'TW-001', CURRENT_DATE - 400, TRUE, 'manual'),
+        (8507, 3015, NULL, NULL, 'TW-002', CURRENT_DATE - 400, TRUE, 'manual'),
+        (8508, 3015, NULL, NULL, 'TW-003', CURRENT_DATE - 400, TRUE, 'manual'),
+        (8509, 3015, NULL, NULL, 'TW-004', CURRENT_DATE - 450, TRUE, 'manual');
 
     -- 8404/8405 (#746): unit-endpoint genealogy edges — inserted here (not with the lot->lot
     -- edges above) because their FKs reference unit, which is created just above. They give
@@ -597,6 +608,11 @@ END $$;
     INSERT INTO form (id, part_number_id, test_order, is_locked, is_active, form_type, record_types, instrument_types, revision, serial_prefix, serial_pad) VALUES
         (6001, 3010, '6101,6102,6103,6104,6105,6106,6107,6108,6115', TRUE, TRUE, 'test', 'New Release,Re-Test', 'ModelA,ModelB', 1, '', 0),
         (6002, 3011, '6109,6110,6111,6112,6113,6114', TRUE, TRUE, 'test', 'New Release', NULL, 1, 'FT-', 4);
+
+    -- 6003 (#447): a yearly calibration form — the only seeded form with a recurrence interval
+    -- (recurrence_days = 365), so its records prefill next_due_date a year out.
+    INSERT INTO form (id, part_number_id, test_order, is_locked, is_active, form_type, record_types, instrument_types, revision, recurrence_days) VALUES
+        (6003, 3014, '6116', TRUE, TRUE, 'calibration', 'Calibration', NULL, 1, 365);
 
     -- 6104 is an archived (retired) step: hidden from new records and the live definition view
     -- (revealed by the "Show archived" toggle), but still rendered on historical records that
@@ -628,6 +644,9 @@ END $$;
         (6112, 6002, 1, 0, 'Overall Length',     '<=120mm',             'mm',  NULL,  NULL, '120', 'range', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6113, 6002, 1, 3, 'Visual Checks',      NULL,                  NULL,  NULL,  NULL, NULL,  NULL,    NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit'),
         (6114, 6002, 1, 0, 'Surface Finish',     'No visible defects',  NULL,  NULL, 'List:Pass;Fail', NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit');
+
+    INSERT INTO form_row (id, form_id, revision, type, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, instrument_types, archived, format, default_result, hide_formula, updated_at, granularity) VALUES
+        (6116, 6003, 1, 0, 'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit');
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
     -- trg_form_row_history snapshots the old row into form_row_history.
@@ -673,6 +692,24 @@ END $$;
         -- high; Retest Voltage Check (6108) shows the clamped value from the formula. Also the
         -- only record that fills 6105-6107 (filled/List:/query: pf_types) with real data.
         (7016, 6001, 3004, '2026-07-20', '7016', 'MFG-1001', 'Drone Frame Housing', '6101,6102,6103,6105,6106,6107,6108,6115', 'Re-Test', 'ModelA', TRUE, FALSE, TRUE, 1, NULL, NULL, NULL, '2020-01-01T00:00:00', '2026-07-20T00:00:00', NULL);
+
+    -- Calibration records for the torque wrenches (#447), dates relative to CURRENT_DATE so the
+    -- due states never rot. next_due_date is the form's 365-day interval from the record date
+    -- unless noted. Which unit lands where on the Reports dashboard Due / Overdue card:
+    --   7021  TW-001 (8506): locked, due 10 days ago             -> overdue
+    --   7026  TW-001: a newer WIP (unlocked) recalibration, due a year out — a draft never clears
+    --         the overdue flag, so TW-001 stays overdue until 7026 is completed
+    --   7022  TW-002 (8507): locked, due in 10 days              -> due soon
+    --   7023  TW-003 (8508): locked, due in 200 days             -> in date, not listed
+    --   7024  TW-004 (8509): old locked record, due 35 days ago, superseded by
+    --   7025  TW-004: newer locked record, due in 345 days       -> not listed (7024's date no longer counts)
+    INSERT INTO form_record (id, form_id, part_id, record_date, serial_number, subject_part_number, subject_pn_description, test_order, record_type, instrument_type, is_locked, is_approved, is_active, form_revision, lot_id, build_id, unit_id, updated_at, created_at, notes, next_due_date) VALUES
+        (7021, 6003, 3015, CURRENT_DATE - 375, 'TW-001', 'MFG-1002', 'Torque Wrench 10-100 Nm (Serialized)', '6116', 'Calibration', NULL, TRUE,  FALSE, TRUE, 1, NULL, NULL, 8506, '2020-01-01T00:00:00', CURRENT_DATE - 375, NULL, CURRENT_DATE - 10),
+        (7022, 6003, 3015, CURRENT_DATE - 355, 'TW-002', 'MFG-1002', 'Torque Wrench 10-100 Nm (Serialized)', '6116', 'Calibration', NULL, TRUE,  FALSE, TRUE, 1, NULL, NULL, 8507, '2020-01-01T00:00:00', CURRENT_DATE - 355, NULL, CURRENT_DATE + 10),
+        (7023, 6003, 3015, CURRENT_DATE - 165, 'TW-003', 'MFG-1002', 'Torque Wrench 10-100 Nm (Serialized)', '6116', 'Calibration', NULL, TRUE,  FALSE, TRUE, 1, NULL, NULL, 8508, '2020-01-01T00:00:00', CURRENT_DATE - 165, NULL, CURRENT_DATE + 200),
+        (7024, 6003, 3015, CURRENT_DATE - 400, 'TW-004', 'MFG-1002', 'Torque Wrench 10-100 Nm (Serialized)', '6116', 'Calibration', NULL, TRUE,  FALSE, TRUE, 1, NULL, NULL, 8509, '2020-01-01T00:00:00', CURRENT_DATE - 400, NULL, CURRENT_DATE - 35),
+        (7025, 6003, 3015, CURRENT_DATE - 20,  'TW-004', 'MFG-1002', 'Torque Wrench 10-100 Nm (Serialized)', '6116', 'Calibration', NULL, TRUE,  FALSE, TRUE, 1, NULL, NULL, 8509, '2020-01-01T00:00:00', CURRENT_DATE - 20,  NULL, CURRENT_DATE + 345),
+        (7026, 6003, 3015, CURRENT_DATE - 1,   'TW-001', 'MFG-1002', 'Torque Wrench 10-100 Nm (Serialized)', '6116', 'Calibration', NULL, FALSE, FALSE, TRUE, 1, NULL, NULL, 8506, '2020-01-01T00:00:00', CURRENT_DATE - 1,   NULL, CURRENT_DATE + 364);
 
     -- One materialized row per step per record, headings included (type=1) — matching what
     -- materializeRecordSteps produces for post-#487 records. Grouped by record.
@@ -755,6 +792,15 @@ END $$;
         (7164, 7016, 6107, TRUE,  '7015', 'Previous Serial Number','Prior unit tested on this form', NULL, NULL, NULL, NULL, 'comment', 0, '2020-01-01T00:00:00'),
         (7165, 7016, 6108, TRUE,  '5.25', 'Retest Voltage Check',  'Re-measure output ({6102} at first test)', 'V', '4.75', NULL, '5.25', 'range', 0, '2020-01-01T00:00:00'),
         (7166, 7016, 6115, TRUE,  '0.87', 'Power Draw',            '<=1.00W',                   'W',  NULL,  NULL,  '1.00', 'range', 0, '2020-01-01T00:00:00');
+
+    -- One materialized result per calibration record (#447): the certificate number step 6116.
+    INSERT INTO result (id, form_record_id, form_row_id, pass_fail, result, parameter, specification, spec_units, spec_min, spec_nom, spec_max, pf_type, type, updated_at) VALUES
+        (7167, 7021, 6116, NULL, 'CAL-2025-0101', 'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', 0, '2020-01-01T00:00:00'),
+        (7168, 7022, 6116, NULL, 'CAL-2025-0102', 'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', 0, '2020-01-01T00:00:00'),
+        (7169, 7023, 6116, NULL, 'CAL-2026-0033', 'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', 0, '2020-01-01T00:00:00'),
+        (7170, 7024, 6116, NULL, 'CAL-2025-0007', 'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', 0, '2020-01-01T00:00:00'),
+        (7171, 7025, 6116, NULL, 'CAL-2026-0098', 'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', 0, '2020-01-01T00:00:00'),
+        (7172, 7026, 6116, NULL, NULL,            'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', 0, '2020-01-01T00:00:00');
 
     -- A 'completed' event + per-result snapshot is captured on every lock (#251).
     -- 7003 was locked twice (result 6104 corrected 300→310 in between) so the record detail

@@ -119,10 +119,10 @@ func (q *Queries) CountFormSteps(ctx context.Context, formID int) (int, error) {
 const duplicateRecord = `-- name: DuplicateRecord :one
 INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
                          record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
-                         is_approved, form_revision, unit_id)
+                         is_approved, form_revision, unit_id, next_due_date)
 SELECT s.form_id, s.part_id, s.serial_number, s.subject_part_number, s.subject_pn_description,
        s.record_type, COALESCE(s.instrument_type, ''), s.test_order, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, FALSE,
-       FALSE, f.revision, s.unit_id
+       FALSE, f.revision, s.unit_id, CURRENT_DATE + f.recurrence_days
 FROM form_record s
 JOIN form f ON f.id = s.form_id
 WHERE s.id = $1
@@ -130,7 +130,8 @@ RETURNING id
 `
 
 // A fresh WIP re-test of a record: same form, part, serial, subject, type, instrument and step order, dated now,
-// stamped with the form's current revision (#260), unit carried over (#745). No row = no such record.
+// stamped with the form's current revision (#260), unit carried over (#745), next due date recomputed from
+// the form's recurrence interval (#447). No row = no such record.
 func (q *Queries) DuplicateRecord(ctx context.Context, id int) (int, error) {
 	row := q.db.QueryRowContext(ctx, duplicateRecord, id)
 	var id_2 int
@@ -158,7 +159,7 @@ const getFormHeader = `-- name: GetFormHeader :one
 SELECT f.id, f.part_number_id, f.is_locked, COALESCE(f.test_order, '') AS test_order, f.revision,
        pn.part_number, COALESCE(pn.description, '') AS description,
        COALESCE(f.record_types, '') AS record_types, COALESCE(f.instrument_types, '') AS instrument_types,
-       f.serial_prefix, f.serial_pad
+       f.serial_prefix, f.serial_pad, f.recurrence_days
 FROM form f
 JOIN part pn ON f.part_number_id = pn.id
 WHERE f.id = $1
@@ -176,6 +177,7 @@ type GetFormHeaderRow struct {
 	InstrumentTypes string
 	SerialPrefix    string
 	SerialPad       int
+	RecurrenceDays  *int
 }
 
 // A form with its part's number/description; every page that shows a form header reads this.
@@ -194,6 +196,7 @@ func (q *Queries) GetFormHeader(ctx context.Context, id int) (GetFormHeaderRow, 
 		&i.InstrumentTypes,
 		&i.SerialPrefix,
 		&i.SerialPad,
+		&i.RecurrenceDays,
 	)
 	return i, err
 }
@@ -293,9 +296,15 @@ SELECT id, form_id, COALESCE(part_id, 0)::int AS part_id, COALESCE(serial_number
        COALESCE(subject_pn_description, '') AS subject_pn_description,
        record_date, COALESCE(record_type, '') AS record_type, COALESCE(notes, '') AS notes,
        COALESCE(instrument_type, '') AS instrument_type, is_locked, is_approved, is_active,
-       COALESCE(test_order, '') AS test_order, lot_id, build_id, unit_id
-FROM form_record
-WHERE id = $1
+       COALESCE(test_order, '') AS test_order, lot_id, build_id, unit_id, next_due_date,
+       -- A newer locked record of the same form and unit exists, so this record's due date no longer counts (#447).
+       (r.next_due_date IS NOT NULL AND r.unit_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM form_record n
+               WHERE n.form_id = r.form_id AND n.unit_id = r.unit_id AND n.is_locked AND n.is_active AND n.id <> r.id
+                 AND (COALESCE(n.record_date, '-infinity'::timestamp), n.id)
+                   > (COALESCE(r.record_date, '-infinity'::timestamp), r.id)))::bool AS next_due_superseded
+FROM form_record r
+WHERE r.id = $1
 `
 
 type GetRecordRow struct {
@@ -316,6 +325,8 @@ type GetRecordRow struct {
 	LotID                *int
 	BuildID              *int
 	UnitID               *int
+	NextDueDate          *time.Time
+	NextDueSuperseded    bool
 }
 
 // ── Records ──────────────────────────────────────────────────────────────────
@@ -340,6 +351,8 @@ func (q *Queries) GetRecord(ctx context.Context, id int) (GetRecordRow, error) {
 		&i.LotID,
 		&i.BuildID,
 		&i.UnitID,
+		&i.NextDueDate,
+		&i.NextDueSuperseded,
 	)
 	return i, err
 }
@@ -511,11 +524,13 @@ func (q *Queries) InsertNamedQuery(ctx context.Context, arg InsertNamedQueryPara
 const insertRecord = `-- name: InsertRecord :one
 INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
                          record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
-                         form_revision)
-VALUES ($1, $2, $3::text, $4::text,
-        $5::text, $6::text, $7::text,
-        $8::text, $9::timestamp, CURRENT_TIMESTAMP, TRUE, FALSE,
-        $10::int)
+                         form_revision, next_due_date)
+SELECT $1::int, $2::int, $3::text, $4::text,
+       $5::text, $6::text, $7::text,
+       $8::text, $9::timestamp, CURRENT_TIMESTAMP, TRUE, FALSE,
+       $10::int, $9::timestamp::date + f.recurrence_days
+FROM form f
+WHERE f.id = $1
 RETURNING id
 `
 
@@ -532,6 +547,7 @@ type InsertRecordParams struct {
 	FormRevision         int
 }
 
+// next_due_date = record date + the form's recurrence interval (#447); NULL when the form has none.
 func (q *Queries) InsertRecord(ctx context.Context, arg InsertRecordParams) (int, error) {
 	row := q.db.QueryRowContext(ctx, insertRecord,
 		arg.FormID,
@@ -815,6 +831,78 @@ func (q *Queries) ListBOMParts(ctx context.Context, parentPartID int) ([]ListBOM
 	for rows.Next() {
 		var i ListBOMPartsRow
 		if err := rows.Scan(&i.ID, &i.PartNumber, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDueUnits = `-- name: ListDueUnits :many
+WITH latest AS (
+  SELECT DISTINCT ON (r.form_id, r.unit_id) r.id, r.form_id, r.unit_id, r.next_due_date
+  FROM form_record r
+  JOIN unit u ON u.id = r.unit_id
+  WHERE r.is_locked AND r.is_active AND u.is_active
+  ORDER BY r.form_id, r.unit_id, r.record_date DESC NULLS LAST, r.id DESC
+)
+SELECT l.id AS record_id, l.unit_id::int AS unit_id, u.part_id, u.serial_number, p.part_number, l.form_id,
+       fp.part_number AS form_part_number, l.next_due_date::date AS next_due_date
+FROM latest l
+JOIN unit u ON u.id = l.unit_id
+JOIN part p ON p.id = u.part_id
+JOIN form f ON f.id = l.form_id AND f.is_active
+JOIN part fp ON fp.id = f.part_number_id
+WHERE l.next_due_date IS NOT NULL AND l.next_due_date <= $1::date + $2::int
+ORDER BY l.next_due_date ASC, l.id ASC
+LIMIT $3::int
+`
+
+type ListDueUnitsParams struct {
+	Today    time.Time
+	SoonDays int
+	RowLimit int
+}
+
+type ListDueUnitsRow struct {
+	RecordID       int
+	UnitID         int
+	PartID         int
+	SerialNumber   string
+	PartNumber     string
+	FormID         int
+	FormPartNumber string
+	NextDueDate    time.Time
+}
+
+// Units whose latest locked record of an active form (#447) is overdue or due within soon_days of today,
+// soonest first. today comes from the caller (the user's local date), not CURRENT_DATE (the server's), so
+// the list and its badges agree. A latest record with no due date means untracked, so it never lists.
+func (q *Queries) ListDueUnits(ctx context.Context, arg ListDueUnitsParams) ([]ListDueUnitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDueUnits, arg.Today, arg.SoonDays, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueUnitsRow
+	for rows.Next() {
+		var i ListDueUnitsRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.UnitID,
+			&i.PartID,
+			&i.SerialNumber,
+			&i.PartNumber,
+			&i.FormID,
+			&i.FormPartNumber,
+			&i.NextDueDate,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1633,6 +1721,57 @@ func (q *Queries) ListStepReportRows(ctx context.Context, arg ListStepReportRows
 	return items, nil
 }
 
+const listUnitDue = `-- name: ListUnitDue :many
+WITH latest AS (
+  SELECT DISTINCT ON (r.form_id) r.id, r.form_id, r.next_due_date
+  FROM form_record r
+  WHERE r.unit_id = $1::int AND r.is_locked AND r.is_active
+  ORDER BY r.form_id, r.record_date DESC NULLS LAST, r.id DESC
+)
+SELECT l.id AS record_id, l.form_id, fp.part_number AS form_part_number, l.next_due_date::date AS next_due_date
+FROM latest l
+JOIN form f ON f.id = l.form_id AND f.is_active
+JOIN part fp ON fp.id = f.part_number_id
+WHERE l.next_due_date IS NOT NULL
+ORDER BY l.next_due_date ASC, l.id ASC
+`
+
+type ListUnitDueRow struct {
+	RecordID       int
+	FormID         int
+	FormPartNumber string
+	NextDueDate    time.Time
+}
+
+// One unit's tracked due dates (#447), one per active form whose latest locked record carries one.
+func (q *Queries) ListUnitDue(ctx context.Context, unitID int) ([]ListUnitDueRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUnitDue, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnitDueRow
+	for rows.Next() {
+		var i ListUnitDueRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.FormID,
+			&i.FormPartNumber,
+			&i.NextDueDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnitRecordSummary = `-- name: ListUnitRecordSummary :many
 SELECT r.id, r.record_date, COALESCE(r.record_type, '') AS record_type,
        (COUNT(res.id) FILTER (WHERE res.pass_fail = TRUE))::int AS passed,
@@ -1865,6 +2004,21 @@ func (q *Queries) SetAuditUser(ctx context.Context, username string) error {
 	return err
 }
 
+const setFormRecurrence = `-- name: SetFormRecurrence :exec
+UPDATE form SET recurrence_days = $1::int WHERE id = $2
+`
+
+type SetFormRecurrenceParams struct {
+	RecurrenceDays *int
+	ID             int
+}
+
+// NULL = not a recurring form (#447).
+func (q *Queries) SetFormRecurrence(ctx context.Context, arg SetFormRecurrenceParams) error {
+	_, err := q.db.ExecContext(ctx, setFormRecurrence, arg.RecurrenceDays, arg.ID)
+	return err
+}
+
 const setFormSerialFormat = `-- name: SetFormSerialFormat :exec
 UPDATE form SET serial_prefix = $1::text, serial_pad = $2::int
 WHERE id = $3
@@ -1998,8 +2152,8 @@ UPDATE form_record
 SET record_date = COALESCE($1::timestamp, record_date), record_type = $2::text,
     notes = $3::text, instrument_type = $4::text,
     lot_id = $5::int, build_id = $6::int, unit_id = $7::int,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = $8
+    next_due_date = $8::date, updated_at = CURRENT_TIMESTAMP
+WHERE id = $9
 `
 
 type UpdateRecordAfterSaveParams struct {
@@ -2010,6 +2164,7 @@ type UpdateRecordAfterSaveParams struct {
 	LotID          *int
 	BuildID        *int
 	UnitID         *int
+	NextDueDate    *time.Time
 	ID             int
 }
 
@@ -2023,6 +2178,7 @@ func (q *Queries) UpdateRecordAfterSave(ctx context.Context, arg UpdateRecordAft
 		arg.LotID,
 		arg.BuildID,
 		arg.UnitID,
+		arg.NextDueDate,
 		arg.ID,
 	)
 	return err

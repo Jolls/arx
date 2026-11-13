@@ -1,6 +1,9 @@
 package records
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestUnitRecordSummaryState(t *testing.T) {
 	cases := []struct {
@@ -34,6 +37,25 @@ func TestFormatSerial(t *testing.T) {
 	} {
 		if got := FormatSerial(c.prefix, c.pad, c.n); got != c.want {
 			t.Errorf("FormatSerial(%q, %d, %d) = %q, want %q", c.prefix, c.pad, c.n, got, c.want)
+		}
+	}
+}
+
+func TestDueStatus(t *testing.T) {
+	today := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	day := func(n int) time.Time { return today.AddDate(0, 0, n) }
+	for _, c := range []struct {
+		name string
+		due  time.Time
+		want string
+	}{
+		{"yesterday is overdue", day(-1), DueOverdue},
+		{"today is due soon", day(0), DueSoon},
+		{"day 30 is due soon", day(DueSoonDays), DueSoon},
+		{"day 31 is not flagged", day(DueSoonDays + 1), ""},
+	} {
+		if got := DueStatus(c.due, today); got != c.want {
+			t.Errorf("%s: DueStatus = %q, want %q", c.name, got, c.want)
 		}
 	}
 }

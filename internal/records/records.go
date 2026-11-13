@@ -73,6 +73,8 @@ type Record struct {
 	IsLocked, IsApproved, IsActive                        bool
 	TestOrder                                             string
 	LotID, BuildID, UnitID                                *int
+	NextDueDate                                           *time.Time // #447
+	NextDueSuperseded                                     bool       // a newer locked record of the same form and unit exists
 }
 
 // Listed is one row of a records table. FormID / FormPartNumber / FormDescription are only set for
@@ -216,6 +218,7 @@ func (s *Service) GetRecord(ctx context.Context, id int) (Record, error) {
 		RecordDate: nullTime(r.RecordDate), RecordType: r.RecordType, Notes: r.Notes,
 		InstrumentType: r.InstrumentType, IsLocked: r.IsLocked, IsApproved: r.IsApproved, IsActive: r.IsActive,
 		TestOrder: r.TestOrder, LotID: r.LotID, BuildID: r.BuildID, UnitID: r.UnitID,
+		NextDueDate: r.NextDueDate, NextDueSuperseded: r.NextDueSuperseded,
 	}, nil
 }
 
@@ -426,16 +429,18 @@ func (s *Service) ClaimRecord(ctx context.Context, id int) (bool, error) {
 }
 
 // RecordSave is the record-level part of a results save. A nil RecordDate keeps the stored date; Notes ""
-// stores NULL; nil ids store NULL.
+// stores NULL; nil ids store NULL. NextDueDate is always written: nil clears it (#447).
 type RecordSave struct {
 	RecordDate                        *time.Time
 	RecordType, Notes, InstrumentType string
 	LotID, BuildID, UnitID            *int
+	NextDueDate                       *time.Time
 }
 
 func (s *Service) UpdateRecordAfterSave(ctx context.Context, id int, r RecordSave) error {
 	p := dbq.UpdateRecordAfterSaveParams{ID: id, RecordType: r.RecordType, Notes: nullText(r.Notes),
-		InstrumentType: r.InstrumentType, LotID: r.LotID, BuildID: r.BuildID, UnitID: r.UnitID}
+		InstrumentType: r.InstrumentType, LotID: r.LotID, BuildID: r.BuildID, UnitID: r.UnitID,
+		NextDueDate: r.NextDueDate}
 	if r.RecordDate != nil {
 		p.RecordDate = sql.NullTime{Time: *r.RecordDate, Valid: true}
 	}
@@ -664,4 +669,50 @@ func (s *Service) UnitRecordSummary(ctx context.Context, unitID int) ([]UnitReco
 		out[i] = UnitRecordSummary{r.ID, nullTime(r.RecordDate), r.RecordType, r.Passed, r.Failed}
 	}
 	return out, nil
+}
+
+// Due-date statuses (#447) and the fixed "due soon" window in days.
+const (
+	DueOverdue  = "overdue"
+	DueSoon     = "soon"
+	DueSoonDays = 30
+)
+
+// DueStatus classifies a due date against today: overdue, due within DueSoonDays, or "". Both are
+// calendar dates at UTC midnight (what the DATE column scans to).
+func DueStatus(due, today time.Time) string {
+	switch days := int(due.Sub(today).Hours() / 24); {
+	case days < 0:
+		return DueOverdue
+	case days <= DueSoonDays:
+		return DueSoon
+	}
+	return ""
+}
+
+// Today is the current calendar date at UTC midnight, the form DueStatus compares against.
+func Today() time.Time {
+	n := time.Now()
+	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// DueUnit and UnitDue are rows of the due-date reads: the dashboard card and one unit's page.
+type (
+	DueUnit = dbq.ListDueUnitsRow
+	UnitDue = dbq.ListUnitDueRow
+)
+
+// ListDueUnits returns up to limit units overdue or due within DueSoonDays, soonest first.
+func (s *Service) ListDueUnits(ctx context.Context, limit int) ([]DueUnit, error) {
+	return s.q.ListDueUnits(ctx, dbq.ListDueUnitsParams{Today: Today(), SoonDays: DueSoonDays, RowLimit: limit})
+}
+
+// ListUnitDue returns one unit's tracked due dates, one per recurring form, soonest first.
+func (s *Service) ListUnitDue(ctx context.Context, unitID int) ([]UnitDue, error) {
+	return s.q.ListUnitDue(ctx, unitID)
+}
+
+// SetFormRecurrence saves a form's default recurrence interval in days; nil = not recurring (#447).
+func (s *Service) SetFormRecurrence(ctx context.Context, id int, days *int) error {
+	return s.q.SetFormRecurrence(ctx, dbq.SetFormRecurrenceParams{ID: id, RecurrenceDays: days})
 }

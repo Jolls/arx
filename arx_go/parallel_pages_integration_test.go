@@ -147,6 +147,7 @@ func TestIntegration_ParallelPages_ErrorBehaviour(t *testing.T) {
 		{"top-failures", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardTopFailures }, "ListTopFailureModes"},
 		{"lowest-yield", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardLowestYield }, "ListRecordFailFlags"},
 		{"stale-wip", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardStaleWIP }, "ListStaleWIPRecords"},
+		{"due-overdue", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardDueOverdue }, "ListDueUnits"},
 		{"pending-approval", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardPendingApproval }, "ListPendingApprovalPOs"},
 		{"below-reorder", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardBelowReorder }, "ListBelowReorderParts"},
 		{"recent-lots", func(h *Handler) http.HandlerFunc { return h.ReportsDashboardRecentLots }, "ListLots"},
@@ -177,6 +178,7 @@ func TestIntegration_ParallelPages_ErrorBehaviour(t *testing.T) {
 	fatal(pageUnitTrace, "ListTraceAncestors", "Error tracing unit ancestry:")
 	fatal(pageUnitTrace, "ListTraceDescendants", "Error tracing unit descendants:")
 	fatal(pageUnitTrace, "ListRecordTypes", "Error retrieving record types:")
+	fatal(pageUnitTrace, "ListUnitDue", "Error retrieving due dates:")
 
 	fatal(pagePO, "GetPO", "Error retrieving purchase order:")
 	fatal(pagePO, "ListPOLines", "Error loading PO items:")
@@ -277,7 +279,7 @@ func TestIntegration_ParallelPages_Stats(t *testing.T) {
 		{pagePart3005, 2, 9},
 		{pageRecord, 2, 8},
 		{pageLotTrace, 4, 8},
-		{pageUnitTrace, 4, 7},
+		{pageUnitTrace, 4, 8}, // #447: + the unit's due dates
 		{pagePO, 2, 5},
 	} {
 		ctx, st := withStats(context.Background())
