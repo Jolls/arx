@@ -42,7 +42,7 @@ func testForm(f records.FormHeader) models.TestForm {
 	return models.TestForm{
 		ID: f.ID, PartNumberID: f.PartNumberID, IsLocked: f.IsLocked, TestOrder: f.TestOrder,
 		PartNumber: f.PartNumber, Description: f.Description, RecordTypes: f.RecordTypes,
-		InstrumentTypes: f.InstrumentTypes, Revision: f.Revision,
+		InstrumentTypes: f.InstrumentTypes, Revision: f.Revision, SerialPrefix: f.SerialPrefix, SerialPad: f.SerialPad,
 	}
 }
 
@@ -891,6 +891,22 @@ func (h *Handler) SaveFormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Update the form's serial-number format if changed (#450).
+	newSerialPrefix := strings.TrimSpace(r.FormValue("serial_prefix"))
+	newSerialPad, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("serial_pad")))
+	newSerialPad = min(max(newSerialPad, 0), 20)
+	if len(newSerialPrefix) > 50 {
+		http.Error(w, "serial prefix must be 50 characters or fewer", http.StatusBadRequest)
+		return
+	}
+	if newSerialPrefix != r.FormValue("original_serial_prefix") ||
+		strconv.Itoa(newSerialPad) != r.FormValue("original_serial_pad") {
+		if err := svc.SetFormSerialFormat(r.Context(), formID, newSerialPrefix, newSerialPad); err != nil {
+			serverError(w, "could not save serial format", err)
+			return
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		serverError(w, "could not save steps", err)
 		return
@@ -1216,12 +1232,12 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Next serial number: max numeric SN + 1, defaulting to 1 if none exist.
+	// Next serial number: form prefix + (max matching numeric suffix + 1), defaulting to 1 if none exist.
 	// This is only a suggestion shown in the form; CreateRecord re-derives the SN
 	// atomically under a lock when the user accepts it, closing the concurrent-create race (#369).
-	nextSNStr := "1"
-	if nextSN, err := h.records().NextSerial(r.Context(), formID); err == nil {
-		nextSNStr = strconv.Itoa(nextSN)
+	nextSNStr := records.FormatSerial(form.SerialPrefix, form.SerialPad, 1)
+	if sn, err := h.records().NextSerial(r.Context(), formID, form.SerialPrefix, form.SerialPad, nil); err == nil {
+		nextSNStr = sn
 	}
 
 	h.renderRecords(w, r, "record_new.html", map[string]any{
@@ -1233,6 +1249,42 @@ func (h *Handler) NewRecord(w http.ResponseWriter, r *http.Request) {
 		"ActiveTab": "records",
 		"TestMode":  h.cfg().TestMode,
 	})
+}
+
+// NewRecordUnits — GET /forms/{id}/records/new/units?bom_pnid=N. For the new-record serial picker (#451):
+// the selected Unit Under Test's existing unit serials, plus the suggested next serial for that UUT
+// (what CreateRecord will allocate for an accepted default).
+func (h *Handler) NewRecordUnits(w http.ResponseWriter, r *http.Request) {
+	formID, err := strconv.Atoi(r.PathValue("id"))
+	pnid, pnErr := strconv.Atoi(r.URL.Query().Get("bom_pnid"))
+	if err != nil || pnErr != nil {
+		http.NotFound(w, r)
+		return
+	}
+	hdr, err := h.records().GetFormHeader(r.Context(), formID)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		serverError(w, "query error", err)
+		return
+	}
+	units, err := h.inventory().ListPartUnits(r.Context(), pnid)
+	if err != nil {
+		serverError(w, "query error", err)
+		return
+	}
+	next, err := h.records().NextSerial(r.Context(), formID, hdr.SerialPrefix, hdr.SerialPad, &pnid)
+	if err != nil {
+		serverError(w, "serial number error", err)
+		return
+	}
+	serials := make([]string, 0, len(units))
+	for _, u := range units {
+		serials = append(serials, u.SerialNumber)
+	}
+	writeJSON(w, map[string]any{"serials": serials, "next": next})
 }
 
 // CreateRecord — POST /forms/{id}/records/new
@@ -1310,12 +1362,12 @@ func (h *Handler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 			serverError(w, "serial lock error", err)
 			return
 		}
-		nextSN, err := svc.NextSerial(r.Context(), formID)
+		// Also skip past the chosen UUT's existing unit serials (#450), so the default never reuses one.
+		serialNumber, err = svc.NextSerial(r.Context(), formID, form.SerialPrefix, form.SerialPad, partNumberID)
 		if err != nil {
 			serverError(w, "serial number error", err)
 			return
 		}
-		serialNumber = strconv.Itoa(nextSN)
 	}
 
 	newID, err := svc.InsertRecord(r.Context(), records.NewRecord{

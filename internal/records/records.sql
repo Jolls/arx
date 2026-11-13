@@ -24,7 +24,8 @@ ORDER BY pn.part_number ASC;
 -- A form with its part's number/description; every page that shows a form header reads this.
 SELECT f.id, f.part_number_id, f.is_locked, COALESCE(f.test_order, '') AS test_order, f.revision,
        pn.part_number, COALESCE(pn.description, '') AS description,
-       COALESCE(f.record_types, '') AS record_types, COALESCE(f.instrument_types, '') AS instrument_types
+       COALESCE(f.record_types, '') AS record_types, COALESCE(f.instrument_types, '') AS instrument_types,
+       f.serial_prefix, f.serial_pad
 FROM form f
 JOIN part pn ON f.part_number_id = pn.id
 WHERE f.id = sqlc.arg(id);
@@ -173,10 +174,20 @@ FROM ordered
 WHERE id = sqlc.arg(record_id);
 
 -- name: NextFormSerial :one
--- Suggested next serial: the largest all-digit serial of the form (any state) + 1, or 1.
-SELECT COALESCE(MAX(CASE WHEN serial_number ~ '^[0-9]+$' THEN CAST(serial_number AS INTEGER) END) + 1, 1)::int AS next_serial
-FROM form_record
-WHERE form_id = sqlc.arg(form_id);
+-- Suggested next serial number (#450): the largest sequence number + 1, or 1. A serial counts when it is
+-- sqlc.arg(prefix) followed by 1-9 digits (an empty prefix = all-digit serials, as before; longer digit
+-- runs would overflow the INTEGER cast and are ignored). Counted:
+-- the form's records (any state), and - when part_id is given - that part's units, so an accepted
+-- default never lands on an existing unit's serial.
+WITH serials AS (
+  SELECT serial_number FROM form_record WHERE form_id = sqlc.arg(form_id)
+  UNION ALL
+  SELECT serial_number FROM unit WHERE part_id = sqlc.narg(part_id)::int
+)
+SELECT COALESCE(MAX(CASE WHEN left(serial_number, length(sqlc.arg(prefix)::text)) = sqlc.arg(prefix)::text
+                          AND substr(serial_number, length(sqlc.arg(prefix)::text) + 1) ~ '^[0-9]{1,9}$'
+                         THEN CAST(substr(serial_number, length(sqlc.arg(prefix)::text) + 1) AS INTEGER) END) + 1, 1)::int AS next_serial
+FROM serials;
 
 -- name: ListRecordResults :many
 -- A record's materialized result rows (the frozen snapshot of each step).
@@ -413,17 +424,23 @@ UPDATE form SET test_order = sqlc.arg(test_order)::text WHERE id = sqlc.arg(id);
 UPDATE form SET record_types = sqlc.narg(record_types)::text, instrument_types = sqlc.narg(instrument_types)::text
 WHERE id = sqlc.arg(id);
 
+-- name: SetFormSerialFormat :exec
+UPDATE form SET serial_prefix = sqlc.arg(serial_prefix)::text, serial_pad = sqlc.arg(serial_pad)::int
+WHERE id = sqlc.arg(id);
+
 -- name: IsFormPart :one
 -- Whether a part may own a new form: an active FORM-category part.
 SELECT EXISTS (SELECT 1 FROM part WHERE id = sqlc.arg(id) AND category = 'FORM' AND is_active = TRUE)::bool;
 
 -- name: InsertForm :one
--- A new active, unlocked form with an empty step order. Record / instrument types come from the source form
--- (NULL when there is none).
-INSERT INTO form (part_number_id, is_active, is_locked, test_order, record_types, instrument_types)
+-- A new active, unlocked form with an empty step order. Record / instrument types and the serial format
+-- come from the source form (NULL / the column defaults when there is none).
+INSERT INTO form (part_number_id, is_active, is_locked, test_order, record_types, instrument_types, serial_prefix, serial_pad)
 VALUES (sqlc.arg(part_number_id), TRUE, FALSE, '',
         (SELECT s.record_types FROM form s WHERE s.id = sqlc.arg(source_id)),
-        (SELECT s.instrument_types FROM form s WHERE s.id = sqlc.arg(source_id)))
+        (SELECT s.instrument_types FROM form s WHERE s.id = sqlc.arg(source_id)),
+        COALESCE((SELECT s.serial_prefix FROM form s WHERE s.id = sqlc.arg(source_id)), ''),
+        COALESCE((SELECT s.serial_pad FROM form s WHERE s.id = sqlc.arg(source_id)), 0))
 RETURNING id;
 
 -- ── Named queries (#250) ─────────────────────────────────────────────────────

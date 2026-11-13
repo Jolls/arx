@@ -444,6 +444,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodGet, "/api/forms/{id}/records/rows", withAuth, h.RecordsRows)
 	b.handle(http.MethodPost, "/forms/{id}/records/bulk-lock", withAuth, h.BulkLockRecords)
 	b.handle(http.MethodGet, "/forms/{id}/records/new", withAuth, h.NewRecord)
+	b.handle(http.MethodGet, "/forms/{id}/records/new/units", withAuth, h.NewRecordUnits)
 	b.handle(http.MethodPost, "/forms/{id}/records/new", withAuth, h.CreateRecord)
 	b.handle(http.MethodGet, "/forms/{id}/def", withAuth, h.FormDef)
 	b.handle(http.MethodGet, "/forms/{id}/def/edit", withAuth, h.EditFormDef)

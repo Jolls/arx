@@ -126,6 +126,23 @@
     </div>
   </div>
 
+  <div class="row g-3 mb-4" style="max-width:700px">
+    <div class="col">
+      <label class="form-label fw-semibold" for="serial_prefix">Serial Prefix</label>
+      <input type="hidden" name="original_serial_prefix" value="{{.Form.SerialPrefix}}">
+      <input type="text" class="form-control form-control-sm font-mono" id="serial_prefix"
+             name="serial_prefix" value="{{.Form.SerialPrefix}}" maxlength="50" placeholder="e.g. SK-">
+      <div class="form-text">Start of the suggested serial number. Empty = bare number.</div>
+    </div>
+    <div class="col">
+      <label class="form-label fw-semibold" for="serial_pad">Serial Padding</label>
+      <input type="hidden" name="original_serial_pad" value="{{.Form.SerialPad}}">
+      <input type="number" class="form-control form-control-sm" id="serial_pad"
+             name="serial_pad" value="{{.Form.SerialPad}}" min="0" max="20">
+      <div class="form-text">Minimum digits, zero-padded (4 &rarr; SK-0042). 0 = none.</div>
+    </div>
+  </div>
+
   <div class="table-responsive">
     <table id="steps-table" class="table table-bordered table-sm align-middle" style="min-width:2400px">
       <thead class="table-dark" style="position:sticky;top:0;z-index:1">

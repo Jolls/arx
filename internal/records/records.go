@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"arx/internal/dbq"
@@ -289,9 +290,20 @@ func (s *Service) Neighbors(ctx context.Context, formID, recordID int) (prev, ne
 	return r.PrevID, r.NextID, err
 }
 
-// NextSerial is the suggested next serial for a form: the largest all-digit serial + 1, or 1.
-func (s *Service) NextSerial(ctx context.Context, formID int) (int, error) {
-	return s.q.NextFormSerial(ctx, formID)
+// NextSerial is the suggested next serial for a form (#450): prefix + the next sequence number
+// (largest existing prefix-matching numeric suffix + 1, or 1) zero-padded to at least pad digits.
+// partID, when set, also counts that part's units so the suggestion never lands on an existing unit.
+func (s *Service) NextSerial(ctx context.Context, formID int, prefix string, pad int, partID *int) (string, error) {
+	n, err := s.q.NextFormSerial(ctx, dbq.NextFormSerialParams{Prefix: prefix, FormID: formID, PartID: partID})
+	if err != nil {
+		return "", err
+	}
+	return FormatSerial(prefix, pad, n), nil
+}
+
+// FormatSerial renders prefix + n zero-padded to at least pad digits (pad is a minimum width, not a cap).
+func FormatSerial(prefix string, pad, n int) string {
+	return fmt.Sprintf("%s%0*d", prefix, pad, n)
 }
 
 func (s *Service) ListResults(ctx context.Context, recordID int) ([]ResultRow, error) {
@@ -541,6 +553,11 @@ func (s *Service) SetStepArchived(ctx context.Context, formID, id int, archived 
 
 func (s *Service) SetFormTestOrder(ctx context.Context, id int, testOrder string) error {
 	return s.q.SetFormTestOrder(ctx, dbq.SetFormTestOrderParams{ID: id, TestOrder: testOrder})
+}
+
+// SetFormSerialFormat saves a form's serial prefix and zero-padding width (#450).
+func (s *Service) SetFormSerialFormat(ctx context.Context, id int, prefix string, pad int) error {
+	return s.q.SetFormSerialFormat(ctx, dbq.SetFormSerialFormatParams{ID: id, SerialPrefix: prefix, SerialPad: pad})
 }
 
 // SetFormTypes saves a form's allowed record / instrument types; "" stores NULL (free text).

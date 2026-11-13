@@ -115,3 +115,58 @@ func TestIntegration_CreateRecord_ConcurrentDistinctSerials(t *testing.T) {
 		}
 	}
 }
+
+// #450: a form's serial prefix/padding shape the suggestion; an accepted default also skips past the
+// chosen UUT's existing unit serials; a typed SN outside the pattern is stored as-is. #451: the units
+// endpoint lists the UUT's unit serials.
+func TestIntegration_CreateRecord_SerialFormatAndUnitSkip(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	partID, formID, _, formCleanup := seedLockTestForm(t, h, ctx)
+	defer formCleanup()
+	if _, err := h.execContext(ctx, `UPDATE form SET serial_prefix='SK-', serial_pad=4 WHERE id=$1`, formID); err != nil {
+		t.Fatalf("set serial format: %v", err)
+	}
+	if _, err := h.execContext(ctx, `INSERT INTO unit (part_id, serial_number, source) VALUES ($1, 'SK-0003', 'manual')`, partID); err != nil {
+		t.Fatalf("seed unit: %v", err)
+	}
+	defer h.execContext(ctx, `DELETE FROM unit WHERE part_id=$1`, partID)
+
+	for _, want := range []string{"SK-0001", "SK-0002"} {
+		rec := createRecord(h, formID, "SK-0001", "SK-0001")
+		assertStatus(t, "CreateRecord auto", rec, http.StatusSeeOther)
+		if got := createdSerial(t, h, ctx, rec); got != want {
+			t.Fatalf("auto serial: got %q, want %q", got, want)
+		}
+	}
+
+	// With the UUT chosen, the accepted default skips unit SK-0003 (the form's own max is SK-0002).
+	rec := httptest.NewRecorder()
+	h.CreateRecord(rec, adminCtx(withID(postForm(fmt.Sprintf("/forms/%d/records/new", formID), url.Values{
+		"serial_number": {"SK-0003"}, "suggested_serial_number": {"SK-0003"},
+		"bom_pnid": {strconv.Itoa(partID)}, "record_type": {"Production"},
+	}), formID)))
+	assertStatus(t, "CreateRecord auto with UUT", rec, http.StatusSeeOther)
+	if got := createdSerial(t, h, ctx, rec); got != "SK-0004" {
+		t.Fatalf("auto serial with UUT: got %q, want SK-0004", got)
+	}
+
+	rec = createRecord(h, formID, "ABC-7", "SK-0005")
+	assertStatus(t, "CreateRecord off-pattern override", rec, http.StatusSeeOther)
+	if got := createdSerial(t, h, ctx, rec); got != "ABC-7" {
+		t.Fatalf("override serial: got %q, want ABC-7", got)
+	}
+
+	// A digit run too long for the INTEGER cast is ignored by the sequence, not an error.
+	rec = createRecord(h, formID, "SK-12345678901", "SK-0005")
+	assertStatus(t, "CreateRecord overlong serial", rec, http.StatusSeeOther)
+
+	rec = httptest.NewRecorder()
+	h.NewRecordUnits(rec, adminCtx(withID(httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/forms/%d/records/new/units?bom_pnid=%d", formID, partID), nil), formID)))
+	assertStatus(t, "NewRecordUnits", rec, http.StatusOK)
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"next":"SK-0005","serials":["SK-0003"]}` {
+		t.Fatalf("units = %s, want next SK-0005 (form records SK-0001, SK-0002, SK-0004) with serials [SK-0003]", got)
+	}
+}

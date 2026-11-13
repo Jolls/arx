@@ -34,8 +34,14 @@
   <div class="mb-3">
     <label class="form-label fw-semibold" for="serial_number">Serial Number</label>
     <input type="text" class="form-control font-mono" id="serial_number"
-           name="serial_number" value="{{.NextSN}}" required>
+           name="serial_number" value="{{.NextSN}}" required autocomplete="off"
+           data-prefix="{{.Form.SerialPrefix}}" data-pad="{{.Form.SerialPad}}">
     <input type="hidden" name="suggested_serial_number" value="{{.NextSN}}">
+    <div class="form-text">
+      <span id="sn_existing_badge" class="badge text-bg-info d-none">Existing unit</span>
+      <span id="sn_pattern_badge" class="badge text-bg-warning d-none">Doesn't match this form's serial format</span>
+      Pick an existing unit's serial for the selected part, or type a new one.
+    </div>
   </div>
 
   <div class="mb-3">
@@ -83,4 +89,94 @@
     </button>
   </div>
 </form>
+
+<script>
+(function () {
+  var sn = document.getElementById('serial_number');
+  var uut = document.getElementById('bom_pnid');
+  var existingBadge = document.getElementById('sn_existing_badge');
+  var patternBadge = document.getElementById('sn_pattern_badge');
+  var suggested = document.querySelector('input[name="suggested_serial_number"]');
+  var prefix = sn.dataset.prefix;
+  var pad = parseInt(sn.dataset.pad, 10) || 0;
+  var units = [];
+  var loadSeq = 0;
+  var dd = null, activeIdx = -1, shown = [];
+
+  function refreshBadges() {
+    var v = sn.value.trim();
+    existingBadge.classList.toggle('d-none', units.indexOf(v) < 0);
+    var digits = v.slice(prefix.length);
+    var matches = v.indexOf(prefix) === 0 && /^[0-9]+$/.test(digits) && digits.length >= pad;
+    patternBadge.classList.toggle('d-none', (prefix === '' && pad === 0) || v === '' || matches);
+  }
+
+  // Same dropdown look as the PO supplier picker (.search-dropdown).
+  function closeDropdown() {
+    if (dd) { dd.remove(); dd = null; }
+    activeIdx = -1;
+  }
+  function renderActive() {
+    if (dd) Array.from(dd.children).forEach(function (el, i) { el.classList.toggle('active', i === activeIdx); });
+  }
+  function pick(serial) {
+    sn.value = serial;
+    closeDropdown();
+    refreshBadges();
+  }
+  function showDropdown(filter) {
+    closeDropdown();
+    var q = filter.toLowerCase();
+    shown = units.filter(function (s) { return s.toLowerCase().indexOf(q) >= 0; });
+    if (!shown.length) return;
+    dd = document.createElement('div');
+    dd.className = 'search-dropdown';
+    var rect = sn.getBoundingClientRect();
+    dd.style.top = (rect.bottom + 2) + 'px';
+    dd.style.left = rect.left + 'px';
+    dd.style.width = rect.width + 'px';
+    document.body.appendChild(dd);
+    shown.forEach(function (s) {
+      var item = document.createElement('div');
+      item.className = 'search-dropdown-item';
+      item.textContent = s;
+      item.addEventListener('mousedown', function (e) { e.preventDefault(); pick(s); });
+      dd.appendChild(item);
+    });
+  }
+
+  function loadUnits() {
+    units = [];
+    closeDropdown();
+    refreshBadges();
+    if (!uut || !uut.value) return;
+    var seq = ++loadSeq;
+    fetch('/forms/{{.Form.ID}}/records/new/units?bom_pnid=' + encodeURIComponent(uut.value))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || seq !== loadSeq) return;
+        units = data.serials || [];
+        // Keep an untouched suggestion in step with what the server will allocate for this part.
+        if (sn.value === suggested.value) {
+          sn.value = suggested.value = data.next;
+        }
+        refreshBadges();
+      })
+      .catch(function () {});
+  }
+
+  sn.addEventListener('focus', function () { showDropdown(''); });
+  sn.addEventListener('input', function () { showDropdown(sn.value.trim()); refreshBadges(); });
+  sn.addEventListener('keydown', function (e) {
+    if (!dd) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, shown.length - 1); renderActive(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); renderActive(); }
+    else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); pick(shown[activeIdx]); }
+    else if (e.key === 'Escape') closeDropdown();
+  });
+  sn.addEventListener('blur', function () { setTimeout(closeDropdown, 200); });
+  if (uut) uut.addEventListener('change', loadUnits);
+  loadUnits();
+})();
+</script>
 {{end}}

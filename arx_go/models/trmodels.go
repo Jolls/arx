@@ -19,6 +19,8 @@ type TestForm struct {
 	RecordTypes     string // comma-separated allowed record types; empty = free-text
 	InstrumentTypes string // comma-separated valid instrument types for this form; empty = free-text
 	Revision        int    // number of times this form has been released (locked); 0 = never released ("Draft"). Bumped on unlock->lock, never on save (#260).
+	SerialPrefix    string // prefix of the suggested serial number (#450); empty = bare integer
+	SerialPad       int    // minimum zero-padded width of the suggested serial's sequence (#450); 0 = none
 }
 
 // OrderedTestIDs parses TestOrder into a slice of integer step IDs.
