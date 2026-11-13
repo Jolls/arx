@@ -6,8 +6,9 @@
 -- Created lazily one at a time at test time (Q5); exists only for serial / lot_serial
 -- tracking_mode. lot_id set for a serialized unit inside a lot, build_id for a build-sourced
 -- unit — both individually nullable; a `manual` unit (#799: pre-existing serial, no test
--- record) may legitimately have neither, distinguished by source. serial_number is a
--- STRING, UNIQUE per part_id.
+-- record) may legitimately have neither, distinguished by source — and so may a `test` unit
+-- (#452): a save with no build/lot to attach still mints the unit, just with both left NULL.
+-- serial_number is a STRING, UNIQUE per part_id.
 --
 -- Additive/unused until slice 8. Requires part, lot, and build to exist first (FKs below).
 

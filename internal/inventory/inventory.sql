@@ -241,6 +241,17 @@ RETURNING id;
 -- name: FindUnitIDBySerial :one
 SELECT id FROM unit WHERE part_id = sqlc.arg(part_id) AND serial_number = sqlc.arg(serial_number);
 
+-- name: FindOrCreateTestUnit :one
+-- Like UpsertTestUnit but for a save with no build/lot pick (#452): mints a NEW unit as
+-- source='test' with lot_id/build_id both NULL when none exists (a no-BOM serial-tracked part
+-- can never offer provenance), but an EXISTING unit's source/provenance is left completely
+-- untouched (the DO UPDATE only rewrites serial_number to itself, purely so RETURNING yields the
+-- existing id) — a plain no-pick save must not flip a 'manual' unit (#799) to 'test' (#422).
+INSERT INTO unit (part_id, serial_number, source)
+VALUES (sqlc.arg(part_id), sqlc.arg(serial_number), 'test')
+ON CONFLICT (part_id, serial_number) DO UPDATE SET serial_number = EXCLUDED.serial_number
+RETURNING id;
+
 -- name: GetUnitProvenance :one
 SELECT lot_id, build_id FROM unit WHERE id = sqlc.arg(id);
 

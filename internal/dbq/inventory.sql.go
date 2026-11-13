@@ -260,6 +260,30 @@ func (q *Queries) CreateManualUnit(ctx context.Context, arg CreateManualUnitPara
 	return id, err
 }
 
+const findOrCreateTestUnit = `-- name: FindOrCreateTestUnit :one
+INSERT INTO unit (part_id, serial_number, source)
+VALUES ($1, $2, 'test')
+ON CONFLICT (part_id, serial_number) DO UPDATE SET serial_number = EXCLUDED.serial_number
+RETURNING id
+`
+
+type FindOrCreateTestUnitParams struct {
+	PartID       int
+	SerialNumber string
+}
+
+// Like UpsertTestUnit but for a save with no build/lot pick (#452): mints a NEW unit as
+// source='test' with lot_id/build_id both NULL when none exists (a no-BOM serial-tracked part
+// can never offer provenance), but an EXISTING unit's source/provenance is left completely
+// untouched (the DO UPDATE only rewrites serial_number to itself, purely so RETURNING yields the
+// existing id) — a plain no-pick save must not flip a 'manual' unit (#799) to 'test' (#422).
+func (q *Queries) FindOrCreateTestUnit(ctx context.Context, arg FindOrCreateTestUnitParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, findOrCreateTestUnit, arg.PartID, arg.SerialNumber)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
 const findTraceRecords = `-- name: FindTraceRecords :many
 SELECT r.kind, r.id, r.part_id, r.part_number, r.part_description, r.output_lot_id, r.name, r.matched_id, r.matched_name
 FROM (
