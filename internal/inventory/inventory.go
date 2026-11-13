@@ -561,10 +561,15 @@ func (s *Service) UpsertTestUnit(ctx context.Context, partID int, serial string,
 }
 
 // FindOrCreateTestUnit finds the unit for (partID, serial), or mints it as source='test' with
-// lot_id/build_id both NULL when none exists (#452) — unlike UpsertTestUnit, it never modifies an
-// existing unit's source or provenance, since this is the no-pick path.
+// lot_id/build_id both NULL when none exists (#452); never modifies an existing unit. The lookup
+// is a separate statement from the insert on purpose: when a concurrent save commits the same
+// serial first, the insert does nothing and only a new statement's snapshot sees that row.
 func (s *Service) FindOrCreateTestUnit(ctx context.Context, partID int, serial string) (int, error) {
-	return s.q.FindOrCreateTestUnit(ctx, dbq.FindOrCreateTestUnitParams{PartID: partID, SerialNumber: serial})
+	id, err := s.q.InsertTestUnitIfAbsent(ctx, dbq.InsertTestUnitIfAbsentParams{PartID: partID, SerialNumber: serial})
+	if err == sql.ErrNoRows {
+		return s.q.FindUnitIDBySerial(ctx, dbq.FindUnitIDBySerialParams{PartID: partID, SerialNumber: serial})
+	}
+	return id, err
 }
 
 // FindUnitIDBySerial returns the id of the existing unit for (partID, serial), or nil when there is none.

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.103] - 2026-11-12
+### Fixed
+- Narrows the 0.8.101 auto-mint: saving a record for a serial-tracked part that has a BOM, with no build or lot picked, no longer mints a provenance-less unit (only a no-BOM part does); it links an existing unit as before ([#452](https://github.com/Jolls/arx/issues/452))
+
 ## [0.8.102] - 2026-11-12
 ### Added
 - A form can set a serial-number prefix and zero-padding (e.g. `SK-0042`) that shapes the suggested serial on a new record; the sequence is form-wide, and an accepted default skips past the chosen unit-under-test's existing serials. Typed serials outside the format are still accepted, with a warning badge. Needs migration `20261112100000_450_form_serial_format.sql` ([#450](https://github.com/Jolls/arx/issues/450))

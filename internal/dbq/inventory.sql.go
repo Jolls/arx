@@ -260,30 +260,6 @@ func (q *Queries) CreateManualUnit(ctx context.Context, arg CreateManualUnitPara
 	return id, err
 }
 
-const findOrCreateTestUnit = `-- name: FindOrCreateTestUnit :one
-INSERT INTO unit (part_id, serial_number, source)
-VALUES ($1, $2, 'test')
-ON CONFLICT (part_id, serial_number) DO UPDATE SET serial_number = EXCLUDED.serial_number
-RETURNING id
-`
-
-type FindOrCreateTestUnitParams struct {
-	PartID       int
-	SerialNumber string
-}
-
-// Like UpsertTestUnit but for a save with no build/lot pick (#452): mints a NEW unit as
-// source='test' with lot_id/build_id both NULL when none exists (a no-BOM serial-tracked part
-// can never offer provenance), but an EXISTING unit's source/provenance is left completely
-// untouched (the DO UPDATE only rewrites serial_number to itself, purely so RETURNING yields the
-// existing id) — a plain no-pick save must not flip a 'manual' unit (#799) to 'test' (#422).
-func (q *Queries) FindOrCreateTestUnit(ctx context.Context, arg FindOrCreateTestUnitParams) (int, error) {
-	row := q.db.QueryRowContext(ctx, findOrCreateTestUnit, arg.PartID, arg.SerialNumber)
-	var id int
-	err := row.Scan(&id)
-	return id, err
-}
-
 const findTraceRecords = `-- name: FindTraceRecords :many
 SELECT r.kind, r.id, r.part_id, r.part_number, r.part_description, r.output_lot_id, r.name, r.matched_id, r.matched_name
 FROM (
@@ -586,6 +562,29 @@ func (q *Queries) GetUnitProvenance(ctx context.Context, id int) (GetUnitProvena
 	var i GetUnitProvenanceRow
 	err := row.Scan(&i.LotID, &i.BuildID)
 	return i, err
+}
+
+const insertTestUnitIfAbsent = `-- name: InsertTestUnitIfAbsent :one
+INSERT INTO unit (part_id, serial_number, source)
+VALUES ($1, $2, 'test')
+ON CONFLICT (part_id, serial_number) DO NOTHING
+RETURNING id
+`
+
+type InsertTestUnitIfAbsentParams struct {
+	PartID       int
+	SerialNumber string
+}
+
+// Mints a source='test' unit with lot_id/build_id both NULL (#452) or, when (part, serial) already
+// exists, inserts nothing and returns no row (sql.ErrNoRows) — leaving an existing unit untouched,
+// so a plain no-pick save can't flip a 'manual' unit (#799) to 'test'. The caller then looks the
+// existing id up in a fresh statement (see FindOrCreateTestUnit).
+func (q *Queries) InsertTestUnitIfAbsent(ctx context.Context, arg InsertTestUnitIfAbsentParams) (int, error) {
+	row := q.db.QueryRowContext(ctx, insertTestUnitIfAbsent, arg.PartID, arg.SerialNumber)
+	var id int
+	err := row.Scan(&id)
+	return id, err
 }
 
 const linkRecordToBuild = `-- name: LinkRecordToBuild :execrows

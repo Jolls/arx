@@ -2205,10 +2205,7 @@ func TestIntegration_SaveResults_LinksExistingUnitWithoutPick(t *testing.T) {
 	}
 }
 
-// No existing unit and nothing picked still mints a source='test' unit with lot_id/build_id
-// both NULL (#452 — superseding the old Q5 "no mint without provenance" rule from #422: even a
-// part with a BOM, like 3013, mints one here if the user didn't build-at-test-time or pick a
-// lot/build, same as a no-BOM part that can never offer provenance).
+// No existing unit and nothing picked still mints no unit (Q5 rule, #422).
 func TestIntegration_SaveResults_NoUnitWithoutProvenance(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
@@ -2218,27 +2215,15 @@ func TestIntegration_SaveResults_NoUnitWithoutProvenance(t *testing.T) {
 	recID := saveSerialRecord(t, h, serial, url.Values{})
 
 	var recUnit sql.NullInt64
+	var n int
 	if err := h.queryRowContext(ctx, `SELECT unit_id FROM form_record WHERE id = $1`, recID).Scan(&recUnit); err != nil {
 		t.Fatal(err)
 	}
-	if !recUnit.Valid {
-		t.Fatal("record unit_id not set after no-provenance save")
-	}
-	var lot, build sql.NullInt64
-	var source string
-	if err := h.queryRowContext(ctx, `SELECT lot_id, build_id, source FROM unit WHERE id = $1`, recUnit.Int64).
-		Scan(&lot, &build, &source); err != nil {
-		t.Fatal(err)
-	}
-	if lot.Valid || build.Valid || source != "test" {
-		t.Errorf("unit lot=%v build=%v source=%q; want NULL, NULL, \"test\"", lot, build, source)
-	}
-	var n int
 	if err := h.queryRowContext(ctx, `SELECT COUNT(*) FROM unit WHERE part_id = 3013 AND serial_number = $1`, serial).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 {
-		t.Errorf("unit count for (part,serial) = %d, want 1", n)
+	if recUnit.Valid || n != 0 {
+		t.Errorf("record unit_id %v, units %d; want NULL, 0", recUnit, n)
 	}
 }
 
