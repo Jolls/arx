@@ -120,7 +120,7 @@ trigger-written row (the seed updates step 6103 after insert to exercise the his
 
 ## Timestamp and date provenance (#279)
 
-ArxProd went live on Postgres on **2026-10-01**. Its rows are the load from the 0.7 Azure SQL database (#216), written by two clocks and **not corrected** (the tool read each column by the clock that wrote it: server clock UTC, desktop clock `America/Los_Angeles` because every 0.7 desktop ran in Pacific time; table in `docs/216-data-migration/runbook.md`).
+ArxProd went live on Postgres on **2026-10-01**. Its rows are the load from the 0.7 Azure SQL database (#216), written by two clocks and **not corrected** (the tool read each column by the clock that wrote it: server clock UTC, desktop clock `America/Los_Angeles` because every 0.7 desktop ran in Pacific time).
 
 - **Before 2026-10-01** (loaded rows):
   - `purchase_order.date_modified` on RFQ quotes saved from the compare page was written with `GETDATE()` (UTC) but read as Pacific, so it is 7-8 hours early. That path wrote no history row, so those rows can't be told apart from correct ones. The column is only shown, as a date, on the PO page; nothing sorts or filters on it.
