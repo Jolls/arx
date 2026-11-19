@@ -482,10 +482,14 @@ func TestIntegration_RecordsWrites_ResyncRecord(t *testing.T) {
 	f := recForm(t, h)
 	s4 := wStep(t, h, f.formID, 0, "Retired", map[string]any{"archived": true})
 	s5 := wStep(t, h, f.formID, 0, "Scope only", map[string]any{"instrument_types": "Scope"})
-	order := wOrder(f.s1, f.s2, f.s3, s4, s5)
+	s6 := wStep(t, h, f.formID, 0, "Retired with value", map[string]any{"archived": true})
+	order := wOrder(f.s1, f.s2, f.s3, s4, s5, s6)
 	repExec(t, h, `UPDATE form SET test_order=$1 WHERE id=$2`, order, f.formID)
 	r := recRecord(t, h, f, nil, "78", "2026-07-01 10:00", "New Release", false, true, 0)
 	repExec(t, h, `UPDATE form_record SET test_order=$1, instrument_type='Meter' WHERE id=$2`, wOrder(f.s2), r)
+	// Archived after the record was created: the empty row (s4) must drop on resync, the recorded one (s6) stays.
+	repExec(t, h, `INSERT INTO result (form_record_id, form_row_id, type, parameter) VALUES ($1,$2,0,'Retired')`, r, s4)
+	repExec(t, h, `INSERT INTO result (form_record_id, form_row_id, type, parameter, result) VALUES ($1,$2,0,'Retired with value','5')`, r, s6)
 	repExec(t, h, `INSERT INTO result (form_record_id, form_row_id, type, parameter, result, spec_max, pass_fail) VALUES ($1,$2,0,'Old','7','99',TRUE)`, r, f.s2)
 	repExec(t, h, `INSERT INTO result (form_record_id, form_row_id, type, parameter, result) VALUES ($1,999999999,0,'Gone','g')`, r)
 
@@ -499,8 +503,8 @@ func TestIntegration_RecordsWrites_ResyncRecord(t *testing.T) {
 		t.Errorf("s2 refreshed = %q %q %q %q %q %q %q %v", param, spec, min, nom, max, units, res, pf)
 	}
 	if got, want := fmt.Sprint(wInts(t, h, `SELECT form_row_id FROM result WHERE form_record_id=$1 ORDER BY form_row_id`, r)),
-		fmt.Sprint([]int{f.s1, f.s2, f.s3, 999999999}); got != want {
-		t.Errorf("rows after resync = %s, want %s (archived / other-instrument skipped, removed step kept)", got, want)
+		fmt.Sprint([]int{f.s1, f.s2, f.s3, s6, 999999999}); got != want {
+		t.Errorf("rows after resync = %s, want %s (empty archived row dropped, archived row with a value / removed step kept, other-instrument skipped)", got, want)
 	}
 	wScan(t, h, `SELECT parameter, result FROM result WHERE form_record_id=$1 AND form_row_id=999999999`, []any{r}, &param, &res)
 	if param != "Gone" || res != "g" {

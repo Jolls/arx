@@ -2346,7 +2346,8 @@ func (h *Handler) SaveResults(w http.ResponseWriter, r *http.Request) {
 // snapshot definition fields (incl. type/hide_formula/default_result) on every existing row,
 // materializes rows for steps added since creation, recomputes pass_fail against the current limits,
 // and refreshes the record's test_order. Locked records are rejected. Rows for steps removed/archived
-// from the form are left untouched, preserving their historical result.
+// from the form are left untouched, preserving their historical result; an archived step with no
+// recorded value or comment is dropped from the record.
 func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 	recordID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -2404,9 +2405,13 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
+	emptyRows := map[int]int{} // form_row_id -> result row id, for rows with no recorded value or comment
 	for _, x := range saved {
 		existing[x.FormRowID] = x.ID
 		curResults[x.FormRowID] = &models.TestResult{ID: x.ID, TestID: x.FormRowID, Result: x.Result}
+		if x.Result == "" && x.Comment == "" {
+			emptyRows[x.FormRowID] = x.ID
+		}
 	}
 
 	// Walk the form's CURRENT order so newly added steps are materialized too.
@@ -2416,6 +2421,13 @@ func (h *Handler) ResyncRecord(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if step.Archived {
+			// Keep an archived step only if it recorded a value; drop its empty row so it leaves the record.
+			if rowID, ok := emptyRows[tid]; ok {
+				if err := svc.DeleteResult(r.Context(), rowID); err != nil {
+					serverError(w, "resync error", err)
+					return
+				}
+			}
 			continue
 		}
 		if step.Type == 0 && !stepAppliesToRecord(step.InstrumentTypes, record.InstrumentType) {

@@ -418,6 +418,11 @@ func (s *Service) RefreshResult(ctx context.Context, id int, d ResultDef, passFa
 	})
 }
 
+// DeleteResult removes a result row (resync drops an archived step that never recorded a value).
+func (s *Service) DeleteResult(ctx context.Context, id int) error {
+	return s.q.DeleteResult(ctx, id)
+}
+
 func (s *Service) UpdateResultValue(ctx context.Context, id int, result, comment string, passFail *bool) error {
 	return s.q.UpdateResultValue(ctx, dbq.UpdateResultValueParams{ID: id, Result: result, Comment: comment, PassFail: optBool(passFail)})
 }

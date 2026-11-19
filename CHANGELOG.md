@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.108] - 2026-11-18
+### Fixed
+- Updating a record to the latest form definition now drops archived steps that never recorded a value or comment; archived steps with a recorded result stay on the record
+
 ## [0.8.107] - 2026-11-18
 ### Fixed
 - Cross-step `{id}` tokens in a step's Parameter or Specification now resolve on saved records instead of showing the literal `{269}` ([#467](https://github.com/Jolls/arx/issues/467))
