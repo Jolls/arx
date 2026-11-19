@@ -107,7 +107,11 @@ func recordsTemplateFuncs() template.FuncMap {
 			if res.Result == "" {
 				return `<span class="badge bg-warning text-dark">MISSING</span>`
 			}
-			if res.PassFail != nil && *res.PassFail {
+			if res.PassFail == nil {
+				// Recorded but not evaluable (no bounds, non-numeric value or bound) — not a failure (#468).
+				return `<span class="badge bg-secondary">—</span>`
+			}
+			if *res.PassFail {
 				return `<span class="badge bg-success">PASS</span>`
 			}
 			return `<span class="badge bg-danger">FAIL</span>`

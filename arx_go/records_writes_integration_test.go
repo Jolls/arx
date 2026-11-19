@@ -173,7 +173,8 @@ func TestIntegration_RecordsWrites_CreateRecordMaterializes(t *testing.T) {
 	wScan(t, h, `SELECT type, parameter, specification, spec_min, format, hide_formula, default_result, pf_type,
 		result IS NULL, pass_fail IS NULL, comment IS NULL FROM result WHERE form_record_id=$1 AND form_row_id=$2`, []any{id, s4},
 		&typ, &param, &spec, &min, &format, &hide, &def, &pf, &resNull, &pfNull, &commentNull)
-	if typ != 0 || param != "Current" || spec != "1..3" || min != "1" || format != "F2" || hide != "HIDE" || def != "x" || pf != "range" ||
+	// The definition is copied as-is (#468): tokens resolve at render/save, not at creation.
+	if typ != 0 || param != "Current" || spec != "{min}..{max}" || min != "1" || format != "F2" || hide != "HIDE" || def != "x" || pf != "range" ||
 		!resNull || !pfNull || !commentNull {
 		t.Errorf("s4 snapshot = %d %q %q %q %q %q %q %q result/pf/comment NULL %v/%v/%v", typ, param, spec, min, format, hide, def, pf, resNull, pfNull, commentNull)
 	}
@@ -298,6 +299,99 @@ func TestIntegration_RecordsWrites_SaveResults(t *testing.T) {
 	wScan(t, h, `SELECT notes, to_char(record_date,'YYYY-MM-DD HH24:MI'), record_type FROM form_record WHERE id=$1`, []any{r}, &notes, &date, &rtype)
 	if notes != "hello" || date != "2026-08-01 00:00" || rtype != "" {
 		t.Errorf("second save = notes %q date %q type %q", notes, date, rtype)
+	}
+}
+
+// #468: "=" math, {id} and query: bounds are evaluated on save and stored with pass_fail; an upstream
+// change re-evaluates a downstream row without touching its updated_at; resync re-evaluates everything
+// but the query; the lock snapshot carries the resolved text.
+func TestIntegration_RecordsWrites_SaveResultsEvaluatesBounds(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	qname := smokeUniq("limit")
+	qid := repInsert(t, h, `INSERT INTO named_queries (name, sql, description, params) VALUES ($1,'SELECT ''4''',NULL,NULL) RETURNING id`,
+		[]any{qname}, `DELETE FROM named_queries WHERE id=$1`)
+	sA := wStep(t, h, f.formID, 0, "Upstream", nil)
+	sB := wStep(t, h, f.formID, 0, "Power", map[string]any{"spec_nom": "5", "spec_min": "={nom}*0.9", "spec_max": "={nom}*1.1",
+		"spec_units": "mW", "specification": "{nom}{units} ({min}-{max})", "pf_type": "range"})
+	sC := wStep(t, h, f.formID, 0, "Tracks upstream", map[string]any{"spec_max": fmt.Sprintf("={%d}+1", sA), "pf_type": "range"})
+	sD := wStep(t, h, f.formID, 0, "Queried", map[string]any{"spec_max": "query:" + qname + "(@pn={record.pn})",
+		"specification": "<= {max}", "pf_type": "range"})
+	repExec(t, h, `UPDATE form SET test_order=$1 WHERE id=$2`, wOrder(sA, sB, sC, sD), f.formID)
+	r := wNewID(t, wPost(h.CreateRecord, "/forms/x/records/new", url.Values{"serial_number": {"SN-E1"}, "suggested_serial_number": {"1"}}, f.formID), "/records/")
+	wCleanupRecord(t, h, r)
+
+	save := func(a, c string) {
+		t.Helper()
+		assertStatus(t, "SaveResults", wPost(h.SaveResults, "/records/x/edit", url.Values{
+			fmt.Sprintf("result_%d", sA): {a}, fmt.Sprintf("result_%d", sB): {"5.2"},
+			fmt.Sprintf("result_%d", sC): {c}, fmt.Sprintf("result_%d", sD): {"5"},
+		}, r), http.StatusSeeOther)
+	}
+	type row struct {
+		min, nom, max string
+		pf            *bool
+	}
+	get := func(step int) row {
+		t.Helper()
+		var x row
+		wScan(t, h, `SELECT COALESCE(eval_min,''), COALESCE(eval_nom,''), COALESCE(eval_max,''), pass_fail FROM result
+			WHERE form_record_id=$1 AND form_row_id=$2`, []any{r, step}, &x.min, &x.nom, &x.max, &x.pf)
+		return x
+	}
+	check := func(label string, step int, min, nom, max, pf string) {
+		t.Helper()
+		x := get(step)
+		if x.min != min || x.nom != nom || x.max != max || pfString(x.pf) != pf {
+			t.Errorf("%s: evals %q/%q/%q pf %s, want %q/%q/%q %s", label, x.min, x.nom, x.max, pfString(x.pf), min, nom, max, pf)
+		}
+	}
+
+	save("7", "8.5")
+	check("math bounds", sB, "4.5", "5", "5.5", "PASS")
+	check("cross-step bound", sC, "", "", "8", "FAIL")
+	check("query bound", sD, "", "", "4", "FAIL")
+
+	// Upstream change only: sC's value is unchanged, so it's re-evaluated but its Result Date stays.
+	repExec(t, h, `UPDATE result SET updated_at='2020-01-01' WHERE form_record_id=$1 AND form_row_id=$2`, r, sC)
+	save("9", "8.5")
+	check("downstream after upstream change", sC, "", "", "10", "PASS")
+	var upd string
+	wScan(t, h, `SELECT to_char(updated_at,'YYYY-MM-DD') FROM result WHERE form_record_id=$1 AND form_row_id=$2`, []any{r, sC}, &upd)
+	if upd != "2020-01-01" {
+		t.Errorf("re-evaluated sC updated_at = %s, want untouched", upd)
+	}
+
+	// Resync: the live bound change is re-evaluated; the query is not re-run (keeps 4 until the next save).
+	repExec(t, h, `UPDATE named_queries SET sql='SELECT ''6''' WHERE id=$1`, qid)
+	repExec(t, h, `UPDATE form_row SET spec_max='={nom}*1.2' WHERE id=$1`, sB)
+	assertStatus(t, "ResyncRecord", wPost(h.ResyncRecord, "/records/x/resync", nil, r), http.StatusSeeOther)
+	check("resync math bound", sB, "4.5", "5", "6", "PASS")
+	check("resync keeps query value", sD, "", "", "4", "FAIL")
+	// A changed query definition doesn't keep the old query's value.
+	repExec(t, h, `UPDATE form_row SET spec_max=$1 WHERE id=$2`, "query:"+qname+"(@x=1)", sD)
+	assertStatus(t, "ResyncRecord changed query", wPost(h.ResyncRecord, "/records/x/resync", nil, r), http.StatusSeeOther)
+	check("resync drops a changed query's value", sD, "", "", "", "nil")
+
+	// The next save re-runs the query.
+	save("9", "8.5")
+	check("save re-runs query", sD, "", "", "6", "PASS")
+
+	// A query that fails on save (here: renamed away) keeps the stored value instead of erasing it.
+	repExec(t, h, `UPDATE named_queries SET name=name||'_gone' WHERE id=$1`, qid)
+	save("9", "8.5")
+	check("failed query keeps stored value", sD, "", "", "6", "PASS")
+
+	// Lock: the completion snapshot carries resolved text.
+	assertStatus(t, "LockRecord", wPost(h.LockRecord, "/records/x/lock", nil, r), http.StatusSeeOther)
+	var specB, specD string
+	snap := `SELECT rer.specification FROM record_event_results rer JOIN record_events re ON re.id=rer.event_id
+		WHERE re.form_record_id=$1 AND rer.form_row_id=$2`
+	wScan(t, h, snap, []any{r, sB}, &specB)
+	wScan(t, h, snap, []any{r, sD}, &specD)
+	if specB != "5mW (4.5-6)" || specD != "<= 6" {
+		t.Errorf("snapshot specs = %q / %q", specB, specD)
 	}
 }
 

@@ -3965,7 +3965,7 @@ func TestIntegration_FormDef_RendersStepsAndArchivedToggle(t *testing.T) {
 	// {record.type} token stays unresolved, so the "!=" comparison (unresolved-token !=
 	// "Re-Test") evaluates true and the step is hidden — unlike an "=" formula, where an
 	// unresolved token can never match and the step stays shown. This asymmetry is
-	// existing evaluateHide behavior (see TestEvaluateHide), not something this test
+	// existing hide-formula behavior (see TestResolveStep_Hide), not something this test
 	// should try to change.
 	if strings.Contains(body, "Retest Voltage Check") {
 		t.Errorf("FormDef(6001): body unexpectedly contains \"Retest Voltage Check\" (step 6108 should be hidden — unresolved \"!=\" token)")

@@ -121,6 +121,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
 var MISSING = '<span class="badge bg-warning text-dark">MISSING</span>'
 
+// strictNum parses a whole trimmed plain decimal number (NaN otherwise) — the same strings as the
+// server's decimalNumber (models/trmodels.go), so this badge and the saved P/F agree.
+function strictNum(s) {
+  s = (s || '').trim()
+  return /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s) ? Number(s) : NaN
+}
+
 function pfBadge(val, min, max, pfType) {
   var v = (val || '').trim()
   if (pfType === 'filled' || pfType === 'attach') {
@@ -129,13 +136,14 @@ function pfBadge(val, min, max, pfType) {
   if (pfType === 'comment') {
     return '<span class="badge bg-success">PASS</span>'
   }
-  // range (default)
+  // range (default). Strict numbers, as the server's ComputePassFail: "4.5mW" is not 4.5, and a
+  // bound that isn't a number leaves P/F blank rather than failing or passing (#468).
   if (!v) return (min || max) ? MISSING : ''
-  var f = parseFloat(v)
-  if (isNaN(f)) return ''
+  var f = strictNum(v), lo = strictNum(min), hi = strictNum(max)
+  if (isNaN(f) || (min && isNaN(lo)) || (max && isNaN(hi))) return ''
   var pass = true
-  if (min) pass = pass && f >= parseFloat(min)
-  if (max) pass = pass && f <= parseFloat(max)
+  if (min) pass = pass && f >= lo
+  if (max) pass = pass && f <= hi
   return pass
     ? '<span class="badge bg-success">PASS</span>'
     : '<span class="badge bg-danger">FAIL</span>'

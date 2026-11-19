@@ -73,6 +73,13 @@ func TestComputePassFail(t *testing.T) {
 		{"range max only, value above fails", "11", &TestStep{PFType: "range", SpecMax: "10"}, boolPtr(false)},
 		{"range value is trimmed", "  5  ", &TestStep{PFType: "range", SpecMin: "1", SpecMax: "10"}, boolPtr(true)},
 		{"range bound is trimmed", "5", &TestStep{PFType: "range", SpecMin: " 1 ", SpecMax: " 10 "}, boolPtr(true)},
+		// #468: an unevaluable bound leaves P/F blank instead of silently passing.
+		{"range non-numeric min is unevaluatable", "5", &TestStep{PFType: "range", SpecMin: "={nom}*0.9", SpecMax: "10"}, nil},
+		{"range non-numeric max is unevaluatable", "5", &TestStep{PFType: "range", SpecMax: "query:x"}, nil},
+		{"range NaN value is unevaluatable", "NaN", &TestStep{PFType: "range", SpecMin: "1"}, nil},
+		{"range Inf value is unevaluatable", "inf", &TestStep{PFType: "range", SpecMin: "1"}, nil},
+		{"range hex value is unevaluatable", "0x1Ap0", &TestStep{PFType: "range", SpecMin: "1"}, nil},
+		{"range exponent value passes", "1e1", &TestStep{PFType: "range", SpecMin: "1", SpecMax: "10"}, boolPtr(true)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

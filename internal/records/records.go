@@ -7,6 +7,7 @@ package records
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -409,13 +410,42 @@ func (s *Service) InsertResult(ctx context.Context, recordID, stepID int, d Resu
 	})
 }
 
-// RefreshResult re-pulls a definition into an existing result row with a recomputed pass/fail.
-func (s *Service) RefreshResult(ctx context.Context, id int, d ResultDef, passFail *bool) error {
+// ResultEvals are a result row's evaluated spec_min/nom/max (#468); "" = not evaluated.
+type ResultEvals struct {
+	Min string `json:"eval_min"`
+	Nom string `json:"eval_nom"`
+	Max string `json:"eval_max"`
+}
+
+// RefreshResult re-pulls a definition into an existing result row with re-evaluated bounds and a
+// recomputed pass/fail.
+func (s *Service) RefreshResult(ctx context.Context, id int, d ResultDef, ev ResultEvals, passFail *bool) error {
 	return s.q.RefreshResult(ctx, dbq.RefreshResultParams{
 		ID: id, Type: d.Type, Parameter: d.Parameter, Specification: d.Specification, SpecMin: d.SpecMin,
 		SpecNom: d.SpecNom, SpecMax: d.SpecMax, SpecUnits: d.SpecUnits, PfType: d.PFType, Format: d.Format,
-		HideFormula: d.HideFormula, DefaultResult: d.DefaultResult, PassFail: optBool(passFail),
+		HideFormula: d.HideFormula, DefaultResult: d.DefaultResult, EvalMin: ev.Min, EvalNom: ev.Nom, EvalMax: ev.Max,
+		PassFail: optBool(passFail),
 	})
+}
+
+// ResultEvalUpdate is one row's re-evaluation for UpdateResultEvals.
+type ResultEvalUpdate struct {
+	ID int `json:"id"`
+	ResultEvals
+	PassFail *bool `json:"pass_fail"`
+}
+
+// UpdateResultEvals stores re-evaluated bounds and pass/fail for many rows in one statement, leaving
+// updated_at (the value's Result Date) alone. A no-op for an empty list.
+func (s *Service) UpdateResultEvals(ctx context.Context, rows []ResultEvalUpdate) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(rows)
+	if err != nil {
+		return err
+	}
+	return s.q.UpdateResultEvals(ctx, string(b))
 }
 
 // DeleteResult removes a result row (resync drops an archived step that never recorded a value).
