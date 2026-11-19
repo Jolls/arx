@@ -1,6 +1,7 @@
 package models
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -155,6 +156,9 @@ type TestResult struct {
 	Type          int    // snapshot of form_row.type — 0=data, 1/2/3=heading
 	HideFormula   string // snapshot of hide_formula — frozen visibility, evaluated vs the record's own results
 	DefaultResult string // snapshot of default_result — used by the edit page for auto-calc; not shown on the view
+	EvalMin       string // spec_min as evaluated by the last save (#468); "" = not evaluated
+	EvalNom       string // spec_nom as evaluated by the last save
+	EvalMax       string // spec_max as evaluated by the last save
 	UpdatedAt     *time.Time
 }
 
@@ -259,8 +263,9 @@ type EventSnapshot struct {
 	Rows    []SnapshotDiffRow
 }
 
-// ComputePassFail evaluates pass/fail for a result value against a step's spec bounds.
-// Returns nil if the result cannot be evaluated (empty, non-numeric, no bounds).
+// ComputePassFail evaluates pass/fail for a result value against a step's (resolved) spec bounds.
+// Returns nil if the result cannot be evaluated (empty, non-numeric, no bounds, or a bound that
+// isn't a number — #468: an unevaluable bound must not silently pass).
 // pf_type values:
 //
 //	"filled" — PASS if non-empty, nil (MISSING) if blank
@@ -291,23 +296,42 @@ func ComputePassFail(value string, step *TestStep) *bool {
 		if !hasMin && !hasMax {
 			return nil
 		}
-		f, err := strconv.ParseFloat(val, 64)
-		if err != nil {
+		f, ok := decimalNumber(val)
+		if !ok {
 			return nil
 		}
 		pass := true
 		if hasMin {
-			if min, err := strconv.ParseFloat(strings.TrimSpace(step.SpecMin), 64); err == nil {
-				pass = pass && f >= min
+			min, ok := decimalNumber(step.SpecMin)
+			if !ok {
+				return nil
 			}
+			pass = pass && f >= min
 		}
 		if hasMax {
-			if max, err := strconv.ParseFloat(strings.TrimSpace(step.SpecMax), 64); err == nil {
-				pass = pass && f <= max
+			max, ok := decimalNumber(step.SpecMax)
+			if !ok {
+				return nil
 			}
+			pass = pass && f <= max
 		}
 		return &pass
 	}
+}
+
+// decimalNumberRE is a plain decimal number, optionally signed and with an exponent — what the edit page's
+// strictNum (static/records/app.js) accepts too, so the live badge and the saved P/F agree. ParseFloat alone
+// would also take "NaN", "Inf" and hex floats.
+var decimalNumberRE = regexp.MustCompile(`^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$`)
+
+// decimalNumber parses a trimmed plain decimal number.
+func decimalNumber(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	if !decimalNumberRE.MatchString(s) {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	return f, err == nil
 }
 
 // CalcPF returns "PASS", "FAIL", "MISSING", or "" for template rendering.

@@ -29,6 +29,27 @@
 </div>
 
 <details class="mb-3 small text-muted">
+  <summary class="user-select-none" style="cursor:pointer">What each column accepts</summary>
+  <div class="mt-2 ps-2">
+    <div class="table-responsive-sm">
+    <table class="table table-sm table-bordered align-middle mb-1 w-auto">
+      <thead><tr><th>Column</th><th>Tokens</th><th><code>=</code> math</th><th><code>query:</code></th><th><code>List:</code></th></tr></thead>
+      <tbody>
+        <tr><td>Parameter (headings too), Specification</td><td>&check; incl. <code>{nom}</code> <code>{min}</code> <code>{max}</code> <code>{units}</code></td><td>&ndash;</td><td>&ndash;</td><td>&ndash;</td></tr>
+        <tr><td>spec_units</td><td>&check;</td><td>&ndash;</td><td>&ndash;</td><td>&ndash;</td></tr>
+        <tr><td>spec_nom</td><td>&check;</td><td>&check;</td><td>&check; picker; first row is the nominal</td><td>&check; picker</td></tr>
+        <tr><td>spec_min / spec_max</td><td>&check; incl. <code>{nom}</code> <code>{units}</code></td><td>&check;</td><td>&check; first row's value</td><td>&ndash;</td></tr>
+        <tr><td>default_result</td><td>&check;</td><td>&check;</td><td>&ndash;</td><td>&ndash;</td></tr>
+        <tr><td>Hide</td><td>&check;</td><td>&ndash;</td><td>&ndash;</td><td>&ndash;</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div>Math and queries must start the value: <code>={nom}*0.9</code>, <code>query:name(@p={record.pn})</code> (not <code>=query:</code>). A bound that doesn't come out as a number leaves P/F blank.
+    Queries are re-run when a record is saved; viewing a record shows the values from its last save.</div>
+  </div>
+</details>
+
+<details class="mb-3 small text-muted">
   <summary class="user-select-none" style="cursor:pointer">Token reference</summary>
   <div class="mt-2 ps-2" style="line-height:1.8">
     <div class="fw-semibold mb-1">Self-referential (resolved from this step's own fields)</div>
@@ -43,14 +64,14 @@
     <code>{record.type}</code> record type &nbsp;&bull;&nbsp;
     <code>{record.date}</code> test date
     <div class="fw-semibold mt-2 mb-1">Cross-step (resolved from another step's recorded result)</div>
-    <code>{<em>id</em>}</code> result of step with that ID — e.g. <code>{15}</code>. Step IDs are shown in the ID column below.
+    <code>{<em>id</em>}</code> result of step with that ID — e.g. <code>{15}</code> — or, while it has no result, that step's nominal (not in default_result or Hide). Step IDs are shown in the ID column below.
     <div class="fw-semibold mt-2 mb-1">Named queries (run a SQL query; tokens above usable as parameters)</div>
     <code>query:<em>name</em>(@param={record.pn})</code>
     <div class="mt-1">Example Specification: <code>{nom}{units} ({min} – {max}{units})</code> &rarr; <em>5v (4.5 – 5.5v)</em></div>
-    <div class="fw-semibold mt-2 mb-1">default_result column</div>
+    <div class="fw-semibold mt-2 mb-1"><code>=</code> math (default_result, spec_nom, spec_min, spec_max)</div>
     Plain text is used as-is (e.g. <code>{record.pn}</code> gives the part number). Start with <code>=</code> to evaluate as arithmetic after tokens above resolve: <code>+ - * /</code>, parentheses, and
     <code>min()</code>, <code>max()</code>, <code>abs()</code>, <code>mod()</code>, <code>round()</code>, <code>floor()</code>, <code>ceil()</code>, <code>sqrt()</code>, <code>pow()</code>.
-    Example: <code>=min({15}, {max})</code> defaults to the smaller of step 15's result and this step's spec_max.
+    Example: <code>=min({15}, {max})</code> defaults to the smaller of step 15's result and this step's spec_max; spec_min <code>={nom}*0.9</code> is 90% of the nominal.
     <div class="fw-semibold mt-2 mb-1">Hide column</div>
     Blank or <code>SHOW</code> = always visible &nbsp;&bull;&nbsp;
     <code>HIDE</code> = always hidden &nbsp;&bull;&nbsp;

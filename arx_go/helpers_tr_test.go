@@ -168,86 +168,6 @@ func TestStepFromResult(t *testing.T) {
 	}
 }
 
-// TestEvaluateHide guards the conditional step-visibility semantics (#257) that both the
-// server (frozen-row filtering) and the record-editor JS mirror. Step {12} resolves to its
-// recorded result; {record.type} resolves to the record comment.
-func TestEvaluateHide(t *testing.T) {
-	results := map[int]*models.TestResult{
-		12: {Result: "N/A"},
-	}
-	record := &models.TestRecord{RecordType: "Re-Test"}
-
-	cases := []struct {
-		name    string
-		formula string
-		want    bool // true = hidden
-	}{
-		{"blank shows", "", false},
-		{"SHOW shows", "SHOW", false},
-		{"HIDE hides", "HIDE", true},
-		{"case-insensitive HIDE", "hide", true},
-		{"eq match hides", "{12}=N/A", true},
-		{"eq mismatch shows", "{12}=PASS", false},
-		{"eq is case-insensitive", "{12}=n/a", true},
-		{"neq match shows", "{12}!=N/A", false},
-		{"neq mismatch hides", "{12}!=PASS", true},
-		{"record token eq hides", "{record.type}=Re-Test", true},
-		{"unresolvable step ref shows", "{99}=N/A", false},
-		{"whitespace tolerated", "  {12} = N/A ", true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := evaluateHide(c.formula, results, nil, record, nil); got != c.want {
-				t.Errorf("evaluateHide(%q) = %v, want %v", c.formula, got, c.want)
-			}
-		})
-	}
-}
-
-func TestBakeStepTokens(t *testing.T) {
-	rec := &models.TestRecord{SerialNumber: "42", SerialNumberPN: "PN-1"}
-
-	// Self + record tokens bake; {id} cross-step tokens stay for render-time resolution.
-	step := &models.TestStep{
-		SpecMin: "1", SpecMax: "9", SpecNom: "5", SpecUnits: "V",
-		Specification: "{nom}{units} ({min}-{max}) for {record.sn} vs {3}",
-	}
-	bakeStepTokens(step, rec, nil)
-	if step.Specification != "5V (1-9) for 42 vs {3}" {
-		t.Errorf("bake should resolve self/record tokens and keep {id}: %q", step.Specification)
-	}
-
-	// A query: directive in spec_nom must NOT be baked into the spec text.
-	q := &models.TestStep{SpecNom: "query:lookup(@pn={record.pn})", Specification: "{nom}"}
-	bakeStepTokens(q, rec, nil)
-	if q.Specification != "{nom}" {
-		t.Errorf("query directive must not bake into spec text, got %q", q.Specification)
-	}
-	if q.SpecNom != "query:lookup(@pn=PN-1)" {
-		t.Errorf("record tokens inside the query directive should still resolve, got %q", q.SpecNom)
-	}
-}
-
-// A frozen result row displays its saved parameter/specification (EffectiveParameter/EffectiveSpec),
-// so {id} tokens must be resolved there too, not only on the step.
-func TestResolveRowRefs(t *testing.T) {
-	results := map[int]*models.TestResult{
-		269: {TestID: 269, Result: "520nm"},
-		300: {TestID: 300, Parameter: "{269}: Laser SN", Specification: "max for {269}"},
-	}
-	row := models.ResultRow{Step: stepFromResult(300, results[300]), Result: results[300]}
-	resolveRowRefs(&row, results, map[int]*models.TestStep{}, &models.TestRecord{}, &models.TestForm{})
-	if got := row.EffectiveParameter(); got != "520nm: Laser SN" {
-		t.Errorf("EffectiveParameter = %q", got)
-	}
-	if got := row.EffectiveSpec(); got != "max for 520nm" {
-		t.Errorf("EffectiveSpec = %q", got)
-	}
-	if results[300].Parameter != "{269}: Laser SN" {
-		t.Errorf("shared result map entry was mutated: %q", results[300].Parameter)
-	}
-}
-
 func TestImageResult(t *testing.T) {
 	cases := []struct {
 		val  string
@@ -268,30 +188,4 @@ func TestImageResult(t *testing.T) {
 			t.Errorf("imageResult(%q) = %v, want %v", c.val, got, c.want)
 		}
 	}
-}
-
-func TestSubstituteStepSelf(t *testing.T) {
-	step := &models.TestStep{SpecMin: "1", SpecMax: "9", SpecNom: "5", SpecUnits: "V"}
-
-	t.Run("replaces all tokens", func(t *testing.T) {
-		got := substituteStepSelf("{min} to {max} ({nom}) {units}", step)
-		want := "1 to 9 (5) V"
-		if got != want {
-			t.Errorf("got %q, want %q", got, want)
-		}
-	})
-
-	t.Run("nil step returns input unchanged", func(t *testing.T) {
-		in := "{min}-{max}"
-		if got := substituteStepSelf(in, nil); got != in {
-			t.Errorf("got %q, want %q", got, in)
-		}
-	})
-
-	t.Run("no tokens returns input unchanged", func(t *testing.T) {
-		in := "plain text"
-		if got := substituteStepSelf(in, step); got != in {
-			t.Errorf("got %q, want %q", got, in)
-		}
-	})
 }

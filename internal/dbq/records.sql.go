@@ -59,10 +59,11 @@ func (q *Queries) CompleteRecord(ctx context.Context, arg CompleteRecordParams) 
 
 const copyRecordResults = `-- name: CopyRecordResults :exec
 INSERT INTO result (form_record_id, form_row_id, type, parameter, specification, spec_min, spec_nom, spec_max,
-                    spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail, updated_at)
+                    spec_units, pf_type, format, hide_formula, default_result, result, comment, pass_fail,
+                    eval_min, eval_nom, eval_max, updated_at)
 SELECT $1, s.form_row_id, s.type, s.parameter, s.specification, s.spec_min, s.spec_nom,
        s.spec_max, s.spec_units, s.pf_type, s.format, s.hide_formula, s.default_result, s.result, s.comment,
-       s.pass_fail, CURRENT_TIMESTAMP
+       s.pass_fail, s.eval_min, s.eval_nom, s.eval_max, CURRENT_TIMESTAMP
 FROM result s
 WHERE s.form_record_id = $2
 `
@@ -1434,7 +1435,8 @@ SELECT id, form_record_id, form_row_id,
        COALESCE(spec_min, '') AS spec_min, COALESCE(spec_nom, '') AS spec_nom, COALESCE(spec_max, '') AS spec_max,
        COALESCE(spec_units, '') AS spec_units, COALESCE(pf_type, '') AS pf_type, COALESCE(format, '') AS format,
        COALESCE(type, 0)::int AS type, COALESCE(hide_formula, '') AS hide_formula,
-       COALESCE(default_result, '') AS default_result, updated_at
+       COALESCE(default_result, '') AS default_result, updated_at,
+       COALESCE(eval_min, '') AS eval_min, COALESCE(eval_nom, '') AS eval_nom, COALESCE(eval_max, '') AS eval_max
 FROM result
 WHERE form_record_id = $1
 `
@@ -1458,6 +1460,9 @@ type ListRecordResultsRow struct {
 	HideFormula   string
 	DefaultResult string
 	UpdatedAt     *time.Time
+	EvalMin       string
+	EvalNom       string
+	EvalMax       string
 }
 
 // A record's materialized result rows (the frozen snapshot of each step).
@@ -1489,6 +1494,9 @@ func (q *Queries) ListRecordResults(ctx context.Context, recordID int) ([]ListRe
 			&i.HideFormula,
 			&i.DefaultResult,
 			&i.UpdatedAt,
+			&i.EvalMin,
+			&i.EvalNom,
+			&i.EvalMax,
 		); err != nil {
 			return nil, err
 		}
@@ -1944,8 +1952,10 @@ SET type = $1::int, parameter = $2::text, specification = $3::text,
     spec_min = $4::text, spec_nom = $5::text, spec_max = $6::text,
     spec_units = $7::text, pf_type = $8::text, format = $9::text,
     hide_formula = $10::text, default_result = $11::text,
-    pass_fail = $12::bool, updated_at = CURRENT_TIMESTAMP
-WHERE id = $13
+    eval_min = NULLIF($12::text, ''), eval_nom = NULLIF($13::text, ''),
+    eval_max = NULLIF($14::text, ''),
+    pass_fail = $15::bool, updated_at = CURRENT_TIMESTAMP
+WHERE id = $16
 `
 
 type RefreshResultParams struct {
@@ -1960,11 +1970,15 @@ type RefreshResultParams struct {
 	Format        string
 	HideFormula   string
 	DefaultResult string
+	EvalMin       string
+	EvalNom       string
+	EvalMax       string
 	PassFail      sql.NullBool
 	ID            int
 }
 
-// Re-pulls a step's live definition into an existing snapshot row (resync) with a recomputed pass_fail.
+// Re-pulls a step's live definition into an existing snapshot row (resync) with re-evaluated bounds
+// (#468; ” = not evaluated) and a recomputed pass_fail.
 func (q *Queries) RefreshResult(ctx context.Context, arg RefreshResultParams) error {
 	_, err := q.db.ExecContext(ctx, refreshResult,
 		arg.Type,
@@ -1978,6 +1992,9 @@ func (q *Queries) RefreshResult(ctx context.Context, arg RefreshResultParams) er
 		arg.Format,
 		arg.HideFormula,
 		arg.DefaultResult,
+		arg.EvalMin,
+		arg.EvalNom,
+		arg.EvalMax,
 		arg.PassFail,
 		arg.ID,
 	)
@@ -2190,6 +2207,23 @@ func (q *Queries) UpdateRecordAfterSave(ctx context.Context, arg UpdateRecordAft
 		arg.NextDueDate,
 		arg.ID,
 	)
+	return err
+}
+
+const updateResultEvals = `-- name: UpdateResultEvals :exec
+UPDATE result r
+SET eval_min = NULLIF(u.eval_min, ''), eval_nom = NULLIF(u.eval_nom, ''), eval_max = NULLIF(u.eval_max, ''),
+    pass_fail = u.pass_fail
+FROM jsonb_to_recordset($1::text::jsonb) AS u(id int, eval_min text, eval_nom text, eval_max text, pass_fail boolean)
+WHERE r.id = u.id
+`
+
+// Stores re-evaluated bounds and pass_fail for many result rows in one statement (#468). rows is a JSON
+// array of {"id", "eval_min", "eval_nom", "eval_max", "pass_fail"} (” eval = not evaluated, null
+// pass_fail = not evaluated). updated_at is left alone: it is the value's Result Date in step reports,
+// and a re-evaluation is not a new value.
+func (q *Queries) UpdateResultEvals(ctx context.Context, rows string) error {
+	_, err := q.db.ExecContext(ctx, updateResultEvals, rows)
 	return err
 }
 

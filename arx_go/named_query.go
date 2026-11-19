@@ -108,7 +108,7 @@ func (qr QueryResult) Values() string {
 }
 
 // runNamedQuery fetches a named query from the named_queries table and executes it.
-// specNom must already have {id} tokens substituted (call substituteRefs first).
+// specNom must already have its tokens resolved (the step resolver in stepexpr.go does this).
 func (h *Handler) runNamedQuery(ctx context.Context, specNom string) (QueryResult, error) {
 	name, params := parseQuerySpec(specNom)
 	if name == "" {

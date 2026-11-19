@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.110] - 2026-11-18
+### Added
+- Test steps' spec_min/spec_max/spec_nom accept `=` math (e.g. `={nom}*0.9`) and spec_min/spec_max accept `query:` named queries; saving a record evaluates them and stores the values (new `result.eval_min/eval_nom/eval_max`), which view, print and the completion snapshot show ([#468](https://github.com/Jolls/arx/issues/468))
+- Form definition editor: a "What each column accepts" table listing which columns take tokens, `=` math, `query:` and `List:` ([#471](https://github.com/Jolls/arx/issues/471))
+
+### Changed
+- One server-side step resolver replaces the separate token, hide-formula and pass/fail code paths; new records copy the definition as-is and resolve tokens at render/save, so editing a record's type reaches `{record.type}` ([#468](https://github.com/Jolls/arx/issues/468))
+- A bound that doesn't evaluate to a number now leaves P/F blank instead of passing; the record view shows blank, not FAIL, for an unevaluated P/F ([#468](https://github.com/Jolls/arx/issues/468))
+- "Update to latest" re-evaluates bounds and P/F against the refreshed definition, keeping query-derived values until the next save ([#468](https://github.com/Jolls/arx/issues/468))
+
+### Fixed
+- Saving a record ignored `{id}` cross-step bounds (they passed) and left a downstream step's P/F stale when only an upstream value changed ([#468](https://github.com/Jolls/arx/issues/468))
+- Completion snapshots stored specification text with unresolved `{id}` tokens ([#468](https://github.com/Jolls/arx/issues/468))
+- `{id}` tokens in heading rows never resolved ([#471](https://github.com/Jolls/arx/issues/471))
+
 ## [0.8.109] - 2026-11-18
 ### Changed
 - Dependency bumps: Bootstrap 5.3.8 → 5.3.9 (CDN links + SRI hashes), pgx 5.12.0 → 5.13.0, goose 3.29.0 → 3.30.1, `golang.org/x/crypto` 0.58.0 → 0.59.0, `golang.org/x/image` 0.47.0 → 0.48.0

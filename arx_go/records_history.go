@@ -14,9 +14,10 @@ import (
 var errRecordNeedsLot = errors.New("a lot must be selected before this record can be completed — the tested part is lot-tracked")
 
 // snapshotRecordResults copies the record's current data-row results (result) into
-// record_event_results, linked to the given Complete event. Rows are inserted in the
-// record's frozen display order (test_order, falling back to form_row_id order) so the snapshot
-// renders by id. Headings (type > 0) are not captured. svc runs on the caller's tx.
+// record_event_results, linked to the given Complete event, with parameter/specification/units
+// resolved as the record view shows them (#468; query-derived values from the last save). Rows are
+// inserted in the record's frozen display order (test_order, falling back to form_row_id order) so the
+// snapshot renders by id. Headings (type > 0) are not captured. svc runs on the caller's tx.
 func (h *Handler) snapshotRecordResults(ctx context.Context, svc *records.Service, eventID, recordID int) error {
 	rec, err := svc.GetRecord(ctx, recordID)
 	if err != nil {
@@ -26,13 +27,24 @@ func (h *Handler) snapshotRecordResults(ctx context.Context, svc *records.Servic
 	if err != nil {
 		return err
 	}
+	hdr, err := svc.GetFormHeader(ctx, rec.FormID)
+	if err != nil {
+		return err
+	}
+	liveSteps, err := h.loadSteps(ctx, svc, rec.FormID)
+	if err != nil {
+		return err
+	}
+	record, form, results := testRecord(rec), testForm(hdr), testResults(rows)
+	res := newStepResolver(recordStepSet(results, liveSteps), recordStepCtx(results, &record, &form))
 	byTest := map[int]models.RecordResultSnapshot{}
 	for _, r := range rows {
 		if r.Type != 0 {
 			continue
 		}
-		s := models.RecordResultSnapshot{TestID: r.FormRowID, Parameter: r.Parameter, Specification: r.Specification,
-			SpecUnits: r.SpecUnits, Result: r.Result, Comment: r.Comment}
+		rs := res.step(r.FormRowID)
+		s := models.RecordResultSnapshot{TestID: r.FormRowID, Parameter: rs.Parameter, Specification: rs.Specification,
+			SpecUnits: rs.SpecUnits, Result: r.Result, Comment: r.Comment}
 		if r.PassFail.Valid {
 			s.PassFail = &r.PassFail.Bool
 		}

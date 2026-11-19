@@ -23,6 +23,9 @@ CREATE TABLE result (
   type           INTEGER NOT NULL DEFAULT 0,        -- Snapshot of form_row.type.
   hide_formula   VARCHAR(255),                      -- Snapshot of form_row.hide_formula.
   default_result VARCHAR(255),                      -- Snapshot of form_row.default_result.
+  eval_min       VARCHAR(255),                      -- spec_min as evaluated by the last save (#468); NULL = not evaluated.
+  eval_nom       VARCHAR(255),                      -- spec_nom as evaluated by the last save.
+  eval_max       VARCHAR(255),                      -- spec_max as evaluated by the last save.
   updated_at     TIMESTAMPTZ DEFAULT now()
 );
 
