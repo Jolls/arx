@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.107] - 2026-11-18
+### Fixed
+- Cross-step `{id}` tokens in a step's Parameter or Specification now resolve on saved records instead of showing the literal `{269}` ([#467](https://github.com/Jolls/arx/issues/467))
+
 ## [0.8.105] - 2026-11-13
 ### Removed
 - One-time Azure SQL → Postgres data-migration tooling and docs (`arx_go/cmd/migrate_data`, `internal/datamigrate`, `docs/216-data-migration/`); the timestamp-provenance limitation in `SQL/SCHEMA.md` stays documented ([#345](https://github.com/Jolls/arx/issues/345))

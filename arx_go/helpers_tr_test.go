@@ -228,6 +228,26 @@ func TestBakeStepTokens(t *testing.T) {
 	}
 }
 
+// A frozen result row displays its saved parameter/specification (EffectiveParameter/EffectiveSpec),
+// so {id} tokens must be resolved there too, not only on the step.
+func TestResolveRowRefs(t *testing.T) {
+	results := map[int]*models.TestResult{
+		269: {TestID: 269, Result: "520nm"},
+		300: {TestID: 300, Parameter: "{269}: Laser SN", Specification: "max for {269}"},
+	}
+	row := models.ResultRow{Step: stepFromResult(300, results[300]), Result: results[300]}
+	resolveRowRefs(&row, results, map[int]*models.TestStep{}, &models.TestRecord{}, &models.TestForm{})
+	if got := row.EffectiveParameter(); got != "520nm: Laser SN" {
+		t.Errorf("EffectiveParameter = %q", got)
+	}
+	if got := row.EffectiveSpec(); got != "max for 520nm" {
+		t.Errorf("EffectiveSpec = %q", got)
+	}
+	if results[300].Parameter != "{269}: Laser SN" {
+		t.Errorf("shared result map entry was mutated: %q", results[300].Parameter)
+	}
+}
+
 func TestImageResult(t *testing.T) {
 	cases := []struct {
 		val  string

@@ -158,6 +158,18 @@ func resolveStepRefs(step *models.TestStep, results map[int]*models.TestResult, 
 	step.DefaultResult = substituteRefs(step.DefaultResult, results, refSteps, record, form)
 }
 
+// resolveRowRefs is resolveStepRefs for a rendered row. Templates show the frozen result's
+// parameter/specification when a result exists (ResultRow.EffectiveParameter/EffectiveSpec), so the
+// resolved text is copied onto a copy of the result (the shared map entry stays untouched).
+func resolveRowRefs(row *models.ResultRow, results map[int]*models.TestResult, refSteps map[int]*models.TestStep, record *models.TestRecord, form *models.TestForm) {
+	resolveStepRefs(row.Step, results, refSteps, record, form)
+	if row.Result != nil {
+		res := *row.Result
+		res.Parameter, res.Specification = row.Step.Parameter, row.Step.Specification
+		row.Result = &res
+	}
+}
+
 // substituteStepSelf replaces {min}, {max}, {nom} in s with the step's own spec bound values.
 // Called after substituteRefs so cross-step tokens resolve first.
 func substituteStepSelf(s string, step *models.TestStep) string {
@@ -1129,7 +1141,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		if row.Level > 0 || row.Step == nil {
 			continue
 		}
-		resolveStepRefs(row.Step, results, refSteps, &record, &form)
+		resolveRowRefs(row, results, refSteps, &record, &form)
 		row.Step.DefaultResult = ""
 		if row.Result != nil && row.Result.Result == "" && row.Result.Comment == "" {
 			row.Result = nil
@@ -1209,7 +1221,7 @@ func (h *Handler) RecordPrint(w http.ResponseWriter, r *http.Request) {
 		if row.Level > 0 || row.Step == nil {
 			continue
 		}
-		resolveStepRefs(row.Step, results, refSteps, &record, &form)
+		resolveRowRefs(row, results, refSteps, &record, &form)
 		row.Step.DefaultResult = ""
 		if row.Result != nil && row.Result.Result == "" && row.Result.Comment == "" {
 			row.Result = nil
@@ -1689,7 +1701,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 			row.RawDefault = row.Step.DefaultResult
 		}
 		// Resolve {id} cross-step tokens against the record's own results (frozen).
-		resolveStepRefs(row.Step, results, refSteps, &record, &form)
+		resolveRowRefs(row, results, refSteps, &record, &form)
 	}
 
 	trace, err := h.loadRecordTrace(r.Context(), &record, true)
