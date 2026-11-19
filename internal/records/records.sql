@@ -321,6 +321,9 @@ SET type = sqlc.arg(type)::int, parameter = sqlc.arg(parameter)::text, specifica
     pass_fail = sqlc.narg(pass_fail)::bool, updated_at = CURRENT_TIMESTAMP
 WHERE id = sqlc.arg(id);
 
+-- name: DeleteResult :exec
+DELETE FROM result WHERE id = sqlc.arg(id);
+
 -- name: UpdateResultValue :exec
 UPDATE result
 SET result = sqlc.arg(result)::text, comment = sqlc.arg(comment)::text, pass_fail = sqlc.narg(pass_fail)::bool,

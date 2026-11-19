@@ -116,6 +116,15 @@ func (q *Queries) CountFormSteps(ctx context.Context, formID int) (int, error) {
 	return column_1, err
 }
 
+const deleteResult = `-- name: DeleteResult :exec
+DELETE FROM result WHERE id = $1
+`
+
+func (q *Queries) DeleteResult(ctx context.Context, id int) error {
+	_, err := q.db.ExecContext(ctx, deleteResult, id)
+	return err
+}
+
 const duplicateRecord = `-- name: DuplicateRecord :one
 INSERT INTO form_record (form_id, part_id, serial_number, subject_part_number, subject_pn_description,
                          record_type, instrument_type, test_order, record_date, created_at, is_active, is_locked,
