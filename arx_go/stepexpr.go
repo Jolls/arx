@@ -411,6 +411,14 @@ func applyResolved(row *models.ResultRow, rs *resolvedStep) {
 	}
 }
 
+// stepLabel resolves a step's parameter for an aggregate page with no record (#473): its own
+// {nom}/{min}/{max}/{units} and {form.X} resolve, a query: value from stored (the latest save's);
+// {record.X} and {id} tokens stay as written.
+func stepLabel(s *models.TestStep, stored stepEvals, form *models.TestForm) string {
+	c := stepCtx{form: form, stored: map[int]stepEvals{s.ID: stored}}
+	return newStepResolver(map[int]*models.TestStep{s.ID: s}, c).step(s.ID).Parameter
+}
+
 // stepWarning is a definition problem the editor flags on a field (#471).
 type stepWarning struct {
 	Field string `json:"field"`

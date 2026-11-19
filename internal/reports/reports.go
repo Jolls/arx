@@ -44,11 +44,21 @@ func (s *Service) POsReceivedThisMonth(ctx context.Context, today time.Time) (in
 	return s.q.CountPOsReceivedThisMonth(ctx, today)
 }
 
-// FailureMode is one failing test step on one form.
+// FailureMode is one failing test step on one form. Parameter and the spec fields are the step's raw
+// live definition, the eval fields its latest saved evaluated values; the caller resolves the label.
 type FailureMode struct {
 	FormID       int
+	PartNumberID int
 	PartNumber   string
+	FormRowID    int
 	Parameter    string
+	SpecNom      string
+	SpecMin      string
+	SpecMax      string
+	SpecUnits    string
+	EvalMin      string
+	EvalNom      string
+	EvalMax      string
 	FailureCount int
 }
 

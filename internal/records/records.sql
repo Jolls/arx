@@ -529,19 +529,28 @@ GROUP BY trec.id, trec.record_date;
 
 -- name: ListFailureModes :many
 -- Each step's failure count and tested count over the form's active records in the date range,
--- most failures first. The label is the step's most recently written result-row parameter.
-SELECT COALESCE((SELECT r2.parameter FROM result r2
-                 WHERE r2.form_row_id = res.form_row_id
-                 ORDER BY r2.id DESC LIMIT 1), '')::text AS parameter,
-       COALESCE(SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END), 0)::int AS failure_count,
-       COUNT(res.pass_fail)::int AS total_tested
-FROM result res
-JOIN form_record trec ON res.form_record_id = trec.id
-WHERE trec.form_id = sqlc.arg(form_id) AND trec.is_active = TRUE AND res.pass_fail IS NOT NULL
-  AND (sqlc.narg(from_date)::timestamp IS NULL OR trec.record_date >= sqlc.narg(from_date)::timestamp)
-  AND (sqlc.narg(to_date)::date IS NULL OR trec.record_date < (sqlc.narg(to_date)::date + 1))
-GROUP BY res.form_row_id
-ORDER BY failure_count DESC, parameter ASC;
+-- most failures first. The label comes from the step's live definition, returned raw with the step's
+-- latest saved evaluated values for the caller to resolve (#473).
+SELECT t.form_row_id, COALESCE(fr.parameter, '')::text AS parameter,
+       COALESCE(fr.spec_nom, '')::text AS spec_nom, COALESCE(fr.spec_min, '')::text AS spec_min,
+       COALESCE(fr.spec_max, '')::text AS spec_max, COALESCE(fr.spec_units, '')::text AS spec_units,
+       COALESCE(last.eval_min, '')::text AS eval_min, COALESCE(last.eval_nom, '')::text AS eval_nom,
+       COALESCE(last.eval_max, '')::text AS eval_max,
+       t.failure_count, t.total_tested
+FROM (SELECT res.form_row_id,
+             COALESCE(SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END), 0)::int AS failure_count,
+             COUNT(res.pass_fail)::int AS total_tested
+      FROM result res
+      JOIN form_record trec ON res.form_record_id = trec.id
+      WHERE trec.form_id = sqlc.arg(form_id) AND trec.is_active = TRUE AND res.pass_fail IS NOT NULL
+        AND (sqlc.narg(from_date)::timestamp IS NULL OR trec.record_date >= sqlc.narg(from_date)::timestamp)
+        AND (sqlc.narg(to_date)::date IS NULL OR trec.record_date < (sqlc.narg(to_date)::date + 1))
+      GROUP BY res.form_row_id) t
+LEFT JOIN form_row fr ON fr.id = t.form_row_id
+LEFT JOIN LATERAL (SELECT r2.eval_min, r2.eval_nom, r2.eval_max FROM result r2
+                   WHERE r2.form_row_id = t.form_row_id AND r2.pass_fail IS NOT NULL
+                   ORDER BY r2.id DESC LIMIT 1) last ON TRUE
+ORDER BY t.failure_count DESC, fr.parameter ASC;
 
 -- name: ListUnitRecordSummary :many
 -- Popout (#387): a unit's active test records with data-row pass/fail tallies, newest first.

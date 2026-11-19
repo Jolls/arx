@@ -278,3 +278,25 @@ func TestApplyResolved(t *testing.T) {
 		t.Errorf("shared result map entry was mutated: %q", results[300].Parameter)
 	}
 }
+
+// #473: aggregate-page labels resolve the step's own tokens, take a query: nominal from the last save,
+// and leave record/{id} tokens as written.
+func TestStepLabel(t *testing.T) {
+	form := &models.TestForm{ID: 6001, PartNumber: "FORM-1001"}
+	for _, tc := range []struct {
+		name   string
+		step   models.TestStep
+		stored stepEvals
+		want   string
+	}{
+		{"self tokens", models.TestStep{ID: 1, Parameter: "{nom}{units} check", SpecNom: "5", SpecUnits: "mW"}, stepEvals{}, "5mW check"},
+		{"math bounds", models.TestStep{ID: 1, Parameter: "{min}-{max}", SpecNom: "10", SpecMin: "={nom}*0.9", SpecMax: "={nom}*1.1"}, stepEvals{}, "9-11"},
+		{"query nominal from stored", models.TestStep{ID: 1, Parameter: "{nom}V", SpecNom: "query:nom_volts"}, stepEvals{Nom: "12"}, "12V"},
+		{"form token", models.TestStep{ID: 1, Parameter: "{form.pn} output"}, stepEvals{}, "FORM-1001 output"},
+		{"record and id tokens stay", models.TestStep{ID: 1, Parameter: "Output at {record.type} vs {2}"}, stepEvals{}, "Output at {record.type} vs {2}"},
+	} {
+		if got := stepLabel(&tc.step, tc.stored, form); got != tc.want {
+			t.Errorf("%s: stepLabel = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

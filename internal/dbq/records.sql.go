@@ -927,18 +927,26 @@ func (q *Queries) ListDueUnits(ctx context.Context, arg ListDueUnitsParams) ([]L
 }
 
 const listFailureModes = `-- name: ListFailureModes :many
-SELECT COALESCE((SELECT r2.parameter FROM result r2
-                 WHERE r2.form_row_id = res.form_row_id
-                 ORDER BY r2.id DESC LIMIT 1), '')::text AS parameter,
-       COALESCE(SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END), 0)::int AS failure_count,
-       COUNT(res.pass_fail)::int AS total_tested
-FROM result res
-JOIN form_record trec ON res.form_record_id = trec.id
-WHERE trec.form_id = $1 AND trec.is_active = TRUE AND res.pass_fail IS NOT NULL
-  AND ($2::timestamp IS NULL OR trec.record_date >= $2::timestamp)
-  AND ($3::date IS NULL OR trec.record_date < ($3::date + 1))
-GROUP BY res.form_row_id
-ORDER BY failure_count DESC, parameter ASC
+SELECT t.form_row_id, COALESCE(fr.parameter, '')::text AS parameter,
+       COALESCE(fr.spec_nom, '')::text AS spec_nom, COALESCE(fr.spec_min, '')::text AS spec_min,
+       COALESCE(fr.spec_max, '')::text AS spec_max, COALESCE(fr.spec_units, '')::text AS spec_units,
+       COALESCE(last.eval_min, '')::text AS eval_min, COALESCE(last.eval_nom, '')::text AS eval_nom,
+       COALESCE(last.eval_max, '')::text AS eval_max,
+       t.failure_count, t.total_tested
+FROM (SELECT res.form_row_id,
+             COALESCE(SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END), 0)::int AS failure_count,
+             COUNT(res.pass_fail)::int AS total_tested
+      FROM result res
+      JOIN form_record trec ON res.form_record_id = trec.id
+      WHERE trec.form_id = $1 AND trec.is_active = TRUE AND res.pass_fail IS NOT NULL
+        AND ($2::timestamp IS NULL OR trec.record_date >= $2::timestamp)
+        AND ($3::date IS NULL OR trec.record_date < ($3::date + 1))
+      GROUP BY res.form_row_id) t
+LEFT JOIN form_row fr ON fr.id = t.form_row_id
+LEFT JOIN LATERAL (SELECT r2.eval_min, r2.eval_nom, r2.eval_max FROM result r2
+                   WHERE r2.form_row_id = t.form_row_id AND r2.pass_fail IS NOT NULL
+                   ORDER BY r2.id DESC LIMIT 1) last ON TRUE
+ORDER BY t.failure_count DESC, fr.parameter ASC
 `
 
 type ListFailureModesParams struct {
@@ -948,13 +956,22 @@ type ListFailureModesParams struct {
 }
 
 type ListFailureModesRow struct {
+	FormRowID    int
 	Parameter    string
+	SpecNom      string
+	SpecMin      string
+	SpecMax      string
+	SpecUnits    string
+	EvalMin      string
+	EvalNom      string
+	EvalMax      string
 	FailureCount int
 	TotalTested  int
 }
 
 // Each step's failure count and tested count over the form's active records in the date range,
-// most failures first. The label is the step's most recently written result-row parameter.
+// most failures first. The label comes from the step's live definition, returned raw with the step's
+// latest saved evaluated values for the caller to resolve (#473).
 func (q *Queries) ListFailureModes(ctx context.Context, arg ListFailureModesParams) ([]ListFailureModesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listFailureModes, arg.FormID, arg.FromDate, arg.ToDate)
 	if err != nil {
@@ -964,7 +981,19 @@ func (q *Queries) ListFailureModes(ctx context.Context, arg ListFailureModesPara
 	var items []ListFailureModesRow
 	for rows.Next() {
 		var i ListFailureModesRow
-		if err := rows.Scan(&i.Parameter, &i.FailureCount, &i.TotalTested); err != nil {
+		if err := rows.Scan(
+			&i.FormRowID,
+			&i.Parameter,
+			&i.SpecNom,
+			&i.SpecMin,
+			&i.SpecMax,
+			&i.SpecUnits,
+			&i.EvalMin,
+			&i.EvalNom,
+			&i.EvalMax,
+			&i.FailureCount,
+			&i.TotalTested,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
