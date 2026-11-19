@@ -287,6 +287,11 @@ func (s *Service) ListRecordTypes(ctx context.Context, scope Scope, id int) ([]s
 	return s.q.ListRecordTypes(ctx, p)
 }
 
+// NewestFormRecordID is the form's newest active record; sql.ErrNoRows when it has none.
+func (s *Service) NewestFormRecordID(ctx context.Context, formID int) (int, error) {
+	return s.q.NewestFormRecordID(ctx, formID)
+}
+
 // Neighbors returns the previous / next active record ids (0 = none) of recordID within its form's
 // list order; sql.ErrNoRows when recordID isn't an active record of the form.
 func (s *Service) Neighbors(ctx context.Context, formID, recordID int) (prev, next int, err error) {

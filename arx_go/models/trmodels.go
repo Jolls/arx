@@ -174,8 +174,7 @@ type ResultRow struct {
 	Step             *TestStep
 	Result           *TestResult // nil if no result recorded for this step
 	Level            int         // mirrors Step.Type; 0=data, 1/2/3=heading
-	RawSpecNom       string      // spec_nom with {record.X} resolved but {id} tokens kept — edit view only
-	RawDefault       string      // default_result with {record.X} resolved but {id} tokens kept — edit view only
+	HasDefault       bool        // the step has a default_result — edit view: the live resolver fills it in
 	Hidden           bool        // hide_formula currently evaluates to hidden — edit view renders it display:none for live toggling
 	QueryDescription string      // description of the named query backing this row's spec_nom, if any — edit view tooltip
 }
@@ -296,20 +295,20 @@ func ComputePassFail(value string, step *TestStep) *bool {
 		if !hasMin && !hasMax {
 			return nil
 		}
-		f, ok := decimalNumber(val)
+		f, ok := DecimalNumber(val)
 		if !ok {
 			return nil
 		}
 		pass := true
 		if hasMin {
-			min, ok := decimalNumber(step.SpecMin)
+			min, ok := DecimalNumber(step.SpecMin)
 			if !ok {
 				return nil
 			}
 			pass = pass && f >= min
 		}
 		if hasMax {
-			max, ok := decimalNumber(step.SpecMax)
+			max, ok := DecimalNumber(step.SpecMax)
 			if !ok {
 				return nil
 			}
@@ -324,8 +323,8 @@ func ComputePassFail(value string, step *TestStep) *bool {
 // would also take "NaN", "Inf" and hex floats.
 var decimalNumberRE = regexp.MustCompile(`^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$`)
 
-// decimalNumber parses a trimmed plain decimal number.
-func decimalNumber(s string) (float64, bool) {
+// DecimalNumber parses a trimmed plain decimal number.
+func DecimalNumber(s string) (float64, bool) {
 	s = strings.TrimSpace(s)
 	if !decimalNumberRE.MatchString(s) {
 		return 0, false

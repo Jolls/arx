@@ -26,6 +26,9 @@ func TestEvalMath(t *testing.T) {
 		{"mod(7, -3)", "-2"},
 		{"round(2.5)", "3"},
 		{"round(-2.5)", "-2"}, // JS Math.round: halves round up
+		{"round(5.30*165/1000, 2)", "0.87"},
+		{"round(1.005, 1)", "1"},
+		{"round(1234, -2)", "1200"},
 		{"floor(-1.5)", "-2"},
 		{"ceil(1.2)", "2"},
 		{"sqrt(16)", "4"},
@@ -45,7 +48,7 @@ func TestEvalMath(t *testing.T) {
 	}
 
 	bad := []string{
-		"", "1+", "(1", "1)", "1 2", ".5", "1.2.3", "abc", "alert(1)", "min(1)", "abs(1,2)", "pow(2)",
+		"", "1+", "(1", "1)", "1 2", ".5", "1.2.3", "abc", "alert(1)", "min(1)", "abs(1,2)", "pow(2)", "round(1,2,3)",
 		"max()", "1/0", "sqrt(-1)", "12/29/2026", "{12}*2", "5mW", "query:x",
 	}
 	for _, expr := range bad {

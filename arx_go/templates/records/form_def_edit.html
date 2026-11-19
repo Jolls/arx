@@ -70,7 +70,7 @@
     <div class="mt-1">Example Specification: <code>{nom}{units} ({min} – {max}{units})</code> &rarr; <em>5v (4.5 – 5.5v)</em></div>
     <div class="fw-semibold mt-2 mb-1"><code>=</code> math (default_result, spec_nom, spec_min, spec_max)</div>
     Plain text is used as-is (e.g. <code>{record.pn}</code> gives the part number). Start with <code>=</code> to evaluate as arithmetic after tokens above resolve: <code>+ - * /</code>, parentheses, and
-    <code>min()</code>, <code>max()</code>, <code>abs()</code>, <code>mod()</code>, <code>round()</code>, <code>floor()</code>, <code>ceil()</code>, <code>sqrt()</code>, <code>pow()</code>.
+    <code>min()</code>, <code>max()</code>, <code>abs()</code>, <code>mod()</code>, <code>round(x)</code> or <code>round(x, digits)</code>, <code>floor()</code>, <code>ceil()</code>, <code>sqrt()</code>, <code>pow()</code>.
     Example: <code>=min({15}, {max})</code> defaults to the smaller of step 15's result and this step's spec_max; spec_min <code>={nom}*0.9</code> is 90% of the nominal.
     <div class="fw-semibold mt-2 mb-1">Hide column</div>
     Blank or <code>SHOW</code> = always visible &nbsp;&bull;&nbsp;
@@ -171,6 +171,20 @@
     </div>
   </div>
 
+  <div id="step-preview" class="card mb-3 d-none">
+    <div class="card-header d-flex flex-wrap align-items-center gap-2">
+      <span class="fw-semibold">Preview step <span data-preview-id></span></span>
+      <input type="number" class="form-control form-control-sm" style="max-width:10rem" data-preview-record
+             placeholder="Newest record" title="Sample record # (blank = this form's newest record)">
+      <input type="text" class="form-control form-control-sm font-mono" style="max-width:22rem" data-preview-values
+             placeholder="Sample results, e.g. 15=4.9, 16=OK" title="Override results by step ID">
+      <button type="button" class="btn btn-sm btn-secondary" data-preview-refresh><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+      <button type="button" class="btn-close ms-auto" data-preview-close aria-label="Close"></button>
+    </div>
+    <div class="card-body small" data-preview-body></div>
+    <div class="card-footer small text-muted">Uses the unsaved values on this page. Nothing is saved.</div>
+  </div>
+
   <div class="table-responsive">
     <table id="steps-table" class="table table-bordered table-sm align-middle" style="min-width:2400px">
       <thead class="table-dark" style="position:sticky;top:0;z-index:1">
@@ -178,15 +192,15 @@
           <th style="width:24px;"></th>
           <th style="width:40px">ID</th>
           <th style="width:60px">Type</th>
-          <th style="width:180px">Parameter</th>
-          <th style="width:180px">Specification</th>
-          <th style="width:220px">spec_nom</th>
-          <th style="width:90px">spec_min</th>
-          <th style="width:90px">spec_max</th>
-          <th style="width:70px">spec_units</th>
+          <th style="width:180px" data-bs-toggle="tooltip" title="Tokens, incl. {nom} {min} {max} {units}. No math or queries.">Parameter</th>
+          <th style="width:180px" data-bs-toggle="tooltip" title="Tokens, incl. {nom} {min} {max} {units}. No math or queries.">Specification</th>
+          <th style="width:220px" data-bs-toggle="tooltip" title="A value, =math, query:name(@p=...) (picker; first row is the nominal) or List:a;b">spec_nom</th>
+          <th style="width:90px" data-bs-toggle="tooltip" title="A number, =math (e.g. ={nom}*0.9) or query:name(...). Not a number = blank P/F.">spec_min</th>
+          <th style="width:90px" data-bs-toggle="tooltip" title="A number, =math (e.g. ={nom}*1.1) or query:name(...). Not a number = blank P/F.">spec_max</th>
+          <th style="width:70px" data-bs-toggle="tooltip" title="Tokens only">spec_units</th>
           <th style="width:90px">pf_type</th>
-          <th style="width:120px">default_result</th>
-          <th style="width:150px">Hide</th>
+          <th style="width:120px" data-bs-toggle="tooltip" title="Text, or =math; an unfilled {id} means no default">default_result</th>
+          <th style="width:150px" data-bs-toggle="tooltip" title="HIDE, SHOW, {token}=value or {token}!=value">Hide</th>
           <th style="width:120px">category</th>
           <th style="width:120px">sheet_name</th>
           <th style="width:180px">instrument_types</th>
@@ -200,7 +214,7 @@
         {{if gt .Type 0}}
         <tr class="row-heading-{{.Type}}{{if .Archived}} step-archived{{end}}" data-step-id="{{.ID}}">
           <td class="drag-handle text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
-          <td class="text-muted small">{{.ID}}</td>
+          <td class="text-muted small text-nowrap">{{.ID}} {{template "stepPreviewBtn"}}</td>
           <td>
             <input type="hidden" name="original_type_{{.ID}}" value="{{.Type}}">
             <select class="form-select form-select-sm" name="type_{{.ID}}"
@@ -250,7 +264,7 @@
           <input type="hidden" name="original_instrument_types_{{.ID}}" value="{{.InstrumentTypes}}">
           <input type="hidden" name="original_format_{{.ID}}"           value="{{.Format}}">
           <input type="hidden" name="original_comment_{{.ID}}"          value="{{.StepComment}}">
-          <td class="text-muted small">{{.ID}}</td>
+          <td class="text-muted small text-nowrap">{{.ID}} {{template "stepPreviewBtn"}}</td>
           <td>
             <select class="form-select form-select-sm" name="type_{{.ID}}"
                     data-original="{{.Type}}">
@@ -317,7 +331,7 @@
 <template id="new-row-tpl">
   <tr class="table-warning" data-step-id="">
     <td class="drag-handle text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
-    <td class="text-muted small"><em>new</em></td>
+    <td class="text-muted small text-nowrap"><em>new</em> {{template "stepPreviewBtn"}}</td>
     <td>
       <select class="form-select form-select-sm" name="new_row[IDX][type]">
         <option value="0" selected>0 &mdash; Data</option>
@@ -351,6 +365,10 @@
   </tr>
 </template>
 
+<script>
+// Lint and step preview (#469, #471): app.js posts this page's unsaved rows to /api/steps/resolve.
+var STEP_EDITOR = { formId: {{.Form.ID}}, csrf: {{.CSRFToken}} };
+</script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js" integrity="sha384-BSxuMLxX+FCbTdYec3TbXlnMGEEM2QXTFdtDaveen71o+jswm2J36+xFqp8k4VHM" crossorigin="anonymous"></script>
 <script>
 (function () {
@@ -396,3 +414,5 @@
 })();
 </script>
 {{end}}
+
+{{define "stepPreviewBtn"}}<button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-step-preview title="Preview this step (nothing is saved)"><i class="bi bi-eye"></i></button>{{end}}

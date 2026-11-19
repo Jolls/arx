@@ -220,16 +220,16 @@
     <tbody>
       {{range .Rows}}
       {{if gt .Level 0}}
-      <tr class="row-heading-{{.Level}} row-collapsible" data-level="{{.Level}}" data-hide="{{.Step.HideFormula}}"{{if .Hidden}} style="display:none"{{end}}>
-        <td colspan="5"><i class="bi bi-chevron-down row-collapse-icon"></i> {{.EffectiveParameter}}</td>
+      <tr class="row-heading-{{.Level}} row-collapsible" data-level="{{.Level}}" data-step-id="{{.Step.ID}}"{{if .Hidden}} style="display:none"{{end}}>
+        <td colspan="5"><i class="bi bi-chevron-down row-collapse-icon"></i> <span class="step-param">{{.EffectiveParameter}}</span></td>
       </tr>
       {{else}}
       {{$cur := .EffectiveValue}}
       {{$opts := .Step.ListOptions}}
       {{$sid := .Step.ID}}
-      <tr data-hide="{{.Step.HideFormula}}"{{if .Hidden}} style="display:none"{{end}}>
-        <td{{if .QueryDescription}} data-bs-toggle="tooltip" title="{{.QueryDescription}}"{{end}}>{{.EffectiveParameter}}</td>
-        <td class="small text-muted">{{.EffectiveSpec}}</td>
+      <tr data-step-id="{{$sid}}"{{if .Hidden}} style="display:none"{{end}}>
+        <td class="step-param"{{if .QueryDescription}} data-bs-toggle="tooltip" title="{{.QueryDescription}}"{{end}}>{{.EffectiveParameter}}</td>
+        <td class="small text-muted step-spec">{{.EffectiveSpec}}</td>
         <td>
           {{if eq .Step.PFType "attach"}}
           <input type="hidden" name="result_{{$sid}}" value="{{$cur}}"
@@ -272,7 +272,6 @@
           </select>
           {{else if isQuerySpec .Step.SpecNom}}
           <div data-query-spec="{{.Step.SpecNom}}"
-               data-raw-spec="{{.RawSpecNom}}"
                data-step-id="{{$sid}}"
                data-input-name="result_{{$sid}}"
                data-current-val="{{$cur}}"
@@ -289,9 +288,9 @@
           </div>
           {{else}}
           <input type="text" class="form-control form-control-sm font-mono"
-                 name="result_{{$sid}}" value="{{if .RawDefault}}{{if .Result}}{{.Result.Result}}{{end}}{{else}}{{$cur}}{{end}}"
+                 name="result_{{$sid}}" value="{{if .HasDefault}}{{if .Result}}{{.Result.Result}}{{end}}{{else}}{{$cur}}{{end}}"
                  placeholder="{{.Step.Format}}"
-                 {{if .RawDefault}}data-formula="{{.RawDefault}}"{{end}}
+                 {{if .HasDefault}}data-formula{{end}}
                  data-spec-min="{{.Step.SpecMin}}"
                  data-spec-max="{{.Step.SpecMax}}"
                  data-pf-type="{{.Step.PFType}}"
@@ -446,58 +445,11 @@ document.getElementById('edit-form').addEventListener('submit', function() {
   localStorage.removeItem(DRAFT_KEY);
 });
 
-// #257 — Conditional step visibility. Mirrors Go evaluateHide: re-evaluates each row's
-// hide_formula against the current result values and shows/hides it live as the user types.
-// Supports {id} step refs, {record.type}, and HIDE/SHOW/=/!=. Unresolved tokens are left as-is
-// (comparison won't match → row stays visible), matching the server.
-function resolveHideTokens(formula) {
-  return formula.replace(/\{([^}]+)\}/g, function(m, tok) {
-    tok = tok.trim();
-    if (/^\d+$/.test(tok)) {
-      const el = document.querySelector('#edit-form [name="result_' + tok + '"]');
-      return el ? el.value : m;
-    }
-    if (tok === 'record.type') {
-      const el = document.querySelector('#edit-form [name="record_type"]');
-      return el ? el.value : m;
-    }
-    return m;
-  });
-}
-
-function rowHidden(formula) {
-  const resolved = resolveHideTokens(formula).trim();
-  if (resolved === '' || /^show$/i.test(resolved)) return false;
-  if (/^hide$/i.test(resolved)) return true;
-  let idx = resolved.indexOf('!=');
-  if (idx >= 0) {
-    return resolved.slice(0, idx).trim().toLowerCase() !== resolved.slice(idx + 2).trim().toLowerCase();
-  }
-  idx = resolved.indexOf('=');
-  if (idx >= 0) {
-    return resolved.slice(0, idx).trim().toLowerCase() === resolved.slice(idx + 1).trim().toLowerCase();
-  }
-  return false;
-}
-
-function applyHideFormulas() {
-  document.querySelectorAll('#edit-form tr[data-hide]').forEach(function(tr) {
-    const f = tr.getAttribute('data-hide');
-    if (!f) return;
-    tr.style.display = rowHidden(f) ? 'none' : '';
-  });
-}
-
-document.querySelectorAll('#edit-form [name^="result_"]').forEach(function(el) {
-  el.addEventListener('input', applyHideFormulas);
-  el.addEventListener('change', applyHideFormulas);
-});
-const _hideRecordTypeEl = document.querySelector('#edit-form [name="record_type"]');
-if (_hideRecordTypeEl) _hideRecordTypeEl.addEventListener('input', applyHideFormulas);
-applyHideFormulas();
 </script>
 <script>
 var PASTE_RESULT_CSRF_TOKEN = {{.CSRFToken}};
+// Live step resolution (#469): app.js posts this back to /api/steps/resolve with the values being typed.
+var STEP_CTX = {{.StepCtx}};
 </script>
 <script src="/static/clipboard_paste.js?v={{.AppVersion}}"></script>
 <script src="/static/records/paste_result_image.js?v={{.AppVersion}}"></script>

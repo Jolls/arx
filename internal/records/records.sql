@@ -165,6 +165,13 @@ WHERE is_active = TRUE AND record_type <> ''
   AND (sqlc.narg(unit_id)::int IS NULL OR unit_id = sqlc.narg(unit_id)::int)
 ORDER BY 1;
 
+-- name: NewestFormRecordID :one
+-- The form's newest active record — the definition editor's default preview sample (#469).
+SELECT id FROM form_record
+WHERE form_id = sqlc.arg(form_id) AND is_active = TRUE
+ORDER BY record_date DESC NULLS LAST, id DESC
+LIMIT 1;
+
 -- name: GetRecordNeighbors :one
 -- Previous / next active record id (0 = none) in the records-table order; no row when the record
 -- is not an active record of the form.

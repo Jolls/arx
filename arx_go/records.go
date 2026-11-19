@@ -877,8 +877,8 @@ func testResults(rows []records.ResultRow) map[int]*models.TestResult {
 // loadFrozenRows builds the ordered, frozen rows for a saved record and the resolver for them. Content
 // comes from the materialized snapshot; steps with no snapshot row (headings/unrecorded rows on a pre-#487
 // record) fall back to the live definition. Visibility (hide_formula, archived, instrument type) is
-// applied. Rows carry their raw definition; the caller resolves them (resolveRows) — the edit view first
-// captures Raw* fields from res.rawView().
+// applied. Rows carry their raw definition; the caller resolves them (resolveRows). The edit view also
+// embeds the resolver's steps and stored values for live re-resolution (/api/steps/resolve).
 // includeHidden=true keeps steps whose hide_formula currently evaluates to hidden, flagging them
 // ResultRow.Hidden instead of dropping them. The edit view passes true so client-side JS can toggle
 // visibility live as results change; the read-only/print views pass false.
@@ -1541,8 +1541,6 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "query error", err)
 		return
 	}
-	raw := res.rawView()
-
 	namedQueryDescs := map[string]string{}
 	if nqs, err := h.listNamedQueries(r.Context()); err == nil {
 		for _, nq := range nqs {
@@ -1550,20 +1548,30 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The page re-resolves live through /api/steps/resolve (#469): it posts this context back with the
+	// values being typed, so a keystroke needs no database read.
+	pageCtx := stepPageCtx{Stored: map[int]stepEvalJSON{},
+		Record: stepRecordJSON{Type: record.RecordType, PN: record.SerialNumberPN, SN: record.SerialNumber,
+			PNDesc: record.SerialNumberDesc, Date: record.RecordDate},
+		Form: stepFormJSON{ID: form.ID, PNID: form.PartNumberID, PN: form.PartNumber}}
+	for _, s := range res.steps {
+		pageCtx.Steps = append(pageCtx.Steps, stepDef(s))
+	}
+	for id, e := range res.c.stored {
+		if e != (stepEvals{}) {
+			pageCtx.Stored[id] = stepEvalJSON{Min: e.Min, Nom: e.Nom, Max: e.Max}
+		}
+	}
 	for i := range resultRows {
 		row := &resultRows[i]
-		if row.Level > 0 || row.Step == nil {
+		pageCtx.Show = append(pageCtx.Show, row.Step.ID)
+		if row.Level > 0 {
 			continue
 		}
-		// The raw view resolves everything but {id} tokens — the state the edit JS re-resolves
-		// live as cross-step results change.
+		row.HasDefault = row.Step.DefaultResult != ""
 		if strings.HasPrefix(strings.TrimSpace(row.Step.SpecNom), "query:") {
-			row.RawSpecNom = raw.step(row.Step.ID).SpecNom
-			name, _ := parseQuerySpec(row.RawSpecNom)
-			row.QueryDescription = namedQueryDescs[name]
-		}
-		if row.Step.DefaultResult != "" {
-			row.RawDefault = raw.step(row.Step.ID).DefaultResult
+			name, _ := parseQuerySpec(row.Step.SpecNom)
+			row.QueryDescription = namedQueryDescs[strings.TrimSpace(name)]
 		}
 	}
 	resolveRows(resultRows, res)
@@ -1579,6 +1587,7 @@ func (h *Handler) EditRecord(w http.ResponseWriter, r *http.Request) {
 		"Record":              record,
 		"Rows":                resultRows,
 		"Trace":               trace,
+		"StepCtx":             pageCtx,
 		"CSRFToken":           h.csrfToken(w, r),
 		"ActiveTab":           "records",
 		"TestMode":            h.cfg().TestMode,
