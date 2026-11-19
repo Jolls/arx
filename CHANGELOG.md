@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.109] - 2026-11-18
+### Changed
+- Dependency bumps: Bootstrap 5.3.8 → 5.3.9 (CDN links + SRI hashes), pgx 5.12.0 → 5.13.0, goose 3.29.0 → 3.30.1, `golang.org/x/crypto` 0.58.0 → 0.59.0, `golang.org/x/image` 0.47.0 → 0.48.0
+
 ## [0.8.108] - 2026-11-18
 ### Fixed
 - Updating a record to the latest form definition now drops archived steps that never recorded a value or comment; archived steps with a recorded result stay on the record
