@@ -75,7 +75,17 @@ var mathFuncs = map[string]func([]float64) (float64, bool){
 		}
 		return r, true
 	},
-	"round": unaryFunc(func(x float64) float64 { return math.Floor(x + 0.5) }), // JS Math.round: halves round up
+	// round(x) or round(x, digits); halves round up, as JS Math.round did.
+	"round": func(a []float64) (float64, bool) {
+		if len(a) != 1 && len(a) != 2 {
+			return 0, false
+		}
+		scale := 1.0
+		if len(a) == 2 {
+			scale = math.Pow(10, math.Trunc(a[1]))
+		}
+		return math.Floor(a[0]*scale+0.5) / scale, true
+	},
 	"floor": unaryFunc(math.Floor),
 	"ceil":  unaryFunc(math.Ceil),
 	"sqrt":  unaryFunc(math.Sqrt),

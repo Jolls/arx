@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"maps"
 	"net/url"
 	"strconv"
 	"strings"
@@ -67,7 +68,12 @@ func (h *Handler) saveQueryValues(ctx context.Context, recordID int, form url.Va
 	c := recordStepCtx(results, &record, &f)
 	c.rerunQueries = true
 	submittedValues(c.values, form)
-	return h.runStepQueries(ctx, recordStepSet(results, liveSteps), c, results), nil
+	ids := make([]int, 0, len(results))
+	for id := range results {
+		ids = append(ids, id)
+	}
+	queries, _ := h.runStepQueries(ctx, recordStepSet(results, liveSteps), c, ids, nil)
+	return queries, nil
 }
 
 // resultsUseQueries reports whether a save may need a query run: a query: bound, or a query: nominal
@@ -90,23 +96,40 @@ func resultsUseQueries(rows []records.ResultRow) bool {
 	return false
 }
 
-// runStepQueries runs, in parallel, every query resolving the record's own steps needs, repeating while a
-// query's parameters depend on another query's result. A query that returns no row resolves to nothing;
-// one that fails is logged and left unrun, so the save falls back to its stored value.
-func (h *Handler) runStepQueries(ctx context.Context, steps map[int]*models.TestStep, c stepCtx, onRecord map[int]*models.TestResult) map[string]string {
-	queries := map[string]string{}
-	failed := map[string]bool{}
+// maxStepQueries caps the named queries one resolution runs; a form needs far fewer.
+const maxStepQueries = 50
+
+// runStepQueries runs, in parallel, every query resolving the given steps needs that c.queries doesn't
+// already hold and skip doesn't list, repeating while a query's parameters depend on another query's result.
+// It returns c.queries plus what ran. A query that returns no row resolves to nothing; one that fails is
+// logged and left unrun (so a save falls back to its stored value), its user-safe error returned by spec.
+func (h *Handler) runStepQueries(ctx context.Context, steps map[int]*models.TestStep, c stepCtx, ids []int, skip []string) (map[string]string, map[string]string) {
+	queries := maps.Clone(c.queries)
+	if queries == nil {
+		queries = map[string]string{}
+	}
+	failed := map[string]string{}
+	for _, spec := range skip {
+		failed[spec] = "failed earlier"
+	}
+	budget := maxStepQueries
 	for range 3 {
 		c.queries = queries
 		res := newStepResolver(steps, c)
-		for id := range onRecord {
+		for _, id := range ids {
 			res.step(id)
 		}
 		var pending []string
 		for _, spec := range res.pendingQueries() {
-			if !failed[spec] {
-				pending = append(pending, spec)
+			if _, bad := failed[spec]; bad {
+				continue
 			}
+			if budget == 0 {
+				failed[spec] = "too many queries in one request"
+				continue
+			}
+			budget--
+			pending = append(pending, spec)
 		}
 		if len(pending) == 0 {
 			break
@@ -127,11 +150,23 @@ func (h *Handler) runStepQueries(ctx context.Context, steps map[int]*models.Test
 		for i, spec := range pending {
 			if errs[i] != nil {
 				log.Printf("step query %q: %v", spec, errs[i])
-				failed[spec] = true
+				failed[spec] = stepQueryError(errs[i])
 				continue
 			}
 			queries[spec] = vals[i]
 		}
 	}
-	return queries
+	for _, spec := range skip {
+		delete(failed, spec) // the caller already knows
+	}
+	return queries, failed
+}
+
+// stepQueryError is what a failed step query tells the browser: the caller-fixable problems
+// APINamedQuery also surfaces verbatim, otherwise a generic message (driver detail stays in the log).
+func stepQueryError(err error) string {
+	if errors.Is(err, errNamedQueryEmptySpec) || errors.Is(err, errNamedQueryNotFound) || errors.Is(err, errQueryNotSelect) {
+		return err.Error()
+	}
+	return "query failed (details in the server log)"
 }

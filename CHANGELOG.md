@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.111] - 2026-11-19
+### Added
+- Record edit page re-evaluates steps live as values are typed — specification text, bounds and P/F, defaults, hidden steps and query pickers — through the same server engine a save uses; opening the page re-runs its queries ([#469](https://github.com/Jolls/arx/issues/469))
+- Form definition editor: a per-step Preview that resolves the unsaved row against the form's newest (or a chosen) record and sample results, without saving or adding history ([#469](https://github.com/Jolls/arx/issues/469))
+- Form definition editor: inline warnings for values that won't do what they look like (`query:` or `=` in a column that doesn't run it, `=query:`, malformed math/query syntax, unknown tokens or step IDs, a bound that isn't a number) and column-header tooltips ([#471](https://github.com/Jolls/arx/issues/471))
+
+### Fixed
+- `round(x, digits)` in step math (e.g. the seeded Power Draw default `=round({6102}*{6103}/1000,2)`) was rejected, leaving the default blank; `round` now takes an optional digits argument ([#469](https://github.com/Jolls/arx/issues/469))
+
+### Removed
+- The edit page's browser-side copies of the math, token and hide-formula evaluators ([#469](https://github.com/Jolls/arx/issues/469))
+
 ## [0.8.110] - 2026-11-18
 ### Added
 - Test steps' spec_min/spec_max/spec_nom accept `=` math (e.g. `={nom}*0.9`) and spec_min/spec_max accept `query:` named queries; saving a record evaluates them and stores the values (new `result.eval_min/eval_nom/eval_max`), which view, print and the completion snapshot show ([#468](https://github.com/Jolls/arx/issues/468))

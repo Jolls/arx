@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
 var MISSING = '<span class="badge bg-warning text-dark">MISSING</span>'
 
 // strictNum parses a whole trimmed plain decimal number (NaN otherwise) — the same strings as the
-// server's decimalNumber (models/trmodels.go), so this badge and the saved P/F agree.
+// server's DecimalNumber (models/trmodels.go), so this badge and the saved P/F agree.
 function strictNum(s) {
   s = (s || '').trim()
   return /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s) ? Number(s) : NaN
@@ -165,32 +165,131 @@ function updatePF(el) {
 document.addEventListener('input',  function (e) { updatePF(e.target) })
 document.addEventListener('change', function (e) { updatePF(e.target) })
 
-// Auto-load named query options for query: rows on the edit page.
-// Supports live re-resolution: when any result changes, named queries whose
-// spec contains {id} cross-references are re-fetched with the updated value.
+// Live step resolution on the record edit page (#469). Every change posts the page's step context
+// (STEP_CTX, embedded by record_edit.html) plus the current values to /api/steps/resolve — the same
+// server engine a save uses — and paints what comes back: parameter/specification text, bounds (and
+// so the P/F badges), defaults, hidden rows, and query pickers whose resolved spec changed. Arx.exe is
+// local and a resolve without new queries touches no database, so the debounce is short.
 ;(function () {
-  // Live map: step-id (string) → current result value.
-  // Updated whenever any result input or named-query select changes.
-  var liveResults = {}
+  if (typeof STEP_CTX === 'undefined') return
 
-  function setLive(sid, val) {
-    liveResults[String(sid)] = val || ''
+  var knownQueries = {} // query spec → first-row value, echoed back so each query runs once per page load
+  var failedQueries = {} // query specs that errored — echoed back so they aren't retried every keystroke
+  var seq = 0           // drops responses that arrive after a newer request
+  var timer = null
+
+  function scheduleResolve() {
+    clearTimeout(timer)
+    timer = setTimeout(function () { resolveSteps(true) }, 50)
   }
 
-  // Resolve {id} tokens in rawSpec using liveResults.
-  // {record.X} tokens are already resolved server-side; only numeric {id} remain.
-  function resolveIds(raw) {
-    return raw.replace(/\{(\d+)\}/g, function (_, id) {
-      var v = liveResults[id]
-      return (v !== undefined && v !== '') ? v : '{' + id + '}'
+  function currentValues() {
+    var values = {}
+    document.querySelectorAll('#edit-form [name^="result_"]').forEach(function (el) {
+      var m = el.name.match(/^result_(\d+)$/)
+      if (m) values[m[1]] = (el.value || '').trim()
     })
+    return values
+  }
+
+  // runQueries=false resolves against the values the last save stored (no query runs).
+  function resolveSteps(runQueries) {
+    var my = ++seq
+    var rt = document.querySelector('#edit-form [name="record_type"]')
+    var record = Object.assign({}, STEP_CTX.record)
+    if (rt) record.type = rt.value.trim()
+    var body = Object.assign({}, STEP_CTX, {
+      record: record, values: currentValues(), queries: knownQueries,
+      failed_queries: Object.keys(failedQueries), run_queries: runQueries
+    })
+    return fetch('/api/steps/resolve?csrf_token=' + encodeURIComponent(PASTE_RESULT_CSRF_TOKEN), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!data) return
+        // Keep what ran even from a superseded response, so it isn't run again.
+        Object.assign(knownQueries, data.queries || {})
+        Object.keys(data.query_errors || {}).forEach(function (q) { failedQueries[q] = true })
+        if (my === seq) paint(data.steps || {})
+      })
+      .catch(function () {}) // a failed refresh leaves the page as it was; saving still evaluates
+  }
+
+  function paint(steps) {
+    var defaultsChanged = false
+    Object.keys(steps).forEach(function (id) {
+      var s = steps[id]
+      var tr = document.querySelector('#edit-form tr[data-step-id="' + id + '"]')
+      if (!tr) return
+      tr.style.display = s.hidden ? 'none' : ''
+      var param = tr.querySelector('.step-param')
+      if (param && param.textContent !== s.parameter) param.textContent = s.parameter
+      var spec = tr.querySelector('.step-spec')
+      if (spec && spec.textContent !== s.specification) spec.textContent = s.specification
+      tr.querySelectorAll('[data-pf-target]').forEach(function (el) {
+        el.dataset.specMin = s.spec_min
+        el.dataset.specMax = s.spec_max
+        if (el.name) updatePF(el)
+      })
+      var wrap = tr.querySelector('[data-query-spec]')
+      if (wrap && s.spec_nom.indexOf('query:') === 0 && s.spec_nom !== wrap.dataset.querySpec) {
+        wrap.dataset.querySpec = s.spec_nom
+        loadNamedQuery(wrap, s.spec_nom)
+      }
+      var input = tr.querySelector('input[data-formula]')
+      if (input && applyDefault(input, s.default_result)) defaultsChanged = true
+    })
+    // A default that changed a value feeds the steps that reference it.
+    if (defaultsChanged) scheduleResolve()
+  }
+
+  // Apply a step's resolved default ("" = can't be computed yet) to its input. Returns true when the
+  // input's value changed. A value saved on load that differs from the default is a manual override
+  // (#133); double-click toggles override (see below).
+  function applyDefault(input, val) {
+    var before = input.value
+    if (val === '') {
+      input.readOnly = false
+      input.classList.remove('formula-computed', 'formula-overridden')
+      input.removeAttribute('title')
+      if (!input.dataset.override && input.value !== '' && input.value === input.dataset.computed) {
+        input.value = ''
+        updatePF(input)
+      }
+      return input.value !== before
+    }
+    if (!input.dataset.seen) {
+      input.dataset.seen = '1'
+      if (input.value !== '' && input.value !== val) input.dataset.override = '1'
+    }
+    // Cleared override reverts to the computed default.
+    if (input.dataset.override && input.value === '') delete input.dataset.override
+    if (input.dataset.override) {
+      input.readOnly = false
+      input.classList.remove('formula-computed')
+      var differs = input.value !== val
+      input.classList.toggle('formula-overridden', differs)
+      if (differs) input.title = 'Overrides default: ' + val
+      else input.removeAttribute('title')
+      return false
+    }
+    input.readOnly = true
+    input.classList.remove('formula-overridden')
+    input.removeAttribute('title')
+    input.classList.add('formula-computed')
+    input.dataset.computed = val
+    if (input.value !== val) {
+      input.value = val
+      updatePF(input)
+    }
+    return input.value !== before
   }
 
   // Load (or reload) a named-query wrapper with the given resolved spec.
   // Preserves any currently-selected value across reloads.
   function loadNamedQuery(wrap, resolvedSpec) {
     var inputName  = wrap.dataset.inputName
-    var sid        = wrap.dataset.stepId
     // On reload, keep whatever value the user has already selected.
     var existingHidden = wrap.querySelector('input[type="hidden"]')
     var currentVal = existingHidden ? existingHidden.value : (wrap.dataset.currentVal || '')
@@ -242,9 +341,8 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
               })
             }
             mHidden.value = checked.join(',')
-            if (sid) setLive(sid, mHidden.value)
             updatePF(mHidden)
-            schedulResolve()
+            scheduleResolve()
           }
 
           rows.forEach(function (row) {
@@ -289,9 +387,8 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
           wrap.appendChild(mHidden)
           wrap.appendChild(mBox)
           wrap.appendChild(otherText)
-          if (sid) setLive(sid, mHidden.value)
           updatePF(mHidden)
-          schedulResolve()
+          scheduleResolve()
           return
         }
         // --- end multi-select ---
@@ -360,10 +457,9 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
             hidden.value = sel.value
             textInput.style.display = 'none'
           }
-          if (sid) setLive(sid, hidden.value)
           updateOpenLink()
           updatePF(hidden)
-          schedulResolve()
+          scheduleResolve()
         }
 
         sel.addEventListener('change', function () {
@@ -384,11 +480,10 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
         wrap.appendChild(textInput)
         wrap.appendChild(openLink)
 
-        if (sid) setLive(sid, hidden.value)
         updateOpenLink()
         updatePF(hidden)
-        // After loading, check if any downstream queries need re-fetching.
-        schedulResolve()
+        // The picked value may feed other steps.
+        scheduleResolve()
       })
       .catch(function (err) {
         var msg = document.createElement('span')
@@ -399,241 +494,24 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
       })
   }
 
-  // Evaluate an arithmetic expression string: digits, + - * /, parens, and calls to
-  // the named functions in MATH_FUNCS below (min/max/abs/mod/round/floor/ceil/sqrt/pow).
-  // Returns the numeric result or null if the expression is invalid/unsafe.
-  //
-  // This is a hand-rolled recursive-descent parser rather than a widened character
-  // whitelist passed to Function() — a whitelist permissive enough to allow letters
-  // would let a formula invoke arbitrary globals (alert, fetch, ...). The parser only
-  // ever calls the specific functions below, by name, with validated arg counts.
-  var MATH_FUNCS = {
-    min: function (args) { return args.length >= 2 ? Math.min.apply(null, args) : null },
-    max: function (args) { return args.length >= 2 ? Math.max.apply(null, args) : null },
-    abs: function (args) { return args.length === 1 ? Math.abs(args[0]) : null },
-    mod: function (args) {
-      if (args.length !== 2) return null
-      var a = args[0], b = args[1], r = a % b
-      return (r !== 0 && (r < 0) !== (b < 0)) ? r + b : r
-    },
-    round: function (args) { return args.length === 1 ? Math.round(args[0]) : null },
-    floor: function (args) { return args.length === 1 ? Math.floor(args[0]) : null },
-    ceil: function (args) { return args.length === 1 ? Math.ceil(args[0]) : null },
-    sqrt: function (args) { return args.length === 1 ? Math.sqrt(args[0]) : null },
-    pow: function (args) { return args.length === 2 ? Math.pow(args[0], args[1]) : null }
-  }
-  var ADD_OPS = { '+': function (a, b) { return a + b }, '-': function (a, b) { return a - b } }
-  var MUL_OPS = { '*': function (a, b) { return a * b }, '/': function (a, b) { return a / b } }
-
-  function isSpace(c) { return c === ' ' || c === '\t' || c === '\n' || c === '\r' }
-  function isAlpha(c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
-
-  function evalMath(expr) {
-    // Reject date-like strings (e.g. "12/29/2026") — slashes would be evaluated as division.
-    if (/^\s*\d{1,2}\/\d{1,2}\/\d{2,4}/.test(expr)) return null
-
-    var i = 0
-    var len = expr.length
-
-    // Parse errors throw (caught below) rather than threading a "failed" flag through
-    // every call — the try/catch is the single place that turns invalid input into null.
-    function fail() { throw 0 }
-
-    function skipSpace() { while (i < len && isSpace(expr[i])) i++ }
-
-    function parseBinary(next, ops) {
-      var value = next()
-      while (true) {
-        skipSpace()
-        var op = expr[i]
-        if (!ops.hasOwnProperty(op)) break
-        i++
-        value = ops[op](value, next())
-      }
-      return value
-    }
-
-    function parseExpression() { return parseBinary(parseTerm, ADD_OPS) }
-    function parseTerm() { return parseBinary(parseUnary, MUL_OPS) }
-
-    function parseUnary() {
-      skipSpace()
-      if (expr[i] === '-') { i++; return -parseUnary() }
-      if (expr[i] === '+') { i++; return parseUnary() }
-      return parseAtom()
-    }
-
-    function parseArgs() {
-      var args = []
-      skipSpace()
-      if (expr[i] === ')') return args
-      args.push(parseExpression())
-      skipSpace()
-      while (expr[i] === ',') {
-        i++
-        args.push(parseExpression())
-        skipSpace()
-      }
-      return args
-    }
-
-    function parseAtom() {
-      skipSpace()
-      var ch = expr[i]
-      if (ch === undefined) fail()
-
-      if (ch === '(') {
-        i++
-        var v = parseExpression()
-        skipSpace()
-        if (expr[i] !== ')') fail()
-        i++
-        return v
-      }
-
-      if (ch >= '0' && ch <= '9') {
-        var start = i
-        var sawDot = false
-        while (i < len && ((expr[i] >= '0' && expr[i] <= '9') || (expr[i] === '.' && !sawDot))) {
-          if (expr[i] === '.') sawDot = true
-          i++
-        }
-        return parseFloat(expr.slice(start, i))
-      }
-
-      if (isAlpha(ch)) {
-        var nameStart = i
-        while (i < len && isAlpha(expr[i])) i++
-        var name = expr.slice(nameStart, i)
-        skipSpace()
-        if (expr[i] !== '(' || !MATH_FUNCS.hasOwnProperty(name)) fail()
-        i++
-        var args = parseArgs()
-        skipSpace()
-        if (expr[i] !== ')') fail()
-        i++
-        var result = MATH_FUNCS[name](args)
-        if (result === null) fail()
-        return result
-      }
-
-      fail()
-    }
-
-    try {
-      var result = parseExpression()
-      skipSpace()
-      if (i !== len) return null
-      return result
-    } catch (e) {
-      return null
-    }
-  }
-
-  // Apply data-formula inputs: resolve {id} tokens, evaluate math, update value + P/F.
-  // Inputs are marked readonly and highlighted when the formula fully resolves.
-  function applyFormulas() {
-    document.querySelectorAll('input[data-formula]').forEach(function (input) {
-      var formula = input.dataset.formula
-      if (!formula) return
-      var resolved = resolveIds(formula)
-      var hasUnresolved = resolved.indexOf('{') !== -1
-      if (hasUnresolved) {
-        input.readOnly = false
-        input.classList.remove('formula-computed', 'formula-overridden')
-        input.removeAttribute('title')
-        if (!input.dataset.override && input.value !== '' && input.value === input.dataset.computed) {
-          input.value = ''
-          var usid = input.name ? input.name.slice(7) : ''
-          if (usid) setLive(usid, '')
-          updatePF(input)
-        }
-        return
-      }
-      // Only a leading "=" makes the default arithmetic; anything else is literal text (#132).
-      var val = resolved.trim()
-      if (val.charAt(0) === '=') {
-        var result = evalMath(val.slice(1).trim())
-        if (result === null || !isFinite(result)) return
-        val = String(parseFloat(result.toFixed(10)))
-      }
-      // A value saved on load that differs from the default is a manual override (#133).
-      if (!input.dataset.seen) {
-        input.dataset.seen = '1'
-        if (input.value !== '' && input.value !== val) input.dataset.override = '1'
-      }
-      // Cleared override reverts to the computed default.
-      if (input.dataset.override && input.value === '') delete input.dataset.override
-      if (input.dataset.override) {
-        input.readOnly = false
-        input.classList.remove('formula-computed')
-        var differs = input.value !== val
-        input.classList.toggle('formula-overridden', differs)
-        if (differs) input.title = 'Overrides default: ' + val
-        else input.removeAttribute('title')
-        return
-      }
-      input.readOnly = true
-      input.classList.remove('formula-overridden')
-      input.removeAttribute('title')
-      input.classList.add('formula-computed')
-      input.dataset.computed = val
-      if (input.value !== val) {
-        input.value = val
-        var sid = input.name ? input.name.slice(7) : ''
-        if (sid) setLive(sid, val)
-        updatePF(input)
-      }
-    })
-  }
-
-  // Re-resolve all named-query wrappers that have a raw spec with {id} tokens.
-  // Re-fetches only those whose resolved spec actually changed.
-  var resolveTimer = null
-  function schedulResolve() {
-    clearTimeout(resolveTimer)
-    resolveTimer = setTimeout(function () {
-      document.querySelectorAll('[data-raw-spec]').forEach(function (wrap) {
-        var raw = wrap.dataset.rawSpec
-        if (!raw) return
-        var resolved = resolveIds(raw)
-        if (resolved !== wrap.dataset.querySpec) {
-          wrap.dataset.querySpec = resolved
-          loadNamedQuery(wrap, resolved)
-        }
-      })
-      applyFormulas()
-    }, 120)
-  }
-
   document.addEventListener('DOMContentLoaded', function () {
-    // Seed live map from any plain result inputs already on the page.
-    document.querySelectorAll('[name^="result_"]').forEach(function (el) {
-      var sid = el.name.slice(7)
-      setLive(sid, el.value)
-    })
-
-    // Initial load of all named-query wrappers.
+    // Initial load of all named-query pickers (their options).
     document.querySelectorAll('[data-query-spec]').forEach(function (wrap) {
       loadNamedQuery(wrap, wrap.dataset.querySpec)
     })
-
     // Compute initial P/F for any pre-filled plain inputs.
     document.querySelectorAll('[data-pf-target]').forEach(updatePF)
-
-    // Apply any formula-driven result inputs.
-    applyFormulas()
+    // First resolve against the stored values, so a saved default that matches what the last save
+    // computed isn't mistaken for a manual override; then re-run the page's queries.
+    resolveSteps(false).then(function () { resolveSteps(true) })
   })
 
-  // Keep live map in sync when plain text/select result inputs change.
-  document.addEventListener('input', function (e) {
-    var m = e.target.name && e.target.name.match(/^result_(\d+)$/)
-    if (m) { setLive(m[1], e.target.value); schedulResolve() }
-  })
-  document.addEventListener('change', function (e) {
-    var m = e.target.name && e.target.name.match(/^result_(\d+)$/)
-    if (m) { setLive(m[1], e.target.value); schedulResolve() }
-  })
+  function onResultChange(e) {
+    var n = e.target.name || ''
+    if (/^result_\d+$/.test(n) || n === 'record_type') scheduleResolve()
+  }
+  document.addEventListener('input', onResultChange)
+  document.addEventListener('change', onResultChange)
   // Double-click a locked default to override it; double-click an overridden one to revert (#133).
   document.addEventListener('dblclick', function (e) {
     var input = e.target
@@ -643,7 +521,7 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
     } else if (input.dataset.override) {
       input.value = ''
     } else return
-    applyFormulas()
+    scheduleResolve()
   })
 }())
 
@@ -746,67 +624,158 @@ document.addEventListener('DOMContentLoaded', function () {
   table.addEventListener('change', function (e) { updateRow(e.target) })
 })
 
-// spec_nom syntax lint for the form definition editor.
-// Validates query:name or query:name(@param=value) syntax on blur; clears on
-// focus. The parameter list is optional (#449) — a zero-param named query's
-// spec_nom is just "query:name", which parseQuerySpec (named_query.go) and
-// the "Build spec_nom" button (Settings → Named Queries) both already treat
-// as valid.
+// Form definition editor: lint (#471) and per-step preview (#469). Both post the page's unsaved rows to
+// /api/steps/resolve — the engine records use — so nothing is saved and no history rows are written.
+// Lint is syntax-only (no queries, no database); a preview runs the step's queries against a sample record.
 document.addEventListener('DOMContentLoaded', function () {
   var table = document.getElementById('steps-table')
-  if (!table) return
+  if (!table || typeof STEP_EDITOR === 'undefined') return
+  var FIELDS = ['type', 'parameter', 'specification', 'spec_nom', 'spec_min', 'spec_max', 'spec_units',
+    'pf_type', 'default_result', 'hide']
 
-  function lintSpecNom(input) {
-    var val = (input.value || '').trim()
-    var msg = ''
+  // A saved row's id, or a negative id for an unsaved row (data-step-id "new_N").
+  function newIndex(tr) { var m = /^new_(\d+)$/.exec(tr.dataset.stepId); return m ? m[1] : null }
+  function rowKey(tr) { var n = newIndex(tr); return n === null ? parseInt(tr.dataset.stepId, 10) : -(parseInt(n, 10) + 1) }
+  function fieldInput(tr, field) {
+    var n = newIndex(tr)
+    var name = n === null ? field + '_' + tr.dataset.stepId : 'new_row[' + n + '][' + field + ']'
+    return tr.querySelector('[name="' + name + '"]')
+  }
+  function rowDefs() {
+    return Array.from(table.querySelectorAll('tbody tr[data-step-id]')).map(function (tr) {
+      var d = { id: rowKey(tr) }
+      FIELDS.forEach(function (f) {
+        var el = fieldInput(tr, f)
+        d[f] = el ? el.value : ''
+      })
+      d.type = parseInt(d.type || '0', 10)
+      return d
+    })
+  }
+  function post(body) {
+    return fetch('/api/steps/resolve?csrf_token=' + encodeURIComponent(STEP_EDITOR.csrf), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t.trim() || r.statusText) })
+      return r.json()
+    })
+  }
 
-    if (val.startsWith('query:')) {
-      var m = val.match(/^query:(\w*)(?:\(([^)]*)\))?$/)
-      if (!m) {
-        msg = 'Missing closing )'
-      } else {
-        var name = m[1], paramsStr = (m[2] || '').trim()
-        if (!name) {
-          msg = 'Missing query name after query:'
-        } else if (paramsStr) {
-          var bad = paramsStr.split(',').map(function (p) { return p.trim() })
-            .filter(function (p) { return p && !p.startsWith('@') })
-            .map(function (p) { return p.split('=')[0].trim() })
-          if (bad.length) {
-            msg = 'Param' + (bad.length > 1 ? 's' : '') + ' missing @: ' +
-              bad.map(function (p) { return '@' + p }).join(', ')
-          }
-        }
-      }
-    }
+  // --- lint: re-run when focus leaves a field; warnings sit under the field they're about ---
+  var lintTimer = null, lintSeq = 0
+  function lint() {
+    var my = ++lintSeq
+    post({ steps: rowDefs(), run_queries: false, lint: true }).then(function (data) {
+      if (my !== lintSeq) return
+      table.querySelectorAll('.step-lint').forEach(function (el) { el.remove() })
+      table.querySelectorAll('.border-warning').forEach(function (el) { el.classList.remove('border-warning') })
+      table.querySelectorAll('tbody tr[data-step-id]').forEach(function (tr) {
+        var s = (data.steps || {})[rowKey(tr)]
+        ;((s && s.warnings) || []).forEach(function (w) {
+          var el = fieldInput(tr, w.field)
+          if (!el) return
+          el.classList.add('border-warning')
+          var div = document.createElement('div')
+          div.className = 'step-lint small text-warning-emphasis mt-1'
+          div.textContent = w.msg
+          el.parentNode.appendChild(div)
+        })
+      })
+    }).catch(function () {})
+  }
+  function scheduleLint() { clearTimeout(lintTimer); lintTimer = setTimeout(lint, 300) }
+  table.addEventListener('focusout', scheduleLint)
+  table.addEventListener('change', scheduleLint)
+  lint()
 
-    var existing = input.parentNode.querySelector('.spec-nom-lint')
-    if (existing) existing.remove()
-    input.classList.toggle('is-invalid', !!msg)
-    if (msg) {
+  // --- preview ---
+  var panel = document.getElementById('step-preview')
+  if (!panel) return
+  var previewKey = null, previewSeq = 0
+  var body = panel.querySelector('[data-preview-body]')
+
+  // "15=4.9, {16}=OK" → { "15": "4.9", "16": "OK" }
+  function sampleValues(text) {
+    var v = {}
+    text.split(',').forEach(function (p) {
+      var i = p.indexOf('=')
+      if (i <= 0) return
+      var id = p.slice(0, i).trim().replace(/[{}]/g, '')
+      if (/^\d+$/.test(id)) v[id] = p.slice(i + 1).trim()
+    })
+    return v
+  }
+
+  function addRow(tbl, label, value, cls) {
+    var tr = tbl.insertRow()
+    var th = document.createElement('th')
+    th.className = 'text-nowrap'
+    th.textContent = label
+    tr.appendChild(th)
+    var td = tr.insertCell()
+    td.className = cls || 'font-mono'
+    td.textContent = value
+  }
+
+  function renderPreview(data) {
+    var s = (data.steps || {})[previewKey] || {}
+    body.innerHTML = ''
+    var ctx = document.createElement('div')
+    ctx.className = 'text-muted mb-2'
+    ctx.textContent = data.sample_record ? 'Sample record ' + data.sample_record
+      : 'No sample record: record tokens stay unresolved'
+    body.appendChild(ctx)
+    var tbl = document.createElement('table')
+    tbl.className = 'table table-sm table-bordered mb-2 w-auto'
+    addRow(tbl, 'Parameter', s.parameter || '')
+    addRow(tbl, 'Specification', s.specification || '')
+    addRow(tbl, 'spec_nom', s.spec_nom || '')
+    addRow(tbl, 'spec_min', s.spec_min || '')
+    addRow(tbl, 'spec_max', s.spec_max || '')
+    addRow(tbl, 'spec_units', s.spec_units || '')
+    addRow(tbl, 'default_result', s.default_result || '')
+    addRow(tbl, 'Hidden', s.hidden ? 'yes' : 'no', '')
+    Object.keys(data.queries || {}).forEach(function (q) {
+      addRow(tbl, q, data.queries[q] === '' ? '(no rows)' : data.queries[q])
+    })
+    Object.keys(data.query_errors || {}).forEach(function (q) {
+      addRow(tbl, q, data.query_errors[q], 'text-danger')
+    })
+    body.appendChild(tbl)
+    ;(s.warnings || []).forEach(function (w) {
       var div = document.createElement('div')
-      div.className = 'spec-nom-lint text-danger small mt-1'
-      div.textContent = msg
-      input.insertAdjacentElement('afterend', div)
-    }
+      div.className = 'text-warning-emphasis'
+      div.textContent = w.field + ': ' + w.msg
+      body.appendChild(div)
+    })
   }
 
-  function clearLint(input) {
-    input.classList.remove('is-invalid')
-    var existing = input.parentNode.querySelector('.spec-nom-lint')
-    if (existing) existing.remove()
+  function preview() {
+    var my = ++previewSeq
+    var rec = panel.querySelector('[data-preview-record]').value.trim()
+    body.textContent = 'Resolving…'
+    post({
+      steps: rowDefs(), show: [previewKey], form_id: STEP_EDITOR.formId,
+      record_id: rec ? parseInt(rec, 10) : -1,
+      values: sampleValues(panel.querySelector('[data-preview-values]').value), run_queries: true, lint: true
+    }).then(function (data) { if (my === previewSeq) renderPreview(data) })
+      .catch(function (err) { if (my === previewSeq) body.textContent = String(err && err.message ? err.message : err) })
   }
 
-  function isSpecNom(el) {
-    return el.tagName === 'INPUT' && (el.name || '').indexOf('spec_nom') !== -1
-  }
-
-  // focusout/focusin bubble (unlike blur/focus), so event delegation works without capture.
-  table.addEventListener('focusout', function (e) { if (isSpecNom(e.target)) lintSpecNom(e.target) })
-  table.addEventListener('focusin',  function (e) { if (isSpecNom(e.target)) clearLint(e.target) })
-
-  // Lint any pre-filled values on load.
-  table.querySelectorAll('input[name*="spec_nom"]').forEach(lintSpecNom)
+  table.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-step-preview]')
+    if (!btn) return
+    previewKey = rowKey(btn.closest('tr'))
+    panel.querySelector('[data-preview-id]').textContent = previewKey > 0 ? previewKey : '(new row)'
+    panel.classList.remove('d-none')
+    preview()
+  })
+  panel.querySelector('[data-preview-refresh]').addEventListener('click', preview)
+  panel.querySelector('[data-preview-close]').addEventListener('click', function () { panel.classList.add('d-none') })
+  // The panel sits inside the steps form: Enter refreshes the preview instead of saving the definition.
+  panel.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); preview() }
+  })
 })
 
 // Lazy-load an image preview on first hover — avoids fetching every image on

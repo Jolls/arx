@@ -472,6 +472,7 @@ func buildRouter(h *Handler) (http.Handler, []registeredRoute) {
 	b.handle(http.MethodPost, "/forms/{id}/lock", withAuth, h.LockForm)
 	b.handle(http.MethodPost, "/forms/{id}/unlock", withAuth, h.UnlockForm)
 	b.handle(http.MethodGet, "/api/named-query", withAuth, h.APINamedQuery)
+	b.handle(http.MethodPost, "/api/steps/resolve", withAuth, h.APIStepsResolve)
 
 	var router http.Handler = withNotFound(b.mux, h.NotFound)
 	router = h.RequireCsrfOnPost(router)

@@ -1916,6 +1916,21 @@ func (q *Queries) LockSerialAllocation(ctx context.Context, arg LockSerialAlloca
 	return err
 }
 
+const newestFormRecordID = `-- name: NewestFormRecordID :one
+SELECT id FROM form_record
+WHERE form_id = $1 AND is_active = TRUE
+ORDER BY record_date DESC NULLS LAST, id DESC
+LIMIT 1
+`
+
+// The form's newest active record — the definition editor's default preview sample (#469).
+func (q *Queries) NewestFormRecordID(ctx context.Context, formID int) (int, error) {
+	row := q.db.QueryRowContext(ctx, newestFormRecordID, formID)
+	var id int
+	err := row.Scan(&id)
+	return id, err
+}
+
 const nextFormSerial = `-- name: NextFormSerial :one
 WITH serials AS (
   SELECT serial_number FROM form_record WHERE form_id = $2

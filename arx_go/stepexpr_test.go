@@ -81,21 +81,50 @@ func TestResolveStep_Default(t *testing.T) {
 	if got := resolveOne(t, steps, c, 16).DefaultResult; got != "" {
 		t.Errorf("default with unfilled {15} = %q, want none (no default from nominals)", got)
 	}
-	raw := newStepResolver(steps, c).rawView()
-	if got := raw.step(16).DefaultResult; got != "=min({15}, 9)" {
-		t.Errorf("raw default = %q, want {id} kept for the live JS", got)
-	}
 	if got := resolveOne(t, steps, c, 17).DefaultResult; got != "SN-1" {
 		t.Errorf("plain-text default = %q", got)
 	}
 }
 
-// The raw view inlines an unresolved "=" bound so a default built on it stays valid math for the JS.
-func TestResolveStep_RawViewInlinesUnresolvedBound(t *testing.T) {
-	steps := map[int]*models.TestStep{1: {ID: 1, SpecMax: "={12}*2", DefaultResult: "={max}-1"}}
-	raw := newStepResolver(steps, stepCtx{values: map[int]string{}}).rawView()
-	if got := raw.step(1).DefaultResult; got != "=({12}*2)-1" {
-		t.Errorf("raw default = %q", got)
+func TestLintStep(t *testing.T) {
+	ids := map[int]bool{1: true, 15: true}
+	cases := []struct {
+		name string
+		step models.TestStep
+		want string // "" = no warning; else "field: msg"
+	}{
+		{"clean", models.TestStep{SpecNom: "5", SpecMin: "={nom}*0.9", SpecMax: "query:lim(@pn={record.pn})", Specification: "{nom} {min}-{max}{units}"}, ""},
+		{"query in spec_max ok, in specification not", models.TestStep{Specification: "query:x"}, "specification: query: only runs in spec_nom, spec_min and spec_max"},
+		{"=query", models.TestStep{SpecMax: "=query:x(@a=1)"}, "spec_max: = math can't run a query; start the value with query: instead"},
+		{"query not leading", models.TestStep{SpecMax: "max query:x"}, "spec_max: query: must start the value"},
+		{"query params need @", models.TestStep{SpecNom: "query:x(pn=1)"}, "spec_nom: Params need @: @pn"},
+		{"query missing paren", models.TestStep{SpecNom: "query:x(@pn=1"}, "spec_nom: Malformed query: (missing closing parenthesis?)"},
+		{"math in parameter", models.TestStep{Parameter: "=1+1"}, "parameter: = math only works in spec_nom, spec_min, spec_max and default_result"},
+		{"bad math", models.TestStep{DefaultResult: "=min({15},"}, "default_result: Invalid math expression"},
+		{"divide by token ok", models.TestStep{DefaultResult: "=10/({15}-1)"}, ""},
+		{"non-numeric bound", models.TestStep{SpecMin: "5mW"}, "spec_min: Not a number; P/F will be blank"},
+		{"token bound ok", models.TestStep{SpecMin: "{15}"}, ""},
+		{"unknown step", models.TestStep{Parameter: "after {99}"}, "parameter: No step {99} on this form"},
+		{"unknown token", models.TestStep{Specification: "{record.serial}"}, "specification: Unknown token {record.serial}"},
+		{"self token not in bounds", models.TestStep{SpecMax: "={min}+1"}, "spec_max: {min} isn't available in spec_max"},
+		{"List in bound", models.TestStep{SpecMax: "List:a;b"}, "spec_max: List: only works in spec_nom"},
+		{"List: as plain text is fine", models.TestStep{Parameter: "List: connector pins checked"}, ""},
+		{"heading ignores spec fields", models.TestStep{Type: 1, Parameter: "{1} heading", SpecMax: "junk"}, ""},
+		{"hide comparison ok", models.TestStep{HideFormula: "{15}=N/A"}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ""
+			if w := lintStep(&c.step, ids); len(w) > 0 {
+				got = w[0].Field + ": " + w[0].Msg
+				if len(w) > 1 {
+					t.Errorf("extra warnings: %+v", w[1:])
+				}
+			}
+			if got != c.want {
+				t.Errorf("lint = %q, want %q", got, c.want)
+			}
+		})
 	}
 }
 

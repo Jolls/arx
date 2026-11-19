@@ -48,9 +48,8 @@ type stepCtx struct {
 	values  map[int]string    // step id → result (every row on the record, "" when unfilled); nil = no record (definition view)
 	stored  map[int]stepEvals // step id → evaluated values stored by the last save
 	queries map[string]string // resolved query: spec → first-row value ("" = ran, no row); entries win over stored
-	keepIDs bool              // leave {id} tokens for the edit page's live JS (RawSpecNom/RawDefault)
-	// rerunQueries (save) reports every needed query as pending even when a stored value exists, so the
-	// caller runs it afresh; a query that then fails still falls back to the stored value.
+	// rerunQueries (save, edit page) reports every needed query as pending even when a stored value exists,
+	// so the caller runs it afresh; a query that then fails still falls back to the stored value.
 	rerunQueries bool
 }
 
@@ -84,13 +83,6 @@ func newStepResolver(steps map[int]*models.TestStep, c stepCtx) *stepResolver {
 		busy: map[int]bool{}, pending: map[string]bool{}}
 }
 
-// rawView is a resolver over the same steps that leaves {id} tokens for the edit page's JS.
-func (r *stepResolver) rawView() *stepResolver {
-	c := r.c
-	c.keepIDs = true
-	return newStepResolver(r.steps, c)
-}
-
 // pendingQueries lists the query specs resolution needed that neither stepCtx.queries nor stored values had.
 func (r *stepResolver) pendingQueries() []string {
 	out := make([]string, 0, len(r.pending))
@@ -116,7 +108,8 @@ func (r *stepResolver) step(id int) *resolvedStep {
 		case "units":
 			return units, true
 		case "nom":
-			return r.selfText(r.nominal(id))
+			v := r.nominal(id)
+			return v.text, v.ok
 		}
 		return "", false
 	}
@@ -125,9 +118,9 @@ func (r *stepResolver) step(id int) *resolvedStep {
 	all := func(name string) (string, bool) {
 		switch name {
 		case "min":
-			return r.selfText(min)
+			return min.text, min.ok
 		case "max":
-			return r.selfText(max)
+			return max.text, max.ok
 		}
 		return nomUnits(name)
 	}
@@ -203,7 +196,7 @@ func (r *stepResolver) evalField(id int, field, raw string, self func(string) (s
 	t := strings.TrimSpace(r.subst(raw, idNominal, self))
 	switch {
 	case strings.HasPrefix(t, "query:"):
-		if r.c.keepIDs || stepToken.MatchString(t) {
+		if stepToken.MatchString(t) {
 			return fieldVal{text: t}
 		}
 		if v, ran := r.c.queries[t]; ran {
@@ -236,38 +229,17 @@ func orText(v, fallback string) string {
 	return fallback
 }
 
-// selfText is what a {nom}/{min}/{max} token becomes: the resolved value, or — in the edit page's raw view
-// only — the unresolved text, so its {id} tokens still reach the live JS (an "=" expression is inlined
-// in parentheses so it stays valid math).
-func (r *stepResolver) selfText(v fieldVal) (string, bool) {
-	switch {
-	case v.ok:
-		return v.text, true
-	case !r.c.keepIDs || v.text == "" || strings.HasPrefix(v.text, "query:"):
-		return "", false
-	case strings.HasPrefix(v.text, "="):
-		return "(" + v.text[1:] + ")", true
-	}
-	return v.text, true
-}
-
 // defaultResult resolves default_result: plain text as-is, a leading "=" evaluated as math (#132). Any
-// unresolved token (e.g. an unfilled {id}) means no default; the raw view keeps it for the live JS.
+// unresolved token (e.g. an unfilled {id}) or invalid math means no default.
 func (r *stepResolver) defaultResult(raw string, self func(string) (string, bool)) string {
 	d := r.subst(raw, idDefault, self)
 	t := strings.TrimSpace(d)
 	if stepToken.MatchString(t) {
-		if r.c.keepIDs {
-			return d
-		}
 		return ""
 	}
 	if strings.HasPrefix(t, "=") {
 		if v, ok := evalMath(t[1:]); ok {
 			return formatMathResult(v)
-		}
-		if r.c.keepIDs {
-			return d
 		}
 		return ""
 	}
@@ -302,9 +274,6 @@ func (r *stepResolver) subst(s string, mode idMode, self func(string) (string, b
 					return v
 				}
 			}
-			return m
-		}
-		if r.c.keepIDs {
 			return m
 		}
 		id, _ := strconv.Atoi(inner)
@@ -440,4 +409,146 @@ func applyResolved(row *models.ResultRow, rs *resolvedStep) {
 		res.Parameter, res.Specification = rs.Parameter, rs.Specification
 		row.Result = &res
 	}
+}
+
+// stepWarning is a definition problem the editor flags on a field (#471).
+type stepWarning struct {
+	Field string `json:"field"`
+	Msg   string `json:"msg"`
+}
+
+// stepFieldRules is what each definition column accepts (the help table in form_def_edit.html says the
+// same): math/query = "=" math and query: directives may start the value; self = the self tokens it sees.
+var stepFieldRules = []struct {
+	field       string
+	math, query bool
+	self        string
+}{
+	{"parameter", false, false, "nom min max units"},
+	{"specification", false, false, "nom min max units"},
+	{"spec_units", false, false, ""},
+	{"spec_nom", true, true, "units"},
+	{"spec_min", true, true, "nom units"},
+	{"spec_max", true, true, "nom units"},
+	{"default_result", true, false, "nom min max units"},
+	{"hide", false, false, ""},
+}
+
+var (
+	anyToken     = regexp.MustCompile(`\{[^{}]*\}`)
+	querySyntax  = regexp.MustCompile(`^query:(\w*)(?:\(([^)]*)\))?$`)
+	recordTokens = map[string]bool{"record.type": true, "record.pn": true, "record.sn": true, "record.pndesc": true,
+		"record.date": true, "record.datetime": true, "form.id": true, "form.pnid": true, "form.pn": true}
+)
+
+// stepFieldValue is a step's raw value for a stepFieldRules field.
+func stepFieldValue(s *models.TestStep, field string) string {
+	switch field {
+	case "parameter":
+		return s.Parameter
+	case "specification":
+		return s.Specification
+	case "spec_units":
+		return s.SpecUnits
+	case "spec_nom":
+		return s.SpecNom
+	case "spec_min":
+		return s.SpecMin
+	case "spec_max":
+		return s.SpecMax
+	case "default_result":
+		return s.DefaultResult
+	}
+	return s.HideFormula
+}
+
+// lintStep flags definition values that won't do what they look like (#471): a query: or "=" in a column
+// that doesn't run it, "=query:", malformed math or query syntax, unknown tokens, an {id} with no such step
+// (ids nil = don't check), and a plain bound that isn't a number. Syntax only — nothing runs.
+func lintStep(s *models.TestStep, ids map[int]bool) []stepWarning {
+	var out []stepWarning
+	warn := func(field, msg string) { out = append(out, stepWarning{field, msg}) }
+	for _, rule := range stepFieldRules {
+		if s.Type > 0 && rule.field != "parameter" && rule.field != "hide" {
+			continue // a heading only shows its parameter
+		}
+		v := strings.TrimSpace(stepFieldValue(s, rule.field))
+		if v == "" {
+			continue
+		}
+		for _, tok := range anyToken.FindAllString(v, -1) {
+			inner := tok[1 : len(tok)-1]
+			id, err := strconv.Atoi(inner)
+			switch {
+			case err == nil:
+				if ids != nil && !ids[id] {
+					warn(rule.field, "No step "+tok+" on this form")
+				}
+			case recordTokens[inner]:
+			case inner == "nom" || inner == "min" || inner == "max" || inner == "units":
+				if !strings.Contains(" "+rule.self+" ", " "+inner+" ") {
+					warn(rule.field, tok+" isn't available in "+rule.field)
+				}
+			default:
+				warn(rule.field, "Unknown token "+tok)
+			}
+		}
+		switch {
+		case strings.HasPrefix(strings.ReplaceAll(v, " ", ""), "=query:"):
+			warn(rule.field, "= math can't run a query; start the value with query: instead")
+		case strings.Contains(v, "query:") && !rule.query:
+			warn(rule.field, "query: only runs in spec_nom, spec_min and spec_max")
+		case strings.Contains(v, "query:") && !strings.HasPrefix(v, "query:"):
+			warn(rule.field, "query: must start the value")
+		case strings.HasPrefix(v, "query:"):
+			if msg := lintQuerySyntax(v); msg != "" {
+				warn(rule.field, msg)
+			}
+		case strings.HasPrefix(v, "List:") && rule.math && rule.field != "spec_nom":
+			warn(rule.field, "List: only works in spec_nom")
+		case strings.HasPrefix(v, "=") && rule.field != "hide":
+			if !rule.math {
+				warn(rule.field, "= math only works in spec_nom, spec_min, spec_max and default_result")
+			} else if !mathParses(v[1:]) {
+				warn(rule.field, "Invalid math expression")
+			}
+		case rule.field == "spec_min" || rule.field == "spec_max":
+			if _, ok := models.DecimalNumber(v); !ok && !anyToken.MatchString(v) {
+				warn(rule.field, "Not a number; P/F will be blank")
+			}
+		}
+	}
+	return out
+}
+
+// lintQuerySyntax checks query:name or query:name(@param=value, ...) — "" when well-formed.
+func lintQuerySyntax(v string) string {
+	m := querySyntax.FindStringSubmatch(v)
+	switch {
+	case m == nil:
+		return "Malformed query: (missing closing parenthesis?)"
+	case m[1] == "":
+		return "Missing query name after query:"
+	}
+	var bad []string
+	for p := range strings.SplitSeq(m[2], ",") {
+		if p = strings.TrimSpace(p); p != "" && !strings.HasPrefix(p, "@") {
+			bad = append(bad, "@"+strings.TrimSpace(strings.SplitN(p, "=", 2)[0]))
+		}
+	}
+	if len(bad) > 0 {
+		return "Params need @: " + strings.Join(bad, ", ")
+	}
+	return ""
+}
+
+// mathParses reports whether an "=" expression is valid math once its tokens hold numbers. Two sample values
+// so an expression that only divides by zero for one of them still counts as valid.
+func mathParses(expr string) bool {
+	for _, sample := range []string{"1", "2.5"} {
+		if _, ok := evalMath(anyToken.ReplaceAllString(expr, sample)); ok {
+			return true
+		}
+	}
+	return false
 }
