@@ -744,29 +744,48 @@ func (q *Queries) ListStaleWIPRecords(ctx context.Context, arg ListStaleWIPRecor
 }
 
 const listTopFailureModes = `-- name: ListTopFailureModes :many
-SELECT f.id AS form_id, pn.part_number,
-       COALESCE((SELECT r2.parameter FROM result r2
-                 WHERE r2.form_row_id = res.form_row_id
-                 ORDER BY r2.id DESC LIMIT 1), '')::text AS parameter,
-       SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END)::int AS failure_count
-FROM result res
-JOIN form_record trec ON res.form_record_id = trec.id
-JOIN form f ON trec.form_id = f.id
-JOIN part pn ON f.part_number_id = pn.id
-WHERE trec.is_active = TRUE AND res.pass_fail IS NOT NULL
-GROUP BY f.id, pn.part_number, res.form_row_id
-HAVING SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) > 0
-ORDER BY failure_count DESC LIMIT $1::int
+SELECT t.form_id, t.part_number_id, t.part_number, t.form_row_id,
+       COALESCE(fr.parameter, '')::text AS parameter,
+       COALESCE(fr.spec_nom, '')::text AS spec_nom, COALESCE(fr.spec_min, '')::text AS spec_min,
+       COALESCE(fr.spec_max, '')::text AS spec_max, COALESCE(fr.spec_units, '')::text AS spec_units,
+       COALESCE(last.eval_min, '')::text AS eval_min, COALESCE(last.eval_nom, '')::text AS eval_nom,
+       COALESCE(last.eval_max, '')::text AS eval_max,
+       t.failure_count
+FROM (SELECT f.id AS form_id, f.part_number_id, pn.part_number, res.form_row_id,
+             SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END)::int AS failure_count
+      FROM result res
+      JOIN form_record trec ON res.form_record_id = trec.id
+      JOIN form f ON trec.form_id = f.id
+      JOIN part pn ON f.part_number_id = pn.id
+      WHERE trec.is_active = TRUE AND res.pass_fail IS NOT NULL
+      GROUP BY f.id, pn.part_number, res.form_row_id
+      HAVING SUM(CASE WHEN res.pass_fail = FALSE THEN 1 ELSE 0 END) > 0
+      ORDER BY failure_count DESC LIMIT $1::int) t
+LEFT JOIN form_row fr ON fr.id = t.form_row_id
+LEFT JOIN LATERAL (SELECT r2.eval_min, r2.eval_nom, r2.eval_max FROM result r2
+                   WHERE r2.form_row_id = t.form_row_id AND r2.pass_fail IS NOT NULL
+                   ORDER BY r2.id DESC LIMIT 1) last ON TRUE
+ORDER BY t.failure_count DESC
 `
 
 type ListTopFailureModesRow struct {
 	FormID       int
+	PartNumberID int
 	PartNumber   string
+	FormRowID    int
 	Parameter    string
+	SpecNom      string
+	SpecMin      string
+	SpecMax      string
+	SpecUnits    string
+	EvalMin      string
+	EvalNom      string
+	EvalMax      string
 	FailureCount int
 }
 
-// Failing steps across all forms, all-time, most-failed first.
+// Failing steps across all forms, all-time, most-failed first. The label comes from the step's live
+// definition, returned raw with the step's latest saved evaluated values for the caller to resolve (#473).
 func (q *Queries) ListTopFailureModes(ctx context.Context, rowLimit int) ([]ListTopFailureModesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listTopFailureModes, rowLimit)
 	if err != nil {
@@ -778,8 +797,17 @@ func (q *Queries) ListTopFailureModes(ctx context.Context, rowLimit int) ([]List
 		var i ListTopFailureModesRow
 		if err := rows.Scan(
 			&i.FormID,
+			&i.PartNumberID,
 			&i.PartNumber,
+			&i.FormRowID,
 			&i.Parameter,
+			&i.SpecNom,
+			&i.SpecMin,
+			&i.SpecMax,
+			&i.SpecUnits,
+			&i.EvalMin,
+			&i.EvalNom,
+			&i.EvalMax,
 			&i.FailureCount,
 		); err != nil {
 			return nil, err

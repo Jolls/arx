@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
+
+	"arx/arx_go/models"
 )
 
 // failureModeRow is one test step's failure tally within a form's failure
@@ -55,7 +57,10 @@ func (h *Handler) RecordsFailureModes(w http.ResponseWriter, r *http.Request) {
 
 	var steps []failureModeRow
 	for _, row := range rows {
-		steps = append(steps, failureModeRow{Parameter: row.Parameter, FailureCount: row.FailureCount, TotalTested: row.TotalTested})
+		label := stepLabel(&models.TestStep{ID: row.FormRowID, Parameter: row.Parameter, SpecNom: row.SpecNom,
+			SpecMin: row.SpecMin, SpecMax: row.SpecMax, SpecUnits: row.SpecUnits},
+			stepEvals{Min: row.EvalMin, Nom: row.EvalNom, Max: row.EvalMax}, &form)
+		steps = append(steps, failureModeRow{Parameter: label, FailureCount: row.FailureCount, TotalTested: row.TotalTested})
 	}
 
 	h.renderRecords(w, r, "failure_modes.html", map[string]any{

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"arx/arx_go/models"
 	"arx/internal/inventory"
 	"arx/internal/records"
 	"arx/internal/reports"
@@ -286,7 +287,17 @@ func (h *Handler) dashboardPOsReceivedThisMonth(ctx context.Context) (int, error
 // the per-form Failure Modes report (arx_go/records_failure_modes.go, issue
 // #245).
 func (h *Handler) dashboardTopFailureModes(ctx context.Context, limit int) ([]dashboardFailureModeItem, error) {
-	return h.reports().TopFailureModes(ctx, limit)
+	items, err := h.reports().TopFailureModes(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	for i, m := range items {
+		items[i].Parameter = stepLabel(&models.TestStep{ID: m.FormRowID, Parameter: m.Parameter, SpecNom: m.SpecNom,
+			SpecMin: m.SpecMin, SpecMax: m.SpecMax, SpecUnits: m.SpecUnits},
+			stepEvals{Min: m.EvalMin, Nom: m.EvalNom, Max: m.EvalMax},
+			&models.TestForm{ID: m.FormID, PartNumberID: m.PartNumberID, PartNumber: m.PartNumber})
+	}
+	return items, nil
 }
 
 // dashboardLowestYieldForms lists the forms with the lowest all-time

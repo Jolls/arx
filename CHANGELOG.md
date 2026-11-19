@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.112] - 2026-11-19
+### Fixed
+- Failure Modes page and the dashboard's Top Failing Steps showed raw tokens (e.g. `{nom}{units} check`) in step labels for records created since the step expression engine; labels now come from the step's live definition with its own `{nom}`/`{min}`/`{max}`/`{units}` and `{form.X}` tokens resolved ([#473](https://github.com/Jolls/arx/issues/473))
+
 ## [0.8.111] - 2026-11-19
 ### Added
 - Record edit page re-evaluates steps live as values are typed — specification text, bounds and P/F, defaults, hidden steps and query pickers — through the same server engine a save uses; opening the page re-runs its queries ([#469](https://github.com/Jolls/arx/issues/469))
