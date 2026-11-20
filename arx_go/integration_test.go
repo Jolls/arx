@@ -4092,6 +4092,64 @@ func TestIntegration_FormDef_ReleaseMarker(t *testing.T) {
 	}
 }
 
+// Read-only, uses seeded form 6001's 'locked' form_events row (6201). No cleanup needed. (#487)
+func TestIntegration_FormDef_AuditLog(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := recGet(h.FormDef, "/forms/6001/def", 6001)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("FormDef(6001): status %d, want 200", rec.Code)
+	}
+	log := auditLogSection(rec.Body.String())
+	for _, want := range []string{"Audit log (1)", `badge bg-secondary">locked`, "<td>admin</td>", "Released revision 1"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("FormDef(6001): audit log missing %q", want)
+		}
+	}
+}
+
+// auditLogSection returns the page from the audit-log collapse link on ("" when there is none), so
+// assertions can't match markup elsewhere on the page.
+func auditLogSection(body string) string {
+	i := strings.Index(body, `href="#auditLog"`)
+	if i < 0 {
+		return ""
+	}
+	return body[i:]
+}
+
+// A throwaway form: no audit log until it has events; an unlock's comment shows there without adding a
+// timeline point, and event types other than locked/unlocked stay out of the log. (#487)
+func TestIntegration_FormDef_AuditLogUnlockComment(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	path := fmt.Sprintf("/forms/%d/def", f.formID)
+
+	before := recGet(h.FormDef, path, f.formID).Body.String()
+	if auditLogSection(before) != "" {
+		t.Errorf("FormDef: audit log shown for a form with no form_events")
+	}
+	for _, typ := range []string{"unlocked", "archived"} {
+		repInsert(t, h, `INSERT INTO form_events (form_id, event_type, username, event_date, comments) VALUES ($1,$2,'evuser',CURRENT_TIMESTAMP,'tolerance fix') RETURNING id`,
+			[]any{f.formID, typ}, `DELETE FROM form_events WHERE id=$1`)
+	}
+	after := recGet(h.FormDef, path, f.formID).Body.String()
+	log := auditLogSection(after)
+	for _, want := range []string{"Audit log (1)", `badge bg-warning text-dark">unlocked`, "tolerance fix", "<td>evuser</td>"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("FormDef: audit log missing %q", want)
+		}
+	}
+	if strings.Contains(log, "archived</span>") {
+		t.Errorf("FormDef: audit log lists an 'archived' event")
+	}
+	if b, a := strings.Count(before, "def-timeline-"), strings.Count(after, "def-timeline-"); a != b {
+		t.Errorf("FormDef: def-timeline- count %d → %d after an unlock, want unchanged", b, a)
+	}
+}
+
 // Read-only, uses seeded form 6001. No cleanup needed.
 func TestIntegration_EditFormDef_ShowsRawUnsubstitutedValues(t *testing.T) {
 	h, cleanup := liveHandler(t)

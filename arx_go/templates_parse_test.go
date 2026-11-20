@@ -89,7 +89,7 @@ func TestRecordsTemplatesParse(t *testing.T) {
 			continue
 		}
 		if _, err := template.New("").Funcs(recordsTemplateFuncs()).ParseFS(templatesFS,
-			"templates/shared/layout.html", page,
+			"templates/shared/layout.html", "templates/shared/audit_log.html", page,
 		); err != nil {
 			t.Errorf("parse %s: %v", base, err)
 		}

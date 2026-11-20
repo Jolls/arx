@@ -1276,14 +1276,16 @@ func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams
 }
 
 const listFormTimeline = `-- name: ListFormTimeline :many
-SELECT changed_at AS at, form_row_id, ''::text AS username, FALSE AS is_lock
+SELECT changed_at AS at, form_row_id, ''::text AS username, FALSE AS is_lock,
+       0::int AS event_id, ''::text AS event_type, ''::text AS comments
 FROM form_row_history
 WHERE form_row_id IN (SELECT fr.id FROM form_row fr WHERE fr.form_id = $1)
 UNION ALL
-SELECT fe.event_date, 0, COALESCE(fe.username, ''), TRUE
+SELECT fe.event_date, 0, COALESCE(fe.username, ''), fe.event_type = 'locked',
+       fe.id, fe.event_type, COALESCE(fe.comments, '')
 FROM form_events fe
-WHERE fe.form_id = $1 AND fe.event_type = 'locked'
-ORDER BY at, is_lock
+WHERE fe.form_id = $1 AND fe.event_type IN ('locked', 'unlocked')
+ORDER BY at, event_id
 `
 
 type ListFormTimelineRow struct {
@@ -1291,10 +1293,14 @@ type ListFormTimelineRow struct {
 	FormRowID int
 	Username  string
 	IsLock    bool
+	EventID   int
+	EventType string
+	Comments  string
 }
 
-// The definition page's timeline sources, oldest first (#481): each step history entry (is_lock false,
-// no username) and each release from form_events (is_lock true, form_row_id 0). Unlocks aren't shown.
+// The definition page's timeline and audit-log sources, oldest first (#481, #487): each step history
+// entry (event_id 0, event_type ”) and each lock/unlock from form_events (is_lock = it is a release,
+// form_row_id 0). Edit rows sort before events at the same instant; events keep id order.
 func (q *Queries) ListFormTimeline(ctx context.Context, formID int) ([]ListFormTimelineRow, error) {
 	rows, err := q.db.QueryContext(ctx, listFormTimeline, formID)
 	if err != nil {
@@ -1309,6 +1315,9 @@ func (q *Queries) ListFormTimeline(ctx context.Context, formID int) ([]ListFormT
 			&i.FormRowID,
 			&i.Username,
 			&i.IsLock,
+			&i.EventID,
+			&i.EventType,
+			&i.Comments,
 		); err != nil {
 			return nil, err
 		}

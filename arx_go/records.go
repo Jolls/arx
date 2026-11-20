@@ -352,13 +352,20 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Load history timestamps and releases for the timeline. changed_at/event_date are timestamptz
-	// assigned by the database (#192), so the calendar-day
+	// Load history timestamps and lock/unlock events for the timeline and the audit log (#487) in one
+	// round trip. changed_at/event_date are timestamptz assigned by the database (#192), so the calendar-day
 	// bucketing happens in Go in the viewing user's timezone (#847) — SQL-side
 	// AT TIME ZONE would need Windows zone names, not the IANA names we store.
 	var histPoints []historyPoint
+	var events []models.RecordEvent
 	if rows, err := h.records().ListFormTimeline(r.Context(), formID); err == nil {
 		histPoints = buildTimeline(rows, h.userLocation(r), form.Revision)
+		for _, row := range rows {
+			if row.EventType != "" {
+				events = append(events, models.RecordEvent{ID: row.EventID, EventType: row.EventType,
+					Username: row.Username, EventDate: &row.At, Comments: row.Comments})
+			}
+		}
 	}
 
 	h.renderRecords(w, r, "form_def.html", map[string]any{
@@ -366,6 +373,7 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		"Steps":       steps,
 		"HasArchived": hasArchived,
 		"HistPoints":  histPoints,
+		"Events":      events,
 		"CSRFToken":   h.csrfToken(w, r),
 		"ActiveTab":   "records",
 		"TestMode":    h.cfg().TestMode,
@@ -386,7 +394,7 @@ type historyPoint struct {
 // bucketed per calendar day in loc, counting distinct steps; a day that has a release gets no edit dot
 // (its edits show through the release's changed highlight). Revisions count back from currentRev: a
 // point's revision is currentRev minus the releases after it, so releases older than form_events still
-// count. Positions come from timelinePositions.
+// count. Non-release events (unlocks) are skipped: audit log only (#487). Positions come from timelinePositions.
 func buildTimeline(rows []records.TimelineRow, loc *time.Location, currentRev int) []historyPoint {
 	dayKey := func(t time.Time) string { return t.In(loc).Format("2006-01-02") }
 	rev := currentRev // the revision in force at each point: start before every release, +1 per release
@@ -401,6 +409,9 @@ func buildTimeline(rows []records.TimelineRow, loc *time.Location, currentRev in
 	prevLock := "" // the previous release's `at`, "" before the first
 	curDay, steps := "", map[int]bool(nil) // rows arrive oldest first, so a day's edits are contiguous: its point is the last one
 	for _, row := range rows {
+		if row.EventType != "" && !row.IsLock {
+			continue
+		}
 		if row.IsLock {
 			rev++
 			at := row.At.UTC().Format(time.RFC3339Nano)
@@ -1108,6 +1119,7 @@ func (h *Handler) RecordDetail(w http.ResponseWriter, r *http.Request) {
 		"FileRows":          fileRows,
 		"Events":            events,
 		"Snapshots":         snapshots,
+		"AuditResults":      true,
 		"Trace":             trace,
 		"CanApproveRecords": canApproveRecords,
 		"PrevID":            prevID,
