@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.115] - 2026-11-19
+### Changed
+- Form definition history timeline: each gap between dots gets a minimum 2% of the bar plus a share proportional to its length capped at 20 days, so a burst of edits no longer overlaps and long quiet stretches no longer take over the bar ([#480](https://github.com/Jolls/arx/issues/480))
+
 ## [0.8.114] - 2026-11-19
 ### Added
 - Form definition history: previous/next buttons beside the timeline step through the history dots ([#478](https://github.com/Jolls/arx/issues/478))
