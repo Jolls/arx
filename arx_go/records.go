@@ -392,19 +392,12 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 			histPoints = append(histPoints, HistoryPoint{At: b.day, Count: len(b.rows)})
 		}
 	}
-	// Position dots: earliest â†' 5%, now â†' 95%.
-	if len(histPoints) > 0 {
-		earliest := histPoints[0].At.Unix()
-		now := time.Now().Unix()
-		span := float64(now - earliest)
-		for i := range histPoints {
-			if span <= 0 {
-				histPoints[i].PctLeft = 50
-			} else {
-				pct := float64(histPoints[i].At.Unix()-earliest) / span * 83
-				histPoints[i].PctLeft = 5 + pct
-			}
-		}
+	times := make([]time.Time, len(histPoints))
+	for i, p := range histPoints {
+		times[i] = p.At
+	}
+	for i, pct := range timelinePositions(times, time.Now()) {
+		histPoints[i].PctLeft = pct
 	}
 
 	h.renderRecords(w, r, "form_def.html", map[string]any{
@@ -416,6 +409,34 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		"ActiveTab":   "records",
 		"TestMode":    h.cfg().TestMode,
 	})
+}
+
+// timelinePositions places the history dots (oldest first) along the timeline bar as percentages: the
+// first at 5%, the Now dot (fixed at 95% in the template) after the last (#480). Each gap, including
+// last→now, gets a fixed base share of the bar (so a burst of edits doesn't overlap) plus a share of the
+// rest in proportion to its length capped at 20 days (so long quiet stretches don't swallow the bar).
+// Too many gaps for the base share falls back to even spacing.
+func timelinePositions(times []time.Time, now time.Time) []float64 {
+	const barPct, basePct, maxGapDays = 90.0, 2.0, 20.0
+	if len(times) == 0 {
+		return nil
+	}
+	gap := func(a, b time.Time) float64 { return min(b.Sub(a).Hours()/24, maxGapDays) }
+	cum := make([]float64, len(times))
+	for i := 1; i < len(times); i++ {
+		cum[i] = cum[i-1] + gap(times[i-1], times[i])
+	}
+	total := cum[len(times)-1] + gap(times[len(times)-1], now)
+	base := min(basePct, barPct/float64(len(times))) // len(times) gaps, counting last→now
+	scale := 0.0
+	if total > 0 {
+		scale = (barPct - base*float64(len(times))) / total
+	}
+	pcts := make([]float64, len(times))
+	for i := range times {
+		pcts[i] = 5 + base*float64(i) + scale*cum[i]
+	}
+	return pcts
 }
 
 // FormDefHistory â€" GET /api/forms/{id}/def/history?at=<RFC3339 timestamp>
