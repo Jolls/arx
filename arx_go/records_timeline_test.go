@@ -84,6 +84,13 @@ func TestBuildTimeline(t *testing.T) {
 					Title: "Released Rev 1 — admin — 2026-05-02 09:00"},
 				{At: at(2, 15), IsLock: true, Query: "at=2026-05-02T22%3A00%3A00Z&since=2026-05-02T16%3A00%3A00Z",
 					Title: "Released Rev 2 — admin — 2026-05-02 15:00"}}},
+		{"unlock rows are audit-log only, not timeline points (#487)", []records.TimelineRow{
+			{At: at(2, 9), Username: "admin", IsLock: true, EventID: 1, EventType: "locked"},
+			{At: at(3, 9), Username: "bob", EventID: 2, EventType: "unlocked", Comments: "fix"},
+			edit(at(4, 9), 1)}, 1,
+			[]historyPoint{
+				{At: at(2, 9), IsLock: true, Title: "Released Rev 1 — admin — 2026-05-02 09:00"},
+				{At: midnight(4), Title: "2026-05-04 — 1 change — Rev 1 → draft of Rev 2"}}},
 		{"lock day is the viewer's local day, not the UTC day", []records.TimelineRow{
 			edit(time.Date(2026, 5, 28, 23, 30, 0, 0, time.UTC), 1),
 			lock(time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC), "admin")}, 1,

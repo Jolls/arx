@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.118] - 2026-11-20
+### Added
+- Form definition view: "Audit log (N)" collapsible listing each release and unlock with date, user and comment, so unlock comments are visible in the app ([#487](https://github.com/Jolls/arx/issues/487))
+
 ## [0.8.117] - 2026-11-20
 ### Added
 - Form definition history timeline: each release shows as a padlock marker ("Released Rev N — user — date"); clicking it shows the form as released, highlighting the steps changed since the previous release. A day with a release shows only its padlock, and the timeline now appears for a form that has releases but no edits ([#481](https://github.com/Jolls/arx/issues/481))

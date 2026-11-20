@@ -45,16 +45,19 @@ FROM form_row
 WHERE form_id = sqlc.arg(form_id);
 
 -- name: ListFormTimeline :many
--- The definition page's timeline sources, oldest first (#481): each step history entry (is_lock false,
--- no username) and each release from form_events (is_lock true, form_row_id 0). Unlocks aren't shown.
-SELECT changed_at AS at, form_row_id, ''::text AS username, FALSE AS is_lock
+-- The definition page's timeline and audit-log sources, oldest first (#481, #487): each step history
+-- entry (event_id 0, event_type '') and each lock/unlock from form_events (is_lock = it is a release,
+-- form_row_id 0). Edit rows sort before events at the same instant; events keep id order.
+SELECT changed_at AS at, form_row_id, ''::text AS username, FALSE AS is_lock,
+       0::int AS event_id, ''::text AS event_type, ''::text AS comments
 FROM form_row_history
 WHERE form_row_id IN (SELECT fr.id FROM form_row fr WHERE fr.form_id = sqlc.arg(form_id))
 UNION ALL
-SELECT fe.event_date, 0, COALESCE(fe.username, ''), TRUE
+SELECT fe.event_date, 0, COALESCE(fe.username, ''), fe.event_type = 'locked',
+       fe.id, fe.event_type, COALESCE(fe.comments, '')
 FROM form_events fe
-WHERE fe.form_id = sqlc.arg(form_id) AND fe.event_type = 'locked'
-ORDER BY at, is_lock;
+WHERE fe.form_id = sqlc.arg(form_id) AND fe.event_type IN ('locked', 'unlocked')
+ORDER BY at, event_id;
 
 -- name: ListFormStepsAt :many
 -- A form's steps as they stood at day_end — the end of one day (#478) or a release instant (#481): each

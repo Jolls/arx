@@ -46,7 +46,7 @@ func parseTemplates(fsys fs.FS) (map[string]*template.Template, error) {
 		for _, page := range pages {
 			rel := strings.TrimPrefix(page, "templates/")
 			switch rel {
-			case "shared/layout.html", "shared/partials.html":
+			case "shared/layout.html", "shared/partials.html", "shared/audit_log.html":
 				continue
 			case "shared/popouts.html":
 				if err := add("popouts", core, page); err != nil {
@@ -79,7 +79,7 @@ func parseTemplates(fsys fs.FS) (map[string]*template.Template, error) {
 			}
 			continue
 		}
-		if err := add("records:"+base, records, "templates/shared/layout.html", page); err != nil {
+		if err := add("records:"+base, records, "templates/shared/layout.html", "templates/shared/audit_log.html", page); err != nil {
 			return nil, err
 		}
 	}
