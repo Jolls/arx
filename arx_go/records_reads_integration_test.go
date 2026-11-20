@@ -546,7 +546,8 @@ func TestIntegration_RecordsReads_FormDefTimeline(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.FormDef(rec, req)
 	body := rec.Body.String()
-	for _, want := range []string{`2026-07-01 — 2 changes`, `2026-07-05 — 1 change"`} {
+	// The form is at Rev 2 with no form_events rows, so revisions count back from form.revision (#481).
+	for _, want := range []string{`2026-07-01 — 2 changes — Rev 2 → draft of Rev 3"`, `2026-07-05 — 1 change — Rev 2 → draft of Rev 3"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("timeline missing %q", want)
 		}

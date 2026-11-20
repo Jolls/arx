@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.117] - 2026-11-20
+### Added
+- Form definition history timeline: each release shows as a padlock marker ("Released Rev N — user — date"); clicking it shows the form as released, highlighting the steps changed since the previous release. A day with a release shows only its padlock, and the timeline now appears for a form that has releases but no edits ([#481](https://github.com/Jolls/arx/issues/481))
+- Form definition history timeline: each edit dot's tooltip shows the revision it drafts (e.g. "Rev 2 → draft of Rev 3"), counted back from the form's current revision so releases from before the event log still count ([#481](https://github.com/Jolls/arx/issues/481))
+
+### Changed
+- Form definition history timeline code simplified: one query feeds both edit dots and release markers (no extra round trip), the history query string is built server-side, and the history integration tests share the `recForm` fixture and a `defHistoryStep` helper ([#481](https://github.com/Jolls/arx/issues/481))
+
 ## [0.8.116] - 2026-11-19
 ### Changed
 - `SQL/schema_diagram.md`: added the `part_attachment.supplier_part_id`/`mfg_part_id` FKs and their relationships, the recent form/record/result columns (serial prefix/padding, recurrence and next due date, evaluated bounds), and the behaviour-driving columns the per-area diagrams left out (`form_row.archived`/`hide_formula`, `part.tracking_mode`, unlock comments, `form_row_history`'s stored earlier values, PO dates) ([#483](https://github.com/Jolls/arx/issues/483))

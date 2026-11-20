@@ -43,7 +43,7 @@ type (
 	FormHeader   = dbq.GetFormHeaderRow
 	FormStep     = dbq.ListFormStepsRow
 	FormStepAt   = dbq.ListFormStepsAtRow
-	HistoryStamp = dbq.ListFormHistoryStampsRow
+	TimelineRow  = dbq.ListFormTimelineRow
 	PartOption   = dbq.ListFormPartOptionsRow
 	SourceForm   = dbq.ListSourceFormsRow
 	StepInfo     = dbq.GetFormStepRow
@@ -174,13 +174,13 @@ func (s *Service) ListFormSteps(ctx context.Context, formID int) ([]FormStep, er
 	return s.q.ListFormSteps(ctx, formID)
 }
 
-func (s *Service) ListFormHistoryStamps(ctx context.Context, formID int) ([]HistoryStamp, error) {
-	return s.q.ListFormHistoryStamps(ctx, formID)
+func (s *Service) ListFormTimeline(ctx context.Context, formID int) ([]TimelineRow, error) {
+	return s.q.ListFormTimeline(ctx, formID)
 }
 
-// ListFormStepsAt returns the form's steps as they stood at dayEnd, flagging those changed in [dayStart, dayEnd).
-func (s *Service) ListFormStepsAt(ctx context.Context, formID int, dayStart, dayEnd time.Time) ([]FormStepAt, error) {
-	return s.q.ListFormStepsAt(ctx, dbq.ListFormStepsAtParams{FormID: formID, DayStart: dayStart, DayEnd: dayEnd})
+// ListFormStepsAt returns the form's steps as they stood at end, flagging those changed in [start, end).
+func (s *Service) ListFormStepsAt(ctx context.Context, formID int, start, end time.Time) ([]FormStepAt, error) {
+	return s.q.ListFormStepsAt(ctx, dbq.ListFormStepsAtParams{FormID: formID, DayStart: start, DayEnd: end})
 }
 
 func (s *Service) ListFormPartOptions(ctx context.Context) ([]PartOption, error) {

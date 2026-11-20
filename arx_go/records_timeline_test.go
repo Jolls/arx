@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"arx/internal/records"
 )
 
 func TestTimelinePositions(t *testing.T) {
@@ -35,6 +37,71 @@ func TestTimelinePositions(t *testing.T) {
 		for i := range got {
 			if math.Abs(got[i]-c.want[i]) > 1e-9 {
 				t.Errorf("%s: pct[%d] = %v, want %v", c.name, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+func TestBuildTimeline(t *testing.T) {
+	loc, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(day, hour int) time.Time { return time.Date(2026, 5, day, hour, 0, 0, 0, loc) }
+	midnight := func(day int) time.Time { return at(day, 0) }
+	edit := func(ts time.Time, step int) records.TimelineRow { return records.TimelineRow{At: ts, FormRowID: step} }
+	lock := func(ts time.Time, user string) records.TimelineRow {
+		return records.TimelineRow{At: ts, Username: user, IsLock: true}
+	}
+	cases := []struct {
+		name string
+		rows []records.TimelineRow
+		rev  int
+		want []historyPoint
+	}{
+		{"no rows", nil, 0, nil},
+		{"edits only, never released: distinct steps per day", []records.TimelineRow{
+			edit(at(1, 9), 1), edit(at(1, 10), 1), edit(at(1, 11), 2), edit(at(2, 9), 1)}, 0,
+			[]historyPoint{
+				{At: midnight(1), Query: "at=2026-05-01", Title: "2026-05-01 — 2 changes — Draft"},
+				{At: midnight(2), Query: "at=2026-05-02", Title: "2026-05-02 — 1 change — Draft"}}},
+		{"a lock day yields its edit dot to the lock marker", []records.TimelineRow{
+			edit(at(1, 10), 1), edit(at(2, 9), 2), lock(at(2, 11), "admin"), edit(at(3, 9), 1)}, 1,
+			[]historyPoint{
+				{At: midnight(1), Title: "2026-05-01 — 1 change — Draft"},
+				{At: at(2, 11), IsLock: true, Title: "Released Rev 1 — admin — 2026-05-02 11:00"},
+				{At: midnight(3), Title: "2026-05-03 — 1 change — Rev 1 → draft of Rev 2"}}},
+		{"revisions count back past releases missing from form_events", []records.TimelineRow{
+			edit(at(1, 9), 1), lock(at(2, 10), "bob"), edit(at(3, 9), 1)}, 3,
+			[]historyPoint{
+				{At: midnight(1), Title: "2026-05-01 — 1 change — Rev 2 → draft of Rev 3"},
+				{At: at(2, 10), IsLock: true, Title: "Released Rev 3 — bob — 2026-05-02 10:00"},
+				{At: midnight(3), Title: "2026-05-03 — 1 change — Rev 3 → draft of Rev 4"}}},
+		{"two locks on one day both show, the second since the first", []records.TimelineRow{
+			lock(at(2, 9), "admin"), lock(at(2, 15), "admin")}, 2,
+			[]historyPoint{
+				{At: at(2, 9), IsLock: true, Query: "at=2026-05-02T16%3A00%3A00Z&since=",
+					Title: "Released Rev 1 — admin — 2026-05-02 09:00"},
+				{At: at(2, 15), IsLock: true, Query: "at=2026-05-02T22%3A00%3A00Z&since=2026-05-02T16%3A00%3A00Z",
+					Title: "Released Rev 2 — admin — 2026-05-02 15:00"}}},
+		{"lock day is the viewer's local day, not the UTC day", []records.TimelineRow{
+			edit(time.Date(2026, 5, 28, 23, 30, 0, 0, time.UTC), 1),
+			lock(time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC), "admin")}, 1,
+			[]historyPoint{
+				{At: time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC), IsLock: true, Title: "Released Rev 1 — admin — 2026-05-28 18:00"}}},
+	}
+	for _, c := range cases {
+		got := buildTimeline(c.rows, loc, c.rev)
+		if len(got) != len(c.want) {
+			t.Errorf("%s: len = %d, want %d (%+v)", c.name, len(got), len(c.want), got)
+			continue
+		}
+		for i, w := range c.want {
+			g := got[i]
+			// Query is checked only where the case spells it out.
+			if !g.At.Equal(w.At) || g.IsLock != w.IsLock || (w.Query != "" && g.Query != w.Query) || g.Title != w.Title {
+				t.Errorf("%s: point %d = {%v %v %q %q}, want {%v %v %q %q}", c.name, i,
+					g.At, g.IsLock, g.Query, g.Title, w.At, w.IsLock, w.Query, w.Title)
 			}
 		}
 	}
