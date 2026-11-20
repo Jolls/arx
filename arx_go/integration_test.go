@@ -3972,46 +3972,47 @@ func TestIntegration_FormDef_RendersStepsAndArchivedToggle(t *testing.T) {
 	}
 }
 
-// Seeds a throwaway part/form/form_row, saves it twice today via raw UPDATEs (two form_row_history
-// rows), then verifies FormDefHistory returns the end-of-day state (#478): today shows the last save's
-// value once (no duplicate rows), yesterday shows the value from before today's saves.
+type defStepState struct {
+	ID      int    `json:"id"`
+	SpecMax string `json:"spec_max"`
+	Changed bool   `json:"changed"`
+}
+
+// defHistoryStep returns step stepID's state from FormDefHistory?<query> as a viewer in tz sees it,
+// failing unless the step appears exactly once.
+func defHistoryStep(t *testing.T, h *Handler, formID, stepID int, query, tz string) defStepState {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.FormDefHistory(rec, userCtxTZ(withID(httptest.NewRequest(http.MethodGet, "/x?"+query, nil), formID), tz))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("FormDefHistory(%s): status %d, want 200", query, rec.Code)
+	}
+	var resp struct{ Steps []defStepState }
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	var got []defStepState
+	for _, s := range resp.Steps {
+		if s.ID == stepID {
+			got = append(got, s)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("FormDefHistory(%s): step %d appears %d times, want once", query, stepID, len(got))
+	}
+	return got[0]
+}
+
+// A throwaway form's Ripple step saved twice today via raw UPDATEs (two form_row_history rows):
+// FormDefHistory returns the end-of-day state (#478) — today shows the last save's value once (no
+// duplicate rows), yesterday shows the value from before today's saves.
 func TestIntegration_FormDefHistory_EndOfDayState(t *testing.T) {
 	h, cleanup := liveHandler(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	ctx := context.Background()
+	f := recForm(t, h)
 
-	var partID int
-	partNumber := "ITEST-FDH-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	if err := h.queryRowContext(ctx,
-		`INSERT INTO part (part_number, revision, description, release_status, is_active) VALUES ($1, 'A', 'Integration Test Part', 'U', TRUE) RETURNING id`,
-		partNumber,
-	).Scan(&partID); err != nil {
-		t.Fatalf("seed part: %v", err)
-	}
-
-	var formID int
-	if err := h.queryRowContext(ctx,
-		`INSERT INTO form (part_number_id, test_order, is_locked, is_active) VALUES ($1, '', FALSE, TRUE) RETURNING id`, partID,
-	).Scan(&formID); err != nil {
-		t.Fatalf("seed form: %v", err)
-	}
-
-	var testID int
-	if err := h.queryRowContext(ctx,
-		`INSERT INTO form_row (form_id, type, parameter, spec_max) VALUES ($1, 0, 'Historical Step', '100') RETURNING id`,
-		formID,
-	).Scan(&testID); err != nil {
-		t.Fatalf("seed form_row: %v", err)
-	}
-
-	defer func() {
-		smokeExec(ctx, h, `DELETE FROM form_row_history WHERE form_row_id=$1`, testID)
-		smokeExec(ctx, h, `DELETE FROM form_row WHERE id=$1`, testID)
-		smokeExec(ctx, h, `DELETE FROM form WHERE id=$1`, formID)
-		smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, partID)
-	}()
-
-	// Two saves today (100 → 150 → 200), each in its own tx like separate SaveFormDef calls.
+	// Two saves today (1 → 150 → 200), each in its own tx like separate SaveFormDef calls.
 	// Each raw UPDATE triggers trg_form_row_history, snapshotting the OLD spec_max.
 	// trg_form_row_history requires changed_by (NOT NULL), populated from arx.username —
 	// a tx + setAuditUser is required, same as the production SaveFormDef/ArchiveStep path.
@@ -4022,7 +4023,7 @@ func TestIntegration_FormDefHistory_EndOfDayState(t *testing.T) {
 		}
 		records.New(tx).SetAuditUser(ctx, "itest")
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE form_row SET spec_max=$1 WHERE id=$2`, v, testID); err != nil {
+			`UPDATE form_row SET spec_max=$1 WHERE id=$2`, v, f.s3); err != nil {
 			tx.Rollback()
 			t.Fatalf("update form_row: %v", err)
 		}
@@ -4041,61 +4042,53 @@ func TestIntegration_FormDefHistory_EndOfDayState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadLocation(%s): %v", testTZ, err)
 	}
-	today := time.Now().UTC().In(loc).Format("2006-01-02")
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/forms/%d/def/history?at=%s", formID, today), nil)
-	h.FormDefHistory(rec, userCtxTZ(withID(req, formID), testTZ))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("FormDefHistory(at=today): status %d, want 200", rec.Code)
+	today := time.Now().UTC().In(loc)
+	if s := defHistoryStep(t, h, f.formID, f.s3, "at="+today.Format("2006-01-02"), testTZ); s.SpecMax != "200" || !s.Changed {
+		t.Errorf("end of today: %+v, want spec_max 200 (last save wins) changed", s)
 	}
-
-	var resp struct {
-		Steps []struct {
-			ID      int    `json:"id"`
-			SpecMax string `json:"spec_max"`
-			Changed bool   `json:"changed"`
-		} `json:"steps"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(resp.Steps) != 1 {
-		t.Fatalf("len(Steps) = %d, want 1", len(resp.Steps))
-	}
-	if resp.Steps[0].ID != testID {
-		t.Errorf("Steps[0].ID = %d, want %d", resp.Steps[0].ID, testID)
-	}
-	if !resp.Steps[0].Changed {
-		t.Errorf("Steps[0].Changed = false, want true")
-	}
-	if resp.Steps[0].SpecMax != "200" {
-		t.Errorf("Steps[0].SpecMax = %q, want %q (end of today: last save wins)", resp.Steps[0].SpecMax, "200")
-	}
-
 	// No history yesterday (same zone), but today's saves came after it — end of yesterday is the
 	// value from before today's first save, not the current one.
-	yesterday := time.Now().UTC().In(loc).AddDate(0, 0, -1).Format("2006-01-02")
-	rec2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/forms/%d/def/history?at=%s", formID, yesterday), nil)
-	h.FormDefHistory(rec2, userCtxTZ(withID(req2, formID), testTZ))
-	var resp2 struct {
-		Steps []struct {
-			ID      int    `json:"id"`
-			SpecMax string `json:"spec_max"`
-			Changed bool   `json:"changed"`
-		} `json:"steps"`
+	if s := defHistoryStep(t, h, f.formID, f.s3, "at="+today.AddDate(0, 0, -1).Format("2006-01-02"), testTZ); s.SpecMax != "1" || s.Changed {
+		t.Errorf("end of yesterday: %+v, want spec_max 1 (before today's saves) unchanged", s)
 	}
-	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
-		t.Fatalf("decode response: %v", err)
+}
+
+// A throwaway form whose Ripple step was saved (1 → 150), released, then saved again (→ 200): FormDefHistory
+// at the release instant (#481) returns the state as released, changed since `since`. History rows hold the
+// pre-save values; the release instant carries microseconds like a real CURRENT_TIMESTAMP.
+func TestIntegration_FormDefHistory_ReleaseState(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	repExec(t, h, `INSERT INTO form_row_history (form_row_id, changed_at, changed_by, spec_max)
+		VALUES ($1,'2026-07-01 12:00+00','t','1'), ($1,'2026-07-03 12:00+00','t','150')`, f.s3)
+	const lockStr = "2026-07-02T12:00:00.123456Z"
+	repInsert(t, h, `INSERT INTO form_events (form_id, event_type, username, event_date) VALUES ($1,'locked','itest',$2::timestamptz) RETURNING id`,
+		[]any{f.formID, lockStr}, `DELETE FROM form_events WHERE id=$1`)
+
+	atRelease := func(since string) string { return url.Values{"at": {lockStr}, "since": {since}}.Encode() }
+	if s := defHistoryStep(t, h, f.formID, f.s3, atRelease(""), "UTC"); s.SpecMax != "150" || !s.Changed {
+		t.Errorf("at release, since start: %+v, want spec_max 150 changed", s)
 	}
-	if len(resp2.Steps) != 1 {
-		t.Fatalf("len(Steps) = %d, want 1", len(resp2.Steps))
+	if s := defHistoryStep(t, h, f.formID, f.s3, atRelease(lockStr), "UTC"); s.Changed {
+		t.Errorf("at release, since release: %+v, want unchanged", s)
 	}
-	if resp2.Steps[0].Changed {
-		t.Errorf("Steps[0].Changed = true, want false (no history yesterday)")
+}
+
+// Read-only, uses seeded form 6001 (revision 1, one 'locked' form_events row by admin). No cleanup needed.
+func TestIntegration_FormDef_ReleaseMarker(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+
+	rec := recGet(h.FormDef, "/forms/6001/def", 6001)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("FormDef(6001): status %d, want 200", rec.Code)
 	}
-	if resp2.Steps[0].SpecMax != "100" {
-		t.Errorf("Steps[0].SpecMax = %q, want %q (value before today's saves)", resp2.Steps[0].SpecMax, "100")
+	body := rec.Body.String()
+	for _, want := range []string{"def-timeline-lock", "Released Rev 1 — admin — "} {
+		if !strings.Contains(body, want) {
+			t.Errorf("FormDef(6001): body missing %q", want)
+		}
 	}
 }
 

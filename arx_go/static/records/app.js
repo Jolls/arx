@@ -566,10 +566,8 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function applyHistory(data, dotLabel) {
-    var stepMap = {}
-    ;(data.steps || []).forEach(function (s) {
-      if (!stepMap[s.id] || s.changed) stepMap[s.id] = s
-    })
+    var stepMap = {} // ListFormStepsAt returns one row per step
+    ;(data.steps || []).forEach(function (s) { stepMap[s.id] = s })
 
     var rows = table.querySelectorAll('tr[data-step-id]')
 
@@ -577,11 +575,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var id = parseInt(tr.dataset.stepId)
       var s = stepMap[id]
       if (!s) return
-      if (s.changed) {
-        tr.classList.add('row-changed')
-      } else {
-        tr.classList.remove('row-changed')
-      }
+      tr.classList.toggle('row-changed', s.changed)
       tr.querySelectorAll('[data-field]').forEach(function (td) {
         var field = td.dataset.field
         td.textContent = s[field] !== undefined ? s[field] : ''
@@ -610,7 +604,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var req = ++histReq // drop out-of-order responses when stepping quickly with prev/next
     if (dot.dataset.now) { resetToNow(); return }
     setActiveDot(dot)
-    fetch('/api/forms/' + formId + '/def/history?at=' + encodeURIComponent(dot.dataset.at))
+    fetch('/api/forms/' + formId + '/def/history?' + dot.dataset.query)
       .then(function (r) { return r.json() })
       .then(function (data) { if (req === histReq) applyHistory(data, dot.title) })
   })

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -351,53 +352,13 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Load history timestamps for timeline dots. changed_at is a timestamptz
+	// Load history timestamps and releases for the timeline. changed_at/event_date are timestamptz
 	// assigned by the database (#192), so the calendar-day
 	// bucketing happens in Go in the viewing user's timezone (#847) — SQL-side
 	// AT TIME ZONE would need Windows zone names, not the IANA names we store.
-	type HistoryPoint struct {
-		At      time.Time
-		Count   int
-		PctLeft float64 // position along timeline bar (5â€"95%)
-	}
-	loc := h.userLocation(r)
-	stamps, err := h.records().ListFormHistoryStamps(r.Context(), formID)
-	var histPoints []HistoryPoint
-	if err == nil {
-		// Rows arrive ORDER BY changed_at ASC, so same-day rows (keyed by local date in
-		// loc) are contiguous — track only the current day's bucket instead of a map
-		// keyed by day string.
-		type dayBucket struct {
-			day  time.Time
-			key  string
-			rows map[int]bool
-		}
-		var buckets []*dayBucket
-		var current *dayBucket
-		for _, st := range stamps {
-			rowID := st.FormRowID
-			local := st.ChangedAt.In(loc)
-			key := local.Format("2006-01-02")
-			if current == nil || current.key != key {
-				day, err := time.ParseInLocation("2006-01-02", key, loc)
-				if err != nil {
-					continue
-				}
-				current = &dayBucket{day: day, key: key, rows: map[int]bool{}}
-				buckets = append(buckets, current)
-			}
-			current.rows[rowID] = true
-		}
-		for _, b := range buckets {
-			histPoints = append(histPoints, HistoryPoint{At: b.day, Count: len(b.rows)})
-		}
-	}
-	times := make([]time.Time, len(histPoints))
-	for i, p := range histPoints {
-		times[i] = p.At
-	}
-	for i, pct := range timelinePositions(times, time.Now()) {
-		histPoints[i].PctLeft = pct
+	var histPoints []historyPoint
+	if rows, err := h.records().ListFormTimeline(r.Context(), formID); err == nil {
+		histPoints = buildTimeline(rows, h.userLocation(r), form.Revision)
 	}
 
 	h.renderRecords(w, r, "form_def.html", map[string]any{
@@ -409,6 +370,73 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 		"ActiveTab":   "records",
 		"TestMode":    h.cfg().TestMode,
 	})
+}
+
+// historyPoint is one timeline point (#478/#481): an edit day (At = local midnight) or a release
+// (IsLock, At = the lock instant).
+type historyPoint struct {
+	At      time.Time
+	IsLock  bool
+	Query   string  // FormDefHistory query: at=<day>, or at=<lock instant>&since=<previous lock|"">
+	Title   string  // tooltip, also the "Showing state after:" label
+	PctLeft float64   // position along timeline bar (5–95%)
+}
+
+// buildTimeline turns ListFormTimeline rows (oldest first) into timeline points (#481). Edit rows are
+// bucketed per calendar day in loc, counting distinct steps; a day that has a release gets no edit dot
+// (its edits show through the release's changed highlight). Revisions count back from currentRev: a
+// point's revision is currentRev minus the releases after it, so releases older than form_events still
+// count. Positions come from timelinePositions.
+func buildTimeline(rows []records.TimelineRow, loc *time.Location, currentRev int) []historyPoint {
+	dayKey := func(t time.Time) string { return t.In(loc).Format("2006-01-02") }
+	rev := currentRev // the revision in force at each point: start before every release, +1 per release
+	lockDays := map[string]bool{}
+	for _, row := range rows {
+		if row.IsLock {
+			lockDays[dayKey(row.At)] = true
+			rev--
+		}
+	}
+	var points []historyPoint
+	prevLock := "" // the previous release's `at`, "" before the first
+	curDay, steps := "", map[int]bool(nil) // rows arrive oldest first, so a day's edits are contiguous: its point is the last one
+	for _, row := range rows {
+		if row.IsLock {
+			rev++
+			at := row.At.UTC().Format(time.RFC3339Nano)
+			points = append(points, historyPoint{At: row.At, IsLock: true,
+				Query: url.Values{"at": {at}, "since": {prevLock}}.Encode(),
+				Title: fmt.Sprintf("Released Rev %d — %s — %s", rev, row.Username, row.At.In(loc).Format("2006-01-02 15:04"))})
+			prevLock = at
+			continue
+		}
+		key := dayKey(row.At)
+		if lockDays[key] {
+			continue
+		}
+		if key != curDay {
+			l := row.At.In(loc)
+			curDay, steps = key, map[int]bool{}
+			points = append(points, historyPoint{At: time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, loc), Query: "at=" + key})
+		}
+		steps[row.FormRowID] = true
+		plural, revLabel := "", "Draft"
+		if len(steps) > 1 {
+			plural = "s"
+		}
+		if rev > 0 {
+			revLabel = fmt.Sprintf("Rev %d → draft of Rev %d", rev, rev+1)
+		}
+		points[len(points)-1].Title = fmt.Sprintf("%s — %d change%s — %s", key, len(steps), plural, revLabel)
+	}
+	times := make([]time.Time, len(points))
+	for i, p := range points {
+		times[i] = p.At
+	}
+	for i, pct := range timelinePositions(times, time.Now()) {
+		points[i].PctLeft = pct
+	}
+	return points
 }
 
 // timelinePositions places the history dots (oldest first) along the timeline bar as percentages: the
@@ -439,26 +467,37 @@ func timelinePositions(times []time.Time, now time.Time) []float64 {
 	return pcts
 }
 
-// FormDefHistory â€" GET /api/forms/{id}/def/history?at=<RFC3339 timestamp>
-// Returns the form definition state at the end of that day as JSON (#478): the day's last save wins.
-// Changed rows are those with a history entry within that day.
+// FormDefHistory â€" GET /api/forms/{id}/def/history?at=<YYYY-MM-DD> | ?at=<RFC3339>&since=<RFC3339|"">
+// Returns the form definition state as JSON. A day returns the state at the end of that day, changed =
+// history within the day (#478): the day's last save wins. An instant (a release marker, #481) returns
+// the state at that instant, changed = history in [since, at); empty since = from the start.
 func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	// `at` is a calendar day in the viewing user's timezone (#847); changed_at is a
-	// timestamptz assigned by the database (#192), so resolve the day to a half-open UTC range in Go rather
-	// than CAST(changed_at AS DATE), which would take the UTC day.
 	atStr := r.URL.Query().Get("at")
-	loc := h.userLocation(r)
-	dayStart, err := time.ParseInLocation("2006-01-02", atStr, loc)
-	if err != nil {
-		http.Error(w, "bad at param", http.StatusBadRequest)
-		return
+	var start, end time.Time
+	if at, err := time.Parse(time.RFC3339Nano, atStr); err == nil {
+		end = at
+		if s := r.URL.Query().Get("since"); s != "" {
+			if start, err = time.Parse(time.RFC3339Nano, s); err != nil {
+				http.Error(w, "bad since param", http.StatusBadRequest)
+				return
+			}
+		}
+	} else {
+		// A day `at` is a calendar day in the viewing user's timezone (#847); changed_at is a
+		// timestamptz assigned by the database (#192), so resolve the day to a half-open UTC range in Go rather
+		// than CAST(changed_at AS DATE), which would take the UTC day.
+		dayStart, err := time.ParseInLocation("2006-01-02", atStr, h.userLocation(r))
+		if err != nil {
+			http.Error(w, "bad at param", http.StatusBadRequest)
+			return
+		}
+		start, end = dayStart, dayStart.AddDate(0, 0, 1)
 	}
-	dayEnd := dayStart.AddDate(0, 0, 1)
 
 	type stepState struct {
 		ID            int    `json:"id"`
@@ -474,7 +513,7 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		Changed       bool   `json:"changed"`
 	}
 
-	rows, err := h.records().ListFormStepsAt(r.Context(), formID, dayStart.UTC(), dayEnd.UTC())
+	rows, err := h.records().ListFormStepsAt(r.Context(), formID, start.UTC(), end.UTC())
 	if err != nil {
 		serverError(w, "query error", err)
 		return

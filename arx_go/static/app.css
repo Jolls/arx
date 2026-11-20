@@ -388,6 +388,16 @@ tr.line-removed td { opacity: 0.35; pointer-events: none; }
 }
 .def-timeline-dot:hover  { background: #495057; width: 18px; height: 18px; }
 .def-timeline-dot.active { background: #ed7d31; width: 18px; height: 18px; }
+/* Release (lock) marker on the history timeline (#481): a padlock instead of a dot. */
+.def-timeline-dot.def-timeline-lock {
+    width: auto; height: auto;
+    border: 0; border-radius: 0;
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-success);
+    font-size: 14px; line-height: 1;
+}
+.def-timeline-dot.def-timeline-lock:hover  { color: var(--bs-success-text-emphasis); }
+.def-timeline-dot.def-timeline-lock.active { color: #ed7d31; font-size: 18px; }
 
 /* Changed row highlight when viewing history */
 #def-table tr.row-changed td   { background-color: var(--bs-warning-bg-subtle) !important; }

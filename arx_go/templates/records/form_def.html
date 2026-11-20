@@ -76,11 +76,10 @@
     <div class="def-timeline-line"></div>
     {{range .HistPoints}}
     <button type="button"
-            class="def-timeline-dot"
+            class="def-timeline-dot{{if .IsLock}} def-timeline-lock{{end}}"
             style="left:{{printf "%.1f" .PctLeft}}%"
-            data-at="{{.At.Format "2006-01-02"}}"
-            title="{{.At.Format "2006-01-02"}} — {{.Count}} change{{if gt .Count 1}}s{{end}}">
-    </button>
+            data-query="{{.Query}}"
+            title="{{.Title}}">{{if .IsLock}}<i class="bi bi-lock-fill"></i>{{end}}</button>
     {{end}}
     <button type="button"
             class="def-timeline-dot def-timeline-now active"

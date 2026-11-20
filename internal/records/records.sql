@@ -44,17 +44,22 @@ SELECT id, form_id, COALESCE(parameter, '') AS parameter, COALESCE(specification
 FROM form_row
 WHERE form_id = sqlc.arg(form_id);
 
--- name: ListFormHistoryStamps :many
--- Change timestamps of a form's steps, oldest first (the definition page's timeline dots).
-SELECT changed_at, form_row_id
+-- name: ListFormTimeline :many
+-- The definition page's timeline sources, oldest first (#481): each step history entry (is_lock false,
+-- no username) and each release from form_events (is_lock true, form_row_id 0). Unlocks aren't shown.
+SELECT changed_at AS at, form_row_id, ''::text AS username, FALSE AS is_lock
 FROM form_row_history
-WHERE form_row_id IN (SELECT id FROM form_row WHERE form_id = sqlc.arg(form_id))
-ORDER BY changed_at ASC;
+WHERE form_row_id IN (SELECT fr.id FROM form_row fr WHERE fr.form_id = sqlc.arg(form_id))
+UNION ALL
+SELECT fe.event_date, 0, COALESCE(fe.username, ''), TRUE
+FROM form_events fe
+WHERE fe.form_id = sqlc.arg(form_id) AND fe.event_type = 'locked'
+ORDER BY at, is_lock;
 
 -- name: ListFormStepsAt :many
--- A form's steps as they stood at the end of one day (#478): each step shows the pre-change values of
--- its first history row at/after day_end (the day's last save wins), else its current ones. changed =
--- the step has history in [day_start, day_end).
+-- A form's steps as they stood at day_end — the end of one day (#478) or a release instant (#481): each
+-- step shows the pre-change values of its first history row at/after day_end (the last earlier save
+-- wins), else its current ones. changed = the step has history in [day_start, day_end).
 SELECT t.id,
        (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.type, 0)            ELSE COALESCE(t.type, 0)            END)::int  AS type,
        (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.parameter, '')      ELSE COALESCE(t.parameter, '')      END)::text AS parameter,

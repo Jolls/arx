@@ -1007,42 +1007,6 @@ func (q *Queries) ListFailureModes(ctx context.Context, arg ListFailureModesPara
 	return items, nil
 }
 
-const listFormHistoryStamps = `-- name: ListFormHistoryStamps :many
-SELECT changed_at, form_row_id
-FROM form_row_history
-WHERE form_row_id IN (SELECT id FROM form_row WHERE form_id = $1)
-ORDER BY changed_at ASC
-`
-
-type ListFormHistoryStampsRow struct {
-	ChangedAt time.Time
-	FormRowID int
-}
-
-// Change timestamps of a form's steps, oldest first (the definition page's timeline dots).
-func (q *Queries) ListFormHistoryStamps(ctx context.Context, formID int) ([]ListFormHistoryStampsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listFormHistoryStamps, formID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListFormHistoryStampsRow
-	for rows.Next() {
-		var i ListFormHistoryStampsRow
-		if err := rows.Scan(&i.ChangedAt, &i.FormRowID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listFormPartOptions = `-- name: ListFormPartOptions :many
 SELECT id, part_number, COALESCE(description, '') AS description
 FROM part
@@ -1273,9 +1237,9 @@ type ListFormStepsAtRow struct {
 	Changed       bool
 }
 
-// A form's steps as they stood at the end of one day (#478): each step shows the pre-change values of
-// its first history row at/after day_end (the day's last save wins), else its current ones. changed =
-// the step has history in [day_start, day_end).
+// A form's steps as they stood at day_end — the end of one day (#478) or a release instant (#481): each
+// step shows the pre-change values of its first history row at/after day_end (the last earlier save
+// wins), else its current ones. changed = the step has history in [day_start, day_end).
 func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams) ([]ListFormStepsAtRow, error) {
 	rows, err := q.db.QueryContext(ctx, listFormStepsAt, arg.DayStart, arg.DayEnd, arg.FormID)
 	if err != nil {
@@ -1297,6 +1261,54 @@ func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams
 			&i.DefaultResult,
 			&i.HideFormula,
 			&i.Changed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFormTimeline = `-- name: ListFormTimeline :many
+SELECT changed_at AS at, form_row_id, ''::text AS username, FALSE AS is_lock
+FROM form_row_history
+WHERE form_row_id IN (SELECT fr.id FROM form_row fr WHERE fr.form_id = $1)
+UNION ALL
+SELECT fe.event_date, 0, COALESCE(fe.username, ''), TRUE
+FROM form_events fe
+WHERE fe.form_id = $1 AND fe.event_type = 'locked'
+ORDER BY at, is_lock
+`
+
+type ListFormTimelineRow struct {
+	At        time.Time
+	FormRowID int
+	Username  string
+	IsLock    bool
+}
+
+// The definition page's timeline sources, oldest first (#481): each step history entry (is_lock false,
+// no username) and each release from form_events (is_lock true, form_row_id 0). Unlocks aren't shown.
+func (q *Queries) ListFormTimeline(ctx context.Context, formID int) ([]ListFormTimelineRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFormTimeline, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFormTimelineRow
+	for rows.Next() {
+		var i ListFormTimelineRow
+		if err := rows.Scan(
+			&i.At,
+			&i.FormRowID,
+			&i.Username,
+			&i.IsLock,
 		); err != nil {
 			return nil, err
 		}
