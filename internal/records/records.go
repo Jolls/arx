@@ -178,7 +178,7 @@ func (s *Service) ListFormHistoryStamps(ctx context.Context, formID int) ([]Hist
 	return s.q.ListFormHistoryStamps(ctx, formID)
 }
 
-// ListFormStepsAt returns the form's steps as they stood in [dayStart, dayEnd).
+// ListFormStepsAt returns the form's steps as they stood at dayEnd, flagging those changed in [dayStart, dayEnd).
 func (s *Service) ListFormStepsAt(ctx context.Context, formID int, dayStart, dayEnd time.Time) ([]FormStepAt, error) {
 	return s.q.ListFormStepsAt(ctx, dbq.ListFormStepsAtParams{FormID: formID, DayStart: dayStart, DayEnd: dayEnd})
 }

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.114] - 2026-11-19
+### Added
+- Form definition history: previous/next buttons beside the timeline step through the history dots ([#478](https://github.com/Jolls/arx/issues/478))
+
+### Changed
+- Form definition history: a timeline dot now shows the form as it stood at the end of that day (the day's last save wins) instead of before it ([#478](https://github.com/Jolls/arx/issues/478))
+
+### Fixed
+- Form definition history: a step saved more than once in a day appeared twice with an arbitrary in-between value, and a step changed only on a later day showed its current value instead of the value it had that day ([#478](https://github.com/Jolls/arx/issues/478))
+
 ## [0.8.113] - 2026-11-19
 ### Changed
 - Form definition editor: a step's Preview lists every option of a `query:` picker, separated by `; `, instead of only its first row ([#469](https://github.com/Jolls/arx/issues/469))

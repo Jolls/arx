@@ -3972,9 +3972,10 @@ func TestIntegration_FormDef_RendersStepsAndArchivedToggle(t *testing.T) {
 	}
 }
 
-// Seeds a throwaway part/form/form_row, forces a deterministic same-day form_row_history
-// row via a raw UPDATE, then verifies FormDefHistory returns the PRE-change snapshot value.
-func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
+// Seeds a throwaway part/form/form_row, saves it twice today via raw UPDATEs (two form_row_history
+// rows), then verifies FormDefHistory returns the end-of-day state (#478): today shows the last save's
+// value once (no duplicate rows), yesterday shows the value from before today's saves.
+func TestIntegration_FormDefHistory_EndOfDayState(t *testing.T) {
 	h, cleanup := liveHandler(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -4010,21 +4011,24 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 		smokeExec(ctx, h, `DELETE FROM part WHERE id=$1`, partID)
 	}()
 
-	// Raw UPDATE triggers trg_form_row_history, snapshotting the OLD spec_max='100'.
+	// Two saves today (100 → 150 → 200), each in its own tx like separate SaveFormDef calls.
+	// Each raw UPDATE triggers trg_form_row_history, snapshotting the OLD spec_max.
 	// trg_form_row_history requires changed_by (NOT NULL), populated from arx.username —
 	// a tx + setAuditUser is required, same as the production SaveFormDef/ArchiveStep path.
-	tx, err := h.beginTx(ctx)
-	if err != nil {
-		t.Fatalf("beginTx: %v", err)
-	}
-	records.New(tx).SetAuditUser(ctx, "itest")
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE form_row SET spec_max='150' WHERE id=$1`, testID); err != nil {
-		tx.Rollback()
-		t.Fatalf("update form_row: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit form_row update: %v", err)
+	for _, v := range []string{"150", "200"} {
+		tx, err := h.beginTx(ctx)
+		if err != nil {
+			t.Fatalf("beginTx: %v", err)
+		}
+		records.New(tx).SetAuditUser(ctx, "itest")
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE form_row SET spec_max=$1 WHERE id=$2`, v, testID); err != nil {
+			tx.Rollback()
+			t.Fatalf("update form_row: %v", err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit form_row update: %v", err)
+		}
 	}
 
 	// The trigger stamps changed_at with CURRENT_TIMESTAMP (a UTC instant). Ask for the day
@@ -4064,11 +4068,12 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	if !resp.Steps[0].Changed {
 		t.Errorf("Steps[0].Changed = false, want true")
 	}
-	if resp.Steps[0].SpecMax != "100" {
-		t.Errorf("Steps[0].SpecMax = %q, want %q (pre-change value)", resp.Steps[0].SpecMax, "100")
+	if resp.Steps[0].SpecMax != "200" {
+		t.Errorf("Steps[0].SpecMax = %q, want %q (end of today: last save wins)", resp.Steps[0].SpecMax, "200")
 	}
 
-	// No history that day (yesterday, in the same zone) — falls back to the CURRENT form_row value.
+	// No history yesterday (same zone), but today's saves came after it — end of yesterday is the
+	// value from before today's first save, not the current one.
 	yesterday := time.Now().UTC().In(loc).AddDate(0, 0, -1).Format("2006-01-02")
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/forms/%d/def/history?at=%s", formID, yesterday), nil)
@@ -4089,8 +4094,8 @@ func TestIntegration_FormDefHistory_ReturnsPreChangeSnapshot(t *testing.T) {
 	if resp2.Steps[0].Changed {
 		t.Errorf("Steps[0].Changed = true, want false (no history yesterday)")
 	}
-	if resp2.Steps[0].SpecMax != "150" {
-		t.Errorf("Steps[0].SpecMax = %q, want %q (current value)", resp2.Steps[0].SpecMax, "150")
+	if resp2.Steps[0].SpecMax != "100" {
+		t.Errorf("Steps[0].SpecMax = %q, want %q (value before today's saves)", resp2.Steps[0].SpecMax, "100")
 	}
 }
 

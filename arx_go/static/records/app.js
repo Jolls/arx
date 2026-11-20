@@ -546,9 +546,23 @@ document.addEventListener('DOMContentLoaded', function () {
     })
   })
 
+  // Prev/next step through the dots in DOM order (oldest … Now); disabled at either end.
+  var prevBtn = document.getElementById('def-history-prev')
+  var nextBtn = document.getElementById('def-history-next')
+  function activeIndex() { return dots.findIndex(function (d) { return d.classList.contains('active') }) }
+  function step(delta) {
+    var dot = dots[activeIndex() + delta]
+    if (dot) dot.click()
+  }
+  prevBtn.addEventListener('click', function () { step(-1) })
+  nextBtn.addEventListener('click', function () { step(1) })
+
   function setActiveDot(dot) {
     dots.forEach(function (d) { d.classList.remove('active') })
     dot.classList.add('active')
+    var i = activeIndex()
+    prevBtn.disabled = i <= 0
+    nextBtn.disabled = i >= dots.length - 1
   }
 
   function applyHistory(data, dotLabel) {
@@ -573,7 +587,7 @@ document.addEventListener('DOMContentLoaded', function () {
         td.textContent = s[field] !== undefined ? s[field] : ''
       })
     })
-    label.textContent = 'Showing state before: ' + dotLabel
+    label.textContent = 'Showing state after: ' + dotLabel
   }
 
   function resetToNow() {
@@ -589,14 +603,16 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Event delegation — single listener handles all dots including Now.
+  var histReq = 0
   timeline.addEventListener('click', function (e) {
     var dot = e.target.closest('.def-timeline-dot')
     if (!dot) return
+    var req = ++histReq // drop out-of-order responses when stepping quickly with prev/next
     if (dot.dataset.now) { resetToNow(); return }
     setActiveDot(dot)
     fetch('/api/forms/' + formId + '/def/history?at=' + encodeURIComponent(dot.dataset.at))
       .then(function (r) { return r.json() })
-      .then(function (data) { applyHistory(data, dot.title) })
+      .then(function (data) { if (req === histReq) applyHistory(data, dot.title) })
   })
 })
 

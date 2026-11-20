@@ -419,8 +419,8 @@ func (h *Handler) FormDef(w http.ResponseWriter, r *http.Request) {
 }
 
 // FormDefHistory â€" GET /api/forms/{id}/def/history?at=<RFC3339 timestamp>
-// Returns the form definition state at that timestamp as JSON.
-// Changed rows are those with a history entry at exactly that timestamp (pre-change values).
+// Returns the form definition state at the end of that day as JSON (#478): the day's last save wins.
+// Changed rows are those with a history entry within that day.
 func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {

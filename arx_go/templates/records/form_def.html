@@ -71,7 +71,8 @@
 {{if .HistPoints}}
 <div class="mb-3">
   <div class="small text-muted mb-1">History</div>
-  <div class="def-timeline" data-form-id="{{.Form.ID}}">
+  <div class="d-flex align-items-center gap-2">
+  <div class="def-timeline flex-grow-1" data-form-id="{{.Form.ID}}">
     <div class="def-timeline-line"></div>
     {{range .HistPoints}}
     <button type="button"
@@ -87,6 +88,11 @@
             data-now="true"
             title="Current">
     </button>
+  </div>
+  <div class="btn-group btn-group-sm">
+    <button type="button" class="btn btn-outline-secondary" id="def-history-prev" title="Previous history state"><i class="bi bi-chevron-left"></i></button>
+    <button type="button" class="btn btn-outline-secondary" id="def-history-next" title="Next history state" disabled><i class="bi bi-chevron-right"></i></button>
+  </div>
   </div>
   <div id="def-history-label" class="small text-muted mt-1"></div>
 </div>
