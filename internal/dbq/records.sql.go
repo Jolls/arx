@@ -1237,14 +1237,19 @@ SELECT t.id,
        (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.pf_type, '')        ELSE COALESCE(t.pf_type, '')        END)::text AS pf_type,
        (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.default_result, '') ELSE COALESCE(t.default_result, '') END)::text AS default_result,
        (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.hide_formula, '')   ELSE COALESCE(t.hide_formula, '')   END)::text AS hide_formula,
-       (h.form_row_id IS NOT NULL)::bool AS changed
+       EXISTS (SELECT 1 FROM form_row_history c
+               WHERE c.form_row_id = t.id
+                 AND c.changed_at >= $1::timestamptz
+                 AND c.changed_at < $2::timestamptz)::bool AS changed
 FROM form_row t
-LEFT JOIN (
+LEFT JOIN LATERAL (
     SELECT form_row_id, type, parameter, spec_nom, spec_min, spec_max,
            spec_units, pf_type, default_result, hide_formula
     FROM form_row_history
-    WHERE changed_at >= $1::timestamptz AND changed_at < $2::timestamptz
-) h ON h.form_row_id = t.id
+    WHERE form_row_id = t.id AND changed_at >= $2::timestamptz
+    ORDER BY changed_at, id
+    LIMIT 1
+) h ON TRUE
 WHERE t.form_id = $3
 `
 
@@ -1268,8 +1273,9 @@ type ListFormStepsAtRow struct {
 	Changed       bool
 }
 
-// A form's steps as they stood on one day: a step with history in [day_start, day_end) shows its
-// pre-change values (changed = true), any other its current ones.
+// A form's steps as they stood at the end of one day (#478): each step shows the pre-change values of
+// its first history row at/after day_end (the day's last save wins), else its current ones. changed =
+// the step has history in [day_start, day_end).
 func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams) ([]ListFormStepsAtRow, error) {
 	rows, err := q.db.QueryContext(ctx, listFormStepsAt, arg.DayStart, arg.DayEnd, arg.FormID)
 	if err != nil {
