@@ -717,8 +717,9 @@ document.addEventListener('DOMContentLoaded', function () {
     td.textContent = value
   }
 
-  function renderPreview(data) {
+  function renderPreview(data, my) {
     var s = (data.steps || {})[previewKey] || {}
+    var picker = /^query:/.test(s.spec_nom || '') ? s.spec_nom : ''
     body.innerHTML = ''
     var ctx = document.createElement('div')
     ctx.className = 'text-muted mb-2'
@@ -736,8 +737,26 @@ document.addEventListener('DOMContentLoaded', function () {
     addRow(tbl, 'default_result', s.default_result || '')
     addRow(tbl, 'Hidden', s.hidden ? 'yes' : 'no', '')
     Object.keys(data.queries || {}).forEach(function (q) {
+      if (q === picker) return // shown below with every option, not just the first row
       addRow(tbl, q, data.queries[q] === '' ? '(no rows)' : data.queries[q])
     })
+    if (picker && !(data.query_errors || {})[picker]) {
+      // A picker's options: every row, as the record edit page loads them.
+      addRow(tbl, picker, 'Loading…')
+      var cell = tbl.rows[tbl.rows.length - 1].cells[1]
+      fetch('/api/named-query?spec=' + encodeURIComponent(picker)).then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t.trim() || r.statusText) })
+        return r.json()
+      }).then(function (q) {
+        if (my !== previewSeq) return
+        var rows = q.rows || []
+        cell.textContent = rows.length ? rows.map(function (o) { return o.label || o.value }).join('; ') : '(no rows)'
+      }).catch(function (err) {
+        if (my !== previewSeq) return
+        cell.className = 'text-danger'
+        cell.textContent = String(err && err.message ? err.message : err)
+      })
+    }
     Object.keys(data.query_errors || {}).forEach(function (q) {
       addRow(tbl, q, data.query_errors[q], 'text-danger')
     })
@@ -758,7 +777,7 @@ document.addEventListener('DOMContentLoaded', function () {
       steps: rowDefs(), show: [previewKey], form_id: STEP_EDITOR.formId,
       record_id: rec ? parseInt(rec, 10) : -1,
       values: sampleValues(panel.querySelector('[data-preview-values]').value), run_queries: true, lint: true
-    }).then(function (data) { if (my === previewSeq) renderPreview(data) })
+    }).then(function (data) { if (my === previewSeq) renderPreview(data, my) })
       .catch(function (err) { if (my === previewSeq) body.textContent = String(err && err.message ? err.message : err) })
   }
 
