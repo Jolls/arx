@@ -75,14 +75,16 @@ erDiagram
     }
 
     part_attachment {
-        int     id            PK
-        int     part_id       FK
-        varchar file_name     "path or URL"
+        int     id               PK
+        int     part_id          FK
+        int     supplier_part_id FK "optional scope; at most one of the two"
+        int     mfg_part_id      FK "optional scope; at most one of the two"
+        varchar file_name        "path or URL"
         varchar category
         varchar part_revision
         varchar comment
         int     sort_order
-        bit     is_active     "soft-delete only"
+        bit     is_active        "soft-delete only"
     }
 
     bom {
@@ -245,6 +247,9 @@ erDiagram
         varchar record_types
         varchar instrument_types
         int     revision
+        varchar serial_prefix   "suggested-serial prefix"
+        int     serial_pad      "suggested-serial digit width"
+        int     recurrence_days "prefills form_record.next_due_date; NULL = not recurring"
     }
 
     form_row {
@@ -295,6 +300,7 @@ erDiagram
         bit      is_approved
         bit      is_active
         int      form_revision
+        date     next_due_date  "NULL = untracked"
     }
 
     form_events {
@@ -320,6 +326,9 @@ erDiagram
         varchar spec_nom
         varchar pf_type
         int     type           "0=data,1-3=heading"
+        varchar eval_min       "spec_min as evaluated on save"
+        varchar eval_nom       "spec_nom as evaluated on save"
+        varchar eval_max       "spec_max as evaluated on save"
     }
 
     record_events {
@@ -414,6 +423,8 @@ erDiagram
     part_category     ||--o{ part            : "category (code)"
     uom               ||--o{ supplier_part   : "purchase unit (uom_id)"
     mfg_part          ||--o{ supplier_part   : "manufacturer PN (mfg_part_id)"
+    supplier_part     ||--o{ part_attachment : "scoped files (supplier_part_id)"
+    mfg_part          ||--o{ part_attachment : "scoped files (mfg_part_id)"
 
     %% ===== Relationships: purchasing =====
     purchase_order ||--o{ po_line                 : "line items (po_id)"
@@ -499,13 +510,16 @@ erDiagram
         int     price_id              FK "deferred, not enforced"
         int     default_supplier_id   FK "deferred, not enforced"
         int     primary_attachment_id FK
+        varchar tracking_mode         "none/lot/serial/lot_serial"
         bit     is_active
     }
 
     part_attachment {
-        int     id        PK
-        int     part_id   FK
-        varchar file_name "path or URL"
+        int     id               PK
+        int     part_id          FK
+        int     supplier_part_id FK "optional scope; at most one of the two"
+        int     mfg_part_id      FK "optional scope; at most one of the two"
+        varchar file_name        "path or URL"
         varchar category
         bit     is_active
     }
@@ -544,6 +558,7 @@ erDiagram
     part                ||--o{ company_schematic  : "sourcing links (supplier_part.part_id, uom_id)"
     part                ||--o{ company_schematic  : "manufacturer PNs (mfg_part.part_id)"
     company_schematic   ||..o{ part               : "preferred supplier & active price (default_supplier_id, price_id — deferred)"
+    company_schematic   ||--o{ part_attachment    : "scoped files (supplier_part_id, mfg_part_id)"
 ```
 
 ### Companies
@@ -626,6 +641,8 @@ erDiagram
     parts_schematic         ||--o{ supplier_part         : "sourced parts & purchase unit (part_id, uom_id)"
     parts_schematic         ||--o{ mfg_part              : "manufacturer PNs (part_id)"
     company                 ||..o{ parts_schematic        : "preferred supplier & active price for (default_supplier_id, price_id — deferred)"
+    supplier_part           ||--o{ parts_schematic        : "scoped part files (part_attachment.supplier_part_id)"
+    mfg_part                ||--o{ parts_schematic        : "scoped part files (part_attachment.mfg_part_id)"
 ```
 
 ### Purchasing / PO lifecycle
@@ -659,6 +676,9 @@ erDiagram
         varchar approval_status     "not_submitted/pending/approved/rejected"
         int     rfq_group_id
         decimal total_cost
+        date    date_ordered
+        date    date_closed
+        bit     is_active
     }
 
     po_line {
@@ -669,6 +689,7 @@ erDiagram
         decimal qty
         decimal unit_cost
         decimal received_qty
+        date    date_received
         int     lead_time_days
     }
 
@@ -721,6 +742,7 @@ erDiagram
         varchar  lot_description
         varchar  source          "purchase/build/adjust"
         int      po_line_id      FK
+        varchar  vendor_lot_number "supplier's own lot ID (purchased lots)"
         bit      is_active
     }
 
@@ -798,6 +820,9 @@ erDiagram
         bit     is_active
         varchar form_type       "inspection/test/calibration/checklist/batch record"
         int     revision
+        varchar serial_prefix   "suggested-serial prefix"
+        int     serial_pad      "suggested-serial digit width"
+        int     recurrence_days "prefills form_record.next_due_date; NULL = not recurring"
     }
 
     form_row {
@@ -808,7 +833,9 @@ erDiagram
         varchar spec_min
         varchar spec_max
         varchar spec_nom
+        varchar hide_formula
         varchar granularity  "unit/lot"
+        bit     archived     "retired step; hidden by default"
     }
 
     form_record {
@@ -818,6 +845,8 @@ erDiagram
         int      lot_id         FK "logical only, not enforced"
         int      build_id       FK "logical only, not enforced"
         int      unit_id        FK
+        int      form_revision
+        date     next_due_date  "NULL = untracked"
         bit      is_locked
         bit      is_approved
         bit      is_active
@@ -829,6 +858,11 @@ erDiagram
         int     form_row_id    FK "logical only, not enforced"
         bit     pass_fail
         varchar result
+        varchar parameter      "frozen copy of the step definition"
+        varchar specification  "frozen copy of the step definition"
+        varchar eval_min       "spec_min as evaluated on save"
+        varchar eval_nom       "spec_nom as evaluated on save"
+        varchar eval_max       "spec_max as evaluated on save"
     }
 
     lot {
@@ -874,6 +908,7 @@ erDiagram
         varchar  event_type "locked/unlocked/archived/activated"
         varchar  username
         datetime event_date
+        varchar  comments   "required on unlock"
     }
 
     form_row {
@@ -881,10 +916,16 @@ erDiagram
     }
 
     form_row_history {
-        int      id          PK
-        int      form_row_id FK "logical only, not enforced"
+        int      id            PK
+        int      form_row_id   FK "logical only, not enforced"
         datetime changed_at
         varchar  changed_by
+        varchar  parameter     "pre-change value"
+        varchar  specification "pre-change value"
+        varchar  spec_min      "pre-change value"
+        varchar  spec_max      "pre-change value"
+        varchar  spec_nom      "pre-change value"
+        varchar  hide_formula  "pre-change value"
     }
 
     form_record {
@@ -897,6 +938,7 @@ erDiagram
         varchar  event_type     "locked/unlocked/archived/activated"
         varchar  username
         datetime event_date
+        varchar  comments       "required on unlock"
     }
 
     record_event_results {
