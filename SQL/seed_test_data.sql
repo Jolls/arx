@@ -30,7 +30,8 @@
 -- one with a comment, one without. company_attachment is NOT seeded (would require real
 -- files/URLs on companies too) and is cleared and left empty.
 -- form_row_history gets one row written by trg_form_row_history (the seed
--- updates step 6103 after insert precisely to exercise the definition-history timeline).
+-- updates step 6103 after insert precisely to exercise the definition-history timeline; the
+-- trigger also records its pre-update archived flag, FALSE, #484).
 --
 -- Login (ArxDev only): admin/admin (PO + record approver), tester/tester (no approvals).
 
@@ -649,7 +650,7 @@ END $$;
         (6116, 6003, 1, 0, 'Certificate Number', 'Record the calibration lab certificate number', NULL, NULL, NULL, NULL, 'filled', NULL, FALSE, NULL, NULL, NULL, '2020-01-01T00:00:00', 'unit');
 
     -- Exercise the definition-history timeline: tighten 6103's limit 250 → 200.
-    -- trg_form_row_history snapshots the old row into form_row_history.
+    -- trg_form_row_history snapshots the old row (archived = FALSE) into form_row_history.
     UPDATE form_row SET spec_max = '200' WHERE id = 6103;
 
     -- updated_at pinned to a fixed sentinel (see the app_config seed comment above) so

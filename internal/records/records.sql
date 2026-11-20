@@ -62,7 +62,9 @@ ORDER BY at, event_id;
 -- name: ListFormStepsAt :many
 -- A form's steps as they stood at day_end — the end of one day (#478) or a release instant (#481): each
 -- step shows the pre-change values of its first history row at/after day_end (the last earlier save
--- wins), else its current ones. changed = the step has history in [day_start, day_end).
+-- wins), else its current ones. changed = the step has history in [day_start, day_end). archived follows
+-- the same rule, with an unrecorded (NULL) history value falling back to the current one (#484). existed
+-- = created before day_end, or created_at unknown, or history before day_end (a load-time created_at).
 SELECT t.id,
        (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.type, 0)            ELSE COALESCE(t.type, 0)            END)::int  AS type,
        (CASE WHEN h.form_row_id IS NOT NULL THEN COALESCE(h.parameter, '')      ELSE COALESCE(t.parameter, '')      END)::text AS parameter,
@@ -76,11 +78,16 @@ SELECT t.id,
        EXISTS (SELECT 1 FROM form_row_history c
                WHERE c.form_row_id = t.id
                  AND c.changed_at >= sqlc.arg(day_start)::timestamptz
-                 AND c.changed_at < sqlc.arg(day_end)::timestamptz)::bool AS changed
+                 AND c.changed_at < sqlc.arg(day_end)::timestamptz)::bool AS changed,
+       COALESCE(h.archived, t.archived)::bool AS archived,
+       (t.created_at IS NULL
+        OR t.created_at < sqlc.arg(day_end)::timestamptz
+        OR EXISTS (SELECT 1 FROM form_row_history e
+                   WHERE e.form_row_id = t.id AND e.changed_at < sqlc.arg(day_end)::timestamptz))::bool AS existed
 FROM form_row t
 LEFT JOIN LATERAL (
     SELECT form_row_id, type, parameter, spec_nom, spec_min, spec_max,
-           spec_units, pf_type, default_result, hide_formula
+           spec_units, pf_type, default_result, hide_formula, archived
     FROM form_row_history
     WHERE form_row_id = t.id AND changed_at >= sqlc.arg(day_end)::timestamptz
     ORDER BY changed_at, id
@@ -464,8 +471,9 @@ WHERE s.id = sqlc.arg(step_id) AND s.form_id = sqlc.arg(from_form_id)
 RETURNING id;
 
 -- name: SetStepArchived :exec
+-- No-op when the flag already matches, so a repeat request writes no form_row_history row (#484).
 UPDATE form_row SET archived = sqlc.arg(archived), updated_at = CURRENT_TIMESTAMP
-WHERE id = sqlc.arg(id) AND form_id = sqlc.arg(form_id);
+WHERE id = sqlc.arg(id) AND form_id = sqlc.arg(form_id) AND archived <> sqlc.arg(archived);
 
 -- name: SetFormTestOrder :exec
 UPDATE form SET test_order = sqlc.arg(test_order)::text WHERE id = sqlc.arg(id);

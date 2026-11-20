@@ -1204,11 +1204,16 @@ SELECT t.id,
        EXISTS (SELECT 1 FROM form_row_history c
                WHERE c.form_row_id = t.id
                  AND c.changed_at >= $1::timestamptz
-                 AND c.changed_at < $2::timestamptz)::bool AS changed
+                 AND c.changed_at < $2::timestamptz)::bool AS changed,
+       COALESCE(h.archived, t.archived)::bool AS archived,
+       (t.created_at IS NULL
+        OR t.created_at < $2::timestamptz
+        OR EXISTS (SELECT 1 FROM form_row_history e
+                   WHERE e.form_row_id = t.id AND e.changed_at < $2::timestamptz))::bool AS existed
 FROM form_row t
 LEFT JOIN LATERAL (
     SELECT form_row_id, type, parameter, spec_nom, spec_min, spec_max,
-           spec_units, pf_type, default_result, hide_formula
+           spec_units, pf_type, default_result, hide_formula, archived
     FROM form_row_history
     WHERE form_row_id = t.id AND changed_at >= $2::timestamptz
     ORDER BY changed_at, id
@@ -1235,11 +1240,15 @@ type ListFormStepsAtRow struct {
 	DefaultResult string
 	HideFormula   string
 	Changed       bool
+	Archived      bool
+	Existed       bool
 }
 
 // A form's steps as they stood at day_end — the end of one day (#478) or a release instant (#481): each
 // step shows the pre-change values of its first history row at/after day_end (the last earlier save
-// wins), else its current ones. changed = the step has history in [day_start, day_end).
+// wins), else its current ones. changed = the step has history in [day_start, day_end). archived follows
+// the same rule, with an unrecorded (NULL) history value falling back to the current one (#484). existed
+// = created before day_end, or created_at unknown, or history before day_end (a load-time created_at).
 func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams) ([]ListFormStepsAtRow, error) {
 	rows, err := q.db.QueryContext(ctx, listFormStepsAt, arg.DayStart, arg.DayEnd, arg.FormID)
 	if err != nil {
@@ -1261,6 +1270,8 @@ func (q *Queries) ListFormStepsAt(ctx context.Context, arg ListFormStepsAtParams
 			&i.DefaultResult,
 			&i.HideFormula,
 			&i.Changed,
+			&i.Archived,
+			&i.Existed,
 		); err != nil {
 			return nil, err
 		}
@@ -2164,7 +2175,7 @@ func (q *Queries) SetFormTypes(ctx context.Context, arg SetFormTypesParams) erro
 
 const setStepArchived = `-- name: SetStepArchived :exec
 UPDATE form_row SET archived = $1, updated_at = CURRENT_TIMESTAMP
-WHERE id = $2 AND form_id = $3
+WHERE id = $2 AND form_id = $3 AND archived <> $1
 `
 
 type SetStepArchivedParams struct {
@@ -2173,6 +2184,7 @@ type SetStepArchivedParams struct {
 	FormID   int
 }
 
+// No-op when the flag already matches, so a repeat request writes no form_row_history row (#484).
 func (q *Queries) SetStepArchived(ctx context.Context, arg SetStepArchivedParams) error {
 	_, err := q.db.ExecContext(ctx, setStepArchived, arg.Archived, arg.ID, arg.FormID)
 	return err

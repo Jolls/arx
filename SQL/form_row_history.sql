@@ -26,5 +26,6 @@ CREATE TABLE form_row_history (
   format        VARCHAR(255),
   comment       VARCHAR(500),
   category      VARCHAR(255),
-  sheet_name    VARCHAR(255)
+  sheet_name    VARCHAR(255),
+  archived      BOOLEAN                            -- pre-update form_row.archived; NULL = not recorded (#484).
 );

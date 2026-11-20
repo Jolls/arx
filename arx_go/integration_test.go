@@ -3973,9 +3973,11 @@ func TestIntegration_FormDef_RendersStepsAndArchivedToggle(t *testing.T) {
 }
 
 type defStepState struct {
-	ID      int    `json:"id"`
-	SpecMax string `json:"spec_max"`
-	Changed bool   `json:"changed"`
+	ID       int    `json:"id"`
+	SpecMax  string `json:"spec_max"`
+	Changed  bool   `json:"changed"`
+	Archived bool   `json:"archived"`
+	Existed  bool   `json:"existed"`
 }
 
 // defHistoryStep returns step stepID's state from FormDefHistory?<query> as a viewer in tz sees it,
@@ -4072,6 +4074,260 @@ func TestIntegration_FormDefHistory_ReleaseState(t *testing.T) {
 	}
 	if s := defHistoryStep(t, h, f.formID, f.s3, atRelease(lockStr), "UTC"); s.Changed {
 		t.Errorf("at release, since release: %+v, want unchanged", s)
+	}
+}
+
+// FormDefHistory never drops a step from the list: one created after the selected day, and one archived
+// now with no history, are both returned with their current values (#484 adds flags, not filters).
+func TestIntegration_FormDefHistory_ReturnsLaterAndArchivedSteps(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h) // steps created now
+	arch := repInsert(t, h, `INSERT INTO form_row (form_id, type, parameter, spec_max, archived) VALUES ($1,0,'Old','7',TRUE) RETURNING id`,
+		[]any{f.formID}, `DELETE FROM form_row_history WHERE form_row_id=$1`, `DELETE FROM form_row WHERE id=$1`)
+	if s := defHistoryStep(t, h, f.formID, f.s3, "at=2026-07-01", "UTC"); s.SpecMax != "1" || s.Changed {
+		t.Errorf("later-created step: %+v, want spec_max 1 unchanged", s)
+	}
+	if s := defHistoryStep(t, h, f.formID, arch, "at=2026-07-01", "UTC"); s.SpecMax != "7" || s.Changed {
+		t.Errorf("archived step: %+v, want spec_max 7 unchanged", s)
+	}
+}
+
+// Each archive/unarchive writes one history row whose snapshot equals the unchanged definition — the
+// property the #484 backfill uses to spot toggles.
+func TestIntegration_ArchiveStep_WritesHistoryRowPerToggle(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	partID, formID, testID := seedThrowawayForm(t, h, ctx, "ITEST-AH")
+	defer cleanupThrowawayForm(ctx, h, partID, formID, testID)
+
+	for _, v := range []string{"1", "0"} {
+		rec := httptest.NewRecorder()
+		h.ArchiveStep(rec, adminCtx(withIDAndTestID(
+			postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {v}}),
+			formID, testID)))
+		assertStatus(t, "ArchiveStep "+v, rec, http.StatusSeeOther)
+	}
+	var n, same int
+	if err := h.queryRowContext(ctx, `SELECT COUNT(*), COUNT(*) FILTER (WHERE parameter='Step' AND type=0 AND spec_max IS NULL)
+		FROM form_row_history WHERE form_row_id=$1`, testID).Scan(&n, &same); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	if n != 2 || same != 2 {
+		t.Errorf("history rows = %d (%d with unchanged snapshot), want 2 (2)", n, same)
+	}
+}
+
+// Read-only on seeded form 6001: the DOM hooks the history JS relies on.
+func TestIntegration_FormDef_ArchivedRowAndHistoryHooks(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	rec := httptest.NewRecorder()
+	h.FormDef(rec, withID(httptest.NewRequest(http.MethodGet, "/forms/6001/def", nil), 6001))
+	body := rec.Body.String()
+	for _, want := range []string{`<tr data-step-id="6104" class="step-archived">`, `id="show-archived-toggle"`,
+		`id="def-history-label"`, `def-timeline-now`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("FormDef(6001): body missing %q", want)
+		}
+	}
+}
+
+// #484: the trigger records the pre-update archived flag — archive (was FALSE), unarchive (was TRUE),
+// then a plain edit (was FALSE).
+func TestIntegration_FormRowHistory_TriggerRecordsArchived(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	partID, formID, testID := seedThrowawayForm(t, h, ctx, "ITEST-HA")
+	defer cleanupThrowawayForm(ctx, h, partID, formID, testID)
+
+	for _, v := range []string{"1", "0", "0"} { // the repeat restore is a no-op: no history row
+		rec := httptest.NewRecorder()
+		h.ArchiveStep(rec, adminCtx(withIDAndTestID(
+			postForm(fmt.Sprintf("/forms/%d/tests/%d/archive", formID, testID), url.Values{"archived": {v}}),
+			formID, testID)))
+		assertStatus(t, "ArchiveStep "+v, rec, http.StatusSeeOther)
+	}
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	records.New(tx).SetAuditUser(ctx, "itest")
+	if _, err := tx.ExecContext(ctx, `UPDATE form_row SET parameter='Step 2' WHERE id=$1`, testID); err != nil {
+		tx.Rollback()
+		t.Fatalf("update: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if got := historyArchived(t, handlerDB{h}, testID); fmt.Sprint(got) != "[false true false]" {
+		t.Errorf("history archived = %v, want [false true false]", got)
+	}
+}
+
+// historyArchived returns a step's form_row_history.archived values oldest first ("nil" for NULL).
+func historyArchived(t *testing.T, q interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, stepID int) []string {
+	t.Helper()
+	rows, err := q.QueryContext(context.Background(),
+		`SELECT archived FROM form_row_history WHERE form_row_id=$1 ORDER BY changed_at, id`, stepID)
+	if err != nil {
+		t.Fatalf("select history archived: %v", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var a sql.NullBool
+		if err := rows.Scan(&a); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if a.Valid {
+			out = append(out, strconv.FormatBool(a.Bool))
+		} else {
+			out = append(out, "nil")
+		}
+	}
+	return out
+}
+
+// #484: FormDefHistory returns each step's archived state at the selected time (NULL history falls back to
+// the live value) and whether it existed yet.
+func TestIntegration_FormDefHistory_ArchivedAndExistedAtTime(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	f := recForm(t, h)
+	step := func(archived bool, created any) int {
+		return repInsert(t, h, `INSERT INTO form_row (form_id, type, parameter, spec_max, archived, created_at)
+			VALUES ($1,0,'S','150',$2,$3::timestamptz) RETURNING id`, []any{f.formID, archived, created},
+			`DELETE FROM form_row_history WHERE form_row_id=$1`, `DELETE FROM form_row WHERE id=$1`)
+	}
+	hist := func(id int, at string, archived any, specMax string) {
+		repExec(t, h, `INSERT INTO form_row_history (form_row_id, changed_at, changed_by, spec_max, archived)
+			VALUES ($1,$2::timestamptz,'t',$3,$4)`, id, at, specMax, archived)
+	}
+	at := func(id int, day string) defStepState { return defHistoryStep(t, h, f.formID, id, "at="+day, "UTC") }
+
+	// E: edited 07-01 (spec_max 1 → 150), archived 07-03.
+	e := step(true, "2026-06-01")
+	hist(e, "2026-07-01 12:00+00", false, "1")
+	hist(e, "2026-07-03 12:00+00", false, "150")
+	for _, c := range []struct {
+		day               string
+		archived, changed bool
+	}{{"2026-07-01", false, true}, {"2026-07-02", false, false}, {"2026-07-03", true, true}, {"2026-07-04", true, false}} {
+		if s := at(e, c.day); s.Archived != c.archived || s.Changed != c.changed {
+			t.Errorf("E at %s: %+v, want archived %v changed %v", c.day, s, c.archived, c.changed)
+		}
+	}
+	// N: history written before the column existed (NULL) falls back to the live value.
+	n := step(true, "2026-06-01")
+	hist(n, "2026-07-03 12:00+00", nil, "150")
+	if s := at(n, "2026-07-01"); !s.Archived {
+		t.Errorf("N at 2026-07-01: %+v, want archived (live fallback)", s)
+	}
+	// X1: created 07-05, no history.
+	x1 := step(false, "2026-07-05")
+	if s := at(x1, "2026-07-01"); s.Existed {
+		t.Errorf("X1 at 2026-07-01: %+v, want not existed", s)
+	}
+	if s := at(x1, "2026-07-06"); !s.Existed {
+		t.Errorf("X1 at 2026-07-06: %+v, want existed", s)
+	}
+	// X2: NULL created_at counts as existing.
+	if s := at(step(false, nil), "2026-07-01"); !s.Existed {
+		t.Errorf("X2 (NULL created_at): %+v, want existed", s)
+	}
+	// X3: history before created_at (a load-time created_at) counts as existing.
+	x3 := step(false, "2026-07-05")
+	hist(x3, "2026-07-01 12:00+00", false, "150")
+	if s := at(x3, "2026-07-02"); !s.Existed {
+		t.Errorf("X3 (history before created_at): %+v, want existed", s)
+	}
+}
+
+// migrationBody returns the goose body (between StatementBegin/End) of the migration whose name contains tag.
+func migrationBody(t *testing.T, tag string) string {
+	t.Helper()
+	matches, _ := filepath.Glob(filepath.Join(migrationDir, "*"+tag+"*.sql"))
+	if len(matches) != 1 {
+		t.Fatalf("migration *%s*.sql: found %d files, want 1", tag, len(matches))
+	}
+	b, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	i, j := strings.Index(s, "-- +goose StatementBegin"), strings.LastIndex(s, "-- +goose StatementEnd")
+	if i < 0 || j < i {
+		t.Fatalf("%s: no goose statement block", matches[0])
+	}
+	return s[i+len("-- +goose StatementBegin") : j]
+}
+
+// #484: the migration's backfill infers archived on pre-existing (NULL) history rows by walking each step's
+// archive toggles back from its live flag; steps whose walk ends archived keep NULL; set rows are untouched.
+// Runs only the backfill statement (no DDL), in a transaction rolled back at the end, so the rest of the
+// database's history is never written outside the migrate runner.
+func TestIntegration_Migration484_BackfillArchived(t *testing.T) {
+	h, cleanup := liveHandler(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	f := recForm(t, h)
+	step := func(archived bool) int {
+		return repInsert(t, h, `INSERT INTO form_row (form_id, parameter, archived) VALUES ($1,'B',$2) RETURNING id`,
+			[]any{f.formID, archived}, `DELETE FROM form_row_history WHERE form_row_id=$1`, `DELETE FROM form_row WHERE id=$1`)
+	}
+	hist := func(id int, at, param string, archived any) {
+		repExec(t, h, `INSERT INTO form_row_history (form_row_id, changed_at, changed_by, parameter, archived)
+			VALUES ($1,$2::timestamptz,'t',$3,$4)`, id, at, param, archived)
+	}
+	// S1: edit A→B, archive, unarchive (all other columns NULL on both sides: NULL-safe compare).
+	s1 := step(false)
+	hist(s1, "2026-07-01 12:00+00", "A", nil)
+	hist(s1, "2026-07-02 12:00+00", "B", nil)
+	hist(s1, "2026-07-03 12:00+00", "B", nil)
+	// S2: one toggle from a live FALSE — the walk starts the step archived, so it fails the self-check.
+	s2 := step(false)
+	hist(s2, "2026-07-01 12:00+00", "B", nil)
+	// S3: a row already set keeps its value even where the walk disagrees.
+	s3 := step(true)
+	hist(s3, "2026-07-01 12:00+00", "B", true)
+	// S4: unchanged snapshots from before archiving existed (#403) or from the VBA import aren't toggles.
+	s4 := step(false)
+	hist(s4, "2026-06-01 12:00+00", "B", nil)
+	repExec(t, h, `INSERT INTO form_row_history (form_row_id, changed_at, changed_by, parameter)
+		VALUES ($1,'2026-07-01 12:00+00','VBA_MIGRATION','B')`, s4)
+
+	body := migrationBody(t, "_484_")
+	i := strings.Index(body, "WITH s AS")
+	if i < 0 {
+		t.Fatal("migration 484: backfill statement not found")
+	}
+	tx, err := h.beginTx(ctx)
+	if err != nil {
+		t.Fatalf("beginTx: %v", err)
+	}
+	defer tx.Rollback()
+	for run := 1; run <= 2; run++ {
+		if _, err := tx.ExecContext(ctx, body[i:]); err != nil {
+			t.Fatalf("run %d: %v", run, err)
+		}
+		for _, c := range []struct {
+			name string
+			id   int
+			want string
+		}{{"S1", s1, "[false false true]"}, {"S2", s2, "[nil]"}, {"S3", s3, "[true]"}, {"S4", s4, "[false false]"}} {
+			if got := historyArchived(t, tx, c.id); fmt.Sprint(got) != c.want {
+				t.Errorf("run %d %s: archived = %v, want %s", run, c.name, got, c.want)
+			}
+		}
+	}
+	// The seed's one trigger-written history row (step 6103, never archived).
+	if got := historyArchived(t, tx, 6103); fmt.Sprint(got) != "[false]" {
+		t.Errorf("seed step 6103 history archived = %v, want [false]", got)
 	}
 }
 
