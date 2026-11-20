@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.116] - 2026-11-19
+### Changed
+- `SQL/schema_diagram.md`: added the `part_attachment.supplier_part_id`/`mfg_part_id` FKs and their relationships, the recent form/record/result columns (serial prefix/padding, recurrence and next due date, evaluated bounds), and the behaviour-driving columns the per-area diagrams left out (`form_row.archived`/`hide_formula`, `part.tracking_mode`, unlock comments, `form_row_history`'s stored earlier values, PO dates) ([#483](https://github.com/Jolls/arx/issues/483))
+
 ## [0.8.115] - 2026-11-19
 ### Changed
 - Form definition history timeline: each gap between dots gets a minimum 2% of the bar plus a share proportional to its length capped at 20 days, so a burst of edits no longer overlaps and long quiet stretches no longer take over the bar ([#480](https://github.com/Jolls/arx/issues/480))
