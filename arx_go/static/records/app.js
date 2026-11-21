@@ -525,6 +525,19 @@ document.addEventListener('change', function (e) { updatePF(e.target) })
   })
 }())
 
+// hiddenChangedSteps counts a history response's changed steps the viewer can't see (#484): not in the table
+// (e.g. a hide formula) or archived at that time while Show archived is off. archived = how many of those are
+// archived-hidden rows. Steps that didn't exist yet aren't counted.
+function hiddenChangedSteps(steps, rowIDs, showArchived) {
+  var out = {count: 0, archived: 0}
+  steps.forEach(function (s) {
+    if (!s.changed || !s.existed) return
+    if (!rowIDs.has(s.id)) out.count++
+    else if (s.archived && !showArchived) { out.count++; out.archived++ }
+  })
+  return out
+}
+
 // Definition history timeline.
 document.addEventListener('DOMContentLoaded', function () {
   var timeline = document.querySelector('.def-timeline')
@@ -535,16 +548,40 @@ document.addEventListener('DOMContentLoaded', function () {
   var label  = document.getElementById('def-history-label')
   var nowDot = timeline.querySelector('.def-timeline-now')
   var dots   = Array.from(timeline.querySelectorAll('.def-timeline-dot'))
+  var note   = document.getElementById('def-history-hidden')
+  var archToggle = document.getElementById('show-archived-toggle')
 
-  // Store original cell text so we can restore when Now is clicked.
-  var originals = {}
+  // Store original cell HTML (keeps the archived badge) and archived state so we can restore when Now is clicked.
+  var originals = {}, origArchived = {}, rowIDs = new Set()
   table.querySelectorAll('tr[data-step-id]').forEach(function (tr) {
     var id = tr.dataset.stepId
+    rowIDs.add(parseInt(id))
+    origArchived[id] = tr.classList.contains('step-archived')
     originals[id] = {}
     tr.querySelectorAll('[data-field]').forEach(function (td) {
-      originals[id][td.dataset.field] = td.textContent
+      originals[id][td.dataset.field] = td.innerHTML
     })
   })
+
+  // "N changed steps are hidden" under the timeline for the dot being viewed (#484); current = its response.
+  var current = null
+  function renderNote() {
+    var r = current ? hiddenChangedSteps(current.steps || [], rowIDs, !archToggle || archToggle.checked) : {count: 0}
+    note.textContent = r.count === 1 ? '1 changed step is hidden' : r.count + ' changed steps are hidden'
+    if (r.archived && archToggle) {
+      var a = document.createElement('a')
+      a.href = '#'
+      a.textContent = 'Show archived'
+      a.addEventListener('click', function (e) {
+        e.preventDefault()
+        archToggle.checked = true
+        archToggle.dispatchEvent(new Event('change'))
+      })
+      note.append(' · ', a)
+    }
+    note.classList.toggle('d-none', r.count === 0)
+  }
+  if (archToggle) archToggle.addEventListener('change', renderNote)
 
   // Prev/next step through the dots in DOM order (oldest … Now); disabled at either end.
   var prevBtn = document.getElementById('def-history-prev')
@@ -576,24 +613,36 @@ document.addEventListener('DOMContentLoaded', function () {
       var s = stepMap[id]
       if (!s) return
       tr.classList.toggle('row-changed', s.changed)
+      tr.classList.toggle('step-archived', s.archived)
+      tr.classList.toggle('d-none', !s.existed)
       tr.querySelectorAll('[data-field]').forEach(function (td) {
         var field = td.dataset.field
         td.textContent = s[field] !== undefined ? s[field] : ''
       })
+      var p = tr.querySelector('[data-field="parameter"]')
+      if (s.archived && p) p.insertAdjacentHTML('beforeend', ' <span class="badge bg-secondary">archived</span>')
     })
+    // No Show archived switch means no step is archived now: show rows archived back then, greyed.
+    if (!archToggle) table.classList.add('show-archived')
     label.textContent = 'Showing state after: ' + dotLabel
+    current = data
+    renderNote()
   }
 
   function resetToNow() {
     table.querySelectorAll('tr[data-step-id]').forEach(function (tr) {
-      tr.classList.remove('row-changed')
+      tr.classList.remove('row-changed', 'd-none')
       var id = tr.dataset.stepId
+      tr.classList.toggle('step-archived', origArchived[id])
       tr.querySelectorAll('[data-field]').forEach(function (td) {
-        td.textContent = (originals[id] && originals[id][td.dataset.field]) || ''
+        td.innerHTML = (originals[id] && originals[id][td.dataset.field]) || ''
       })
     })
+    if (!archToggle) table.classList.remove('show-archived')
     setActiveDot(nowDot)
     label.textContent = ''
+    current = null
+    renderNote()
   }
 
   // Event delegation — single listener handles all dots including Now.

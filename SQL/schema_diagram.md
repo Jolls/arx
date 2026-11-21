@@ -282,6 +282,7 @@ erDiagram
         varchar  spec_nom
         varchar  hide_formula
         varchar  pf_type
+        bit      archived    "pre-change value; NULL = not recorded"
     }
 
     form_record {
@@ -926,6 +927,7 @@ erDiagram
         varchar  spec_max      "pre-change value"
         varchar  spec_nom      "pre-change value"
         varchar  hide_formula  "pre-change value"
+        bit      archived      "pre-change value; NULL = not recorded"
     }
 
     form_record {

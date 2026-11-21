@@ -201,14 +201,14 @@ BEGIN
        type, parameter, specification, spec_units,
        spec_min, spec_max, spec_nom, default_result,
        hide_formula, pf_type,
-       instrument_types, format, comment, category, sheet_name)
+       instrument_types, format, comment, category, sheet_name, archived)
     SELECT
       id, CURRENT_TIMESTAMP,
       COALESCE(current_setting('arx.username', true), ''),
       type, parameter, specification, spec_units,
       spec_min, spec_max, spec_nom, default_result,
       hide_formula, pf_type,
-      instrument_types, format, comment, category, sheet_name
+      instrument_types, format, comment, category, sheet_name, archived
     FROM oldtab;
     RETURN NULL;
 END;

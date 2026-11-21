@@ -481,7 +481,8 @@ func timelinePositions(times []time.Time, now time.Time) []float64 {
 // FormDefHistory â€" GET /api/forms/{id}/def/history?at=<YYYY-MM-DD> | ?at=<RFC3339>&since=<RFC3339|"">
 // Returns the form definition state as JSON. A day returns the state at the end of that day, changed =
 // history within the day (#478): the day's last save wins. An instant (a release marker, #481) returns
-// the state at that instant, changed = history in [since, at); empty since = from the start.
+// the state at that instant, changed = history in [since, at); empty since = from the start. Each step also
+// carries its archived flag at that time and whether it existed yet (#484).
 func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 	formID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -522,6 +523,8 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 		DefaultResult string `json:"default_result"`
 		HideFormula   string `json:"hide_formula"`
 		Changed       bool   `json:"changed"`
+		Archived      bool   `json:"archived"`
+		Existed       bool   `json:"existed"`
 	}
 
 	rows, err := h.records().ListFormStepsAt(r.Context(), formID, start.UTC(), end.UTC())
@@ -534,7 +537,8 @@ func (h *Handler) FormDefHistory(w http.ResponseWriter, r *http.Request) {
 	for _, s := range rows {
 		steps = append(steps, stepState{ID: s.ID, Type: s.Type, Parameter: s.Parameter, SpecNom: s.SpecNom,
 			SpecMin: s.SpecMin, SpecMax: s.SpecMax, SpecUnits: s.SpecUnits, PFType: s.PfType,
-			DefaultResult: s.DefaultResult, HideFormula: s.HideFormula, Changed: s.Changed})
+			DefaultResult: s.DefaultResult, HideFormula: s.HideFormula, Changed: s.Changed,
+			Archived: s.Archived, Existed: s.Existed})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

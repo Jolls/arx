@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.119] - 2026-11-20
+### Fixed
+- Form definition history: each date now shows steps as active or archived as they were then, hides steps that didn't exist yet, and notes when changed steps are hidden; step history records the archived flag, backfilled for older entries where it can be inferred ([#484](https://github.com/Jolls/arx/issues/484))
+
 ## [0.8.118] - 2026-11-20
 ### Added
 - Form definition view: "Audit log (N)" collapsible listing each release and unlock with date, user and comment, so unlock comments are visible in the app ([#487](https://github.com/Jolls/arx/issues/487))
