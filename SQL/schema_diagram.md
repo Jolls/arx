@@ -62,8 +62,8 @@ erDiagram
         varchar description
         varchar release_status        "U/A/D"
         int     primary_attachment_id FK
-        int     price_id              FK "deferred, not enforced"
-        int     default_supplier_id   FK "deferred, not enforced"
+        int     price_id              FK "active price"
+        int     default_supplier_id   FK "preferred supplier; feeds cost rollup"
         int     uom_id                FK
         int     attachment_count      "denormalized, trigger-maintained"
         int     po_line_count         "denormalized, trigger-maintained"
@@ -307,7 +307,7 @@ erDiagram
     form_events {
         int      id         PK
         int      form_id    FK
-        varchar  event_type "locked/unlocked/archived/activated"
+        varchar  event_type "locked/unlocked"
         varchar  username
         datetime event_date
         varchar  comments
@@ -335,7 +335,7 @@ erDiagram
     record_events {
         int      id             PK
         int      form_record_id FK
-        varchar  event_type     "locked/unlocked/archived/activated"
+        varchar  event_type     "completed/approved/unlocked"
         varchar  username
         datetime event_date
         varchar  comments
@@ -399,10 +399,11 @@ erDiagram
     }
 
     %% ===== Relationships: companies & contacts =====
-    company             ||--o{ company_attachment : "attachments (supplier_id)"
+    company             ||..o{ company_attachment : "attachments (supplier_id, logical only)"
     company_attachment  ||--o{ company             : "primary attachment for (primary_attachment_id)"
-    company             ||..o{ contact             : "contacts (company_id, deferred FK)"
+    company             ||--o{ contact             : "contacts (company_id)"
     contact             ||--o{ company             : "default contact for (default_contact)"
+    company             ||--o{ part                : "preferred supplier for (default_supplier_id)"
     company             ||--o{ supplier_part       : "sourcing links (supplier_id)"
     company             ||--o{ mfg_part            : "as manufacturer (mfg_id)"
     company             ||--o{ price               : "pricing (supplier_id)"
@@ -419,6 +420,7 @@ erDiagram
     part             ||--o{ supplier_part    : "sourcing links (part_id)"
     part             ||--o{ mfg_part         : "manufacturer PNs (part_id)"
     part             ||--o{ price            : "pricing (part_id)"
+    price            ||--o{ part             : "active price for (price_id)"
     part             ||--o{ po_line          : "PO lines (part_id)"
     uom               ||--o{ part            : "base unit (uom_id)"
     part_category     ||--o{ part            : "category (code)"
@@ -472,19 +474,21 @@ erDiagram
   `TestResults` — were fully renamed across #534–#693; see `SQL/SCHEMA.md` for the
   per-table rename history).
 - **Non-enforced references** (dotted lines above): a handful of FK-shaped columns have no
-  actual `FOREIGN KEY` constraint in the DDL — either explicitly deferred
-  (`contact.company_id`, `part.price_id`, `part.default_supplier_id` — see #213/#465) or a
-  leftover commented-out `ALTER TABLE ... ADD CONSTRAINT` in the DDL file that was never
-  applied (`form_row.form_id`, `form_record.form_id`, `form_record.lot_id`,
-  `form_record.build_id`, `result.form_record_id`, `result.form_row_id`,
-  `form_row_history.form_row_id`, `record_event_results.form_row_id`). `form_record.part_id`
-  and `form.part_number_id` were promoted to real enforced FKs in #742/#744 respectively —
-  they are drawn solid above.
+  actual `FOREIGN KEY` constraint in the DDL — either never constrained
+  (`company_attachment.supplier_id`, `form_row_history.form_row_id`,
+  `record_event_results.form_row_id`) or a leftover commented-out
+  `ALTER TABLE ... ADD CONSTRAINT` in the DDL file that was never applied
+  (`form_row.form_id`, `form_record.form_id`, `form_record.lot_id`, `form_record.build_id`,
+  `result.form_record_id`, `result.form_row_id`). `contact.company_id`, `part.price_id` and
+  `part.default_supplier_id` (once deferred, #213/#465) and `form_record.part_id`/
+  `form.part_number_id` (#742/#744) are now enforced FKs — they are drawn solid above.
 - **`genealogy`** endpoints are polymorphic: `CK_gen_one_parent`/`CK_gen_one_child` each
   enforce exactly one of the lot/unit FK pair being set per edge, so a single edge is
   lot→lot, lot→unit, unit→lot, or unit→unit.
-- **`app_config`**, **`named_queries`**, and **`users`**
-  have no foreign key relationships to other tables.
+- **`app_config`**, **`attachment_category`**, **`named_queries`**, and **`users`**
+  have no foreign key relationships to other tables (`part_attachment.category` and
+  `users.default_po_contact_id`/`default_po_receiver_id` are plain values, not FKs).
+  `schema_migrations` (the migration ledger) is omitted from all diagrams.
 - Denormalized/trigger-maintained columns (`company.supplier_part_count`/`po_count`,
   `part.attachment_count`/`po_line_count`) are recalculated by triggers in
   `SQL/triggers.sql` — never updated directly in application code.
@@ -508,8 +512,8 @@ erDiagram
         varchar category              "FK part_category.code"
         varchar release_status        "U/A/D"
         int     uom_id                FK
-        int     price_id              FK "deferred, not enforced"
-        int     default_supplier_id   FK "deferred, not enforced"
+        int     price_id              FK "active price"
+        int     default_supplier_id   FK "preferred supplier; feeds cost rollup"
         int     primary_attachment_id FK
         varchar tracking_mode         "none/lot/serial/lot_serial"
         bit     is_active
@@ -558,7 +562,7 @@ erDiagram
     part                ||--o{ company_schematic  : "pricing (price.part_id)"
     part                ||--o{ company_schematic  : "sourcing links (supplier_part.part_id, uom_id)"
     part                ||--o{ company_schematic  : "manufacturer PNs (mfg_part.part_id)"
-    company_schematic   ||..o{ part               : "preferred supplier & active price (default_supplier_id, price_id — deferred)"
+    company_schematic   ||--o{ part               : "preferred supplier & active price (default_supplier_id, price_id)"
     company_schematic   ||--o{ part_attachment    : "scoped files (supplier_part_id, mfg_part_id)"
 ```
 
@@ -630,9 +634,9 @@ erDiagram
         varchar uom
     }
 
-    company              ||--o{ company_attachment : "attachments (supplier_id)"
+    company              ||..o{ company_attachment : "attachments (supplier_id, logical only)"
     company_attachment   ||--o{ company             : "primary attachment for (primary_attachment_id)"
-    company              ||..o{ contact             : "contacts (company_id, deferred)"
+    company              ||--o{ contact             : "contacts (company_id)"
     contact              ||--o{ company             : "default contact for (default_contact)"
     company               ||--o{ supplier_part       : "sourcing links (supplier_id)"
     company               ||--o{ mfg_part            : "as manufacturer (mfg_id)"
@@ -641,7 +645,8 @@ erDiagram
     parts_schematic         ||--o{ price                : "priced parts (part_id)"
     parts_schematic         ||--o{ supplier_part         : "sourced parts & purchase unit (part_id, uom_id)"
     parts_schematic         ||--o{ mfg_part              : "manufacturer PNs (part_id)"
-    company                 ||..o{ parts_schematic        : "preferred supplier & active price for (default_supplier_id, price_id — deferred)"
+    company                 ||--o{ parts_schematic        : "preferred supplier for (part.default_supplier_id)"
+    price                   ||--o{ parts_schematic        : "active price for (part.price_id)"
     supplier_part           ||--o{ parts_schematic        : "scoped part files (part_attachment.supplier_part_id)"
     mfg_part                ||--o{ parts_schematic        : "scoped part files (part_attachment.mfg_part_id)"
 ```
@@ -906,7 +911,7 @@ erDiagram
     form_events {
         int      id         PK
         int      form_id    FK
-        varchar  event_type "locked/unlocked/archived/activated"
+        varchar  event_type "locked/unlocked"
         varchar  username
         datetime event_date
         varchar  comments   "required on unlock"
@@ -937,7 +942,7 @@ erDiagram
     record_events {
         int      id             PK
         int      form_record_id FK
-        varchar  event_type     "locked/unlocked/archived/activated"
+        varchar  event_type     "completed/approved/unlocked"
         varchar  username
         datetime event_date
         varchar  comments       "required on unlock"
