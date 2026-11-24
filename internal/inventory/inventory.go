@@ -849,29 +849,31 @@ func (s *Service) LinkRecordToBuild(ctx context.Context, recordID, partID int, l
 	return n > 0, err
 }
 
-// FindResult is one lot, unit, build, part, PO, company, contact, manufacturer part number or
-// supplier part number matched by FindRecords (#416, #2). OutputLotID is 0 except for a build
-// that produced a lot. For a part, mfg_part or supplier_part, ID/PartID are both the owning
-// part's id (a mfg_part/supplier_part match lands on that part's Sourcing tab, not a page of its
-// own). PartID is 0 for a PO, company or contact (none is scoped to one part); PartDescription
-// instead carries the PO's supplier name or the contact's company name. A "company" match isn't
-// restricted to is_supplier rows, since /supplier/{id} shows any company.
+// FindResult is one lot, unit, build, part, PO, company, contact, manufacturer part number,
+// supplier part number or unlinked PO line vendor part number matched by FindRecords (#416, #2).
+// OutputLotID is 0 except for a build that produced a lot. For a part, mfg_part or supplier_part,
+// ID/PartID are both the owning part's id (a mfg_part/supplier_part match lands on that part's
+// Sourcing tab, not a page of its own). PartID is 0 for a PO, company, contact or po_line (none
+// is scoped to one part); PartDescription instead carries the PO's supplier name, the contact's
+// company name or the PO line's description. A "company" match isn't restricted to is_supplier
+// rows, since /supplier/{id} shows any company. A po or po_line match lands on the PO (PONumber).
 type FindResult struct {
-	Kind            string // "lot" | "unit" | "build" | "part" | "po" | "company" | "contact" | "mfg_part" | "supplier_part"
+	Kind            string // "lot" | "unit" | "build" | "part" | "po" | "company" | "contact" | "mfg_part" | "supplier_part" | "po_line"
 	ID, PartID      int
 	PartNumber      string
 	PartDescription string
-	Name            string // lot/serial/part number, po.number, company.name, contact.display_name, mfg_part_number or supplier_pn; "" for a build
+	Name            string // lot/serial/part number, po.number, company.name, contact.display_name, mfg_part_number, supplier_pn or vendor_part_number; "" for a build
+	PONumber        string // the PO's number for a po or po_line; "" otherwise
 	OutputLotID     int
 	MatchedID       bool
 	MatchedName     bool
 }
 
 // FindRecords returns every lot, unit, build, part, PO, company, contact, manufacturer part
-// number and supplier part number whose id, lot number, serial, part number, PO number, company
-// name, contact name, MPN or supplier PN exactly equals q (lots first, then units, builds,
-// parts, POs, companies, contacts, MPNs, then supplier PNs). q must be non-empty; the caller
-// trims it.
+// number, supplier part number and unlinked PO line vendor part number whose id, lot number,
+// serial, part number, PO number, company name, contact name, MPN, supplier PN or vendor PN
+// equals q, text case-insensitively (lots first, then units, builds, parts, POs, companies,
+// contacts, MPNs, supplier PNs, then PO lines). q must be non-empty; the caller trims it.
 func (s *Service) FindRecords(ctx context.Context, q string) ([]FindResult, error) {
 	var id *int
 	if n, err := strconv.Atoi(q); err == nil && q[0] != '+' && n > 0 && n <= math.MaxInt32 {
@@ -884,7 +886,7 @@ func (s *Service) FindRecords(ctx context.Context, q string) ([]FindResult, erro
 	out := make([]FindResult, len(rows))
 	for i, r := range rows {
 		out[i] = FindResult{Kind: r.Kind, ID: r.ID, PartID: r.PartID, PartNumber: r.PartNumber,
-			PartDescription: r.PartDescription, Name: r.Name, MatchedID: r.MatchedID, MatchedName: r.MatchedName}
+			PartDescription: r.PartDescription, Name: r.Name, PONumber: r.PoNumber, MatchedID: r.MatchedID, MatchedName: r.MatchedName}
 		if r.OutputLotID != nil {
 			out[i].OutputLotID = *r.OutputLotID
 		}

@@ -375,66 +375,74 @@ ORDER BY u.id
 LIMIT sqlc.arg(n)::int;
 
 -- name: FindTraceRecords :many
--- Lookup (#416, #2): lots/units/builds whose id, lot_number or serial_number exactly equals the
--- query, plus parts, POs, companies (suppliers, manufacturers or other; matched on name
--- regardless of is_supplier, since /supplier/{id} shows any company), contacts, manufacturer
--- part numbers (mfg_part, active only - inactive is a soft-delete) and supplier part numbers
--- (supplier_part) whose part_number / po.number / company.name / contact.display_name /
--- mfg_part_number / supplier_pn exactly equals it (human identifier only; part.id, po.id,
--- company.id, contact.id, mfg_part.id and supplier_part.id aren't matched since none is a value
--- a user would type or scan). id is NULL when the query isn't a usable int. mfg_part and
--- supplier_part land on the owning part's Sourcing tab, so their id/part_id are both that part's
--- id. The flags say which field matched.
-SELECT r.kind, r.id, r.part_id, r.part_number, r.part_description, r.output_lot_id, r.name, r.matched_id, r.matched_name
+-- Lookup (#416, #2): lots/units/builds whose id, lot_number or serial_number equals the query
+-- (text fields case-insensitively), plus parts, POs, companies (suppliers, manufacturers or
+-- other; matched on name regardless of is_supplier, since /supplier/{id} shows any company),
+-- contacts, manufacturer part numbers (mfg_part, active only - inactive is a soft-delete),
+-- supplier part numbers (supplier_part) and vendor part numbers on PO lines not linked to a part
+-- (po_line; a linked line's vendor PN is only found if it is also a supplier_pn) whose part_number / po.number /
+-- company.name / contact.display_name / mfg_part_number / supplier_pn / vendor_part_number
+-- equals it case-insensitively (human identifier only; part.id, po.id, company.id, contact.id,
+-- mfg_part.id, supplier_part.id and po_line.id aren't matched since none is a value a user would
+-- type or scan). id is NULL when the query isn't a usable int. mfg_part and supplier_part land
+-- on the owning part's Sourcing tab, so their id/part_id are both that part's id. po_number is
+-- the PO's number for a po or po_line match (empty otherwise). The flags say which field matched.
+SELECT r.kind, r.id, r.part_id, r.part_number, r.part_description, r.output_lot_id, r.name, r.po_number, r.matched_id, r.matched_name
 FROM (
     SELECT 'lot'::text AS kind, l.id, l.part_id, COALESCE(p.part_number, '')::text AS part_number,
            COALESCE(p.description, '')::text AS part_description, NULL::int AS output_lot_id, l.lot_number::text AS name,
+           ''::text AS po_number,
            COALESCE(l.id = sqlc.narg(id)::int, FALSE)::bool AS matched_id,
-           (l.lot_number = sqlc.arg(q)::text)::bool AS matched_name
+           (lower(l.lot_number) = lower(sqlc.arg(q)::text))::bool AS matched_name
     FROM lot l JOIN part p ON p.id = l.part_id
-    WHERE l.id = sqlc.narg(id)::int OR l.lot_number = sqlc.arg(q)::text
+    WHERE l.id = sqlc.narg(id)::int OR lower(l.lot_number) = lower(sqlc.arg(q)::text)
     UNION ALL
     SELECT 'unit'::text, u.id, u.part_id, COALESCE(p.part_number, '')::text, COALESCE(p.description, '')::text,
-           NULL::int, u.serial_number::text, COALESCE(u.id = sqlc.narg(id)::int, FALSE)::bool,
-           (u.serial_number = sqlc.arg(q)::text)::bool
+           NULL::int, u.serial_number::text, ''::text, COALESCE(u.id = sqlc.narg(id)::int, FALSE)::bool,
+           (lower(u.serial_number) = lower(sqlc.arg(q)::text))::bool
     FROM unit u JOIN part p ON p.id = u.part_id
-    WHERE u.id = sqlc.narg(id)::int OR u.serial_number = sqlc.arg(q)::text
+    WHERE u.id = sqlc.narg(id)::int OR lower(u.serial_number) = lower(sqlc.arg(q)::text)
     UNION ALL
     SELECT 'build'::text, b.id, b.part_id, COALESCE(p.part_number, '')::text, COALESCE(p.description, '')::text,
-           b.output_lot_id, ''::text, TRUE, FALSE
+           b.output_lot_id, ''::text, ''::text, TRUE, FALSE
     FROM build b JOIN part p ON p.id = b.part_id
     WHERE b.id = sqlc.narg(id)::int
     UNION ALL
     SELECT 'part'::text, p2.id, p2.id, p2.part_number::text, COALESCE(p2.description, '')::text,
-           NULL::int, p2.part_number::text, FALSE, TRUE
+           NULL::int, p2.part_number::text, ''::text, FALSE, TRUE
     FROM part p2
-    WHERE p2.part_number = sqlc.arg(q)::text
+    WHERE lower(p2.part_number) = lower(sqlc.arg(q)::text)
     UNION ALL
     SELECT 'po'::text, po.id, 0, ''::text, COALESCE(po.supplier_name, '')::text,
-           NULL::int, po.number::text, FALSE, TRUE
+           NULL::int, po.number::text, po.number::text, FALSE, TRUE
     FROM purchase_order po
-    WHERE po.number = sqlc.arg(q)::text
+    WHERE lower(po.number) = lower(sqlc.arg(q)::text)
     UNION ALL
     SELECT 'company'::text, c.id, 0, ''::text, ''::text,
-           NULL::int, c.name::text, FALSE, TRUE
+           NULL::int, c.name::text, ''::text, FALSE, TRUE
     FROM company c
-    WHERE c.name = sqlc.arg(q)::text
+    WHERE lower(c.name) = lower(sqlc.arg(q)::text)
     UNION ALL
     SELECT 'contact'::text, ct.id, 0, ''::text, COALESCE(cc.name, '')::text,
-           NULL::int, ct.display_name::text, FALSE, TRUE
+           NULL::int, ct.display_name::text, ''::text, FALSE, TRUE
     FROM contact ct LEFT JOIN company cc ON cc.id = ct.company_id
-    WHERE ct.display_name = sqlc.arg(q)::text
+    WHERE lower(ct.display_name) = lower(sqlc.arg(q)::text)
     UNION ALL
     SELECT 'mfg_part'::text, mp.part_id, mp.part_id, COALESCE(p.part_number, '')::text,
-           COALESCE(p.description, '')::text, NULL::int, mp.mfg_part_number::text, FALSE, TRUE
+           COALESCE(p.description, '')::text, NULL::int, mp.mfg_part_number::text, ''::text, FALSE, TRUE
     FROM mfg_part mp JOIN part p ON p.id = mp.part_id
-    WHERE mp.mfg_part_number = sqlc.arg(q)::text AND mp.is_active
+    WHERE lower(mp.mfg_part_number) = lower(sqlc.arg(q)::text) AND mp.is_active
     UNION ALL
     SELECT 'supplier_part'::text, sp.part_id, sp.part_id, COALESCE(p.part_number, '')::text,
-           COALESCE(p.description, '')::text, NULL::int, sp.supplier_pn::text, FALSE, TRUE
+           COALESCE(p.description, '')::text, NULL::int, sp.supplier_pn::text, ''::text, FALSE, TRUE
     FROM supplier_part sp JOIN part p ON p.id = sp.part_id
-    WHERE sp.supplier_pn = sqlc.arg(q)::text
+    WHERE lower(sp.supplier_pn) = lower(sqlc.arg(q)::text)
+    UNION ALL
+    SELECT 'po_line'::text, pl.id, 0, COALESCE(pl.part_number_snapshot, '')::text, COALESCE(pl.description, '')::text,
+           NULL::int, pl.vendor_part_number::text, po.number::text, FALSE, TRUE
+    FROM po_line pl JOIN purchase_order po ON po.id = pl.po_id
+    WHERE lower(pl.vendor_part_number) = lower(sqlc.arg(q)::text) AND pl.part_id IS NULL
 ) r
 ORDER BY CASE r.kind WHEN 'lot' THEN 1 WHEN 'unit' THEN 2 WHEN 'build' THEN 3 WHEN 'part' THEN 4
     WHEN 'po' THEN 5 WHEN 'company' THEN 6 WHEN 'contact' THEN 7 WHEN 'mfg_part' THEN 8
-    ELSE 9 END, r.id;
+    WHEN 'supplier_part' THEN 9 ELSE 10 END, r.id;

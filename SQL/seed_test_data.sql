@@ -413,6 +413,8 @@ END $$;
     -- (queryOnTimeDelivery) needs at least one such row to exercise its on-time-% math;
     -- quoted 50 days against 2026-04-01 date_ordered vs. actual 2026-05-15 date_received
     -- means it arrived 6 days early (on time).
+    -- 5513 is the one line with no linked part (part_id NULL, free-text consumable), so the
+    -- header Find box's PO vendor PN lookup has an unlinked line to resolve (GR-5RAG200 -> PO 5009).
     INSERT INTO po_line (id, po_id, part_number_snapshot, revision_snapshot, part_id, line_number, description, qty, unit_cost, vendor_part_number, lead_time_days, received_qty, date_received) VALUES
         (5501, 5001, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       10,  2.50,  'ACME-AL6061', NULL, 0,  NULL),
         (5502, 5002, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       20,  2.50,  'ACME-AL6061', NULL, 0,  NULL),
@@ -421,7 +423,8 @@ END $$;
         (5505, 5004, 'RAW-1001', 'A', 3001, 1, 'Aluminum Stock 6061',       10,  2.50,  'ACME-AL6061', NULL, 10, '2026-01-18'),
         (5506, 5008, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.048, 'PMC-M3X8',    NULL, 0,  NULL),
         (5511, 5010, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.055, 'ACME-M3X8',   14,   0,  NULL),
-        (5512, 5011, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.048, 'PMC-M3X8',    21,   0,  NULL);
+        (5512, 5011, 'BUY-1001', 'A', 3002, 1, 'M3x8 SHCS',                 500, 0.048, 'PMC-M3X8',    21,   0,  NULL),
+        (5513, 5009, NULL,       NULL, NULL, 1, 'Lint-free shop rags, box of 200', 4, 15.00, 'GR-5RAG200', NULL, 0, NULL);
 
     -- 5805 (PO 5009's submission) is dated well before "today" so the reference pending PO
     -- shows a non-trivial age on the Reports dashboard's POs Pending Approval card (issue

@@ -7022,7 +7022,7 @@ func TestIntegration_QuerySpendBySupplier(t *testing.T) {
 		order = append(order, row.SupplierName)
 	}
 	assertFloatEqual(t, "Acme Fasteners total spend", byName["Acme Fasteners"], 282.50)
-	assertFloatEqual(t, "Precision Machining Co total spend", byName["Precision Machining Co"], 108.00)
+	assertFloatEqual(t, "Precision Machining Co total spend", byName["Precision Machining Co"], 168.00) // incl. unlinked po_line 5513 (4 x 15.00, PO 5009)
 
 	acmeIdx, precisionIdx := -1, -1
 	for i, name := range order {

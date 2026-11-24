@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.121] - 2026-11-23
+### Added
+- Header Find box also matches the vendor PN on PO lines with no linked part (opens the PO), and has a hover tooltip spelling out what it matches
+### Changed
+- Header Find box matches text case-insensitively (still exact, no partial matches)
+
 ## [0.8.120] - 2026-11-23
 ### Changed
 - `SQL/schema_diagram.md`: `contact.company_id`, `part.price_id` and `part.default_supplier_id` drawn as the enforced FKs they are (the last two were missing from the full schema), `company_attachment.supplier_id` drawn as logical-only, and `form_events`/`record_events` event types corrected to what the app writes

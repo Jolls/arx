@@ -19,12 +19,13 @@ func TestFindURL(t *testing.T) {
 		{inventory.FindResult{Kind: "build", PartID: 3013, ID: 8203, OutputLotID: 8306}, "/part/3013/lots/8306"},
 		{inventory.FindResult{Kind: "build", PartID: 3005, ID: 8201}, "/part/3005/build"},
 		{inventory.FindResult{Kind: "part", ID: 3005}, "/part/3005"},
-		{inventory.FindResult{Kind: "po", Name: "1234"}, "/po/1234"},
-		{inventory.FindResult{Kind: "po", Name: "PO 1/2"}, "/po/PO%201%2F2"},
+		{inventory.FindResult{Kind: "po", Name: "1234", PONumber: "1234"}, "/po/1234"},
+		{inventory.FindResult{Kind: "po", Name: "PO 1/2", PONumber: "PO 1/2"}, "/po/PO%201%2F2"},
 		{inventory.FindResult{Kind: "company", ID: 1001}, "/supplier/1001"},
 		{inventory.FindResult{Kind: "contact", ID: 55}, "/contact/55"},
 		{inventory.FindResult{Kind: "mfg_part", PartID: 3002, ID: 3002}, "/part/3002/suppliers"},
 		{inventory.FindResult{Kind: "supplier_part", PartID: 3001, ID: 3001}, "/part/3001/suppliers"},
+		{inventory.FindResult{Kind: "po_line", ID: 5513, Name: "GR-5RAG200", PONumber: "PO 1/2"}, "/po/PO%201%2F2"},
 	} {
 		if got := findURL(c.r); got != c.want {
 			t.Errorf("findURL(%+v) = %q; want %q", c.r, got, c.want)
@@ -48,6 +49,7 @@ func TestMatchedLabel(t *testing.T) {
 		{inventory.FindResult{Kind: "contact", MatchedName: true}, "Contact name"},
 		{inventory.FindResult{Kind: "mfg_part", MatchedName: true}, "Manufacturer part number"},
 		{inventory.FindResult{Kind: "supplier_part", MatchedName: true}, "Supplier part number"},
+		{inventory.FindResult{Kind: "po_line", MatchedName: true}, "PO vendor part number"},
 	} {
 		if got := matchedLabel(c.r); got != c.want {
 			t.Errorf("matchedLabel(%+v) = %q; want %q", c.r, got, c.want)
