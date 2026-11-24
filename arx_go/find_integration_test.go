@@ -33,7 +33,12 @@ func TestIntegration_Find_ResolvesLotUnitBuild(t *testing.T) {
 		"Acme Fasteners": "/supplier/1001",       // company name (#2)
 		"John Doe":       "/contact/2001",        // contact name (#2)
 		"CX-4471":        "/part/3002/suppliers", // manufacturer part number (#2)
-		"ACME-AL6061":    "/part/3001/suppliers", // supplier part number (#2)
+		"ACME-AL6061":    "/part/3001/suppliers", // supplier part number (#2); its linked PO lines aren't matched
+		"GR-5RAG200":     "/po/5009",             // vendor PN on a PO line with no linked part
+		"sn-3013-001":    "/part/3013/units/8501", // text matches are case-insensitive
+		"asm-1001":       "/part/3005",
+		"acme fasteners": "/supplier/1001",
+		"gr-5rag200":     "/po/5009",
 	} {
 		rec := findReq(t, h, q)
 		if rec.Code != http.StatusFound || rec.Header().Get("Location") != want {
@@ -82,9 +87,9 @@ func TestIntegration_Find_BlankQ(t *testing.T) {
 func TestIntegration_Find_ExactOnly(t *testing.T) {
 	h, done := liveHandler(t)
 	t.Cleanup(done)
-	for _, q := range []string{"SN-3013", "sn-3013-001", "asm-1001"} {
+	for _, q := range []string{"SN-3013", "asm-100", "GR-5RAG"} {
 		if body := findReq(t, h, q).Body.String(); !strings.Contains(body, "No record found for") {
-			t.Errorf("q=%q matched; lookup must be exact and case-sensitive", q)
+			t.Errorf("q=%q matched; lookup must be exact (no partial match)", q)
 		}
 	}
 }
