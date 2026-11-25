@@ -39,11 +39,12 @@ jobs:
           fi
 
           title="Postgres $latest is available (pinned to $pinned)"
-          existing=$(gh issue list --search "in:title \"Postgres\" \"is available\"" --state open --json title \
-            --jq '.[] | select(.title | test("^Postgres [0-9]+ is available")) | .title')
+          # Any state: an issue closed after evaluation (upgrade deferred) must not be re-opened weekly.
+          existing=$(gh issue list --search "in:title \"Postgres $latest is available\"" --state all --json title \
+            --jq ".[] | select(.title | startswith(\"Postgres $latest is available\")) | .title")
 
           if [ -n "$existing" ]; then
-            echo "Open issue already tracking a newer version ($existing), skipping."
+            echo "Issue already exists for Postgres $latest ($existing), skipping."
             exit 0
           fi
 

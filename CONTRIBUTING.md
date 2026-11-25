@@ -20,7 +20,7 @@ Windows-only source files need a `!windows`-tagged counterpart so the Linux CI j
 
 ## Local test database
 
-For manual testing without access to a shared `ArxDev`, run a throwaway Postgres 17 with the schema and test seed. It needs only docker (`podman compose` works too), with no psql, bash or WSL on the host. The data lives on tmpfs, so stopping the container wipes it:
+For manual testing without access to a shared `ArxDev`, run a throwaway Postgres 18 with the schema and test seed. It needs only docker (`podman compose` works too), with no psql, bash or WSL on the host. The data lives on tmpfs, so stopping the container wipes it:
 
 ```
 docker compose -f SQL/compose.yml up -d --wait db   # returns once the seed has loaded
